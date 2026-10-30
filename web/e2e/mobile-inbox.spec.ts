@@ -67,4 +67,68 @@ test.describe('mobile inbox list', () => {
 
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/inbox-list-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
+
+  test('opens a notification as the phone issue page with notification actions', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-inbox-notification-${testInfo.project.name}-${testInfo.retry}`
+    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: '[mobile] Inbox notification', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(workspaceResponse.status()).toBe(201)
+    const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
+    const teamId = workspace.teams?.[0]?.id
+    expect(teamId).toBeTruthy()
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const createIssue = async (title: string, description: string) => {
+      const response = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description, teamId, stateId: 'state_todo' } })
+      expect(response.status()).toBe(201)
+      return response.json() as Promise<{ id: string; identifier: string }>
+    }
+    const related = await createIssue('[mobile] Related issue', '[mobile] Related issue body')
+    const issue = await createIssue('[mobile] Inbox notification issue', 'External https://example.com\n\nIssue https://example.com/flow-app12/issue/FLO-1/get-familiar-with-flow\n\nProject https://example.com/app12/projects/all\n\nCustom custom text after')
+    const relation = await request.post(`http://127.0.0.1:4180/api/issues/${issue.id}/relations`, { headers, data: { type: 'related', relatedIssueId: related.id } })
+    expect(relation.ok()).toBe(true)
+    const comment = await request.post(`http://127.0.0.1:4180/api/issues/${issue.id}/comments`, { headers, data: { body: '[mobile] A comment on the issue' } })
+    expect(comment.status()).toBe(201)
+    const reminder = await request.post(`http://127.0.0.1:4180/api/issues/${issue.id}/reminders`, { headers, data: { remindAt: new Date(Date.now() + 400).toISOString() } })
+    expect(reminder.status()).toBe(201)
+    await page.waitForTimeout(1200)
+
+    await page.goto(`/${workspaceKey}/inbox`)
+    const row = page.locator('.flow-inbox-notification-list > [role="listitem"] [role="link"]').first()
+    await expect(row).toBeVisible()
+    await row.click()
+
+    const header = page.locator('.flow-inbox-detail__header')
+    await expect(header).toBeVisible()
+    expect((await header.boundingBox())?.height).toBe(44)
+    const menu = page.locator('.flow-inbox-detail__menu')
+    await expect(menu).toBeVisible()
+    expect((await menu.boundingBox())?.width).toBe(32)
+    await expect(page.getByRole('button', { name: 'Add to favorites' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Unsubscribe from issue' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Snooze notification' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Delete notification', exact: true })).toBeVisible()
+
+    for (const name of ['Copy issue URL', 'Copy issue ID', 'Copy branch name']) {
+      const button = page.getByRole('button', { name, exact: true })
+      await expect(button).toBeVisible()
+      expect((await button.boundingBox())?.width).toBe(32)
+      expect((await button.boundingBox())?.y).toBeCloseTo(51.5, 0)
+    }
+
+    const title = page.locator('.flow-inbox-detail .title-editor p')
+    await expect(title).toHaveText('[mobile] Inbox notification issue')
+    expect((await title.boundingBox())?.x).toBe(14)
+    expect((await title.boundingBox())?.y).toBeCloseTo(89.75, 0)
+    await expect(page.locator('.flow-inbox-detail .description-editor p').first()).toContainText('https://example.com')
+    await expect(page.locator('.flow-inbox-detail .activity-heading > span')).toHaveText('Activity')
+    const properties = page.locator('.flow-inbox-detail .issue-mobile-properties')
+    expect((await properties.boundingBox())?.width).toBe(390 - 28)
+    expect((await properties.boundingBox())?.y).toBeCloseTo(145.75, 0)
+
+    const geometry = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }))
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.width)
+
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/inbox-notification-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
 })
