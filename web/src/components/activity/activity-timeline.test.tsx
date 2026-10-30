@@ -184,6 +184,28 @@ describe('issue activity timeline', () => {
       expect(container.querySelector('.timeline')?.textContent).not.toContain('](')
     })
 
+    it('renders a related-issue relation as an inline link instead of a chip', async () => {
+      const original = window.matchMedia
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: (query: string) => ({ matches: query === '(max-width: 767px)', media: query, onchange: null, addEventListener: () => undefined, removeEventListener: () => undefined, addListener: () => undefined, removeListener: () => undefined, dispatchEvent: () => false }),
+      })
+      try {
+        const data = mentionFixture({ issues: [makeIssue(), makeIssue({ id: 'issue-2', identifier: 'TST-2', title: 'Second issue' })] })
+        const { container } = renderTimeline([eventOf('e1', 'issue.relation_added', { type: 'related', relatedIssueId: 'issue-2' })], data)
+        const row = container.querySelector('#activity-e1') as HTMLElement
+        expect(row).toHaveTextContent('added related issue TST-2 Second issue')
+        const link = row.querySelector('a.activity-relation-link') as HTMLAnchorElement
+        expect(link).toHaveAttribute('href', '/workspace/issue/TST-2/second-issue')
+        expect(link.querySelector('b')).toHaveTextContent('TST-2')
+        expect(row.querySelector('[data-agent-entity="issue"]')).toBeNull()
+        expect(row.querySelector('.activity-event-icon svg')).toBeTruthy()
+      } finally {
+        window.matchMedia = original
+      }
+    })
+
     it('fetches the parent issue the paged client does not hold and keeps a placeholder when it is gone', async () => {
       resetAgentRecordCache()
       const remote = makeIssue({ id: '0a1b2c3d-1111-2222-3333-444455556666', identifier: 'TST-9', title: 'Remote parent' })

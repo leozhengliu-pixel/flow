@@ -32,6 +32,9 @@
 .issue-activity-timeline .comment-reply > .avatar { align-self: start; margin-top: 1px; }
 .issue-activity-timeline .activity-row { display: block; height: auto; min-height: 16.8px; margin: 0; color: var(--ui-pill-fg); font-size: 12px; font-weight: 450; line-height: 1.4; overflow-wrap: anywhere; }
 .issue-activity-timeline .activity-row strong { font-weight: 500; color: inherit; }
+.issue-activity-timeline .activity-relation-link { color: inherit; text-decoration: none; }
+.issue-activity-timeline .activity-relation-link:hover { text-decoration: underline; }
+.issue-activity-timeline .activity-relation-link b { font-weight: 500; color: inherit; }
 .issue-activity-timeline .activity-time { display: inline-block; white-space: nowrap; overflow-wrap: normal; }
 .issue-activity-timeline .activity-dot { margin: 0 6px; color: inherit; }
 .issue-activity-timeline .activity-time a { color: inherit; text-decoration: none; }
