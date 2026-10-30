@@ -32,7 +32,7 @@ func TestNormalizeKeepsEditedProjectStatusColours(t *testing.T) {
 	if colours["ps_planned"] != "#26b5ce" {
 		t.Fatalf("a colour the workspace chose must be kept, got %q", colours["ps_planned"])
 	}
-	if colours["ps_progress"] != "#F2C94C" {
+	if colours["ps_progress"] != "lch(80% 90 85)" {
 		t.Fatalf("a missing colour should fall back to the default, got %q", colours["ps_progress"])
 	}
 	if status := data.Projects[0].Status; status.Name != "Next up" || status.Color != "#26b5ce" {

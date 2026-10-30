@@ -718,6 +718,16 @@ func normalize(data *domain.Bootstrap) {
 		if data.States[index].TeamID == "" && data.States[index].ID == "state_duplicate" {
 			data.States[index].Reserved = true
 		}
+		// Workspace workflow statuses are editable: only fill a missing colour and move
+		// the old built-in defaults to the reference app's current defaults.
+		if data.States[index].TeamID == "" {
+			if fallback, ok := canonicalWorkflowStateColors[data.States[index].ID]; ok {
+				color := data.States[index].Color
+				if color == "" || isLegacyDefaultColor(color, fallback.legacy) {
+					data.States[index].Color = fallback.color
+				}
+			}
+		}
 	}
 	if data.Settings == nil {
 		data.Settings = map[string]any{}
@@ -1072,7 +1082,7 @@ func normalize(data *domain.Bootstrap) {
 		// to the current defaults. Colours a workspace chose are kept.
 		if fallback, ok := canonicalProjectStatusColors[data.ProjectStatuses[index].ID]; ok {
 			color := data.ProjectStatuses[index].Color
-			if color == "" || strings.EqualFold(color, fallback.legacy) {
+			if color == "" || isLegacyDefaultColor(color, fallback.legacy) {
 				data.ProjectStatuses[index].Color = fallback.color
 			}
 		}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hexToLch, normalizeHexColor, projectStatusOptionColor, projectStatusStrokeColor } from './project-status-color'
+import { PROJECT_STATUS_DEFAULT_COLORS, hexToLch, normalizeHexColor, projectStatusOptionColor, projectStatusStrokeColor } from './project-status-color'
 
 describe('projectStatusOptionColor', () => {
   const current = { id: 'started', name: 'In progress', color: '#ffcc00' }
@@ -11,6 +11,18 @@ describe('projectStatusOptionColor', () => {
 
   it('keeps the option color for unrelated statuses', () => {
     expect(projectStatusOptionColor({ id: 'done', name: 'Done', color: '#00aa66' }, current)).toBe('#00aa66')
+  })
+})
+
+describe('PROJECT_STATUS_DEFAULT_COLORS', () => {
+  it('uses the reference app project status palette', () => {
+    expect(PROJECT_STATUS_DEFAULT_COLORS).toEqual({
+      backlog: '#f2994a',
+      planned: '#d7d8db',
+      started: 'lch(80% 90 85)',
+      completed: '#5e6ad2',
+      canceled: '#8a8f98',
+    })
   })
 })
 

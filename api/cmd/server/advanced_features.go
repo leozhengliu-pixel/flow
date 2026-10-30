@@ -3527,7 +3527,7 @@ func (s *server) commitImportSync(w http.ResponseWriter, r *http.Request) {
 					} else if startedAt != nil {
 						stateType = "started"
 					}
-					issueState = domain.WorkflowState{ID: idgen.New("state_import_"), TeamID: team.ID, Name: value, Color: map[string]string{"completed": "#5e6ad2", "canceled": "#95a2b3", "started": "#f2c94c", "unstarted": "#bec2c8"}[stateType], Type: stateType, Position: float64(len(statesForTeam(data, team.ID)) + 1)}
+					issueState = domain.WorkflowState{ID: idgen.New("state_import_"), TeamID: team.ID, Name: value, Color: map[string]string{"completed": "#5e6ad2", "canceled": "#95a2b3", "started": "lch(80% 90 85)", "unstarted": "#e2e2e2"}[stateType], Type: stateType, Position: float64(len(statesForTeam(data, team.ID)) + 1)}
 					data.States = append(data.States, issueState)
 				}
 			}
