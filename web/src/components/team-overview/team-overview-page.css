@@ -1218,6 +1218,7 @@
 /* Phone: the reference app's team header band, from the documents-list measurements. */
 @media (max-width: 767px) {
   .app:has(.team-home-page) { background: var(--bg-panel); border: 0; }
+  .app:has(.team-documents) { color: var(--bright); font-size: 16px; font-weight: 400; line-height: 24px; letter-spacing: normal; }
   .team-home-band {
     box-sizing: border-box;
     display: flex;
@@ -1273,6 +1274,65 @@
     background: transparent;
     overflow: hidden;
   }
-  .team-home-tabs a { height: 32px; padding: 0 10.5px; border: 0; }
+  .team-home-tabs a { height: 32px; gap: 6px; padding: 0 9.5px; border: .5px solid transparent; }
   .team-home-tab-label { display: block; line-height: normal; border: 0; }
+  .team-home-tab-caret { width: 8px; height: 9px; flex: 0 0 8px; }
+  .team-home-tabs-overflow-pill {
+    box-sizing: border-box;
+    width: 74.96px;
+    height: 32px;
+    display: inline-flex;
+    flex: 0 0 74.96px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 10px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    background: var(--ui-pill-bg);
+    color: var(--ui-pill-fg);
+    font: 500 12px/normal var(--font);
+    white-space: nowrap;
+  }
+  .team-home-tabs-overflow-pill:hover { background: var(--ui-pill-hover-bg); color: var(--ui-pill-hover-fg); }
+  .team-home-tabs-measure { position: absolute; top: -9999px; left: 0; display: flex; gap: 8px; visibility: hidden; pointer-events: none; white-space: nowrap; }
+  .team-home-tabs-measure-pill { box-sizing: border-box; height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9.5px; border: .5px solid transparent; border-radius: 9999px; font: 500 12px/normal var(--font); }
+  .team-home-tabs-menu {
+    z-index: 1100;
+    box-sizing: border-box;
+    width: 201px;
+    padding: 0;
+    border: .5px solid var(--phone-menu-border);
+    border-radius: 8px;
+    background: var(--phone-menu-bg);
+    box-shadow: var(--shadow-control);
+    color: var(--phone-menu-fg-strong);
+    font: 400 16px/24px var(--font);
+    letter-spacing: normal;
+    outline: 0;
+  }
+  .team-home-tabs-menu-inner { padding: 5.5px 0; border-radius: 6px; }
+  .team-home-tabs-menu-item {
+    width: 100%;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 18px 0 14px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .team-home-tabs-menu-item > span {
+    border: 0;
+    background: transparent;
+    color: var(--phone-menu-fg-secondary);
+    font: 450 13px/normal var(--font);
+  }
+  .team-home-tabs-menu-item[data-active] > span { color: var(--bright); }
+  .team-home-tabs-menu-item:hover,
+  .team-home-tabs-menu-item:focus-visible { background: var(--theme-surface-hover); outline: 0; }
 }
