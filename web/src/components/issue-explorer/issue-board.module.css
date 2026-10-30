@@ -31,7 +31,16 @@
 }
 .columnMenu{z-index:600;width:175px;padding:6px 0;border:.5px solid var(--theme-border-strong);border-radius:12px;outline:0;background:var(--theme-surface-2);box-shadow:var(--menu-shadow);color:var(--theme-text-primary)}
 .columnMenuItem{height:32px;display:flex;align-items:center;padding:0 18px 0 14px;border-radius:8px;outline:0;font-size:13px}.columnMenuItem[data-highlighted]{background:var(--theme-surface-hover)}
-.hiddenColumns{width:164px;min-width:164px;min-height:100%;padding:15px 8px;border-left:.5px solid var(--theme-border);color:var(--theme-text-secondary)}.hiddenColumns>strong{height:28px;display:flex;align-items:center;padding:0 8px;font-size:12px;font-weight:500}.hiddenColumns>button{width:100%;height:34px;display:grid;grid-template-columns:16px minmax(0,1fr) auto;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--theme-text-primary);font:12px inherit;text-align:left}.hiddenColumns>button:hover{background:var(--theme-surface-hover)}.hiddenColumns>button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.hiddenColumns>button b{color:var(--theme-text-secondary);font-weight:500}
+.hiddenColumns{width:164px;min-width:164px;min-height:100%;padding:15px 8px;border-left:.5px solid var(--theme-border);color:var(--theme-text-secondary)}
+.hiddenHeader{height:28px;display:flex;align-items:center}
+.hiddenToggle{height:28px;display:flex;align-items:center;gap:0;padding:0 8px;border:0;background:transparent;color:inherit;font-size:12px;font-weight:500;cursor:pointer}
+.hiddenToggle svg{display:none}
+.hiddenToggle strong{font-size:12px;font-weight:500}
+.hiddenStatus{width:100%;height:34px;display:grid;grid-template-columns:16px minmax(0,1fr) auto;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--theme-text-primary);font:12px inherit;text-align:left}
+.hiddenStatus:hover{background:var(--theme-surface-hover)}
+.hiddenStatus span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hiddenStatus b{display:inline-flex;align-items:center;gap:4px;color:var(--theme-text-secondary);font-weight:500}
+.hiddenStatus b svg{display:none}
 :global(:root[data-theme="light"]) .board{
   --board-card-background:var(--theme-surface-2);
   --board-card-hover:var(--board-card-background);
@@ -46,6 +55,7 @@
   height:max-content;
   min-height:100%;
 }
+.columnHeaderWrap{display:block}
 .columnHeader{
   height:50px;
   display:flex;
@@ -54,6 +64,11 @@
   padding:0 18px;
   color:var(--issue-muted);
 }
+.countValue{flex:none}
+.countEstimate{display:none}
+.cardBadge{display:inline-flex;align-items:center}
+.phoneIcon{display:none}
+.desktopIcon{display:contents}
 .columnHeader strong{
   color:var(--issue-fg);
   font-size:13px;
@@ -97,6 +112,7 @@
   background:var(--accent-primary);
   box-shadow:0 0 0 1px var(--accent-soft);
 }
+.cardBody{padding:8px 8px 13.5px}
 .card{
   display:block;
   text-decoration:none;
@@ -104,7 +120,7 @@
   width:322px;
   min-height:0;
   margin:0 0 8px 1px;
-  padding:8px 8px 13.5px;
+  padding:0;
   border:0;
   border-radius:8px;
   background:var(--board-card-background);
@@ -331,3 +347,43 @@
 .swimlaneHeader>button:first-child{width:20px;height:20px;border:0;border-radius:999px;background:transparent;color:var(--theme-text-secondary);cursor:pointer}
 .swimlaneHeader>button:first-child[aria-expanded=false]{transform:rotate(-90deg)}
 .swimlaneBoard{height:min(560px,70vh)}
+
+/* Phone board: a fixed 298px column leaves the next column peeking in from the right. */
+@media(max-width:767px){
+  .board{padding:0;background:transparent}
+  .column{width:298px;min-width:298px}
+  .cards{padding:9px 16px 8px}
+  .card{width:264px}
+  .columnHeaderWrap{height:50px;position:sticky;top:0;z-index:14;background:var(--bg-panel)}
+  .columnHeader{position:relative;z-index:0;height:50px;gap:2px;padding:4px 16px 0 22px;background:transparent}
+  .columnHeader::before{content:"";position:absolute;z-index:-1;left:8px;right:8px;top:4px;bottom:0;border-radius:5px 5px 0 0;background:color-mix(in srgb,var(--bg-sidebar) 40%,transparent)}
+  .columnHeader strong{margin-left:8px;font-size:13px;font-weight:500}
+  .count{height:24px;display:flex;align-items:center;gap:3px;margin-left:6px;padding:0;font-size:13px;font-weight:450}
+  .countEstimate{display:block;flex:none}
+  .headerButton svg{opacity:.64}
+  .headerButton{width:28px;height:28px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;color:var(--issue-fg);font-size:12px;font-weight:500;line-height:normal}
+  .columnHeader>svg{color:var(--theme-text-primary)}
+  .phoneIcon{display:contents}
+  .desktopIcon{display:none}
+  .columnHeader strong{line-height:normal}
+  .countValue{line-height:normal}
+  .cardBody{padding-bottom:12.25px}
+  .card:not(:first-of-type) .cardBody{padding-bottom:11.25px}
+  .board{--board-card-background:var(--board-card-surface);--board-card-border:var(--board-card-outline)}
+  .cardTop{letter-spacing:-.24px;line-height:normal;color:var(--board-card-muted)}
+  .title{color:var(--theme-text-primary)}
+  .created{margin-top:11.25px;line-height:normal;color:var(--board-card-muted)}
+  .noAssignee{color:var(--theme-text-primary);font-size:16px;font-weight:400;line-height:24px;opacity:.34}
+  .assigneeTrigger{right:8px}
+  .column:hover .addIssue{opacity:0}
+  .addIssue{opacity:0;width:calc(100% - 4px);height:28px;margin:0 2px;padding:6px 8px;line-height:normal;border:.5px solid var(--board-add-issue-border);border-radius:9999px;background:var(--board-add-issue-bg);color:var(--board-add-issue-fg);font-size:12px;font-weight:500}
+  .hiddenColumns{width:350px;min-width:350px;padding:0 12px 0 0;border-left:0}
+  .hiddenHeader{height:50px;position:sticky;top:0;z-index:10;background:var(--bg-panel)}
+  .hiddenToggle{height:28px;gap:4px;margin-left:1px;padding:0 8px 0 6px;border:.5px solid transparent;border-radius:9999px;color:var(--issue-fg);font-size:12px;font-weight:500;line-height:normal}
+  .hiddenToggle svg{display:block;flex:none;width:18px;height:18px;opacity:.64;transform:rotate(90deg)}
+  .hiddenToggle strong{font-size:12px;font-weight:500;color:var(--issue-fg)}
+  .hiddenList{display:flex;flex-direction:column;gap:10px;padding-top:0}
+  .hiddenStatus{height:37px;display:flex;gap:12px;padding:4px 12px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-1);color:var(--theme-text-primary);font-size:13px;font-weight:500}
+  .hiddenStatus b{margin-left:auto;display:inline-flex;align-items:center;gap:4px;color:var(--theme-text-secondary);font-weight:500}
+  .hiddenStatus b svg{display:block;flex:none}
+}

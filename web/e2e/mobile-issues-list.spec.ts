@@ -403,3 +403,65 @@ test.describe('mobile team issues list', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   })
 })
+
+test.describe('mobile Team issues board', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('phone board shows a 298px Todo column with the hidden columns column peeking in', async ({ page, request }, testInfo) => {
+    const apiBase = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
+    const workspaceKey = `mobile-team-board-${testInfo.project.name}-${testInfo.retry}-${Date.now()}`
+    const response = await request.post(`${apiBase}/api/workspaces`, {
+      data: { name: '[mobile] Team board', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(response.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await (await request.get(`${apiBase}/api/bootstrap`, { headers })).json() as {
+      teams: Array<{ id: string; key: string }>
+      states: Array<{ id: string; type: string }>
+    }
+    const team = bootstrap.teams[0]
+    const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
+    const settings = await request.patch(`${apiBase}/api/teams/${team.id}/settings`, { headers, data: { estimateType: 'fibonacci' } })
+    expect(settings.ok()).toBe(true)
+    const create = async (title: string, extra = {}) => {
+      const created = await request.post(`${apiBase}/api/issues`, {
+        headers,
+        data: { title, description: '', teamId: team.id, stateId, priority: 0, ...extra },
+      })
+      expect(created.status()).toBe(201)
+      return created.json() as Promise<{ id: string }>
+    }
+    const parent = await create('[mobile] Estimate test A', { estimate: 3 })
+    await create('[mobile] Estimate test B', { estimate: 5 })
+    await create('[mobile] Nested child one', { estimate: 1, parentId: parent.id })
+
+    await page.goto(`/${workspaceKey}/team/${team.key}/all`)
+    await expect(page.locator('main').first()).toBeVisible()
+    await page.getByRole('button', { name: 'Display options' }).first().click()
+    await page.getByRole('tab', { name: 'Board', exact: true }).click()
+    const emptyColumns = page.locator('input[aria-label="Show empty columns"]')
+    if (!(await emptyColumns.isChecked())) await emptyColumns.click()
+    for (const name of ['Backlog', 'In Progress', 'Done', 'Canceled', 'Duplicate']) {
+      await page.getByRole('button', { name: `Hide group ${name}`, exact: true }).click()
+    }
+    await page.keyboard.press('Escape')
+
+    const board = page.getByRole('list', { name: 'Issue board' })
+    await expect(board).toBeVisible()
+    const column = board.locator('[data-board-column]').first()
+    expect((await column.boundingBox())?.width).toBe(298)
+    const columnHeader = column.locator('[data-board-column-header]')
+    await expect(columnHeader).toHaveCSS('height', '50px')
+    await expect(columnHeader).toHaveCSS('position', 'sticky')
+    const card = column.locator('[data-board-card]').first()
+    const cardBox = await card.boundingBox()
+    expect(cardBox?.x).toBe(17)
+    expect(cardBox?.width).toBe(264)
+    const addIssue = await column.locator('[data-board-add-issue]').boundingBox()
+    expect(addIssue?.x).toBe(18)
+    expect(addIssue?.width).toBe(262)
+    expect(addIssue?.height).toBe(28)
+    expect((await board.locator('[data-board-hidden-header]').boundingBox())?.x).toBe(299)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+})

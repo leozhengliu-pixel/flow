@@ -1,4 +1,5 @@
-.trigger{width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:var(--bg-subtle);color:var(--issue-muted);cursor:pointer}.trigger:hover,.trigger[aria-pressed=true],.trigger[data-state=open]{background:var(--bg-active);color:var(--text)}.trigger:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}.trigger svg{width:16px;height:16px}
+.trigger{position:relative;width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:var(--bg-subtle);color:var(--issue-muted);cursor:pointer}
+.triggerDot{display:none}.trigger:hover,.trigger[aria-pressed=true],.trigger[data-state=open]{background:var(--bg-active);color:var(--text)}.trigger:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}.trigger svg{width:16px;height:16px}
 .popover,.selectMenu{z-index:650;outline:0;border:.5px solid var(--theme-border-strong);background:var(--theme-surface-2);box-shadow:0 3px 8px var(--shadow-color-heavy),0 2px 5px var(--shadow-color-heavy),0 1px 1px var(--shadow-color-heavy);color:var(--theme-text-primary);font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif}
 .popover{width:301px;height:min(531px,calc(100vh - 103px));padding:8px 0 0;overflow:auto;border-radius:12px;scrollbar-width:none;animation:popoverIn 120ms ease-out}.popover::-webkit-scrollbar{display:none}
 .layoutTabs{height:32px;margin:6px 16px 8px;display:flex;align-items:center;gap:6px;border-radius:5px}.layoutTabs button{height:28px;flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 8px;border:.5px solid transparent;border-radius:9999px;background:var(--control-muted-bg);color:var(--theme-text-secondary);font:500 12px/20px inherit;cursor:pointer}.layoutTabs button[aria-selected=true]{background:var(--theme-surface-active);box-shadow:0 1px 2px var(--shadow-color-deep);color:var(--bright)}.layoutTabs button:disabled{opacity:1;cursor:not-allowed}
@@ -72,4 +73,9 @@
 
 @media (max-width: 767px) {
   .trigger.trigger.trigger:focus-visible { outline: 0; }
+}
+
+/* Phone: the reference marks a display that is not the default list with a small accent dot. */
+@media(max-width:767px){
+  .triggerDot{position:absolute;top:2.8px;right:2.9px;width:7px;height:7px;display:block;border-radius:50%;background:var(--display-modified-dot)}
 }

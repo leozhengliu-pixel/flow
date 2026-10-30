@@ -23,10 +23,21 @@ export function EstimateValueIcon({ value, size }: { value?: number | null; size
   return <EstimateIcon none={unset} size={size}/>
 }
 
+const BOARD_ESTIMATE_ARC = 'M6.95588 5.28329L10.6901 7.43926C11.0235 7.63171 11.0235 8.11283 10.6901 8.30528L6.95588 10.4612C6.62255 10.6537 6.20588 10.4131 6.20588 10.0282L6.20588 5.71631C6.20588 5.33141 6.62255 5.09084 6.95588 5.28329Z'
+
+/** The reference board card's estimate glyph: a play inside a progress ring. */
+export function BoardEstimateIcon({ size = 14 }: { size?: number }) {
+  return <svg aria-hidden="true" focusable="false" className="estimate-icon board-estimate-icon" width={size} height={size} viewBox="0 0 16 16" fill="currentColor">
+    <path d={BOARD_ESTIMATE_ARC}/>
+    <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="39.269908169872416" strokeDashoffset="5.357544031041707" strokeLinecap="round" transform="rotate(-54.26075591453578 6.25 6.25)" style={{ transformBox: 'fill-box' }}/>
+    <circle cx="7.6" cy="2.1" r="1.5" fill="var(--display-modified-dot)"/>
+  </svg>
+}
+
 /** "△ 8" chip used on list rows, board cards and group headers. */
-export function EstimateChip({ value, settings, className, label }: { value: number; settings: EstimateSettings; className?: string; label?: string }) {
-  return <span className={`estimate-chip${className ? ` ${className}` : ''}`} aria-label={label ?? `Estimate ${estimateLabel(value, settings?.estimateType ?? 'notUsed')}`}>
-    <EstimateIcon size={14}/>
+export function EstimateChip({ value, settings, className, label, board = false }: { value: number; settings: EstimateSettings; className?: string; label?: string; board?: boolean }) {
+  return <span className={`estimate-chip${board ? ' estimate-chip--board' : ''}${className ? ` ${className}` : ''}`} aria-label={label ?? `Estimate ${estimateLabel(value, settings?.estimateType ?? 'notUsed')}`}>
+    {board ? <><EstimateIcon size={14}/><BoardEstimateIcon size={14}/></> : <EstimateIcon size={14}/>}
     <span className="estimate-chip__value">{estimateShortLabel(value, settings?.estimateType ?? 'notUsed')}</span>
   </span>
 }
