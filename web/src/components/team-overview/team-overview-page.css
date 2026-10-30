@@ -1247,6 +1247,7 @@
     font: 500 12px/normal var(--font);
   }
   html:root[data-sidebar-mode] body .app .team-home-mobile[data-sidebar-trigger] > svg { display: block; width: 14px; height: 14px; border: 0; }
+  html:root[data-sidebar-mode] body .app .team-home-mobile[data-sidebar-trigger] > svg { color: var(--phone-icon-fg); }
   .app .team-home-mobile[data-sidebar-trigger]::before,
   .app .team-home-mobile[data-sidebar-trigger]::after { content: none; }
   .team-home-top-icon { margin-left: 6px; color: var(--bright); }
@@ -1262,6 +1263,9 @@
     color: var(--text);
     font: 500 12px/normal var(--font);
   }
+  .team-home-top-actions > button svg,
+  .team-home-top-actions [data-radix-collection-item] svg,
+  .team-home-copy-url svg { color: var(--phone-icon-fg); }
   .team-home-top-actions svg,
   .team-home-copy-url svg { width: 14px; height: 14px; }
   .team-home-tabs {

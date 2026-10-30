@@ -833,6 +833,10 @@
     border: .5px solid transparent;
     border-radius: 9999px;
   }
+  html:root body .app .flow-inbox__header .flow-inbox__icon-button svg { color: var(--phone-icon-fg); }
+  html:root body .app .flow-inbox__header .flow-inbox__icon-button:is([data-active="true"],[aria-pressed="true"],[data-state="open"],[aria-expanded="true"]) svg { color: var(--bright); }
+  html:root body .app .flow-inbox__header [data-sidebar-trigger]::before,
+  html:root body .app .flow-inbox__header [data-sidebar-trigger]::after { background: var(--phone-icon-fg); }
   html:root body .app .flow-inbox__header-toolbar-group {
     gap: 4px;
     margin-right: 8px;
@@ -975,6 +979,7 @@
     flex: 0 0 16px;
     align-items: center;
     justify-content: center;
+    color: var(--phone-menu-icon-fg);
   }
   .inbox-actions-phone-menu__icon svg {
     display: block;
@@ -1048,6 +1053,7 @@
     font-family: inherit;
   }
   html:root body .app .flow-inbox-detail__menu svg { width: 14px; height: 14px; }
+  html:root body .app .flow-inbox-detail__menu svg { color: var(--phone-icon-fg); }
   html:root body .app .flow-inbox-detail__source {
     font-size: 13px;
     font-weight: 500;
@@ -1065,6 +1071,9 @@
     line-height: normal;
     font-family: inherit;
   }
+  html:root body .app .flow-inbox-detail__icon-button svg { color: var(--phone-icon-fg); }
+  html:root body .app .flow-inbox-detail .document-actions .issue-document-action svg,
+  html:root body .app .flow-inbox-detail .issue-empty-sub-issue-action svg { color: var(--phone-icon-fg); }
   html:root body .app .flow-inbox-detail__icon-button[data-detail-action="subscription"] { margin-left: 12px; background: transparent; }
   html:root body .app .flow-inbox-detail__command-strip {
     display: flex;

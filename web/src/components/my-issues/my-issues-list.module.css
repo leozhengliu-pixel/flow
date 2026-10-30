@@ -116,8 +116,10 @@
   .nestingBranch{top:14px;fill:var(--relation-chip-border)}
   .statusTrigger{border-style:none}
   .statusTrigger svg{color:var(--bright);border-style:none}
+  .row:has(.subIssueProgress) .statusTrigger svg{opacity:.6}
   .priorityTrigger{justify-self:end;margin-right:-3px;margin-left:0;border-style:none}
-  .priorityTrigger svg{color:var(--bright);border-style:none}
+  .priorityTrigger svg{color:var(--bright);border-style:none;opacity:.5}
+  .row:has(.subIssueProgress) .priorityTrigger svg{opacity:.3}
   .title{line-height:normal;color:var(--bright);border-style:none}
   .titleProperties{padding-right:18px}
   .groupHeader{padding-left:0;border-style:none}
@@ -126,9 +128,11 @@
   .groupChevron{display:none}
   .collapseButton[aria-expanded=false] .groupCaret{transform:none}
   .collapseButton{width:20px;height:20px;flex:0 0 20px;margin-left:8px;padding:2px;border:0;border-radius:9999px;color:var(--bright);font-size:16px;font-weight:400;line-height:24px}
+  .collapseButton svg{color:var(--phone-icon-subtle)}
   .groupName{line-height:normal;border-style:none}
   .groupCount{font-size:13px;font-weight:450;line-height:normal;border-style:none}
   .createButton{width:28px;height:28px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;font-size:12px;font-weight:500;line-height:normal}
+  .createButton svg{color:var(--phone-icon-secondary)}
   .sessionPillTrigger{min-width:0;min-height:0;width:auto;height:auto;padding:0;border:0;border-radius:0;background:transparent}
   .sessionPillTrigger:hover,.sessionPillTrigger[data-state=open]{background:transparent}
   .sessionPill{display:flex;align-items:center;height:24px;padding:0 2.5px 0 4px;border:.5px solid var(--theme-border);border-radius:48px;background:var(--bg-panel);box-shadow:none;color:var(--issue-muted);white-space:nowrap;z-index:0}
@@ -141,11 +145,13 @@
   .titleProperties:has(.parentTrail){gap:0}
   .parentTrail{line-height:normal}
   /* The unassigned avatar keeps the muted glyph but matches the reference avatar metrics. */
-  .noAssignee svg{color:var(--bright);border-style:none;fill:var(--issue-muted)}
+  .noAssignee svg{color:var(--bright);border-style:none;fill:var(--bright);opacity:.22}
+  .row:has(.subIssueProgress) .noAssignee svg{opacity:.15}
   /* The reference phone sub-issue counter is text only ("0/1"), with no ring. */
   .subIssueProgress{padding:0 10px}
   .subIssueProgress svg{display:none}
   /* On a phone the estimate is a bare triangle and value, not a bordered chip. */
   .estimateChip{height:auto;padding:0;border:0;border-radius:0;background:transparent;gap:4px}
+  .row .estimateChip :global(.estimate-icon){color:var(--phone-icon-dim)}
   .estimateChip :global(.estimate-chip__value){min-width:24px;border-style:none;font-size:12px;font-weight:450;line-height:normal;color:var(--issue-muted)}
 }
