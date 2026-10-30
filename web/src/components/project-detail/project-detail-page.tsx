@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { Layers2, Link2, Pencil, Star, Trash2 } from "lucide-react";
+import { FlowFavoriteFilledIcon, FlowFavoriteIcon, FlowUrlIcon } from "@/components/issue/flow-header-icons";
 import { toast } from "@/lib/toast";
 import { fetchProjectIssueSummary, type IssueRecordSummary } from '@/lib/api';
 import { projectPulseSubscribed } from '@/lib/pulse-subscriptions';
@@ -41,6 +42,7 @@ import {
   AddViewIcon,
   InsightsIcon,
   SidebarIcon,
+  SidebarLeftIcon,
 } from "@/components/ui/view-action-icons";
 import {
   confirmAction,
@@ -421,6 +423,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
     // An issue made from a comment's selection goes to this project (and its first team).
     <SelectionIssueProvider value={{ teamId: project.teamIds?.[0], projectId: project.id }}>
     <main className="project-detail-page">
+      <div className="project-detail-page__top">
       <header className="project-detail-page__header">
         <button
           aria-label="Open workspace sidebar"
@@ -431,6 +434,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           <span />
           <span />
           <span />
+          <SidebarIcon />
         </button>
         {props.projectsOriginPath && (
           <>
@@ -473,7 +477,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           role="switch"
           type="button"
         >
-          <Star fill={favorited ? "currentColor" : "none"} size={14} />
+          <Star className="project-overview__desktop-icon" fill={favorited ? "currentColor" : "none"} size={14} />
+          {favorited ? <FlowFavoriteFilledIcon className="project-overview__mobile-icon" /> : <FlowFavoriteIcon className="project-overview__mobile-icon" />}
         </button>
         <ProjectActionsMenu
           favorited={favorited}
@@ -501,7 +506,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
             onClick={copyProjectUrl}
             type="button"
           >
-            <Link2 size={14} />
+            <Link2 className="project-overview__desktop-icon" size={14} />
+            <FlowUrlIcon className="project-overview__mobile-icon" />
           </button>
         </FlowTooltip>
         <ProjectNotificationMenu
@@ -706,10 +712,12 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               }}
               type="button"
             >
-              <SidebarIcon />
+              <SidebarIcon className="project-overview__desktop-icon" />
+              <SidebarLeftIcon className="project-overview__mobile-icon" />
             </button>
           </FlowTooltip>
         </div>
+      </div>
       </div>
 
       <div
@@ -904,7 +912,7 @@ function ProjectTab({
         onChange(id);
       }}
     >
-      {children}
+      <div>{children}</div>
     </a>
     </FlowTooltip>
   );
