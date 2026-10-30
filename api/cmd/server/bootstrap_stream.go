@@ -178,6 +178,8 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 				issue.SubIssueIDs = outline.SubIssueIDs
 				issue.Relations = outline.Relations
 				issue.Labels = outline.Labels
+				// The outline carries the decorated agent task state (issue records store it empty).
+				issue.AgentSessionState = outline.AgentSessionState
 				issue.IsSummary = false
 				if count > 0 {
 					buffer.WriteByte(',')
