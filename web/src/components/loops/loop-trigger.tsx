@@ -265,7 +265,7 @@ function TriggerMenu({ data, triggerType, config, onChange, readOnly }: { data: 
   const matches = (label: string) => !query.trim() || t(label).toLowerCase().includes(query.trim().toLowerCase()) || label.toLowerCase().includes(query.trim().toLowerCase());
   const entityTypes = triggerType === "cycle" ? (["project", "initiative", "release", "team", "cycle"] as const) : (["project", "initiative", "release", "team"] as const);
   return (
-    <DropdownMenu onOpenChange={(open) => !open && setQuery("")}>
+    <DropdownMenu phoneSheet={false} onOpenChange={(open) => !open && setQuery("")}>
       <DropdownMenuTrigger className="loops-trigger-button" aria-label={t("Trigger")}>
         <span className="loops-trigger-button-label">
           <TriggerSentence data={data} triggerType={triggerType} config={config} />

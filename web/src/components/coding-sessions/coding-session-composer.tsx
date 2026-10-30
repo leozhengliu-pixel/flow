@@ -84,7 +84,7 @@ const isShortcutSend = (event: { key: string; shiftKey: boolean; metaKey: boolea
 
 function OptionDropdown({ options, selected, onSelect }: { options: ComposerOption[]; selected?: ComposerOption; onSelect: (option: ComposerOption) => void }) {
   const { t } = useI18n()
-  return <DropdownMenu>
+  return <DropdownMenu phoneSheet={false}>
     <DropdownMenuTrigger asChild>
       <button type="button" className={`cs-option-select${selected ? ' is-selected' : ''}`} title={selected?.label}>
         <span data-i18n-ignore={selected ? true : undefined}>{selected ? selected.label : t('Select an option')}</span><ChevronDown size={14} aria-hidden="true"/>
