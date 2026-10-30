@@ -220,3 +220,197 @@
 .pulse-why-dialog .pulse-why-actions .pulse-link-button{display:inline-flex;align-items:center;gap:8px;color:var(--ui-pill-fg);font-size:13px;font-weight:450}
 .pulse-why-dialog .pulse-why-actions .pulse-secondary-button{height:28px;padding:0 12px;border:0;border-radius:9999px;background:var(--ui-pill-bg);color:var(--text-body);font-size:13px;font-weight:500;box-shadow:0 0 0 .5px var(--ui-pill-ring),var(--ui-pill-shadow)}
 .pulse-why-dialog:focus{outline:0}
+
+@media (max-width: 767px) {
+  html:root body .app .pulse-page .pulse-header {
+    gap: 12px;
+    padding: 0;
+    background: var(--bg-panel);
+    border-style: none;
+  }
+  html:root body .app .pulse-page .pulse-header-top {
+    gap: 0;
+    padding: 0 8px;
+  }
+  html:root body .app .pulse-page .pulse-mobile-menu {
+    width: 32px;
+    height: 32px;
+    margin: 0;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  html:root body .app .pulse-page .pulse-header h2 {
+    margin: 0 0 0 12px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: normal;
+    border-style: none;
+  }
+  html:root body .app .pulse-page .pulse-header .pulse-icon-button {
+    width: 32px;
+    height: 32px;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  html:root body .app .pulse-page .pulse-toolbar {
+    gap: 6px;
+    padding: 0 8px;
+  }
+  html:root body .app .pulse-page .pulse-view-tabs > a.pulse-tab {
+    height: 32px;
+    padding: 0 9.5px;
+    border-radius: 9999px;
+    border: .5px solid transparent;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  html:root body .app .pulse-page .pulse-view-tabs > a.pulse-tab > span {
+    line-height: normal;
+    border-style: none;
+  }
+  html:root body .app .pulse-page .pulse-add-view {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  html:root body .app .pulse-page .pulse-feed {
+    width: calc(100% - 16px);
+    gap: 48px;
+    padding: 48px 0 96px;
+  }
+  html:root body .app .pulse-page .pulse-group-header {
+    height: 15.5px;
+    gap: 16px;
+    color: var(--ui-pill-fg);
+    font-size: 13px;
+    font-weight: 450;
+    line-height: normal;
+    border-style: none;
+  }
+  html:root body .app .pulse-page .pulse-group-header > span {
+    border-style: none;
+  }
+  html:root body .app .pulse-page .pulse-group-header > i {
+    height: .5px;
+    background: var(--theme-border);
+  }
+  html:root body .app .pulse-page .pulse-post-card {
+    row-gap: 16px;
+    column-gap: 0;
+    border-style: none;
+  }
+  html:root body .app .pulse-page .pulse-post-header {
+    gap: 12px;
+  }
+  html:root body .app .pulse-page .pulse-post-heading {
+    min-width: 0;
+    flex: none;
+    gap: 6px;
+  }
+  html:root body .app .pulse-page .pulse-post-title {
+    min-height: 22.5px;
+    line-height: normal;
+    border-style: none;
+  }
+  html:root body .app .pulse-page .pulse-post-byline {
+    line-height: normal;
+  }
+  html:root body .app .pulse-page .pulse-post-author,
+  html:root body .app .pulse-page .pulse-post-byline time {
+    line-height: normal;
+    border-style: none;
+  }
+  html:root body .app .pulse-page .pulse-post-health.is-onTrack {
+    color: var(--project-health-on-track);
+  }
+  html:root body .app .pulse-page .pulse-post-health > span {
+    line-height: normal;
+    border-style: none;
+  }
+  html:root body .app .pulse-page .pulse-post-card .pulse-byline-avatar {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    font-size: 9px;
+    font-weight: 400;
+    line-height: 0;
+    color: var(--pulse-phone-avatar-fg);
+    background: var(--pulse-phone-avatar-bg);
+    box-shadow: none;
+    border-style: none;
+  }
+  html:root body .app .pulse-page .pulse-post-body {
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 450;
+    line-height: 24px;
+    letter-spacing: -.1px;
+    border-style: none;
+  }
+  html:root body .app .pulse-page .pulse-post-footer {
+    align-items: flex-start;
+  }
+  html:root body .app .pulse-page .pulse-post-footer > .pulse-footer-button {
+    min-width: 0;
+    width: auto;
+    height: 28px;
+    padding: 5px 10px;
+    border: .5px solid transparent;
+    border-radius: 30px;
+    background: var(--ui-pill-bg);
+    color: var(--ui-pill-fg);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: normal;
+    box-shadow: none;
+  }
+  html:root body .app .pulse-page .pulse-post-reactions > .pulse-footer-button {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+    box-shadow: none;
+  }
+  html:root body .app .pulse-page .pulse-post-menu-button {
+    width: 28px;
+    flex: 0 0 28px;
+    height: 28px;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+  }
+}
