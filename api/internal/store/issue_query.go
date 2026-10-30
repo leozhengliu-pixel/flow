@@ -883,11 +883,14 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 	return page, nil
 }
 
-func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecordQuery) (IssueRecordPage, error) {
-	page := IssueRecordPage{Items: []domain.Issue{}, Total: -1}
+// issueRecordSelection builds the row source, visibility CTE and predicates
+// shared by the paged query and the plain COUNT(*). Keeping them in one place
+// makes issueRecordTotal's equivalence test check the same SQL the fallback
+// runs.
+func (s *SQLiteStore) issueRecordSelection(query IssueRecordQuery) (string, []any, string, []any, error) {
 	where, args, err := issueRecordWhere(query)
 	if err != nil {
-		return page, err
+		return "", nil, "", nil, err
 	}
 	if query.SearchText != "" {
 		selection, values := s.issueTextSelection(query.Workspace, query.SearchText)
@@ -897,12 +900,33 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 	if query.Nested {
 		root, values, err := s.issueNestedRootClause(query)
 		if err != nil {
-			return page, err
+			return "", nil, "", nil, err
 		}
 		where += " AND " + root
 		args = append(args, values...)
 	}
 	prefix, prefixArgs := issueAccessCTE(query)
+	return prefix, prefixArgs, where, args, nil
+}
+
+// countIssueRecordsSQL is the exact COUNT(*)* row count issueRecordTotal
+// falls back to.
+func (s *SQLiteStore) countIssueRecordsSQL(ctx context.Context, query IssueRecordQuery) (int64, error) {
+	prefix, prefixArgs, where, args, err := s.issueRecordSelection(query)
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	err = s.db.QueryRowContext(ctx, prefix+"SELECT COUNT(*) FROM issue_records i WHERE "+where, append(prefixArgs, args...)...).Scan(&total)
+	return total, err
+}
+
+func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecordQuery) (IssueRecordPage, error) {
+	page := IssueRecordPage{Items: []domain.Issue{}, Total: -1}
+	prefix, prefixArgs, where, args, err := s.issueRecordSelection(query)
+	if err != nil {
+		return page, err
+	}
 	column := "sort_order"
 	expression := ""
 	switch query.Sort {
@@ -952,7 +976,7 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 			return page, err
 		} else if ok {
 			page.Total = total
-		} else if err := s.db.QueryRowContext(ctx, prefix+"SELECT COUNT(*) FROM issue_records i WHERE "+where, append(prefixArgs, args...)...).Scan(&page.Total); err != nil {
+		} else if page.Total, err = s.countIssueRecordsSQL(ctx, query); err != nil {
 			return page, err
 		}
 	}
@@ -1080,14 +1104,20 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 // counters when the query is a plain scope count (a workspace or team list
 // with no other predicate). The counters are transactionally maintained by
 // every issue write, so this stays correct while avoiding a COUNT(*) over
-// the whole workspace.
+// the whole workspace. Queries with any other row predicate return ok=false;
+// the caller then runs countIssueRecordsSQL.
 func (s *SQLiteStore) issueRecordTotal(ctx context.Context, query IssueRecordQuery) (int64, bool, error) {
 	if !issueFilterEmpty(query.Filter) || query.Text != "" || query.SearchText != "" ||
 		len(query.ProjectIDs) > 0 || len(query.StateIDs) > 0 || len(query.ReleaseIDs) > 0 ||
-		query.RestrictToIssueIDs || query.GroupBy != "" {
+		len(query.IssueIDs) > 0 || query.RestrictToIssueIDs || query.Nested ||
+		query.GroupBy != "" || query.GroupValue != nil || len(query.GroupValues) > 0 || len(query.GroupCases) > 0 {
 		return 0, false, nil
 	}
 	access := query.Access
+	var archivedTeams []string
+	if access != nil {
+		archivedTeams = access.ArchivedTeamIDs
+	}
 	if len(query.TeamIDs) == 0 {
 		// A workspace-wide count must not include teams the viewer cannot see.
 		if access != nil && !access.Admin {
@@ -1096,24 +1126,45 @@ func (s *SQLiteStore) issueRecordTotal(ctx context.Context, query IssueRecordQue
 		if query.AllowedTeamIDs != nil {
 			return 0, false, nil
 		}
-		scopeType, scopeID := "workspace", ""
-		return s.sumIssueCounters(ctx, query, scopeType, []string{scopeID})
+		total, ok, err := s.sumIssueCounters(ctx, query, "workspace", []string{""})
+		if err != nil || !ok {
+			return total, ok, err
+		}
+		// Deleted teams in their restore window are hidden from everyone,
+		// admins included; the workspace counter still includes their issues.
+		if len(archivedTeams) > 0 {
+			hidden, ok, err := s.sumIssueCounters(ctx, query, "team", archivedTeams)
+			if err != nil || !ok {
+				return 0, false, err
+			}
+			total -= hidden
+			if total < 0 {
+				total = 0
+			}
+		}
+		return total, true, nil
 	}
+	teams := slices.Clone(query.TeamIDs)
 	if access != nil && !access.Admin {
-		for _, team := range query.TeamIDs {
-			if !slices.Contains(access.VisibleTeamIDs, team) || slices.Contains(access.ArchivedTeamIDs, team) {
+		for _, team := range teams {
+			if !slices.Contains(access.VisibleTeamIDs, team) {
 				return 0, false, nil
 			}
 		}
 	}
 	if query.AllowedTeamIDs != nil {
-		for _, team := range query.TeamIDs {
+		for _, team := range teams {
 			if !slices.Contains(query.AllowedTeamIDs, team) {
 				return 0, false, nil
 			}
 		}
 	}
-	return s.sumIssueCounters(ctx, query, "team", query.TeamIDs)
+	// Archived teams are hidden from every viewer (issueRecordVisibilityClause).
+	teams = slices.DeleteFunc(teams, func(team string) bool { return slices.Contains(archivedTeams, team) })
+	if len(teams) == 0 {
+		return 0, true, nil
+	}
+	return s.sumIssueCounters(ctx, query, "team", teams)
 }
 
 func (s *SQLiteStore) sumIssueCounters(ctx context.Context, query IssueRecordQuery, scopeType string, ids []string) (int64, bool, error) {
