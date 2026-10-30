@@ -1242,7 +1242,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
     height: 44px;
     gap: 0;
     padding: 0 8px;
-    border-bottom: 0;
+    border-bottom: .5px solid var(--pd-border);
   }
   html:root body .app .project-detail-page__top > .project-detail-page__header [data-sidebar-trigger].project-detail-page__mobile-menu {
     width: 32px;
@@ -1323,6 +1323,24 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
     font-size: 12px;
     font-weight: 500;
     line-height: normal;
+  }
+  .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__tab {
+    position: relative;
+    background-clip: padding-box;
+  }
+  .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__tab::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: 0 0 0 .5px var(--ui-pill-ring), var(--ui-pill-shadow);
+    pointer-events: none;
+  }
+  .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__tab:hover::after {
+    box-shadow: 0 0 0 .5px var(--ui-pill-hover-ring), var(--ui-pill-shadow);
+  }
+  .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__tab[data-active=true]::after {
+    box-shadow: 0 0 0 .5px var(--ui-pill-ring);
   }
   .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__tab > div {
     overflow: hidden;
