@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 
 test.describe('mobile inbox list', () => {
@@ -350,4 +351,85 @@ test.describe('mobile inbox list', () => {
 
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/pulse-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
+  test('shows the phone reviews header, tab counts and empty state', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-inbox-reviews-list-${testInfo.project.name}-${testInfo.retry}`
+    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: '[mobile] Reviews list', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(workspaceResponse.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const secret = `mobile-reviews-${workspaceKey}`
+    const integration = await request.put('http://127.0.0.1:4180/api/integrations/github', {
+      headers,
+      data: { name: '[mobile] GitHub', config: { organization: 'mobile-e2e', webhookSecret: secret, codeAccess: 'true' }, scopes: ['repo'] },
+    })
+    expect(integration.status()).toBe(200)
+
+    const webhook = async (payload: Record<string, unknown>, delivery: string) => {
+      const body = JSON.stringify(payload)
+      const signature = 'sha256=' + createHmac('sha256', secret).update(body).digest('hex')
+      const response = await request.post('http://127.0.0.1:4180/api/integrations/github/webhook', {
+        headers: { ...headers, 'Content-Type': 'application/json', 'X-GitHub-Event': 'pull_request', 'X-GitHub-Delivery': delivery, 'X-Hub-Signature-256': signature },
+        data: body,
+      })
+      expect(response.status()).toBe(202)
+    }
+    for (const number of [101, 102]) {
+      const pullRequest = { number, id: 9000 + number, title: `[mobile] Review ${number}`, body: '', html_url: `https://github.com/mobile-e2e/repo/pull/${number}`, state: 'open', user: { login: 'flowuser' }, base: { ref: 'main' }, head: { ref: `mobile/review-${number}`, sha: 'abc' }, additions: 3, deletions: 1, commits: 1 }
+      const event = { number, pull_request: pullRequest, repository: { full_name: 'mobile-e2e/repo' }, sender: { login: 'flowuser' } }
+      await webhook({ ...event, action: 'opened' }, `${workspaceKey}-open-${number}`)
+      await webhook({ ...event, action: 'closed', pull_request: { ...pullRequest, state: 'closed', merged: true } }, `${workspaceKey}-closed-${number}`)
+    }
+
+    await page.goto(`/${workspaceKey}/reviews`)
+    const near = (actual: number | undefined, expected: number) => expect(Math.abs((actual ?? Number.NaN) - expected)).toBeLessThanOrEqual(1)
+
+    const header = page.locator('.reviews-header')
+    await expect(header).toBeVisible()
+    near((await header.boundingBox())?.height, 87.5)
+    const menu = page.locator('.reviews-topbar [data-sidebar-trigger]')
+    near((await menu.boundingBox())?.x, 8)
+    expect((await menu.boundingBox())?.width).toBe(32)
+    near((await page.locator('.reviews-topbar h1').boundingBox())?.x, 52)
+    near((await page.locator('.reviews-topbar button[aria-label="Add filter"]').boundingBox())?.x, 314)
+    near((await page.locator('.reviews-topbar button[aria-label="Display options"]').boundingBox())?.x, 350)
+
+    const created = page.locator('.reviews-tabs a:nth-of-type(2)')
+    const toReview = page.locator('.reviews-tabs a:nth-of-type(1)')
+    near((await created.boundingBox())?.x, 8)
+    near((await toReview.boundingBox())?.x, 92.75)
+    expect((await created.boundingBox())?.height).toBe(32)
+    await expect(created).toHaveCSS('background-color', 'lch(10.149 0.593 272)')
+    await expect(toReview).toHaveCSS('background-color', 'lch(16.706 0.979 272)')
+    await expect(toReview.locator('.reviews-tab-label--phone')).toHaveText('To review')
+    await expect(created.locator('.reviews-tab-label--phone')).toHaveText('Created')
+    await expect(created.locator('.reviews-tab-count')).toHaveText('2')
+    near((await created.locator('.reviews-tab-count').boundingBox())?.x, 69.63)
+    expect((await created.locator('.reviews-tab-count').boundingBox())?.height).toBe(13)
+
+    // Hide the closed (merged) reviews of this view, as the reference account does, so the To review tab is empty.
+    await page.locator('.reviews-topbar button[aria-label="Display options"]').click()
+    await page.locator('.review-list-options .select-control[aria-label="Closed reviews"]').click()
+    await page.locator('[role="option"]:has-text("None")').click()
+    await page.locator('.reviews-topbar h1').click()
+
+    const illustration = page.locator('.reviews-empty-illustration svg')
+    await expect(illustration).toBeVisible()
+    near((await illustration.boundingBox())?.x, 130)
+    near((await illustration.boundingBox())?.y, 380.5)
+    near((await illustration.boundingBox())?.width, 130)
+    near((await illustration.boundingBox())?.height, 131)
+    near((await page.locator('.reviews-empty-illustration').boundingBox())?.y, 371)
+    const emptyText = page.locator('.reviews-empty-text')
+    await expect(emptyText).toHaveText('Nothing to review')
+    near((await emptyText.boundingBox())?.y, 545)
+    await expect(emptyText).toHaveCSS('font-size', '13px')
+    await expect(emptyText).toHaveCSS('font-weight', '500')
+
+    const geometry = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }))
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.width)
+
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/reviews-list-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
+
 })

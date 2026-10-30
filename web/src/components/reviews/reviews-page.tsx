@@ -1,4 +1,4 @@
-import { AlertCircle, GitMerge, GitPullRequest, PanelRightClose, RefreshCw, Search, Zap } from "lucide-react";
+import { AlertCircle, GitMerge, GitPullRequest, RefreshCw, Search, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/lib/toast";
 
@@ -17,6 +17,7 @@ import "./reviews-page.css";
 import { ReviewFilters, ReviewDisplayMenu } from "./review-list-controls";
 import {
   compareReviews,
+  defaultReviewDisplay,
   groupReviews,
   matchesReviewFilters,
   reviewBaseItems,
@@ -26,6 +27,8 @@ import {
   reviewStatusLabels,
   type ReviewDisplay,
 } from "./review-list-model";
+import { ReviewsEmptyIllustration } from "./reviews-empty-illustration";
+import { SidebarLeftIcon } from "@/components/ui/view-action-icons";
 import { useReviewListControls } from "./use-review-list-controls";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { PersonHover } from "@/components/property/person-info";
@@ -204,41 +207,49 @@ function ReviewList({
     }
   };
   const tabs = [
-    { id: "for-you" as const, label: "For you", path: reviewsPath(data.workspace.urlKey) },
-    { id: "created" as const, label: "Created", path: reviewsPath(data.workspace.urlKey, "created") },
-  ];
+    { id: "for-you" as const, label: "For you", phoneLabel: "To review", path: reviewsPath(data.workspace.urlKey) },
+    { id: "created" as const, label: "Created", phoneLabel: "Created", path: reviewsPath(data.workspace.urlKey, "created") },
+  ].map((item) => ({
+    ...item,
+    // A tab's badge counts what that view can show with its own defaults; the open tab already has its display applied.
+    count: item.id === view ? baseItems.length : reviewBaseItems(data, item.id, defaultReviewDisplay(item.id)).length,
+  }));
   return (
     <section className="reviews-list-pane">
-      <header className="reviews-topbar">
-        <button className="reviews-mobile-sidebar" aria-label={t("Open sidebar")} data-sidebar-trigger onClick={onOpenSidebar} type="button">
-          <PanelRightClose />
-        </button>
-        <h1>{t("Reviews")}</h1>
-        <div>
-          {/* Running the import is for workspace admins; members would only get a refusal. */}
-          {isWorkspaceAdmin(data) && <button type="button" className="review-ghost-button" aria-label={t("Sync now")} title={t("Sync now")} disabled={syncing} aria-busy={syncing} onClick={() => void syncNow()}>
-            <RefreshCw className={syncing ? "reviews-sync-spinning" : undefined} />
-          </button>}
-          <ReviewFilters filters={filters} data={data} items={baseItems} onChange={setFilters} filterBarHost={filterHost} />
-          <ReviewDisplayMenu display={display} view={view} onChange={setDisplay} />
-        </div>
-      </header>
-      <nav className="reviews-tabs" aria-label={t("Reviews")}>
-        {tabs.map((item) => (
-          <a
-            key={item.id}
-            className={view === item.id ? "active" : ""}
-            aria-current={view === item.id ? "page" : undefined}
-            href={item.path}
-            onClick={(event) => {
-              event.preventDefault();
-              onNavigate(item.path);
-            }}
-          >
-            {t(item.label)}
-          </a>
-        ))}
-      </nav>
+      <div className="reviews-header">
+        <header className="reviews-topbar">
+          <button className="reviews-mobile-sidebar" aria-label={t("Open sidebar")} data-sidebar-trigger onClick={onOpenSidebar} type="button">
+            <SidebarLeftIcon />
+          </button>
+          <h1>{t("Reviews")}</h1>
+          <div>
+            {/* Running the import is for workspace admins; members would only get a refusal. */}
+            {isWorkspaceAdmin(data) && <button type="button" className="review-ghost-button" aria-label={t("Sync now")} title={t("Sync now")} disabled={syncing} aria-busy={syncing} onClick={() => void syncNow()}>
+              <RefreshCw className={syncing ? "reviews-sync-spinning" : undefined} />
+            </button>}
+            <ReviewFilters filters={filters} data={data} items={baseItems} onChange={setFilters} filterBarHost={filterHost} />
+            <ReviewDisplayMenu display={display} view={view} onChange={setDisplay} />
+          </div>
+        </header>
+        <nav className="reviews-tabs" aria-label={t("Reviews")}>
+          {tabs.map((item) => (
+            <a
+              key={item.id}
+              className={view === item.id ? "active" : ""}
+              aria-current={view === item.id ? "page" : undefined}
+              href={item.path}
+              onClick={(event) => {
+                event.preventDefault();
+                onNavigate(item.path);
+              }}
+            >
+              <span className="reviews-tab-label reviews-tab-label--desktop">{t(item.label)}</span>
+              <span className="reviews-tab-label reviews-tab-label--phone">{t(item.phoneLabel)}</span>
+              {item.count > 0 && <span className="reviews-tab-count">{item.count}</span>}
+            </a>
+          ))}
+        </nav>
+      </div>
       <div className="review-filter-host" ref={setFilterHost} />
       {visible.length ? (
         <div className="review-groups">
@@ -306,7 +317,10 @@ function ReviewList({
         </div>
       ) : (
         <div className="reviews-selection-empty">
-          <span>{t(view === "created" ? "No open reviews" : "Nothing to review")}</span>
+          <div className="reviews-empty-illustration">
+            <ReviewsEmptyIllustration />
+          </div>
+          <span className="reviews-empty-text">{t(view === "created" ? "No open reviews" : "Nothing to review")}</span>
         </div>
       )}
     </section>
