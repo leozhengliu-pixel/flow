@@ -63,6 +63,47 @@ func TestMCPListResultsAreObjectStructuredContent(t *testing.T) {
 	}
 }
 
+func TestMCPListCyclesAllAndIssueRelationshipProjections(t *testing.T) {
+	f := newMCPContractFixture(t)
+	team := f.data.Teams[0].ID
+	cycles := mcpSuccess(t, f.call(t, "list_cycles", map[string]any{"teamId": team, "type": "all"}))
+	if _, ok := cycles.(map[string]any)["items"].([]any); !ok {
+		t.Fatalf("list_cycles all = %T, want structured items", cycles)
+	}
+	result := mcpSuccess(t, f.call(t, "list_issues", map[string]any{
+		"limit":  1,
+		"fields": []string{"title", "labels", "attachmentCount", "customerRequestCount", "subIssueCount", "hasChildren"},
+	}))
+	items := result.(map[string]any)["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("list_issues projection items = %d, want 1", len(items))
+	}
+	item := items[0].(map[string]any)
+	for _, field := range []string{"attachmentCount", "customerRequestCount", "subIssueCount", "hasChildren"} {
+		if _, ok := item[field]; !ok {
+			t.Errorf("list_issues projection missing %q: %v", field, item)
+		}
+	}
+	for _, filter := range []string{"hasAttachments", "hasCustomerRequests", "hasSubIssues"} {
+		if result := f.call(t, "list_issues", map[string]any{filter: true, "limit": 1}); result["result"].(map[string]any)["isError"] == true {
+			t.Errorf("list_issues %s filter: %v", filter, result)
+		}
+	}
+	parent := mcpSuccess(t, f.call(t, "save_issue", map[string]any{"title": "Relationship parent", "team": team})).(map[string]any)
+	mcpSuccess(t, f.call(t, "save_issue", map[string]any{"title": "Relationship child", "parentId": parent["identifier"]}))
+	filtered := mcpSuccess(t, f.call(t, "list_issues", map[string]any{"hasSubIssues": true, "fields": []string{"id", "subIssueCount", "hasChildren"}, "limit": 250})).(map[string]any)
+	found := false
+	for _, raw := range filtered["items"].([]any) {
+		item := raw.(map[string]any)
+		if item["id"] == parent["id"] {
+			found = item["hasChildren"] == true && item["subIssueCount"].(float64) == 1
+		}
+	}
+	if !found {
+		t.Fatalf("hasSubIssues did not return parent: %v", filtered)
+	}
+}
+
 // A sub-issue created with parentId and no team goes to its parent's team (the spike's agents left team out).
 func TestMCPSaveIssueSubIssueTakesTheParentsTeam(t *testing.T) {
 	f := newMCPContractFixture(t)

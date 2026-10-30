@@ -19,7 +19,7 @@ var issueAttributeFields = map[string]bool{
 	"completedAt": true, "canceledAt": true, "startedAt": true,
 	"templateId": true, "externalSource": true, "delegateId": true,
 	"firstLabel": true, "agentSessionId": true, "addedToCycle": true,
-	"hasLinks": true, "autoClosed": true, "triagedAt": true, "statusChangedAt": true,
+	"hasLinks": true, "hasChildren": true, "autoClosed": true, "triagedAt": true, "statusChangedAt": true,
 	"nextOccurrenceAt": true, "recurrenceInstance": true, "snoozedUntil": true,
 	"autoClosedAt": true,
 }
@@ -41,7 +41,7 @@ var issueAttributePrefixes = []string{"relation:", "suggestedLabel:", "suggested
 
 // issueAttributeVersion is stored in issue_attribute_migrations.complete; bump it
 // when issueAttributes gains fields so existing issues are re-indexed once.
-const issueAttributeVersion = 5
+const issueAttributeVersion = 6
 
 func isIssueAttributeField(field string) bool {
 	if issueAttributeFields[field] {
@@ -90,6 +90,9 @@ func issueAttributes(issue domain.Issue) map[string]string {
 	}
 	if len(issue.Attachments) > 0 {
 		values["hasLinks"] = "true"
+	}
+	if len(issue.SubIssueIDs) > 0 {
+		values["hasChildren"] = "true"
 	}
 	if issue.AutoClosed {
 		values["autoClosed"] = "true"
