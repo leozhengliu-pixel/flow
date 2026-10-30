@@ -7,7 +7,7 @@ import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-m
 import type { AgentSession } from '@/types/flow'
 
 const api = vi.hoisted(() => ({ fetchAgentStatus: vi.fn(), markAgentSessionRead: vi.fn(), updateAgentMessageFeedback: vi.fn(), createAgentSessionFeedback: vi.fn(), getAgentSession: vi.fn(), resolveAgentApproval: vi.fn(), stopAgentSession: vi.fn() }))
-const streams = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn() }))
+const streams = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn(), streamAgentSessionMessageEdit: vi.fn() }))
 vi.mock('@/lib/api', () => api)
 vi.mock('@/lib/agent-stream', () => streams)
 
@@ -23,6 +23,17 @@ const session: AgentSession = {
 }
 
 describe('Agent chat panel streaming', () => {
+  it('retries a saved failure by replacing its reply, without duplicating the user message', async () => {
+    const failed = { ...session, messages: [session.messages[0], { ...session.messages[1], content: '', parts: [{ id: 'error', type: 'error' as const, text: 'json: unexpected end of JSON input', status: 'error' as const }] }] }
+    api.getAgentSession.mockResolvedValue(failed)
+    streams.streamAgentSessionMessageEdit.mockImplementation(() => new Promise(() => {}))
+    render(<I18nProvider><AgentChatPanel initialSession={failed} issues={[]} onClose={vi.fn()} open/></I18nProvider>)
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Send a message to Flow Agent' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(streams.streamAgentSessionMessageEdit).toHaveBeenCalledWith('session-1', 'user-message', 'Summarize', expect.any(Function), expect.any(AbortSignal)))
+    expect(streams.streamAgentSessionMessage).not.toHaveBeenCalled()
+    expect(screen.getAllByText('Summarize')).toHaveLength(1)
+  })
   beforeEach(() => {
     api.fetchAgentStatus.mockReset().mockResolvedValue({ enabled: true, model: 'model' })
     Object.values(streams).forEach(mock => mock.mockReset())
@@ -216,6 +227,19 @@ describe('Agent chat panel following a reply that runs on the server', () => {
     Object.values(streams).forEach(mock => mock.mockReset())
   })
 
+  it('retries a failed approval decision, not the prompt or its workspace writes', async () => {
+    const running = runningReplySession()
+    api.getAgentSession.mockResolvedValue(running)
+    api.resolveAgentApproval.mockRejectedValueOnce(new Error('json: unexpected end of JSON input')).mockResolvedValue({ approvalId: 'approval-1', decision: 'approved' })
+    render(<I18nProvider><AgentChatPanel initialSession={running} issues={[]} onClose={vi.fn()} open/></I18nProvider>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve tool' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+    expect(api.resolveAgentApproval).toHaveBeenCalledTimes(2)
+    expect(api.resolveAgentApproval).toHaveBeenLastCalledWith('session-live', 'approval-1', 'approve')
+    expect(streams.streamAgentSessionMessage).not.toHaveBeenCalled()
+    act(() => pushAgentSession(finishedReplySession(running)))
+  })
+
   it('shows the partial reply after a reload with a live approval card and Stop, and answers the approval once', async () => {
     const user = userEvent.setup()
     const running = runningReplySession()
@@ -251,4 +275,3 @@ describe('Agent chat panel following a reply that runs on the server', () => {
     expect(screen.getByText('Response sent')).toBeVisible()
   })
 })
-

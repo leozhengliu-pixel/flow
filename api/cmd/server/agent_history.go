@@ -48,7 +48,7 @@ func sanitizeAgentProviderMessages(messages []agentProviderMessage) []agentProvi
 				continue
 			}
 			seenCalls[call.ID] = true
-			if len(call.Arguments) > 0 && !json.Valid(call.Arguments) {
+			if !json.Valid(call.Arguments) {
 				call.Arguments = json.RawMessage(`{}`)
 			}
 			calls = append(calls, call)

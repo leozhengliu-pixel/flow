@@ -367,7 +367,7 @@ describe('agent page composer', () => {
       streams.streamAgentSessionMessageEdit.mockImplementation((_id, _messageId, _message, onEvent) => new Promise(() => { emit = onEvent }))
       const user = userEvent.setup()
       render(<I18nProvider><AgentPage chatSlug="failed" data={makeBootstrap({ agentSessions: [failed], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
-      expect(await screen.findByText('Provider timed out')).toBeVisible()
+      expect(await screen.findByText('The model provider took too long to respond. Try again.')).toBeVisible()
       await user.click(await screen.findByRole('button', { name: 'Retry' }))
       // The edit endpoint keeps the stored question (same id) and drops the failed reply; no new message is appended.
       expect(streams.streamAgentSessionMessageEdit).toHaveBeenCalledWith('session-failed', 'user-message', 'Summarise the launch', expect.any(Function), expect.any(AbortSignal))
@@ -436,7 +436,7 @@ describe('agent page composer', () => {
       ] }
       api.getAgentSession.mockResolvedValue(older)
       render(<I18nProvider><AgentPage chatSlug="failed" data={makeBootstrap({ agentSessions: [older], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
-      expect(await screen.findByText('Provider timed out')).toBeVisible()
+      expect(await screen.findByText('The model provider took too long to respond. Try again.')).toBeVisible()
       expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
     })
   })

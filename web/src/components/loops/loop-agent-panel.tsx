@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCurrentTimeMs } from "@/hooks/use-current-time";
 import { useLatestRef } from "@/hooks/use-latest-ref";
 import { fetchAgentStatus, getAgentSession, listAgentSessions } from "@/lib/api";
-import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
+import { streamAgentSessionMessage, streamAgentSessionMessageEdit, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
 import { AgentPanel } from "@/components/agent/agent-panel";
 import { EntityAgentThread } from "@/components/agent/entity-agent-thread";
 import { clearEntityThreadDraft } from "@/components/agent/entity-thread-draft";
@@ -56,11 +56,13 @@ export function LoopAgentPanel({
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<AgentStatus>();
   const [loading, setLoading] = useState(false);
+  const [scrollRequest, setScrollRequest] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [streamParts, setStreamParts] = useState<AgentMessagePart[]>([]);
   const [error, setError] = useState<string>();
   const [streamMessageId, setStreamMessageId] = useState<string>();
   const abortRef = useRef<AbortController | undefined>(undefined);
+  const retryMessage = useRef('');
   const autoSent = useRef(false);
   const published = useRef(false);
   const draftKey = `loop:${loopId}:${session?.id ?? "new"}`;
@@ -137,21 +139,24 @@ export function LoopAgentPanel({
   const following = follow.following;
 
   const submit = useCallback(
-    async (text?: string) => {
+    async (text?: string, retryOf?: AgentMessage) => {
       const message = (text ?? input).trim();
       if (!message || loading || following || !status?.enabled) return;
-      setMessages((current) => [...current, { id: `pending-${Date.now()}`, role: "user", content: message, createdAt: new Date().toISOString() }]);
+      retryMessage.current = message;
+      setMessages((current) => [...(retryOf ? current.slice(0, current.findIndex(item => item.id === retryOf.id)) : current), { id: `pending-${Date.now()}`, role: "user", content: message, createdAt: new Date().toISOString() }]);
       if (text === undefined) setInput("");
       setError(undefined);
       setLoading(true);
+      setScrollRequest((value) => value + 1);
       setStreamParts([]);
       setStreamMessageId(undefined);
+      let started = false;
       const controller = new AbortController();
       abortRef.current = controller;
       const onEvent = (event: AgentStreamEvent) => {
         if (event.session) setSession(event.session);
         if (event.messageId) setStreamMessageId(event.messageId);
-        if (event.type === "session.started" && event.session) setMessages(event.session.messages);
+        if (event.type === "session.started" && event.session) { started = true; setMessages(event.session.messages); }
         if (event.type === "text.replaced")
           setMessages((current) => (current.at(-1)?.role === "assistant" ? current.map((item, index) => (index === current.length - 1 ? { ...item, content: event.delta ?? "" } : item)) : current));
         if (event.type === "text.delta")
@@ -180,7 +185,9 @@ export function LoopAgentPanel({
         }
       };
       try {
-        const next = session
+        const next = session && retryOf && !retryOf.id.startsWith('pending-')
+          ? await streamAgentSessionMessageEdit(session.id, retryOf.id, message, onEvent, controller.signal)
+          : session
           ? await streamAgentSessionMessage(session.id, message, onEvent, controller.signal, { loopIds: [loopId] })
           : await streamNewAgentSession({ message, loopIds: [loopId], location: "toolbar" }, onEvent, controller.signal);
         if (next) {
@@ -193,6 +200,7 @@ export function LoopAgentPanel({
           setStreamParts((current) => current.map((part) => (part.status === "running" ? { ...part, status: "error" } : part)));
           return;
         }
+        if (!started) setInput(message);
         setError(reason instanceof Error ? reason.message : t("Flow Agent is unavailable"));
       } finally {
         abortRef.current = undefined;
@@ -212,7 +220,7 @@ export function LoopAgentPanel({
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const shownParts = useMemo(() => agentShownParts(messages, streamParts), [messages, streamParts]);
-  const { approvalBusy, decideToolApproval: decide } = useAgentApprovalAnswer({ sessionId: session?.id, parts: shownParts, onError: setError, onStale: follow.refresh });
+  const { approvalBusy, decideToolApproval: decide, retryApproval } = useAgentApprovalAnswer({ sessionId: session?.id, parts: shownParts, onError: setError, onStale: follow.refresh });
 
   const templateId = visual?.templateId;
   const visibleMessages = useMemo(
@@ -261,6 +269,9 @@ export function LoopAgentPanel({
           abortRef.current?.abort();
         }}
         onSubmit={() => void submit()}
+        onRetry={target => void submit(target?.content ?? retryMessage.current, target ?? session?.messages.findLast(item => item.role === 'user'))}
+        onRetryError={retryApproval ?? (!status?.enabled ? () => { void fetchAgentStatus().then(next => { setStatus(next); setError(next.enabled ? undefined : t("Flow Agent is not configured")); }).catch(reason => setError(String(reason))); } : undefined)}
+        scrollRequest={scrollRequest}
         onToolApproval={(call, decision) => void decide(call, decision)}
         placeholder={status && !status.enabled ? t("Flow Agent is not configured") : t("Describe what this loop should do…")}
         renderAssistantBody={(message, { streaming }) => (

@@ -89,6 +89,8 @@ func loopBuilderPrompt(data domain.Bootstrap, session domain.AgentSession) strin
 		}
 		fmt.Fprintf(&prompt, `This draft was started from scratch or from the user's request.
 - Fill it in from the request with one save_loop call using the loop id: a short name (2-5 words), the trigger and detailed instructions written as a short intro sentence plus numbered steps that say what a teammate should look up, what to change and what to report, like a well-written runbook. The visible instructions must be plain language in the user's language. Never include tool names, JSON/API field names, internal IDs, generated slugs or implementation details in them; keep those hints in this hidden prompt only.
+- Stay strictly within the user's request: do not invent extra checks, evidence, content, outputs, or follow-up steps that the user did not ask for. Preserve the requested scope and wording when it is already clear.
+- For example, a request to summarize Verify's completed issues and append to its daily summary document does not ask for release verification evidence, regression test results, or creating a new document if the target is missing. Do not add those requirements or fallback actions. A team's name is not a request for work suggested by that name.
 - Resolve relative dates against Today. Use the list tools to look up teams, people, labels and statuses you need to name.
 - Do not ask questions unless the request is impossible to act on. Do not publish, enable or run the loop.
 - Reply with one or two sentences on what you set up and end with: %q

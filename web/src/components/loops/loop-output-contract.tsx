@@ -414,7 +414,7 @@ export function LoopOutputContractPanel({
                   <div className="loops-contract-warning" role="alert" key={`unchosen-${index}`}>
                     <AlertTriangle size={14} />
                     <span>
-                      {t("The instructions don't say which document to write to. Until you choose it, runs write to no existing document and need review.")}
+                      {t("The instructions don't name a document. Choose one, or runs will wait for review before writing.")}
                       {output.target.description && <q className="loops-contract-evidence" data-i18n-ignore>{output.target.description}</q>}
                     </span>
                     <ContractDocumentButton

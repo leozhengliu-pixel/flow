@@ -10,6 +10,7 @@ import { AGENT_TASK_ACTIVITY_EVENT, archiveApplicationTask, deleteApplicationAct
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import { AgentAnswerText, AgentChoicePills } from './agent-answer'
+import { AgentErrorDetail } from './agent-error-detail'
 import { agentApprovalChoices, agentApprovalMarkdown } from './agent-approval-model'
 import { AgentCommentGlyph } from './agent-comment-glyph'
 import { agentThreadItems, agentThreadReactions, agentWorkingPhase } from './agent-thread-items'
@@ -103,7 +104,7 @@ export function IssueAgentTasks({ issue, data, resourceType = 'issue', commentId
   const directory = matches ? shared : own
   const threadIds = commentId === undefined ? undefined : typeof commentId === 'string' ? [commentId] : commentId
   const tasks = byCreation(directory.tasks.filter(task => taskId ? task.id === taskId : threadIds ? Boolean(task.commentId && threadIds.includes(task.commentId)) : !standalone || !task.commentId))
-  if (!tasks.length) return directory.error && !threadIds ? <p role="alert">{directory.error}</p> : null
+  if (!tasks.length) return directory.error && !threadIds ? <div role="alert"><AgentErrorDetail error={directory.error} onRetry={directory.refresh}/></div> : null
   return <div className={`issue-agent-threads${threadIds ? ' is-comment-thread' : ' is-standalone'}${variant === 'document' ? ' is-document-card' : ''}`} aria-label={t('Agent sessions')}>
     {tasks.map(task => task.codingSessionId && !task.commentId
       // A delegated coding session is a session card (status row into the session view), not a message thread.
@@ -124,6 +125,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
   const fileInput = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
   const [session, setSession] = useState(task)
+  const [loadRevision, setLoadRevision] = useState(0)
   const [archived, setArchived] = useState(false)
   const cursor = useRef({ key: '', after: '' })
   const agent = data.users.find(user => user.id === task.appUserId)
@@ -161,7 +163,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
     }
     void load().catch(error => { if (!abort.signal.aborted) setError(error instanceof Error ? error.message : String(error)) })
     return () => abort.abort()
-  }, [data.workspace.urlKey, task.id, task.version])
+  }, [data.workspace.urlKey, task.id, task.version, loadRevision])
   const submit = async (type: 'prompt' | 'canceled' | 'retry', body = reply, approve?: boolean) => {
     if (busyRef.current) return
     busyRef.current = true; setBusy(true); setError('')
@@ -268,7 +270,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
         </div>}
         {/* A person's reply in the session has no reply menu of its own; it offers the session's menu. */}
         {human && sessionMenu && !delegator && <div className="issue-agent-message-actions">{sessionMenu}</div>}
-        <div className="issue-agent-message-body"><AgentAnswerText className="issue-agent-markdown" data={data} markdown={body}/>
+        <div className="issue-agent-message-body">{activity.type === 'error' ? <AgentErrorDetail error={body} onRetry={!busy && !generating ? () => void submit('retry') : undefined}/> : <AgentAnswerText className="issue-agent-markdown" data={data} markdown={body}/>}
           {choices.length > 0 && <AgentChoicePills choices={choices} disabled={busy || item.id !== pendingQuestion?.id} onSelect={choice => void submit('prompt', choice.value)} recommended={approval || activity.signal !== 'select' ? undefined : recommendedChoiceValue(activity.signalMetadata)} selected={item.resolved ? item.selected ?? '' : undefined}/>}
           {auth && (authUser && authUser !== data.viewer.id ? <p className="issue-agent-auth-wait">{t('Waiting for')} {data.users.find(user => user.id === authUser)?.displayName || t('another member')} {t('to link their account.')}</p> : <a className="issue-agent-auth-link" href={activity.signalMetadata?.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>{t('Link account')}</a>)}
           {activity.url && <a href={activity.url} target="_blank" rel="noreferrer">{t('Open result')}</a>}
@@ -320,7 +322,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
         </div>
       </>}
     </div>
-    {error && <p className="issue-agent-thread-error" role="alert">{error}</p>}
+    {error && <div className="issue-agent-thread-error" role="alert"><AgentErrorDetail error={error} onRetry={() => setLoadRevision(value => value + 1)}/></div>}
   </section>
 }
 

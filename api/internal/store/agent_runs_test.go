@@ -319,3 +319,21 @@ func TestAgentRunChangesKeysAndSessionState(t *testing.T) {
 		t.Fatalf("deleted state: %v", err)
 	}
 }
+
+func TestAgentRunChangesRepairsMalformedStoredArguments(t *testing.T) {
+	repo := openAgentRunStore(t)
+	run := enqueueTestRun(t, repo, "acme", "task_1", AgentRunKindChat)
+	if _, err := repo.AppendAgentRunChange(t.Context(), run, "save_issue", nil, domain.AgentChange{Action: "created", EntityType: "issue"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.db.ExecContext(t.Context(), `UPDATE agent_run_changes SET arguments=? WHERE run_id=?`, []byte(`{"title":`), run.ID); err != nil {
+		t.Fatal(err)
+	}
+	changes, err := repo.AgentRunChanges(t.Context(), run.ID)
+	if err != nil || len(changes) != 1 || string(changes[0].Arguments) != "{}" {
+		t.Fatalf("changes = %+v, %v", changes, err)
+	}
+	if _, err := json.Marshal(changes); err != nil {
+		t.Fatal(err)
+	}
+}

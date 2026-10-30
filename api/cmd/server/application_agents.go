@@ -904,11 +904,15 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 		// Like chat: only tools of a connector set to always ask wait for approval.
 		approval := &domain.AgentApproval{Kind: "connector"}
 		for _, call := range turn.ToolCalls {
-			if agentToolNeedsApproval(r.Context(), call.Name) {
+			if normalizeAgentToolArguments(&call) == nil && agentToolNeedsApproval(r.Context(), call.Name) {
 				approval.Calls = append(approval.Calls, call)
 			}
 		}
 		for _, call := range turn.ToolCalls {
+			if err := normalizeAgentToolArguments(&call); err != nil {
+				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: err.Error(), IsError: true}})
+				continue
+			}
 			if call.Name == askUserTool {
 				_, _, parseErr := parseAskUser(call)
 				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: fmt.Sprint(parseErr), IsError: true}})

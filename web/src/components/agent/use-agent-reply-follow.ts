@@ -115,6 +115,7 @@ export function useAgentApprovalAnswer({
 }) {
   const { t } = useI18n();
   const [approvalBusy, setApprovalBusy] = useState<string>();
+  const [failedApproval, setFailedApproval] = useState<{ sessionId: string; call: AgentToolCall; decision: "approve" | "reject" }>();
   const busyRef = useLatestRef<string | undefined>(approvalBusy);
   const callbacks = useLatestRef({ onError, onStale, t });
   const decideToolApproval = useCallback(async (call: AgentToolCall | undefined, decision: "approve" | "reject") => {
@@ -122,6 +123,7 @@ export function useAgentApprovalAnswer({
     const approvalId = call.approvalId;
     busyRef.current = approvalId;
     setApprovalBusy(approvalId);
+    setFailedApproval(undefined);
     callbacks.current.onError(undefined);
     try {
       await resolveAgentApproval(sessionId, approvalId, decision);
@@ -132,13 +134,16 @@ export function useAgentApprovalAnswer({
         await callbacks.current.onStale();
         return;
       }
+      setFailedApproval({ sessionId, call, decision });
       callbacks.current.onError(reason instanceof Error && reason.message ? reason.message : callbacks.current.t("Flow Agent is unavailable"));
     }
   }, [sessionId, busyRef, callbacks]);
   const waiting = Boolean(approvalBusy) && parts.some((part) => part.toolCall?.approvalId === approvalBusy && part.toolCall?.status === "pending");
   // Once the reply no longer shows the approval as pending, the card's buttons come back.
   if (approvalBusy && !waiting) setApprovalBusy(undefined);
-  return { approvalBusy, decideToolApproval };
+  const retryApproval = failedApproval && failedApproval.sessionId === sessionId && parts.some(part => part.toolCall?.approvalId === failedApproval.call.approvalId && part.toolCall?.status === "pending")
+    ? () => void decideToolApproval(failedApproval.call, failedApproval.decision) : undefined;
+  return { approvalBusy, decideToolApproval, retryApproval };
 }
 
 /** The parts of every message plus the live stream's (what an approval card can be shown from). */

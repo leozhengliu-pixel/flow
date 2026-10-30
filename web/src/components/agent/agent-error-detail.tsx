@@ -1,5 +1,6 @@
 /* oxlint-disable react/only-export-components -- the error classifier is shared by the loop run page. */
 import { useI18n } from '@/i18n/i18n'
+import { RotateCw } from 'lucide-react'
 import styles from './agent-error-detail.module.css'
 
 type Translate = (source: string) => string
@@ -46,13 +47,13 @@ export function looksRaw(raw: string) {
  * Errors with a translation show it; readable English errors stay as they are for English readers; anything else
  * (status codes and JSON bodies, or English text a Chinese reader would see) becomes the friendly message by kind.
  */
-export function describeAgentError(raw: string, t: Translate, locale: string, kind: AgentErrorKind = classifyAgentError(raw)): { message: string; detail?: string } {
+export function describeAgentError(raw: string, t: Translate, _locale: string, kind: AgentErrorKind = classifyAgentError(raw)): { message: string; detail?: string } {
   const text = raw.trim()
   if (kind === 'stopped') return { message: t(AGENT_ERROR_MESSAGES.stopped) }
   const translated = t(text)
   if (translated !== text) return { message: translated }
-  if (!looksRaw(text) && !locale.startsWith('zh')) return { message: text }
-  return { message: t(AGENT_ERROR_MESSAGES[kind]), detail: text || undefined }
+  const message = t(AGENT_ERROR_MESSAGES[kind])
+  return { message, detail: text && text !== message ? text : undefined }
 }
 
 /** The raw server text behind a friendly error, collapsed under a translated "Details" toggle. */
@@ -67,13 +68,14 @@ export function ErrorDetails({ className, detail }: { className?: string; detail
 }
 
 /** An agent chat error: the translated message, with the raw provider text under "Details". */
-export function AgentErrorDetail({ className, error }: { className?: string; error: string }) {
+export function AgentErrorDetail({ className, error, onRetry }: { className?: string; error: string; onRetry?: () => void }) {
   const { locale, t } = useI18n()
   const { message, detail } = describeAgentError(error, t, locale)
   return (
     <span className={`${styles.error}${className ? ` ${className}` : ''}`}>
       <span data-i18n-ignore>{message}</span>
       {detail && <ErrorDetails detail={detail}/>}
+      {onRetry && <button className={styles.retry} onClick={onRetry} type="button"><RotateCw size={12}/>{t('Retry')}</button>}
     </span>
   )
 }

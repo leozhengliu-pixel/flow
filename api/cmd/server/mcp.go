@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -163,7 +164,7 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 				Meta      map[string]any `json:"_meta"`
 			}
 			if err := json.Unmarshal(request.Params, &params); err != nil {
-				s.writeMCPError(w, request.ID, -32602, "Invalid params", nil)
+				s.writeMCPToolResult(w, r, request.ID, nil, fmt.Errorf("Invalid tool arguments: expected a complete JSON object. Send the call again with valid JSON arguments"))
 				return
 			}
 			if params.Arguments == nil {
@@ -453,6 +454,9 @@ func (e *toolInternalError) Error() string {
 // replaced, as is a 500 from a REST handler the tool ran in process. A call
 // outside an HTTP request gets a fresh id for the log line.
 func publicToolError(ctx context.Context, tool string, err error) error {
+	if errors.Is(err, sql.ErrNoRows) {
+		return errNotFound
+	}
 	var handlerErr *internalHandlerError
 	if err == nil || !isInternalError(err) && !errors.As(err, &handlerErr) {
 		return err
@@ -486,7 +490,7 @@ func mcpToolCallResult(result any, err error, extra map[string]any) (map[string]
 	}
 	raw, marshalErr := json.Marshal(result)
 	if marshalErr != nil {
-		return nil, false
+		return map[string]any{"content": []map[string]string{{"type": "text", "text": "The tool returned an invalid result. Try the call again."}}, "isError": true}, true
 	}
 	body := map[string]any{"content": []map[string]string{{"type": "text", "text": string(raw)}}, "isError": false}
 	if structured := mcpStructuredContent(raw, extra); structured != nil {

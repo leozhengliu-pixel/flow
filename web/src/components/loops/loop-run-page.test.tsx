@@ -82,7 +82,8 @@ describe('LoopRunPage', () => {
   it('shows the error card for a failed run', async () => {
     renderPage('run-2')
     expect(await screen.findByText("Loop couldn't run")).toBeVisible()
-    expect(screen.getByText('AI credits are not set up')).toBeVisible()
+    expect(screen.getByText('The agent ran into an error.')).toBeVisible()
+    expect(screen.getByText('AI credits are not set up').closest('details')).not.toHaveAttribute('open')
   })
 
   it('polls a running run until it finishes', async () => {

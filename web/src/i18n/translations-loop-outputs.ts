@@ -110,7 +110,7 @@ export const loopOutputsZhCN: Record<string, string> = {
   "Filled by the run from…": "由运行根据…填写",
   "Choose document…": "选择文档…",
   "The instructions don't say which document. Choose it, or create a new one.": "指令没有说明是哪篇文档。请选择文档，或新建一篇。",
-  "The instructions don't say which document to write to. Until you choose it, runs write to no existing document and need review.": "指令没有说明要写入哪篇文档。在你选择之前，运行不会写入任何已有文档，并会标记为需要审核。",
+  "The instructions don't name a document. Choose one, or runs will wait for review before writing.": "指令没有写明文档名称。请选择一篇，否则运行会先等待审核，不会写入。",
   "Choose the document for each output that writes to an existing one.": "请为每个写入已有文档的输出选择文档。",
   "Recent documents": "最近的文档",
   "No documents found.": "未找到文档。",

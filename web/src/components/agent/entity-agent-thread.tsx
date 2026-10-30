@@ -45,6 +45,10 @@ export type EntityAgentThreadProps = {
   input: string
   onInputChange: (value: string) => void
   onSubmit: () => void
+  onRetry?: (message?: AgentMessage) => void
+  onRetryError?: () => void
+  /** Incremented for an explicit send so a manually scrolled-up reader follows the new turn. */
+  scrollRequest?: number
   /** Sends a follow-up suggestion chip as the next user message; without it the chip fills the composer. */
   onSendSuggestion?: (message: string) => void
   onStop?: () => void
@@ -118,6 +122,9 @@ export function EntityAgentThread({
   input,
   onInputChange,
   onSubmit,
+  onRetry,
+  onRetryError,
+  scrollRequest,
   onSendSuggestion,
   onStop,
   enabled = true,
@@ -201,6 +208,15 @@ export function EntityAgentThread({
     if (!followLatestRef.current) return
     node.scrollTop = node.scrollHeight
   }, [messages, streamParts, loading])
+
+  useEffect(() => {
+    if (!scrollRequest) return
+    followLatestRef.current = true
+    const node = logRef.current
+    if (!node) return
+    const frame = requestAnimationFrame(() => { node.scrollTop = node.scrollHeight })
+    return () => cancelAnimationFrame(frame)
+  }, [scrollRequest])
 
   useEffect(() => {
     requestAnimationFrame(() => {
@@ -350,6 +366,7 @@ export function EntityAgentThread({
                     content={message.content}
                   />
                 )}
+                {!isUser && message.parts?.filter(part => part.type === 'error').map(part => <div className={styles.streamPart} key={part.id} role="alert"><AgentErrorDetail error={part.text ?? ''} onRetry={!loading && index === latestAssistantIndex ? () => onRetry?.(messages.slice(0, index).findLast(item => item.role === 'user')) : undefined}/></div>)}
                 {isUser && <AgentMessageAttachments attachments={message.attachments?.filter(item => !item.url || !message.content.includes(`](${item.url})`))}/>}
                 {answer && !streaming && !renderAssistantBody && <AgentReferencedResources data={entityData} exclude={agentChangeEntityKeys(message)} references={answer.references} />}
                 {!isUser && !renderAssistantBody && <AgentChangeCards data={entityData} message={message} onSessionChange={onSessionChange} sessionId={sessionId} />}
@@ -405,7 +422,7 @@ export function EntityAgentThread({
         )}
         {streamOther.map(part => (
           <div className={styles.streamPart} key={part.id}>
-            {part.type === 'elicitation' ? <AgentElicitation part={part} /> : part.type === 'error' ? <AgentErrorDetail error={part.text ?? ''} /> : part.type === 'question' && part.question
+            {part.type === 'elicitation' ? <AgentElicitation part={part} /> : part.type === 'error' ? <AgentErrorDetail error={part.text ?? ''} onRetry={!loading ? () => onRetry?.() : undefined}/> : part.type === 'question' && part.question
               // ask_user's question streams while the model writes it; its options arrive with the finished call.
               ? <AgentQuestionPrompt ariaLabel={t('AI message')} className={`${styles.messageDocument} agent-chat-document`} data={entityData} disabled part={part}/>
               : part.text}
@@ -434,6 +451,7 @@ export function EntityAgentThread({
           </div>
         )}
       {composerHeader}
+      {error && !messages.at(-1)?.parts?.some(part => part.type === 'error') && <div className={styles.errorBanner} role="alert"><AgentErrorDetail error={error} onRetry={onRetryError ?? (!loading ? () => onRetry ? onRetry() : onSubmit() : undefined)}/></div>}
       <div className={styles.composer} data-tooltip-elevated="">
         {mentionData ? (
           <AgentMentionInput
@@ -477,7 +495,7 @@ export function EntityAgentThread({
         )}
         <footer>
           {footerStart}
-          {error ? <span role="alert"><AgentErrorDetail error={error} /></span> : <span />}
+          <span />
           {composerTools}
           {loading ? (
             <ScopedFlowTooltip label={t('Stop responding')} sideOffset={8}>

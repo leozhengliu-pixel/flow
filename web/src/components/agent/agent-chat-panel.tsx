@@ -6,7 +6,7 @@ import { splitAgentDraft } from './agent-draft'
 import { splitAgentSuggestions } from './agent-answer-content'
 import { fetchAgentStatus, getAgentSession, updateAgentSession, uploadAgentFile } from '@/lib/api'
 import { toast } from '@/lib/toast'
-import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
+import { streamAgentSessionMessage, streamAgentSessionMessageEdit, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
 import { createAgentStreamEventCoalescer } from '@/lib/agent-stream-coalescer'
 import { markStoppedAgentReply } from './agent-stopped-reply'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from '@/types/flow'
@@ -109,6 +109,7 @@ export function AgentChatPanel({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<AgentStatus>()
   const [loading, setLoading] = useState(false)
+  const [scrollRequest, setScrollRequest] = useState(0)
   const [streamParts, setStreamParts] = useState<AgentMessagePart[]>([])
   const [error, setError] = useState<string>()
   const [minimized, setMinimized] = useState(false)
@@ -122,6 +123,7 @@ export function AgentChatPanel({
   }
   const [fullscreen, setFullscreen] = useState(false)
   const abortRef = useRef<AbortController | undefined>(undefined)
+  const retryMessage = useRef('')
   // A reply running on the server without this panel streaming it (opened or reloaded mid-reply, or asked from another
   // surface): its saved progress shows with live approval and question cards, followed until it finishes.
   const shownSession = useMemo(() => session && { ...session, messages }, [messages, session])
@@ -133,7 +135,7 @@ export function AgentChatPanel({
   })
   const replyRunning = loading || follow.following
   const shownParts = useMemo(() => agentShownParts(messages, streamParts), [messages, streamParts])
-  const { approvalBusy, decideToolApproval } = useAgentApprovalAnswer({ sessionId: session?.id, parts: shownParts, onError: setError, onStale: follow.refresh })
+  const { approvalBusy, decideToolApproval, retryApproval } = useAgentApprovalAnswer({ sessionId: session?.id, parts: shownParts, onError: setError, onStale: follow.refresh })
   // Seeing the chat here (once its reply has settled) clears its unread dot on the Agent page too.
   useMarkAgentSessionRead(open ? session : undefined, replyRunning, (read, lastReadAt) => {
     if (!session || session.id !== read.id) return
@@ -299,17 +301,18 @@ export function AgentChatPanel({
    * Sends the composer text, or `followUp` (a suggestion chip or a question's option) without touching the composer.
    * `answer` picks that option of the reply's pending question: it shows as the chosen pill, not as a message.
    */
-  const submit = async (followUp?: string, answer?: { partId: string; value: string }) => {
+  const submit = async (followUp?: string, answer?: { partId: string; value: string }, retryOf?: AgentMessage) => {
     // Like the reference app, a quoted selection goes first (the model reads it as a quote, the chat shows it as a chip).
     const message = followUp !== undefined ? followUp.trim() : quoteAgentMessage(quote, input).trim()
     if (!message || replyRunning || !status?.enabled || (followUp === undefined && filesUploading)) return
+    retryMessage.current = message
     const sentFiles = followUp === undefined ? attachments : []
     // Files go with the message for the server to keep and give to the model (images as images, not text).
     const sentAttachments = await Promise.all(sentFiles.map(agentFileAttachment))
     const sentMentions = followUp === undefined ? mentions : []
     const sentIdsOf = (type: AgentMention['type']) => followUp === undefined ? idsOf(type) : []
     setMessages(current => [
-      ...current.map(item => answer && item.parts?.some(part => part.id === answer.partId)
+      ...(retryOf ? current.slice(0, current.findIndex(item => item.id === retryOf.id)) : current).map(item => answer && item.parts?.some(part => part.id === answer.partId)
         ? { ...item, parts: item.parts.map(part => part.id === answer.partId && part.question ? { ...part, status: 'completed' as const, question: { ...part.question, selected: answer.value } } : part) }
         : item),
       { id: `pending-${Date.now()}`, role: 'user', content: message, mentions: sentMentions, answerTo: answer?.partId, attachments: sentFiles.length ? sentFiles.map(({ name, type, size }) => ({ name, contentType: type, size })) : undefined, createdAt: new Date().toISOString() },
@@ -330,9 +333,11 @@ export function AgentChatPanel({
     }
     setError(undefined)
     setLoading(true)
+    setScrollRequest(value => value + 1)
     setStreamParts([])
     // The work shown while streaming, kept for a stopped reply (it folds to "Worked for N seconds").
     const liveWork = new Map<string, AgentMessagePart>()
+    let started = false
     let coalescer: ReturnType<typeof createAgentStreamEventCoalescer> | undefined
     try {
       const controller = new AbortController()
@@ -343,7 +348,7 @@ export function AgentChatPanel({
           next = event.session
           setSession(event.session)
         }
-        if (event.type === 'session.started' && event.session) setMessages(event.session.messages)
+        if (event.type === 'session.started' && event.session) { started = true; setMessages(event.session.messages) }
         if (event.type === 'text.replaced') {
           setMessages(current => current.at(-1)?.role === 'assistant'
             ? current.map((item, index) => index === current.length - 1 ? { ...item, content: event.delta ?? '' } : item)
@@ -394,7 +399,9 @@ export function AgentChatPanel({
       }
       coalescer = createAgentStreamEventCoalescer(handleEvent)
       const onEvent = coalescer.push
-      next = session
+      next = session && retryOf && !retryOf.id.startsWith('pending-')
+        ? await streamAgentSessionMessageEdit(session.id, retryOf.id, message, onEvent, controller.signal)
+        : session
         ? await streamAgentSessionMessage(session.id, message, onEvent, controller.signal, { ...mentioned, ...(sentAttachments.length ? { attachments: sentAttachments } : {}) })
         : await streamNewAgentSession(
             {
@@ -424,6 +431,7 @@ export function AgentChatPanel({
         setMessages(current => markStoppedAgentReply(current, [...liveWork.values()].filter(part => part.type === 'reasoning' || part.type === 'step' || part.type === 'toolCall')))
         return
       }
+      if (!started) setInput(message)
       setError(reason instanceof Error ? reason.message : t('Flow Agent is unavailable'))
     } finally {
       coalescer?.flush()
@@ -556,12 +564,15 @@ export function AgentChatPanel({
         // The reply runs on the server even without this panel, so Stop ends it there too.
         onStop={() => { void follow.stop(); abortRef.current?.abort() }}
         onSubmit={() => void submit()}
+        onRetry={target => void submit(target?.content ?? retryMessage.current, undefined, target ?? session?.messages.findLast(item => item.role === 'user'))}
+        onRetryError={retryApproval ?? (!status?.enabled ? () => { void fetchAgentStatus().then(next => { setStatus(next); setError(next.enabled ? undefined : t('Flow Agent is not configured')) }).catch(reason => setError(String(reason))) } : undefined)}
         onSendSuggestion={message => void submit(message)}
         onAnswer={(part, choice) => void submit(choice.label, { partId: part.id, value: choice.value })}
         sessionId={session?.id}
         onSessionChange={next => { setSession(next); setMessages(next.messages); onSessionChange?.(next) }}
         onToolApproval={(call, decision) => void decideToolApproval(call, decision)}
         streamParts={streamParts}
+        scrollRequest={scrollRequest}
       />
     </AgentPanel>
     {/* Outside the panel, so the minimized pill's close can ask too. */}
