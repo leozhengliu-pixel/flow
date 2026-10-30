@@ -792,7 +792,7 @@ func (s *server) applyMCPIssueFilters(ctx context.Context, q *store.IssueRecordQ
 		}
 		add("id", ids...)
 	}
-	for _, item := range []struct{ arg, field string }{{"hasAttachments", "hasLinks"}, {"hasSubIssues", "hasChildren"}} {
+	for _, item := range []struct{ arg, field string }{{"hasAttachments", "hasLinks"}, {"hasSubIssues", "hasSubIssues"}} {
 		if hasBoolArg(args, item.arg) {
 			op := "isNotEmpty"
 			if !boolArg(args, item.arg) {

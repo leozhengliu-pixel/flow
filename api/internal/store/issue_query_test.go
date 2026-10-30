@@ -101,6 +101,118 @@ func TestIssueRecordsMigrateAndPageWithoutWorkspaceArray(t *testing.T) {
 	}
 }
 
+func TestHasSubIssuesFilterTracksParentColumnChanges(t *testing.T) {
+	ctx := context.Background()
+	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "has-sub-issues.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	workspace := repository.Bootstrap().Workspace.URLKey
+	base := repository.Bootstrap().Issues[0]
+	newIssue := func(id string) domain.Issue {
+		issue := base
+		issue.ID, issue.Identifier = id, "HSI-"+id
+		issue.ParentID, issue.SubIssueIDs, issue.ArchivedAt = nil, []string{}, nil
+		return issue
+	}
+	parentA, parentB := newIssue("has-sub-parent-a"), newIssue("has-sub-parent-b")
+	child := newIssue("has-sub-child")
+	child.ParentID = &parentA.ID
+	// Importing only the child is representative of mutation paths where the
+	// parent row is not part of the saved set; its JSON SubIssueIDs stays stale.
+	if err := repository.ImportIssues(ctx, workspace, []domain.Issue{parentA, parentB, child}); err != nil {
+		t.Fatal(err)
+	}
+	check := func(label string, want ...string) {
+		t.Helper()
+		page, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{
+			Workspace: workspace, IssueIDs: []string{parentA.ID, parentB.ID}, RestrictToIssueIDs: true,
+			Filter: IssueFilter{Field: "hasSubIssues", Operator: "isNotEmpty"}, Limit: 10,
+		})
+		if err != nil {
+			t.Fatalf("%s: %v", label, err)
+		}
+		got := make([]string, 0, len(page.Items))
+		for _, issue := range page.Items {
+			got = append(got, issue.ID)
+		}
+		slices.Sort(got)
+		slices.Sort(want)
+		if !slices.Equal(got, want) {
+			t.Fatalf("%s: hasSubIssues=%v, want %v", label, got, want)
+		}
+		empty, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{
+			Workspace: workspace, IssueIDs: []string{parentA.ID, parentB.ID}, RestrictToIssueIDs: true,
+			Filter: IssueFilter{Field: "hasSubIssues", Operator: "isEmpty"}, Limit: 10,
+		})
+		if err != nil {
+			t.Fatalf("%s (empty): %v", label, err)
+		}
+		got = got[:0]
+		for _, issue := range empty.Items {
+			got = append(got, issue.ID)
+		}
+		slices.Sort(got)
+		wantEmpty := []string{}
+		for _, id := range []string{parentA.ID, parentB.ID} {
+			if !slices.Contains(want, id) {
+				wantEmpty = append(wantEmpty, id)
+			}
+		}
+		slices.Sort(wantEmpty)
+		if !slices.Equal(got, wantEmpty) {
+			t.Fatalf("%s: hasSubIssues empty=%v, want %v", label, got, wantEmpty)
+		}
+	}
+	check("create", parentA.ID)
+
+	child.ParentID = &parentB.ID
+	if err := repository.ImportIssues(ctx, workspace, []domain.Issue{child}); err != nil {
+		t.Fatal(err)
+	}
+	check("re-parent", parentB.ID)
+	child.ParentID = nil
+	if err := repository.ImportIssues(ctx, workspace, []domain.Issue{child}); err != nil {
+		t.Fatal(err)
+	}
+	check("remove parent")
+
+	child.ParentID = &parentA.ID
+	archived := time.Now().UTC()
+	child.ArchivedAt = &archived
+	if err := repository.ImportIssues(ctx, workspace, []domain.Issue{child}); err != nil {
+		t.Fatal(err)
+	}
+	check("archive", parentA.ID)
+	child.ArchivedAt = nil
+	if err := repository.ImportIssues(ctx, workspace, []domain.Issue{child}); err != nil {
+		t.Fatal(err)
+	}
+	check("unarchive", parentA.ID)
+
+	if _, err := repository.db.ExecContext(ctx, `DELETE FROM issue_records WHERE workspace_key=? AND id=?`, workspace, child.ID); err != nil {
+		t.Fatal(err)
+	}
+	check("delete")
+
+	children := []domain.Issue{newIssue("has-sub-bulk-1"), newIssue("has-sub-bulk-2")}
+	for i := range children {
+		children[i].ParentID = &parentA.ID
+	}
+	if err := repository.ImportIssues(ctx, workspace, children); err != nil {
+		t.Fatal(err)
+	}
+	check("bulk create", parentA.ID)
+	for i := range children {
+		children[i].ParentID = &parentB.ID
+	}
+	if err := repository.ImportIssues(ctx, workspace, children); err != nil {
+		t.Fatal(err)
+	}
+	check("bulk move", parentB.ID)
+}
+
 func TestIssueQueryRejectsCursorAcrossScopeAndBoundsFilters(t *testing.T) {
 	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
