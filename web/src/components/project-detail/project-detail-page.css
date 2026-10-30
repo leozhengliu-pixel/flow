@@ -1537,11 +1537,13 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-activity__composer > footer button.project-activity__attach svg { opacity: .66; }
   .project-activity__composer > footer button.is-submit:disabled { color: var(--agent-thread-text); }
   .project-activity__composer > footer button.is-submit {
+    position: relative;
     box-sizing: border-box;
     height: 28px;
     padding: 0 7.5px;
     border: .5px solid transparent;
     background: var(--chip-bg);
+    background-clip: padding-box;
     color: var(--agent-thread-text);
     line-height: normal;
   }
@@ -1554,12 +1556,23 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-activity__composer[data-mode=update] > footer { position: absolute; right: 0; bottom: 0; left: 0; justify-content: flex-end; }
   .project-activity__composer > footer > button.project-activity__agent { display: none; }
   .project-activity__composer .project-activity__health {
+    position: relative;
     height: 28px;
     gap: 0;
     padding: 0 8px;
     background: var(--theme-control);
+    background-clip: padding-box;
     line-height: 12px;
     white-space: nowrap;
+  }
+  .project-activity__composer .project-activity__health::after,
+  .project-activity__composer > footer button.is-submit::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: 0 0 0 .5px var(--ui-pill-ring), var(--ui-pill-shadow);
+    pointer-events: none;
   }
   .project-activity__composer .project-activity__health svg { width: 16px; height: 16px; margin: 0 6px 0 -4px; }
   .project-activity__composer .project-activity__health > span { font-size: 12px; font-weight: 500; line-height: normal; }
@@ -1585,7 +1598,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-activity__diff-from svg,
   .project-activity__diff-to svg { width: 16px; height: 16px; flex: none; }
   .project-activity__diff-to { display: inline-flex; align-items: center; gap: 3px; }
-  .project-activity__diff-prefix { color: var(--theme-text-secondary); }
+  .project-activity__diff-prefix { color: inherit; }
   .project-activity__diff-arrow { flex: none; color: var(--theme-text-secondary); }
   .project-activity__feed { display: flex; flex-direction: column; margin-top: 12px; }
   .project-activity__month {
