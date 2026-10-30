@@ -883,14 +883,30 @@ func (s *SQLiteStore) QueryIssueRecords(ctx context.Context, query IssueRecordQu
 	return page, nil
 }
 
+// labelDrivenMaxIssues bounds when a label filter reads its rows from the
+// label index instead of the issue scope. A label on more issues than this is
+// broad enough that the scope index is cheaper; a selective label (and a
+// label that matches no issue after the other filters) reads only its own
+// rows.
+const labelDrivenMaxIssues = 10000
+
+// labelDrivenWorkspaceMaxIssues is the workspace-wide limit: the scope sort
+// index already finds a page quickly for a common label, so only clearly
+// selective labels benefit from the label index there.
+const labelDrivenWorkspaceMaxIssues = 2000
+
 // issueRecordSelection builds the row source, visibility CTE and predicates
 // shared by the paged query and the plain COUNT(*). Keeping them in one place
 // makes issueRecordTotal's equivalence test check the same SQL the fallback
 // runs.
-func (s *SQLiteStore) issueRecordSelection(query IssueRecordQuery) (string, []any, string, []any, error) {
+func (s *SQLiteStore) issueRecordSelection(ctx context.Context, query IssueRecordQuery) (string, []any, string, string, []any, error) {
+	from, fromArgs, rest, driven := s.labelDrivenIssueSource(ctx, query)
+	if driven {
+		query.Filter = rest
+	}
 	where, args, err := issueRecordWhere(query)
 	if err != nil {
-		return "", nil, "", nil, err
+		return "", nil, "", "", nil, err
 	}
 	if query.SearchText != "" {
 		selection, values := s.issueTextSelection(query.Workspace, query.SearchText)
@@ -900,30 +916,151 @@ func (s *SQLiteStore) issueRecordSelection(query IssueRecordQuery) (string, []an
 	if query.Nested {
 		root, values, err := s.issueNestedRootClause(query)
 		if err != nil {
-			return "", nil, "", nil, err
+			return "", nil, "", "", nil, err
 		}
 		where += " AND " + root
 		args = append(args, values...)
 	}
 	prefix, prefixArgs := issueAccessCTE(query)
-	return prefix, prefixArgs, where, args, nil
+	prefixArgs = append(prefixArgs, fromArgs...)
+	return prefix, prefixArgs, from, where, args, nil
+}
+
+// labelDrivenIssueSource replaces the issue table with a derived table of the
+// issues carrying a selective label when the filter is a plain label is/in
+// leaf (or one leaf in an AND). The rest of the filter is returned for
+// issueRecordWhere. Ordering, keyset pagination and visibility keep using the
+// i alias, so behaviour is unchanged.
+func (s *SQLiteStore) labelDrivenIssueSource(ctx context.Context, query IssueRecordQuery) (string, []any, IssueFilter, bool) {
+	rest, labelIDs, ok := drivableLabelFilter(query.Filter)
+	if !ok || len(labelIDs) == 0 {
+		return "issue_records i", nil, IssueFilter{}, false
+	}
+	count, err := s.issueLabelIssueCount(ctx, query.Workspace, labelIDs)
+	if err != nil || count > labelDrivenMaxIssues || len(query.TeamIDs) == 0 && count > labelDrivenWorkspaceMaxIssues {
+		return "issue_records i", nil, IssueFilter{}, false
+	}
+	clause, labelArgs := bindList("l.label_id", labelIDs)
+	subquery := "SELECT DISTINCT l.issue_id FROM issue_label_records l WHERE l.workspace_key=? AND " + clause
+	values := append([]any{query.Workspace}, labelArgs...)
+	values = append(values, query.Workspace)
+	join := " JOIN "
+	if s.dialect == "mysql" {
+		// Drive from the label rows and read the issue filters/sort from the
+		// covering index; MySQL otherwise keeps the issue scope as the outer
+		// table because of its post-import statistics.
+		join = " STRAIGHT_JOIN issue_records i FORCE INDEX (issue_records_label_cover_idx) ON i.workspace_key=? AND i.id=labels.issue_id"
+	}
+	if s.dialect != "mysql" {
+		join += "issue_records i ON i.workspace_key=? AND i.id=labels.issue_id"
+	}
+	return "(" + subquery + ") labels" + join, values, rest, true
+}
+
+func (s *SQLiteStore) issueLabelIssueCount(ctx context.Context, workspace string, labelIDs []string) (int, error) {
+	clause, args := bindList("label_id", labelIDs)
+	// Stop counting at the threshold: a broad label must not pay for a full
+	// count just to learn it is broad.
+	statement := "SELECT COUNT(*) FROM (SELECT 1 FROM issue_label_records WHERE workspace_key=? AND " + clause + " LIMIT ?) capped"
+	args = append([]any{workspace}, args...)
+	args = append(args, labelDrivenMaxIssues+1)
+	var count int
+	err := s.db.QueryRowContext(ctx, statement, args...).Scan(&count)
+	return count, err
+}
+
+// drivableLabelFilter finds one labels is/in leaf that can drive the query.
+// OR/NOT groups and additional label leaves are left to the general SQL.
+func drivableLabelFilter(filter IssueFilter) (IssueFilter, []string, bool) {
+	if ids, ok := labelLeafIDs(filter); ok {
+		return IssueFilter{}, ids, true
+	}
+	if filter.Not != nil || len(filter.Or) > 0 || len(filter.And) == 0 {
+		return filter, nil, false
+	}
+	rest := make([]IssueFilter, 0, len(filter.And))
+	var labelIDs []string
+	labelLeaves := 0
+	for _, child := range filter.And {
+		if ids, ok := labelLeafIDs(child); ok {
+			labelLeaves++
+			labelIDs = append(labelIDs, ids...)
+			continue
+		}
+		if issueFilterContainsLabels(child) {
+			return filter, nil, false
+		}
+		rest = append(rest, child)
+	}
+	if labelLeaves != 1 || len(labelIDs) == 0 {
+		return filter, nil, false
+	}
+	labelIDs = slices.Compact(slices.Sorted(slices.Values(labelIDs)))
+	return IssueFilter{And: rest}, labelIDs, true
+}
+
+func labelLeafIDs(node IssueFilter) ([]string, bool) {
+	if len(node.And) > 0 || len(node.Or) > 0 || node.Not != nil {
+		return nil, false
+	}
+	if normalizeIssueFilterField(node.Field) != "labels" {
+		return nil, false
+	}
+	operator := strings.ToLower(node.Operator)
+	if operator == "" {
+		operator = "is"
+	}
+	if operator != "is" && operator != "in" {
+		return nil, false
+	}
+	if len(node.Values) == 0 || len(node.Values) > 1000 || slices.Contains(node.Values, "") {
+		return nil, false
+	}
+	return node.Values, true
+}
+
+func issueFilterContainsLabels(node IssueFilter) bool {
+	if normalizeIssueFilterField(node.Field) == "labels" {
+		return true
+	}
+	if node.Not != nil && issueFilterContainsLabels(*node.Not) {
+		return true
+	}
+	for _, child := range node.And {
+		if issueFilterContainsLabels(child) {
+			return true
+		}
+	}
+	for _, child := range node.Or {
+		if issueFilterContainsLabels(child) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeIssueFilterField(field string) string {
+	if normalized, ok := issueFilterFieldAliases[strings.ToLower(field)]; ok {
+		return normalized
+	}
+	return field
 }
 
 // countIssueRecordsSQL is the exact COUNT(*)* row count issueRecordTotal
 // falls back to.
 func (s *SQLiteStore) countIssueRecordsSQL(ctx context.Context, query IssueRecordQuery) (int64, error) {
-	prefix, prefixArgs, where, args, err := s.issueRecordSelection(query)
+	prefix, prefixArgs, from, where, args, err := s.issueRecordSelection(ctx, query)
 	if err != nil {
 		return 0, err
 	}
 	var total int64
-	err = s.db.QueryRowContext(ctx, prefix+"SELECT COUNT(*) FROM issue_records i WHERE "+where, append(prefixArgs, args...)...).Scan(&total)
+	err = s.db.QueryRowContext(ctx, prefix+"SELECT COUNT(*) FROM "+from+" WHERE "+where, append(prefixArgs, args...)...).Scan(&total)
 	return total, err
 }
 
 func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecordQuery) (IssueRecordPage, error) {
 	page := IssueRecordPage{Items: []domain.Issue{}, Total: -1}
-	prefix, prefixArgs, where, args, err := s.issueRecordSelection(query)
+	prefix, prefixArgs, from, where, args, err := s.issueRecordSelection(ctx, query)
 	if err != nil {
 		return page, err
 	}
@@ -1021,8 +1158,7 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 		// The index is read from the far end; the page is turned around below.
 		scanDirection = map[string]string{"ASC": "DESC", "DESC": "ASC"}[direction]
 	}
-	from := "issue_records i"
-	if s.dialect == "mysql" && len(query.TeamIDs) > 0 && query.Sort == "updatedAt" {
+	if s.dialect == "mysql" && from == "issue_records i" && len(query.TeamIDs) > 0 && query.Sort == "updatedAt" {
 		// Read the team's rows in updatedAt order from the matching index;
 		// otherwise MySQL scans the whole workspace in updatedAt order and
 		// filters the team afterwards (slow for a saved view with no matches).
