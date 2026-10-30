@@ -477,6 +477,21 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 			args = append(args, values...)
 			return "(" + strings.Join(clauses, " AND ") + ")", args, nil
 		}
+		if node.Field == "hasSubIssues" {
+			op := strings.ToLower(node.Operator)
+			if op == "" {
+				op = "is"
+			}
+			if op != "isempty" && op != "isnotempty" {
+				return "", nil, fmt.Errorf("%w: unsupported operator %s", ErrIssueQuery, node.Operator)
+			}
+			clause := "EXISTS (SELECT 1 FROM issue_records child WHERE child.workspace_key=i.workspace_key AND child.parent_id=i.id)"
+			if op == "isempty" {
+				clause = "NOT (" + clause + ")"
+			}
+			clauses = append(clauses, clause)
+			return "(" + strings.Join(clauses, " AND ") + ")", args, nil
+		}
 		if isReleaseFilterField(node.Field) {
 			clause, values, err := compileReleaseFilter(node)
 			if err != nil {

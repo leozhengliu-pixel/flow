@@ -17,6 +17,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Agent issue and cycle listing now supports an explicit `all` cycle filter, compact relationship counts and relationship-presence filters, avoiding per-issue detail fan-out; the tool harness uses a valid page location.
 
+- The `hasSubIssues` issue-list filter now checks the indexed child parent IDs directly, so it stays current through issue mutations without a workspace-wide attribute re-index.
+
 - Agent tool calls now share reference, localized status/priority, and relative-date normalization across chat and MCP, with actionable resolution errors; the opt-in streaming regression harness is in `scripts/agent-tool-error-harness.py`.
 
 - Agent and loop-builder progress now uses friendly, retry-aware steps, language-matched draft copy, optimistic loop creation, and weekday-aware schedules; issue field aliases are normalized before tool validation.
