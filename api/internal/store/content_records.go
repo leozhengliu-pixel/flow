@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -120,7 +121,13 @@ func (s *SQLiteStore) ensureContentRecords(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `ALTER TABLE workspace_content_records ADD COLUMN record_version INTEGER NOT NULL DEFAULT 0`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
 		return err
 	}
-	for _, index := range []string{"content_resource_order_idx ON workspace_content_records(workspace_key,kind,resource_id,created_at,id)", "content_owner_idx ON workspace_content_records(workspace_key,kind,owner_id,created_at,id)", "content_parent_idx ON workspace_content_records(workspace_key,kind,parent_id,id)", "content_identity_idx ON workspace_content_records(workspace_key,kind,id)", "content_status_idx ON workspace_content_records(workspace_key,kind,status,next_attempt_at,id)", "content_version_idx ON workspace_content_records(record_version,workspace_key,kind,id)"} {
+	// Cycle history reads the activities that moved an issue between cycles.
+	// They are indexed in their own sparse table so the cycle graph never
+	// parses every activity row in the workspace (cycle_graph_history.go).
+	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS issue_activity_cycles(workspace_key VARCHAR(191) NOT NULL,activity_id VARCHAR(191) NOT NULL,cycle_id VARCHAR(191) NOT NULL,issue_id VARCHAR(191) NOT NULL,PRIMARY KEY(workspace_key,activity_id,cycle_id))`); err != nil {
+		return err
+	}
+	for _, index := range []string{"content_resource_order_idx ON workspace_content_records(workspace_key,kind,resource_id,created_at,id)", "content_owner_idx ON workspace_content_records(workspace_key,kind,owner_id,created_at,id)", "content_parent_idx ON workspace_content_records(workspace_key,kind,parent_id,id)", "content_identity_idx ON workspace_content_records(workspace_key,kind,id)", "content_status_idx ON workspace_content_records(workspace_key,kind,status,next_attempt_at,id)", "content_version_idx ON workspace_content_records(record_version,workspace_key,kind,id)", "issue_activity_cycles_cycle_idx ON issue_activity_cycles(workspace_key,cycle_id,issue_id)"} {
 		prefix := "CREATE INDEX IF NOT EXISTS "
 		if s.dialect == "mysql" {
 			prefix = "CREATE INDEX "
@@ -179,6 +186,9 @@ func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, 
 	if err == nil && kind == "comment" {
 		err = syncApplicationMentions(ctx, tx, workspace, resource, raw)
 	}
+	if err == nil {
+		err = syncActivityCycleRefs(ctx, tx, row)
+	}
 	return err
 }
 
@@ -198,6 +208,9 @@ type contentRecordRow struct {
 	raw                                    []byte
 	owner, parent, status, nextAttempt     string
 	actorID, actorAt                       string
+	// cycleRefs are the cycles an activity row says the issue was moved to
+	// or from; they are indexed in issue_activity_cycles.
+	cycleRefs []string
 }
 
 func (row contentRecordRow) args() []any {
@@ -270,8 +283,75 @@ func buildContentRecordRow(workspace, kind, resource string, raw []byte) (conten
 		if activity.Actor.ID != "" {
 			row.actorID, row.actorAt = activity.Actor.ID, activity.CreatedAt.UTC().Format(issueRecordTimestamp)
 		}
+		for _, field := range []string{"cycle", "cycleBefore", "initialCycle"} {
+			if value := strings.TrimSpace(activity.Metadata[field]); value != "" && !slices.Contains(row.cycleRefs, value) {
+				row.cycleRefs = append(row.cycleRefs, value)
+			}
+		}
 	}
 	return row, nil
+}
+
+// syncActivityCycleRefs keeps issue_activity_cycles equal to the cycle
+// references of one activity row. An edit that drops a reference removes it.
+func syncActivityCycleRefs(ctx context.Context, tx *sqlTx, row contentRecordRow) error {
+	if row.kind != "activity" {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM issue_activity_cycles WHERE workspace_key=? AND activity_id=?`, row.workspace, row.id); err != nil {
+		return err
+	}
+	for _, cycle := range row.cycleRefs {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO issue_activity_cycles(workspace_key,activity_id,cycle_id,issue_id) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`, row.workspace, row.id, cycle, row.resource); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// syncActivityCycleRefRows is syncActivityCycleRefs for a batch: one delete
+// per chunk and one multi-row insert of the references.
+func syncActivityCycleRefRows(ctx context.Context, tx *sqlTx, rows []contentRecordRow) error {
+	activities := []contentRecordRow{}
+	for _, row := range rows {
+		if row.kind == "activity" {
+			activities = append(activities, row)
+		}
+	}
+	if len(activities) == 0 {
+		return nil
+	}
+	ids := make([]string, len(activities))
+	for i, row := range activities {
+		ids[i] = row.id
+	}
+	workspaces := make([]string, len(activities))
+	for i, row := range activities {
+		workspaces[i] = row.workspace
+	}
+	// Activities in one write all belong to one workspace.
+	args := []any{workspaces[0]}
+	marks := make([]string, len(ids))
+	for i, id := range ids {
+		marks[i] = "?"
+		args = append(args, id)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM issue_activity_cycles WHERE workspace_key=? AND activity_id IN (`+strings.Join(marks, ",")+`)`, args...); err != nil {
+		return err
+	}
+	tuples := []string{}
+	insertArgs := []any{}
+	for _, row := range activities {
+		for _, cycle := range row.cycleRefs {
+			tuples = append(tuples, "(?,?,?,?)")
+			insertArgs = append(insertArgs, row.workspace, row.id, cycle, row.resource)
+		}
+	}
+	if len(tuples) == 0 {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO issue_activity_cycles(workspace_key,activity_id,cycle_id,issue_id) VALUES `+strings.Join(tuples, ",")+` ON CONFLICT DO NOTHING`, insertArgs...)
+	return err
 }
 
 // writeContentRecordRows upserts rows (and their issue actors) with
@@ -312,6 +392,9 @@ func writeContentRecordRows(ctx context.Context, tx *sqlTx, rows []contentRecord
 			args = append(args, row.args()...)
 		}
 		if _, err := tx.ExecContext(ctx, contentRecordUpsertPrefix+strings.Join(tuples, ",")+contentRecordUpsertSuffix, args...); err != nil {
+			return err
+		}
+		if err := syncActivityCycleRefRows(ctx, tx, unique); err != nil {
 			return err
 		}
 		for _, row := range part {

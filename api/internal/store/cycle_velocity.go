@@ -27,7 +27,15 @@ func (s *SQLiteStore) CycleCompletedIssues(ctx context.Context, workspace string
 			marks[index] = "?"
 			args = append(args, id)
 		}
-		rows, err := s.db.QueryContext(ctx, "SELECT cycle_id,data FROM issue_records WHERE workspace_key=? AND archived=0 AND state_type='completed' AND cycle_id IN ("+strings.Join(marks, ",")+")", args...)
+		// list_data carries the estimate and is much smaller than the full
+		// issue record, so velocity does not load every completed body.
+		from := "issue_records"
+		if s.dialect == "mysql" {
+			// MySQL misestimates a workspace-sized table after a bulk import
+			// and scans the clustered index instead of this composite one.
+			from = "issue_records FORCE INDEX (issue_records_cycle_state_idx)"
+		}
+		rows, err := s.db.QueryContext(ctx, "SELECT cycle_id,COALESCE(list_data,data) FROM "+from+" WHERE workspace_key=? AND archived=0 AND state_type='completed' AND cycle_id IN ("+strings.Join(marks, ",")+")", args...)
 		if err != nil {
 			return nil, err
 		}

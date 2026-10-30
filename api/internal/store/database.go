@@ -365,6 +365,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"migrateAttachmentIndex", s.migrateAttachmentIndex},
 		{"migrateIssueListProjection", s.migrateIssueListProjection},
 		{"migrateIssueSearchIndex", s.migrateIssueSearchIndex},
+		{"migrateContentActivityCycles", s.migrateContentActivityCycles},
 		{"migrateMetadataSearchIndex", s.migrateMetadataSearchIndex},
 		{"migrateAPIKeyLookup", s.migrateAPIKeyLookup},
 		{"migrateCustomerFilterIndex", s.migrateCustomerFilterIndex},
