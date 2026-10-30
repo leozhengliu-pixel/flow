@@ -2,6 +2,7 @@ import { useEffect, type ComponentPropsWithRef, type ReactElement, type ReactNod
 import { FlowTooltip, ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { Virtuoso } from 'react-virtuoso'
 import { Link2 } from 'lucide-react'
+import { FlowBellIcon, FlowFavoriteIcon } from '@/components/issue/flow-header-icons'
 import { useI18n } from '@/i18n/i18n'
 import { DetailsIcon, FilterIcon } from '@/components/my-issues/my-issues-icons'
 import { MyIssuesDisplayMenu, type MyIssuesDisplayMenuProps } from '@/components/my-issues/my-issues-display-menu'
@@ -35,7 +36,7 @@ export type ViewEditorControls = { filterButton: ReactNode; displayButton: React
 
 export function IssueExplorerSurface({
   children, scopeName, scopeHref, scopeTeam, activeView, viewHref, filters, filterBar, footer, viewEditor, viewEditorMode, draftName, draftPlaceholder, draftVisual, viewActions, displayOptions, detailsOpen, itemCount = 0,
-  creatingView = false, favorite = false, filterActive = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onAdvancedFilter, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar, onCreateIssue, displayMenuProps, resourceHeader, className, insightsLabel = 'view insights', detailsShortcutTooltip = false,
+  creatingView = false, favorite = false, filterActive = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onAdvancedFilter, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar, onCreateIssue, displayMenuProps, resourceHeader, className, insightsLabel = 'view insights', detailsShortcutTooltip = false, teamFavorite = false, onToggleTeamFavorite, teamNotificationsHref,
 }: {
   children: ReactNode
   scopeName: string
@@ -87,6 +88,10 @@ export function IssueExplorerSurface({
   className?: string
   /** Noun for the insights button ("Open {label}"). */
   insightsLabel?: string
+  /** Team scope: the header star and the team notification settings link. */
+  teamFavorite?: boolean
+  onToggleTeamFavorite?: () => void
+  teamNotificationsHref?: string
   /** Show the details toggle's ⌘ I shortcut in a tooltip instead of the native title. */
   detailsShortcutTooltip?: boolean
 }) {
@@ -154,18 +159,22 @@ export function IssueExplorerSurface({
       ) : resourceHeader ? (
         <NewContentViewHeaderTitle icon={resourceHeader.icon} title={resourceHeader.title} actions={resourceHeader.actions} />
       ) : (
-        <ContentViewHeaderBreadcrumb
-          items={[
-            {
-              id: 'scope',
-              label: scopeName,
-              href: scopeHref,
-              icon: scopeTeam ? <ViewGlyph className={styles.scopeIcon} color={scopeTeam.color} icon={scopeTeam.icon || 'Team'} /> : undefined,
-            },
-            { id: 'issues', label: 'Issues', current: true },
-          ]}
-        />
+        <>
+          <ContentViewHeaderBreadcrumb
+            items={[
+              {
+                id: 'scope',
+                label: scopeName,
+                href: scopeHref,
+                icon: scopeTeam ? <ViewGlyph className={styles.scopeIcon} color={scopeTeam.color} icon={scopeTeam.icon || 'Team'} /> : undefined,
+              },
+              { id: 'issues', label: 'Issues', current: true },
+            ]}
+          />
+          {scopeTeam && onToggleTeamFavorite ? <button type="button" role="switch" aria-checked={teamFavorite} aria-label={t(teamFavorite ? 'Remove from favorites' : 'Add to favorites')} className={styles.phoneTeamFavorite} onClick={onToggleTeamFavorite}><FlowFavoriteIcon /></button> : null}
+        </>
       )}
+      {scopeTeam && !savedView && teamNotificationsHref ? <a className={styles.phoneTeamNotifications} href={teamNotificationsHref} aria-label={t('Setup team notifications')}><FlowBellIcon /></a> : null}
     </ContentViewHeader>
   )
 

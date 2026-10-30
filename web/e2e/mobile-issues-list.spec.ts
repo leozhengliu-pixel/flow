@@ -319,3 +319,87 @@ test.describe('mobile Assigned details panel', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   })
 })
+
+test.describe('mobile team issues list', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('phone team header, estimate-only group and nested sub-issue match the reference', async ({ page, request }, testInfo) => {
+    const apiBase = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
+    const workspaceKey = `mobile-team-list-${testInfo.project.name}-${testInfo.retry}-${Date.now()}`
+    const response = await request.post(`${apiBase}/api/workspaces`, {
+      data: { name: '[mobile] Team list', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(response.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await (await request.get(`${apiBase}/api/bootstrap`, { headers })).json() as {
+      teams: Array<{ id: string; key: string }>
+      states: Array<{ id: string; type: string }>
+    }
+    const team = bootstrap.teams[0]
+    const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
+    const renamed = await request.patch(`${apiBase}/api/workspaces/${workspaceKey}/teams/${team.id}`, {
+      headers,
+      data: { name: 'Picker Test', icon: 'Starred', color: '#E719A5' },
+    })
+    expect(renamed.ok()).toBe(true)
+    const settings = await request.patch(`${apiBase}/api/teams/${team.id}/settings`, {
+      headers,
+      data: {
+        estimateType: 'fibonacci',
+        issueViewDefaults: {
+          all: {
+            layout: 'list', grouping: 'status', groupOrder: 'asc', subGrouping: 'none', ordering: 'created',
+            orderCompletedByRecency: false, showSubIssues: true, showEmptyGroups: false, nestedSubIssues: true,
+            hiddenGroupIds: [], properties: ['priority', 'status', 'estimate', 'assignee'],
+          },
+        },
+      },
+    })
+    expect(settings.ok()).toBe(true)
+    const create = async (title: string, extra = {}) => {
+      const created = await request.post(`${apiBase}/api/issues`, {
+        headers,
+        data: { title, description: '', teamId: team.id, stateId, priority: 0, ...extra },
+      })
+      expect(created.status()).toBe(201)
+      return created.json() as Promise<{ id: string }>
+    }
+    const parentA = await create('Estimate test A', { estimate: 3 })
+    await create('Estimate test B', { estimate: 5 })
+    await create('Nested child one', { estimate: 1, parentId: parentA.id })
+
+    await page.goto(`/${workspaceKey}/team/${team.key}/all`)
+    await expect(page.locator('main').first()).toBeVisible()
+    const header = page.locator('[data-content-view-header]')
+    await expect(header.getByRole('switch', { name: 'Add to favorites' })).toBeVisible()
+    await expect(header.getByRole('link', { name: 'Setup team notifications' })).toBeVisible()
+    await expect(header.getByRole('button', { name: 'New issue' })).toBeVisible()
+    const headerGeometry = await page.evaluate(() => {
+      const star = document.querySelector('[data-content-view-header] button[aria-label="Add to favorites"]')!.getBoundingClientRect()
+      const bell = document.querySelector('[data-content-view-header] [aria-label="Setup team notifications"]')!.getBoundingClientRect()
+      const create = document.querySelector('[data-content-view-header] .phone-create-issue')!.getBoundingClientRect()
+      return { starX: star.x, starSize: star.width, bellX: bell.x, createX: create.x }
+    })
+    expect(headerGeometry.starX).toBeCloseTo(209.97, 0)
+    expect(headerGeometry.starSize).toBe(32)
+    expect(headerGeometry.bellX).toBeCloseTo(314, 0)
+    expect(headerGeometry.createX).toBeCloseTo(350, 0)
+
+    const toolbar = page.locator('[data-content-view-subheader]')
+    await expect(toolbar.getByRole('button', { name: 'Open details' })).toBeVisible()
+    await expect(toolbar.getByRole('button', { name: 'Display options' })).toBeVisible()
+    const groupHeader = page.locator('[data-issue-explorer] [class*="groupHeader"]').first()
+    await expect(groupHeader).toHaveCSS('height', '36px')
+    await expect(groupHeader.locator('[class*="groupCount"]')).toBeHidden()
+    await expect(groupHeader.locator('.estimate-chip__value')).toHaveText('9')
+    const rows = page.locator('[data-issue-explorer] a[data-issue-row-id]')
+    await expect(rows).toHaveCount(3)
+    await expect(rows.nth(0)).toContainText('Estimate test B')
+    await expect(rows.nth(1)).toContainText('Estimate test A')
+    const nested = page.locator('[data-issue-explorer] a[data-issue-row-id][data-nested="true"]')
+    await expect(nested).toContainText('Nested child one')
+    expect((await nested.boundingBox())?.y).toBeCloseTo(213.5, 0)
+    await expect(nested.locator('.estimate-chip')).toBeHidden()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+})

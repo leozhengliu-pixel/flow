@@ -327,6 +327,14 @@ function useSelectHoveredRowWithX(entries: MyIssuesListEntry[], selectedIds: Rea
   }, [])
 }
 
+/** The reference phone "No priority" glyph: three short bars (the sprite glyph is used at other widths). */
+function PhoneNoPriorityIcon() {
+  return <svg className="priority priority-0" width={16} height={16} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+    <rect x="1.5" y="7.25" width="3" height="1.5" rx="0.5" opacity="0.9"/>
+    <rect x="6.5" y="7.25" width="3" height="1.5" rx="0.5" opacity="0.9"/>
+    <rect x="11.5" y="7.25" width="3" height="1.5" rx="0.5" opacity="0.9"/>
+  </svg>
+}
 function MyIssuesRowView({ issue, active = false, selected = false, displayProperties = DEFAULT_PROPERTIES, nestedLines=EMPTY_LINES, showSubIssueProgress=true, propertyOptions = EMPTY_OPTIONS, mutationError, onContextAction, onOpen, onPropertyChange, onRetryMutation, onSelect }: {
   issue: MyIssuesRowData; active?: boolean; selected?: boolean; displayProperties?: ReadonlySet<MyIssuesProperty>; nestedLines?:readonly boolean[]; showSubIssueProgress?:boolean; propertyOptions?: MyIssuesRowPropertyOptions; mutationError?: string
   onContextAction?: (issue: MyIssuesRowData, action: MyIssuesContextAction) => void; onOpen?: (issue: MyIssuesRowData) => void
@@ -366,7 +374,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
           options={propertyOptions.priority}
           onSelect={value => change('priority', value)}
           triggerClassName={`${styles.propertyTrigger} ${styles.priorityTrigger}`}
-          trigger={<PriorityIcon priority={issue.priority} size={16}/>}
+          trigger={phone && issue.priority === 0 ? <PhoneNoPriorityIcon/> : <PriorityIcon priority={issue.priority} size={16}/>}
         />}
         {displayProperties.has('id') && <span className={styles.identifier}>{issue.identifier}</span>}
         {displayProperties.has('status') && <RowCommandPicker

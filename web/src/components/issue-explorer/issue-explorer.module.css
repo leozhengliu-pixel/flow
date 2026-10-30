@@ -24,7 +24,7 @@
 @media(max-width:800px){.body[data-insights-open=true]>:first-child{margin-right:0}}
 .tab:focus-visible,.addView:focus-visible,.iconButton:focus-visible,.headerAction:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
 @media(max-width:800px){.surface{width:100%;height:calc(100% - 36px);margin:0 0 36px;border:0;border-radius:0;box-shadow:none}.mobileSidebarButton{display:flex;flex-direction:column;justify-content:center}.header{padding:0 8px}.toolbar{overflow:visible}.tabs{min-width:0;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain;padding-right:2px}.tabs::-webkit-scrollbar{display:none}.actions{margin-left:8px}.headerAction:last-child{display:none}.body[data-saved-panel-open=true]>:first-child{margin-right:0}}
-@media(max-width:767px){.actions>:nth-child(3),.actions>:nth-child(4){display:none}.toolbar{gap:4px}.tabs{flex:1}.actions{flex:0 0 auto}}
+@media(max-width:767px){.actions>:nth-child(3){display:none}.toolbar{gap:4px}.tabs{flex:1}.actions{flex:0 0 auto}}
 /* View card (new / edit): the reference app places it under the count row with its own filter + display buttons. */
 .createPanel{height:auto;flex:none;margin:0 8px 8px;overflow:visible;border:0;border-radius:0;background:transparent;box-shadow:none}
 .createPanel[data-mode=create]{margin-top:8px}
@@ -43,3 +43,49 @@
 .iconButton[data-filter-active]{background:var(--ui-pill-hover-bg,var(--theme-surface-hover));color:var(--theme-text-primary)}
 .createPanel .cardBar{min-height:28px;flex:none;align-items:flex-start;padding:0;border:0;background:transparent}
 .createPanel .cardBar>:first-child{min-height:28px;align-items:center}
+
+/* Phone parity for the team issues list: the reference header breadcrumb and
+   toolbar metrics, plus the estimate-only group header. */
+.phoneTeamFavorite,.phoneTeamNotifications{display:none}
+@media(max-width:767px){
+  html:root body :global(.app) [data-issue-explorer] [data-content-view-header] [data-sidebar-trigger]{margin-right:8px}
+  html:root body :global(.app) [data-issue-explorer] [data-content-view-header] [data-sidebar-trigger]>svg{display:block}
+  html:root body :global(.app) [data-issue-explorer] [data-content-view-header] [data-sidebar-trigger]::before,html:root body :global(.app) [data-issue-explorer] [data-content-view-header] [data-sidebar-trigger]::after{display:none}
+  [data-issue-explorer] [data-content-view-breadcrumb] a{height:24px;padding:0 5px 0 4px;border:0;border-radius:8px;background:transparent;color:var(--text);font-size:13px;font-weight:500;line-height:normal}
+  [data-issue-explorer] [data-content-view-breadcrumb] a>span:first-child{width:16px;height:16px;flex:0 0 16px;font-size:16px;font-weight:400;line-height:24px;color:var(--bright);border-style:none}
+  [data-issue-explorer] [data-content-view-breadcrumb] a>span:first-child>*{width:16px;height:16px}
+  [data-issue-explorer] [data-content-view-breadcrumb] a>span:last-child{line-height:normal;color:var(--text);border-style:none}
+  [data-issue-explorer] [data-content-view-breadcrumb]>span:nth-child(2)>span:first-child{display:inline-flex;align-items:center;height:15.5px;margin:0 0 0 3px;color:var(--issue-muted);font-size:13px;font-weight:500;line-height:normal;border-style:none}
+  [data-issue-explorer] [data-content-view-breadcrumb]>span:last-child>[data-current]{color:var(--text);font-size:13px;font-weight:500;line-height:normal}
+  [data-issue-explorer] [data-content-view-breadcrumb]>span:last-child>[data-current] span{border-style:none}
+  [data-issue-explorer] [data-content-view-subheader]{gap:6px;border-style:none}
+  [data-issue-explorer] [data-content-view-subheader] [class*="tabs"]{gap:4px}
+  [data-issue-explorer] [data-content-view-subheader] nav a[class*="tab"]{height:32px;border:.5px solid transparent;padding:0 9.5px}
+  [data-issue-explorer] [data-content-view-subheader] [class*="addView"]{width:32px;height:32px;flex:0 0 32px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--phone-control-fg);font-size:12px;font-weight:500;line-height:normal}
+  [data-issue-explorer] [data-content-view-subheader] [class*="actions"]{flex:0 0 auto;gap:6px;margin-left:0}
+  [data-issue-explorer] [data-content-view-subheader] [class*="actions"] button{width:32px;height:32px;flex:0 0 32px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;font-size:12px;font-weight:500;line-height:normal}
+  :global(:root[data-theme="dark"]) [data-issue-explorer] [data-content-view-subheader] [class*="actions"] button{background:var(--phone-control-bg);color:var(--phone-control-fg)}
+  button.phoneTeamFavorite,.phoneTeamNotifications{width:32px;height:32px;flex:0 0 32px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--phone-control-fg);font-size:12px;font-weight:500;line-height:normal;cursor:pointer}
+  button.phoneTeamFavorite{margin-left:6px}
+  .phoneTeamNotifications{margin-left:auto}
+  [data-issue-explorer] [data-content-view-header]:has(.phoneTeamNotifications) :global(.phone-create-issue){margin-left:4px}
+  [data-issue-explorer] [data-content-view-header] [data-sidebar-trigger] svg{color:var(--issue-muted)}
+  button.phoneTeamFavorite svg,a.phoneTeamNotifications svg{width:14px;height:14px;color:var(--issue-muted)}
+  [data-issue-explorer] [data-content-view-subheader] [class*="addView"] svg{color:var(--issue-dim)}
+  [data-issue-explorer] [data-content-view-subheader] [class*="actions"] svg{color:var(--issue-muted)}
+  [data-issue-explorer] [class*="groupCaret"]{color:var(--relation-chip-border)}
+  [data-issue-explorer] [class*="createButton"] svg{color:var(--phone-group-count)}
+  [data-issue-explorer] a[data-issue-row-id] [class*="priorityTrigger"] svg{color:var(--bright)}
+  [data-issue-explorer] a[data-issue-row-id] [class*="priorityTrigger"] svg rect{fill:var(--issue-muted)}
+  [data-issue-explorer] a[data-issue-row-id] :global(.estimate-chip) svg path{fill:var(--issue-muted)}
+  [data-issue-explorer] a[data-issue-row-id] [class*="noAssignee"] svg{fill:var(--issue-dim)}
+  [data-issue-explorer] [class*="groupState"]{display:grid;width:14px;height:14px;margin-left:0;place-items:center}
+  [data-issue-explorer] [class*="groupState"] svg{color:var(--bright);border-style:none}
+  [data-issue-explorer] [class*="groupHeader"]:has([class*="groupEstimate"]) [class*="groupCount"]{display:none}
+  [data-issue-explorer] [class*="groupEstimate"] :global(.estimate-chip__value){border-style:none}
+  [data-issue-explorer] a[data-issue-row-id] :global(.estimate-chip) svg{color:var(--bright);border-style:none;fill:var(--issue-muted)}
+  [data-issue-explorer] a[data-issue-row-id][data-nested="true"] :global(.estimate-chip){display:none}
+  [data-issue-explorer] a[data-issue-row-id] [class*="titleProperties"]{gap:8px}
+  [data-issue-explorer] a[data-issue-row-id] [class*="subIssueProgress"]{display:flex;align-items:center;height:24px;padding:0 8px;border:.5px solid var(--relation-chip-border);border-radius:48px;background:var(--bg-panel);color:var(--bright);font-size:16px;font-weight:400;line-height:24px;z-index:0}
+  [data-issue-explorer] a[data-issue-row-id] [class*="subIssueProgress"]>span{font-size:12px;font-weight:450;line-height:normal}
+}
