@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type APIRequestContext } from '@playwright/test'
 
 const API = 'http://127.0.0.1:4180'
 
@@ -7,26 +7,31 @@ function advancedFilterParam() {
   return Buffer.from(JSON.stringify(filters), 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
+async function seedTeamDocuments(request: APIRequestContext, workspaceKey: string, label: string) {
+  const created = await request.post(`${API}/api/workspaces`, {
+    data: { name: 'Mobile documents parity', urlKey: workspaceKey, region: 'us', tutorial: false },
+  })
+  expect(created.status()).toBe(201)
+  const bootstrap = await created.json() as { teams: { id: string; key: string }[] }
+  const team = bootstrap.teams[0]
+  const headers = { 'X-Workspace-Key': workspaceKey }
+  expect((await request.patch(`${API}/api/workspaces/${workspaceKey}/teams/${team.id}`, { data: { name: label }, headers })).ok()).toBe(true)
+  expect((await request.patch(`${API}/api/workspace/preferences`, { data: { featureFlags: { loops: false } }, headers })).ok()).toBe(true)
+  const projectResponse = await request.post(`${API}/api/projects`, { data: { name: '[mobile] Compare Test', teamIds: [team.id] }, headers })
+  expect(projectResponse.status()).toBe(201)
+  const project = await projectResponse.json() as { id: string }
+  for (const document of [{ teamIds: [team.id] }, { teamIds: [team.id], projectIds: [project.id] }, { teamIds: [team.id], projectIds: [project.id] }]) {
+    expect((await request.post(`${API}/api/documents`, { data: { title: '[mobile] New document', ...document }, headers })).status()).toBe(201)
+  }
+  return team
+}
+
 test.describe('mobile documents list', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
   test('phone Documents tab rows show group headers, checkboxes, document icons and titles', async ({ page, request }, testInfo) => {
     const workspaceKey = `mobile-docs-${testInfo.project.name}-${testInfo.retry}`
-    const created = await request.post(`${API}/api/workspaces`, {
-      data: { name: 'Mobile documents parity', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(created.status()).toBe(201)
-    const bootstrap = await created.json() as { teams: { id: string; key: string }[] }
-    const team = bootstrap.teams[0]
-    const headers = { 'X-Workspace-Key': workspaceKey }
-    expect((await request.patch(`${API}/api/workspaces/${workspaceKey}/teams/${team.id}`, { data: { name: '[mobile] Docs' }, headers })).ok()).toBe(true)
-    expect((await request.patch(`${API}/api/workspace/preferences`, { data: { featureFlags: { loops: false } }, headers })).ok()).toBe(true)
-    const projectResponse = await request.post(`${API}/api/projects`, { data: { name: '[mobile] Compare Test', teamIds: [team.id] }, headers })
-    expect(projectResponse.status()).toBe(201)
-    const project = await projectResponse.json() as { id: string }
-    for (const document of [{ teamIds: [team.id] }, { teamIds: [team.id], projectIds: [project.id] }, { teamIds: [team.id], projectIds: [project.id] }]) {
-      expect((await request.post(`${API}/api/documents`, { data: { title: '[mobile] New document', ...document }, headers })).status()).toBe(201)
-    }
+    const team = await seedTeamDocuments(request, workspaceKey, '[mobile] Docs')
 
     await page.goto(`/${workspaceKey}/team/${team.key}/documents?doc-filter=${advancedFilterParam()}`)
     await expect(page.locator('.team-home-topbar')).toHaveCSS('height', '44px')
@@ -55,5 +60,32 @@ test.describe('mobile documents list', () => {
     await expect(icon).toHaveCSS('color', 'rgb(255, 255, 255)')
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/documents-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
+})
+
+test.describe('mobile documents tab menu', () => {
+  test.use({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('active Documents tab collapses into a dropdown listing Documents and Members', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-docs-tabs-${testInfo.project.name}-${testInfo.retry}`
+    const team = await seedTeamDocuments(request, workspaceKey, '[mobile] Docs tabs')
+
+    await page.goto(`/${workspaceKey}/team/${team.key}/documents?doc-filter=${advancedFilterParam()}`)
+    const trigger = page.locator('[data-team-tab-active]')
+    await expect(trigger).toContainText('Documents')
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.locator('.team-home-tabs a').filter({ hasText: 'Members' })).toHaveCount(0)
+    await expect(page.locator('.team-home-tabs a').filter({ hasText: 'Overview' })).toBeVisible()
+
+    await trigger.click()
+    const menu = page.getByRole('menu', { name: 'Team views' })
+    await expect(menu).toBeVisible()
+    await expect(menu.getByRole('menuitem')).toHaveCount(2)
+    await expect(menu.getByRole('menuitem', { name: 'Documents' })).toHaveAttribute('data-active', 'true')
+    await expect(menu.getByRole('menuitem', { name: 'Members' })).not.toHaveAttribute('data-active', 'true')
+
+    await menu.getByRole('menuitem', { name: 'Members' }).click()
+    await expect(page).toHaveURL(new RegExp(`/${team.key}/members$`))
+    await expect(page.locator('.team-home-tabs a[aria-current="page"]')).toContainText('Members')
   })
 })

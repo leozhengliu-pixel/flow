@@ -1,4 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
+import * as Popover from "@radix-ui/react-popover";
 import { toggleFavoriteFor } from '@/lib/favorites';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import { TeamIcon } from '@/components/issue/issue-icons';
@@ -18,8 +19,10 @@ import {
   Trash2,
 } from "lucide-react";
 import {
+  Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -70,6 +73,8 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { ProjectIcon, SlackIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
 import { DocumentGlyph } from "@/components/documents/document-icon";
+import { TabsOverflowIcon } from "@/components/my-issues/my-issues-icons";
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import { documentDisplayTitle, type DocumentActionContext } from "@/components/documents/document-actions";
 import { DocumentRowMenu } from "@/components/documents/document-menu";
 import { IssueActionGlyph } from "@/components/issue/issue-action-glyphs";
@@ -284,51 +289,145 @@ export function TeamOverviewPage({
     });
     await onReload();
   };
+  const phone = usePhoneLayout();
+  const teamTabsRef = useRef<HTMLElement>(null);
+  const teamTabsMeasureRef = useRef<HTMLDivElement>(null);
+  const [teamTabsMenuOpen, setTeamTabsMenuOpen] = useState(false);
+  const [teamTabsVisibleCount, setTeamTabsVisibleCount] = useState(4);
+  const teamTabItems = useMemo(() => {
+    const items: { id: View; label: string; path: string }[] = [
+      { id: "overview", label: t("Overview"), path: teamHomePath(data.workspace.urlKey, team.key) },
+      { id: "documents", label: t("Documents"), path: teamDocumentsPath(data.workspace.urlKey, team.key) },
+    ];
+    if (loopsEnabled) items.push({ id: "loops", label: t("Loops"), path: teamLoopsPath(data.workspace.urlKey, team.key) });
+    items.push({ id: "members", label: t("Members"), path: teamMembersPath(data.workspace.urlKey, team.key) });
+    return items;
+  }, [data.workspace.urlKey, team.key, loopsEnabled, t]);
+  const activeTeamTabIndex = Math.max(0, teamTabItems.findIndex(tab => tab.id === view));
+  useLayoutEffect(() => {
+    if (!phone) return;
+    const nav = teamTabsRef.current, measure = teamTabsMeasureRef.current;
+    if (!nav || !measure) return;
+    const compute = () => {
+      const available = nav.clientWidth;
+      const widths = [...measure.querySelectorAll<HTMLElement>("[data-team-tab-measure]")].map(element => element.getBoundingClientRect().width);
+      if (!widths.length) return;
+      const activePill = measure.querySelector<HTMLElement>("[data-team-tab-measure-active]");
+      const activePillWidth = activePill?.getBoundingClientRect().width ?? (widths[activeTeamTabIndex] ?? 0) + 35;
+      const countPillWidth = 74.96, gap = 8;
+      let count = 0, used = 0;
+      for (let index = 0; index < teamTabItems.length; index++) {
+        const next = used + (count ? gap : 0) + widths[index];
+        const remaining = teamTabItems.length - (index + 1);
+        if (remaining === 0) {
+          if (next <= available + 0.5) { count = index + 1; used = next; }
+          break;
+        }
+        const pill = activeTeamTabIndex <= index ? countPillWidth : activePillWidth;
+        if (next + gap + pill <= available + 0.5) { count = index + 1; used = next; } else break;
+      }
+      setTeamTabsVisibleCount(count);
+    };
+    compute();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(compute);
+    observer.observe(nav);
+    observer.observe(measure);
+    return () => observer.disconnect();
+  }, [phone, activeTeamTabIndex, teamTabItems]);
+  const teamTabsOverflow = phone && teamTabsVisibleCount < teamTabItems.length;
+  const shownTeamTabs = phone ? teamTabItems.slice(0, teamTabsVisibleCount) : teamTabItems;
+  const hiddenTeamTabs = phone ? teamTabItems.slice(teamTabsVisibleCount) : [];
+  const activeTeamTabHidden = teamTabsOverflow && activeTeamTabIndex >= teamTabsVisibleCount;
+  const activeTeamTab = teamTabItems[activeTeamTabIndex];
+  const menuTeamTabs = activeTeamTabHidden
+    ? hiddenTeamTabs
+    : teamTabsOverflow ? hiddenTeamTabs : teamTabItems.slice(activeTeamTabIndex);
+  const teamTabLink = (tab: { id: View; label: string; path: string }, trigger = false, label?: string) => (
+    <a
+      aria-current={view === tab.id ? "page" : undefined}
+      aria-haspopup={trigger ? "menu" : undefined}
+      aria-expanded={trigger ? teamTabsMenuOpen : undefined}
+      aria-label={label}
+      data-team-tab-active={trigger ? "true" : undefined}
+      href={tab.path}
+      onClick={(event) => {
+        event.preventDefault();
+        if (trigger) setTeamTabsMenuOpen(open => !open);
+        else onNavigate(tab.path);
+      }}
+    >
+      <span className="team-home-tab-label">{tab.label}</span>
+      {trigger && teamTabsOverflow && <TabsOverflowIcon aria-hidden="true" className="team-home-tab-caret" />}
+    </a>
+  );
+  const teamTabsMenu = (items: { id: View; label: string; path: string }[]) => (
+    <Popover.Portal>
+      <Popover.Content
+        className="team-home-tabs-menu"
+        data-flow-motion="floating"
+        side="bottom"
+        align="start"
+        sideOffset={4}
+        collisionPadding={8}
+        role="menu"
+        aria-label={t("Team views")}
+      >
+        <div className="team-home-tabs-menu-inner">
+          {items.map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              role="menuitem"
+              data-team-tab-menu-item
+              data-active={view === tab.id ? "true" : undefined}
+              className="team-home-tabs-menu-item"
+              onClick={() => { setTeamTabsMenuOpen(false); onNavigate(tab.path); }}
+            >
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      </Popover.Content>
+    </Popover.Portal>
+  );
+  const hiddenAfterActive = hiddenTeamTabs.filter(tab => tab.id !== activeTeamTab.id).length;
+  const activeOverflowLabel = hiddenAfterActive
+    ? t("{name} & {count} more").replace("{name}", activeTeamTab.label).replace("{count}", String(hiddenAfterActive))
+    : activeTeamTab.label;
   const teamTabs = (
     <div className="team-home-band">
-      <nav className="team-home-tabs" aria-label={t("Team views")}>
-        <a
-          aria-current={view === "overview" ? "page" : undefined}
-          href={teamHomePath(data.workspace.urlKey, team.key)}
-          onClick={(event) => {
-            event.preventDefault();
-            onNavigate(teamHomePath(data.workspace.urlKey, team.key));
-          }}
-        >
-          <span className="team-home-tab-label">{t("Overview")}</span>
-        </a>
-        <a
-          aria-current={view === "documents" ? "page" : undefined}
-          href={teamDocumentsPath(data.workspace.urlKey, team.key)}
-          onClick={(event) => {
-            event.preventDefault();
-            onNavigate(teamDocumentsPath(data.workspace.urlKey, team.key));
-          }}
-        >
-          <span className="team-home-tab-label">{t("Documents")}</span>
-        </a>
-        {loopsEnabled && (
-          <a
-            aria-current={view === "loops" ? "page" : undefined}
-            href={teamLoopsPath(data.workspace.urlKey, team.key)}
-            onClick={(event) => {
-              event.preventDefault();
-              onNavigate(teamLoopsPath(data.workspace.urlKey, team.key));
-            }}
-          >
-            <span className="team-home-tab-label">{t("Loops")}</span>
-          </a>
+      <nav ref={teamTabsRef} className="team-home-tabs" aria-label={t("Team views")}>
+        {shownTeamTabs.map(tab => (
+          phone && !teamTabsOverflow && tab.id === view ? (
+            <Popover.Root key={tab.id} open={teamTabsMenuOpen} onOpenChange={setTeamTabsMenuOpen}>
+              <Popover.Trigger asChild>{teamTabLink(tab, true)}</Popover.Trigger>
+              {teamTabsMenu(menuTeamTabs)}
+            </Popover.Root>
+          ) : (
+            <Fragment key={tab.id}>{teamTabLink(tab)}</Fragment>
+          )
+        ))}
+        {teamTabsOverflow && activeTeamTabHidden && (
+          <Popover.Root open={teamTabsMenuOpen} onOpenChange={setTeamTabsMenuOpen}>
+            <Popover.Trigger asChild>{teamTabLink(activeTeamTab, true, activeOverflowLabel)}</Popover.Trigger>
+            {teamTabsMenu(menuTeamTabs)}
+          </Popover.Root>
         )}
-        <a
-          aria-current={view === "members" ? "page" : undefined}
-          href={teamMembersPath(data.workspace.urlKey, team.key)}
-          onClick={(event) => {
-            event.preventDefault();
-            onNavigate(teamMembersPath(data.workspace.urlKey, team.key));
-          }}
-        >
-          <span className="team-home-tab-label">{t("Members")}</span>
-        </a>
+        {teamTabsOverflow && !activeTeamTabHidden && (
+          <Popover.Root open={teamTabsMenuOpen} onOpenChange={setTeamTabsMenuOpen}>
+            <Popover.Trigger asChild>
+              <button type="button" className="team-home-tabs-overflow-pill">
+                <span>{t("{count} more").replace("{count}", String(hiddenTeamTabs.length))}</span>
+              </button>
+            </Popover.Trigger>
+            {teamTabsMenu(menuTeamTabs)}
+          </Popover.Root>
+        )}
+        {phone && <div ref={teamTabsMeasureRef} className="team-home-tabs-measure" aria-hidden="true">
+          {teamTabItems.map(tab => <span key={tab.id} data-team-tab-measure className="team-home-tabs-measure-pill">{tab.label}</span>)}
+          <span data-team-tab-measure-active className="team-home-tabs-measure-pill is-active"><span>{activeTeamTab.label}</span><TabsOverflowIcon className="team-home-tab-caret" /></span>
+        </div>}
       </nav>
     </div>
   );
