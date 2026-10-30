@@ -414,6 +414,10 @@ func bindList(column string, values []string) (string, []any) {
 var issueFilterFieldAliases = map[string]string{"state": "status", "stateid": "status", "teamid": "team", "projectid": "project", "assigneeid": "assignee", "creatorid": "creator", "cycleid": "cycle", "label": "labels", "labelid": "labels", "subscriber": "subscribers", "subscriberid": "subscribers", "createdat": "createdAt", "updatedat": "updatedAt", "sortorder": "sortOrder", "myactivity": "myActivity", "statustype": "statusType"}
 
 func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []any, error) {
+	return compileIssueFilterScoped(node, depth, remaining, nil)
+}
+
+func compileIssueFilterScoped(node IssueFilter, depth int, remaining *int, query *IssueRecordQuery) (string, []any, error) {
 	if field, ok := issueFilterFieldAliases[strings.ToLower(node.Field)]; ok {
 		node.Field = field
 	}
@@ -429,7 +433,7 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 	}{{node.And, " AND "}, {node.Or, " OR "}} {
 		var children []string
 		for _, child := range group.nodes {
-			sql, values, err := compileIssueFilter(child, depth+1, remaining)
+			sql, values, err := compileIssueFilterScoped(child, depth+1, remaining, query)
 			if err != nil {
 				return "", nil, err
 			}
@@ -441,7 +445,7 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 		}
 	}
 	if node.Not != nil {
-		sql, values, err := compileIssueFilter(*node.Not, depth+1, remaining)
+		sql, values, err := compileIssueFilterScoped(*node.Not, depth+1, remaining, query)
 		if err != nil {
 			return "", nil, err
 		}
@@ -485,7 +489,15 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 			if op != "isempty" && op != "isnotempty" {
 				return "", nil, fmt.Errorf("%w: unsupported operator %s", ErrIssueQuery, node.Operator)
 			}
-			clause := "EXISTS (SELECT 1 FROM issue_records child WHERE child.workspace_key=i.workspace_key AND child.parent_id=i.id)"
+			childScope := "child.workspace_key=i.workspace_key AND child.parent_id=i.id AND child.archived=0"
+			if query != nil {
+				visibility, values := issueRecordVisibilityClause(*query, "child")
+				if visibility != "" {
+					childScope += " AND " + visibility
+					args = append(args, values...)
+				}
+			}
+			clause := "EXISTS (SELECT 1 FROM issue_records child WHERE " + childScope + ")"
 			if op == "isempty" {
 				clause = "NOT (" + clause + ")"
 			}
@@ -636,23 +648,42 @@ func escapeIssueLike(value string) string {
 	return strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(value)
 }
 
+// issueRecordVisibilityClause is the content scope shared by the main issue
+// query and relationship probes such as hasSubIssues. The alias is supplied
+// by the caller so correlated child rows use exactly the same permission
+// model as the outer issue row.
+func issueRecordVisibilityClause(query IssueRecordQuery, alias string) (string, []any) {
+	clauses := []string{}
+	args := []any{}
+	if query.Access != nil && !query.Access.Admin {
+		teams, values := bindList(alias+".team_id", query.Access.VisibleTeamIDs)
+		clauses = append(clauses, "("+teams+" OR "+alias+".id IN (SELECT id FROM shared_issues))")
+		args = append(args, values...)
+	}
+	if query.Access != nil && len(query.Access.ArchivedTeamIDs) > 0 {
+		archivedTeams, values := bindList(alias+".team_id", query.Access.ArchivedTeamIDs)
+		clauses = append(clauses, "NOT "+archivedTeams)
+		args = append(args, values...)
+	}
+	if query.AllowedTeamIDs != nil {
+		teams, values := bindList(alias+".team_id", query.AllowedTeamIDs)
+		clauses = append(clauses, teams)
+		args = append(args, values...)
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
 func issueRecordWhere(query IssueRecordQuery) (string, []any, error) {
 	if query.Workspace == "" {
 		return "", nil, ErrIssueQuery
 	}
 	clauses := []string{"i.workspace_key=?"}
 	args := []any{query.Workspace}
-	if query.Access != nil && !query.Access.Admin {
-		if query.Access.UserID == "" {
-			return "", nil, ErrIssueQuery
-		}
-		teams, values := bindList("i.team_id", query.Access.VisibleTeamIDs)
-		clauses = append(clauses, "("+teams+" OR i.id IN (SELECT id FROM shared_issues))")
-		args = append(args, values...)
+	if query.Access != nil && !query.Access.Admin && query.Access.UserID == "" {
+		return "", nil, ErrIssueQuery
 	}
-	if query.Access != nil && len(query.Access.ArchivedTeamIDs) > 0 {
-		archivedTeams, values := bindList("i.team_id", query.Access.ArchivedTeamIDs)
-		clauses = append(clauses, "NOT "+archivedTeams)
+	if visibility, values := issueRecordVisibilityClause(query, "i"); visibility != "" {
+		clauses = append(clauses, visibility)
 		args = append(args, values...)
 	}
 	if query.Archived != "all" {
@@ -667,7 +698,7 @@ func issueRecordWhere(query IssueRecordQuery) (string, []any, error) {
 		column   string
 		values   []string
 		required bool
-	}{{"team_id", query.TeamIDs, false}, {"project_id", query.ProjectIDs, false}, {"state_id", query.StateIDs, false}, {"id", query.IssueIDs, query.RestrictToIssueIDs}, {"team_id", query.AllowedTeamIDs, query.AllowedTeamIDs != nil}} {
+	}{{"team_id", query.TeamIDs, false}, {"project_id", query.ProjectIDs, false}, {"state_id", query.StateIDs, false}, {"id", query.IssueIDs, query.RestrictToIssueIDs}} {
 		if len(item.values) > 0 || item.required {
 			clause, values := bindList("i."+item.column, item.values)
 			clauses = append(clauses, clause)
@@ -680,7 +711,7 @@ func issueRecordWhere(query IssueRecordQuery) (string, []any, error) {
 		args = append(args, value, value)
 	}
 	budget := 100
-	filter, values, err := compileIssueFilter(query.Filter, 0, &budget)
+	filter, values, err := compileIssueFilterScoped(query.Filter, 0, &budget, &query)
 	if err != nil {
 		return "", nil, err
 	}

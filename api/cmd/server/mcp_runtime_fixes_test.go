@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"flow/api/internal/domain"
 )
 
 // mcpResultText is content[0].text of a successful tools/call.
@@ -101,6 +103,41 @@ func TestMCPListCyclesAllAndIssueRelationshipProjections(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("hasSubIssues did not return parent: %v", filtered)
+	}
+}
+
+func TestMCPIssueRelationshipsHidePrivateChildren(t *testing.T) {
+	f := newMCPContractFixture(t)
+	workspace := f.data.Workspace.URLKey
+	if err := f.repository.MutateWorkspace(t.Context(), workspace, "team.created", "private-team", nil, func(data *domain.Bootstrap) error {
+		data.Teams = append(data.Teams, domain.Team{ID: "private-team", Name: "Private team", Key: "PRV", Private: true})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	parent := f.data.Issues[0]
+	parent.ID, parent.Identifier, parent.ParentID, parent.SubIssueIDs = "mcp-visible-parent", "TST-MCP-PARENT", nil, []string{"mcp-private-child"}
+	child := parent
+	child.ID, child.Identifier, child.Team = "mcp-private-child", "PRV-MCP-CHILD", domain.Team{ID: "private-team"}
+	child.ParentID = &parent.ID
+	if err := f.repository.ImportIssues(t.Context(), workspace, []domain.Issue{parent, child}); err != nil {
+		t.Fatal(err)
+	}
+	args := map[string]any{"fields": []string{"id", "subIssueCount", "hasChildren"}, "limit": 250}
+	result := mcpSuccess(t, f.call(t, "list_issues", args)).(map[string]any)
+	for _, raw := range result["items"].([]any) {
+		item := raw.(map[string]any)
+		if item["id"] == parent.ID {
+			if item["subIssueCount"].(float64) != 0 || item["hasChildren"] != false {
+				t.Fatalf("private child leaked through relationship fields: %v", item)
+			}
+		}
+	}
+	filtered := mcpSuccess(t, f.call(t, "list_issues", map[string]any{"hasSubIssues": true, "fields": []string{"id"}, "limit": 250})).(map[string]any)
+	for _, raw := range filtered["items"].([]any) {
+		if raw.(map[string]any)["id"] == parent.ID {
+			t.Fatal("parent with only a private child matched hasSubIssues=true")
+		}
 	}
 }
 

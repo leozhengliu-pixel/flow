@@ -648,6 +648,21 @@ func (s *server) pagedMCPIssues(ctx context.Context, actor mcpActor, data domain
 		raw, _ := json.Marshal(mcpIssuePageCursor{Cursor: page.NextCursor, Anchor: anchor})
 		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 	}
+	childIDs := map[string]bool{}
+	for _, issue := range page.Items {
+		for _, id := range issue.SubIssueIDs {
+			if id != "" {
+				childIDs[id] = true
+			}
+		}
+	}
+	visibleChildren, err := s.visibleActiveMCPSubIssueIDs(ctx, q, childIDs)
+	if err != nil {
+		return nil, err
+	}
+	for index := range page.Items {
+		page.Items[index].SubIssueIDs = slices.DeleteFunc(page.Items[index].SubIssueIDs, func(id string) bool { return !visibleChildren[id] })
+	}
 	if len(fields) > 0 {
 		customerRequestCounts := map[string]int{}
 		for _, request := range data.CustomerRequests {
@@ -704,6 +719,38 @@ func (s *server) pagedMCPIssues(ctx context.Context, actor mcpActor, data domain
 		return map[string]any{"items": items, "nextCursor": page.NextCursor}, nil
 	}
 	return map[string]any{"items": page.Items, "nextCursor": page.NextCursor}, nil
+}
+
+// visibleActiveMCPSubIssueIDs projects relationship ids with the same access
+// scope as list_issues. Web sub-issue lists omit archived rows, so archived
+// children are excluded here even when the parent query includes them.
+func (s *server) visibleActiveMCPSubIssueIDs(ctx context.Context, query store.IssueRecordQuery, ids map[string]bool) (map[string]bool, error) {
+	visible := map[string]bool{}
+	all := make([]string, 0, len(ids))
+	for id := range ids {
+		all = append(all, id)
+	}
+	for start := 0; start < len(all); start += 500 {
+		end := min(start+500, len(all))
+		childQuery := query
+		childQuery.Filter = store.IssueFilter{}
+		childQuery.TeamIDs, childQuery.ProjectIDs, childQuery.StateIDs, childQuery.ReleaseIDs = nil, nil, nil, nil
+		childQuery.IssueIDs = all[start:end]
+		childQuery.RestrictToIssueIDs = true
+		childQuery.Archived = "false"
+		childQuery.Limit = end - start
+		childQuery.Cursor = ""
+		childQuery.Sort, childQuery.Direction = "", ""
+		childQuery.IncludeTotal, childQuery.Summary, childQuery.IncludeDescription = false, true, false
+		page, err := s.store.QueryIssueRecords(ctx, childQuery)
+		if err != nil {
+			return nil, err
+		}
+		for _, issue := range page.Items {
+			visible[issue.ID] = true
+		}
+	}
+	return visible, nil
 }
 
 // applyMCPIssueFilters adds list_issues' filters (team, state, assignee, project, dates…) to an issue query; dates

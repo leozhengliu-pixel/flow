@@ -184,7 +184,7 @@ func TestHasSubIssuesFilterTracksParentColumnChanges(t *testing.T) {
 	if err := repository.ImportIssues(ctx, workspace, []domain.Issue{child}); err != nil {
 		t.Fatal(err)
 	}
-	check("archive", parentA.ID)
+	check("archive")
 	child.ArchivedAt = nil
 	if err := repository.ImportIssues(ctx, workspace, []domain.Issue{child}); err != nil {
 		t.Fatal(err)
@@ -211,6 +211,40 @@ func TestHasSubIssuesFilterTracksParentColumnChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	check("bulk move", parentB.ID)
+}
+
+func TestHasSubIssuesFilterIgnoresHiddenChildren(t *testing.T) {
+	ctx := context.Background()
+	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "hidden-child.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	data := repository.Bootstrap()
+	workspace := data.Workspace.URLKey
+	parent := data.Issues[0]
+	parent.ID, parent.Identifier, parent.ParentID, parent.SubIssueIDs = "visible-parent", "TST-VISIBLE", nil, []string{}
+	child := parent
+	child.ID, child.Identifier, child.Team = "hidden-child", "PRV-HIDDEN", domain.Team{ID: "private-team"}
+	child.ParentID = &parent.ID
+	if err := repository.ImportIssues(ctx, workspace, []domain.Issue{parent, child}); err != nil {
+		t.Fatal(err)
+	}
+	access := &IssueRecordAccess{UserID: "viewer", WorkspaceID: data.Workspace.ID, VisibleTeamIDs: []string{parent.Team.ID}}
+	query := func(operator string) IssueRecordQuery {
+		return IssueRecordQuery{Workspace: workspace, Access: access, IssueIDs: []string{parent.ID}, RestrictToIssueIDs: true, Filter: IssueFilter{Field: "hasSubIssues", Operator: operator}, Limit: 10}
+	}
+	page, err := repository.QueryIssueRecords(ctx, query("isNotEmpty"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 0 {
+		t.Fatalf("hidden child matched hasSubIssues=true: %#v", page.Items)
+	}
+	page, err = repository.QueryIssueRecords(ctx, query("isEmpty"))
+	if err != nil || len(page.Items) != 1 || page.Items[0].ID != parent.ID {
+		t.Fatalf("hidden child did not match hasSubIssues=false: %v %#v", err, page.Items)
+	}
 }
 
 func TestIssueQueryRejectsCursorAcrossScopeAndBoundsFilters(t *testing.T) {

@@ -12,6 +12,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Upgrade `github.com/go-jose/go-jose/v4` to v4.1.6 to address panics in JSON
   and CBC-HMAC processing and denial of service when parsing RSA JWKs used by
   OIDC discovery and token verification.
+- Issue relationship filters and MCP sub-issue counts now exclude archived
+  children and children outside the viewer's team and permission scope.
 - Upgrade `golang.org/x/net` to v0.62.0 to address HTML parser vulnerabilities;
   coding-runtime OpenPGP signing uses the maintained `github.com/ProtonMail/go-crypto`
   fork instead of the deprecated `golang.org/x/crypto/openpgp` package.
