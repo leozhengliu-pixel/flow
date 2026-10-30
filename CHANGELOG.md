@@ -28,6 +28,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Phone-sized app frames fill the viewport, with matching navigation targets,
+  searchable workspace menus and modal property pickers; the issue composer
+  uses phone-sized controls without changing desktop layouts.
+
 - Common MCP and agent issue tools use bounded catalog projections and indexed issue point reads; team counts use maintained counters instead of scanning the full issue table.
 - Agent replies now recover from empty or malformed streamed tool arguments without breaking saved chats; chat errors use translated messages with Details and Retry. Sending follows the new turn, finished steps omit running summaries, and loop drafts appear after their work header. The loop builder keeps to the requested scope and document-target guidance is clearer.
 

@@ -547,6 +547,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const rowActions = { data, onUpdateIssue, onDeleteIssues, onOpenIssue: (issue: Issue) => onOpenIssue(issue), onCreateIssue }
   return <IssueRowActionsProvider value={rowActions}>
     <IssueExplorerSurface
+      onCreateIssue={onCreateIssue ? () => onCreateIssue(scope.kind === 'team' ? { teamId: scope.team.id } : undefined) : undefined}
       scopeName={scope.kind === 'team' ? scope.team.name : data.workspace.name}
       scopeTeam={scope.kind === 'team' ? scope.team : undefined}
       creatingView={creatingView}

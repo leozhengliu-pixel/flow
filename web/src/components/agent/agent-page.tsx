@@ -460,6 +460,7 @@ export function AgentPage({
             <button
               aria-expanded={historyOpen}
               aria-label={t("Switch agent chat")}
+              data-agent-chat-switcher
               className={styles.switcher}
               type="button"
             >

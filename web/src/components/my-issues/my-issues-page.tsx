@@ -234,6 +234,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       onAdvancedFilter={() => { const chip = createAdvancedFilter(); setOpenAdvancedId(chip.id); controller.addFilter(chip) }}
       onFilterToggle={(field, option) => { const fieldLabel = FILTER_LABELS[field]; if (fieldLabel) controller.toggleFilter(field, fieldLabel, option) }}
       onOpenSidebar={onOpenSidebar}
+      onCreateIssue={onCreateIssue ? () => onCreateIssue() : undefined}
       onViewChange={view => { setProjectedView(view); controller.changeView(view) }}
       filterBar={<MyIssuesFilterBar
         filters={controller.filters}

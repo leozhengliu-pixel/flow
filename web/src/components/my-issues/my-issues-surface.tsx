@@ -68,6 +68,7 @@ export interface MyIssuesSurfaceProps {
   onAdvancedFilter?: () => void
   onViewChange?: (view: MyIssuesView) => void
   onOpenSidebar?: () => void
+  onCreateIssue?: () => void
   /** Surface-specific display menu capabilities (available groupings/orderings, toggles, footer). */
   displayMenuProps?: Partial<Omit<MyIssuesDisplayMenuProps, 'open' | 'onOpenChange' | 'options' | 'onChange'>>
 }
@@ -111,11 +112,11 @@ const filterGroups = [
 
 export function MyIssuesSurface({
   activeView = 'assigned', children, filterBar, detailsOpen = false, insightsOpen = false, displayOptions = defaultMyIssuesDisplayOptions, filterOpenSignal = 0, filters = [], viewCounts, viewHref,
-  filterOptions, onAdvancedFilter, onDetailsOpenChange, onInsightsOpenChange, onDisplayOptionsChange, onFilterSelect, onFilterToggle, onViewChange, onOpenSidebar, displayMenuProps,
+  filterOptions, onAdvancedFilter, onDetailsOpenChange, onInsightsOpenChange, onDisplayOptionsChange, onFilterSelect, onFilterToggle, onViewChange, onOpenSidebar, onCreateIssue, displayMenuProps,
 }: MyIssuesSurfaceProps) {
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
   return <ContentViewContainer framed inset="tall" data-my-issues-surface="true">
-    <ContentViewHeader onOpenSidebar={onOpenSidebar}>
+    <ContentViewHeader onOpenSidebar={onOpenSidebar} onCreateIssue={onCreateIssue}>
       <ContentViewHeaderTitle title="My issues" />
     </ContentViewHeader>
     <ContentViewSubheader
