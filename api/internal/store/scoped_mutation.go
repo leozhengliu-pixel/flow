@@ -189,7 +189,17 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		if !ok {
 			return fmt.Errorf("workspace %q: %w", workspaceKey, errors.New("not found"))
 		}
+		discussionOnly := IsIssueDiscussionMutation(ctx)
 		current := cloneBootstrap(collectionMetadata(stored))
+		if discussionOnly {
+			current.IssueSLAs = nil
+			current.SLAEvents = nil
+			current.Subscriptions = nil
+			current.Favorites = nil
+			current.AuditLog = nil
+			current.IntegrationDeliveries = nil
+			current.Trash = nil
+		}
 		if scope.Resolve != nil {
 			scope = scope.merge(scope.Resolve(current))
 		}
@@ -321,6 +331,18 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		next.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspaceKey)
 		aggregateID, err := mutate(&next)
 		next.CollaborationUpdates = nil
+		if discussionOnly {
+			// These collections are unrelated to a comment but may contain
+			// hundreds of thousands of records. Restore their shared snapshots
+			// before persistence so a discussion mutation cannot clear them.
+			next.IssueSLAs = stored.IssueSLAs
+			next.SLAEvents = stored.SLAEvents
+			next.Subscriptions = stored.Subscriptions
+			next.Favorites = stored.Favorites
+			next.AuditLog = stored.AuditLog
+			next.IntegrationDeliveries = stored.IntegrationDeliveries
+			next.Trash = stored.Trash
+		}
 		next.ViewerRole, next.ViewerTeamIDs, next.FormerMembers = originalViewerRole, nil, nil
 		current.Members, current.TeamMembers = storedMembers, storedTeamMembers
 		next.Members, next.TeamMembers = storedMembers, storedTeamMembers
