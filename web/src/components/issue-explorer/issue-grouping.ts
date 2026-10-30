@@ -274,13 +274,13 @@ function activityDescriptor(value: string, now: number): GroupDescriptor {
   const start = new Date(now); start.setHours(0, 0, 0, 0)
   const day = new Date(date); day.setHours(0, 0, 0, 0)
   const offset = Math.round((start.getTime() - day.getTime()) / DAY)
-  if (offset <= 0) return { id: 'activity-today', label: 'Today', rank: 0 }
-  if (offset === 1) return { id: 'activity-yesterday', label: 'Yesterday', rank: 1 }
+  if (offset <= 0) return { id: 'activity-today', label: 'Today', rank: 0, translatableLabel: true }
+  if (offset === 1) return { id: 'activity-yesterday', label: 'Yesterday', rank: 1, translatableLabel: true }
   if (offset < 30) {
     const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
-    return { id: `activity-day-${key}`, label: `${offset} days ago`, rank: offset }
+    return { id: `activity-day-${key}`, label: `${offset} days ago`, rank: offset, translatableLabel: true }
   }
-  return { id: 'activity-older', label: 'Older', rank: 30 }
+  return { id: 'activity-older', label: 'Older', rank: 30, translatableLabel: true }
 }
 
 /** Issue comparator honoring the reference app ordering fields and direction. "No priority" always sorts last. */
