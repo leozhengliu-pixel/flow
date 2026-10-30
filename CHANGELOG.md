@@ -19,7 +19,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Estimate icons now use the same filled-left triangle for every value and
   property button, with a separate broken outline for "No estimate" menu options.
 - On phones, issue details wrap their properties, expose due dates and related-issue navigation, keep the copy controls visible, and use touch-sized issue action menus without repeating the desktop properties rail.
-- On phones, the issue header keeps the reference app's breadcrumb and action positions, the property pills share one hairline and padding so a due date reads like the other properties, and the related-issues pill uses the relationship glyph already used by the activity stream.
+- On phones, the issue header keeps the reference app's breadcrumb and action positions, the property pills share one hairline and padding so a due date reads like the other properties, and the related-issues pill uses the relationship glyph already used by the activity stream, and the header menu plus reaction/attachment glyphs use the muted phone icon palette.
 - On phones, the Reviews page has the reference app's combined 87.5px header and tab strip, Created count badges, and the centered empty-state illustration; desktop layouts are unchanged.
 - Phone pill tabs (Reviews, My issues, Projects) clip their fill to the padding box, so the shared hairline ring matches the reference edge instead of lightening the fill.
 
