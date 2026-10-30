@@ -339,7 +339,7 @@ test.describe('mobile team issues list', () => {
     const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
     const renamed = await request.patch(`${apiBase}/api/workspaces/${workspaceKey}/teams/${team.id}`, {
       headers,
-      data: { name: 'Picker Test', icon: 'Starred', color: '#E719A5' },
+      data: { name: 'Picker Test', icon: 'StarOutline', color: '#E719A5' },
     })
     expect(renamed.ok()).toBe(true)
     const settings = await request.patch(`${apiBase}/api/teams/${team.id}/settings`, {
