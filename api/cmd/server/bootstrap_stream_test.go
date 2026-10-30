@@ -13,6 +13,18 @@ import (
 	"flow/api/internal/domain"
 )
 
+func TestWorkspaceKeyAcceptsBothWorkspaceHeaders(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api/notifications", nil)
+	request.Header.Set("X-Flow-Workspace", "flow-header")
+	if got := workspaceKey(request); got != "flow-header" {
+		t.Fatalf("workspaceKey = %q, want the X-Flow-Workspace value", got)
+	}
+	request.Header.Set("X-Workspace-Key", "canonical")
+	if got := workspaceKey(request); got != "canonical" {
+		t.Fatalf("workspaceKey = %q, want X-Workspace-Key to win", got)
+	}
+}
+
 func TestLegacyBootstrapQueueCancelsWithoutEnteringHandler(t *testing.T) {
 	entered, release, finished := make(chan struct{}, 2), make(chan struct{}), make(chan struct{})
 	handler := serializeLegacyBootstrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +92,43 @@ func TestBootstrapArrayStopsAfterDisconnectedClient(t *testing.T) {
 	w := &failedBootstrapWriter{}
 	if err := encodeBootstrapArray(w, json.NewEncoder(w), make([]domain.Issue, 1000)); err == nil || w.writes != 1 {
 		t.Fatalf("continued writing after disconnect: writes=%d err=%v", w.writes, err)
+	}
+}
+
+func notificationIDs(data domain.Bootstrap) map[string]bool {
+	ids := map[string]bool{}
+	for _, notification := range data.Notifications {
+		ids[notification.ID] = true
+	}
+	return ids
+}
+
+// A deleted or archived notification is inbox history. The full bootstrap must
+// not ship it, or a client that caches the snapshot keeps rendering the row
+// after the server has removed it.
+func TestLegacyBootstrapOmitsDeletedAndArchivedNotifications(t *testing.T) {
+	_, handler, data, _ := applicationFixture(t)
+	issue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Reminder target", "teamId": data.Teams[0].ID}, http.StatusCreated)
+	remindAt := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	live := requestJSON[domain.Notification](t, handler, http.MethodPost, "/api/issues/"+issue.ID+"/reminders", map[string]any{"remindAt": remindAt}, http.StatusCreated)
+	if !notificationIDs(requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK))[live.ID] {
+		t.Fatal("live reminder missing from bootstrap")
+	}
+
+	deleted := requestJSON[domain.Notification](t, handler, http.MethodPost, "/api/issues/"+issue.ID+"/reminders", map[string]any{"remindAt": remindAt}, http.StatusCreated)
+	requestJSON[domain.Notification](t, handler, http.MethodPatch, "/api/notifications/"+deleted.ID, map[string]any{"deleted": true}, http.StatusOK)
+	archived := requestJSON[domain.Notification](t, handler, http.MethodPost, "/api/issues/"+issue.ID+"/reminders", map[string]any{"remindAt": remindAt}, http.StatusCreated)
+	requestJSON[domain.Notification](t, handler, http.MethodPatch, "/api/notifications/"+archived.ID, map[string]any{"archived": true}, http.StatusOK)
+
+	ids := notificationIDs(requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK))
+	if ids[deleted.ID] {
+		t.Fatal("deleted notification remained in bootstrap")
+	}
+	if ids[archived.ID] {
+		t.Fatal("archived notification remained in bootstrap")
+	}
+	if !ids[live.ID] {
+		t.Fatal("live notification disappeared from bootstrap")
 	}
 }
 
