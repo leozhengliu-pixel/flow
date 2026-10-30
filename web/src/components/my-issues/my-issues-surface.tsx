@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { forwardRef, useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import * as Popover from '@radix-ui/react-popover'
 import { ChevronDown } from 'lucide-react'
 import { FlowTooltip } from '@/components/ui/tooltip'
@@ -121,11 +121,57 @@ export function MyIssuesSurface({
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
   const phone = usePhoneLayout()
   const t = useOptionalTranslate()
-  // A phone keeps the two most-used views beside the toolbar; the rest move into
-  // the reference app's "N more" pill, which opens a small anchored popover.
-  const visibleViews = phone ? views.slice(0, 2) : views
-  const overflowViews = phone ? views.slice(2) : []
-  const overflowLabel = t('{count} more').replace('{count}', String(overflowViews.length))
+  const navRef = useRef<HTMLElement>(null)
+  const measureRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const [overflowOpen, setOverflowOpen] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(views.length)
+  const activeIndex = Math.max(0, views.findIndex(view => view.id === activeView))
+  // Fit the reference app's tab strip: keep as many leading views as fit beside the
+  // overflow pill. When the selected view itself would overflow, the pill shows the
+  // selected view and is active, while the rest stay in its menu.
+  useLayoutEffect(() => {
+    if (!phone) return
+    const nav = navRef.current, measure = measureRef.current
+    if (!nav || !measure) return
+    const compute = () => {
+      const available = nav.clientWidth
+      const widths = [...measure.querySelectorAll<HTMLElement>('[data-tab-measure]')].map(element => element.getBoundingClientRect().width)
+      if (!widths.length) return
+      const activePill = measure.querySelector<HTMLElement>('[data-tab-measure-active]')
+      const activePillWidth = activePill?.getBoundingClientRect().width ?? (widths[activeIndex] ?? 0) + 15
+      const countPillWidth = 74.96, gap = 8
+      let count = 0, used = 0
+      for (let index = 0; index < views.length; index++) {
+        const next = used + (count ? gap : 0) + widths[index]
+        const remaining = views.length - (index + 1)
+        if (remaining === 0) {
+          if (next <= available + 0.5) { count = index + 1; used = next }
+          break
+        }
+        const pill = activeIndex <= index ? countPillWidth : activePillWidth
+        if (next + gap + pill <= available + 0.5) { count = index + 1; used = next } else break
+      }
+      setVisibleCount(count)
+    }
+    compute()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(compute)
+    observer.observe(nav)
+    observer.observe(measure)
+    return () => observer.disconnect()
+  }, [phone, activeIndex])
+  const showOverflow = phone && visibleCount < views.length
+  const shownViews = phone ? views.slice(0, visibleCount) : views
+  const overflowViews = phone ? views.slice(visibleCount) : []
+  const activeHidden = showOverflow && activeIndex >= visibleCount
+  const menuViews = activeHidden ? overflowViews.filter(view => view.id !== activeView) : overflowViews
+  const overflowLabel = activeHidden
+    ? (menuViews.length ? t('{name} & {count} more').replace('{name}', views[activeIndex].label).replace('{count}', String(menuViews.length)) : views[activeIndex].label)
+    : t('{count} more').replace('{count}', String(overflowViews.length))
+  const overflowVisibleLabel = activeHidden ? views[activeIndex].label : overflowLabel
+  useEffect(() => { if (!overflowOpen) itemRefs.current = [] }, [overflowOpen])
   return <ContentViewContainer framed inset="tall" data-my-issues-surface="true" data-my-issues-view={activeView} data-my-issues-grouping={displayOptions.grouping}>
     <ContentViewHeader onOpenSidebar={onOpenSidebar} onCreateIssue={onCreateIssue}>
       <ContentViewHeaderTitle title="My issues" />
@@ -134,20 +180,35 @@ export function MyIssuesSurface({
       borderless
       className={styles.viewsSubheader}
       start={
-        <nav className={styles.tabs} aria-label="My issues views">
-          {visibleViews.map(view => <a key={view.id} href={viewHref?.(view.id) ?? `#${view.id}`} className={`${styles.tab} ui-pill`} data-active={activeView === view.id} data-disabled={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} aria-label={viewCounts?.[view.id] == null ? view.label : `${view.label}, ${viewCounts[view.id]} issues`} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onViewChange?.(view.id) }}>{view.label}</a>)}
-          {overflowViews.length > 0 && <Popover.Root>
+        <nav ref={navRef} className={styles.tabs} aria-label="My issues views">
+          {shownViews.map(view => <a key={view.id} href={viewHref?.(view.id) ?? `#${view.id}`} className={`${styles.tab} ui-pill`} data-active={activeView === view.id} data-disabled={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} aria-label={viewCounts?.[view.id] == null ? view.label : `${view.label}, ${viewCounts[view.id]} issues`} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onViewChange?.(view.id) }}>{view.label}</a>)}
+          {showOverflow && <Popover.Root open={overflowOpen} onOpenChange={setOverflowOpen}>
             <Popover.Trigger asChild>
-              <button type="button" className={`${styles.tab} ${styles.tabsOverflow} ui-pill`} aria-label={overflowLabel} aria-haspopup="menu">
-                <span>{overflowLabel}</span><ChevronDown aria-hidden="true"/>
+              <button ref={triggerRef} type="button" className={`${styles.tab} ${styles.tabsOverflow} ${activeHidden ? styles.tabsOverflowActive : styles.tabsOverflowCount} ui-pill`} data-active={activeHidden || undefined} aria-label={overflowLabel} aria-haspopup="menu" aria-expanded={overflowOpen}>
+                <span>{overflowVisibleLabel}</span><ChevronDown aria-hidden="true"/>
               </button>
             </Popover.Trigger>
             <Popover.Portal>
-              <Popover.Content className={styles.tabsMenu} data-flow-motion="floating" side="bottom" align="start" sideOffset={4} collisionPadding={8} aria-label="More views">
-                {overflowViews.map(view => <button key={view.id} type="button" className={styles.tabsMenuItem} onClick={() => onViewChange?.(view.id)}>{view.label}</button>)}
+              <Popover.Content className={styles.tabsMenu} data-flow-motion="floating" side="bottom" align="start" sideOffset={4} collisionPadding={8} role="menu" aria-label={t('More views')} onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => itemRefs.current[0]?.focus()) }}>
+                {menuViews.map((view, index) => <button key={view.id} ref={element => { itemRefs.current[index] = element }} type="button" role="menuitem" className={styles.tabsMenuItem} onClick={() => { setOverflowOpen(false); onViewChange?.(view.id) }} onKeyDown={event => {
+                  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault()
+                    const step = event.key === 'ArrowDown' ? 1 : -1
+                    itemRefs.current[(index + step + menuViews.length) % menuViews.length]?.focus()
+                  } else if (event.key === 'Home' || event.key === 'End') {
+                    event.preventDefault()
+                    itemRefs.current[event.key === 'Home' ? 0 : menuViews.length - 1]?.focus()
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault(); setOverflowOpen(false); triggerRef.current?.focus()
+                  }
+                }}>{view.label}</button>)}
               </Popover.Content>
             </Popover.Portal>
           </Popover.Root>}
+          <div ref={measureRef} className={styles.tabMeasure} aria-hidden="true">
+            {views.map(view => <span key={view.id} data-tab-measure className={`${styles.tab} ui-pill`}>{view.label}</span>)}
+            <span data-tab-measure-active className={`${styles.tab} ${styles.tabsOverflow} ${styles.tabsOverflowActive} ui-pill`} data-active="true"><span>{views[activeIndex].label}</span><ChevronDown/></span>
+          </div>
         </nav>
       }
       end={

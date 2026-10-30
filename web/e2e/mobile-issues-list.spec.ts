@@ -55,8 +55,20 @@ test.describe('mobile issue lists and views', () => {
     const row = page.locator('[data-my-issues-surface] a[data-issue-row-id]').first()
     expect((await row.boundingBox())?.height).toBe(44)
     await overflow.click()
-    await expect(page.getByRole('button', { name: 'Subscribed', exact: true })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Subscribed', exact: true })).toBeVisible()
     await page.keyboard.press('Escape')
+
+    // The selected view moves into the active overflow pill when it does not fit.
+    await page.goto(`/${workspaceKey}/my-issues/subscribed`)
+    const activeOverflow = page.getByRole('button', { name: /^Subscribed & \d+ more$/ })
+    await expect(activeOverflow).toHaveAttribute('data-active', 'true')
+    await activeOverflow.click()
+    const moreViews = page.getByRole('menu', { name: 'More views' })
+    await expect(moreViews).toBeVisible()
+    await expect(page.getByRole('menuitem').first()).toBeFocused()
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Enter')
+    await expect(moreViews).toBeHidden()
 
     await page.goto(`/${workspaceKey}/issues/all`)
     const display = page.getByRole('button', { name: 'Display options' }).first()

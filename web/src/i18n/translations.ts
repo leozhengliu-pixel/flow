@@ -1928,6 +1928,8 @@ export const zhCN: Record<string, string> = {
   "Command menu": "命令菜单",
   "Workspace Menu": "工作区菜单",
   "{count} more": "另外 {count} 项",
+  "More views": "更多视图",
+  "{name} & {count} more": "{name} 及另外 {count} 项",
   "Help": "帮助",
   "Type a command or search...": "输入命令或搜索…",
   "Searching...": "正在搜索…",

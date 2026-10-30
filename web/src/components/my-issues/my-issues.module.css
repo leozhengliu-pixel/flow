@@ -44,12 +44,15 @@
   .actions>:nth-child(3){display:none}
   .toolbar{gap:4px}
   .tabs{flex:1}
-  .actions{flex:0 0 auto}
+  .actions{flex:0 0 auto;margin-left:0}
   .tab{height:32px;padding:0 9.5px}
   .iconButton{width:32px;height:32px;flex:0 0 32px}
   .actions button{width:32px;height:32px;flex:0 0 32px;font-size:12px;font-weight:500;line-height:normal}
   :global(:root[data-theme="dark"]) .actions button{background:var(--phone-control-bg);color:var(--phone-control-fg)}
-  .tabsOverflow{box-sizing:border-box;width:74.96px;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 10px;border:.5px solid transparent;border-radius:9999px}
+  .tabsOverflow{box-sizing:border-box;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:.5px solid transparent;border-radius:9999px;white-space:nowrap}
+  .tabsOverflowCount{width:74.96px;justify-content:center}
+  .tabsOverflowActive{width:auto}
+  .tabMeasure{position:absolute;top:-9999px;left:0;display:flex;gap:8px;visibility:hidden;pointer-events:none;white-space:nowrap}
   .tabsOverflow svg{width:8px;height:8px;flex:0 0 8px}
   .tabsMenu{z-index:1100;box-sizing:border-box;width:201px;padding:6px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-2);box-shadow:var(--shadow-control);color:var(--theme-text-primary);outline:0}
   .tabsMenuItem{width:100%;height:32px;display:flex;align-items:center;padding:0 14px;border:0;border-radius:6px;background:transparent;color:inherit;font:450 13px/normal inherit;text-align:left;white-space:nowrap;cursor:pointer}
