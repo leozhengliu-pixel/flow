@@ -116,10 +116,11 @@
   .nestingBranch{top:14px;fill:var(--relation-chip-border)}
   .statusTrigger{border-style:none}
   .statusTrigger svg{color:var(--bright);border-style:none}
-  .row:has(.subIssueProgress) .statusTrigger svg{opacity:.6}
+  .row[data-context="true"] .statusTrigger svg{opacity:.6}
   .priorityTrigger{justify-self:end;margin-right:-3px;margin-left:0;border-style:none}
   .priorityTrigger svg{color:var(--bright);border-style:none;opacity:.5}
-  .row:has(.subIssueProgress) .priorityTrigger svg{opacity:.3}
+  .row[data-context="true"] .priorityTrigger svg{opacity:.3}
+  .row[data-context="true"] .title{opacity:.6}
   .title{line-height:normal;color:var(--bright);border-style:none}
   .titleProperties{padding-right:18px}
   .groupHeader{padding-left:0;border-style:none}
@@ -146,7 +147,7 @@
   .parentTrail{line-height:normal}
   /* The unassigned avatar keeps the muted glyph but matches the reference avatar metrics. */
   .noAssignee svg{color:var(--bright);border-style:none;fill:var(--bright);opacity:.22}
-  .row:has(.subIssueProgress) .noAssignee svg{opacity:.15}
+  .row[data-context="true"] .noAssignee svg{opacity:.15}
   /* The reference phone sub-issue counter is text only ("0/1"), with no ring. */
   .subIssueProgress{padding:0 10px}
   .subIssueProgress>span{color:var(--issue-muted)}
