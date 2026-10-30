@@ -54,6 +54,32 @@ func auditWrites(t *testing.T, repo *SQLiteStore) func() map[string]int {
 	}
 }
 
+// Issue writes maintain one field-CAS checkpoint per changed issue, but must
+// not rewrite unrelated discussion or other issues' checkpoints.
+func allowOnlyIssueHistoryWrites(t *testing.T, repo *SQLiteStore, ids []string) {
+	t.Helper()
+	if _, err := repo.db.ExecContext(t.Context(), `CREATE TABLE allowed_history_writes(issue_id TEXT PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range ids {
+		if _, err := repo.db.ExecContext(t.Context(), `INSERT INTO allowed_history_writes VALUES(?)`, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, operation := range []string{"INSERT", "UPDATE", "DELETE"} {
+		row := "NEW"
+		if operation == "DELETE" {
+			row = "OLD"
+		}
+		query := fmt.Sprintf(`CREATE TRIGGER guard_content_%s BEFORE %s ON workspace_content_records
+			WHEN %s.kind<>'issue_field_history' OR NOT EXISTS (SELECT 1 FROM allowed_history_writes WHERE issue_id=%s.resource_id)
+			BEGIN SELECT RAISE(ABORT,'unrelated content write'); END`, operation, operation, row, row)
+		if _, err := repo.db.ExecContext(t.Context(), query); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestUnchangedImportAndIndexDeltasDoNotRewriteRows(t *testing.T) {
 	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
@@ -77,6 +103,7 @@ func TestUnchangedImportAndIndexDeltasDoNotRewriteRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	writes := auditWrites(t, repo)
+	allowOnlyIssueHistoryWrites(t, repo, []string{issues[0].ID})
 	if err := repo.ImportIssues(ctx, key, issues); err != nil {
 		t.Fatal(err)
 	}
@@ -87,14 +114,14 @@ func TestUnchangedImportAndIndexDeltasDoNotRewriteRows(t *testing.T) {
 	if err := repo.ImportIssues(ctx, key, issues); err != nil {
 		t.Fatal(err)
 	}
-	if changes := writes(); !reflect.DeepEqual(changes, map[string]int{"issue_records": 1}) {
+	if changes := writes(); !reflect.DeepEqual(changes, map[string]int{"issue_records": 1, "workspace_content_records": 1}) {
 		t.Fatalf("title edit rewrote indexes: %+v", changes)
 	}
 	issues[0].Labels = append(issues[0].Labels, domain.IssueLabel{ID: "two", Name: "Two"})
 	if err := repo.ImportIssues(ctx, key, issues[:1]); err != nil {
 		t.Fatal(err)
 	}
-	if changes := writes(); !reflect.DeepEqual(changes, map[string]int{"issue_records": 1, "issue_label_records": 1}) {
+	if changes := writes(); !reflect.DeepEqual(changes, map[string]int{"issue_records": 1, "issue_label_records": 1, "workspace_content_records": 1}) {
 		t.Fatalf("adding label rewrote unchanged indexes: %+v", changes)
 	}
 }
@@ -509,5 +536,56 @@ func TestUnchangedIssueRecordCallbackDoesNotWrite(t *testing.T) {
 	}
 	if changes := writes(); len(changes) != 0 {
 		t.Fatalf("no-op issue callback wrote rows: %+v", changes)
+	}
+}
+
+func TestDiscussionWritesPreserveUnrelatedMetadataWithoutRewritingIt(t *testing.T) {
+	for _, path := range []string{"issue", "scoped"} {
+		t.Run(path, func(t *testing.T) {
+			repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "discussion.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer repo.Close()
+			base := repo.Bootstrap()
+			workspace, issue := base.Workspace.URLKey, base.Issues[0]
+			if err := repo.MutateWorkspace(t.Context(), workspace, "test.seed_metadata", issue.ID, nil, func(data *domain.Bootstrap) error {
+				for i := range 20 {
+					id := fmt.Sprintf("discussion-metadata-%d", i)
+					data.IssueSLAs = append(data.IssueSLAs, domain.IssueSLA{ID: id, IssueID: issue.ID})
+					data.SLAEvents = append(data.SLAEvents, domain.SLAEvent{ID: id, IssueID: issue.ID})
+					data.Subscriptions = append(data.Subscriptions, domain.Subscription{ID: id, ResourceID: id})
+					data.Favorites = append(data.Favorites, domain.Favorite{ID: id, ResourceID: id})
+					data.AuditLog = append(data.AuditLog, domain.AuditLogEntry{ID: id})
+					data.IntegrationDeliveries = append(data.IntegrationDeliveries, domain.IntegrationDelivery{ID: id, Payload: json.RawMessage(`{}`)})
+					data.Trash = append(data.Trash, domain.TrashEntry{ID: id, Payload: json.RawMessage(`{}`)})
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			fields := []string{"issueSlas", "slaEvents", "subscriptions", "favorites", "auditLog", "integrationDeliveries", "trash"}
+			before, _ := repo.WorkspaceMetadataFields(workspace, fields...)
+			writes := auditWrites(t, repo)
+			ctx := WithIssueDiscussionMutation(t.Context(), issue.ID, "isolated-comment")
+			if path == "scoped" {
+				ctx = WithMutationScope(WithoutIssueRecordMutations(ctx), MutationScope{IssueIDs: []string{issue.ID}})
+			}
+			if err := repo.MutateWorkspace(ctx, workspace, "comment.created", issue.ID, nil, func(data *domain.Bootstrap) error {
+				data.Comments[issue.ID] = append(data.Comments[issue.ID], domain.Comment{ID: "isolated-comment", Body: "Only this comment changes", CreatedAt: time.Now().UTC()})
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if got := writes(); !reflect.DeepEqual(got, map[string]int{"workspace_content_records": 1}) {
+				t.Fatalf("comment rewrote unrelated rows: %v", got)
+			}
+			if err := repo.ReloadAllWorkspaces(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if after, _ := repo.WorkspaceMetadataFields(workspace, fields...); !reflect.DeepEqual(before, after) {
+				t.Fatal("comment changed unrelated metadata after reload")
+			}
+		})
 	}
 }
