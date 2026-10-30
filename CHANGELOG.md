@@ -248,6 +248,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Agent chat streams batch answer tokens to animation frames, preserve a reader's
+  manual scroll position, show a quiet shimmering thinking row without a spinner,
+  and persist generated titles off the reply's critical path.
+
 - Nested issue counts use existing indexes for project, creator, cycle and
   customer groups, and project, subscriber and sparse-attribute filters.
   Search matches are read once; substring filters scan their team scope once.

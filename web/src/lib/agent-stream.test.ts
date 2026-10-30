@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { streamNewAgentSession } from './agent-stream'
+import { createAgentStreamEventCoalescer, streamNewAgentSession } from './agent-stream'
 
 function streamResponse(chunks: string[], status = 200) {
   const encoder = new TextEncoder()
@@ -14,6 +14,21 @@ function streamResponse(chunks: string[], status = 200) {
 describe('Agent stream client', () => {
   beforeEach(() => {
     window.history.replaceState({}, '', '/workspace/agent')
+  })
+
+  it('coalesces token deltas to one animation-frame batch without delaying lifecycle events', () => {
+    vi.useFakeTimers()
+    const seen: string[] = []
+    const coalescer = createAgentStreamEventCoalescer(event => seen.push(event.delta ?? event.type))
+    coalescer.push({ type: 'text.delta', delta: 'a' })
+    coalescer.push({ type: 'text.delta', delta: 'b' })
+    expect(seen).toEqual([])
+    coalescer.push({ type: 'tool.started' })
+    expect(seen).toEqual(['a', 'b', 'tool.started'])
+    coalescer.push({ type: 'text.delta', delta: 'c' })
+    vi.advanceTimersByTime(20)
+    expect(seen).toEqual(['a', 'b', 'tool.started', 'c'])
+    vi.useRealTimers()
   })
 
   it('parses split SSE frames and returns the completed session', async () => {

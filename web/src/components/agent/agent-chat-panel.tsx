@@ -7,6 +7,7 @@ import { splitAgentSuggestions } from './agent-answer-content'
 import { fetchAgentStatus, getAgentSession, updateAgentSession, uploadAgentFile } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
+import { createAgentStreamEventCoalescer } from '@/lib/agent-stream-coalescer'
 import { markStoppedAgentReply } from './agent-stopped-reply'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
@@ -332,11 +333,12 @@ export function AgentChatPanel({
     setStreamParts([])
     // The work shown while streaming, kept for a stopped reply (it folds to "Worked for N seconds").
     const liveWork = new Map<string, AgentMessagePart>()
+    let coalescer: ReturnType<typeof createAgentStreamEventCoalescer> | undefined
     try {
       const controller = new AbortController()
       abortRef.current = controller
       let next = session
-      const onEvent = (event: AgentStreamEvent) => {
+      const handleEvent = (event: AgentStreamEvent) => {
         if (event.session) {
           next = event.session
           setSession(event.session)
@@ -390,6 +392,8 @@ export function AgentChatPanel({
           if (reply && draft) onDraft?.(draft)
         }
       }
+      coalescer = createAgentStreamEventCoalescer(handleEvent)
+      const onEvent = coalescer.push
       next = session
         ? await streamAgentSessionMessage(session.id, message, onEvent, controller.signal, { ...mentioned, ...(sentAttachments.length ? { attachments: sentAttachments } : {}) })
         : await streamNewAgentSession(
@@ -422,6 +426,7 @@ export function AgentChatPanel({
       }
       setError(reason instanceof Error ? reason.message : t('Flow Agent is unavailable'))
     } finally {
+      coalescer?.flush()
       abortRef.current = undefined
       setLoading(false)
     }

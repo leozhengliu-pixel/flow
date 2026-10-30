@@ -1,5 +1,6 @@
 import type { AgentFileAttachment, AgentMessagePart, AgentSession } from '@/types/flow'
 import { ApiError, apiFetch, jsonRequest } from '@/lib/api-client'
+export { createAgentStreamEventCoalescer } from './agent-stream-coalescer'
 
 export interface AgentStreamEvent {
   type: 'session.started' | 'text.delta' | 'text.replaced' | 'reasoning.delta' | 'tool.started' | 'tool.delta' | 'tool.completed' | 'tool.approval_required' | 'tool.approval_resolved' | 'elicitation.requested' | 'elicitation.resolved' | 'session.completed' | 'error'
@@ -13,6 +14,7 @@ export interface AgentStreamEvent {
   /** A new part goes ahead of this one (a phase title above the tool rows it names). */
   beforePartId?: string
 }
+
 
 export type AgentStreamInput = {
   message: string

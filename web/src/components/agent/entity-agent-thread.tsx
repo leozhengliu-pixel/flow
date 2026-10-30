@@ -34,7 +34,6 @@ import {
 } from './agent-drafts'
 import styles from './entity-agent-thread.module.css'
 import { AgentErrorDetail } from './agent-error-detail'
-import { GridLoader } from '@/components/ui/grid-loader'
 import { splitAgentQuote } from './agent-floating-request'
 import { AgentSelectedTextIcon } from './agent-icons'
 
@@ -161,6 +160,7 @@ export function EntityAgentThread({
   const messages = useMemo(() => savedMessages.map(settleStoppedAgentReply), [savedMessages])
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const logRef = useRef<HTMLDivElement>(null)
+  const followLatestRef = useRef(true)
   const draftKey = agentDraftStorageKey(conversationDraftKey)
   // The saved draft is restored once, before any edit is saved back (saving earlier would erase it).
   const hydratedDraft = useRef(false)
@@ -184,6 +184,21 @@ export function EntityAgentThread({
   useEffect(() => {
     const node = logRef.current
     if (!node) return
+    const update = () => {
+      followLatestRef.current = node.scrollHeight - node.scrollTop - node.clientHeight <= 48
+    }
+    update()
+    node.addEventListener('scroll', update, { passive: true })
+    return () => node.removeEventListener('scroll', update)
+  }, [])
+
+  useEffect(() => {
+    const node = logRef.current
+    if (!node) return
+    // A newly sent user bubble should always be visible; once the reader scrolls
+    // away, token updates must not pull them back to the bottom.
+    if (messages.at(-1)?.role === 'user') followLatestRef.current = true
+    if (!followLatestRef.current) return
     node.scrollTop = node.scrollHeight
   }, [messages, streamParts, loading])
 
@@ -385,8 +400,7 @@ export function EntityAgentThread({
         {/* A reply followed from its saved copy shows its own work group, as a streamed one does. */}
         {loading && !streamWork.length && !(renderAssistantBody && messages.at(-1)?.role === 'assistant') && !savedReplyWorking(savedMessages.at(-1)) && (
           <div className={styles.thinking} data-state="loading">
-            <GridLoader variant="agent" size={14} />
-            {t('Thinking…')}
+            <span className={styles.thinkingShimmer}>{t('Thinking…')}</span>
           </div>
         )}
         {streamOther.map(part => (

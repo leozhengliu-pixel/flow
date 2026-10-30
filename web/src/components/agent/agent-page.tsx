@@ -8,6 +8,7 @@ import {
   updateAgentSession,
 } from "@/lib/api";
 import { streamAgentSessionMessage, streamAgentSessionMessageEdit, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
+import { createAgentStreamEventCoalescer } from "@/lib/agent-stream-coalescer";
 import { agentPath } from "@/lib/app-routes";
 import type { AgentMessage, AgentMessageAttachment, AgentMessagePart, AgentSession, AgentStatus, AgentToolCall, BootstrapData, Project } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
@@ -262,12 +263,13 @@ export function AgentPage({
     // Picking a question's option shows it as the chosen pill straight away, not as a message bubble.
     setPending(optimisticAgentTurn(current, message, retrying ? retryOf!.id : editingId, retrying ? retryOf!.mentions : mentions, answer, retrying ? retryOf!.attachments : attachments.length ? attachments.map(({ name, type, size }) => ({ name, contentType: type, size })) : current?.messages.find((item) => item.id === editingId)?.attachments));
     let streamed = current, started = false, failedInChat = false;
+    let coalescer: ReturnType<typeof createAgentStreamEventCoalescer> | undefined;
     try {
       // Files go with the message for the server to keep; a retry resends the text alone and the server keeps its files.
       const sentAttachments = retrying ? [] : await Promise.all(attachments.map(agentFileAttachment));
       const controller = new AbortController();
       streamAbortRef.current = controller;
-      const onEvent = (event: AgentStreamEvent) => {
+      const handleEvent = (event: AgentStreamEvent) => {
           // The server saved the failed turn with its error; show the same row now instead of only a banner.
           if (event.type === "error" && streamed && started) {
             failedInChat = true;
@@ -291,6 +293,8 @@ export function AgentPage({
             if (next.messages.length <= 2) refreshTitle(next);
           }
       };
+      coalescer = createAgentStreamEventCoalescer(handleEvent);
+      const onEvent = coalescer.push;
       const mentioned = {
         issueIds: mentions.filter((item) => item.type === "issue").map((item) => item.id),
         projectIds: mentions.filter((item) => item.type === "project").map((item) => item.id),
@@ -311,6 +315,7 @@ export function AgentPage({
       else if (current && editingId) await streamAgentSessionMessageEdit(current.id, editingId, message, onEvent, controller.signal, sentAttachments);
       else if (current) await streamAgentSessionMessage(current.id, message, onEvent, controller.signal, mentioned);
       else await streamNewAgentSession({ message, ...mentioned, skillIds: selectedSkills, location: "page" }, onEvent, controller.signal);
+      coalescer.flush();
       if (!retrying) {
         clearAgentDraft(agentDraftKey);
         setEditingId(undefined);
@@ -338,6 +343,7 @@ export function AgentPage({
           : t("Flow Agent is unavailable"),
       );
     } finally {
+      coalescer?.flush();
       clearLiveAgentSession(streamed?.id);
 	  streamAbortRef.current = undefined;
       setBusy(false);
@@ -817,26 +823,34 @@ function Conversation({
 }) {
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const followLatestRef = useRef(true);
+  const newestIsUser = session.messages.at(-1)?.role === "user";
   useEffect(() => {
     const viewport = scrollRef.current;
     if (!viewport) return;
+    if (newestIsUser) followLatestRef.current = true;
+    if (!followLatestRef.current) return;
     requestAnimationFrame(() => {
       if (typeof viewport.scrollTo === "function") viewport.scrollTo({ top: viewport.scrollHeight });
       else viewport.scrollTop = viewport.scrollHeight;
     });
-  }, [session.messages.length, session.updatedAt]);
+  }, [newestIsUser, session.messages.length, session.updatedAt]);
   // The reference app's "Latest" pill shows once the newest message is out of view.
   useEffect(() => {
     const viewport = scrollRef.current;
     if (!viewport) return;
     const update = () => onLatestChange?.(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight > 48);
+    const trackFollow = () => { followLatestRef.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 48; };
     update();
+    trackFollow();
     viewport.addEventListener("scroll", update, { passive: true });
+    viewport.addEventListener("scroll", trackFollow, { passive: true });
     const observer = typeof ResizeObserver === "function" ? new ResizeObserver(update) : undefined;
     observer?.observe(viewport);
     if (viewport.firstElementChild) observer?.observe(viewport.firstElementChild);
     return () => {
       viewport.removeEventListener("scroll", update);
+      viewport.removeEventListener("scroll", trackFollow);
       observer?.disconnect();
       onLatestChange?.(false);
     };
