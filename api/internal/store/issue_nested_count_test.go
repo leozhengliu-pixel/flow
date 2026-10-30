@@ -156,7 +156,10 @@ func testNestedCountParity(t *testing.T, repository *SQLiteStore, workspace, wor
 	t.Helper()
 	ctx := context.Background()
 	rng := rand.New(rand.NewSource(7))
-	issues, shape := nestedCountIssues(rng, base, "ncp-", 600)
+	// The parity matrix below is combinatorial; a few hundred issues still
+	// cover every team, state, project, user, label and nesting depth without
+	// making the race-detector run exceed the package timeout.
+	issues, shape := nestedCountIssues(rng, base, "ncp-", 240)
 	importNestedCountIssues(t, repository, workspace, issues)
 	// Customer requests: some issues ask for several customers (one unknown),
 	// one customer more than once.
