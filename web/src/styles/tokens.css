@@ -345,9 +345,9 @@
 .issue-breadcrumb-parent{overflow:hidden;text-overflow:ellipsis}
 .issue-breadcrumb-separator{flex:0 0 auto;margin:-2px 8px 0;color:var(--issue-muted)!important;font-size:13px}
 .issue-breadcrumb-current{min-width:0;display:flex;align-items:center;flex:1 1 auto;margin:-2px -4px;padding:2px 4px;border-radius:6px}
-.issue-breadcrumb-current>strong{flex:0 0 auto;margin-right:6px;color:inherit;font-weight:500;white-space:nowrap}
-.issue-breadcrumb-current>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit!important;font-weight:500}
-.issue-breadcrumb-current{cursor:default}
+.issue-breadcrumb-current>strong,.issue-breadcrumb-label>strong{flex:0 0 auto;margin-right:6px;color:inherit;font-weight:500;white-space:nowrap}
+.issue-breadcrumb-current>span:not(.issue-breadcrumb-label),.issue-breadcrumb-label>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit!important;font-weight:500}
+.issue-breadcrumb-current{cursor:default}.issue-breadcrumb-label{display:contents}
 @media(max-width:800px){.issue-breadcrumb{max-width:calc(100% - 68px);padding:0 6px}.issue-breadcrumb-segment{display:none}.issue-breadcrumb-current{max-width:100%}}
 .detail-sub-issue-row{padding-left:calc(8px + var(--sub-depth,0) * 28px)}
 @media(max-width:760px){.detail-sub-issue-row{padding-left:calc(4px + var(--sub-depth,0) * 20px)}}
