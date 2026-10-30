@@ -104,9 +104,7 @@
 @media(max-width:767px){
   /* The lead column grows with the nesting depth so a sub-issue row shifts 24px
      right of its parent; the priority icon stays flush with the column's end. */
-  .row{padding:0;grid-template-columns:10px calc(16px + var(--nested-depth,0) * 24px) 16px minmax(0,1fr);column-gap:8px;border-style:none;border-radius:0}
-  /* The reference phone avatar uses its fixed dark palette, not the per-person desktop colour. */
-  .row .avatar{background:var(--phone-avatar-bg);color:var(--phone-avatar-fg)}
+  .row{padding:0;grid-template-columns:10px calc(16px + var(--nested-depth,0) * 24px) 16px minmax(0,1fr);column-gap:8px;border-style:none}
   .row>.checkboxCell,.row>.identifier,.row>.rowDate,.row>span[aria-hidden="true"]:last-child{display:none}
   .badges{display:flex}
   /* The avatar's 3px trigger padding sits inside the badge gap, so an estimate
@@ -158,6 +156,6 @@
   .subIssueProgress svg{display:none}
   /* On a phone the estimate is a bare triangle and value, not a bordered chip. */
   .estimateChip{height:auto;padding:0;border:0;border-radius:0;background:transparent;gap:4px}
-  .row .estimateChip :global(.estimate-icon){color:var(--phone-icon-dim)}
+  .row .estimateChip :global(.estimate-icon){color:var(--phone-icon-fg)}
   .estimateChip :global(.estimate-chip__value){min-width:24px;border-style:none;font-size:12px;font-weight:450;line-height:normal;color:var(--issue-muted)}
 }

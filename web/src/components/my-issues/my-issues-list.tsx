@@ -365,6 +365,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
   const statusOptions = useTeamStatusOptions(propertyOptions.status, issue.teamId)
   return <ContextMenu.Root>
     <ContextMenu.Trigger asChild>
+      <div data-issue-row-container>
       <a className={styles.row} style={{'--row-columns':columns,'--nested-depth':nestedDepth} as CSSProperties} data-issue-row-id={issue.id} data-selected={selected} data-active={active || undefined} aria-current={active || undefined} data-nested={nestedDepth>0} data-context={issue.viewMatch === false || undefined} href={issue.href} aria-label={rowAriaLabel(issue)} onClick={click} onKeyDown={keydown}>
         {nestedDepth>0&&<NestedIssueGuide lines={nestedLines}/>}
         <span aria-hidden="true"/><IssueCheckbox checked={selected} onChange={(checked, range) => onSelect?.(issue.id, checked, range)}/>
@@ -432,6 +433,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
         {displayProperties.has('links') && <span className={styles.rowDate} aria-label={issue.linkCount ? `${issue.linkCount} links` : 'No links'}>{issue.linkCount ? <><Link2 size={12}/>{issue.linkCount}</> : null}</span>}
         <span aria-hidden="true"/>
       </a>
+      </div>
     </ContextMenu.Trigger>
     <ContextMenu.Portal><IssueContextMenu editable={Boolean(onPropertyChange)} issue={issue} options={propertyOptions} onPropertyChange={change} onAction={onContextAction?action=>onContextAction(issue,action):undefined}/></ContextMenu.Portal>
   </ContextMenu.Root>
