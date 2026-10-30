@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 
-const apiBase = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4181'
+const apiBase = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
 
 type Issue = { id: string; identifier: string }
 type Notification = { id: string; issueId?: string; recipientId?: string }
