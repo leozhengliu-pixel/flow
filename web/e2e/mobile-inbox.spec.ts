@@ -204,4 +204,65 @@ test.describe('mobile inbox list', () => {
 
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/inbox-filters-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
+
+  test('opens the phone notification actions sheet', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-inbox-actions-${testInfo.project.name}-${testInfo.retry}`
+    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: '[mobile] Inbox actions', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(workspaceResponse.status()).toBe(201)
+    const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
+    const teamId = workspace.teams?.[0]?.id
+    expect(teamId).toBeTruthy()
+    const headers = { 'X-Workspace-Key': workspaceKey }
+
+    for (const title of ['[mobile] Actions notification one', '[mobile] Actions notification two']) {
+      const issue = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description: 'Mobile inbox action row', teamId, stateId: 'state_todo' } })
+      expect(issue.status()).toBe(201)
+      const issueBody = await issue.json() as { id: string }
+      const reminder = await request.post(`http://127.0.0.1:4180/api/issues/${issueBody.id}/reminders`, { headers, data: { remindAt: new Date(Date.now() + 300).toISOString() } })
+      expect(reminder.status()).toBe(201)
+    }
+    await page.waitForTimeout(900)
+
+    await page.goto(`/${workspaceKey}/inbox`)
+    await page.locator('.flow-inbox__header button[aria-label="Notification actions"]').click()
+    await page.waitForTimeout(400)
+
+    const near = (actual: number | undefined, expected: number) => expect(Math.abs((actual ?? Number.NaN) - expected)).toBeLessThanOrEqual(1)
+    const surface = page.locator('.phone-menu-surface.inbox-actions-phone-menu')
+    await expect(surface).toBeVisible()
+    near((await surface.boundingBox())?.x, 16)
+    near((await surface.boundingBox())?.y, 110)
+    near((await surface.boundingBox())?.width, 358)
+    near((await surface.boundingBox())?.height, 254)
+
+    const search = surface.locator('input')
+    near((await search.boundingBox())?.x, 22.5)
+    near((await search.boundingBox())?.y, 116.5)
+    near((await search.boundingBox())?.width, 346)
+    near((await search.boundingBox())?.height, 40)
+
+    const rows = surface.locator('.inbox-actions-phone-menu__row')
+    await expect(rows).toHaveCount(4)
+    await expect(rows.locator('.inbox-actions-phone-menu__label')).toHaveText(['Delete all', 'Delete all read', 'Delete all completed', 'Go to settings'])
+    near((await rows.nth(0).boundingBox())?.y, 162.5)
+    near((await rows.nth(0).boundingBox())?.height, 46)
+    near((await rows.nth(0).boundingBox())?.width, 346)
+    near((await rows.nth(0).locator('.inbox-actions-phone-menu__label').boundingBox())?.x, 58.5)
+    near((await rows.nth(3).boundingBox())?.y, 312.5)
+
+    const divider = surface.locator('.inbox-actions-phone-menu__separator')
+    near((await divider.boundingBox())?.x, 16.5)
+    near((await divider.boundingBox())?.y, 300.5)
+    near((await divider.boundingBox())?.width, 358)
+    near((await divider.boundingBox())?.height, 12)
+
+    await expect(surface.getByRole('menuitem', { name: 'Go to settings' })).toBeVisible()
+
+    const geometry = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }))
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.width)
+
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/inbox-actions-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
 })
