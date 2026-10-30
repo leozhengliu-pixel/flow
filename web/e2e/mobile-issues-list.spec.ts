@@ -127,3 +127,57 @@ test.describe('mobile Created tab', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   })
 })
+
+test.describe('mobile Subscribed tab', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('phone Subscribed tab nests a sub-issue under its parent with an indent guide', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-subscribed-${testInfo.project.name}-${testInfo.retry}`
+    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: '[mobile] Subscribed', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(response.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as {
+      viewer: { id: string }
+      teams: Array<{ id: string }>
+      states: Array<{ id: string; type: string }>
+      labels: Array<{ id: string }>
+    }
+    const teamId = bootstrap.teams[0].id
+    const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
+    const settings = await request.patch(`http://127.0.0.1:4180/api/teams/${teamId}/settings`, { headers, data: { estimateType: 'fibonacci' } })
+    expect(settings.ok()).toBe(true)
+    const create = async (title: string, extra = {}) => {
+      const created = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description: '', teamId, stateId, ...extra } })
+      expect(created.status()).toBe(201)
+      return created.json() as Promise<{ id: string }>
+    }
+    const parent = await create('[mobile] Parent issue')
+    const child = await create('[mobile] Nested child one', { parentId: parent.id })
+    const other = await create('[mobile] Label badge issue')
+    const subscribed = [bootstrap.viewer.id]
+    await request.patch(`http://127.0.0.1:4180/api/issues/${parent.id}`, { headers, data: { subscriberIds: subscribed, estimate: 3, sortOrder: 0 } })
+    await request.patch(`http://127.0.0.1:4180/api/issues/${child.id}`, { headers, data: { subscriberIds: subscribed, sortOrder: 1 } })
+    await request.patch(`http://127.0.0.1:4180/api/issues/${other.id}`, { headers, data: { subscriberIds: subscribed, labelIds: bootstrap.labels[0] ? [bootstrap.labels[0].id] : [], sortOrder: 2 } })
+
+    await page.goto(`/${workspaceKey}/my-issues/subscribed`)
+    await expect(page.locator('main').first()).toBeVisible()
+    await expect(page.locator('[data-my-issues-surface] [class*="groupHeader"]').first()).toBeHidden()
+    const surface = page.locator('[data-my-issues-surface]')
+    const row = surface.locator('a[data-issue-row-id]').first()
+    expect((await row.boundingBox())?.y).toBeCloseTo(87.5, 0)
+    expect((await row.boundingBox())?.height).toBe(44)
+    await expect(row).toContainText('[mobile] Parent issue')
+    const nested = surface.locator('a[data-issue-row-id][data-nested="true"]').first()
+    await expect(nested).toContainText('[mobile] Nested child one')
+    expect((await nested.boundingBox())?.y).toBeCloseTo(131.5, 0)
+    const guide = surface.locator('[class*="nestingGuide"]').first()
+    await expect(guide).toBeVisible()
+    expect((await guide.boundingBox())?.x).toBeCloseTo(16, 0)
+    expect((await guide.boundingBox())?.width).toBeCloseTo(24, 0)
+    await expect(row.locator('.estimate-chip__value')).toContainText('3')
+    await expect(page.getByRole('button', { name: /Subscribed/ })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+})

@@ -102,13 +102,21 @@
 /* Phone rows: the reference app shows priority, status, title and the assignee only.
    A delegated session's state sits in a pill before (and around) the avatars. */
 @media(max-width:767px){
-  .row{padding:0;grid-template-columns:10px 16px 16px minmax(0,1fr);column-gap:8px;border-style:none}
+  /* The lead column grows with the nesting depth so a sub-issue row shifts 24px
+     right of its parent; the priority icon stays flush with the column's end. */
+  .row{padding:0;grid-template-columns:10px calc(16px + var(--nested-depth,0) * 24px) 16px minmax(0,1fr);column-gap:8px;border-style:none}
   .row>.checkboxCell,.row>.identifier,.row>.rowDate,.row>span[aria-hidden="true"]:last-child{display:none}
   .badges{display:flex}
+  /* The avatar's 3px trigger padding sits inside the badge gap, so an estimate
+     chip 5px from the trigger lands 8px from the avatar like the reference. */
+  .badges:has(.estimateChip){gap:5px}
   .statusTrigger{margin-left:-3px}
+  .nestingGuide{left:16px;border-style:none}
+  .nestingSegment{left:calc(var(--nest-level) * 24px + 9.5px)}
+  .nestingBranch{top:14px}
   .statusTrigger{border-style:none}
   .statusTrigger svg{color:var(--bright);border-style:none}
-  .priorityTrigger{border-style:none}
+  .priorityTrigger{justify-self:end;margin-right:-3px;margin-left:0;border-style:none}
   .priorityTrigger svg{color:var(--bright);font-size:16px;font-weight:400;line-height:24px;border-style:none}
   .title{line-height:normal;color:var(--bright);border-style:none}
   .titleProperties{padding-right:18px}
@@ -132,4 +140,9 @@
   /* A sub-issue row puts the parent title flush after the issue title, like the reference app. */
   .titleProperties:has(.parentTrail){gap:0}
   .parentTrail{line-height:normal}
+  /* The unassigned avatar keeps the muted glyph but matches the reference avatar metrics. */
+  .noAssignee svg{font-size:16px;font-weight:400;line-height:24px;color:var(--bright);border-style:none;fill:var(--issue-muted)}
+  /* On a phone the estimate is a bare triangle and value, not a bordered chip. */
+  .estimateChip{height:auto;padding:0;border:0;border-radius:0;background:transparent;gap:4px}
+  .estimateChip :global(.estimate-chip__value){min-width:24px;border-style:none;font-size:12px;font-weight:450;line-height:normal;color:var(--issue-muted)}
 }
