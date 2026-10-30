@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 test.describe('mobile inbox list', () => {
-  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
   test('shows the phone top bar and notification rows', async ({ page, request }, testInfo) => {
     const workspaceKey = `mobile-inbox-${testInfo.project.name}-${testInfo.retry}`
@@ -136,5 +136,72 @@ test.describe('mobile inbox list', () => {
     expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.width)
 
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/inbox-notification-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
+
+  test('opens the phone filter sheet with the reference field list', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-inbox-filters-${testInfo.project.name}-${testInfo.retry}`
+    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: '[mobile] Inbox filters', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(workspaceResponse.status()).toBe(201)
+    const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
+    const teamId = workspace.teams?.[0]?.id
+    expect(teamId).toBeTruthy()
+    const headers = { 'X-Workspace-Key': workspaceKey }
+
+    const initiative = await request.post('http://127.0.0.1:4180/api/initiatives', { headers, data: { name: '[mobile] Filter initiative', leadTeamId: teamId } })
+    expect(initiative.status()).toBe(201)
+    for (const title of ['[mobile] Filter notification one', '[mobile] Filter notification two']) {
+      const issue = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description: 'Mobile inbox filter row', teamId, stateId: 'state_todo' } })
+      expect(issue.status()).toBe(201)
+      const issueBody = await issue.json() as { id: string }
+      const reminder = await request.post(`http://127.0.0.1:4180/api/issues/${issueBody.id}/reminders`, { headers, data: { remindAt: new Date(Date.now() + 300).toISOString() } })
+      expect(reminder.status()).toBe(201)
+    }
+    await page.waitForTimeout(900)
+
+    await page.goto(`/${workspaceKey}/inbox`)
+    await page.locator('.flow-inbox__header-controls button[aria-label="Add filter"]').click()
+    await page.waitForTimeout(400)
+
+    const near = (actual: number | undefined, expected: number) => expect(Math.abs((actual ?? Number.NaN) - expected)).toBeLessThanOrEqual(1)
+    const surface = page.locator('.phone-menu-surface.inbox-filter-phone-properties')
+    await expect(surface).toBeVisible()
+    near((await surface.boundingBox())?.x, 16)
+    near((await surface.boundingBox())?.y, 110)
+    near((await surface.boundingBox())?.width, 358)
+    near((await surface.boundingBox())?.height, 380)
+
+    const search = surface.locator('input')
+    near((await search.boundingBox())?.x, 22.5)
+    near((await search.boundingBox())?.y, 116.5)
+    near((await search.boundingBox())?.width, 346)
+    near((await search.boundingBox())?.height, 40)
+
+    const list = surface.locator('[cmdk-list]')
+    near((await list.boundingBox())?.x, 22.5)
+    near((await list.boundingBox())?.y, 156.5)
+    near((await list.boundingBox())?.width, 346)
+    near((await list.boundingBox())?.height, 334)
+
+    const items = surface.locator('[cmdk-item]')
+    await expect(items).toHaveCount(7)
+    await expect(items.locator('span:last-child')).toHaveText(['Notification type', 'From', 'Team', 'Project', 'Initiative', 'Issue priority', 'Issue status type'])
+    near((await items.nth(0).boundingBox())?.y, 162.5)
+    near((await items.nth(0).boundingBox())?.height, 46)
+    await expect(items.nth(0)).toHaveAttribute('data-selected', 'true')
+    const selected = await items.nth(0).evaluate(node => ({ background: getComputedStyle(node).backgroundColor, color: getComputedStyle(node.querySelector('span:last-child')!).color }))
+    expect(selected.background).toBe('rgba(0, 0, 0, 0)')
+    expect(selected.color).toBe('lch(100 0 272)')
+    near((await items.nth(0).locator('span:last-child').boundingBox())?.x, 58.5)
+
+    const trigger = page.locator('.flow-inbox__header-controls button[aria-label="Add filter"]')
+    near((await trigger.boundingBox())?.width, 32)
+    expect((await trigger.evaluate(node => getComputedStyle(node).color))).toBe('lch(100 0 272)')
+
+    const geometry = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }))
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.width)
+
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/inbox-filters-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 })

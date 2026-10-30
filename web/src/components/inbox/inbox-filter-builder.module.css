@@ -84,3 +84,63 @@
 .propertyItem:not(#_)>svg:first-child{width:14px;height:14px;margin:0 1px;color:var(--pk-text)}
 .propertyItem:not(#_)>span:not(.propertyArrow){color:var(--pk-text)}
 .propertyArrow:not(#_){color:var(--pk-faint)}
+
+/* Phone filter sheet: the reference lists the filter fields as 46px rows. */
+.phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-list]:not(#_)) {
+  position: relative;
+  height: auto;
+  margin: 0 5px;
+  padding: 0;
+  overflow: visible;
+  border-style: none;
+  background: var(--inbox-filter-list-bg);
+}
+.phoneMenu :global(.phone-menu-search:not(#_)) {
+  padding-right: 5px;
+  padding-left: 5px;
+}
+.phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-item]:not(#_)) {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 46px;
+  padding: 0 12px;
+  gap: 8px;
+  border-style: none;
+  border-radius: 0;
+  color: var(--pk-text);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 22.5px;
+}
+.phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-item][data-selected="true"]:not(#_)) {
+  background: transparent;
+  color: var(--pk-text-strong);
+}
+.phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-item][data-selected="true"]:not(#_))::before {
+  position: absolute;
+  z-index: -1;
+  inset: 2px 0;
+  border-radius: 8px;
+  background: var(--pk-hover);
+  content: "";
+}
+.phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-item]:not(#_) > span) {
+  min-width: 0;
+  overflow: hidden;
+  border-style: none;
+  font-size: 13px;
+  font-weight: 450;
+  line-height: 15.6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  html:root body:has(:global(.inbox-filter-phone-properties)) :global(.flow-inbox-row__kind) svg {
+    border-style: none;
+  }
+  html:root body :global(.app) :global(.flow-inbox__header) :global(.flow-inbox__icon-button)[data-inbox-filter-trigger][aria-expanded="true"] {
+    color: var(--pk-text-strong);
+  }
+}
