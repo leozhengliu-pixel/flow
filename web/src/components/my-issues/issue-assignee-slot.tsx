@@ -21,7 +21,7 @@ type Person = { id: string; name: string; avatarUrl?: string; color?: string }
  * connector beneath, or the agent card alone) and the picker is the issue's shared assignee menu
  * (`IssueAssigneeMenu`): the agent hangs under the assignee with an "Agent" pill and opens its agent submenu.
  */
-export function IssueAssigneeSlot({ issue, options, onChange, triggerClassName, avatarClassName, emptyClassName, label, hoverPlacement = 'below' }: {
+export function IssueAssigneeSlot({ issue, options, onChange, triggerClassName, avatarClassName, emptyClassName, label, hoverPlacement = 'below', sessionLabel }: {
   issue: { assignee?: Person; delegate?: Person; agentSessionState?: string }
   options: MyIssuesContextOption[]
   onChange: (id: string) => void | Promise<void>
@@ -30,6 +30,8 @@ export function IssueAssigneeSlot({ issue, options, onChange, triggerClassName, 
   emptyClassName?: string
   label?: string
   hoverPlacement?: 'left' | 'below'
+  /** The delegated session's state ("Finished"): drawn in a pill before the assignee avatars. */
+  sessionLabel?: string
 }) {
   const { users } = usePeopleDirectory()
   const { assignee, delegate } = issue
@@ -45,9 +47,13 @@ export function IssueAssigneeSlot({ issue, options, onChange, triggerClassName, 
   const cluster = <span className="issue-assignee-cluster" data-delegated={delegate ? '' : undefined}>
     {delegate && <UserAvatar avatarUrl={delegate.avatarUrl} className={`${avatarClassName} issue-assignee-cluster__agent`} color={delegate.color ?? avatarColor(delegate.id)} name={delegate.name}/>}
     {assignee
-      ? <UserAvatar avatarUrl={assignee.avatarUrl} className={`${avatarClassName} issue-assignee-cluster__member`} color={assignee.color ?? 'var(--avatar-fallback)'} name={assignee.name}/>
+      ? <span className="issue-assignee-cluster__member" data-row-avatar><UserAvatar avatarUrl={assignee.avatarUrl} className={avatarClassName} color={assignee.color ?? 'var(--avatar-fallback)'} name={assignee.name}/></span>
       : <span className={`${emptyClassName ?? ''} issue-assignee-cluster__empty`}><NoAssigneeIcon size={18}/></span>}
   </span>
+  const baseTriggerClassName = triggerClassName ?? styles.propertyTrigger
+  const trigger = sessionLabel
+    ? <span className={styles.sessionPill} data-session-pill={issue.agentSessionState}><span className={styles.sessionPillLabel} data-session-pill-label>{sessionLabel}</span>{cluster}</span>
+    : cluster
   return <IssueAssigneeMenu
     ariaLabel={ariaLabel}
     assignee={assigneeUser}
@@ -60,8 +66,8 @@ export function IssueAssigneeSlot({ issue, options, onChange, triggerClassName, 
     onDelegate={id => onChange(id || NO_AGENT_ID)}
     onUnassignAll={() => onChange(CLEAR_ASSIGNEE_AND_AGENT_ID)}
     people={people}
-    trigger={cluster}
-    triggerClassName={triggerClassName ?? styles.propertyTrigger}
+    trigger={trigger}
+    triggerClassName={sessionLabel ? `${baseTriggerClassName} ${styles.sessionPillTrigger}` : baseTriggerClassName}
     value={assignee?.name}
   />
 }

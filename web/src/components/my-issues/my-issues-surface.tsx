@@ -1,4 +1,6 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import * as Popover from '@radix-ui/react-popover'
+import { ChevronDown } from 'lucide-react'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { DetailsIcon, FilterIcon } from './my-issues-icons'
 import { InsightsIcon } from '@/components/ui/view-action-icons'
@@ -7,6 +9,8 @@ import { useIssueSurfaceControls } from './use-issue-surface-controls'
 import { MyIssuesDisplayMenu, type MyIssuesDisplayMenuProps } from './my-issues-display-menu'
 import { MyIssuesFilterMenu } from './my-issues-filter-menu'
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { useOptionalTranslate } from '@/i18n/i18n'
 import styles from './my-issues.module.css'
 import {
   ContentViewContainer,
@@ -115,15 +119,35 @@ export function MyIssuesSurface({
   filterOptions, onAdvancedFilter, onDetailsOpenChange, onInsightsOpenChange, onDisplayOptionsChange, onFilterSelect, onFilterToggle, onViewChange, onOpenSidebar, onCreateIssue, displayMenuProps,
 }: MyIssuesSurfaceProps) {
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
+  const phone = usePhoneLayout()
+  const t = useOptionalTranslate()
+  // A phone keeps the two most-used views beside the toolbar; the rest move into
+  // the reference app's "N more" pill, which opens a small anchored popover.
+  const visibleViews = phone ? views.slice(0, 2) : views
+  const overflowViews = phone ? views.slice(2) : []
+  const overflowLabel = t('{count} more').replace('{count}', String(overflowViews.length))
   return <ContentViewContainer framed inset="tall" data-my-issues-surface="true">
     <ContentViewHeader onOpenSidebar={onOpenSidebar} onCreateIssue={onCreateIssue}>
       <ContentViewHeaderTitle title="My issues" />
     </ContentViewHeader>
     <ContentViewSubheader
       borderless
+      className={styles.viewsSubheader}
       start={
         <nav className={styles.tabs} aria-label="My issues views">
-          {views.map(view => <a key={view.id} href={viewHref?.(view.id) ?? `#${view.id}`} className={`${styles.tab} ui-pill`} data-active={activeView === view.id} data-disabled={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} aria-label={viewCounts?.[view.id] == null ? view.label : `${view.label}, ${viewCounts[view.id]} issues`} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onViewChange?.(view.id) }}>{view.label}</a>)}
+          {visibleViews.map(view => <a key={view.id} href={viewHref?.(view.id) ?? `#${view.id}`} className={`${styles.tab} ui-pill`} data-active={activeView === view.id} data-disabled={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} aria-label={viewCounts?.[view.id] == null ? view.label : `${view.label}, ${viewCounts[view.id]} issues`} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onViewChange?.(view.id) }}>{view.label}</a>)}
+          {overflowViews.length > 0 && <Popover.Root>
+            <Popover.Trigger asChild>
+              <button type="button" className={`${styles.tab} ${styles.tabsOverflow} ui-pill`} aria-label={overflowLabel} aria-haspopup="menu">
+                <span>{overflowLabel}</span><ChevronDown aria-hidden="true"/>
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content className={styles.tabsMenu} data-flow-motion="floating" side="bottom" align="start" sideOffset={4} collisionPadding={8} aria-label="More views">
+                {overflowViews.map(view => <button key={view.id} type="button" className={styles.tabsMenuItem} onClick={() => onViewChange?.(view.id)}>{view.label}</button>)}
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>}
         </nav>
       }
       end={

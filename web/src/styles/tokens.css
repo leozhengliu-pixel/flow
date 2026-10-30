@@ -1007,3 +1007,6 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :root[data-theme="light"]{--description-math-border:var(--theme-border)}
 :root{--create-issue-control-bg:lch(17.574% 1.589 272);--create-issue-shadow:0 18px 48px #000b,0 2px 8px #0007}
 :root[data-theme="light"]{--create-issue-control-bg:var(--theme-surface-hover);--create-issue-shadow:var(--shadow-dialog)}
+
+/* Phone list controls and group headers: the reference app's static dark metrics (the generated theme's surfaces are a shade darker). */
+:root{--phone-group-bg:lch(9.232% .85 272);--phone-group-title:lch(90.826% 1.425 272);--phone-group-count:lch(63.304% 1.425 272);--phone-control-bg:lch(10.149% .689 272);--phone-control-fg:lch(90.451% 1.2 272)}

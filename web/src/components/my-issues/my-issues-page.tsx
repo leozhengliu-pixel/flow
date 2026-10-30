@@ -21,7 +21,7 @@ import { InsightHiddenNotice, SavedViewInsightsPanel, type SavedViewInsightsConf
 import { IssueBoard } from '@/components/issue-explorer/issue-board'
 import type { SavedView } from '@/types/flow'
 import { confirmAction } from '@/components/ui/action-dialog-service'
-import { fetchIssueRecord } from '@/lib/api'
+import { fetchIssueRecord, listIssueRecords } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { IssuesSplitLayout, IssueViewSplitPage } from '@/components/issues-split-view'
 import { MyIssuesSummaryCard } from './my-issues-summary-card'
@@ -62,6 +62,9 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const [insightsConfig,setInsightsConfig]=useState<Record<string,unknown>>(()=>readInsights(`${workspaceSlug}:my-issues:${initialView}:insights`))
   const [previewIssueId, setPreviewIssueId] = useState<string>()
   const [mutationErrors, setMutationErrors] = useState<Map<string, string>>(new Map())
+  // The aggregate bootstrap projection can omit the agent task read decoration; the
+  // paged issue records carry it. Fetch the states once for rows that have a session.
+  const [agentSessionStates, setAgentSessionStates] = useState<Map<string, NonNullable<Issue['agentSessionState']>>>(new Map())
   // The query snapshots below read the latest bootstrap data but rebuild only when filters/view change, not on every data refresh (which would refetch the paged list).
   const mutationSequence = useRef(new Map<string, number>())
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
@@ -69,7 +72,22 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const sourceIssues = useMemo(() => data.issueCollectionPaged ? pagedIssues : issuesForView(data, projectedView), [data, projectedView, pagedIssues])
   const sourceIssueIds = useMemo(() => new Set(sourceIssues.map(issue => issue.id)), [sourceIssues])
   const hierarchyIssues = useMemo(() => data.issueCollectionPaged ? sourceIssues : issuesWithHierarchyContext(sourceIssues, data.issues), [data.issueCollectionPaged, data.issues, sourceIssues])
-  const initialGroups = useMemo(() => groupIssues(hierarchyIssues, workspaceSlug, data, sourceIssueIds), [data, hierarchyIssues, sourceIssueIds, workspaceSlug])
+  const missingSessionIssueIds = useMemo(() => data.issues.filter(issue => issue.agentSessionId && !issue.agentSessionState).map(issue => issue.id), [data.issues])
+  useEffect(() => {
+    if (!missingSessionIssueIds.length) return
+    let cancelled = false
+    listIssueRecords({ limit: 1000, filter: { and: [{ field: 'id', operator: 'in', values: missingSessionIssueIds }] } }, undefined, workspaceSlug)
+      .then(page => {
+        if (cancelled) return
+        const next = new Map<string, NonNullable<Issue['agentSessionState']>>()
+        for (const issue of page.items) if (issue.agentSessionState) next.set(issue.id, issue.agentSessionState)
+        if (next.size) setAgentSessionStates(next)
+      })
+      .catch(() => undefined)
+    return () => { cancelled = true }
+  }, [missingSessionIssueIds, workspaceSlug])
+  const decoratedHierarchyIssues = useMemo(() => agentSessionStates.size ? hierarchyIssues.map(issue => issue.agentSessionState || !agentSessionStates.has(issue.id) ? issue : { ...issue, agentSessionState: agentSessionStates.get(issue.id) }) : hierarchyIssues, [agentSessionStates, hierarchyIssues])
+  const initialGroups = useMemo(() => groupIssues(decoratedHierarchyIssues, workspaceSlug, data, sourceIssueIds), [data, decoratedHierarchyIssues, sourceIssueIds, workspaceSlug])
   const issuesById = useMemo(() => new Map([...data.issues, ...pagedIssues].map(issue => [issue.id, issue])), [data.issues, pagedIssues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, sourceIssues), [data, sourceIssues])
 
