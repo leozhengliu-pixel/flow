@@ -1299,7 +1299,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
     font-weight: 500;
     line-height: normal;
   }
-  .project-detail-page__top > .project-detail-page__header .project-detail-page__header-action[data-active=true] { color: var(--text); }
+  .project-detail-page__top > .project-detail-page__header .project-detail-page__header-action[data-active=true] { background: transparent; color: var(--text); }
   .project-detail-page__top > .project-detail-page__header .project-detail-page__header-action svg { width: 14px; height: 14px; }
   .project-detail-page__top > .project-detail-page__header .project-detail-page__header-action svg { color: var(--phone-icon-fg); }
   .project-detail-page__top > .project-detail-page__header > .project-detail-page__header-action[aria-label*="favorites"] { margin-left: 6px; }
