@@ -1,5 +1,7 @@
 .phone-create-issue { display: none; }
 @media (max-width: 767px) {
+  /* The reference phone shell has no fixed Agent/history footer bar. */
+  html:root body .app .bottom-agent { display: none; }
   .phone-create-issue { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; margin-left: auto; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--issue-muted); }
   .phone-create-issue:hover { background: var(--theme-surface-hover); }
   .phone-create-issue:focus-visible { outline: 2px solid var(--focus-ring); }

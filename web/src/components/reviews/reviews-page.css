@@ -665,7 +665,6 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
 }
 
 /* ---- Phone review page ---- */
-@media (max-width: 767px){html:root body .app:has(.reviews-workspace) .bottom-agent{display:none}}
 /* The reference app's review page folds the properties sidebar into the document and merges the top bar with the tabs. */
 .review-detail-chrome{display:contents}
 .review-breadcrumb-issue-icon,.review-breadcrumb-state--phone,.review-phone-pr-number,.review-phone-agent,.review-ready-label--phone,.review-menu-glyph--phone,.review-actions-glyph--phone,.review-comment-attach{display:none}

@@ -64,19 +64,26 @@
 @keyframes filterPopoverIn{from{opacity:0;transform:translateY(-2px) scale(.985)}to{opacity:1;transform:none}}
 @media(max-width:600px){.rootMenu{width:min(var(--filter-root-width),calc(100vw - 22px))}.valueMenu{max-width:calc(100vw - 22px)}}
 
-/* Phone: the reference app's Documents filter menu spans the viewport (16px inset) and opens at 13vh, with
-   46px rows, a rounded search box and no submenu markers. Desktop keeps the anchored popover above. */
+/* Phone: the reference app's filter menus span the viewport (16px inset) and open at 13vh, with 46px rows, a
+   rounded search box and no submenu markers. Value menus replace the root in the same panel. Desktop keeps the
+   anchored popovers above. */
 @media(max-width:767px){
-  :global([data-radix-popper-content-wrapper]:has(>[data-layout=documents])){width:calc(100vw - 32px)!important;min-width:0!important;transform:translate(16px,13vh)!important}
-  .rootMenu[data-layout=documents]{width:100%;box-shadow:var(--pk-card-shadow)}
-  .rootMenu[data-layout=documents] .rootSearch{height:46px;flex-basis:46px;padding:6px 4.5px 0 5.5px;border-bottom:0}
-  .rootMenu[data-layout=documents] .rootSearch input{height:40px;padding:11px 12px;border-radius:12px}
-  .rootMenu[data-layout=documents] .rootSearch input::placeholder{color:var(--pk-faint)}
-  .rootMenu[data-layout=documents] .rootSearch kbd{display:none}
-  .rootMenu[data-layout=documents] .rootList{margin:0 4.5px 0 5.5px;padding:6px 0 4px}
-  .rootMenu[data-layout=documents] .rootItem{height:46px;padding:0 12px;font-size:13px;font-weight:450;line-height:15.6px}
-  .rootMenu[data-layout=documents] .rootChevron{display:none}
-  .rootMenu[data-layout=documents] .rootSeparator{margin:0 -6px}
+  :global([data-radix-popper-content-wrapper]:has(>[data-layout=documents])),
+  :global([data-radix-popper-content-wrapper]:has(>[data-layout=issues][data-variant=root])),
+  :global([data-radix-popper-content-wrapper]:has(>[data-field])),
+  :global([data-radix-popper-content-wrapper]:has(>[data-level])){width:calc(100vw - 32px)!important;min-width:0!important;transform:translate(16px,13vh)!important}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root],.valueMenu){width:100%;max-width:100%;max-height:min(450px,calc(100dvh - 13vh - 16px));box-shadow:var(--pk-card-shadow)}
+  /* A phone value picker replaces the root in the same panel instead of stacking beside it. */
+  .rootMenu[data-layout=issues][data-submenu-open],
+  .rootMenu[data-layout=documents][data-submenu-open]{visibility:hidden;pointer-events:none}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSearch,.valueMenu .valueSearch{height:46px;flex-basis:46px;padding:6px 4.5px 0 5.5px;border-bottom:0}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSearch input,.valueMenu .valueSearch input{height:40px;padding:11px 12px;border-radius:12px}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSearch input::placeholder{color:var(--pk-faint)}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSearch kbd{display:none}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootList{margin:0 4.5px 0 5.5px;padding:6px 0 4px}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootItem,.valueMenu .valueItem{height:46px;padding:0 12px;font-size:13px;font-weight:450;line-height:15.6px}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootChevron{display:none}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSeparator{margin:0 -6px}
 }
 
 /* Text-condition dialog ("Milestone name contains…", custom dates). */
