@@ -374,14 +374,15 @@ it('applies display properties, grouping, closed range, and resets view defaults
   expect(document.querySelector('.review-list-row__metadata')).not.toBeInTheDocument();
 });
 
-it('uses Created view defaults and omits Focus and GitHub team review controls', async () => {
+it('uses Created view defaults and still offers Focus without GitHub team review controls', async () => {
   const user = userEvent.setup();
   renderReviewList([{ ...review, author: viewer }], 'created');
   await user.click(screen.getByRole('button', { name: 'Display options' }));
   expect(screen.queryByRole('checkbox', { name: 'Show GitHub team reviews' })).not.toBeInTheDocument();
   expect(screen.getByRole('combobox', { name: 'Closed reviews' })).toHaveTextContent('Past week');
+  expect(screen.getByRole('combobox', { name: 'Grouping' })).toHaveTextContent('Status');
   await user.click(screen.getByRole('combobox', { name: 'Grouping' }));
-  expect(screen.queryByRole('option', { name: 'Focus' })).not.toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'Focus' })).toBeInTheDocument();
 });
 
 function renderDetail(item: CodeReview, tab: "overview" | "changes" = "overview") {
