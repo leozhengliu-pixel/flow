@@ -69,3 +69,7 @@
 /* Layout tabs sit 2px inside the field, 129 wide with 6px between them; chips and rows are 5px apart. */
 .layoutTabs:not(#_){padding:0 2px}
 .propertyGrid:not(#_){gap:5px}
+
+@media (max-width: 767px) {
+  .trigger.trigger.trigger:focus-visible { outline: 0; }
+}

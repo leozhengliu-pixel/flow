@@ -45,3 +45,7 @@
 .divider{height:1px;margin:4px 8px;border:0;background:var(--theme-border)}
 .options>button>svg{width:14px;height:14px}
 .value>svg{width:14px;height:14px;flex:0 0 14px}
+
+@media (max-width: 767px) {
+  .compact .commands button[aria-label="Clear all filters"] { opacity: .6; }
+}
