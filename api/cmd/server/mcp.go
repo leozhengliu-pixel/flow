@@ -164,7 +164,12 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 				Meta      map[string]any `json:"_meta"`
 			}
 			if err := json.Unmarshal(request.Params, &params); err != nil {
-				s.writeMCPToolResult(w, r, request.ID, nil, fmt.Errorf("Invalid tool arguments: expected a complete JSON object. Send the call again with valid JSON arguments"))
+				var argumentErr *json.UnmarshalTypeError
+				if errors.As(err, &argumentErr) && argumentErr.Field == "arguments" {
+					s.writeMCPToolResult(w, r, request.ID, nil, fmt.Errorf("Invalid tool arguments: expected a complete JSON object. Send the call again with valid JSON arguments"))
+				} else {
+					s.writeMCPError(w, request.ID, -32602, "Invalid params", nil)
+				}
 				return
 			}
 			if params.Arguments == nil {

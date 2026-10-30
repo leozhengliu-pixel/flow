@@ -213,7 +213,7 @@ describe('filter menu Triage Intelligence submenu', () => {
     expect(within(people).getByRole('option', { name: /Any user/ })).toHaveTextContent(/Any user.*1.*issue/)
     expect(within(people).getByRole('option', { name: /Flow/ })).toHaveTextContent(/Flow\s*Agent/)
     // Deep search reaches the nested values: "Triage Intelligence › Suggested assignee › Teammate".
-    await user.type(screen.getByLabelText('Add Filter…'), 'Teammate')
+    await user.type(screen.getByRole('combobox', { name: 'Add Filter…' }), 'Teammate')
     await user.click(await screen.findByRole('option', { name: /Suggested assignee › Teammate/ }))
     expect(onToggle).toHaveBeenCalledWith('triageIntelligence', expect.objectContaining({ id: `assignee:${teammate.id}`, filterLabel: 'Suggested assignee' }))
   })

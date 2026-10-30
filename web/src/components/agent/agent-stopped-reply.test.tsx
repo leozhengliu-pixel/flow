@@ -114,7 +114,8 @@ describe('a stopped reply', () => {
     const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
     await user.type(editor, 'Explain two plus two')
     await user.click(screen.getByRole('button', { name: 'Submit comment' }))
-    expect(await screen.findByText('Two plus')).toBeVisible()
+    // Token deltas flush on the next frame; rich-text hydration may replace the initial node.
+    await waitFor(() => expect(screen.getByText('Two plus')).toBeVisible())
     await user.click(screen.getByRole('button', { name: 'Stop responding' }))
     await waitFor(() => expect(screen.queryByText('Two plus')).not.toBeInTheDocument())
     const conversation = screen.getByRole('group', { name: 'Agent conversation' })

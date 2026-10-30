@@ -422,6 +422,10 @@ func relativeMCPCycle(cycles []domain.Cycle, which string) *domain.Cycle {
 		current++
 	case "previous":
 		current--
+	case "current":
+		// Keep the active cycle selected.
+	default:
+		return nil
 	}
 	if current < 0 || current >= len(sorted) {
 		return nil

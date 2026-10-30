@@ -68,7 +68,6 @@ func decodeErrorBody(t *testing.T, recorder *httptest.ResponseRecorder) map[stri
 }
 
 func TestInternalErrorResponseHidesDatabaseText(t *testing.T) {
-	logs := captureServerLogs(t)
 	cases := map[string]http.HandlerFunc{
 		"respondMutation": func(w http.ResponseWriter, r *http.Request) {
 			respondMutation(w, mysqlDataTooLong(), http.StatusOK, nil)
@@ -92,6 +91,7 @@ func TestInternalErrorResponseHidesDatabaseText(t *testing.T) {
 	}
 	for name, handler := range cases {
 		t.Run(name, func(t *testing.T) {
+			logs := captureServerLogs(t)
 			chain := requestLog(apiErrorEnvelope(handler))
 			recorder := httptest.NewRecorder()
 			chain.ServeHTTP(recorder, httptest.NewRequest(http.MethodPatch, "/api/documents/doc_1", nil))
