@@ -81,9 +81,15 @@ export function DropdownMenuSubTrigger({ children, className, disabled, ...props
   return <P.SubTrigger className={cn('menu-item',className)} disabled={disabled} {...props}>{children}<ChevronRight size={13} className="menu-chevron"/></P.SubTrigger>
 }
 
-export function DropdownMenuSubContent({ className, children, ...props }: P.DropdownMenuSubContentProps) {
+export function DropdownMenuSubContent({ className, children, onFocusOutside, ...props }: P.DropdownMenuSubContentProps) {
   const menu = useContext(PhoneMenuContext)
   const t = useOptionalTranslate()
   if (menu) return <PhoneCommandMenu open={menu.open} onOpenChange={menu.setOpen} label={props['aria-label'] ?? t('Command menu')} placeholder="Filter...">{children}</PhoneCommandMenu>
-  return <P.Portal><P.SubContent data-flow-motion="floating" className={cn('menu-content',className)} {...props}>{children}</P.SubContent></P.Portal>
+  return <P.Portal><P.SubContent data-flow-motion="floating" className={cn('menu-content',className)} onFocusOutside={event => {
+    // Nested controls (a calendar) keep focus inside this submenu; that focus move is not a dismissal.
+    const target = event.detail.originalEvent.target
+    const layer = event.currentTarget
+    if (layer instanceof Node && target instanceof Node && layer.contains(target)) event.preventDefault()
+    onFocusOutside?.(event)
+  }} {...props}>{children}</P.SubContent></P.Portal>
 }

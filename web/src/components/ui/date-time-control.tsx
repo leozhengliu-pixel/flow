@@ -18,6 +18,7 @@ export function DateTimeControl({
   min,
   mode = 'date',
   onChange,
+  portal = true,
   value,
 }: {
   className?: string
@@ -30,6 +31,8 @@ export function DateTimeControl({
   min?: string
   mode?: Mode
   onChange: (value: string) => void
+  /** Render inside the current dismissable layer instead of a body portal (menus keep focus inside). */
+  portal?: boolean
   value: string
 }) {
   const t=locale==='zh-CN'?translateToChinese:(text:string)=>text
@@ -52,6 +55,17 @@ export function DateTimeControl({
     onChange(`${draftDate}T${draftTime}`)
     setOpen(false)
   }
+  const content = <Popover.Content data-flow-motion="floating" align="start" className="date-time-popover" collisionPadding={12} sideOffset={4}>
+    <header><button aria-label={t('Previous month')} onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))}><ChevronIcon direction="left"/></button><strong>{view.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}</strong><button aria-label={t('Next month')} onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))}><ChevronIcon direction="right"/></button></header>
+    <div className="date-time-weekdays">{Array.from({length:7},(_,index)=>(locale==='zh-CN'?['日','一','二','三','四','五','六']:['S','M','T','W','T','F','S'])[(index+weekStart)%7]).map((day,index)=><span key={`${day}-${index}`}>{day}</span>)}</div>
+    <div className="date-time-grid">{days.map(day => {
+      const iso = formatDate(day)
+      const outside = day.getMonth() !== view.getMonth()
+      const disabled = Boolean(min && iso < min.slice(0, 10) || max && iso > max.slice(0, 10))
+      return <button aria-label={day.toLocaleDateString(locale)} data-outside={outside || undefined} data-selected={iso === draftDate || undefined} disabled={disabled} key={iso} onClick={() => choose(iso)}>{day.getDate()}</button>
+    })}</div>
+    {mode === 'datetime' && <footer><TimeControl label={t('Time')} value={draftTime} onChange={setDraftTime}/><button className="date-time-apply" disabled={!draftDate} onClick={apply}>{t('Apply')}</button></footer>}
+  </Popover.Content>
   return <Popover.Root open={open} onOpenChange={next => {
     setOpen(next)
     if (next) {
@@ -66,19 +80,7 @@ export function DateTimeControl({
         <span>{format ? format(value) : displayValue(value, mode)}</span><CalendarIcon/>
       </button>
     </Popover.Trigger>
-    <Popover.Portal>
-      <Popover.Content data-flow-motion="floating" align="start" className="date-time-popover" collisionPadding={12} sideOffset={4}>
-        <header><button aria-label={t('Previous month')} onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))}><ChevronIcon direction="left"/></button><strong>{view.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}</strong><button aria-label={t('Next month')} onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))}><ChevronIcon direction="right"/></button></header>
-        <div className="date-time-weekdays">{Array.from({length:7},(_,index)=>(locale==='zh-CN'?['日','一','二','三','四','五','六']:['S','M','T','W','T','F','S'])[(index+weekStart)%7]).map((day,index)=><span key={`${day}-${index}`}>{day}</span>)}</div>
-        <div className="date-time-grid">{days.map(day => {
-          const iso = formatDate(day)
-          const outside = day.getMonth() !== view.getMonth()
-          const disabled = Boolean(min && iso < min.slice(0, 10) || max && iso > max.slice(0, 10))
-          return <button aria-label={day.toLocaleDateString(locale)} data-outside={outside || undefined} data-selected={iso === draftDate || undefined} disabled={disabled} key={iso} onClick={() => choose(iso)}>{day.getDate()}</button>
-        })}</div>
-        {mode === 'datetime' && <footer><TimeControl label={t('Time')} value={draftTime} onChange={setDraftTime}/><button className="date-time-apply" disabled={!draftDate} onClick={apply}>{t('Apply')}</button></footer>}
-      </Popover.Content>
-    </Popover.Portal>
+    {portal ? <Popover.Portal>{content}</Popover.Portal> : content}
   </Popover.Root>
 }
 
