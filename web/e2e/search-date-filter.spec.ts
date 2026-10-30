@@ -7,10 +7,10 @@ async function seedWorkspace(request: APIRequestContext, workspaceKey: string) {
   const created = await request.post(`${base}/api/workspaces`, { data: { name: 'Search date filter', urlKey: workspaceKey, region: 'us' } })
   expect(created.status()).toBe(201)
   const workspace = await created.json() as { teams: Array<{ id: string }> }
-  const issue = await request.post(`${base}/api/issues`, { headers: { 'X-Flow-Workspace': workspaceKey }, data: { title: '[e2e] Dated result', teamId: workspace.teams[0].id } })
+  const issue = await request.post(`${base}/api/issues`, { headers: { 'X-Workspace-Key': workspaceKey }, data: { title: '[e2e] Dated result', teamId: workspace.teams[0].id } })
   expect(issue.status()).toBe(201)
   const record = await issue.json() as { id: string }
-  const recent = await request.post(`${base}/api/recent`, { headers: { 'X-Flow-Workspace': workspaceKey }, data: { type: 'issue', id: record.id } })
+  const recent = await request.post(`${base}/api/recent`, { headers: { 'X-Workspace-Key': workspaceKey }, data: { type: 'issue', id: record.id } })
   expect(recent.ok()).toBe(true)
 }
 

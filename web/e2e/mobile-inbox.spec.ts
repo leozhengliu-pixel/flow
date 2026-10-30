@@ -12,7 +12,7 @@ test.describe('mobile inbox list', () => {
     const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
     const teamId = workspace.teams?.[0]?.id
     expect(teamId).toBeTruthy()
-    const headers = { 'X-Flow-Workspace': workspaceKey }
+    const headers = { 'X-Workspace-Key': workspaceKey }
 
     const createIssue = async (title: string, stateId: string) => {
       const response = await request.post('http://127.0.0.1:4180/api/issues', {
