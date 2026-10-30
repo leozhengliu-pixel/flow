@@ -14,10 +14,40 @@ import (
 // cycle_id filter, so the scope history has to start from the activity log.
 // Callers must still load the returned IDs through an authorized issue query.
 func (s *SQLiteStore) CycleHistoryIssueIDs(ctx context.Context, workspace, cycleID string) ([]string, error) {
+	if !s.contentActivityCyclesReady(ctx, workspace) {
+		// The background backfill has not reached this workspace yet. Fall
+		// back to the activity JSON so the cycle graph stays correct.
+		return s.cycleHistoryIssueIDsFromActivity(ctx, workspace, cycleID)
+	}
 	// issue_activity_cycles indexes the cycle/cycleBefore/initialCycle
 	// references of every activity, so this stays a short index read instead
 	// of parsing every activity row in the workspace (the cycle graph's cost).
 	rows, err := s.db.QueryContext(ctx, "SELECT DISTINCT issue_id FROM issue_activity_cycles WHERE workspace_key=? AND cycle_id=?", workspace, cycleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (s *SQLiteStore) contentActivityCyclesReady(ctx context.Context, workspace string) bool {
+	var complete int
+	return s.db.QueryRowContext(ctx, `SELECT complete FROM issue_activity_cycles_migrations WHERE workspace_key=?`, workspace).Scan(&complete) == nil && complete != 0
+}
+
+// cycleHistoryIssueIDsFromActivity is the pre-index query: it parses the
+// cycle references out of every activity row of the workspace.
+func (s *SQLiteStore) cycleHistoryIssueIDsFromActivity(ctx context.Context, workspace, cycleID string) ([]string, error) {
+	cycle, before, initial := s.jsonText("data", "metadata.cycle"), s.jsonText("data", "metadata.cycleBefore"), s.jsonText("data", "metadata.initialCycle")
+	rows, err := s.db.QueryContext(ctx, "SELECT DISTINCT resource_id FROM workspace_content_records WHERE workspace_key=? AND kind='activity' AND ("+cycle+"=? OR "+before+"=? OR "+initial+"=?)", workspace, cycleID, cycleID, cycleID)
 	if err != nil {
 		return nil, err
 	}
