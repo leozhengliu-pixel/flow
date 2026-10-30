@@ -321,6 +321,7 @@ export function LoopOutputContractPanel({
     <section className="loops-section" aria-label={t("What this loop will produce")}>
       <div className="loops-section-heading">
         <h3 className="loops-section-title">{t("What this loop will produce")}</h3>
+        {analyzing && <span className="loops-contract-analysis-status" role="status">{t("Reading the instructions…")}</span>}
         {!editing && !reviewing && hasInstructions && (
           <div className="loops-contract-actions">
             {contract?.source === "person" ? (

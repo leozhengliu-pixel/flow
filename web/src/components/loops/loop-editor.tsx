@@ -206,6 +206,7 @@ function LoopEditorForm({
   const workspace = data.workspace.urlKey;
   const [form, setForm] = useState<Form>(() => formOf(loop));
   const [dirty, setDirty] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [autoMessage] = useState(() => (draft && takeLoopAgentAutostart(loop.id) ? loopBuilderFirstMessage(loop) : ""));
   const agentDraft = Boolean(loop.templateId || loop.sourcePrompt);
@@ -226,9 +227,11 @@ function LoopEditorForm({
     if (!draft || !dirty) return;
     const timer = window.setTimeout(() => {
       setDirty(false);
+      setDraftSaving(true);
       void updateLoop(loop.id, mutationOf(form))
         .then((next) => onLoopChange(next))
-        .catch((error) => toast.error(error instanceof Error ? error.message : t("Could not save draft")));
+        .catch((error) => toast.error(error instanceof Error ? error.message : t("Could not save draft")))
+        .finally(() => setDraftSaving(false));
     }, 500);
     return () => window.clearTimeout(timer);
   }, [dirty, draft, form, loop.id, onLoopChange, t]);
@@ -569,9 +572,12 @@ function LoopEditorForm({
           {/* The reference app: "Published versions" on the left and Publish on the right, no Cancel (the breadcrumb leaves the editor). */}
           <footer className={`loops-editor-footer${draft ? "" : " is-published"}`}>
             {draft ? (
-              <button className="loops-ghost-button" type="button" onClick={() => void cancel()}>
-                {t("Cancel")}
-              </button>
+              <>
+                <button className="loops-ghost-button" type="button" onClick={() => void cancel()}>
+                  {t("Cancel")}
+                </button>
+                {draftSaving && <span className="loops-draft-save-status" role="status">{t("Saving draft…")}</span>}
+              </>
             ) : (
               <button className="loops-versions-button" type="button" onClick={() => setVersionsOpen(true)}>
                 {t("Published versions")}

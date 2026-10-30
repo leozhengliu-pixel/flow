@@ -29,6 +29,7 @@ export const loopRunsZhCN: Record<string, string> = {
   "Could not cancel the run": "无法取消运行",
   "Cancelling…": "正在取消…",
   "Initializing run…": "正在初始化运行…",
+  "Loading runs…": "正在加载运行记录…",
   "Cancel run": "取消运行",
   "Reply cancelled": "回复已取消",
   "Reply interrupted": "回复已中断",

@@ -4878,6 +4878,7 @@ Object.assign(zhCN, {
   "Connection lost. Retrying…": "连接已断开，正在重试…",
   "Could not open draft": "无法打开草稿",
   "Could not save draft": "无法保存草稿",
+  "Saving draft…": "正在保存草稿…",
   "Could not save loop": "无法保存 Loop",
   "Could not start the loop": "无法启动 Loop",
   "Could not update favorites": "无法更新收藏",

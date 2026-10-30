@@ -405,7 +405,12 @@ export function LoopRunPage({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          {runs === undefined ? null : filtered.length === 0 ? (
+          {runs === undefined ? (
+            <div className="loops-run-list-loading" aria-live="polite" aria-label={t("Loading runs…")}>
+              <GridLoader variant="agent" size={14} />
+              <span>{t("Loading runs…")}</span>
+            </div>
+          ) : filtered.length === 0 ? (
             <p className="loops-run-list-empty" role={listFailures > 0 ? "status" : undefined}>
               {listFailures > 0 && !runs.length ? t("Could not load loop runs. Retrying…") : t(runs.length ? "No runs match." : "This loop has not run yet.")}
             </p>
@@ -661,13 +666,20 @@ function RunReplyComposer({
   const canSend = Boolean(body.trim()) && !busy && !sending;
   const send = async () => {
     if (!canSend) return;
+    const message = body.trim();
+    const previousBody = body;
+    const previousAttachments = attachments;
+    // Clear the composer as soon as the request starts. This keeps the reply flow
+    // feeling immediate while the run is being updated in the background.
+    setBody("");
+    setAttachments([]);
     setSending(true);
     try {
-      const files = await Promise.all(attachments.map(agentFileAttachment));
-      onReplied(await replyToLoopRun(loopId, run.id, body.trim(), { skillIds, attachments: files }));
-      setBody("");
-      setAttachments([]);
+      const files = await Promise.all(previousAttachments.map(agentFileAttachment));
+      onReplied(await replyToLoopRun(loopId, run.id, message, { skillIds, attachments: files }));
     } catch (reason) {
+      setBody(previousBody);
+      setAttachments(previousAttachments);
       toast.error(reason instanceof Error ? reason.message : t("Could not send reply"));
     } finally {
       setSending(false);
