@@ -5,8 +5,10 @@ import { forwardRef, useEffect, useRef, useState } from 'react'
 
 import { InboxFilterBuilder, type InboxFilterCondition, type InboxFilterOptions } from './inbox-filter-builder'
 import './inbox.css'
+import { PhoneMenu } from '@/components/ui/phone-menu'
 import { CheckIcon, DisplayIcon, FilterIcon, SidebarIcon } from '@/components/ui/view-action-icons'
 import { FlowTooltip } from '@/components/ui/tooltip'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import {
   SPLIT_VIEW_DEFAULT_LIST_WIDTH,
   SPLIT_VIEW_MIN_DETAIL_WIDTH,
@@ -216,6 +218,7 @@ export function InboxHeader({
   onDisplayOptionsChange,
   onDeleteAll,
   onDeleteAllRead,
+  onDeleteAllReadCompleted,
   onMarkAllRead,
   onOpenSettings,
   onOpenSidebar,
@@ -239,6 +242,7 @@ export function InboxHeader({
           onMarkAllRead={onMarkAllRead}
           onDeleteAll={onDeleteAll}
           onDeleteAllRead={onDeleteAllRead}
+          onDeleteAllReadCompleted={onDeleteAllReadCompleted}
           onOpenSettings={onOpenSettings}
         />
       </div>
@@ -277,11 +281,14 @@ function NotificationActionsMenu({
   onMarkAllRead,
   onDeleteAll,
   onDeleteAllRead,
+  onDeleteAllReadCompleted,
   onOpenSettings,
 }: Pick<
   InboxPageShellProps,
-  'onMarkAllRead' | 'onDeleteAll' | 'onDeleteAllRead' | 'onOpenSettings'
+  'onMarkAllRead' | 'onDeleteAll' | 'onDeleteAllRead' | 'onDeleteAllReadCompleted' | 'onOpenSettings'
 > & { pending?: boolean }) {
+  const phone = usePhoneLayout()
+  const [phoneOpen, setPhoneOpen] = useState(false)
   useInboxShortcut('Backspace', event => {
     if (!event.shiftKey) return false
     onDeleteAllRead()
@@ -297,6 +304,25 @@ function NotificationActionsMenu({
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [onMarkAllRead])
+
+  if (phone) {
+    return (
+      <>
+        <IconButton label="Notification actions" aria-expanded={phoneOpen} aria-haspopup="dialog" onClick={() => setPhoneOpen(true)}>
+          <MoreIcon />
+        </IconButton>
+        <InboxPhoneActionsMenu
+          open={phoneOpen}
+          onOpenChange={setPhoneOpen}
+          pending={pending}
+          onDeleteAll={onDeleteAll}
+          onDeleteAllRead={onDeleteAllRead}
+          onDeleteAllReadCompleted={onDeleteAllReadCompleted}
+          onOpenSettings={onOpenSettings}
+        />
+      </>
+    )
+  }
 
   return (
     <DropdownMenu.Root>
@@ -326,6 +352,82 @@ function NotificationActionsMenu({
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
+  )
+}
+
+function InboxPhoneActionsMenu({
+  open,
+  onOpenChange,
+  pending = false,
+  onDeleteAll,
+  onDeleteAllRead,
+  onDeleteAllReadCompleted,
+  onOpenSettings,
+}: Pick<
+  InboxPageShellProps,
+  'onDeleteAll' | 'onDeleteAllRead' | 'onDeleteAllReadCompleted' | 'onOpenSettings'
+> & { open: boolean; onOpenChange: (open: boolean) => void; pending?: boolean }) {
+  const [query, setQuery] = useState('')
+  const searching = query.trim().toLowerCase()
+  const actions = [
+    { id: 'delete-all', label: 'Delete all', onSelect: onDeleteAll },
+    { id: 'delete-all-read', label: 'Delete all read', onSelect: onDeleteAllRead },
+    { id: 'delete-all-completed', label: 'Delete all completed', onSelect: onDeleteAllReadCompleted },
+  ].filter(action => action.label.toLowerCase().includes(searching))
+  const showSettings = 'go to settings'.includes(searching)
+  const settingsTop = 6 + actions.length * 46 + (actions.length ? 12 : 0)
+  const listHeight = 6 + actions.length * 46 + (actions.length && showSettings ? 12 : 0) + (showSettings ? 46 : 0) + 6 - 2
+  return (
+    <PhoneMenu
+      open={open}
+      onOpenChange={onOpenChange}
+      label="Notification actions"
+      className="inbox-actions-phone-menu"
+    >
+      <div className="phone-menu-search">
+        <input
+          type="text"
+          aria-label="Command menu"
+          autoFocus
+          placeholder="Filter…"
+          value={query}
+          onChange={event => setQuery(event.target.value)}
+        />
+      </div>
+      <div className="inbox-actions-phone-menu__list" style={{ height: listHeight }}>
+        {actions.map((action, index) => (
+          <button
+            key={action.id}
+            type="button"
+            role="menuitem"
+            data-testid={`inbox-actions-${action.id}`}
+            className="inbox-actions-phone-menu__row"
+            style={{ top: 6 + index * 46 }}
+            disabled={pending}
+            onClick={() => { action.onSelect(); onOpenChange(false) }}
+          >
+            <span className="inbox-actions-phone-menu__icon"><PhoneDeleteInboxIcon /></span>
+            <span className="inbox-actions-phone-menu__label">{action.label}</span>
+          </button>
+        ))}
+        {showSettings ? (
+          <>
+            {actions.length ? <div className="inbox-actions-phone-menu__separator" role="separator" data-testid="inbox-actions-divider" style={{ top: 6 + actions.length * 46 }} /> : null}
+            <button
+              className="inbox-actions-phone-menu__row"
+              data-testid="inbox-actions-settings"
+              type="button"
+              role="menuitem"
+              style={{ top: settingsTop }}
+              onClick={() => { onOpenSettings?.(); onOpenChange(false) }}
+            >
+              <span className="inbox-actions-phone-menu__icon"><PhoneSettingsInboxIcon /></span>
+              <span className="inbox-actions-phone-menu__label">Go to settings</span>
+            </button>
+          </>
+        ) : null}
+      </div>
+    </PhoneMenu>
   )
 }
 
@@ -545,6 +647,14 @@ function MarkAllReadIcon() {
 
 export function DeleteInboxIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M7.25 1a.75.75 0 0 1 0 1.5H5.18a1 1 0 0 0-.956.706L2.75 8h1.623c.955 0 1.846.477 2.376 1.272a.51.51 0 0 0 .427.228h1.648a.51.51 0 0 0 .427-.228A2.856 2.856 0 0 1 11.627 8H14.5l.323.009c.117.38.177.777.177 1.176V11.5a3.5 3.5 0 0 1-3.5 3.5h-7A3.5 3.5 0 0 1 1 11.5V9.185c0-.299.033-.597.1-.888l.077-.288L2.79 2.765A2.5 2.5 0 0 1 5.18 1h2.07ZM2.5 9.5v2a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2h-1.873c-.397 0-.77.174-1.025.47l-.103.134A2.014 2.014 0 0 1 8.824 11H7.176a2.014 2.014 0 0 1-1.675-.896l-.103-.134a1.356 1.356 0 0 0-1.025-.47H2.5Zm11.22-8.28a.75.75 0 0 1 1.06 1.06L13.561 3.5l1.22 1.22a.75.75 0 1 1-1.061 1.06L12.5 4.561l-1.22 1.22a.75.75 0 1 1-1.06-1.061l1.219-1.22-1.22-1.22a.75.75 0 1 1 1.061-1.06l1.22 1.219 1.22-1.22Z" /></svg>
+}
+
+function PhoneDeleteInboxIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M7.25 1.00006C7.66421 1.00006 8 1.33585 8 1.75006C7.99997 2.16425 7.66419 2.50006 7.25 2.50006H5.17969C4.79573 2.50009 4.45093 2.71908 4.28418 3.05475L4.22363 3.20612L2.74902 8.00006H4.37305C5.32773 8.00006 6.21946 8.4772 6.74902 9.27155L6.78809 9.32233C6.8848 9.43418 7.02584 9.49999 7.17578 9.50006H8.82422C8.99569 9.49997 9.15584 9.41422 9.25098 9.27155L9.35449 9.12604C9.89229 8.41924 10.732 8.00006 11.627 8.00006H14.5L14.8232 8.00885C14.9404 8.38976 15 8.78611 15 9.18463V11.5001L14.9951 11.6797C14.9015 13.5292 13.3727 15.0001 11.5 15.0001H4.5C2.62729 15.0001 1.09845 13.5292 1.00488 11.6797L1 11.5001V9.18463C1.00002 8.88566 1.03339 8.58784 1.09961 8.29694L1.17676 8.00885L2.79004 2.76471C3.09264 1.78131 3.96362 1.09035 4.97559 1.00787L5.17969 1.00006H7.25ZM2.5 11.5001C2.50003 12.6046 3.39545 13.5001 4.5 13.5001H11.5C12.6045 13.5001 13.5 12.6046 13.5 11.5001V9.50006H11.627C11.2304 9.50006 10.8572 9.67386 10.6016 9.96979L10.499 10.1036C10.1257 10.6635 9.49722 11 8.82422 11.0001H7.17578C6.54495 11 5.95335 10.7043 5.57422 10.2061L5.50098 10.1036C5.24961 9.72653 4.8262 9.50006 4.37305 9.50006H2.5V11.5001Z" /><path d="M13.7197 1.21979C14.0126 0.926894 14.4874 0.926894 14.7803 1.21979C15.0731 1.51269 15.0731 1.98746 14.7803 2.28033L13.5605 3.50006L14.7803 4.71979C15.0732 5.01268 15.0732 5.48744 14.7803 5.78033C14.4874 6.07317 14.0126 6.07321 13.7197 5.78033L12.5 4.56061L11.2803 5.78033C10.9874 6.07321 10.5126 6.07317 10.2197 5.78033C9.92683 5.48744 9.92683 5.01268 10.2197 4.71979L11.4395 3.50006L10.2197 2.28033C9.92685 1.98746 9.92689 1.51269 10.2197 1.21979C10.5126 0.926894 10.9874 0.926894 11.2803 1.21979L12.5 2.43951L13.7197 1.21979Z" /></svg>
+}
+
+function PhoneSettingsInboxIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor" fillRule="evenodd" clipRule="evenodd"><path d="M8.00021 5.25C9.51887 5.25015 10.7502 6.48131 10.7502 8C10.7502 9.51869 9.51887 10.7499 8.00021 10.75C6.48142 10.75 5.25021 9.51878 5.25021 8C5.25021 6.48122 6.48142 5.25 8.00021 5.25ZM8.00021 6.75C7.30985 6.75 6.75021 7.30964 6.75021 8C6.75021 8.69036 7.30985 9.25 8.00021 9.25C8.69044 9.24985 9.25021 8.69027 9.25021 8C9.25021 7.30973 8.69044 6.75015 8.00021 6.75Z" /><path d="M8.4797 1C8.79032 1.00005 9.11521 1.07609 9.39571 1.28516C9.67641 1.49469 9.84241 1.78493 9.93087 2.08301L10.0764 2.57422C10.1033 2.66485 10.1451 2.71838 10.2268 2.76562L11.4192 3.4541C11.5007 3.50111 11.5678 3.51013 11.6594 3.48828L12.1584 3.36914C12.4605 3.2968 12.7939 3.29566 13.1154 3.43359C13.4372 3.57185 13.666 3.81486 13.8215 4.08398L14.302 4.91602C14.4573 5.18528 14.554 5.50472 14.5129 5.85254C14.4717 6.20036 14.303 6.48828 14.0891 6.71387L13.7365 7.08594C13.6717 7.15443 13.6467 7.21713 13.6467 7.31152V8.68848C13.6467 8.78287 13.6717 8.84557 13.7365 8.91406L14.0891 9.28613C14.303 9.51172 14.4717 9.79964 14.5129 10.1475C14.554 10.4953 14.4573 10.8147 14.302 11.084L13.8215 11.916C13.666 12.1851 13.4372 12.4281 13.1154 12.5664C12.7939 12.7043 12.4605 12.7032 12.1584 12.6309L11.6594 12.5117C11.5678 12.4899 11.5007 12.4989 11.4192 12.5459L10.2268 13.2344C10.1451 13.2816 10.1033 13.3352 10.0764 13.4258L9.93087 13.917C9.84241 14.2151 9.67641 14.5053 9.39571 14.7148C9.11521 14.9239 8.79032 15 8.4797 15H7.51974C7.20899 14.9999 6.8833 14.9242 6.60275 14.7148C6.32229 14.5053 6.15699 14.2149 6.06857 13.917L5.92306 13.4258C5.89612 13.3351 5.85359 13.2817 5.77169 13.2344L4.58028 12.5459C4.51915 12.5107 4.46564 12.4967 4.4045 12.501L4.33907 12.5117L3.84103 12.6309C3.53875 12.7032 3.20473 12.7047 2.88302 12.5664C2.56142 12.428 2.33239 12.1852 2.17696 11.916L1.69747 11.084C1.54209 10.8147 1.44542 10.4953 1.48653 10.1475C1.52769 9.79988 1.69567 9.51165 1.90939 9.28613L2.26192 8.91406C2.327 8.84544 2.35271 8.783 2.35275 8.68848V7.31152C2.35271 7.217 2.327 7.15455 2.26192 7.08594L1.90939 6.71387C1.69567 6.48835 1.52769 6.20012 1.48653 5.85254C1.44542 5.50474 1.54209 5.18527 1.69747 4.91602L2.17696 4.08398C2.33239 3.81484 2.56142 3.57196 2.88302 3.43359C3.20473 3.29533 3.53875 3.29676 3.84103 3.36914L4.33907 3.48828L4.4045 3.49902C4.46564 3.50331 4.51915 3.48931 4.58028 3.4541L5.77169 2.76562C5.85359 2.71834 5.89612 2.66492 5.92306 2.57422L6.06857 2.08301C6.15699 1.78507 6.32229 1.49467 6.60275 1.28516C6.8833 1.07582 7.20899 1.0001 7.51974 1H8.4797ZM7.50607 2.50977L7.36056 3.00098C7.2244 3.45982 6.93621 3.82513 6.52169 4.06445L5.33028 4.75293C4.9675 4.96225 4.56891 5.03929 4.16329 4.98047L3.98946 4.94727L3.49142 4.82812C3.48792 4.82734 3.48373 4.82682 3.48067 4.82617C3.47921 4.82856 3.47735 4.83128 3.47579 4.83398L2.9963 5.66602C2.99471 5.66872 2.99276 5.67137 2.99142 5.67383C2.9935 5.67614 2.99584 5.67906 2.99825 5.68164L3.35079 6.05371C3.68013 6.401 3.8527 6.83292 3.85275 7.31152V8.68848C3.8527 9.16708 3.68013 9.599 3.35079 9.94629L2.99825 10.3184C2.99599 10.3207 2.99337 10.323 2.99142 10.3252C2.99288 10.3279 2.99458 10.331 2.9963 10.334L3.47579 11.166C3.4772 11.1685 3.47931 11.1707 3.48067 11.1729C3.48367 11.1722 3.48798 11.1726 3.49142 11.1719L3.98946 11.0527L4.16329 11.0195C4.56891 10.9607 4.96751 11.0378 5.33028 11.2471L6.52169 11.9355C6.93621 12.1749 7.2244 12.5402 7.36056 12.999L7.50607 13.4902L7.509 13.499C7.51207 13.4991 7.51622 13.4999 7.51974 13.5H8.4797C8.48257 13.5 8.48588 13.4992 8.48849 13.499C8.48939 13.4962 8.49141 13.4934 8.49239 13.4902L8.6379 12.999L8.6965 12.8311C8.84844 12.4508 9.11439 12.1449 9.47677 11.9355L10.6692 11.2471C11.0834 11.008 11.5439 10.9414 12.009 11.0527L12.508 11.1719C12.5108 11.1725 12.5142 11.1724 12.5168 11.1729C12.5182 11.1705 12.5211 11.1686 12.5227 11.166L13.0022 10.334C13.0038 10.3311 13.0047 10.3278 13.0061 10.3252C13.0043 10.3232 13.0022 10.3205 13.0002 10.3184L12.6477 9.94629C12.3186 9.59908 12.1467 9.16687 12.1467 8.68848V7.31152C12.1467 6.83313 12.3186 6.40092 12.6477 6.05371L13.0002 5.68164C13.0024 5.67931 13.0042 5.67603 13.0061 5.67383C13.0048 5.67147 13.0036 5.66858 13.0022 5.66602L12.5227 4.83398C12.521 4.83114 12.5183 4.82869 12.5168 4.82617C12.5142 4.82674 12.5109 4.82744 12.508 4.82812L12.009 4.94727C11.5439 5.05858 11.0834 4.99203 10.6692 4.75293L9.47677 4.06445C9.11439 3.8551 8.84844 3.54923 8.6965 3.16895L8.6379 3.00098L8.49239 2.50977C8.49133 2.50626 8.48948 2.50306 8.48849 2.5H7.509L7.50607 2.50977Z" /></svg>
 }
 
 function SettingsInboxIcon() {

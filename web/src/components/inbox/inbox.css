@@ -921,6 +921,99 @@
   }
 }
 
+/* Phone notification actions sheet: the reference's search field, three delete rows, divider and settings link. */
+@media (max-width: 767px) {
+  .phone-menu-surface.inbox-actions-phone-menu .phone-menu-search {
+    padding-right: 5px;
+    padding-left: 5px;
+  }
+  .inbox-actions-phone-menu__list {
+    position: relative;
+    margin: 0 5px;
+    padding: 0;
+  }
+  .inbox-actions-phone-menu__row {
+    position: absolute;
+    right: 0;
+    left: 0;
+    display: flex;
+    height: 46px;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--pk-text);
+    font-family: inherit;
+    text-decoration: none;
+    outline: none;
+  }
+  .inbox-actions-phone-menu__row:hover,
+  .inbox-actions-phone-menu__row:focus-visible {
+    background: transparent;
+    color: var(--pk-text-strong);
+  }
+  .inbox-actions-phone-menu__row:hover::before,
+  .inbox-actions-phone-menu__row:focus-visible::before {
+    position: absolute;
+    z-index: -1;
+    inset: 2px 0;
+    border-radius: 8px;
+    background: var(--pk-hover);
+    content: "";
+  }
+  .inbox-actions-phone-menu__row:disabled {
+    opacity: .5;
+  }
+  .inbox-actions-phone-menu__icon {
+    display: flex;
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    align-items: center;
+    justify-content: center;
+  }
+  .inbox-actions-phone-menu__icon svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+  }
+  .inbox-actions-phone-menu__label {
+    min-width: 0;
+    overflow: hidden;
+    border: 0;
+    font-size: 13px;
+    font-weight: 450;
+    line-height: 15.6px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .inbox-actions-phone-menu__separator {
+    position: absolute;
+    right: -6px;
+    left: -6px;
+    box-sizing: border-box;
+    height: 12px;
+    padding: 6px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .inbox-actions-phone-menu__separator::after {
+    display: block;
+    height: .5px;
+    background: var(--pk-divider);
+    content: "";
+  }
+  html:root body .app .flow-inbox-row__kind svg {
+    border-style: none;
+  }
+}
+
 /* Phone issue opened from an inbox notification: the inbox bar with the issue's copy strip and full document. */
 .flow-inbox-detail__menu, .flow-inbox-detail__command-strip { display: none; }
 .flow-inbox-detail__bell { position: relative; display: block; width: 14px; height: 14px; }
