@@ -12,13 +12,14 @@ import { PhoneCommandMenu } from './phone-menu'
 type PhoneMenuState = { open: boolean; setOpen: (open: boolean) => void; close: () => void }
 const PhoneMenuContext = createContext<PhoneMenuState | null>(null)
 
-export function DropdownMenu({ children, open: controlledOpen, onOpenChange, defaultOpen, ...props }: ComponentProps<typeof P.Root>) {
+export function DropdownMenu({ children, open: controlledOpen, onOpenChange, defaultOpen, phoneSheet = true, ...props }: ComponentProps<typeof P.Root> & { phoneSheet?: boolean }) {
   const phone = usePhoneLayout()
   const [localOpen, setLocalOpen] = useState(defaultOpen ?? false)
   const open = controlledOpen ?? localOpen
   const setOpen = (next: boolean) => { setLocalOpen(next); onOpenChange?.(next) }
-  return <PhoneMenuContext.Provider value={phone ? { open, setOpen, close: () => setOpen(false) } : null}>
-    {phone ? children : <P.Root open={open} onOpenChange={setOpen} {...props}>{children}</P.Root>}
+  const sheet = phone && phoneSheet
+  return <PhoneMenuContext.Provider value={sheet ? { open, setOpen, close: () => setOpen(false) } : null}>
+    {sheet ? children : <P.Root open={open} onOpenChange={setOpen} {...props}>{children}</P.Root>}
   </PhoneMenuContext.Provider>
 }
 

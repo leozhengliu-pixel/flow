@@ -26,7 +26,7 @@ export function SearchMenus({state,onChange,users}:{state:SearchPageState;onChan
     setFilterOpen(false)
   }
   return <>
-    <DropdownMenu open={filterOpen} onOpenChange={setFilterOpen}>
+    <DropdownMenu phoneSheet={false} open={filterOpen} onOpenChange={setFilterOpen}>
       <DropdownMenuTrigger asChild><button className="workspace-search-tool" type="button" aria-label={t('Add filter')} title={t('Add filter')}><FilterIcon/></button></DropdownMenuTrigger>
       <DropdownMenuContent className="workspace-search-menu" align="end" aria-label={t('Search filters')}>
         <DropdownMenuItem onSelect={()=>{setAdvanced(state);setAdvancedOpen(true)}}><SlidersHorizontal size={15}/>{t('Advanced filter')}</DropdownMenuItem>

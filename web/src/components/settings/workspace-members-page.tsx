@@ -514,7 +514,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
           <Search size={14} />
           <input aria-label={t("Search by name or email")} placeholder={t("Search by name or email")} value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
-        <DropdownMenu>
+        <DropdownMenu phoneSheet={false}>
           <DropdownMenuTrigger asChild>
             <button type="button" className="settings-members-filter" aria-label={t("Member filter")}>
               {t(activeFilter)}
