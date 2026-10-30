@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 )
@@ -119,9 +120,30 @@ func normalizeFlowToolArgs(tool flowMCPTool, args map[string]any) {
 	if len(args) == 0 {
 		return
 	}
+	// Keep the built-in agent and remote MCP clients on the same forgiving path.
+	// Models commonly copy issue chips, resource links, or display names from a
+	// previous result; the reference normalizer reduces those to the key before
+	// handlers resolve it.
+	normalizeAgentToolArgs(tool.Name, args)
 	for key, value := range args {
 		text, ok := value.(string)
 		kind := tool.scalars[key]
+		if key == "priority" && ok {
+			if priority, found := normalizeFlowPriority(text); found {
+				args[key] = float64(priority)
+				continue
+			}
+		}
+		if ok && isFlowStatusKey(tool.Name, key, args) {
+			args[key] = normalizeFlowStatus(text)
+			text = args[key].(string)
+		}
+		if ok && isFlowDateKey(key) {
+			if date := normalizeFlowRelativeDate(text, time.Now().UTC()); date != "" {
+				args[key] = date
+				continue
+			}
+		}
 		if !ok || kind == "" {
 			continue
 		}
@@ -150,4 +172,144 @@ func normalizeFlowToolArgs(tool flowMCPTool, args map[string]any) {
 			}
 		}
 	}
+	normalizeFlowNestedArgs(args)
+}
+
+func normalizeFlowNestedArgs(args map[string]any) {
+	for _, key := range []string{"filters", "advancedFilters"} {
+		items, ok := args[key].([]any)
+		if !ok {
+			continue
+		}
+		for _, raw := range items {
+			item, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			field, _ := item["field"].(string)
+			if field == "priority" {
+				if value, ok := item["value"].(string); ok {
+					if priority, found := normalizeFlowPriority(value); found {
+						item["value"] = strconv.Itoa(priority)
+					}
+				}
+				if values, ok := item["values"].([]any); ok {
+					for index, value := range values {
+						if text, ok := value.(string); ok {
+							if priority, found := normalizeFlowPriority(text); found {
+								values[index] = strconv.Itoa(priority)
+							}
+						}
+					}
+				}
+			}
+			if field == "status" {
+				if value, ok := item["value"].(string); ok {
+					item["value"] = normalizeFlowStatus(value)
+				}
+				if values, ok := item["values"].([]any); ok {
+					for index, value := range values {
+						if text, ok := value.(string); ok {
+							values[index] = normalizeFlowStatus(text)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+var flowPriorityAliases = map[string]int{
+	"none": 0, "no priority": 0, "无优先级": 0, "无优先": 0, "不重要": 0,
+	"urgent": 1, "紧急": 1, "最高": 1,
+	"high": 2, "高": 2, "高优先级": 2,
+	"medium": 3, "normal": 3, "中": 3, "中优先级": 3,
+	"low": 4, "低": 4, "低优先级": 4,
+}
+
+func normalizeFlowPriority(value string) (int, bool) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	priority, ok := flowPriorityAliases[value]
+	return priority, ok
+}
+
+func isFlowStatusKey(tool, key string, args map[string]any) bool {
+	if key == "state" || key == "status" {
+		return true
+	}
+	// `value` is overloaded by save_loop: it can be a label, person, team, or
+	// project name. Only normalize it for the status event trigger.
+	return key == "value" && tool == "save_loop" && strings.EqualFold(strings.TrimSpace(stringArg(args, "event")), "status")
+}
+
+// normalizeFlowStatus maps common localized labels to the stable workflow
+// types/names understood by every tool handler. Unknown labels are preserved.
+func normalizeFlowStatus(value string) string {
+	key := strings.ToLower(strings.TrimSpace(value))
+	aliases := map[string]string{
+		"待办": "backlog", "待处理": "backlog", "未开始": "unstarted", "未启动": "unstarted",
+		"进行中": "started", "处理中": "started", "已开始": "started", "开始": "started",
+		"完成": "completed", "已完成": "completed", "已解决": "completed", "完了": "completed",
+		"取消": "canceled", "已取消": "canceled", "已关闭": "canceled", "关闭": "canceled",
+		"planned": "planned", "计划中": "planned", "规划中": "planned",
+		"active": "active", "活跃": "active", "进行": "active",
+		"completed": "completed", "done": "completed", "finished": "completed",
+		"canceled": "canceled", "cancelled": "canceled", "backlog": "backlog",
+		"unstarted": "unstarted", "started": "started", "in progress": "started",
+	}
+	if normalized, ok := aliases[key]; ok {
+		return normalized
+	}
+	return strings.TrimSpace(value)
+}
+
+func isFlowDateKey(key string) bool {
+	switch key {
+	case "dueDate", "startDate", "targetDate", "completedAt", "createdAt", "startedAt", "remindAt", "snoozedUntil":
+		return true
+	default:
+		return false
+	}
+}
+
+// normalizeFlowRelativeDate accepts the short natural-language date forms
+// models use and emits the ISO date expected by the REST handlers.
+func normalizeFlowRelativeDate(value string, now time.Time) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	base := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	if value == "today" || value == "今天" {
+		return base.Format(time.DateOnly)
+	}
+	if value == "tomorrow" || value == "明天" {
+		return base.AddDate(0, 0, 1).Format(time.DateOnly)
+	}
+	if value == "day after tomorrow" || value == "后天" {
+		return base.AddDate(0, 0, 2).Format(time.DateOnly)
+	}
+	if value == "yesterday" || value == "昨天" {
+		return base.AddDate(0, 0, -1).Format(time.DateOnly)
+	}
+	if value == "next week" || value == "下周" {
+		return base.AddDate(0, 0, 7).Format(time.DateOnly)
+	}
+	if matches := regexp.MustCompile(`^(?:in\s+)?([0-9]+)\s*(day|days|week|weeks|month|months)\s*(?:later)?$`).FindStringSubmatch(value); matches != nil {
+		n, _ := strconv.Atoi(matches[1])
+		if strings.HasPrefix(matches[2], "month") {
+			return base.AddDate(0, n, 0).Format(time.DateOnly)
+		}
+		if strings.HasPrefix(matches[2], "week") {
+			n *= 7
+		}
+		return base.AddDate(0, 0, n).Format(time.DateOnly)
+	}
+	if matches := regexp.MustCompile(`^([0-9]+)\s*(天|周|个月)后$`).FindStringSubmatch(value); matches != nil {
+		n, _ := strconv.Atoi(matches[1])
+		if matches[2] == "周" {
+			n *= 7
+		} else if matches[2] == "个月" {
+			return base.AddDate(0, n, 0).Format(time.DateOnly)
+		}
+		return base.AddDate(0, 0, n).Format(time.DateOnly)
+	}
+	return ""
 }

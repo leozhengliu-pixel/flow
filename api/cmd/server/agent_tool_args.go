@@ -72,9 +72,29 @@ func agentArgumentMode(key string, issueTool bool) agentArgumentKind {
 			return agentArgumentIssue
 		}
 		return agentArgumentReference
-	case strings.HasSuffix(key, "Id") || strings.HasSuffix(key, "Ids"):
-		// Ids never contain spaces, so a leading identifier followed by text is chip text.
+	case key == "issueId" || key == "issueIds" || key == "parentId" || key == "parentIds" || key == "commentId":
 		return agentArgumentIssue
+	case strings.Contains(key, "IssueId") || strings.Contains(key, "IssueIds"):
+		return agentArgumentIssue
+	case key == "team" || key == "teams" || key == "teamId" || key == "teamIds" ||
+		key == "setTeams" || key == "addTeams" || key == "removeTeams" ||
+		key == "project" || key == "projects" || key == "projectId" || key == "projectIds" ||
+		key == "setProjects" || key == "addProjects" || key == "removeProjects" ||
+		key == "initiative" || key == "initiatives" || key == "initiativeId" || key == "initiativeIds" ||
+		key == "setInitiatives" || key == "addInitiatives" || key == "removeInitiatives" || key == "parentInitiatives" ||
+		key == "document" || key == "documents" || key == "documentId" || key == "documentIds" ||
+		key == "cycle" || key == "cycleId" || key == "milestone" || key == "milestoneId" ||
+		key == "release" || key == "releaseId" || key == "releaseIds" || key == "setReleases" || key == "addReleases" || key == "removeReleases" || key == "view" || key == "viewId" ||
+		key == "user" || key == "userId" || key == "assignee" || key == "assigneeId" ||
+		key == "delegate" || key == "delegateId" || key == "lead" || key == "leadId" || key == "owner" || key == "ownerId" ||
+		key == "creator" || key == "creatorId" || key == "template" || key == "templateId" || key == "skill" || key == "skillId" ||
+		key == "parentTeam" || key == "parentTeamId" || key == "sourceTeam" || key == "sourceTeamId" || key == "leadTeam":
+		return agentArgumentReference
+	case strings.HasSuffix(key, "Ids"):
+		// Unknown plural id fields are still references, but never issue chip text.
+		return agentArgumentReference
+	case strings.HasSuffix(key, "Id"):
+		return agentArgumentReference
 	}
 	return agentArgumentText
 }

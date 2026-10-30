@@ -1437,6 +1437,7 @@ func resolveStateID(data domain.Bootstrap, teamID, query string) (string, error)
 	if query == "" {
 		return "", nil
 	}
+	query = normalizeFlowStatus(query)
 	states := statesForTeam(&data, teamID)
 	for _, match := range []func(domain.WorkflowState) bool{
 		func(item domain.WorkflowState) bool { return strings.EqualFold(query, item.ID) },
@@ -1447,7 +1448,11 @@ func resolveStateID(data domain.Bootstrap, teamID, query string) (string, error)
 			return states[index].ID, nil
 		}
 	}
-	return "", fmt.Errorf("issue state %q not found in this team's workflow", query)
+	names := make([]string, 0, len(states))
+	for _, state := range states {
+		names = append(names, state.Name)
+	}
+	return "", fmt.Errorf("issue state %q not found in this team's workflow; use one of: %s", query, strings.Join(names, ", "))
 }
 func resolveNullableUserID(data domain.Bootstrap, args map[string]any, key string) (*string, error) {
 	value, present := nullableStringArg(args, key)
@@ -1499,12 +1504,11 @@ func resolveNullableCycleID(data domain.Bootstrap, args map[string]any, key stri
 	if value == "" {
 		return &value, nil
 	}
-	for _, item := range data.Cycles {
-		if equalFoldAny(value, item.ID, item.Name, fmt.Sprint(item.Number)) {
-			return &item.ID, nil
-		}
+	item, err := mcpFindCycle(data, value, stringArg(args, "team"))
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("cycle not found")
+	return &item.ID, nil
 }
 func resolveLabelIDs(data domain.Bootstrap, queries []string, resourceType string) ([]string, error) {
 	ids := []string{}
@@ -1521,7 +1525,17 @@ func resolveLabelIDs(data domain.Bootstrap, queries []string, resourceType strin
 			}
 		}
 		if found == "" {
-			return nil, fmt.Errorf("label %q not found", query)
+			choices := make([]string, 0)
+			for _, item := range data.Labels {
+				itemType := item.ResourceType
+				if itemType == "" {
+					itemType = "issue"
+				}
+				if itemType == resourceType && item.Name != "" {
+					choices = append(choices, item.Name)
+				}
+			}
+			return nil, fmt.Errorf("label %q not found; use a label ID or name%s", query, mcpChoiceHint(choices))
 		}
 		ids = append(ids, found)
 	}
