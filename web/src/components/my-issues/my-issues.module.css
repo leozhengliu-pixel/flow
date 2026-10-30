@@ -62,7 +62,7 @@
   .tabsMenuItem>span{border:0}
   .tabsMenuItem:hover,.tabsMenuItem:focus-visible{background:var(--theme-surface-hover);outline:0}
       :global(:root[data-theme="dark"]) .iconButton{background:var(--phone-control-bg);color:var(--phone-control-fg)}
-  :global(:root[data-theme="dark"]) .iconButton:global(.ui-pill)[aria-pressed=true],:global(:root[data-theme="dark"]) .iconButton:global(.ui-pill)[data-state=open]{background:var(--ui-pill-active-bg);color:var(--bright)}
+  :global(:root[data-theme="dark"]) .iconButton:global(.ui-pill)[aria-pressed=true],:global(:root[data-theme="dark"]) .iconButton:global(.ui-pill)[data-state=open]{background:var(--inbox-toolbar-open-bg);color:var(--bright)}
 }
 
 @media(max-width:767px){.viewsSubheader.viewsSubheader{gap:6px;border-style:none}}

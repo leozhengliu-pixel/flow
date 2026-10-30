@@ -264,3 +264,58 @@ test.describe('desktop my issues tab strip', () => {
     expect(new Set(names).size).toBe(5)
   })
 })
+
+test.describe('mobile Assigned details panel', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('opens the right aligned details drawer over a scrim with four summary tabs', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-assigned-details-${testInfo.project.name}-${testInfo.retry}`
+    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: '[mobile] Assigned details', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(response.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as { viewer: { id: string }; teams: Array<{ id: string }>; states: Array<{ id: string; type: string }> }
+    const teamId = bootstrap.teams[0].id
+    const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
+    for (const title of ['[mobile] Assigned detail one', '[mobile] Assigned detail two']) {
+      const created = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description: '', teamId, stateId, assigneeId: bootstrap.viewer.id } })
+      expect(created.status()).toBe(201)
+    }
+
+    await page.goto(`/${workspaceKey}/my-issues/assigned`)
+    await expect(page.locator('main').first()).toBeVisible()
+    await page.getByRole('button', { name: 'Open details', exact: true }).click()
+    await page.waitForTimeout(500)
+
+    const scrim = page.locator('[data-testid="my-issues-details-scrim"]')
+    await expect(scrim).toBeVisible()
+    expect((await scrim.boundingBox())?.y).toBeCloseTo(87.5, 0)
+    const drawer = page.locator('[data-testid="my-issues-details-drawer"]')
+    await expect(drawer).toBeVisible()
+    const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }))
+    const drawerBox = await drawer.boundingBox()
+    expect(drawerBox?.x).toBeCloseTo(viewport.width - 350, 0)
+    expect(drawerBox?.width).toBeCloseTo(350, 0)
+    const panel = page.locator('[data-testid="my-issues-details-panel"]')
+    const panelBox = await panel.boundingBox()
+    expect(panelBox?.x).toBeCloseTo(viewport.width - 346, 0)
+    expect(panelBox?.width).toBeCloseTo(338, 0)
+    expect(panelBox?.height).toBeCloseTo(viewport.height - 95.5, 0)
+    await expect(panel).toHaveCSS('border-radius', '10px')
+    const tabs = panel.getByRole('tab')
+    await expect(tabs).toHaveCount(4)
+    await expect(tabs).toHaveText(['Labels', 'Priority', 'Projects', 'Teams'])
+    await expect(panel.getByRole('tabpanel')).toContainText('No labels used')
+
+    await page.getByRole('tab', { name: 'Teams', exact: true }).click()
+    await expect(page.getByRole('tab', { name: 'Teams', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(panel.getByRole('tabpanel')).toHaveAttribute('aria-label', 'Teams summary')
+    await page.getByRole('tab', { name: 'Labels', exact: true }).click()
+    await expect(panel.getByRole('tabpanel')).toContainText('No labels used')
+
+    await scrim.click({ position: { x: 10, y: 20 } })
+    await expect(drawer).toBeHidden()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+})

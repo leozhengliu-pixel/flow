@@ -176,6 +176,7 @@ function deriveSummary(groups: MyIssuesGroupData[]): MyIssuesDetailsSummary {
     labels: countItems(issues.flatMap(issue => issue.labels ?? []).map(item => ({ id: item.id, label: item.name, color: item.color }))),
     priority: countItems(issues.map(issue => ({ id: String(issue.priority), label: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][issue.priority] }))),
     projects: countItems(issues.filter(issue => issue.project).map(issue => ({ id: issue.project!.id, label: issue.project!.name, color: issue.project!.color }))),
+    teams: countItems(issues.filter(issue => issue.teamId).map(issue => ({ id: issue.teamId!, label: issue.teamName ?? issue.teamId! }))),
   }
 }
 function countItems(items: Omit<MyIssuesSummaryItem, 'count'>[]) {
