@@ -17,6 +17,8 @@ import styles from "./agent-page.module.css";
 /** The most chats the empty Agent page lists under the composer (newest first); older ones stay in the chat switcher. */
 export const AGENT_HISTORY_LIMIT = 50;
 
+const WIDE_TITLE = /[\u1100-\u11ff\u2e80-\u9fff\u3040-\u30ff\u3130-\u318f\uac00-\ud7af]/;
+
 /**
  * The reference app's "Recent agent chats" under the new-chat composer: the newest chats with an unread dot, title and short
  * age. A row opens its chat; right-click offers Copy link, Open in new tab and Open in toolbar.
@@ -53,7 +55,7 @@ export function AgentHistoryList({
       <nav aria-label={t("Recent agent chats")}>
         <div className={styles.historyScroll}>
           <div className={styles.historyList}>
-            {recent.map((session) => {
+            {recent.map((session, rowIndex) => {
               const unread = agentSessionUnread(session);
               const href = hrefFor(session);
               return (
@@ -61,6 +63,8 @@ export function AgentHistoryList({
                   <FlowContextMenuTrigger asChild>
                     <a
                       className={styles.historyRow}
+                      data-agent-chat-row={rowIndex}
+                      data-cjk={WIDE_TITLE.test(session.title) || undefined}
                       data-unread={unread || undefined}
                       draggable={false}
                       href={href}
@@ -72,10 +76,10 @@ export function AgentHistoryList({
                       }}
                     >
                       {unread && <>
-                        <span aria-hidden="true" className={styles.historyDot} />
+                        <span aria-hidden="true" className={styles.historyDot} data-agent-unread-dot="" />
                         <span className="sr-only">{t("Unread")}: </span>
                       </>}
-                      <span className={styles.historyTitle} data-i18n-ignore>{session.title}</span>
+                      <span className={styles.historyTitle} data-agent-chat-title="" data-i18n-ignore>{session.title}</span>
                       <AgentOriginBadge origin={session.origin} />
                       <time className={styles.historyTime} dateTime={session.updatedAt}>{formatAgentHistoryTime(session.updatedAt, t)}</time>
                     </a>

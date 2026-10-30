@@ -45,7 +45,7 @@ export function AgentSkillsPicker({
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
-        <button aria-expanded={open} aria-label={t("Skills")} className={`${styles.skillsButton}${className ? ` ${className}` : ""}`} type="button">
+        <button aria-expanded={open} aria-label={t("Skills")} data-agent-skills="" className={`${styles.skillsButton}${className ? ` ${className}` : ""}`} type="button">
           <AgentSkillsIcon />
           <span>{t("Skills")}</span>
           <AgentChevronDownIcon />
