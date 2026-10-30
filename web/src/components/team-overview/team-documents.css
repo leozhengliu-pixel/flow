@@ -225,6 +225,11 @@
 .team-documents-search button { display: grid; place-items: center; width: 24px; height: 24px; border: 0; background: transparent; color: var(--theme-text-secondary); }
 
 /* Selection bar: "N selected | ⌘ Actions | agent | ✕". */
+.team-docs-selection-bar,
+.team-docs-selection-buttons { display: contents; }
+.team-docs-selection-command,
+.team-docs-selection-close-glyph,
+.team-docs-check-phone { display: none; }
 .team-docs-selection {
   position: absolute;
   bottom: 16px;
@@ -482,4 +487,84 @@
   .team-docs-title > svg { width: 16px; height: 16px; border: 0; color: var(--phone-document-icon) !important; opacity: .55; }
   .team-docs-title > strong { border: 0; color: var(--bright); font: 500 13px/normal var(--font); }
   .team-docs-more { display: none; }
+
+  .team-docs-row[data-selected="true"],
+  .team-docs-row[data-selected="true"]:hover { background: transparent; }
+  .team-docs-row[data-selected="true"]::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 8px;
+    bottom: 0;
+    left: 8px;
+    z-index: -1;
+    border-radius: 8px;
+    background: var(--theme-selected);
+  }
+  .team-docs-row[data-selected="true"] .team-docs-title > strong { color: var(--phone-doc-selected-title); }
+
+  .team-docs-selection-bar {
+    display: flex;
+    position: absolute;
+    right: 0;
+    bottom: 16px;
+    left: 0;
+    z-index: 94;
+    height: 48px;
+    justify-content: center;
+  }
+  .team-docs-selection {
+    position: static;
+    height: 48px;
+    max-width: none;
+    padding: 8px;
+    gap: 8px;
+    border: 0;
+    border-radius: 9999px;
+    background: var(--phone-group-bg);
+    box-shadow: var(--pk-shadow);
+    color: var(--bright);
+    font-size: 12px;
+    transform: none;
+  }
+  .team-docs-selection > span {
+    display: inline;
+    margin: 0;
+    padding: 0 2px 0 12px;
+    color: var(--bright);
+    font: 400 12px/18px var(--font);
+    white-space: nowrap;
+  }
+  .team-docs-selection-label > span { display: inline-block; font-variant-numeric: tabular-nums; }
+  .team-docs-selection-kbd,
+  .team-docs-selection-close,
+  .team-docs-check-desktop { display: none; }
+  .team-docs-selection-command,
+  .team-docs-selection-close-glyph { display: inline-flex; }
+  .team-docs-check-phone { display: block; }
+  .team-docs-selection-buttons { display: flex; align-items: center; gap: 8px; }
+  .team-docs-selection button { min-width: 0; height: 32px; }
+  .team-docs-selection .team-docs-selection-actions {
+    width: 84.375px;
+    height: 32px;
+    padding: 0 10px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    background: var(--set-control);
+    color: var(--phone-group-title);
+    font: 500 12px/normal var(--font);
+  }
+  .team-docs-selection .team-docs-selection-actions span { color: var(--bright); }
+  .team-docs-selection .team-docs-selection-actions svg { width: 14px; height: 14px; color: var(--phone-group-title); }
+  .team-docs-selection .team-docs-selection-agent { display: none; }
+  .team-docs-selection .team-docs-selection-clear {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--phone-group-title);
+  }
+  .team-docs-selection .team-docs-selection-clear svg { width: 14px; height: 14px; color: var(--phone-icon-secondary); }
 }

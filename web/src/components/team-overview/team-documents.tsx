@@ -67,6 +67,21 @@ function MoreIcon() {
   return <svg aria-hidden="true" fill="currentColor" focusable="false" height={16} viewBox="0 0 16 16" width={16}><path d="M3 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/></svg>
 }
 
+/** The reference app's selection checkbox tick. */
+function CheckGlyph({ className }: { className?: string }) {
+  return <svg aria-hidden="true" className={className} fill="currentColor" focusable="false" height={10} viewBox="0 0 10 8" width={10}><path d="M3.46975 5.70757L1.88358 4.1225C1.65832 3.8974 1.29423 3.8974 1.06897 4.1225C0.843675 4.34765 0.843675 4.7116 1.06897 4.93674L3.0648 6.93117C3.29006 7.15628 3.65414 7.15628 3.8794 6.93117L8.93103 1.88306C9.15633 1.65792 9.15633 1.29397 8.93103 1.06883C8.70578 0.843736 8.34172 0.843724 8.11646 1.06879C8.11645 1.0688 8.11643 1.06882 8.11642 1.06883L3.46975 5.70757Z"/></svg>
+}
+
+/** The reference app's bulk-action command glyph. */
+function CommandGlyph() {
+  return <svg aria-hidden="true" fill="currentColor" focusable="false" height={14} viewBox="0 0 16 16" width={14}><path d="M2 4.57143C2 5.99159 3.15126 7.14286 4.57143 7.14286H5.85714V8.85714H4.57143C3.15126 8.85714 2 10.0084 2 11.4286C2 12.8487 3.15126 14 4.57143 14C5.99159 14 7.14286 12.8487 7.14286 11.4286V10.1429H8.85714V11.4286C8.85714 12.8487 10.0084 14 11.4286 14C12.8487 14 14 12.8487 14 11.4286C14 10.0084 12.8487 8.85714 11.4286 8.85714H10.1429V7.14286H11.4286C12.8487 7.14286 14 5.99159 14 4.57143C14 3.15126 12.8487 2 11.4286 2C10.0084 2 8.85714 3.15126 8.85714 4.57143V5.85714H7.14286V4.57143C7.14286 3.15126 5.99159 2 4.57143 2C3.15126 2 2 3.15126 2 4.57143ZM5.85714 4.57143V5.85714H4.57143C3.86135 5.85714 3.28571 5.28151 3.28571 4.57143C3.28571 3.86135 3.86135 3.28571 4.57143 3.28571C5.28151 3.28571 5.85714 3.86135 5.85714 4.57143ZM7.14286 8.85714V7.14286H8.85714V8.85714H7.14286ZM4.57143 10.1429H5.85714V11.4286C5.85714 12.1387 5.28151 12.7143 4.57143 12.7143C3.86135 12.7143 3.28571 12.1387 3.28571 11.4286C3.28571 10.7185 3.86135 10.1429 4.57143 10.1429ZM10.1429 10.1429H11.4286C12.1387 10.1429 12.7143 10.7185 12.7143 11.4286C12.7143 12.1387 12.1387 12.7143 11.4286 12.7143C10.7185 12.7143 10.1429 12.1387 10.1429 11.4286V10.1429ZM10.1429 4.57143C10.1429 3.86135 10.7185 3.28571 11.4286 3.28571C12.1387 3.28571 12.7143 3.86135 12.7143 4.57143C12.7143 5.28151 12.1387 5.85714 11.4286 5.85714H10.1429V4.57143Z"/></svg>
+}
+
+/** The reference app's bulk-clear close glyph. */
+function CloseGlyph() {
+  return <svg aria-hidden="true" fill="currentColor" focusable="false" height={14} viewBox="0 0 16 16" width={14}><path d="M2.96967 2.96967C3.26256 2.67678 3.73744 2.67678 4.03033 2.96967L8 6.939L11.9697 2.96967C12.2626 2.67678 12.7374 2.67678 13.0303 2.96967C13.3232 3.26256 13.3232 3.73744 13.0303 4.03033L9.061 8L13.0303 11.9697C13.2966 12.2359 13.3208 12.6526 13.1029 12.9462L13.0303 13.0303C12.7374 13.3232 12.2626 13.3232 11.9697 13.0303L8 9.061L4.03033 13.0303C3.73744 13.3232 3.26256 13.3232 2.96967 13.0303C2.67678 12.7374 2.67678 12.2626 2.96967 11.9697L6.939 8L2.96967 4.03033C2.7034 3.76406 2.6792 3.3474 2.89705 3.05379L2.96967 2.96967Z"/></svg>
+}
+
 export function TeamDocuments({ creating, data, documents, onNavigate, onNew, onNewInGroup, onReload, onReloadResources, resources, team }: {
   creating: boolean
   data: BootstrapData
@@ -302,7 +317,6 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
     />
   }
 
-  const selectionLabel = `${selectedVisible.length} ${t('selected')}`
   return (
     <div className="team-documents" data-created={visibleProperties.has('created')} data-updated={visibleProperties.has('updated')} data-owner={visibleProperties.has('owner')}>
       <div className="team-documents-toolbar">
@@ -332,11 +346,15 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
             {!hasDocuments && <><p>{t('Create documents to share notes, decisions, and plans with your team.')}</p><button type="button" disabled={creating} aria-busy={creating || undefined} onClick={onNew}>{t('Create document')}</button></>}
           </section></div>
         </div>}
-      {selectedVisible.length > 0 && <div className="team-docs-selection" role="toolbar" aria-label={t('Selected documents')}>
-        <span>{selectionLabel}</span>
-        <button className="team-docs-selection-actions" type="button" onClick={() => openCommandMenu()}><kbd>⌘</kbd>{t('Actions')}</button>
-        <FlowTooltip label={t('Ask agent')}><button aria-label={t('Ask agent')} className="team-docs-selection-agent" type="button" onClick={() => setAgentOpen(true)}><AgentCursorGlyph size={16}/></button></FlowTooltip>
-        <button type="button" onClick={() => setSelected([])} aria-label={t('Clear selection')}><X size={14}/></button>
+      {selectedVisible.length > 0 && <div className="team-docs-selection-bar">
+        <div className="team-docs-selection" role="toolbar" aria-label={t('Selected documents')}>
+          <span className="team-docs-selection-label"><span>{selectedVisible.length}</span> {t('selected')}</span>
+          <div className="team-docs-selection-buttons">
+            <button className="team-docs-selection-actions" type="button" onClick={() => openCommandMenu()}><kbd className="team-docs-selection-kbd">⌘</kbd><span className="team-docs-selection-command"><CommandGlyph/></span><span className="team-docs-selection-actions-label">{t('Actions')}</span></button>
+            <FlowTooltip label={t('Ask agent')}><button aria-label={t('Ask agent')} className="team-docs-selection-agent" type="button" onClick={() => setAgentOpen(true)}><AgentCursorGlyph size={16}/></button></FlowTooltip>
+            <button className="team-docs-selection-clear" type="button" onClick={() => setSelected([])} aria-label={t('Clear selection')}><X className="team-docs-selection-close" size={14}/><span className="team-docs-selection-close-glyph"><CloseGlyph/></span></button>
+          </div>
+        </div>
       </div>}
       {agentOpen && selectedDocuments.length > 0 && <Suspense fallback={null}>
         <AgentChatPanel data={data} issues={[]} open onClose={() => setAgentOpen(false)} pageContext={selectedDocuments.map(document => ({ type: 'document' as const, id: document.id, label: documentDisplayTitle(document, t) }))}/>
@@ -380,7 +398,7 @@ function DocumentRow({ active, created, ctx, document, formatDate, formatRelativ
       <FlowTooltip label={t('Select document')} shortcut="X">
         <label className="team-docs-check" onClick={event => event.stopPropagation()}>
           <input aria-label={t('Select document')} checked={selected} onChange={event => onToggle(document.id, event.target.checked)} type="checkbox"/>
-          <span aria-hidden="true"><Check size={10} strokeWidth={3}/></span>
+          <span aria-hidden="true"><Check className="team-docs-check-desktop" size={10} strokeWidth={3}/><CheckGlyph className="team-docs-check-phone"/></span>
         </label>
       </FlowTooltip>
       <span className="team-docs-title"><DocumentGlyph document={document}/><strong data-i18n-ignore={document.title.trim() ? true : undefined}>{title}</strong></span>
