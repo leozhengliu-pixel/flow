@@ -156,6 +156,29 @@ func (s *SQLiteStore) issueTextSelection(workspace, term string) (string, []any)
 	return "SELECT s.issue_id FROM issue_search_documents s WHERE s.workspace_key=? AND " + match, []any{workspace, value}
 }
 
+// issueTextVisibleSelection narrows a full-text selection to the viewer's
+// visible teams and explicitly shared issues before the outer query reads
+// rows. shared_issues is the CTE issueAccessCTE defines for q.
+func (s *SQLiteStore) issueTextVisibleSelection(q IssueRecordQuery, term string) (string, []any) {
+	selection, values := s.issueTextSelection(q.Workspace, term)
+	teams, teamArgs := bindList("vis.team_id", q.Access.VisibleTeamIDs)
+	join := " JOIN "
+	if s.dialect == "mysql" {
+		// The visibility index covers workspace_key,id,team_id, so the
+		// team filter does not read the issue row for every full-text hit.
+		join = " JOIN issue_records vis FORCE INDEX (issue_records_search_visibility_idx) ON vis.workspace_key=? AND vis.id=hit.issue_id "
+	}
+	from := "SELECT hit.issue_id FROM (" + selection + ") hit"
+	if join != " JOIN " {
+		from += join
+	} else {
+		from += " JOIN issue_records vis ON vis.workspace_key=? AND vis.id=hit.issue_id"
+	}
+	args := append(values, q.Workspace)
+	args = append(args, teamArgs...)
+	return from + " WHERE (" + teams + " OR vis.id IN (SELECT id FROM shared_issues))", args
+}
+
 // Retrieve a bounded union once: semantic synonyms must not independently
 // decode the same issue, nor discard the caller's indexed facet predicates.
 func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueRecordQuery, terms []string, labelIDs []string, limit int, visit func(domain.Issue) error) error {
@@ -167,7 +190,19 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 	if len(terms) == 0 && len(labelIDs) == 0 {
 		return nil
 	}
-	where, args, err := issueRecordWhere(q)
+	// A non-admin viewer's full-text candidates are restricted to their
+	// visible teams (and shared issues) inside the candidate selection, so the
+	// outer query does not run the shared_issues check per hit. With label-only
+	// candidates the label predicate is the outer match, so visibility stays
+	// there.
+	pushVisibility := q.Access != nil && !q.Access.Admin && len(terms) > 0 && len(labelIDs) == 0
+	outerQuery := q
+	if pushVisibility {
+		access := *q.Access
+		access.Admin = true
+		outerQuery.Access = &access
+	}
+	where, args, err := issueRecordWhere(outerQuery)
 	if err != nil {
 		return err
 	}
@@ -184,6 +219,9 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 		var selections []string
 		for _, term := range terms {
 			selection, values := s.issueTextSelection(q.Workspace, term)
+			if pushVisibility {
+				selection, values = s.issueTextVisibleSelection(q, term)
+			}
 			selections = append(selections, selection)
 			textArgs = append(textArgs, values...)
 		}

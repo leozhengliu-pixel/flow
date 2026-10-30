@@ -257,6 +257,10 @@ func (s *SQLiteStore) ensureIssueRecords(ctx context.Context) error {
 		"issue_records_team_updated_idx ON issue_records(workspace_key,team_id,archived,updated_at,id)",
 		"issue_records_search_ids_idx ON issue_records(workspace_key,id,archived,collection_order)",
 		"issue_records_search_candidates_idx ON issue_records(workspace_key,id,archived,updated_at,identifier)",
+		"issue_records_search_visibility_idx ON issue_records(workspace_key,id,team_id)",
+		// Covers the label-driven join so the team/priority/archived filters
+		// and the sort key do not read the clustered issue payload per row.
+		"issue_records_label_cover_idx ON issue_records(workspace_key,id,archived,team_id,priority,updated_at,sort_order)",
 		"issue_records_assignee_counts_idx ON issue_records(workspace_key,assignee_id,archived,state_id,team_id)",
 		"issue_records_creator_counts_idx ON issue_records(workspace_key,creator_id,archived,state_id,team_id)",
 		"issue_attributes_value_idx ON issue_attribute_records(workspace_key,field,value,issue_id)",
