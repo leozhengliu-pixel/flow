@@ -12,11 +12,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"flow/api/internal/config"
 	"flow/api/internal/store"
+
+	"github.com/go-jose/go-jose/v4"
 )
 
 func TestAuthProvidersAndEmailGate(t *testing.T) {
@@ -64,6 +67,15 @@ func TestExternalOIDCRoleMapping(t *testing.T) {
 	}
 	if got := externalOIDCRole(provider, map[string]any{"groups": []any{"unknown"}}); got != "member" {
 		t.Fatalf("unmapped OIDC role should use default, got %q", got)
+	}
+}
+
+func TestOIDCRejectsOversizedRSAJWK(t *testing.T) {
+	modulus := new(big.Int).Lsh(big.NewInt(1), 4096)
+	keyJSON := []byte(`{"kty":"RSA","n":"` + base64.RawURLEncoding.EncodeToString(modulus.Bytes()) + `","e":"AQAB"}`)
+	var key jose.JSONWebKey
+	if err := json.Unmarshal(keyJSON, &key); err == nil || !strings.Contains(err.Error(), "modulus too large") {
+		t.Fatalf("oversized RSA JWK error = %v", err)
 	}
 }
 
