@@ -5,6 +5,7 @@
 export const reviewsZhCN: Record<string, string> = {
   // --- List
   "Created by you": "由你创建",
+  "To review": "待审查",
   "You’re reviewing": "你正在评审",
   "Needs review from your GitHub team": "需要你的 GitHub 团队评审",
   "No open reviews": "没有打开的评审",
