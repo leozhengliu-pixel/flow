@@ -3,11 +3,12 @@ import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, ChevronDown, Menu, Trash2 } from 'lucide-react'
 import { useCurrentTime } from '@/hooks/use-current-time'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { toast } from '@/lib/toast'
 import { confirmAction } from '@/components/ui/action-dialog-service'
-import { AddViewIcon } from '@/components/ui/view-action-icons'
+import { AddViewIcon, SidebarLeftIcon } from '@/components/ui/view-action-icons'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { workspaceFeatureEnabled } from '@/components/layout/sidebar-customization-state'
@@ -80,6 +81,7 @@ function writeViewOrder(workspaceKey: string, order: string[]) {
 export function PulsePage(props: Props) {
   const { data, view, viewId, viewMode } = props
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const workspaceKey = data.workspace.urlKey
   const navigate = useCallback((path: string) => props.onNavigate ? props.onNavigate(path) : window.history.pushState(null, '', path), [props])
   const pulseViews = useMemo(() => data.savedViews.filter(saved => saved.resource === 'pulse' && saved.scope === 'personal' && saved.ownerId === data.viewer.id), [data.savedViews, data.viewer.id])
@@ -230,7 +232,7 @@ export function PulsePage(props: Props) {
   return <main className="flow-framed-workspace main-panel pulse-page">
     <header className="pulse-header">
       <div className="pulse-header-top">
-        <button aria-label={t('Open workspace sidebar')} className="pulse-mobile-menu" data-sidebar-trigger onClick={props.onOpenSidebar} type="button"><Menu size={16}/></button>
+        <button aria-label={t('Open workspace sidebar')} className="pulse-mobile-menu" data-sidebar-trigger onClick={props.onOpenSidebar} type="button">{phone ? <SidebarLeftIcon width={14} height={14}/> : <Menu size={14}/>}</button>
         <h2>{t('Pulse')}</h2>
         <span className="pulse-header-spacer"/>
         <PulseSubscriptionMenu cadence={schedule} onChange={next => void changeSchedule(next)}/>
@@ -240,7 +242,7 @@ export function PulsePage(props: Props) {
           {PULSE_TABS.map((item, index) => {
             const current = !activeSavedView && !creating && view === item.id
             return <FlowTooltip key={item.id} label={t(item.label)} shortcut={String(index + 1)}><a aria-current={current ? 'page' : undefined} className="ui-pill pulse-tab" href={pulsePath(workspaceKey, item.id)} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); goTab(item.id) }}>
-              {t(item.label)}{item.id === 'following' && unread > 0 && <i aria-label={t('Unread updates')} className="pulse-tab-dot"/>}
+              <span>{t(item.label)}</span>{item.id === 'following' && unread > 0 && <i aria-label={t('Unread updates')} className="pulse-tab-dot"/>}
             </a></FlowTooltip>
           })}
           <PulseViewTabs activeId={activeSavedView?.id} onDelete={saved => void removeView(saved)} onDuplicate={saved => void duplicateView(saved)} onEdit={saved => navigate(pulseViewPath(workspaceKey, saved.id, 'edit'))} onFavorite={saved => void props.onUpdateSavedView(saved.id, { favorite: !saved.favorite })} onOpen={goView} onReorder={reorderViews} views={orderedViews} workspaceKey={workspaceKey}/>

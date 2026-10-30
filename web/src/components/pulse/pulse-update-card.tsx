@@ -1,4 +1,5 @@
 import { useResetOnChange } from '@/hooks/use-reset-on-change'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import type { Editor } from '@tiptap/react'
@@ -12,6 +13,8 @@ import { IssueDescriptionEditor } from '@/components/issue/issue-description-edi
 import { insertPickedFiles } from '@/components/issue/editor/insert-picked-files'
 import type { DescriptionSnapshot } from '@/components/issue/editor/editor-content'
 import { HealthGlyph } from '@/components/project-detail/health-glyph'
+import { AddReactionIcon } from '@/components/issue/issue-icons'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { EmojiPicker } from '@/components/reactions/emoji-picker'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { FlowTooltip } from '@/components/ui/tooltip'
@@ -61,6 +64,7 @@ function commentsLabel(open: boolean, count: number) {
 export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
   const { item, viewer } = props
   const { t, formatDate } = useI18n()
+  const phone = usePhoneLayout()
   const update = item.update
   const author = liveActorUser(update.user)
   const type = item.kind === 'project' ? t('project') : t('initiative')
@@ -151,7 +155,7 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
         <PulseSourceTitle item={item} onNavigate={props.onNavigate}/>
         {/* The whole status line is the link to the update (the reference app wraps it in one anchor). */}
         <a className="pulse-post-byline" href={pulseUpdateLink(item)} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); props.onNavigate(`${item.source.url}#update-${update.id}`) }}>
-          <span className={`pulse-post-health is-${update.health}`}><HealthGlyph className="pulse-health-glyph" health={update.health}/>{t(PULSE_HEALTH_LABELS[item.kind][update.health])}</span>
+          <span className={`pulse-post-health is-${update.health}`}>{phone && update.health === 'onTrack' ? <PulsePhoneHealthGlyph/> : <HealthGlyph className="pulse-health-glyph" health={update.health}/>}<span>{t(PULSE_HEALTH_LABELS[item.kind][update.health])}</span></span>
           <UserAvatar avatarUrl={author.avatarUrl} className="avatar pulse-byline-avatar" name={userName(author)}/>
           <span className="pulse-post-author" data-i18n-ignore>{userName(author)}</span>
           <FlowTooltip label={formatDate(created, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}>
@@ -160,7 +164,7 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
         </a>
       </div>
       <DropdownMenu.Root onOpenChange={setMenuOpen}>
-        <DropdownMenu.Trigger asChild><button aria-label={t('Post actions')} className="pulse-post-menu-button" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger>
+        <DropdownMenu.Trigger asChild><button aria-label={t('Post actions')} className="pulse-post-menu-button" type="button">{phone ? <FlowGlyph name="ellipsis" size={14}/> : <MoreHorizontal size={14}/>}</button></DropdownMenu.Trigger>
         <DropdownMenu.Portal><DropdownMenu.Content align="end" className="pulse-menu pulse-post-menu" data-flow-motion="floating" sideOffset={4}>
           <DropdownMenu.Item onSelect={() => props.onNavigate(item.source.url)}>{item.kind === 'initiative' ? <ViewGlyph color="currentColor" icon="Initiative" style={{ width: 14, height: 14, flexShrink: 0 }}/> : <SquareArrowOutUpRight size={14}/>}{item.kind === 'project' ? t('Go to update in project') : t('Go to update in initiative')}</DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => void copy(pulseUpdateLink(item), item.kind === 'project' ? t('The project update URL for {name} is copied to clipboard') : t('The initiative update URL for {name} is copied to clipboard'))}><Link2 size={14}/>{t('Copy link')}</DropdownMenu.Item>
@@ -181,7 +185,7 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
       </FlowTooltip>
       <div className="pulse-post-reactions">
         {Object.entries(reactions).filter(([, userIds]) => userIds.length).map(([emoji, userIds]) => <button aria-pressed={userIds.includes(viewer.id)} key={emoji} onClick={() => props.onReact(item, emoji).catch(() => undefined)} type="button"><span>{emoji}</span>{userIds.length}</button>)}
-        <EmojiPicker align="start" onSelect={emoji => props.onReact(item, emoji).catch(() => undefined)}><button aria-label={t('Add reaction')} className="pulse-footer-button" type="button"><SmilePlus size={14}/></button></EmojiPicker>
+        <EmojiPicker align="start" onSelect={emoji => props.onReact(item, emoji).catch(() => undefined)}><button aria-label={t('Add reaction')} className="pulse-footer-button" type="button">{phone ? <AddReactionIcon size={14}/> : <SmilePlus size={14}/>}</button></EmojiPicker>
       </div>
     </footer>
     {commentsOpen && <section aria-label={t('Comments')} className="pulse-post-comments">
@@ -239,4 +243,8 @@ function PulseSourceTitle({ item, onNavigate }: { item: PulseItem; onNavigate: (
       <button className="pulse-link-button" onClick={() => { setOpen(false); onNavigate(item.source.url) }} type="button">{item.kind === 'project' ? t('Open project') : t('Open initiative')}</button>
     </Popover.Content></Popover.Portal>
   </Popover.Root>
+}
+
+function PulsePhoneHealthGlyph() {
+  return <svg aria-hidden="true" className="pulse-health-glyph" height="16" viewBox="0 0 16 16" width="16"><circle cx="8" cy="8" fill="currentColor" fillOpacity={.25} r="8"/><path d="M12.6807 5.7029C12.9925 5.97566 13.0241 6.44948 12.7513 6.76121L9.71942 10.2263C9.56569 10.402 9.33892 10.4961 9.10596 10.4808C8.873 10.4656 8.66044 10.3427 8.53094 10.1485L6.76432 7.49855L4.37742 10.2263C4.10466 10.5381 3.63083 10.5696 3.31911 10.2969C3.00739 10.0241 2.97581 9.55028 3.24857 9.23856L6.28056 5.77356C6.43429 5.59788 6.66106 5.50379 6.89401 5.51905C7.12696 5.53432 7.33952 5.65718 7.46902 5.85142L9.23562 8.50133L11.6224 5.77347C11.8952 5.46174 12.369 5.43015 12.6807 5.7029Z" fill="currentColor"/></svg>
 }
