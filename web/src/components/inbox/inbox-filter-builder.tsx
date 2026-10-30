@@ -1,6 +1,7 @@
 import { cloneElement, forwardRef, Fragment, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import * as Popover from '@radix-ui/react-popover'
+import { Command } from 'cmdk'
 import { Plus, X } from 'lucide-react'
 
 import { PriorityIcon, ProjectIcon, ReviewStatusGlyph, ReviewStatusValueGlyph, WorkflowStatusPropertyGlyph } from '@/components/issue/issue-icons'
@@ -10,6 +11,8 @@ import { useI18n } from '@/i18n/i18n'
 import { AvatarImage, UserAvatar } from '@/components/ui/user-avatar'
 import { PersonHover } from '@/components/property/person-info'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { PhoneMenu } from '@/components/ui/phone-menu'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { inboxValueMenuHeight, partitionInboxOptions, UNMATCHED_OPTION_ID } from './inbox-filter-model'
 
 import {
@@ -60,10 +63,28 @@ const properties: Array<{ id: InboxFilterProperty; label: string }> = [
   { id: 'reviewStatus', label: 'Review status' },
 ]
 
+/** Team is only offered by the phone sheet; keep it out of the desktop picker but resolvable in applied chips. */
+const allProperties: Array<{ id: InboxFilterProperty; label: string }> = [...properties, { id: 'team', label: 'Team' }]
+
 // Initiative and review status only appear when there is something to filter on.
 const OPTIONAL_PROPERTIES = new Set<InboxFilterProperty>(['initiative', 'reviewStatus'])
 function availableProperties(options: InboxFilterOptions) {
   return properties.filter(property => !OPTIONAL_PROPERTIES.has(property.id) || (options[property.id]?.length ?? 0) > 0)
+}
+
+/** The phone sheet lists Team between From and Project, like the reference filter menu. */
+const phoneProperties: Array<{ id: InboxFilterProperty; label: string }> = [
+  { id: 'notificationType', label: 'Notification type' },
+  { id: 'from', label: 'From' },
+  { id: 'team', label: 'Team' },
+  { id: 'project', label: 'Project' },
+  { id: 'initiative', label: 'Initiative' },
+  { id: 'issuePriority', label: 'Issue priority' },
+  { id: 'issueStatusType', label: 'Issue status type' },
+]
+
+function availablePhoneProperties(options: InboxFilterOptions) {
+  return phoneProperties.filter(property => property.id !== 'initiative' || (options.initiative?.length ?? 0) > 0)
 }
 
 const operatorOptions: Array<{ id: InboxFilterOperator; label: string }> = [
@@ -103,6 +124,7 @@ export function InboxFilterBuilder({
   onOpenChange,
 }: InboxFilterBuilderProps) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const [activeProperty, setActiveProperty] = useState<InboxFilterProperty>()
   const [commandOpen, setCommandOpen] = useState(false)
@@ -146,6 +168,7 @@ export function InboxFilterBuilder({
       'aria-haspopup': 'dialog',
       'aria-label': normalizedFilters.length ? 'Add another filter' : 'Add filter',
       label: normalizedFilters.length ? 'Add another filter' : 'Add filter',
+      'data-inbox-filter-trigger': '',
     } as object)
     : <DefaultTrigger count={normalizedFilters.length} ariaLabel={normalizedFilters.length ? 'Add another filter' : 'Add filter'} />
 
@@ -161,7 +184,15 @@ export function InboxFilterBuilder({
   return (
     <>
       <span className={styles.triggerAnchor} ref={triggerAnchorRef}>
-        <Popover.Root open={open} onOpenChange={setOpen}>
+        {phone ? <>
+          {isValidElement(toolbarTrigger) ? cloneElement(toolbarTrigger, { onClick: () => setOpen(true) } as object) : toolbarTrigger}
+          <InboxPhoneFilterMenu
+            open={open}
+            onOpenChange={setOpen}
+            options={fieldOptions}
+            onToggle={(property, option) => updateFilters(appendInboxFilterValue(normalizedFilters, property, option))}
+          />
+        </> : <Popover.Root open={open} onOpenChange={setOpen}>
           <Popover.Trigger asChild>{toolbarTrigger}</Popover.Trigger>
           <Popover.Portal>
             <Popover.Content data-flow-motion="floating"
@@ -200,7 +231,7 @@ export function InboxFilterBuilder({
               />
             </Popover.Content>
           </Popover.Portal>
-        </Popover.Root>
+        </Popover.Root>}
       </span>
       <Dialog open={commandOpen} onOpenChange={setCommandOpen}>
         <DialogContent className={styles.commandMenu} overlayClassName="command-overlay" aria-describedby={undefined}>
@@ -239,6 +270,50 @@ function FilterBarAdd({ options, itemCount, onSelect }: { options: InboxFilterOp
       <PropertyPicker activeProperty={property} showShortcut searchPlaceholder="Filter notifications by…" options={options} itemCount={itemCount} searchRef={searchRef} onActivate={setProperty} onToggleValue={onSelect} onValueSelected={() => setOpen(false)} onReturnToProperties={() => { setProperty(undefined); requestAnimationFrame(() => searchRef.current?.focus()) }}/>
     </Popover.Content></Popover.Portal>
   </Popover.Root>
+}
+
+function InboxPhoneFilterMenu({ open, onOpenChange, options, onToggle }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  options: InboxFilterOptions
+  onToggle: (property: InboxFilterProperty, option: InboxFilterOption) => void
+}) {
+  const { t } = useI18n()
+  const [property, setProperty] = useState<InboxFilterProperty>()
+  const propertyItems = availablePhoneProperties(options)
+  const values = property ? options[property] ?? [] : []
+  const ordered = property === 'notificationType' ? [...values].sort((a, b) => a.label.localeCompare(b.label)) : values
+  const close = (next: boolean) => { if (!next) setProperty(undefined); onOpenChange(next) }
+  return <PhoneMenu
+    open={open}
+    onOpenChange={close}
+    label={t('Add filter')}
+    className={`${styles.phoneMenu} ${property ? 'inbox-filter-phone-values' : 'inbox-filter-phone-properties'}`}
+  >
+    <Command key={property ?? 'properties'} label={t('Add filter')}>
+      <div className="phone-menu-search">
+        <Command.Input aria-label={t('Command menu')} placeholder={t(property ? 'Filter…' : 'Add Filter…')}/>
+      </div>
+      <Command.List style={property ? undefined : { height: propertyItems.length * 46 + 11 }}>
+        {property ? ordered.map(option => <Command.Item
+          key={option.id}
+          value={`${option.label} ${option.keywords ?? ''}`}
+          onSelect={() => { onToggle(property, option); close(false) }}
+        >
+          <OptionVisual option={option} property={property}/>
+          <span data-i18n-ignore={option.i18nIgnore || undefined}>{option.i18nIgnore ? option.label : t(option.label)}</span>
+        </Command.Item>) : propertyItems.map((item, index) => <Command.Item
+          key={item.id}
+          value={`${t(item.label)} ${item.label}`}
+          style={{ top: 6 + index * 46 }}
+          onSelect={() => setProperty(item.id)}
+        >
+          <PhonePropertyIcon property={item.id}/>
+          <span>{t(item.label)}</span>
+        </Command.Item>)}
+      </Command.List>
+    </Command>
+  </PhoneMenu>
 }
 
 function FilterCommand({ options, itemCount, onSelect, onClose }: {
@@ -603,7 +678,7 @@ function AppliedFilterBar({
   return <section ref={barRef} className={styles.appliedBar} data-inbox-filter-bar aria-label="Applied filters">
     <div className={styles.appliedFilters}>
       {filters.map(filter => {
-        const property = properties.find(item => item.id === filter.property)
+        const property = allProperties.find(item => item.id === filter.property)
         if (!property) return null
         return <AppliedCondition
           condition={filter}
@@ -802,6 +877,7 @@ function filterValueNoun(property?: InboxFilterProperty) {
   if (property === 'reviewStatus') return 'review statuses'
   if (property === 'notificationType') return 'notification types'
   if (property === 'from') return 'people'
+  if (property === 'team') return 'teams'
   if (property === 'project') return 'projects'
   if (property === 'initiative') return 'initiatives'
   return 'values'
@@ -813,6 +889,36 @@ const DefaultTrigger = forwardRef<HTMLButtonElement, ComponentProps<'button'> & 
     {count ? <span>{count}</span> : null}
   </button>
 })
+
+function PhonePropertyIcon({ property }: { property: InboxFilterProperty }) {
+  if (property === 'team') return <TeamFilterGlyph />
+  if (property === 'issuePriority') return <PhonePriorityGlyph />
+  if (property === 'issueStatusType') return <span className={styles.statusPropertyIcon} aria-hidden="true"><PhoneStatusTypeGlyph /></span>
+  return <PropertyIcon property={property} />
+}
+
+/** Reference glyphs used by the phone filter sheet (the desktop picker keeps its compact set). */
+function TeamFilterGlyph() {
+  return <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+    <path d="M12.5 13.5V15H3.5V13.5H12.5ZM13.5 12.5V3.5C13.5 2.94771 13.0523 2.5 12.5 2.5H3.5C2.94771 2.5 2.5 2.94772 2.5 3.5V12.5C2.5 13.0523 2.94772 13.5 3.5 13.5V15L3.24414 14.9873C2.06772 14.8677 1.13227 13.9323 1.0127 12.7559L1 12.5V3.5C1 2.20566 1.98361 1.14082 3.24414 1.0127L3.5 1H12.5L12.7559 1.0127C14.0164 1.14082 15 2.20566 15 3.5V12.5L14.9873 12.7559C14.8677 13.9323 13.9323 14.8677 12.7559 14.9873L12.5 15V13.5C13.0523 13.5 13.5 13.0523 13.5 12.5Z"/>
+    <path d="M10 6C10 7.10457 9.10457 8 8 8C6.89543 8 6 7.10457 6 6C6 4.89543 6.89543 4 8 4C9.10457 4 10 4.89543 10 6Z"/>
+    <path d="M11.405 12H4.59566C4.18761 12 3.88127 11.6641 4.0449 11.307C4.40693 10.5169 5.38905 9.33333 8.02449 9.33333C10.673 9.33333 11.6222 10.5286 11.9603 11.3187C12.1123 11.6738 11.8066 12 11.405 12Z"/>
+  </svg>
+}
+
+function PhonePriorityGlyph() {
+  return <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+    <rect x="1" y="8" width="3" height="6" rx="1"/>
+    <rect x="6" y="5" width="3" height="9" rx="1"/>
+    <rect x="11" y="2" width="3" height="12" rx="1"/>
+  </svg>
+}
+
+function PhoneStatusTypeGlyph() {
+  return <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+    <rect x="1" y="1" width="12" height="12" rx="6" stroke="currentColor" strokeWidth="1.5"/>
+  </svg>
+}
 
 function PropertyIcon({ property }: { property: InboxFilterProperty }) {
   if (property === 'notificationType') return <InboxFilterPropertyGlyph property={property} />

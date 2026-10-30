@@ -42,6 +42,7 @@ export interface InboxFilterTarget {
   notificationType: string
   actorId: string
   projectId?: string
+  teamIds?: string[]
   initiativeIds: string[]
   issuePriority: number
   issueStatusType: string
@@ -54,6 +55,7 @@ export function matchesInboxFilter(notification: InboxFilterTarget, filter: Inbo
   let match = false
   if (filter.property === 'notificationType') match = values.has(notification.notificationType)
   if (filter.property === 'from') match = values.has(notification.actorId)
+  if (filter.property === 'team') match = Boolean(notification.teamIds?.some(id => values.has(id)))
   if (filter.property === 'project') match = notification.projectId ? values.has(notification.projectId) : Boolean(notification.issueId) && values.has('__none__')
   if (filter.property === 'initiative') match = notification.initiativeIds.length ? notification.initiativeIds.some(id => values.has(id)) : values.has('__none__')
   if (filter.property === 'issuePriority') match = Boolean(notification.issueId) && values.has(String(notification.issuePriority))

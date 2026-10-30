@@ -5,6 +5,7 @@ import type { PersonIdentity } from '@/lib/people'
 export type InboxFilterProperty =
   | 'notificationType'
   | 'from'
+  | 'team'
   | 'project'
   | 'initiative'
   | 'issuePriority'
