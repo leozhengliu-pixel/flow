@@ -388,6 +388,15 @@ func TestNormalizeAgentToolArgs(t *testing.T) {
 	if agentIssueReferenceKey("DEV-42") != "" || agentIssueReferenceKey("DEV-42 Title") != "DEV-42" {
 		t.Error("agentIssueReferenceKey")
 	}
+	references := map[string]any{
+		"team":     "https://flow.test/acme/team/eng/board",
+		"project":  "[Roadmap](https://flow.test/acme/project/roadmap-1/overview)",
+		"assignee": "@张伟",
+	}
+	normalizeAgentToolArgs("save_issue", references)
+	if references["team"] != "eng" || references["project"] != "roadmap-1" || references["assignee"] != "张伟" {
+		t.Fatalf("resource references = %#v", references)
+	}
 }
 
 // Chips reach the model as copyable references, never as glued chip text.

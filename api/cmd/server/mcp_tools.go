@@ -1201,6 +1201,7 @@ func paginate[T any](items []T, args map[string]any) map[string]any {
 }
 
 func mcpFindIssue(data domain.Bootstrap, query string) (domain.Issue, error) {
+	query = strings.TrimSpace(query)
 	for _, item := range data.Issues {
 		if equalFoldAny(query, item.ID, item.Identifier) {
 			return item, nil
@@ -1221,7 +1222,16 @@ func mcpFindIssue(data domain.Bootstrap, query string) (domain.Issue, error) {
 			return item, nil
 		}
 	}
-	return domain.Issue{}, fmt.Errorf("issue %q not found", query)
+	choices := make([]string, 0, min(len(data.Issues), 12))
+	for _, item := range data.Issues {
+		if item.Identifier != "" {
+			choices = append(choices, item.Identifier)
+		}
+		if len(choices) == 12 {
+			break
+		}
+	}
+	return domain.Issue{}, fmt.Errorf("issue %q not found; use an issue ID or identifier%s", query, mcpChoiceHint(choices))
 }
 
 // issueAnswersTo reports whether query names the issue: its id, identifier,
@@ -1231,24 +1241,49 @@ func issueAnswersTo(issue domain.Issue, query string) bool {
 }
 
 func mcpFindTeam(data domain.Bootstrap, query string) (domain.Team, error) {
+	query = strings.TrimSpace(query)
 	for _, item := range data.Teams {
 		if equalFoldAny(query, item.ID, item.Key, item.Name) {
 			return item, nil
 		}
 	}
-	return domain.Team{}, fmt.Errorf("team %q not found", query)
+	choices := make([]string, 0, len(data.Teams))
+	for _, item := range data.Teams {
+		label := item.Key
+		if label == "" {
+			label = item.Name
+		}
+		if label != "" {
+			choices = append(choices, label)
+		}
+	}
+	return domain.Team{}, fmt.Errorf("team %q not found; use a team ID, key, or name%s", query, mcpChoiceHint(choices))
 }
 
 func mcpFindUser(data domain.Bootstrap, query string) (domain.User, error) {
-	if strings.EqualFold(query, "me") {
-		return data.Viewer, nil
-	}
-	for _, item := range data.Users {
-		if equalFoldAny(query, item.ID, item.Name, item.DisplayName, item.Email) {
-			return item, nil
+	match := mcpResolveUser(data, query)
+	switch match.Status {
+	case mcpUserFound:
+		return match.found, nil
+	case mcpUserAmbiguous:
+		candidates := make([]string, 0, len(match.Candidates))
+		for _, candidate := range match.Candidates {
+			if name, ok := candidate["name"].(string); ok && name != "" {
+				candidates = append(candidates, name)
+			}
 		}
+		return domain.User{}, fmt.Errorf("user %q is ambiguous; choose one of: %s", query, strings.Join(candidates, ", "))
+	default:
+		choices := make([]string, 0, len(data.Users))
+		for _, item := range data.Users {
+			if item.DisplayName != "" {
+				choices = append(choices, item.DisplayName)
+			} else if item.Name != "" {
+				choices = append(choices, item.Name)
+			}
+		}
+		return domain.User{}, fmt.Errorf("user %q not found; use a user ID, email, display name, or `me`%s", query, mcpChoiceHint(choices))
 	}
-	return domain.User{}, fmt.Errorf("user %q not found", query)
 }
 
 // mcpUserMatch is what one person reference in a bulk request (save_team members, get_user queries) resolved to.
@@ -1352,6 +1387,7 @@ func mcpResolveUsers(data domain.Bootstrap, queries []string) (found []domain.Us
 }
 
 func mcpFindProject(data domain.Bootstrap, query string) (domain.Project, error) {
+	query = strings.TrimSpace(query)
 	for _, item := range data.Projects {
 		if equalFoldAny(query, item.ID, item.Name, item.SlugID) {
 			return item, nil
@@ -1361,10 +1397,17 @@ func mcpFindProject(data domain.Bootstrap, query string) (domain.Project, error)
 	if index := domain.ProjectIndexBySlugRef(data.Projects, mcpSlugRef(query, "project")); index >= 0 {
 		return data.Projects[index], nil
 	}
-	return domain.Project{}, fmt.Errorf("project %q not found", query)
+	choices := make([]string, 0, len(data.Projects))
+	for _, item := range data.Projects {
+		if item.Name != "" {
+			choices = append(choices, item.Name)
+		}
+	}
+	return domain.Project{}, fmt.Errorf("project %q not found; use a project ID, slug, or name%s", query, mcpChoiceHint(choices))
 }
 
 func mcpFindInitiative(data domain.Bootstrap, query string) (domain.Initiative, error) {
+	query = strings.TrimSpace(query)
 	for _, item := range data.Initiatives {
 		if equalFoldAny(query, item.ID, item.Name, item.SlugID) {
 			return item, nil
@@ -1373,7 +1416,23 @@ func mcpFindInitiative(data domain.Bootstrap, query string) (domain.Initiative, 
 	if index := domain.InitiativeIndexBySlugRef(data.Initiatives, mcpSlugRef(query, "initiative")); index >= 0 {
 		return data.Initiatives[index], nil
 	}
-	return domain.Initiative{}, fmt.Errorf("initiative %q not found", query)
+	choices := make([]string, 0, len(data.Initiatives))
+	for _, item := range data.Initiatives {
+		if item.Name != "" {
+			choices = append(choices, item.Name)
+		}
+	}
+	return domain.Initiative{}, fmt.Errorf("initiative %q not found; use an initiative ID, slug, or name%s", query, mcpChoiceHint(choices))
+}
+
+func mcpChoiceHint(choices []string) string {
+	if len(choices) == 0 {
+		return ""
+	}
+	if len(choices) > 12 {
+		choices = choices[:12]
+	}
+	return "; valid choices: " + strings.Join(choices, ", ")
 }
 
 // mcpSlugRef is the slug a project / initiative URL (".../project/<slug>/...")
@@ -1396,6 +1455,7 @@ func mcpSlugRef(query, kind string) string {
 }
 
 func mcpFindDocument(data domain.Bootstrap, query string) (domain.Document, error) {
+	query = strings.TrimSpace(query)
 	for _, item := range data.Documents {
 		if equalFoldAny(query, item.ID, item.SlugID, item.Title) {
 			return item, nil
@@ -1407,7 +1467,21 @@ func mcpFindDocument(data domain.Bootstrap, query string) (domain.Document, erro
 			return item, nil
 		}
 	}
-	return domain.Document{}, fmt.Errorf("document %q not found", query)
+	if slug := mcpSlugRef(query, "document"); slug != query {
+		for _, item := range data.Documents {
+			refs := append([]string{item.ID, item.SlugID, item.Title}, item.PreviousSlugIDs...)
+			if equalFoldAny(slug, refs...) {
+				return item, nil
+			}
+		}
+	}
+	choices := make([]string, 0, len(data.Documents))
+	for _, item := range data.Documents {
+		if item.Title != "" {
+			choices = append(choices, item.Title)
+		}
+	}
+	return domain.Document{}, fmt.Errorf("document %q not found; use a document ID, slug, or title%s", query, mcpChoiceHint(choices))
 }
 
 func mcpFindReview(data domain.Bootstrap, query string) (domain.CodeReview, error) {

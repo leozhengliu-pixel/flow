@@ -366,6 +366,7 @@ func (s *server) saveMCPCustomerRequest(ctx context.Context, actor mcpActor, dat
 // mcpFindCycle finds a cycle by ID, name or number (with team when several
 // teams have cycles), or "current", "next" or "previous" of a team.
 func mcpFindCycle(data domain.Bootstrap, query, teamQuery string) (domain.Cycle, error) {
+	query = strings.TrimSpace(query)
 	cycles := data.Cycles
 	if teamQuery != "" {
 		team, err := mcpFindTeam(data, teamQuery)
@@ -377,18 +378,32 @@ func mcpFindCycle(data domain.Bootstrap, query, teamQuery string) (domain.Cycle,
 	matches := []domain.Cycle{}
 	number, numberErr := strconv.Atoi(strings.TrimPrefix(strings.TrimSpace(query), "#"))
 	for _, cycle := range cycles {
-		if cycle.ID == query || strings.EqualFold(cycle.Name, query) && cycle.Name != "" || numberErr == nil && cycle.Number == number {
+		if strings.EqualFold(cycle.ID, query) || strings.EqualFold(cycle.Name, query) && cycle.Name != "" || numberErr == nil && cycle.Number == number {
 			matches = append(matches, cycle)
 		}
 	}
-	if len(matches) == 0 && teamQuery != "" && slices.Contains([]string{"current", "next", "previous"}, strings.ToLower(query)) {
-		if cycle := relativeMCPCycle(cycles, strings.ToLower(query)); cycle != nil {
+	if len(matches) == 0 && teamQuery != "" {
+		which := map[string]string{"当前": "current", "本周期": "current", "下一个": "next", "下一周期": "next", "上一个": "previous", "上一周期": "previous"}[strings.ToLower(strings.TrimSpace(query))]
+		if which == "" {
+			which = strings.ToLower(query)
+		}
+		if cycle := relativeMCPCycle(cycles, which); cycle != nil {
 			matches = append(matches, *cycle)
 		}
 	}
 	switch len(matches) {
 	case 0:
-		return domain.Cycle{}, fmt.Errorf("cycle %q not found", query)
+		choices := make([]string, 0, len(cycles))
+		for _, item := range cycles {
+			label := item.Name
+			if label == "" {
+				label = strconv.Itoa(item.Number)
+			}
+			if label != "" {
+				choices = append(choices, label)
+			}
+		}
+		return domain.Cycle{}, fmt.Errorf("cycle %q not found; use a cycle ID, number, name, or current/next/previous with a team%s", query, mcpChoiceHint(choices))
 	case 1:
 		return matches[0], nil
 	}

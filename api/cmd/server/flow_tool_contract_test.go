@@ -287,6 +287,34 @@ func TestLooseToolArgumentsAreNormalisedOnBothPaths(t *testing.T) {
 	}
 }
 
+func TestNaturalLanguageToolArgumentsAreNormalised(t *testing.T) {
+	cases := []struct {
+		tool string
+		args map[string]any
+		want map[string]any
+	}{
+		{"save_issue", map[string]any{"title": "x", "team": "ENG", "priority": "高", "state": "进行中", "dueDate": "明天"}, map[string]any{"priority": float64(2), "state": "started"}},
+		{"save_project", map[string]any{"name": "x", "setTeams": []any{"ENG"}, "priority": "紧急", "state": "已完成", "targetDate": "in 2 weeks"}, map[string]any{"priority": float64(1), "state": "completed"}},
+		{"save_view", map[string]any{"name": "x", "filters": []any{map[string]any{"field": "priority", "values": []any{"高"}}, map[string]any{"field": "status", "values": []any{"进行中"}}}}, map[string]any{}},
+		{"save_loop", map[string]any{"name": "x", "event": "labels", "value": "完成"}, map[string]any{"value": "完成"}},
+		{"save_loop", map[string]any{"name": "x", "event": "status", "value": "进行中"}, map[string]any{"value": "started"}},
+	}
+	for _, item := range cases {
+		tool, ok := flowToolByName(item.tool)
+		if !ok {
+			t.Fatalf("missing tool %s", item.tool)
+		}
+		if err := checkFlowToolArgs(tool, item.args); err != nil {
+			t.Fatalf("%s rejected natural arguments: %v", item.tool, err)
+		}
+		for key, want := range item.want {
+			if item.args[key] != want {
+				t.Errorf("%s %s = %#v, want %#v", item.tool, key, item.args[key], want)
+			}
+		}
+	}
+}
+
 // A save_document patch passed as one object is refused on the built-in path before anything runs, with the
 // shape it needs, and the document keeps its version.
 func TestBuiltinRefusesObjectPatchBeforeSaving(t *testing.T) {
