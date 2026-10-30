@@ -14,8 +14,10 @@ import (
 // cycle_id filter, so the scope history has to start from the activity log.
 // Callers must still load the returned IDs through an authorized issue query.
 func (s *SQLiteStore) CycleHistoryIssueIDs(ctx context.Context, workspace, cycleID string) ([]string, error) {
-	cycle, before, initial := s.jsonText("data", "metadata.cycle"), s.jsonText("data", "metadata.cycleBefore"), s.jsonText("data", "metadata.initialCycle")
-	rows, err := s.db.QueryContext(ctx, "SELECT DISTINCT resource_id FROM workspace_content_records WHERE workspace_key=? AND kind='activity' AND ("+cycle+"=? OR "+before+"=? OR "+initial+"=?)", workspace, cycleID, cycleID, cycleID)
+	// issue_activity_cycles indexes the cycle/cycleBefore/initialCycle
+	// references of every activity, so this stays a short index read instead
+	// of parsing every activity row in the workspace (the cycle graph's cost).
+	rows, err := s.db.QueryContext(ctx, "SELECT DISTINCT issue_id FROM issue_activity_cycles WHERE workspace_key=? AND cycle_id=?", workspace, cycleID)
 	if err != nil {
 		return nil, err
 	}
