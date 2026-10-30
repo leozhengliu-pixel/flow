@@ -220,8 +220,12 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 	order := "i.updated_at DESC,i.id"
 	var orderArgs []any
 	if text != "" {
-		order = "CASE WHEN i.identifier=? THEN 0 WHEN LOWER(i.title)=LOWER(?) THEN 1 ELSE 2 END,i.updated_at DESC,i.id"
-		orderArgs = []any{text, text}
+		// An exact identifier ranks first. An exact title is left to the
+		// caller's score (buildSearchResults ranks by score and freshness);
+		// keeping it here forced a clustered row read per full-text hit,
+		// which dominated common-term searches.
+		order = "CASE WHEN i.identifier=? THEN 0 ELSE 2 END,i.updated_at DESC,i.id"
+		orderArgs = []any{text}
 	}
 	if q.Sort != "" && q.Sort != "sortOrder" {
 		column := map[string]string{"createdAt": "created_at", "updatedAt": "updated_at", "title": "title", "priority": "priority"}[q.Sort]
@@ -238,7 +242,13 @@ func (s *SQLiteStore) SearchIssueCandidateTerms(ctx context.Context, q IssueReco
 		}
 		order, orderArgs = expression+" "+direction+",i.id", nil
 	}
-	inner := `SELECT i.id FROM issue_records i WHERE ` + where + ` AND ` + textMatch + ` ORDER BY ` + order + ` LIMIT ?`
+	rowSource := "issue_records i"
+	if s.dialect == "mysql" && len(terms) > 0 {
+		// The matched ids are read through the covering index so ordering
+		// by updatedAt does not fetch every matched issue row.
+		rowSource = "issue_records i FORCE INDEX (issue_records_search_candidates_idx)"
+	}
+	inner := `SELECT i.id FROM ` + rowSource + ` WHERE ` + where + ` AND ` + textMatch + ` ORDER BY ` + order + ` LIMIT ?`
 	params := append(prefixArgs, args...)
 	params = append(params, textArgs...)
 	params = append(params, orderArgs...)
@@ -314,7 +324,13 @@ func (s *SQLiteStore) SearchIssueIDs(ctx context.Context, q IssueRecordQuery, te
 	where += " AND i.id IN (" + selection + ")"
 	args = append(args, values...)
 	prefix, prefixArgs := issueAccessCTE(q)
-	rows, err := s.db.QueryContext(ctx, prefix+"SELECT i.id FROM issue_records i WHERE "+where+" ORDER BY i.collection_order,i.id LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
+	rowSource := "issue_records i"
+	if s.dialect == "mysql" {
+		// Both the id filter and the collection order come from this
+		// covering index; without the hint MySQL fetches every matched row.
+		rowSource = "issue_records i FORCE INDEX (issue_records_search_ids_idx)"
+	}
+	rows, err := s.db.QueryContext(ctx, prefix+"SELECT i.id FROM "+rowSource+" WHERE "+where+" ORDER BY i.collection_order,i.id LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
 	if err != nil {
 		return nil, false, err
 	}
