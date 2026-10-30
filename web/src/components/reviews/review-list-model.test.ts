@@ -46,11 +46,12 @@ describe('review list contracts', () => {
     expect(groupReviews(reviews, { ...defaultReviewDisplay('created'), grouping: 'author' }, viewer.id).map(g => g.id)).toEqual([viewer.id, teammate.id])
     expect(groupReviews(reviews, { ...defaultReviewDisplay('created'), grouping: 'repository' }, viewer.id)).toHaveLength(2)
     expect(groupReviews(reviews, { ...defaultReviewDisplay('created'), grouping: 'none' }, viewer.id)[0].items).toHaveLength(2)
+    expect(groupReviews([...reviews, item('d', { author: viewer, draft: true })], { ...defaultReviewDisplay('created'), grouping: 'focus' }, viewer.id).map(g => g.id)).toEqual(['ready', 'draft', 'requested'])
   })
   it('validates persisted filters and preferences', () => {
     expect(parseReviewFilters('null')).toEqual([])
     expect(parseReviewFilters('[{"id":"__proto__","values":[]}]')).toEqual([])
-    expect(parseReviewDisplay('{"grouping":"focus","ordering":"importance"}', 'created')).toMatchObject({ grouping: 'status', ordering: 'opened' })
+    expect(parseReviewDisplay('{"grouping":"focus","ordering":"importance"}', 'created')).toMatchObject({ grouping: 'focus', ordering: 'importance' })
     expect(parseReviewDisplay('{"properties":["id","nonexistent"]}', 'for-you').properties).toEqual(['id'])
   })
 })

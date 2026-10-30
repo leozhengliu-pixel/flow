@@ -48,6 +48,7 @@ import { PullRequestReviewShortcutsProvider } from "./pull-request-review-shortc
 import { useOptionalPullRequestReviewShortcuts } from "./pull-request-review-shortcuts";
 import { reviewProviderIdentifier } from "./review-provider-model";
 import { ReviewStateIcon, ReviewTitle } from "./review-state-icon";
+import { ReviewGroupChevron, ReviewPhoneStateIcon } from "./review-row-icons";
 import { ReviewOverview } from "./review-overview";
 import { getAnchoredCommentEvent, scrollToAnchoredComment } from "@/lib/review-comment-navigation";
 import { AiBurstGlyph } from "@/components/ui/agent-glyph";
@@ -212,7 +213,10 @@ function ReviewList({
   ].map((item) => ({
     ...item,
     // A tab's badge counts what that view can show with its own defaults; the open tab already has its display applied.
-    count: item.id === view ? baseItems.length : reviewBaseItems(data, item.id, defaultReviewDisplay(item.id)).length,
+    count: item.id === view
+      ? baseItems.length
+      // The incoming badge counts review requests; the viewer's own pull requests live under Created.
+      : reviewBaseItems(data, item.id, defaultReviewDisplay(item.id)).filter((review) => item.id === 'created' || review.author.id !== data.viewer.id).length,
   }));
   return (
     <section className="reviews-list-pane">
@@ -273,8 +277,9 @@ function ReviewList({
                     }
                   >
                     {display.grouping === "author" || display.grouping === "repository" ? <span data-i18n-ignore>{group.label}</span> : <span>{t(group.label)}</span>}
-                    {collapsed && <small>{group.items.length}</small>}
+                    <small>{group.items.length}</small>
                     <i className="review-group-disclosure" aria-hidden="true" />
+                    <ReviewGroupChevron className="review-group-chevron" />
                   </button>
                 )}
                 {!collapsed &&
@@ -340,32 +345,35 @@ function ReviewRow({ item, href, onOpen, display }: { item: CodeReview; href: st
         onOpen();
       }}
     >
-      <ReviewStateIcon review={item} className="review-row-icon" />
-      <span className="review-list-row__content">
-        <span className="review-list-row__title" data-i18n-ignore>
-          <ReviewTitle title={item.title} />
+      <span className="review-row-inner">
+        <ReviewStateIcon review={item} className="review-row-icon" />
+        <ReviewPhoneStateIcon review={item} className="review-row-icon review-row-icon--phone" />
+        <span className="review-list-row__content">
+          <span className="review-list-row__title" data-i18n-ignore>
+            <ReviewTitle title={item.title} />
+          </span>
+          {metadata && (
+            <small className="review-list-row__metadata">
+              {display.properties.includes("repository") && <span data-i18n-ignore>{item.repositoryName}</span>}
+              {display.properties.includes("id") && <span data-i18n-ignore>{reviewProviderIdentifier(item)}</span>}
+              {display.properties.includes("status") && <span>{t(reviewStatusLabels[reviewStatus(item)])}</span>}
+            </small>
+          )}
         </span>
-        {metadata && (
-          <small className="review-list-row__metadata">
-            {display.properties.includes("repository") && <span data-i18n-ignore>{item.repositoryName}</span>}
-            {display.properties.includes("id") && <span data-i18n-ignore>{reviewProviderIdentifier(item)}</span>}
-            {display.properties.includes("status") && <span>{t(reviewStatusLabels[reviewStatus(item)])}</span>}
-          </small>
+        {display.properties.includes("quick") && item.quickToReview && <Zap className="review-row-quick" aria-label={t("Quick to review")} />}
+        {display.properties.includes("author") && (
+          <PersonHover person={item.author}>
+            <span>
+              <UserAvatar name={item.author.displayName} avatarUrl={item.author.avatarUrl} className="review-filter-avatar" />
+            </span>
+          </PersonHover>
+        )}
+        {display.properties.includes("opened") && (
+          <time dateTime={item.createdAt} title={new Date(item.createdAt).toLocaleString()}>
+            {reviewShortAge(item.createdAt)}
+          </time>
         )}
       </span>
-      {display.properties.includes("quick") && item.quickToReview && <Zap className="review-row-quick" aria-label={t("Quick to review")} />}
-      {display.properties.includes("author") && (
-        <PersonHover person={item.author}>
-          <span>
-            <UserAvatar name={item.author.displayName} avatarUrl={item.author.avatarUrl} className="review-filter-avatar" />
-          </span>
-        </PersonHover>
-      )}
-      {display.properties.includes("opened") && (
-        <time dateTime={item.createdAt} title={new Date(item.createdAt).toLocaleString()}>
-          {reviewShortAge(item.createdAt)}
-        </time>
-      )}
     </a>
   );
 }

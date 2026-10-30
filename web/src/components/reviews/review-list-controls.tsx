@@ -52,7 +52,7 @@ export function ReviewFilters({ data, items, filters, onChange, filterBarHost }:
 
 export function ReviewDisplayMenu({ display, view, onChange }: { display: ReviewDisplay; view: ReviewView; onChange: (display: ReviewDisplay) => void }) {
   const { t } = useI18n()
-  const grouping = [{ value: 'none', label: 'No grouping' }, ...(view === 'for-you' ? [{ value: 'focus', label: 'Focus' }] : []), { value: 'status', label: 'Status' }, { value: 'author', label: 'Author' }, { value: 'repository', label: 'Repository' }]
+  const grouping = [{ value: 'none', label: 'No grouping' }, { value: 'focus', label: 'Focus' }, { value: 'status', label: 'Status' }, { value: 'author', label: 'Author' }, { value: 'repository', label: 'Repository' }]
   const ordering = [...(display.grouping === 'focus' ? [{ value: 'importance', label: 'Importance' }] : []), { value: 'name', label: 'Name' }, { value: 'author', label: 'Author' }, { value: 'status', label: 'Status' }, { value: 'opened', label: 'Opened' }, { value: 'updated', label: 'Updated' }]
   return <Popover.Root><Popover.Trigger asChild><button type="button" className="review-ghost-button" aria-label={t('Display options')}><DisplayIcon/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" className="review-list-options" align="end" sideOffset={5} collisionPadding={8}>
     <div className="review-list-options__section">

@@ -74,9 +74,9 @@ export function compareReviews(a: CodeReview, b: CodeReview, display: ReviewDisp
     : Date.parse(display.ordering === 'opened' ? a.createdAt : a.updatedAt) - Date.parse(display.ordering === 'opened' ? b.createdAt : b.updatedAt)
   return (Number.isFinite(value) ? value : 0) * (display.ordering === 'importance' ? 1 : direction) || b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)
 }
-// Focus groups in the reference order: ready, needs review (direct, then team),
+// Focus groups in the reference order: ready, draft, needs review (direct, then team),
 // created by you, already reviewing, completed.
-const focusLabels: Record<string, string> = { ready: 'Ready to merge', requested: 'Needs your review', team: 'Needs review from your GitHub team', yours: 'Created by you', reviewing: 'You’re reviewing', completed: 'Completed' }
+const focusLabels: Record<string, string> = { ready: 'Ready to merge', draft: 'Draft', requested: 'Needs your review', team: 'Needs review from your GitHub team', yours: 'Created by you', reviewing: 'You’re reviewing', completed: 'Completed' }
 const reviewDecisionEvents = new Set(['approved', 'changes_requested', 'review_commented'])
 /** True once the viewer has submitted a review (approve, request changes or review comment). */
 export function viewerHasReviewed(review: CodeReview, viewerId: string) { return review.events.some(event => event.actor.id === viewerId && reviewDecisionEvents.has(event.type)) }
@@ -88,7 +88,7 @@ export function groupReviews(reviews: CodeReview[], display: ReviewDisplay, view
     const id = display.grouping === 'none' ? 'all' : display.grouping === 'status' ? reviewStatus(review)
       : display.grouping === 'repository' ? reviewRepository(review) : display.grouping === 'author' ? review.author.id
       : ['merged', 'closed'].includes(review.status) ? 'completed'
-      : review.author.id === viewerId ? reviewReadyToMerge(review) ? 'ready' : 'yours'
+      : review.author.id === viewerId ? review.draft ? 'draft' : reviewReadyToMerge(review) ? 'ready' : 'yours'
       : viewerHasReviewed(review, viewerId) ? 'reviewing'
       : review.reviewerIds.includes(viewerId) ? 'requested' : 'team'
     const label = display.grouping === 'focus' ? focusLabels[id] : display.grouping === 'status' ? reviewStatusLabels[id] : display.grouping === 'author' ? review.author.displayName : id
@@ -114,7 +114,7 @@ export function parseReviewDisplay(raw: string | null, view: ReviewView): Review
   const fallback = defaultReviewDisplay(view)
   try {
     const saved = JSON.parse(raw ?? 'null'); if (!saved) return fallback
-    const grouping: ReviewGrouping = ['none', 'status', 'author', 'repository', ...(view === 'for-you' ? ['focus'] : [])].includes(saved.grouping) ? saved.grouping : fallback.grouping
+    const grouping: ReviewGrouping = ['none', 'focus', 'status', 'author', 'repository'].includes(saved.grouping) ? saved.grouping : fallback.grouping
     const ordering: ReviewOrdering = ['name', 'author', 'status', 'opened', 'updated', ...(grouping === 'focus' ? ['importance'] : [])].includes(saved.ordering) ? saved.ordering : grouping === 'focus' ? 'importance' : 'opened'
     return { ...fallback, grouping, ordering, descending: ordering !== 'importance' && (typeof saved.descending === 'boolean' ? saved.descending : fallback.descending), closed: ['all', 'day', 'week', 'month', 'none'].includes(saved.closed) ? saved.closed : fallback.closed,
       showDrafts: typeof saved.showDrafts === 'boolean' ? saved.showDrafts : fallback.showDrafts,

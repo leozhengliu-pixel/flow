@@ -55,6 +55,10 @@
 .review-list-row__metadata>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .review-row-quick{width:14px;height:14px;flex:none;color:var(--review-fg-muted)}
 .review-row time{flex:none;color:var(--review-fg-muted);font:450 13px/normal var(--font)}
+.review-row-inner{display:contents}
+.review-row-icon--phone{display:none}
+.review-group-chevron{display:none}
+@media (min-width:768px){.review-group-heading[aria-expanded=true]>small{display:none}}
 .reviews-selection-empty{flex:1;display:grid;place-content:center;justify-items:center;color:var(--review-fg-muted);font:450 13px/normal var(--font)}
 .reviews-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--review-fg-muted);text-align:center}
 .reviews-empty>svg{width:28px;height:28px;color:var(--review-fg-faint)}
@@ -573,6 +577,65 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .reviews-tabs a:nth-of-type(1) { order: 2; }
   html:root body .app .reviews-tabs a:nth-of-type(2) { order: 1; }
   .reviews-tab-label--desktop { display: none; }
+  /* The phone list: full-bleed 40px rows inside 8px insets, flat group bars with an always-visible count. */
+  html:root body .app .review-groups>section+section .review-group-heading { margin-top: 2px; }
+  html:root body .app .review-groups .review-group-heading {
+    position: relative;
+    z-index: 10;
+    margin: 0 8px 2px;
+    padding: 0 0 0 10px;
+    gap: 6px;
+    background: var(--review-group-bar-bg);
+    color: var(--review-group-bar-fg);
+  }
+  html:root body .app .review-groups .review-group-heading > span { border-style: none; }
+  html:root body .app .review-groups .review-group-heading small {
+    display: inline-flex;
+    align-items: center;
+    margin-left: -1px;
+    border-style: none;
+    border-radius: 4px;
+    color: var(--review-group-bar-fg);
+    font: 500 12px/normal var(--font);
+    font-variant-numeric: tabular-nums;
+  }
+  html:root body .app .review-groups .review-group-disclosure { display: none; }
+  html:root body .app .review-groups .review-group-chevron {
+    display: block;
+    width: 16px;
+    height: 16px;
+    flex: none;
+    margin-left: -6px;
+    border-style: none;
+    color: var(--review-group-bar-chevron);
+    transform: rotate(90deg);
+  }
+  html:root body .app .review-row {
+    position: relative;
+    z-index: 0;
+    height: 40px;
+    margin: 0;
+    padding: 0;
+    gap: 0;
+    border-style: none;
+    border-radius: 8px;
+  }
+  html:root body .app .review-row-inner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    margin: 0 8px;
+    padding: 0 8px;
+  }
+  html:root body .app .review-row .review-row-icon--phone { display: block; width: 14px; height: 14px; flex: none; border-style: none; color: inherit; }
+  html:root body .app .review-row .review-row-icon:not(.review-row-icon--phone) { display: none; }
+  html:root body .app .review-row .review-row-icon--phone path { fill: var(--review-row-state-open); }
+  html:root body .app .review-row .review-row-icon--phone[data-review-state=draft] path { fill: var(--review-state-draft); }
+  html:root body .app .review-row .review-list-row__title { border-style: none; }
+  html:root body .app .review-row time { min-width: 30px; border-style: none; text-align: right; }
   .reviews-tab-label--phone { display: inline; }
   .reviews-tab-label { border-style: none; border-radius: 0; }
   .reviews-tab-count {

@@ -432,4 +432,100 @@ test.describe('mobile inbox list', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/reviews-list-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 
+  test('groups the phone Created reviews by Ready to merge and Draft', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-inbox-reviews-created-${testInfo.project.name}-${testInfo.retry}`
+    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: '[mobile] Reviews created', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(workspaceResponse.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const secret = `mobile-reviews-created-${workspaceKey}`
+    const integration = await request.put('http://127.0.0.1:4180/api/integrations/github', {
+      headers,
+      data: { name: '[mobile] GitHub', config: { organization: 'mobile-e2e', webhookSecret: secret, codeAccess: 'true' }, scopes: ['repo'] },
+    })
+    expect(integration.status()).toBe(200)
+
+    const webhook = async (number: number, delivery: string) => {
+      const pullRequest = { number, id: 9100 + number, title: `[mobile] Review ${number}`, body: '', html_url: `https://github.com/mobile-e2e/repo/pull/${number}`, state: 'open', user: { login: 'flowuser' }, base: { ref: 'main' }, head: { ref: `mobile/review-${number}`, sha: 'abc' }, additions: 3, deletions: 1, commits: 1 }
+      const body = JSON.stringify({ action: 'opened', number, pull_request: pullRequest, repository: { full_name: 'mobile-e2e/repo' }, sender: { login: 'flowuser' } })
+      const signature = 'sha256=' + createHmac('sha256', secret).update(body).digest('hex')
+      const response = await request.post('http://127.0.0.1:4180/api/integrations/github/webhook', {
+        headers: { ...headers, 'Content-Type': 'application/json', 'X-GitHub-Event': 'pull_request', 'X-GitHub-Delivery': delivery, 'X-Hub-Signature-256': signature },
+        data: body,
+      })
+      expect(response.status()).toBe(202)
+      return (await response.json() as { reviewId: string }).reviewId
+    }
+    const readyOne = await webhook(201, `${workspaceKey}-open-201`)
+    const readyTwo = await webhook(202, `${workspaceKey}-open-202`)
+    const draft = await webhook(203, `${workspaceKey}-open-203`)
+    for (const id of [readyOne, readyTwo]) {
+      const approved = await request.patch(`http://127.0.0.1:4180/api/reviews/${id}`, { headers, data: { status: 'approved' } })
+      expect(approved.status()).toBe(200)
+    }
+    const drafted = await request.patch(`http://127.0.0.1:4180/api/reviews/${draft}`, { headers, data: { draft: true } })
+    expect(drafted.status()).toBe(200)
+
+    await page.goto(`/${workspaceKey}/reviews/created`)
+    const near = (actual: number | undefined, expected: number) => expect(Math.abs((actual ?? Number.NaN) - expected)).toBeLessThanOrEqual(1)
+
+    // The reference account groups the Created view by focus; pick it the way a user does.
+    await page.locator('.reviews-topbar button[aria-label="Display options"]').click()
+    await page.locator('.review-list-options .select-control[aria-label="Grouping"]').click()
+    await page.locator('[role="option"]:has-text("Focus")').click()
+    await page.locator('.reviews-topbar h1').click()
+
+    const created = page.locator('.reviews-tabs a:nth-of-type(2)')
+    await expect(created.locator('.reviews-tab-label--phone')).toHaveText('Created')
+    await expect(created).toHaveCSS('background-color', 'lch(16.706 0.979 272)')
+    const toReview = page.locator('.reviews-tabs a:nth-of-type(1)')
+    near((await toReview.boundingBox())?.width, 75.29)
+    await expect(toReview.locator('.reviews-tab-count')).toHaveCount(0)
+
+    const sections = page.locator('.review-groups > section')
+    await expect(sections).toHaveCount(2)
+    const readyBar = sections.nth(0).locator('.review-group-heading')
+    near((await readyBar.boundingBox())?.x, 8)
+    near((await readyBar.boundingBox())?.y, 87.5)
+    near((await readyBar.boundingBox())?.width, 374)
+    near((await readyBar.boundingBox())?.height, 28)
+    await expect(readyBar).toHaveCSS('background-color', 'lch(9.232 0.85 272)')
+    await expect(readyBar.locator(':scope > span')).toHaveText('Ready to merge')
+    await expect(readyBar.locator(':scope > small')).toHaveText('2')
+    near((await readyBar.locator(':scope > small').boundingBox())?.x, 113.2)
+    const chevron = readyBar.locator('.review-group-chevron')
+    near((await chevron.boundingBox())?.x, 120.97)
+    expect((await chevron.boundingBox())?.width).toBe(16)
+
+    const rows = sections.nth(0).locator('.review-row')
+    await expect(rows).toHaveCount(2)
+    const firstRow = rows.nth(0)
+    near((await firstRow.boundingBox())?.x, 0)
+    near((await firstRow.boundingBox())?.y, 117.5)
+    near((await firstRow.boundingBox())?.width, 390)
+    near((await firstRow.boundingBox())?.height, 40)
+    const icon = firstRow.locator('.review-row-icon--phone')
+    near((await icon.boundingBox())?.x, 16)
+    near((await icon.boundingBox())?.y, 130.5)
+    expect((await icon.boundingBox())?.width).toBe(14)
+    await expect(icon.locator('path')).toHaveCount(4)
+    near((await firstRow.locator('.review-list-row__title').boundingBox())?.x, 38)
+    near((await firstRow.locator('time').boundingBox())?.x, 344)
+
+    const draftBar = sections.nth(1).locator('.review-group-heading')
+    near((await draftBar.boundingBox())?.y, 199.5)
+    await expect(draftBar.locator(':scope > span')).toHaveText('Draft')
+    await expect(draftBar.locator(':scope > small')).toHaveText('1')
+    const draftRow = sections.nth(1).locator('.review-row')
+    await expect(draftRow).toHaveCount(1)
+    near((await draftRow.boundingBox())?.y, 229.5)
+    await expect(draftRow.locator('.review-row-icon--phone')).toHaveAttribute('data-review-state', 'draft')
+
+    const geometry = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }))
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.width)
+
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/reviews-created-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
+
 })
