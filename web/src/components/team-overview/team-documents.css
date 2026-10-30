@@ -430,7 +430,7 @@
     gap: 8px;
     border: 0;
     border-radius: 8px;
-    background: var(--phone-group-bg);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--team-docs-group-color) 4%, var(--phone-group-bg)) 0, var(--phone-group-bg) 100%);
   }
   .team-docs-row + .team-docs-group { margin-top: 2px; }
   .team-docs-caret {
