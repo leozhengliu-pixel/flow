@@ -309,3 +309,9 @@
   background:var(--bg-panel,var(--theme-surface-1));
   box-shadow:var(--shadow-dialog);
 }
+
+/* Phones paint the drawer glyph with the muted icon colour while the button keeps its measured colour. */
+@media (max-width: 767px) {
+  html:root body :global(.app) .mobileSidebarButton::before,
+  html:root body :global(.app) .mobileSidebarButton::after { background: var(--phone-icon-fg); }
+}

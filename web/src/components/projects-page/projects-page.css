@@ -1785,7 +1785,11 @@
   .lp-projects__views { gap: 4px; }
   .lp-projects__actions { border-style: none; gap: 6px; }
   .lp-projects__toolbar .lp-projects__icon-button { flex: 0 0 32px; height: 32px; width: 32px; padding: 0 2px; font-size: 12px; font-weight: 500; line-height: normal; }
+  .lp-projects__toolbar .lp-projects__icon-button svg { color: var(--phone-icon-fg); }
   .lp-projects__toolbar .lp-projects__add-view { color: var(--project-toolbar-icon-fg); margin-left: 0; }
+  .lp-projects__toolbar .lp-projects__add-view svg { color: var(--phone-icon-dim); }
+  html:root body .app .lp-projects .lp-projects__header [data-sidebar-trigger]::before,
+  html:root body .app .lp-projects .lp-projects__header [data-sidebar-trigger]::after { background: var(--phone-icon-fg); }
   .lp-projects__view { height: 32px; line-height: normal; }
   .lp-projects__view > span { border-style: none; font-size: 12px; font-weight: 500; line-height: normal; }
 

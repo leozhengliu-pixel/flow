@@ -324,7 +324,7 @@
     font: 500 12px/normal var(--font);
   }
   .team-documents-toolbar svg,
-  .team-documents-icon-button svg { width: 14px; height: 14px; }
+  .team-documents-icon-button svg { width: 14px; height: 14px; color: var(--phone-icon-fg); }
   .team-documents-toolbar > .team-documents-new { display: grid; width: 32px; place-items: center; padding: 0 2px; font-size: 12px; gap: 0; }
   .team-documents-toolbar > .team-documents-new svg { width: 14px; height: 14px; }
   .team-documents-new-label { display: none; }
@@ -358,7 +358,7 @@
     font: 500 12px/normal var(--font);
     gap: normal;
   }
-  .team-documents-filter-bar > div:first-child > button svg { width: 14px; height: 14px; }
+  .team-documents-filter-bar > div:first-child > button svg { width: 14px; height: 14px; color: var(--phone-icon-fg); }
   .team-documents-filter-bar > div:last-child { position: static; display: flex; height: 28px; flex: 0 0 28px; justify-content: flex-end; gap: 0; background: transparent; }
   .team-documents-filter-bar > div:last-child > button {
     height: 28px;
@@ -401,7 +401,7 @@
     gap: 4px;
     font: 400 12px/18px var(--font);
   }
-  .team-documents-filter-bar [data-advanced-chip] > button:last-of-type svg { width: 17px; height: 17px; }
+  .team-documents-filter-bar [data-advanced-chip] > button:last-of-type svg { width: 17px; height: 17px; color: var(--phone-icon-fg); }
 
   .team-docs-header { height: 32px; flex: 0 0 32px; margin: 0; padding: 0 18px 0 46px; gap: 6px; }
   .team-docs-check-spacer,
@@ -439,7 +439,7 @@
     color: var(--bright);
     font: 400 16px/24px var(--font);
   }
-  .team-docs-caret svg { width: 16px; height: 16px; }
+  .team-docs-caret svg { width: 16px; height: 16px; color: var(--phone-icon-subtle); }
   .team-docs-group-title { border: 0; color: var(--phone-group-title); font: 500 13px/normal var(--font); }
   .team-docs-group small {
     margin: 2px 0 0;
@@ -462,7 +462,7 @@
     color: var(--phone-group-title);
     font: 500 12px/normal var(--font);
   }
-  .team-docs-group-add svg { width: 14px; height: 14px; }
+  .team-docs-group-add svg { width: 14px; height: 14px; color: var(--phone-icon-fg); }
 
   .team-docs-row { height: 48px; margin: 0; padding: 0; border: 0; border-radius: 8px; z-index: 0; }
   .team-docs-row-inner { padding: 0 18px; column-gap: 6px; }
@@ -479,7 +479,7 @@
     opacity: 1;
   }
   .team-docs-title { column-gap: 8px; }
-  .team-docs-title > svg { width: 16px; height: 16px; border: 0; color: var(--phone-document-icon) !important; }
+  .team-docs-title > svg { width: 16px; height: 16px; border: 0; color: var(--phone-document-icon) !important; opacity: .55; }
   .team-docs-title > strong { border: 0; color: var(--bright); font: 500 13px/normal var(--font); }
   .team-docs-more { display: none; }
 }

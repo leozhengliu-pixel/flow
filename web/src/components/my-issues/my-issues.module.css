@@ -50,6 +50,7 @@
   .tab{height:32px;padding:0 9.5px}
   .iconButton{width:32px;height:32px;flex:0 0 32px}
   .actions button{width:32px;height:32px;flex:0 0 32px;font-size:12px;font-weight:500;line-height:normal}
+  .actions button > svg{color:var(--phone-icon-fg)}
   :global(:root[data-theme="dark"]) .actions button{background:var(--phone-control-bg);color:var(--phone-control-fg)}
   .tabsOverflow{box-sizing:border-box;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:.5px solid transparent;border-radius:9999px;white-space:nowrap}
   .tabsOverflowCount{width:74.96px;justify-content:center}
