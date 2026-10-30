@@ -151,7 +151,10 @@ func (lc *loopRunContext) runToolCall(ctx context.Context, call domain.AgentTool
 	status := "completed"
 	var result []byte
 	toolStarted := time.Now()
-	callErr := scope.check(ctx, call)
+	callErr := normalizeAgentToolArguments(&call)
+	if callErr == nil {
+		callErr = scope.check(ctx, call)
+	}
 	if callErr == nil && !readOnly[strings.TrimPrefix(call.Name, "mcp__flow.")] {
 		if label, done := rec.completedWrites[loopWriteFingerprint(call.Name, loopToolArgs(call))]; done {
 			callErr = fmt.Errorf("This change already succeeded earlier in this run (%s); it was not repeated. Continue with the steps that are not done yet", label)

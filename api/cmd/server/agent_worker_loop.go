@@ -298,7 +298,7 @@ func (s *server) serveMCPLoopRun(w http.ResponseWriter, r *http.Request, request
 		Arguments map[string]any `json:"arguments"`
 	}
 	if err := json.Unmarshal(request.Params, &params); err != nil {
-		s.writeMCPError(w, request.ID, -32602, "Invalid params", nil)
+		s.writeMCPToolResult(w, r, request.ID, nil, fmt.Errorf("Invalid tool arguments: expected a complete JSON object. Send the call again with valid JSON arguments"))
 		return
 	}
 	if params.Arguments == nil {

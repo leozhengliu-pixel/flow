@@ -18,8 +18,7 @@ const isQuestion = (part: AgentMessagePart) => part.type === "elicitation" && Bo
 const isRunning = (status?: string) => status === "running" || status === "pending";
 
 /**
- * The reference app's loop-builder reply, in order: intro, each question (chips → quoted answer) with the
- * "Drafted the loop" card it led to, "Worked for N seconds ▸", the final reply and "Created automation".
+ * A loop-builder reply: questions, work header, draft card, final reply and published automation.
  */
 export function LoopBuilderMessage({
   message,
@@ -50,32 +49,35 @@ export function LoopBuilderMessage({
   // While a question waits for its answer the builder is not working; the chips are the call to action.
   const awaitingAnswer = parts.some((part) => isQuestion(part) && !part.elicitation?.action && part.status !== "completed" && part.status !== "error");
   const running = !awaitingAnswer && (streaming || parts.some((part) => !isQuestion(part) && (isRunning(part.status) || isRunning(part.toolCall?.status))));
-  const timeline: ReactNode[] = [];
+  const questions: ReactNode[] = [];
+  const drafts: ReactNode[] = [];
   const published: ReactNode[] = [];
   for (const part of parts) {
-    if (isQuestion(part)) timeline.push(<AgentElicitation key={part.id} part={part} variant="inline" />);
+    if (isQuestion(part)) questions.push(<AgentElicitation key={part.id} part={part} variant="inline" />);
     else if (isSaveLoop(part)) {
       const card = <LoopToolCard key={part.id} call={part.toolCall} teams={teams} visual={visual} onOpen={onOpenLoop} />;
       if (isPublishCall(part.toolCall)) published.push(card);
-      else timeline.push(card);
+      else drafts.push(card);
     }
   }
   const showWork = work.length > 0 || Boolean(message.durationMs) || running;
   return (
     <>
       {introAnswer?.markdown && <AgentAnswerText ariaLabel="AI message" className="loops-builder-text" data={entityData} markdown={introAnswer.markdown} />}
-      {timeline}
+      {questions}
       {showWork && (
         <AgentWorkGroup
           approvalBusy={approvalBusy}
           className="loops-builder-work"
           collapseWhenDone
+          showDurationWhenEmpty
           message={message}
           onToolApproval={onToolApproval}
           parts={work}
           running={running}
         />
       )}
+      {drafts}
       {replyAnswer?.markdown && <AgentAnswerText ariaLabel="AI message" className="loops-builder-text" data={entityData} markdown={replyAnswer.markdown} />}
       {published.length > 0 && <div className="loops-agent-cards">{published}</div>}
     </>

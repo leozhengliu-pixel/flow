@@ -18,6 +18,16 @@ function renderGroup(parts: Parts, locale: 'en-US' | 'zh-CN' = 'en-US', attachme
 afterEach(() => localStorage.removeItem('flow:locale'))
 
 describe('AgentWorkGroup', () => {
+  it('drops generated running summaries after completion and on reload', () => {
+    const parts: Parts = [{ id: 'm_phase_0', type: 'step', title: 'Looking at teams, issues', status: 'completed' }, { id: 't1', type: 'toolCall', status: 'completed', toolCall: { id: 't1', name: 'list_teams', status: 'completed' } }]
+    const rendered = renderGroup(parts)
+    fireEvent.click(screen.getByText(/Worked for/))
+    expect(screen.queryByText('Looking at teams, issues')).toBeNull()
+    expect(screen.getByText('Looked at teams')).toBeVisible()
+    rendered.unmount()
+    renderGroup(parts)
+    expect(screen.queryByText('Looking at teams, issues')).toBeNull()
+  })
   it('shows "Read file <name>" and "Transcribed media" rows, resolving a file reference to the attachment name', () => {
     const attachments = [{ name: 'Q3 report.pdf', contentType: 'application/pdf', size: 10, url: '/uploads/agent_upload_1_Q3_report.pdf' }]
     const parts: Parts = [
@@ -184,9 +194,10 @@ describe('AgentErrorDetail', () => {
     expect(container.querySelector('details')).not.toHaveAttribute('open')
   })
 
-  it('passes readable errors through without details', () => {
+  it('keeps unknown short errors behind Details too', () => {
     const { container } = render(<I18nProvider><AgentErrorDetail error="Partial warning"/></I18nProvider>)
     expect(screen.getByText('Partial warning')).toBeInTheDocument()
-    expect(container.querySelector('details')).toBeNull()
+    expect(screen.getByText('The agent ran into an error.')).toBeVisible()
+    expect(container.querySelector('details')).not.toHaveAttribute('open')
   })
 })

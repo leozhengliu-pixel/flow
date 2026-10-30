@@ -891,6 +891,12 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 				reply(message, true)
 				continue
 			}
+			if err := normalizeAgentToolArguments(&call); err != nil {
+				index := rec.startTool(request.Context(), call)
+				rec.finishTool(index, "error", err, false, nil, nil)
+				reply(err.Error(), true)
+				continue
+			}
 			switch call.Name {
 			case agentProgressTool:
 				var progress struct {

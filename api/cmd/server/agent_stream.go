@@ -720,6 +720,12 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		}
 		for _, toolCall := range turn.ToolCalls {
 			call := toolCall
+			if err := normalizeAgentToolArguments(&call); err != nil {
+				if err := failCall(call, err.Error()); err != nil {
+					return domain.AgentSession{}, err
+				}
+				continue
+			}
 			if ref, ok := ungrounded[call.ID]; ok {
 				if err := failCall(call, agentUngroundedIssueMessage(ref)); err != nil {
 					return domain.AgentSession{}, err
@@ -1251,8 +1257,25 @@ func (s *server) agentToolRequiresApproval(name string) bool {
 // token or an application agent. Its error text reaches the model and the
 // chat, so a database or driver error is replaced (publicToolError).
 func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call domain.AgentToolCall) ([]byte, error) {
+	if err := normalizeAgentToolArguments(&call); err != nil {
+		return nil, err
+	}
 	result, err := s.runAgentToolCall(r, data, call)
+	if err == nil && !json.Valid(result) {
+		return nil, fmt.Errorf("Invalid result from %s: expected JSON. Try the call again", call.Name)
+	}
 	return result, publicToolError(r.Context(), call.Name, err)
+}
+
+func normalizeAgentToolArguments(call *domain.AgentToolCall) error {
+	if strings.TrimSpace(string(call.Arguments)) == "" {
+		call.Arguments = json.RawMessage(`{}`)
+	}
+	var args map[string]any
+	if json.Unmarshal(call.Arguments, &args) != nil || args == nil {
+		return fmt.Errorf("Invalid arguments for %s: expected a complete JSON object. Send the call again with valid JSON arguments", call.Name)
+	}
+	return nil
 }
 
 func (s *server) runAgentToolCall(r *http.Request, data domain.Bootstrap, call domain.AgentToolCall) ([]byte, error) {

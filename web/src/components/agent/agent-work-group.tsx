@@ -8,14 +8,19 @@ import styles from "./agent-page.module.css";
 import workStyles from "./agent-work-group.module.css";
 
 /** Shared "Worked for N seconds" group used by the Agent page and embedded agent threads. */
-export function AgentWorkGroup({ message, parts: allParts, onToolApproval, approvalBusy, running: forceRunning = false, className, collapseWhenDone = false, attachments }: { message: Pick<AgentMessage, "durationMs">; parts: NonNullable<AgentMessage["parts"]>; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string; running?: boolean; className?: string; /** Fold back to "Worked for N seconds ▸" when the turn finishes (loop builder). */ collapseWhenDone?: boolean; /** The session's message attachments, to name the file a read_file step opened. */ attachments?: AgentMessageAttachment[] }) {
+export function AgentWorkGroup({ message, parts: allParts, onToolApproval, approvalBusy, running: forceRunning = false, className, collapseWhenDone = false, attachments, showDurationWhenEmpty = false }: { message: Pick<AgentMessage, "durationMs">; parts: NonNullable<AgentMessage["parts"]>; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string; running?: boolean; className?: string; /** Fold back to "Worked for N seconds ▸" when the turn finishes (loop builder). */ collapseWhenDone?: boolean; /** The session's message attachments, to name the file a read_file step opened. */ attachments?: AgentMessageAttachment[]; /** The builder's only tool may render as a draft card outside this group. */ showDurationWhenEmpty?: boolean }) {
   const { t } = useI18n();
   // Older chats stored an unnamed placeholder for report_progress next to its step; it is not a real tool row.
   const settled = Boolean(message.durationMs) && !forceRunning;
   // The loop builder's ask_question calls render as answer chips, never as tool rows.
   // Provider reasoning is the model's scratchpad (often English in a Chinese UI):, only step labels and the
   // agent's own narration show. Older chats stored it; it stays hidden.
-  const visibleParts = allParts.filter(part => !isProviderReasoning(part) && (part.type !== "toolCall" || Boolean(part.toolCall?.name) || !settled) && part.toolCall?.name !== "ask_question");
+  const visibleParts = allParts.filter(part => !isProviderReasoning(part) &&
+    // Phase rows are live summaries ("Looking at …") above the finished tool
+    // rows. Once a turn is complete they are stale, so keep only the past-tense
+    // tool rows and explicit progress steps.
+    !(settled && part.type === "step" && part.id.includes("_phase_")) &&
+    (part.type !== "toolCall" || Boolean(part.toolCall?.name) || !settled) && part.toolCall?.name !== "ask_question");
   // A failed call is an implementation detail once the model has retried it successfully.
   const parts = visibleParts.filter((part, index) => {
     if (part.type !== "toolCall" || part.toolCall?.status !== "error") return true;
@@ -43,7 +48,7 @@ export function AgentWorkGroup({ message, parts: allParts, onToolApproval, appro
       : toolCount > 2
         ? `${t("Used")} ${toolCount} ${t("tools")}`
         : t("Work completed");
-  if (!parts.length && !running) return null;
+  if (!parts.length && !running && !(showDurationWhenEmpty && message.durationMs)) return null;
   return <details className={`${styles.workGroup}${failed ? ` ${styles.workFailed}` : ""}${className ? ` ${className}` : ""}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}>
     {/* The reference app: label plus a small disclosure triangle; steps are flat 12px rows, narration is a quote with a 2px bar. */}
     <summary><span className={running ? styles.workShimmer : undefined}>{label}</span><WorkDisclosureIcon/></summary>

@@ -72,7 +72,7 @@ describe('LoopAgentPanel', () => {
     expect(within(panel).getAllByText('Triage agent', { selector: 'strong' })[0]).toBeVisible()
     const answer = within(panel).getByRole('blockquote', { name: 'Your answer' })
     expect(answer).toHaveTextContent("How much should the triage loop do on its own?Route, but don't close")
-    const updated = within(panel).getByText('Updated workflow definition draft')
+    const updated = within(panel).getByText('Drafted the loop')
     const worked = within(panel).getByText('Worked for 12 seconds')
     expect(worked.closest('details')).not.toHaveAttribute('open')
     const final = within(panel).getByText('The Triage agent loop is live and enabled.')
@@ -82,7 +82,7 @@ describe('LoopAgentPanel', () => {
     expect(card).toHaveTextContent('Ran 0 times (30d)')
     expect(card.querySelector('.loops-agent-card-team')).toHaveTextContent('Test team')
     expect(card.querySelector('.status-glyph')).not.toBeNull()
-    const order = [intro, answer, updated, worked, final, created]
+    const order = [intro, answer, worked, updated, final, created]
     for (let index = 1; index < order.length; index += 1) expect(order[index - 1].compareDocumentPosition(order[index]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(panel).getByRole('button', { name: 'This was helpful' })).toBeVisible()
     expect(within(panel).getByRole('button', { name: 'Leave feedback…' })).toBeVisible()

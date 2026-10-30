@@ -380,18 +380,12 @@
   margin-left: 1px;
 }
 .error {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 12px;
-  right: 12px;
-  height: 18px;
-  margin: 0;
-  overflow: hidden;
+  display: block;
+  margin: 6px 12px 0;
   color: var(--theme-text-secondary);
   font-size: 11px;
   line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 .conversation {
   position: absolute;

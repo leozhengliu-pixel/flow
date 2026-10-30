@@ -30,7 +30,7 @@ import { dayLabel, runDuration } from "./loop-model";
 import { describeRunFailure, runSkipNote, runTriggerText } from "./loop-run-labels";
 import { LoopContractSummary } from "./loop-output-contract";
 import { CONTRACT_FALLBACK_NOTICE } from "./loop-output-contract-model";
-import { ErrorDetails } from "@/components/agent/agent-error-detail";
+import { AgentErrorDetail, ErrorDetails } from "@/components/agent/agent-error-detail";
 import { GridLoader } from '@/components/ui/grid-loader'
 import { REASON_LABELS, RUN_STATUSES, STATUS_LABELS } from './loop-run-status'
 import { useBackoffRetry } from './loop-poll'
@@ -660,6 +660,7 @@ function RunReplyComposer({
   const { t } = useI18n();
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string>();
   const [skillIds, setSkillIds] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<File[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -674,13 +675,14 @@ function RunReplyComposer({
     setBody("");
     setAttachments([]);
     setSending(true);
+    setSendError(undefined);
     try {
       const files = await Promise.all(previousAttachments.map(agentFileAttachment));
       onReplied(await replyToLoopRun(loopId, run.id, message, { skillIds, attachments: files }));
     } catch (reason) {
       setBody(previousBody);
       setAttachments(previousAttachments);
-      toast.error(reason instanceof Error ? reason.message : t("Could not send reply"));
+      setSendError(reason instanceof Error ? reason.message : t("Could not send reply"));
     } finally {
       setSending(false);
     }
@@ -693,6 +695,7 @@ function RunReplyComposer({
         void send();
       }}
     >
+      {sendError && <div role="alert"><AgentErrorDetail error={sendError} onRetry={canSend ? () => void send() : undefined}/></div>}
       {attachments.length > 0 && (
         <div className="loops-run-composer-attachments">
           {attachments.map((file, index) => (

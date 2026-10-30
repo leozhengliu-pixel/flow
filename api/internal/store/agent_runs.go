@@ -807,6 +807,9 @@ func (s *SQLiteStore) AgentRunChanges(ctx context.Context, runID string) ([]Agen
 			return nil, err
 		}
 		item.Arguments = json.RawMessage(arguments)
+		if !json.Valid(item.Arguments) {
+			item.Arguments = json.RawMessage(`{}`)
+		}
 		changes = append(changes, item)
 	}
 	return changes, rows.Err()

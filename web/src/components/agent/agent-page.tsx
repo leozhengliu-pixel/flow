@@ -99,6 +99,7 @@ export function AgentPage({
     [pending, setPending] = useState<AgentSession>(),
     [attachments, setAttachments] = useState<File[]>([]),
     [awayFromLatest, setAwayFromLatest] = useState(false),
+    [scrollRequest, setScrollRequest] = useState(0),
     [sessionFeedbackOpen, setSessionFeedbackOpen] = useState(false);
   const scrollToLatestRef = useRef<(() => void) | undefined>(undefined);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -258,6 +259,7 @@ export function AgentPage({
     if (!message || replyRunning || !status?.enabled || (!retryOf && !answer && filesUploading)) return;
     const retrying = Boolean(retryOf && current);
     setBusy(true);
+    setScrollRequest(value => value + 1);
     setError(undefined);
     // The reference app shows the sent message and its working state at once; the stream replaces this copy when it starts.
     // Picking a question's option shows it as the chosen pill straight away, not as a message bubble.
@@ -365,7 +367,7 @@ export function AgentPage({
   }, [sendRef]);
   // The buttons stay off until the reply shows the approval resolved (streamed here, or saved when the reply runs
   // without this page), so a second click never answers it twice.
-  const { approvalBusy, decideToolApproval } = useAgentApprovalAnswer({ sessionId: current?.id, parts: shownParts, onError: setError, onStale: follow.refresh });
+  const { approvalBusy, decideToolApproval, retryApproval } = useAgentApprovalAnswer({ sessionId: current?.id, parts: shownParts, onError: setError, onStale: follow.refresh });
   const historyOptions = useMemo(
     () => [
       { id: "__new__", label: t("New chat") },
@@ -597,6 +599,7 @@ export function AgentPage({
             }}
             onLatestChange={setAwayFromLatest}
             latestRef={scrollToLatestRef}
+            scrollRequest={scrollRequest}
             onEdit={(message) => {
               setEditingId(message.id);
               writeInput(message.content);
@@ -739,7 +742,7 @@ export function AgentPage({
           </footer>
           {error && (
             <span className={styles.error} role="alert">
-              <AgentErrorDetail error={error} />
+              <AgentErrorDetail error={error} onRetry={retryApproval ?? (() => void send())} />
             </span>
           )}
         </div>
@@ -801,6 +804,7 @@ function Conversation({
   onSessionChange,
   onLatestChange,
   latestRef,
+  scrollRequest,
   session,
 }: {
   busy: boolean;
@@ -810,6 +814,8 @@ function Conversation({
   onLatestChange?: (away: boolean) => void;
   /** Receives a function that scrolls to the newest message. */
   latestRef?: RefObject<(() => void) | undefined>;
+  /** Incremented when a new user message is sent, even if the reader was scrolled up. */
+  scrollRequest?: number;
   /** A reply's rating changed on the server. */
   onSessionChange: (session: AgentSession) => void;
   data: BootstrapData;
@@ -837,7 +843,17 @@ function Conversation({
       if (typeof viewport.scrollTo === "function") viewport.scrollTo({ top: viewport.scrollHeight });
       else viewport.scrollTop = viewport.scrollHeight;
     });
-  }, [newestIsUser, session.messages.length, session.updatedAt]);
+  }, [newestIsUser, session.messages.length, session.updatedAt, scrollRequest]);
+  useEffect(() => {
+    if (!scrollRequest) return;
+    // A send is an explicit request to follow the new bubble and its reply;
+    // streaming updates after this still respect a later manual scroll.
+    followLatestRef.current = true;
+    const viewport = scrollRef.current;
+    if (!viewport) return;
+    const frame = requestAnimationFrame(() => { viewport.scrollTop = viewport.scrollHeight; });
+    return () => cancelAnimationFrame(frame);
+  }, [scrollRequest]);
   // The reference app's "Latest" pill shows once the newest message is out of view.
   useEffect(() => {
     const viewport = scrollRef.current;

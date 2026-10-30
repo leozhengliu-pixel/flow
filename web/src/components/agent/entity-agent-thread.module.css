@@ -40,6 +40,7 @@
 .context b{overflow:hidden;color:var(--theme-text-primary);font-size:11px;font-weight:500;text-overflow:ellipsis;white-space:nowrap}
 .composer textarea{display:block;width:100%;min-height:52px;max-height:130px;resize:none;padding:9px 5px 4px;border:0;outline:0;background:transparent;color:var(--theme-text-primary);font:13px/20px var(--font)}
 .composer textarea::placeholder{color:var(--theme-text-tertiary)}
+.errorBanner{flex:0 0 auto;max-height:220px;overflow:auto;margin:4px 8px;color:var(--semantic-danger);font-size:12px}
 .composer footer{height:28px;display:flex;align-items:center;gap:8px}
 .composer footer>span{min-width:0;flex:1;overflow:hidden;color:var(--semantic-danger);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
 .composer footer button{width:28px;height:28px;display:grid;place-items:center;padding:0;border:0;border-radius:9999px;background:var(--control-inverted-bg);color:var(--control-inverted-fg);cursor:pointer}

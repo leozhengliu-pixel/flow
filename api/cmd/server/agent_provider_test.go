@@ -12,6 +12,7 @@ import (
 	"time"
 
 	appconfig "flow/api/internal/config"
+	"flow/api/internal/domain"
 )
 
 func TestAgentProviderStreamingProtocols(t *testing.T) {
@@ -141,6 +142,50 @@ func TestAgentProviderNonStreamingFallbacks(t *testing.T) {
 				t.Fatalf("reasoning=%q", turn.Reasoning)
 			}
 		})
+	}
+}
+
+func TestAgentProviderMalformedStreamArgumentsAreMarshalable(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w,
+			"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"empty\",\"function\":{\"name\":\"list_teams\",\"arguments\":\"\"}}]}}]}\n\n"+
+				"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"limit\\\":\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n"+
+				"data: [DONE]\n\n")
+	}))
+	defer provider.Close()
+	s := &server{agent: appconfig.AgentConfig{Protocol: "openai-chat-completions", BaseURL: provider.URL, APIKey: "secret", Model: "model", MaxOutputTokens: 100}, agentClient: provider.Client()}
+	var events []agentProviderEvent
+	turn, err := s.requestAgentTurn(context.Background(), []agentProviderMessage{{Role: "user", Content: "hello"}}, func(event agentProviderEvent) error {
+		events = append(events, event)
+		if _, marshalErr := json.Marshal(event.ToolCall); marshalErr != nil {
+			return marshalErr
+		}
+		return nil
+	})
+	if err != nil || len(turn.ToolCalls) != 1 || len(events) == 0 {
+		t.Fatalf("turn=%#v events=%#v err=%v", turn, events, err)
+	}
+	// The streamed event is safe, while the raw turn remains available to the
+	// executor so it can return an ordinary invalid-arguments error.
+	if json.Valid(turn.ToolCalls[0].Arguments) || normalizeAgentToolArguments(&turn.ToolCalls[0]) == nil {
+		t.Fatalf("invalid arguments were hidden from executor: %s", turn.ToolCalls[0].Arguments)
+	}
+}
+
+func TestAgentMessageMarshalRepairsRawMessages(t *testing.T) {
+	call := &domain.AgentToolCall{Arguments: json.RawMessage(`{"id":`), Result: json.RawMessage(`{"ok":`)}
+	message := domain.AgentMessage{Parts: []domain.AgentMessagePart{{ToolCall: call}, {Question: &domain.AgentQuestion{Approval: &domain.AgentApproval{Calls: []domain.AgentToolCall{*call}}}}}}
+	raw, err := json.Marshal(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var loaded domain.AgentMessage
+	if err := json.Unmarshal(raw, &loaded); err != nil || string(loaded.Parts[0].ToolCall.Arguments) != "{}" || !json.Valid(loaded.Parts[0].ToolCall.Result) {
+		t.Fatalf("unloadable message: %s, %v", raw, err)
+	}
+	if string(call.Arguments) != `{"id":` {
+		t.Fatal("serialization changed the executor's arguments")
 	}
 }
 

@@ -376,7 +376,7 @@ func TestChatRecoversFromInvalidToolArguments(t *testing.T) {
 	team := chat.srv.store.Bootstrap().Teams[0].Key
 	before := len(chat.srv.store.Bootstrap().Issues)
 	chat.provider.replies = []string{
-		`tool:save_issue {"title":"Fix login","team":"` + team + `","priority":"urgent"}`,
+		`tool:save_issue {"title":"Fix login","team":"` + team + `","priority":{"unexpected":true}}`,
 		`tool:save_issue {"title":"Fix login","team":"` + team + `","priority":1}`,
 		"Created the issue.",
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,6 +31,49 @@ func loopContractEvalAgent() appconfig.AgentConfig {
 		APIKey: env("FLOW_LOOP_CONTRACT_EVAL_KEY", "local-go-proxy"), Model: env("FLOW_LOOP_CONTRACT_EVAL_MODEL", "deepseek-v4.1-flash"), MaxOutputTokens: 4096, Timeout: 3 * time.Minute,
 		ToolsEnabled: true, WriteTools: true,
 	}
+}
+
+func TestLoopBuilderRequestedScopeEvaluation(t *testing.T) {
+	if os.Getenv("FLOW_LOOP_BUILDER_EVAL") != "1" {
+		t.Skip("set FLOW_LOOP_BUILDER_EVAL=1 to check the builder against a real model")
+	}
+	chat := newFileToolChat(t)
+	chat.srv.agent = loopContractEvalAgent()
+	if err := chat.srv.store.MutateWorkspace(t.Context(), "test-workspace", "team.updated", "team_test", nil, func(data *domain.Bootstrap) error {
+		data.Teams[0].Name = "Verify"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	loop := requestJSON[domain.Loop](t, chat.handler, http.MethodPost, "/api/loops", map[string]any{"name": "Draft", "status": "draft"}, http.StatusCreated)
+	body := fmt.Sprintf(`{"message":"每个工作日下午6点，总结 Verify 团队当天完成的事项，并追加到团队日报汇总文档中","loopIds":[%q],"location":"page"}`, loop.ID)
+	request, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, chat.host.URL+"/api/agent/sessions/stream", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Workspace-Key", "test-workspace")
+	client := &http.Client{Timeout: 2 * time.Minute}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	raw, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := string(raw)
+	if !strings.Contains(stream, "session.completed") {
+		t.Fatal("builder did not complete")
+	}
+	saved := requestJSON[domain.Loop](t, chat.handler, http.MethodGet, "/api/loops/"+loop.ID, nil, http.StatusOK)
+	for _, extra := range []string{"发布验证", "回归测试", "先创建", "新建文档", "release verification", "regression test", "create a new"} {
+		if strings.Contains(strings.ToLower(saved.Instructions), extra) {
+			t.Errorf("builder added unrequested content %q: %s", extra, saved.Instructions)
+		}
+	}
+	if saved.Instructions == "" || !strings.Contains(saved.Instructions, "Verify") || !strings.Contains(saved.Instructions, "完成") || !strings.Contains(saved.Instructions, "追加") || saved.Status != "draft" || saved.Enabled {
+		t.Fatalf("builder lost the requested scope: %+v", saved)
+	}
+	t.Logf("instructions: %s", saved.Instructions)
 }
 
 // The reproduction end to end with the real model, against an isolated
