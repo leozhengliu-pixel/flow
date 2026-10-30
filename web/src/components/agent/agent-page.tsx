@@ -452,9 +452,7 @@ export function AgentPage({
           aria-label={t("Open navigation")}
           data-sidebar-trigger onClick={onOpenSidebar}
           type="button"
-        >
-          ☰
-        </button>
+        />
         <Popover.Root open={historyOpen} onOpenChange={setHistoryOpen}>
           <Popover.Trigger asChild>
             <button
@@ -615,6 +613,7 @@ export function AgentPage({
         {!shown && <FlowLogo className={styles.emptyLogo} variant="outline" />}
         <div
           className={`${styles.composer}${shown ? ` ${styles.conversationComposer}` : ""}`}
+          data-agent-composer=""
           data-editing={editingId ? "" : undefined}
           data-tooltip-elevated=""
           // The reference app's ⌘⇧U (Ctrl Shift U) opens the file picker from the composer.
@@ -704,6 +703,8 @@ export function AgentPage({
             <FlowTooltip label={t("Attach images, files, or videos")} shortcut={attachShortcut} sideOffset={8}>
               <button
                 aria-label={t("Attach images, files, or videos")}
+                className={styles.attachButton}
+                data-agent-attach=""
                 onClick={() => fileInputRef.current?.click()}
                 type="button"
               >
@@ -734,6 +735,7 @@ export function AgentPage({
             ><AgentStopIcon /></button></FlowTooltip> : <FlowTooltip label={t("Send message")} shortcut="Enter" sideOffset={8}><button
               aria-label={t("Submit comment")}
               className={styles.sendButton}
+              data-agent-send=""
               // Like the reference app, an empty composer keeps the quiet send button (hover included); text turns it accent.
               data-state={!status?.enabled ? "unavailable" : input.trim() && !filesUploading ? "ready" : "empty"}
               disabled={!input.trim() || filesUploading || !status?.enabled}
