@@ -126,7 +126,7 @@ export function MyIssuesSurface({
   const visibleViews = phone ? views.slice(0, 2) : views
   const overflowViews = phone ? views.slice(2) : []
   const overflowLabel = t('{count} more').replace('{count}', String(overflowViews.length))
-  return <ContentViewContainer framed inset="tall" data-my-issues-surface="true">
+  return <ContentViewContainer framed inset="tall" data-my-issues-surface="true" data-my-issues-view={activeView} data-my-issues-grouping={displayOptions.grouping}>
     <ContentViewHeader onOpenSidebar={onOpenSidebar} onCreateIssue={onCreateIssue}>
       <ContentViewHeaderTitle title="My issues" />
     </ContentViewHeader>
