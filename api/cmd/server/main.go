@@ -2385,6 +2385,10 @@ func workspaceKey(r *http.Request) string {
 	if key := strings.TrimSpace(r.Header.Get("X-Workspace-Key")); key != "" {
 		return key
 	}
+	// The public docs and some clients spell the same selector differently.
+	if key := strings.TrimSpace(r.Header.Get("X-Flow-Workspace")); key != "" {
+		return key
+	}
 	return strings.TrimSpace(r.URL.Query().Get("workspace"))
 }
 

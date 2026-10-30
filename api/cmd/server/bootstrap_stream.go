@@ -252,6 +252,11 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 				if err := json.Unmarshal(raw, &item); err != nil {
 					return err
 				}
+				// The inbox only shows live rows; deleted and archived ones are
+				// history. Sending them here let a cached snapshot keep them.
+				if item.DeletedAt != nil || item.ArchivedAt != nil {
+					return nil
+				}
 				if !s.authDisabled && item.RecipientID != data.Viewer.ID {
 					return nil
 				}
