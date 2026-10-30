@@ -71,6 +71,7 @@ import {
   fetchIssueRelated,
   fetchVisibleIssueIds,
   fetchIssueRecordContext,
+  fetchInboxNotifications,
   logoutAccount,
   listProjectRelations,
   recordRecentResource,
@@ -162,6 +163,7 @@ import { issueListContextPath, issueReturnPath } from '@/lib/issue-navigation-co
 import { WorkspaceBootShell } from "@/components/layout/workspace-boot-shell";
 import { issueDetailPane } from "@/lib/issue-detail-boot";
 import {
+  carryNavigationHydration,
   clearNavigationCache,
   hydrateWorkspaceNavigation,
   readNavigationCache,
@@ -307,6 +309,28 @@ function mergeProjectRelations(data: BootstrapData, projectId: string, relations
   return [...unrelated, ...relations]
 }
 
+/**
+ * The server is the only authority for inbox rows. A navigation snapshot read
+ * from disk may predate a delete, so replace its notifications instead of
+ * merging the cached ones back in.
+ */
+async function fetchAllInboxNotifications(): Promise<BootstrapData['notifications']> {
+  const items: BootstrapData['notifications'] = []
+  const seen = new Set<string>()
+  let cursor: string | undefined
+  for (let page = 0; page < 20; page += 1) {
+    const result = await fetchInboxNotifications(`?limit=500&includeSnoozed=true${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
+    for (const notification of result.notifications ?? []) {
+      if (seen.has(notification.id)) continue
+      seen.add(notification.id)
+      items.push(notification)
+    }
+    if (!result.hasMore || !result.nextCursor) break
+    cursor = result.nextCursor
+  }
+  return items
+}
+
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
 import { isPulseRealtimeEvent, pulseSidebarPath, pulseUnread } from "@/components/pulse/pulse-unread";
 import { useEntityUpdatesLoader, useRequestEntityUpdates } from "@/lib/entity-updates";
@@ -384,7 +408,9 @@ function App() {
     setData(current => {
       if (current?.workspace.urlKey !== workspaceKey || current.viewer.id !== next.viewer.id) return current;
       if (current.issueCollectionPaged) return mergeWorkspaceDirectory(current, next);
-      const merged = mergeWorkspaceMetadata(current, next);
+      const merged = carryNavigationHydration(current, mergeWorkspaceMetadata(current, next));
+      // A metadata projection still carries the cached notifications; until a
+      // real bootstrap confirms the snapshot it must not replace the cache.
       writeNavigationCacheWhenIdle(next.viewer.id, workspaceKey, merged);
       return merged;
     });
@@ -494,6 +520,10 @@ function App() {
   const bootstrapRequest = useRef<BootstrapRequest | null>(null);
   useEffect(() => () => bootstrapRequest.current?.controller.abort(), []);
   const loadedBootstrapRequestKey = useRef('');
+  // A streamed bootstrap can be cut short (a queued request, a transient
+  // disconnect). Retry before replacing the cache-backed page with an error.
+  const bootstrapFailures = useRef<{ key: string; count: number }>({ key: '', count: 0 });
+  const [bootstrapRetry, setBootstrapRetry] = useState(0);
   const initialIssueRef = useRef<{key:string;viewerId:string;issue:Issue} | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [authenticationPolicy,setAuthenticationPolicy] = useState<string>();
@@ -817,6 +847,7 @@ function App() {
       inFlightKey: bootstrapRequest.current?.key,
     }) !== 'fetch') return;
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     if (loadedWorkspaceKey !== requestedWorkspaceKey || loadedBootstrapRequestKey.current && loadedBootstrapRequestKey.current !== requestKey) {
       const cachedNavigation = readNavigationCache(account.viewer.id, requestedWorkspaceKey);
       setData((current) => {
@@ -827,6 +858,18 @@ function App() {
         return hydrateWorkspaceNavigation({ current, cached: cachedNavigation, requestedWorkspaceKey, viewerId: account.viewer.id, preview: initialIssueRef.current });
       });
       setError(false);
+      if (cachedNavigation && loadedWorkspaceKey !== requestedWorkspaceKey) {
+        // The cached snapshot is unverified. The inbox must show the server's
+        // rows even when the bootstrap stream never finishes.
+        void fetchAllInboxNotifications()
+          .then(notifications => {
+            if (cancelled) return;
+            setData(current => current?.workspace.urlKey === requestedWorkspaceKey && current.viewer.id === account.viewer.id
+              ? { ...current, notifications }
+              : current);
+          })
+          .catch(() => undefined);
+      }
     }
     // Cache hydration can make this workspace look loaded; share the in-flight request.
     if (bootstrapRequest.current?.key !== requestKey || bootstrapRequest.current.controller.signal.aborted) {
@@ -840,6 +883,7 @@ function App() {
     settleBootstrapRequest(request, signal => fetchBootstrap(requestedWorkspaceKey, bootstrapProjection, signal))
       .then(next => {
         if (cancelled || next.viewer.id!==sessionViewerRef.current) return;
+        bootstrapFailures.current = { key: '', count: 0 };
         rememberWorkspace(account.viewer.id, requestedWorkspaceKey);
         loadedBootstrapRequestKey.current=requestKey;
         setData(current=>{
@@ -851,9 +895,22 @@ function App() {
           return withPreview;
         });
       })
-      .catch(() => { if (!cancelled) setError(true); });
-    return () => { cancelled = true; };
-  }, [account, connectPath, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, requestedWorkspaceKey, route.kind]);
+      .catch((error) => {
+        if (cancelled) return;
+        // A definite refusal is not transient; only retry a cancelled/partial
+        // stream. Exhausting the retries surfaces the usual error state.
+        if (error instanceof ApiError && error.status >= 400 && error.status < 500) { setError(true); return }
+        const count = bootstrapFailures.current.key === requestKey ? bootstrapFailures.current.count : 0;
+        if (count < 2) {
+          bootstrapFailures.current = { key: requestKey, count: count + 1 };
+          retryTimer = setTimeout(() => setBootstrapRetry(value => value + 1), 400);
+          return;
+        }
+        bootstrapFailures.current = { key: '', count: 0 };
+        setError(true);
+      });
+    return () => { cancelled = true; if (retryTimer) clearTimeout(retryTimer); };
+  }, [account, bootstrapRetry, connectPath, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, requestedWorkspaceKey, route.kind]);
   // Surfaces ("Actions" buttons) register a command context and ask for the palette.
   useEffect(() => {
     const open = () => setCommandOpen(true);

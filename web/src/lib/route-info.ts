@@ -43,7 +43,7 @@ export function routeInfo(
   const workspaceName = data?.workspace?.name || data?.workspace?.urlKey || "Flow";
 
   if (route.kind === "inbox") {
-    const unread = data?.notifications?.filter((item) => !item.readAt).length ?? 0;
+    const unread = data?.notifications?.filter((item) => !item.readAt && !item.deletedAt && !item.archivedAt).length ?? 0;
     const suffix = unread > 0 ? ` (${unread > 99 ? "99+" : unread})` : "";
     return {
       title: `${t("Inbox")}${suffix}`,
