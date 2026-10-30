@@ -256,6 +256,7 @@ export const FLOW_VIEW_ICON_NAMES = [
   "Spaces",
   "Spreadsheet",
   "Starred",
+  "StarOutline",
   "Stopwatch",
   "Subgroup",
   "Subscribe",

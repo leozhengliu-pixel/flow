@@ -149,6 +149,7 @@
   .row:has(.subIssueProgress) .noAssignee svg{opacity:.15}
   /* The reference phone sub-issue counter is text only ("0/1"), with no ring. */
   .subIssueProgress{padding:0 10px}
+  .subIssueProgress>span{color:var(--issue-muted)}
   .subIssueProgress svg{display:none}
   /* On a phone the estimate is a bare triangle and value, not a bordered chip. */
   .estimateChip{height:auto;padding:0;border:0;border-radius:0;background:transparent;gap:4px}
