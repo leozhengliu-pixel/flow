@@ -1029,14 +1029,10 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	if truncated {
 		parts = append(parts, domain.AgentMessagePart{ID: messageID + "_error", Type: "error", Text: agentOutputLimitError, Status: "error"})
 	}
-	// Give the parallel title request a moment so the completed session usually carries it.
-	if titleDone != nil {
-		// The page also picks up a late title, so a fast reply does not wait long for it.
-		select {
-		case <-titleDone:
-		case <-time.After(500 * time.Millisecond):
-		}
-	}
+	// Title generation is deliberately not on the reply's critical path. The
+	// browser refreshes the title after completion while this goroutine persists
+	// it independently, so a slow title model cannot delay the first answer.
+	_ = titleDone
 	return s.persistAgentCompletion(r, *session, domain.AgentMessage{ID: messageID, Role: "assistant", Content: strings.TrimSpace(finalText), Parts: parts, DurationMS: time.Since(started).Milliseconds(), CreatedAt: time.Now().UTC()})
 }
 
