@@ -365,7 +365,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
   const statusOptions = useTeamStatusOptions(propertyOptions.status, issue.teamId)
   return <ContextMenu.Root>
     <ContextMenu.Trigger asChild>
-      <a className={styles.row} style={{'--row-columns':columns,'--nested-depth':nestedDepth} as CSSProperties} data-issue-row-id={issue.id} data-selected={selected} data-active={active || undefined} aria-current={active || undefined} data-nested={nestedDepth>0} href={issue.href} aria-label={rowAriaLabel(issue)} onClick={click} onKeyDown={keydown}>
+      <a className={styles.row} style={{'--row-columns':columns,'--nested-depth':nestedDepth} as CSSProperties} data-issue-row-id={issue.id} data-selected={selected} data-active={active || undefined} aria-current={active || undefined} data-nested={nestedDepth>0} data-context={issue.viewMatch === false || undefined} href={issue.href} aria-label={rowAriaLabel(issue)} onClick={click} onKeyDown={keydown}>
         {nestedDepth>0&&<NestedIssueGuide lines={nestedLines}/>}
         <span aria-hidden="true"/><IssueCheckbox checked={selected} onChange={(checked, range) => onSelect?.(issue.id, checked, range)}/>
         {displayProperties.has('priority') && <RowCommandPicker

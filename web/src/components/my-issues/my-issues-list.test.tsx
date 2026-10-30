@@ -33,6 +33,23 @@ describe('MyIssuesList virtualization', () => {
     await waitFor(() => expect(nested()).toEqual(['parent:false', 'child-1:false', 'child-2:false', 'other:false']))
   })
 
+  it('marks context-only parent rows instead of every row with a sub-issue counter', async () => {
+    const state = { id: 'started', name: 'In progress', type: 'started' as const, color: '#f2c94c' }
+    const row = (id: string, viewMatch: boolean): MyIssuesGroupData['issues'][number] => ({
+      id, identifier: `FLOW-${id}`, title: id, href: `#${id}`, priority: 0, state, viewMatch,
+      subIssueProgress: { completed: 0, total: 1 }, subIssues: [{ id: 'child', identifier: 'FLOW-child', title: 'child', priority: 0, state, createdAt: '', updatedAt: '' }],
+      createdAt: '2026-09-07T00:00:00.000Z', updatedAt: '2026-09-07T00:00:00.000Z',
+    })
+    const groups: MyIssuesGroupData[] = [{ id: 'started', label: 'In progress', issues: [row('context', false), row('matching', true)] }]
+    const { container } = render(<I18nProvider><VirtuosoMockContext.Provider value={{ viewportHeight: 440, itemHeight: 44 }}><MyIssuesList groups={groups}/></VirtuosoMockContext.Provider></I18nProvider>)
+    await waitFor(() => expect(container.querySelectorAll('a[data-issue-row-id]').length).toBe(2))
+    const rows = [...container.querySelectorAll<HTMLElement>('a[data-issue-row-id]')]
+    expect(rows.map(link => link.getAttribute('data-context'))).toEqual(['true', null])
+    const css = readFileSync(path.join(import.meta.dirname, 'my-issues-list.module.css'), 'utf8')
+    expect(css).toMatch(/\.row\[data-context="true"\] \.title\{opacity:\.6\}/)
+    expect(css).not.toMatch(/\.row:has\(\.subIssueProgress\)/)
+  })
+
   it('keeps the selection checkbox in one column at every depth and indents only the row content', async () => {
     const state = { id: 'started', name: 'In progress', type: 'started' as const, color: '#f2c94c' }
     const row = (id: string, parentId?: string): MyIssuesGroupData['issues'][number] => ({ id, identifier: `FLOW-${id}`, title: id, href: `#${id}`, priority: 0, state, parentId, createdAt: '2026-09-07T00:00:00.000Z', updatedAt: '2026-09-07T00:00:00.000Z' })
