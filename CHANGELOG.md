@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Large MySQL workspaces list, sort, search and count issues without full-table scans: priority sorting, triage filters, saved views, cycle capacity and cycle history use matching composite indexes, plain totals use the maintained issue counters, and the activity-to-cycle index keeps the cycle graph from parsing every activity row.
+- The MCP `count_issues` team fast path is no longer disabled by the injected tool base URL, so it reads the maintained team counters instead of counting the whole issue table.
 - MCP rejects unknown cycle references, reports missing issues as caller errors, and keeps malformed JSON-RPC params distinct from recoverable tool argument errors. Internal-error logs retain diagnostic details without exposing them in responses.
 - Production builds keep small math fonts as same-origin files for strict CSP; filter dialogs have accessible names, and streaming assertions wait for frame-batched rich text.
 - Estimate icons now use the same filled-left triangle for every value and
