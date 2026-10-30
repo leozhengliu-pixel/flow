@@ -200,7 +200,7 @@ describe('issue activity timeline', () => {
         expect(link).toHaveAttribute('href', '/workspace/issue/TST-2/second-issue')
         expect(link.querySelector('b')).toHaveTextContent('TST-2')
         expect(row.querySelector('[data-agent-entity="issue"]')).toBeNull()
-        expect(row.querySelector('.activity-event-icon svg')).toBeTruthy()
+        expect(row.querySelector('.activity-event-icon svg')).toHaveAttribute('data-action-glyph', 'related')
       } finally {
         window.matchMedia = original
       }

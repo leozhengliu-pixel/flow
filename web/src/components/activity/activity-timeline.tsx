@@ -2,6 +2,7 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { Archive, Bell, BellOff, CheckCircle2, Copy, Edit3, Ellipsis, Link2, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
 import type { ActivityEvent, Comment, ThreadSubscription, ThreadSubscriptionState, WorkflowState } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
+import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { AttributedAction, ViaApp } from '@/components/ui/via-app'
 import { activityActor, attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
 import { Composer } from '@/components/editor/composer'
@@ -411,20 +412,11 @@ function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?:
   if (event.type.startsWith('attachment.')) return <Paperclip size={14} />
   if (event.type.includes('relation')) {
     const type = event.metadata?.type
-    return phone && (!type || type === 'related') ? <RelatedIssueIcon /> : <Link2 size={14} />
+    return phone && (!type || type === 'related') ? <IssueActionGlyph label="Related to…" fallback={null} /> : <Link2 size={14} />
   }
   if (event.type.includes('review')) return <Link2 size={14} />
   const actor = activityActor(event.actor, event.botActor, context?.users)
   return <Avatar name={actor.name} avatarUrl={actor.avatarUrl} />
-}
-
-/** The reference relation glyph: a rounded issue frame with a flag. */
-function RelatedIssueIcon() {
-  return <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="M9 2.5H5.25A2.75 2.75 0 0 0 2.5 5.25v5.5a2.75 2.75 0 0 0 2.75 2.75H8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-    <path d="M9 2.5h1.75A2.75 2.75 0 0 1 13.5 5.25v1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-    <path d="M8.5 6.9H13.9V12H12L11.4 10.9 10.8 12H8.5V13.5Z" fill="currentColor"/>
-  </svg>
 }
 
 export function CommentMenu({

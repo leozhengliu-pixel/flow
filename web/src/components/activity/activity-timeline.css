@@ -24,7 +24,7 @@
 .issue-activity-timeline .timeline-item.event > div:last-child { min-width: 0; padding: 1px 0; }
 .issue-activity-timeline .activity-event-icon { width: 36px; min-height: 18.8px; display: flex; justify-content: center; align-items: flex-start; padding-top: 2px; color: var(--ui-pill-fg); }
 .issue-activity-timeline .activity-event-icon .avatar { width: 14px; height: 14px; flex: 0 0 14px; font-size: 8px; }
-.issue-activity-timeline .activity-event-icon > svg { flex: 0 0 14px; }
+.issue-activity-timeline .activity-event-icon > svg { width: 14px; height: 14px; flex: 0 0 14px; }
 .issue-activity-timeline .timeline-item.comment > .avatar,
 .issue-activity-timeline .comment-reply > .avatar { width: 18px; height: 18px; min-width: 18px; flex: 0 0 18px; font-size: 9px; }
 .issue-activity-timeline .timeline-item.comment > .avatar { justify-self: center; align-self: start; margin-top: 3px; }
