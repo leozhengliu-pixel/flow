@@ -112,12 +112,12 @@
   .badges:has(.estimateChip){gap:5px}
   .statusTrigger{margin-left:-3px}
   .nestingGuide{left:16px;border-style:none}
-  .nestingSegment{left:calc(var(--nest-level) * 24px + 9.5px)}
-  .nestingBranch{top:14px}
+  .nestingSegment{left:calc(var(--nest-level) * 24px + 9.5px);background:var(--relation-chip-border)}
+  .nestingBranch{top:14px;fill:var(--relation-chip-border)}
   .statusTrigger{border-style:none}
   .statusTrigger svg{color:var(--bright);border-style:none}
   .priorityTrigger{justify-self:end;margin-right:-3px;margin-left:0;border-style:none}
-  .priorityTrigger svg{color:var(--bright);font-size:16px;font-weight:400;line-height:24px;border-style:none}
+  .priorityTrigger svg{color:var(--bright);border-style:none}
   .title{line-height:normal;color:var(--bright);border-style:none}
   .titleProperties{padding-right:18px}
   .groupHeader{padding-left:0;border-style:none}
@@ -141,7 +141,10 @@
   .titleProperties:has(.parentTrail){gap:0}
   .parentTrail{line-height:normal}
   /* The unassigned avatar keeps the muted glyph but matches the reference avatar metrics. */
-  .noAssignee svg{font-size:16px;font-weight:400;line-height:24px;color:var(--bright);border-style:none;fill:var(--issue-muted)}
+  .noAssignee svg{color:var(--bright);border-style:none;fill:var(--issue-muted)}
+  /* The reference phone sub-issue counter is text only ("0/1"), with no ring. */
+  .subIssueProgress{padding:0 10px}
+  .subIssueProgress svg{display:none}
   /* On a phone the estimate is a bare triangle and value, not a bordered chip. */
   .estimateChip{height:auto;padding:0;border:0;border-radius:0;background:transparent;gap:4px}
   .estimateChip :global(.estimate-chip__value){min-width:24px;border-style:none;font-size:12px;font-weight:450;line-height:normal;color:var(--issue-muted)}

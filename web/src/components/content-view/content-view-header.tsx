@@ -1,7 +1,7 @@
 import type { HTMLAttributes, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import styles from './content-view.module.css'
-import { PanelLeft, Plus } from 'lucide-react'
+import { PlusIcon, SidebarLeftIcon } from '@/components/ui/view-action-icons'
 import { useOptionalTranslate } from '@/i18n/i18n'
 
 export interface ContentViewHeaderProps extends HTMLAttributes<HTMLElement> {
@@ -38,11 +38,11 @@ export function ContentViewHeader({
           data-sidebar-trigger
           onClick={onOpenSidebar}
         >
-          <PanelLeft size={14} aria-hidden="true" />
+          <SidebarLeftIcon width={14} height={14} aria-hidden="true" />
         </button>
       ) : null}
       {children}
-      {onCreateIssue && <button className="phone-create-issue" type="button" aria-label={t('New issue')} title={t('New issue')} onClick={onCreateIssue}><Plus size={14}/></button>}
+      {onCreateIssue && <button className="phone-create-issue" type="button" aria-label={t('New issue')} title={t('New issue')} onClick={onCreateIssue}><PlusIcon width={14} height={14}/></button>}
     </header>
   )
 }
