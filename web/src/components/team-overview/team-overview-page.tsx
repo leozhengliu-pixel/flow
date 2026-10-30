@@ -340,9 +340,7 @@ export function TeamOverviewPage({
   const hiddenTeamTabs = phone ? teamTabItems.slice(teamTabsVisibleCount) : [];
   const activeTeamTabHidden = teamTabsOverflow && activeTeamTabIndex >= teamTabsVisibleCount;
   const activeTeamTab = teamTabItems[activeTeamTabIndex];
-  const menuTeamTabs = activeTeamTabHidden
-    ? hiddenTeamTabs
-    : teamTabsOverflow ? hiddenTeamTabs : teamTabItems.slice(activeTeamTabIndex);
+  const menuTeamTabs = hiddenTeamTabs;
   const teamTabLink = (tab: { id: View; label: string; path: string }, trigger = false, label?: string) => (
     <a
       aria-current={view === tab.id ? "page" : undefined}
@@ -399,14 +397,7 @@ export function TeamOverviewPage({
     <div className="team-home-band">
       <nav ref={teamTabsRef} className="team-home-tabs" aria-label={t("Team views")}>
         {shownTeamTabs.map(tab => (
-          phone && !teamTabsOverflow && tab.id === view ? (
-            <Popover.Root key={tab.id} open={teamTabsMenuOpen} onOpenChange={setTeamTabsMenuOpen}>
-              <Popover.Trigger asChild>{teamTabLink(tab, true)}</Popover.Trigger>
-              {teamTabsMenu(menuTeamTabs)}
-            </Popover.Root>
-          ) : (
-            <Fragment key={tab.id}>{teamTabLink(tab)}</Fragment>
-          )
+          <Fragment key={tab.id}>{teamTabLink(tab)}</Fragment>
         ))}
         {teamTabsOverflow && activeTeamTabHidden && (
           <Popover.Root open={teamTabsMenuOpen} onOpenChange={setTeamTabsMenuOpen}>
