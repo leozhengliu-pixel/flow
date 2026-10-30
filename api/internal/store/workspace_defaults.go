@@ -114,20 +114,46 @@ func localSQLiteFixture() domain.Bootstrap {
 func stringPointer(value string) *string { return &value }
 
 // canonicalProjectStatusColors are the built-in project status colours (the reference app's
-// defaults) and the colour each one had before statuses became editable.
-var canonicalProjectStatusColors = map[string]struct{ color, legacy string }{
-	"ps_backlog":   {color: "#F2994A", legacy: "#E79D4F"},
-	"ps_planned":   {color: "#D7D8DB", legacy: "#A8A8AA"},
-	"ps_progress":  {color: "#F2C94C", legacy: "#E2B714"},
-	"ps_completed": {color: "#5E6AD2", legacy: "#5E6AD2"},
-	"ps_canceled":  {color: "#8A8F98", legacy: "#8A8F98"},
+// defaults) and the colours each one had before statuses became editable.
+var canonicalProjectStatusColors = map[string]struct {
+	color  string
+	legacy []string
+}{
+	"ps_backlog":   {color: "#F2994A", legacy: []string{"#E79D4F"}},
+	"ps_planned":   {color: "#D7D8DB", legacy: []string{"#A8A8AA"}},
+	"ps_progress":  {color: "lch(80% 90 85)", legacy: []string{"#F2C94C", "#E2B714"}},
+	"ps_completed": {color: "#5E6AD2", legacy: []string{"#5E6AD2"}},
+	"ps_canceled":  {color: "#8A8F98", legacy: []string{"#8A8F98"}},
+}
+
+// canonicalWorkflowStateColors are the workspace workflow defaults from the reference app.
+// Team-specific statuses are editable and are never rewritten here.
+var canonicalWorkflowStateColors = map[string]struct {
+	color  string
+	legacy []string
+}{
+	"state_backlog":   {color: "#BEC2C8", legacy: []string{"#6B6F76"}},
+	"state_todo":      {color: "#E2E2E2"},
+	"state_progress":  {color: "lch(80% 90 85)", legacy: []string{"#F2C94C", "#E2B714"}},
+	"state_done":      {color: "lch(48% 59.31 288.43)"},
+	"state_canceled":  {color: "#95A2B3"},
+	"state_duplicate": {color: "#95A2B3"},
+}
+
+func isLegacyDefaultColor(color string, legacy []string) bool {
+	for _, value := range legacy {
+		if strings.EqualFold(color, value) {
+			return true
+		}
+	}
+	return false
 }
 
 func canonicalProjectStatuses() []domain.ProjectStatus {
 	return []domain.ProjectStatus{
 		{ID: "ps_backlog", Name: "Backlog", Color: "#F2994A", Type: "backlog"},
 		{ID: "ps_planned", Name: "Planned", Color: "#D7D8DB", Type: "planned"},
-		{ID: "ps_progress", Name: "In Progress", Color: "#F2C94C", Type: "started"},
+		{ID: "ps_progress", Name: "In Progress", Color: "lch(80% 90 85)", Type: "started"},
 		{ID: "ps_completed", Name: "Completed", Color: "#5E6AD2", Type: "completed"},
 		{ID: "ps_canceled", Name: "Canceled", Color: "#8A8F98", Type: "canceled"},
 	}
@@ -135,9 +161,9 @@ func canonicalProjectStatuses() []domain.ProjectStatus {
 
 func canonicalWorkflowStates() []domain.WorkflowState {
 	return []domain.WorkflowState{
-		{ID: "state_backlog", Name: "Backlog", Color: "#6B6F76", Type: "backlog", Position: 0, Default: true},
+		{ID: "state_backlog", Name: "Backlog", Color: "#BEC2C8", Type: "backlog", Position: 0, Default: true},
 		{ID: "state_todo", Name: "Todo", Color: "#E2E2E2", Type: "unstarted", Position: 1},
-		{ID: "state_progress", Name: "In Progress", Color: "#F2C94C", Type: "started", Position: 2},
+		{ID: "state_progress", Name: "In Progress", Color: "lch(80% 90 85)", Type: "started", Position: 2},
 		{ID: "state_done", Name: "Done", Color: "lch(48% 59.31 288.43)", Type: "completed", Position: 3},
 		{ID: "state_canceled", Name: "Canceled", Color: "#95A2B3", Type: "canceled", Position: 4},
 		{ID: "state_duplicate", Name: "Duplicate", Color: "#95A2B3", Type: "canceled", Position: 5, Reserved: true},

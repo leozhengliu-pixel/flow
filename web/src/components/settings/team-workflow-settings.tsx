@@ -1,4 +1,5 @@
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { ISSUE_STATUS_COLORS } from '@/lib/status-default-colors'
 import {
   useEffect,
   useMemo,
@@ -2929,14 +2930,6 @@ function IssueStateRow({
     </div>
   );
 }
-
-const ISSUE_STATUS_COLORS: Record<WorkflowStateType, string> = {
-  backlog: "#6b6f76",
-  unstarted: "#a8a8aa",
-  started: "#e2b714",
-  completed: "#5e6ad2",
-  canceled: "#8a8f98",
-};
 
 function CyclesSettings({
   data,

@@ -6,7 +6,7 @@ export function projectStatusOptionColor(status: { id: string; name: string; col
 export const PROJECT_STATUS_DEFAULT_COLORS: Record<string, string> = {
   backlog: '#f2994a',
   planned: '#d7d8db',
-  started: '#f2c94c',
+  started: 'lch(80% 90 85)',
   completed: '#5e6ad2',
   canceled: '#8a8f98',
 }

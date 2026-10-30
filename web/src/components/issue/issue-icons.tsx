@@ -2,6 +2,9 @@ import { useId, useLayoutEffect, useRef, useState, type CSSProperties, type SVGP
 import { useI18n } from '@/i18n/i18n'
 import type { Cycle, Team, WorkflowState } from '@/types/flow'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
+import { workflowStatusStrokeColor } from '@/lib/status-default-colors'
+import { projectStatusStrokeColor } from '@/lib/project-status-color'
+import { getResolvedTheme } from '@/lib/theme'
 
 export type FlowIconProps = Omit<SVGProps<SVGSVGElement>, 'width' | 'height'> & { size?: number }
 
@@ -115,7 +118,7 @@ export function ProjectStatusIcon({ color, name, progress, type, size = 16, ...p
   const { locale } = useI18n()
   const kind = projectStatusKind(type, name)
   const maskId = `project-status-${useId().replaceAll(':', '')}-${kind}`
-  const stroke = color ?? projectStatusColors[kind]
+  const stroke = projectStatusStrokeColor(color ?? projectStatusColors[kind], getResolvedTheme())
   const statusProgress = kind === 'started'
     ? progress === undefined ? .5 : Math.max(.15, Math.min(.85, progress * .7 + .15))
     : kind === 'completed' || kind === 'canceled' ? 1 : 0
@@ -159,6 +162,7 @@ export function WorkflowStatusGlyph({ state, size = 14, style }: { state: Pick<W
   const triage = id.includes('triage') || name === 'triage'
   const duplicate = id.includes('duplicate') || name === 'duplicate'
   const stateType = triage ? 'triage' : duplicate ? 'duplicate' : state.type
+  const stroke = workflowStatusStrokeColor(state.color)
   const complete = stateType === 'completed' || stateType === 'canceled' || stateType === 'duplicate'
   const progress = stateType === 'started' ? (name.includes('review') ? .75 : .5) : complete ? 1 : 0
   // Motion only after the status changes, never on first paint (set before paint so the mark never flashes in).
@@ -177,8 +181,8 @@ export function WorkflowStatusGlyph({ state, size = 14, style }: { state: Pick<W
   const duplicatePath = 'M9.5791 5.71973C9.872 5.42684 10.3468 5.42686 10.6396 5.71973C10.9325 6.01262 10.9325 6.48738 10.6396 6.78027L6.78027 10.6396C6.48738 10.9325 6.01262 10.9325 5.71973 10.6396C5.42686 10.3468 5.42684 9.872 5.71973 9.5791L9.5791 5.71973ZM7.21973 3.36035C7.51261 3.06746 7.98738 3.06747 8.28027 3.36035C8.57315 3.65325 8.57316 4.12801 8.28027 4.4209L4.4209 8.28027C4.12801 8.57316 4.12801 8.57315 3.36035 8.28027C3.06747 7.98738 3.06746 7.51261 3.36035 7.21973L7.21973 3.36035Z'
   const triagePath = 'M8.0126 7.98223V9.50781C8.0126 9.92901 8.52329 10.1548 8.85102 9.87854L11.8258 7.37066C12.0581 7.17486 12.0581 6.82507 11.8258 6.62927L8.85102 4.12139C8.52329 3.84509 8.0126 4.07092 8.0126 4.49212V6.01763H5.98739V4.49218C5.98739 4.07098 5.4767 3.84515 5.14897 4.12146L2.17419 6.62933C1.94194 6.82513 1.94194 7.17492 2.17419 7.37072L5.14897 9.8786C5.4767 10.1549 5.98739 9.92907 5.98739 9.50787V7.98223H8.0126Z'
   return <svg className="status-glyph" data-changed={changed || undefined} width={size} height={size} style={style} viewBox="0 0 14 14" fill="none" aria-hidden="true">
-    <circle cx="7" cy="7" r={triage ? 3.5 : 6} fill="none" stroke={state.color} strokeWidth={triage ? 7 : 1.5} strokeDasharray={triage ? '2 0' : stateType === 'backlog' ? '1.4 1.74' : '3.14 0'} strokeDashoffset={triage ? 3.2 : stateType === 'backlog' ? .65 : -.7} />
-    <circle cx="7" cy="7" r={radius} fill="none" stroke={state.color} strokeWidth={progress === 1 ? 6 : 4} strokeDasharray={`${visibleCircumference} ${2 * visibleCircumference}`} strokeDashoffset={progressOffset} transform="rotate(-90 7 7)" />
+    <circle cx="7" cy="7" r={triage ? 3.5 : 6} fill="none" stroke={stroke} strokeWidth={triage ? 7 : 1.5} strokeDasharray={triage ? '2 0' : stateType === 'backlog' ? '1.4 1.74' : '3.14 0'} strokeDashoffset={triage ? 3.2 : stateType === 'backlog' ? .65 : -.7} />
+    <circle cx="7" cy="7" r={radius} fill="none" stroke={stroke} strokeWidth={progress === 1 ? 6 : 4} strokeDasharray={`${visibleCircumference} ${2 * visibleCircumference}`} strokeDashoffset={progressOffset} transform="rotate(-90 7 7)" />
     {(triage || progress === 1) && <path key={stateType} className="status-glyph__mark" stroke="none" fill="var(--bg-panel)" fillRule={duplicate ? 'evenodd' : undefined} d={triage ? triagePath : stateType === 'completed' ? checkPath : duplicate ? duplicatePath : cancelPath} />}
   </svg>
 }
