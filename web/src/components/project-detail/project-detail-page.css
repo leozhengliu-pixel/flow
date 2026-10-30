@@ -1501,8 +1501,6 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-details-sidebar__milestone strong { color: var(--phone-project-panel-text); }
   .project-details-sidebar__milestone.is-unassigned strong { color: var(--phone-project-panel-label); }
   .project-details-sidebar__section > header > button.project-details-sidebar__see-all:last-child:not(:first-child) { width: auto; padding: 2px 0 !important; color: var(--phone-project-panel-label); }
-  html:root body .app:has(.project-detail-page) .bottom-agent { display: none; }
-
   /* Project activity: the reference app's phone feed. Scoped to the activity surface so the
      overview and properties screens keep their measured layout. */
   .project-detail-page__header .project-detail-page__mobile-menu::before,

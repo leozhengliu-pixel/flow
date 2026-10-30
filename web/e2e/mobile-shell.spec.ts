@@ -149,6 +149,49 @@ test.describe('main page headers', () => {
   })
 })
 
+test.describe('my issues phone toolbar', () => {
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent })
+  test('matches the reference top bar, toolbar and grouped list', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-shell-myissues-${testInfo.project.name}-${testInfo.retry}`
+    const created = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: '[mobile] My issues shell', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(created.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as {
+      viewer: { id: string }; teams: Array<{ id: string }>; states: Array<{ id: string; type: string }>
+    }
+    const stateId = (bootstrap.states.find(state => state.type === 'started') ?? bootstrap.states[0]).id
+    for (const title of ['[mobile] QA no-PR question: explain greet.js', '[mobile] QA remove agent: slow task']) {
+      const issue = await request.post('http://127.0.0.1:4180/api/issues', {
+        headers,
+        data: { title, description: '', teamId: bootstrap.teams[0].id, stateId, assigneeId: bootstrap.viewer.id },
+      })
+      expect(issue.status()).toBe(201)
+    }
+
+    await page.goto(`${base}/${workspaceKey}/my-issues/assigned`)
+    await geometry(page.locator('[data-content-view-header]'), { x: 0, y: 0, width: 390, height: 44 })
+    await geometry(page.getByRole('button', { name: 'New issue', exact: true }), { x: 350, width: 32, height: 32 })
+    await geometry(page.locator('[data-content-view-subheader]'), { x: 0, y: 44, width: 390, height: 43.5 })
+    await geometry(page.getByRole('link', { name: /^Assigned/ }), { x: 8, height: 32 })
+    await geometry(page.locator('[data-my-issues-group-header]').first(), { x: 8, y: 87.5, width: 374, height: 36 })
+    await geometry(page.locator('[data-issue-row-id]').first(), { x: 0, y: 125.5, width: 390, height: 44 })
+    await expect(page.locator('.bottom-agent')).toBeHidden()
+    await noOverflow(page)
+
+    // The filter menu and its value pickers use the reference's full-width phone panel, not an anchored popover.
+    await page.getByRole('button', { name: 'Add filter', exact: true }).click()
+    await geometry(page.getByRole('dialog', { name: 'Add Filter…' }), { x: 16, width: 358 })
+    await page.getByRole('option', { name: /Status/ }).first().click()
+    await geometry(page.locator('[role="dialog"][data-field="status"]'), { x: 16, width: 358 })
+    await page.keyboard.press('Escape')
+    await page.mouse.click(200, 22)
+    await expect(page.getByRole('dialog', { name: 'Add Filter…' })).not.toBeVisible()
+    if (shots) await page.screenshot({ path: `${shots}/flow-myissues-390.png` })
+  })
+})
+
 test('desktop frame stays docked at 1280px', async ({ browser }) => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 768 } })
   await page.goto(`${base}/verify/inbox`)
