@@ -1456,6 +1456,8 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   }
   .project-details-sidebar__section.is-compact > header > button:last-child:not(:first-child) svg,
   .project-details-sidebar__section.is-milestones > header > button:last-child:not(:first-child) svg { width: 14px; height: 14px; }
+  .project-details-sidebar__section.is-compact > header > button:last-child:not(:first-child) svg { color: var(--phone-icon-dim); }
+  .project-details-sidebar__section.is-milestones > header > button:last-child:not(:first-child) svg { color: var(--phone-icon-fg); }
   .project-details-sidebar__section > header > button:first-child,
   .project-details-sidebar__section > header > button:first-child svg { color: var(--phone-project-panel-label); }
   .project-details-sidebar__property-label { line-height: normal; color: var(--phone-project-panel-label); }
@@ -1465,7 +1467,10 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-details-sidebar__property-trigger.is-labels { color: var(--phone-project-panel-label); }
   .project-details-sidebar__property .lp-project-property-trigger { width: fit-content; max-width: 100%; height: 28px; display: inline-flex; align-items: center; justify-self: start; gap: 8px; padding: 3px 6px; border: 0; border-radius: 9999px; background: transparent; color: var(--phone-project-panel-bright); font-size: 12px; font-weight: 450; line-height: normal; }
   .project-details-sidebar__property .lp-project-property-trigger.is-empty { color: var(--phone-project-panel-label); }
-  .project-details-sidebar__property .lp-project-property-trigger svg { width: 16px; height: 16px; flex: 0 0 16px; }
+  .project-details-sidebar__property .lp-project-property-trigger svg { width: 16px; height: 16px; flex: 0 0 16px; color: var(--phone-icon-fg); }
+  .project-details-sidebar__property-value-row { min-width: 0; display: inline-flex; align-items: center; gap: 4.5px; }
+  .project-details-sidebar__property-add { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; padding: 3px 6px; border: 0; border-radius: 9999px; background: transparent; color: var(--phone-icon-fg); }
+  .project-details-sidebar__property-add svg { width: 16px; height: 16px; }
   .project-details-sidebar__property .lp-project-property-trigger span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .project-label-control.is-sidebar { padding-left: 0; }
   .project-details-sidebar__property .project-label-add { color: var(--phone-project-panel-label); font-size: 12px; font-weight: 450; line-height: normal; }
@@ -1475,14 +1480,5 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-details-sidebar__milestone strong { color: var(--phone-project-panel-text); }
   .project-details-sidebar__milestone.is-unassigned strong { color: var(--phone-project-panel-label); }
   .project-details-sidebar__section > header > button.project-details-sidebar__see-all:last-child:not(:first-child) { width: auto; padding: 2px 0 !important; color: var(--phone-project-panel-label); }
-  .project-details-sidebar,
-  .project-details-sidebar__property-label,
-  .project-details-sidebar__property-trigger > span,
-  .project-details-sidebar__property .lp-project-property-trigger > span,
-  .project-details-sidebar__section > header > button:first-child > span,
-  .project-details-sidebar__milestone-summary strong,
-  .project-details-sidebar__milestone.is-unassigned > strong,
-  .project-details-sidebar__see-all > span,
-  .project-details-sidebar .project-label-add > span { border-style: none; }
   html:root body .app:has(.project-detail-page) .bottom-agent { display: none; }
 }
