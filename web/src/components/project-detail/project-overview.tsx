@@ -214,7 +214,7 @@ function InitiativeSection({ initiatives, project, save }: { initiatives: Props[
   const options = initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, icon: <Flag size={13}/>, groupLabel: initiativeStatusLabel(initiative.status), i18nIgnore: true }))
   const selected = initiatives.filter(initiative => (project.initiatives ?? []).includes(initiative.id))
   return <section className="project-overview__row-section"><h3>Initiatives</h3><div className="project-overview__row-content project-overview__initiatives">
-    {selected.map(initiative => <span className="project-overview__initiative" data-i18n-ignore key={initiative.id}><Flag className="project-overview__desktop-icon" size={13}/><ProjectFlagIcon className="project-overview__mobile-icon"/><span>{initiative.name}</span></span>)}
+    {selected.map(initiative => <span className="project-overview__initiative" data-i18n-ignore key={initiative.id}><Flag className="project-overview__desktop-icon" size={13}/><ProjectFlagIcon className="project-overview__mobile-icon" style={{ color: initiative.color }}/><span>{initiative.name}</span></span>)}
     <PropertyMenu compact multiple label="Initiatives" value="Add initiative…" emptyLabel="No matching initiatives" selectedIds={project.initiatives ?? []} options={options} icon={<Plus size={13}/>} searchPlaceholder="Change initiatives…" searchShortcut="P, then N" surfaceClassName="project-details-sidebar__property-menu is-members is-initiatives" onChange={id => void save({ initiatives: toggleString(project.initiatives ?? [], id) })}/>
   </div></section>
 }
