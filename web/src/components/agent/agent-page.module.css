@@ -1023,6 +1023,121 @@
   .historyRow[data-unread] {
     color: var(--text);
   }
+  /* The reference app's conversation header: the title pill keeps its measured width, so the star and
+     overflow controls sit at the right edge with the chat title clipped, and the move-to-toolbar control is absent. */
+  .page > header {
+    padding-bottom: 0.5px;
+  }
+  .page > header:has(> .headerIcon) .switcher {
+    width: 275.69px;
+    margin-right: -8px;
+  }
+  .page > header:has(> .headerIcon) .switcher h2 {
+    min-width: 0;
+    flex: 1 1 auto;
+    max-width: none;
+  }
+  .page > header > .headerIcon {
+    width: 32px;
+    height: 32px;
+    flex: none;
+    margin-right: -12px;
+    padding: 0 2px;
+    border: 0.5px solid transparent;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  .page > header > .headerIcon svg {
+    color: var(--agent-thread-muted);
+  }
+  .headerSpacer + .headerIcon {
+    display: none;
+  }
+  .conversation {
+    bottom: 148px;
+    color: var(--bright);
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 24px;
+  }
+  .user .messageContent {
+    max-width: 263px;
+    gap: 4px;
+  }
+  .workGroup > summary {
+    margin-left: -8px;
+    padding: 0 8px;
+    border-radius: 4px;
+    color: var(--agent-thread-muted);
+  }
+  .workGroup > summary:hover {
+    color: var(--agent-thread-muted);
+  }
+  .toolCallRow {
+    line-height: normal;
+  }
+  .toolCallRow > span + span {
+    display: none;
+  }
+  .workGroup > summary > svg path {
+    d: path("M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z");
+  }
+  .conversation article {
+    font-weight: 450;
+  }
+  .messageParts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .assistant .messageDocument {
+    width: calc(100% + 10px);
+    margin-left: -10px;
+    padding-left: 10px;
+    box-sizing: border-box;
+  }
+  .conversation .replyActions {
+    width: 100%;
+    height: 28px;
+  }
+  .replyActions button {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+    color: var(--agent-composer-text);
+  }
+  .conversationComposer {
+    background: var(--agent-conversation-composer-bg);
+  }
+  .conversationComposer .editorScroll > div > .editor {
+    color: var(--agent-conversation-composer-text);
+  }
+  .conversationComposer .skillsButton {
+    color: var(--agent-conversation-composer-tool);
+  }
+  .conversationComposer > footer > .attachButton {
+    color: var(--agent-conversation-composer-text);
+  }
+  .conversationComposer > footer > .sendButton[data-agent-send] svg {
+    color: var(--agent-conversation-composer-tool);
+  }
+  .conversationComposer > footer > .sendButton[data-agent-send] {
+    width: 24px;
+    height: 24px;
+    background: var(--agent-conversation-send-bg);
+    box-shadow: none;
+    color: var(--agent-conversation-send-fg);
+  }
+  .conversationComposer > footer > .sendButton[data-agent-send][data-state="ready"] {
+    background: var(--agent-send-ready-bg);
+    color: var(--agent-send-ready-fg);
+  }
+  .conversationComposer > footer > .sendButton[data-agent-send][data-state="unavailable"] {
+    background: var(--agent-conversation-send-bg);
+    color: var(--agent-conversation-send-fg);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .conversation article > div {

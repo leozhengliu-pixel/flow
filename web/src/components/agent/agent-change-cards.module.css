@@ -35,3 +35,34 @@ a.entity:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;bo
 /* Highlight changes in the live editor: an accent bar in the gutter beside each changed block. */
 .highlightLayer{position:fixed;inset:0;z-index:30;pointer-events:none}
 .highlightBar{position:fixed;top:0;left:0;width:2px;border-radius:1px;background:var(--accent-primary)}
+
+/* The reference app on phones: the result label and card span the transcript column (no 10px text inset). */
+@media (max-width: 767px) {
+  .changes {
+    margin-inline: -10px;
+  }
+  .change {
+    gap: 8px;
+    max-width: none;
+  }
+  .header {
+    height: 14.5px;
+    padding: 0 10px;
+    line-height: normal;
+    color: var(--agent-thread-muted);
+  }
+  .card {
+    padding: 10px 12px;
+    border-color: var(--agent-change-card-border);
+    border-radius: 6px;
+  }
+  .entity {
+    height: 16px;
+    font-size: 12px;
+    line-height: normal;
+    color: var(--bright);
+  }
+  .entityKey {
+    color: var(--agent-thread-muted);
+  }
+}

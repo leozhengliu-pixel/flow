@@ -94,3 +94,80 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
     })
   })
 }
+
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  test.describe(`mobile agent conversation ${viewport.width}px`, () => {
+    test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+    test('phone conversation shows the prompt, expanded steps, linked team card and reply composer', async ({ page, request }, testInfo) => {
+      const workspaceKey = `mobile-agent-conversation-${viewport.width}-${testInfo.project.name}-${testInfo.retry}`
+      expect((await request.post(`${api}/api/workspaces`, {
+        data: { name: 'Mobile agent conversation parity', urlKey: workspaceKey, region: 'us', tutorial: false },
+      })).status()).toBe(201)
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const prompt = 'Create a team called Invite Test and add 3 people to it: qa-invite-1@example.com, qa-invite-2@example.com, qa-invite-3@example.com (they are not members of this workspace yet).'
+      const created = await request.post(`${api}/api/agent/sessions`, { headers, data: { message: prompt } })
+      expect(created.status()).toBe(201)
+      const chat = await created.json() as Chat & { slugId: string }
+
+      await page.goto(`/${workspaceKey}/agent/${chat.slugId}`)
+
+      const header = page.locator('main > header')
+      expect((await header.boundingBox())?.height).toBe(44)
+      expect((await page.locator('main > header [data-sidebar-trigger]').boundingBox())?.x).toBe(8)
+      const favorite = page.locator('main > header button[aria-label="Add to favorites"]')
+      expect((await favorite.boundingBox())?.x).toBeCloseTo(323.69, 1)
+      expect((await favorite.boundingBox())?.width).toBe(32)
+      expect((await page.locator('main > header button[aria-label="Chat options"]').boundingBox())?.x).toBeCloseTo(355.69, 1)
+      await expect(page.locator('main > header button[aria-label="Move to toolbar"]')).toBeHidden()
+
+      const scroll = page.locator('main [role="group"][aria-label="Agent conversation"]')
+      expect((await scroll.boundingBox())?.y).toBe(44)
+      expect((await scroll.boundingBox())?.height).toBe(viewport.width === 390 ? 652 : 475)
+
+      const bubble = page.locator('main article:first-of-type > div:first-child')
+      expect((await bubble.boundingBox())?.width).toBe(263)
+      expect((await bubble.boundingBox())?.height).toBe(160)
+      expect((await page.locator('main article:first-of-type [role="document"]').boundingBox())?.height).toBe(144)
+
+      await page.locator('main details > summary').click()
+      const toggle = page.locator('main details > summary')
+      expect((await toggle.boundingBox())?.x).toBe(14)
+      expect((await toggle.boundingBox())?.height).toBe(16)
+      await expect(page.locator('main details > div > div:nth-child(1) span').first()).toHaveText('Created team')
+      await expect(page.locator('main details > div > div:nth-child(2) span').first()).toHaveText('Searched documentation')
+      const latest = page.locator('main [aria-label="Latest — Scroll to latest"]')
+      if (await latest.count()) await latest.click()
+
+      const response = page.locator('main article:nth-of-type(2) [role="document"][aria-label="AI message"]')
+      expect((await response.boundingBox())?.x).toBe(12)
+      expect((await response.boundingBox())?.width).toBe(viewport.width === 390 ? 356 : 341)
+      expect((await response.boundingBox())?.height).toBe(208)
+      expect((await page.locator('main article:nth-of-type(2) code').boundingBox())?.height).toBe(65)
+
+      const card = page.locator('main section[aria-label="Created team"] > div:nth-child(2)')
+      expect((await card.boundingBox())?.x).toBe(12)
+      expect((await card.boundingBox())?.width).toBe(viewport.width - 24)
+      expect(Math.abs(((await card.boundingBox())?.height ?? 0) - 37)).toBeLessThanOrEqual(1)
+      await expect(page.locator('main section[aria-label="Created team"] a span').first()).toHaveText('Invite Test')
+
+      const actions = page.locator('main [data-agent-reply-actions]')
+      expect((await actions.boundingBox())?.width).toBe(viewport.width - 24)
+      expect((await actions.boundingBox())?.height).toBe(28)
+      expect((await page.locator('main article:nth-of-type(2) button[aria-label="This was helpful"]').boundingBox())?.width).toBe(28)
+
+      const composer = page.locator('main [data-agent-composer]')
+      expect((await composer.boundingBox())?.x).toBe(12)
+      expect((await composer.boundingBox())?.y).toBe(viewport.width === 390 ? 700 : 523)
+      expect((await composer.boundingBox())?.height).toBe(132)
+      const send = page.locator('main [data-agent-composer] [data-agent-send]')
+      expect((await send.boundingBox())?.width).toBe(24)
+      expect((await send.boundingBox())?.height).toBe(24)
+      expect(await send.evaluate(node => getComputedStyle(node).backgroundColor)).toBe('lch(17.574 1.589 272)')
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+
+      if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/agent-conversation-${viewport.width}.png`, scale: 'css', animations: 'disabled' })
+    })
+  })
+}
