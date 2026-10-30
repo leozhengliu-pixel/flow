@@ -17,6 +17,12 @@ export class FlowMcp {
     if (payload.result?.isError) throw new Error(`${name}: ${text.slice(0, 300)}`)
     try { return JSON.parse(text) as T } catch { return text as T }
   }
+
+  async loops<T = any>(): Promise<T> {
+    const response = await fetch(`${this.baseUrl}/api/loops`, { headers: { Authorization: `Bearer ${this.token}` } })
+    if (!response.ok) throw new Error(`list loops: HTTP ${response.status}`)
+    return await response.json() as T
+  }
 }
 
 export type BaselineEvent = { at: number; type: string; data: any }

@@ -5424,6 +5424,7 @@ function App() {
             <LoopsPage
               data={data}
               draftId={route.kind === "loop-editor" ? route.draftId : undefined}
+              pendingCreateId={route.kind === "loop-editor" ? route.pendingCreateId : undefined}
               teamKey={route.kind === "loop-editor" ? route.teamKey : undefined}
               loopId={route.kind === "loop-editor" || route.kind === "loop" || route.kind === "loop-run" ? (findLoopByRef(data.loops, route.loopId)?.id ?? route.loopId) : undefined}
               loopsView={route.kind === "loops" ? route.view : undefined}

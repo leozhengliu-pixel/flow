@@ -275,6 +275,7 @@ export type AppRoute =
       workspaceSlug: string;
       loopId?: string;
       draftId?: string;
+      pendingCreateId?: string;
       /** Set for `/team/<key>/loops/new`: a new loop created from a team's Loops tab. */
       teamKey?: string;
     }
@@ -744,9 +745,13 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
   if (loopsView && segments.length === 3)
     return { kind: "loops", workspaceSlug, view: loopsView };
   if (section === "loops" && third === "new" && segments.length === 3) {
-    const draftId = new URLSearchParams(search).get("draftId") || undefined;
+    const params = new URLSearchParams(search);
+    const draftId = params.get("draftId") || undefined;
+    const pendingCreateId = params.get("pendingCreate") || undefined;
     return draftId
       ? { kind: "loop-editor", workspaceSlug, draftId }
+      : pendingCreateId
+        ? { kind: "loop-editor", workspaceSlug, pendingCreateId }
       : { kind: "loop-editor", workspaceSlug };
   }
   // Legacy `/loops/<id>` links open the loop page.
@@ -1389,10 +1394,14 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     fifth === "new" &&
     segments.length === 5
   ) {
-    const draftId = new URLSearchParams(search).get("draftId") || undefined;
+    const params = new URLSearchParams(search);
+    const draftId = params.get("draftId") || undefined;
+    const pendingCreateId = params.get("pendingCreate") || undefined;
     return draftId
       ? { kind: "loop-editor", workspaceSlug, teamKey: third, draftId }
-      : { kind: "loop-editor", workspaceSlug, teamKey: third };
+      : pendingCreateId
+        ? { kind: "loop-editor", workspaceSlug, teamKey: third, pendingCreateId }
+        : { kind: "loop-editor", workspaceSlug, teamKey: third };
   }
   if (
     section === "team" &&

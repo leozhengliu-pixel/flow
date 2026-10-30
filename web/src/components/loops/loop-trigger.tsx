@@ -509,6 +509,7 @@ function ScheduleSentence({ config, onChange, readOnly }: { config: Config; onCh
   ];
   const timeLabel = timeOptions.find((option) => option.value === time)?.label ?? time;
   const unitLabel = units.find((item) => item.value === unit)?.label ?? unit;
+  const weekdaySchedule = (unit === "day" || unit === "week") && weekdays.length > 0;
   const setStart = (value: string) => {
     const next: Config = { ...config, startDate: value.slice(0, 10) };
     delete next.starting;
@@ -522,33 +523,35 @@ function ScheduleSentence({ config, onChange, readOnly }: { config: Config; onCh
       ) : (
         <DateTimeControl className="loops-date-control" format={formatScheduleDate} label={t("Start date")} value={start} onChange={setStart} />
       )}
-      <span className="loops-sentence-text">{t("every")}</span>
-      {readOnly ? (
-        <span className="loops-sentence-token">{interval}</span>
-      ) : (
-        <input
-          aria-label={t("Interval")}
-          className="loops-interval-input"
-          inputMode="numeric"
-          min={1}
-          max={99}
-          type="number"
-          value={interval}
-          onChange={(item) => onChange({ interval: Math.min(99, Math.max(1, Number(item.target.value) || 1)) })}
-        />
-      )}
-      {readOnly ? (
-        <span className="loops-sentence-token">{t(unitLabel)}</span>
-      ) : (
-        <SelectControl className="loops-unit-select" label={t("Interval unit")} value={unit} onChange={(value) => onChange({ unit: value, ...(value === "week" || value === "day" ? {} : { weekdays: undefined }) })} options={units.map((item) => ({ value: item.value, label: t(item.label) }))} />
-      )}
+      <span className="loops-sentence-text">{weekdaySchedule && interval === 1 && unit === "day" ? t("every weekday") : t("every")}</span>
+      {!weekdaySchedule || unit !== "day" ? <>
+        {readOnly ? (
+          <span className="loops-sentence-token">{interval}</span>
+        ) : (
+          <input
+            aria-label={t("Interval")}
+            className="loops-interval-input"
+            inputMode="numeric"
+            min={1}
+            max={99}
+            type="number"
+            value={interval}
+            onChange={(item) => onChange({ interval: Math.min(99, Math.max(1, Number(item.target.value) || 1)) })}
+          />
+        )}
+        {readOnly ? (
+          <span className="loops-sentence-token">{t(unitLabel)}</span>
+        ) : (
+          <SelectControl className="loops-unit-select" label={t("Interval unit")} value={unit} onChange={(value) => onChange({ unit: value, ...(value === "week" || value === "day" ? {} : { weekdays: undefined }) })} options={units.map((item) => ({ value: item.value, label: t(item.label) }))} />
+        )}
+      </> : null}
       <span className="loops-sentence-text">{t("at")}</span>
       {readOnly ? (
         <span className="loops-sentence-token">{timeLabel}</span>
       ) : (
         <SelectControl className="loops-time-select" label={t("Time")} value={time} onChange={(value) => onChange({ time: value })} options={timeOptions} />
       )}
-      {unit === "week" && (!readOnly || WEEKDAYS.some((day) => weekdays.includes(day.id))) && (
+      {(unit === "week" || unit === "day") && (!readOnly || weekdays.length > 0) && (
         <span className="loops-weekdays" role="group" aria-label={t("Weekdays")}>
           <span className="loops-sentence-text">{t("On")}</span>
           {WEEKDAYS.map((day) => {

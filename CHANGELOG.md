@@ -19,6 +19,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Agent tool calls now share reference, localized status/priority, and relative-date normalization across chat and MCP, with actionable resolution errors; the opt-in streaming regression harness is in `scripts/agent-tool-error-harness.py`.
 
+- Agent and loop-builder progress now uses friendly, retry-aware steps, language-matched draft copy, optimistic loop creation, and weekday-aware schedules; issue field aliases are normalized before tool validation.
+
 - Loops verify described issue targets before writing, cache semantic checks,
   and enforce team and named-target scope on status updates. Changed
   instructions suggest a fresh output contract for per-field review while

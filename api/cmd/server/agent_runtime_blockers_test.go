@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -95,9 +94,8 @@ func TestAgentRunTokenInvalidArgumentsAreToolErrors(t *testing.T) {
 	f.s.agent.WorkerSecret = testWorkerSecret
 	_, token := startWorkerTestRun(t, f.s, f.handler, store.AgentRunInput{WorkspaceKey: f.data.Workspace.URLKey, SessionID: "agent_session_args", Kind: store.AgentRunKindChat}, agentRunPrincipal{Mode: agentRunModeUser, UserID: f.data.Viewer.ID})
 	_, response := mcpWithToken(t, f.handler, token, "tools/call", map[string]any{"name": "list_issues", "arguments": map[string]any{"fields": []string{"identifier"}}}, nil)
-	message := mcpToolErrorText(t, response)
-	if !strings.HasPrefix(message, "Invalid arguments for list_issues: ") || !strings.Contains(message, "fields") {
-		t.Fatalf("tool error = %q", message)
+	if result, ok := response["result"].(map[string]any); !ok || result["isError"] == true {
+		t.Fatalf("identifier alias was not accepted: %v", response)
 	}
 	// A request that is not valid JSON-RPC stays a protocol error.
 	_, response = mcpWithToken(t, f.handler, token, "tools/call", "not an object", nil)

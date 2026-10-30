@@ -4,6 +4,8 @@
  * explanations and friendly agent error messages. Merged into zhCN by translations.ts without overriding existing entries.
  */
 export const agentStepsZhCN: Record<string, string> = {
+  "Drafted the loop": "已起草 Loop",
+  "Couldn't complete this step — retried": "此步骤未完成，已重试",
   // Chat tool labels: running and done.
   "Looking at issues…": "正在查看事项…",
   "Looked at issues": "已查看事项",
