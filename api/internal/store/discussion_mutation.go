@@ -20,6 +20,13 @@ func WithIssueDiscussionMutation(ctx context.Context, issueID, commentID string)
 	return context.WithValue(WithIssueRecordMutations(ctx, issueID), discussionMutationKey{}, discussionMutation{commentID})
 }
 
+// IsIssueDiscussionMutation lets the scoped writer omit unrelated, high-volume
+// metadata collections while editing one issue's discussion.
+func IsIssueDiscussionMutation(ctx context.Context) bool {
+	_, ok := ctx.Value(discussionMutationKey{}).(discussionMutation)
+	return ok
+}
+
 // loadDiscussionComment loads the thread around commentID: its ancestors up
 // to the root and every reply below that root, so thread fan-out and thread
 // subscriptions see all participants. Unchanged comments are not rewritten.
