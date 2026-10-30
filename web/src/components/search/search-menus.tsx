@@ -68,7 +68,7 @@ function SearchFilterValue({field,value,onChange,compact=false,users}:{field:Sea
   const [operator,setOperator]=useState<'after'|'before'>('after')
   if(field.endsWith('At')) return <div className="workspace-search-date-filter">
     {!compact&&<SelectControl label={t('Filter operator')} value={operator} options={[{value:'after',label:t('After')},{value:'before',label:t('Before')}]} onChange={next=>setOperator(next as 'after'|'before')}/>}
-    <DateTimeControl locale={locale} label={t(searchFields.find(item=>item.id===field)!.label)} value={value} onChange={next=>onChange(next,operator)}/>
+    <DateTimeControl locale={locale} label={t(searchFields.find(item=>item.id===field)!.label)} portal={false} value={value} onChange={next=>onChange(next,operator)}/>
   </div>
   if(field==='statusType') return <PropertyMenu label="Status type" ariaLabel={t('Status type')} searchPlaceholder={t('Filter status types…')} embedded={!compact} compact={compact} selectedId={value} value={searchStatuses.find(item=>item.id===value)?.label} options={searchStatuses.map(item=>({...item,icon:<StatusIcon state={{id:item.id,name:item.label,type:item.id,color:'var(--text-secondary)'}}/>}))} onChange={onChange}/>
   const label=field==='creatorId'?'Creator':'Assignee / Lead'
