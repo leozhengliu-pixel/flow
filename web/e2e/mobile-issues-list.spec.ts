@@ -57,9 +57,10 @@ test.describe('mobile issue lists and views', () => {
     await overflow.click()
     const moreViewsMenu = page.getByRole('menu', { name: 'More views' })
     await expect(moreViewsMenu).toBeVisible()
-    await expect(moreViewsMenu.getByRole('menuitem')).toHaveCount(2)
+    await expect(moreViewsMenu.getByRole('menuitem')).toHaveCount(3)
     await expect(moreViewsMenu.getByRole('menuitem', { name: 'Subscribed', exact: true })).toBeVisible()
     await expect(moreViewsMenu.getByRole('menuitem', { name: 'Activity', exact: true })).toBeVisible()
+    await expect(moreViewsMenu.getByRole('menuitem', { name: 'Shared with me', exact: true })).toBeVisible()
     await page.keyboard.press('Escape')
 
     // The selected view moves into the active overflow pill when it does not fit.
