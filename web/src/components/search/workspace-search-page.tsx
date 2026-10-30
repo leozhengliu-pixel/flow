@@ -1,7 +1,9 @@
 import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Building2, Menu, Search, UserRound, X } from 'lucide-react'
+import { Building2, ChevronDown, Menu, Search, UserRound, X } from 'lucide-react'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { ReleasesIcon } from '@/components/releases/release-icons'
@@ -17,6 +19,7 @@ import { SearchMenus, SearchFilterChips } from './search-menus'
 
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import './workspace-search-page.css'
+import phoneSearchArtwork from '@/assets/search-empty-mobile.svg'
 
 const tabs: Array<{ id: SearchTab; label: string }> = [
   { id: 'all', label: 'All' },
@@ -32,6 +35,7 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
   users?: User[]
 }) {
   const {t,locale}=useI18n()
+  const phone = usePhoneLayout()
   const [params,setParams]=useSearchParams()
   const state=useMemo(()=>readSearchState(params),[params])
   const {query,tab}=state
@@ -135,7 +139,10 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
     </header>
     <div className="workspace-search-toolbar">
       <nav aria-label={t('Search resource type')}>
-        {tabs.map(item => <button key={item.id} type="button" aria-pressed={item.id===tab} className={`ui-pill ${item.id === tab ? 'active' : ''}`} onClick={() => updateState({...state,tab:item.id})}>{t(item.label)}</button>)}
+        {(phone ? tabs.slice(0, 3) : tabs).map(item => <button key={item.id} type="button" aria-pressed={item.id===tab} className={`ui-pill ${item.id === tab ? 'active' : ''}`} onClick={() => updateState({...state,tab:item.id})}>{t(item.label)}</button>)}
+        {phone && <DropdownMenu><DropdownMenuTrigger className={`ui-pill workspace-search-more-tabs ${tabs.slice(3).some(item => item.id === tab) ? 'active' : ''}`}>
+          {tabs.slice(3).find(item => item.id === tab) ? t(tabs.find(item => item.id === tab)!.label) : t('{count} more').replace('{count}', String(tabs.length - 3))}<ChevronDown size={12}/>
+        </DropdownMenuTrigger><DropdownMenuContent>{tabs.slice(3).map(item => <DropdownMenuItem key={item.id} onSelect={() => updateState({...state,tab:item.id})}>{t(item.label)}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>}
       </nav>
       <div className="workspace-search-tools"><SearchMenus state={state} users={users} onChange={updateState}/></div>
     </div>
@@ -182,6 +189,8 @@ function SearchEmpty() {
 
 function SearchEmptyIllustration() {
   const {t}=useI18n()
+  const phone = usePhoneLayout()
+  if (phone) return <img alt={t('No search results illustration')} className="workspace-search-empty-illustration" src={phoneSearchArtwork}/>
   return <svg role="img" aria-label={t('No search results illustration')} className="workspace-search-empty-illustration" fill="none" viewBox="0 0 156 72">
     <g fill="currentColor" opacity=".08">{[4,32,60,88,116,144].flatMap((x,index)=>[8,36,64].map((y,row)=><rect height={index===2&&row===1?16:10} key={`${x}-${y}`} rx="2" width={index===2&&row===1?16:10} x={x-5} y={y-5}/>))}</g>
     <circle cx="78" cy="36" fill="var(--theme-surface-2)" r="20" stroke="var(--theme-border-strong)"/>
