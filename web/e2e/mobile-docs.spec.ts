@@ -123,3 +123,39 @@ test.describe('mobile documents tab menu', () => {
     await expect(page.locator('.team-home-tabs a[aria-current="page"]')).toContainText('Members')
   })
 })
+
+test.describe('mobile documents filter menu', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('the round filter button opens the full-width filter command menu', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-docs-filter-${testInfo.project.name}-${testInfo.retry}`
+    const team = await seedTeamDocuments(request, workspaceKey, '[mobile] Docs filter')
+
+    await page.goto(`/${workspaceKey}/team/${team.key}/documents?doc-filter=${advancedFilterParam()}`)
+    await page.locator('.team-documents-toolbar button[aria-label="Add filter"]').click()
+
+    const menu = page.locator('[data-radix-popper-content-wrapper] > [data-layout="documents"]')
+    await expect(menu).toBeVisible()
+    await page.waitForTimeout(300)
+    const box = await menu.boundingBox()
+    expect(box?.x).toBe(16)
+    expect(box?.width).toBe(358)
+    expect(Math.abs((box?.y ?? 0) - 110)).toBeLessThanOrEqual(1)
+    expect(Math.abs((box?.height ?? 0) - 312)).toBeLessThanOrEqual(1)
+
+    const search = menu.locator('input')
+    await expect(search).toHaveAttribute('placeholder', 'Add Filter…')
+    expect((await search.boundingBox())?.height).toBe(40)
+    expect((await search.boundingBox())?.x).toBe(22.5)
+
+    const rows = menu.locator('[cmdk-item]')
+    expect(await rows.count()).toBe(5)
+    for (const [index, label] of ['Advanced filter', 'Creator', 'Owner', 'Project', 'Dates'].entries()) {
+      await expect(rows.nth(index)).toContainText(label)
+      expect((await rows.nth(index).boundingBox())?.height).toBe(46)
+    }
+    expect((await rows.first().locator('span').nth(1).boundingBox())?.x).toBe(58.5)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/documents-filter-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
+})
