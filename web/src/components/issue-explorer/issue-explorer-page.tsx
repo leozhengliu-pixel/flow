@@ -5,7 +5,8 @@ import { clearSelectedModels, setSelectedModels } from '@/lib/selected-models-st
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { teamHierarchy } from '@/lib/team-hierarchy'
 import type { BootstrapData, Issue, IssueUpdateInput, SavedView, SavedViewMutationInput, Team } from '@/types/flow'
-import type { TeamIssuesRouteView } from '@/lib/app-routes'
+import { settingsPath, type TeamIssuesRouteView } from '@/lib/app-routes'
+import { toggleFavoriteFor } from '@/lib/favorites'
 import { MyIssuesBulkActionBar } from '@/components/my-issues/my-issues-bulk-action-bar'
 import { MyIssuesDetailsPane, type MyIssuesDetailsSummary, type MyIssuesSummaryItem, type MyIssuesSummaryTab } from '@/components/my-issues/my-issues-details-pane'
 import { MyIssuesFilterBar, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-bar'
@@ -146,6 +147,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
   const retryUpdates = useRef(new Map<string, IssueUpdateInput>())
   const savedViewFavorite = Boolean(savedView && (savedView.favorite || data.favorites.some(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === savedView.id)))
+  const teamFavorite = Boolean(scope.kind === 'team' && data.favorites.some(item => item.userId === data.viewer.id && item.resourceType === 'team' && item.resourceId === scope.team.id))
   const savedViewSubscribed = Boolean(savedView && (savedView.subscribed || data.subscriptions.some(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === savedView.id && isActiveSubscription(item))))
   const savedViewSubscription = savedView ? data.subscriptions.find(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === savedView.id) : undefined
   const savedViewSubscriptionEvents = savedViewSubscription?.events?.length ? savedViewSubscription.events : savedViewSubscribed ? ['issue-added', 'issue-completed'] : []
@@ -550,6 +552,9 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       onCreateIssue={onCreateIssue ? () => onCreateIssue(scope.kind === 'team' ? { teamId: scope.team.id } : undefined) : undefined}
       scopeName={scope.kind === 'team' ? scope.team.name : data.workspace.name}
       scopeTeam={scope.kind === 'team' ? scope.team : undefined}
+      teamFavorite={teamFavorite}
+      onToggleTeamFavorite={scope.kind === 'team' ? () => void toggleFavoriteFor(data, 'team', scope.team.id, undefined, teamFavorite) : undefined}
+      teamNotificationsHref={scope.kind === 'team' ? settingsPath(data.workspace.urlKey, 'team', scope.team.key, 'notifications') : undefined}
       creatingView={creatingView}
       scopeHref={scope.kind === 'team' ? `/${data.workspace.urlKey}/team/${scope.team.key}/overview` : undefined}
       activeView={view}
