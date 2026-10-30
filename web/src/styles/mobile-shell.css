@@ -1,0 +1,122 @@
+.phone-create-issue { display: none; }
+@media (max-width: 767px) {
+  .phone-create-issue { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; margin-left: auto; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--issue-muted); }
+  .phone-create-issue:hover { background: var(--theme-surface-hover); }
+  .phone-create-issue:focus-visible { outline: 2px solid var(--focus-ring); }
+  :root { --phone-menu-top: min(110px, 13.04dvh); }
+  html:root[data-sidebar-mode] .app > main,
+  html:root[data-sidebar-mode] .app .flow-framed-workspace {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  html:root[data-sidebar-mode] body .app [data-sidebar-trigger] {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+    margin-right: 12px;
+  }
+  html:root[data-sidebar-mode] body .app [data-sidebar-trigger]:has(+ [data-agent-chat-switcher]) { margin-right: 4px; }
+  html:root body .app .workspace-search-header [data-sidebar-trigger] { margin-right: 10px; }
+  html:root body .app [data-content-view-header] { padding-right: 8px; }
+  html:root body .app .reviews-topbar { padding-inline: 8px; gap: 0; }
+  html:root[data-sidebar-mode] body .app .reviews-topbar [data-sidebar-trigger] { margin-left: 0; }
+  html:root body .app :is(.flow-inbox__header, .reviews-topbar) h1,
+  html:root body .app .flow-inbox__header h2 { line-height: normal; color: var(--issue-fg); }
+  html:root body .app :is(.flow-inbox__header, .reviews-topbar) button:not([data-sidebar-trigger]) {
+    width: 32px; height: 32px; flex-basis: 32px;
+  }
+  html:root body .app .flow-inbox__header-title-actions { gap: 6px; }
+  html:root body .app .reviews-topbar button[aria-busy] { display: none; }
+  html:root body .app .reviews-topbar > div { gap: 4px; }
+  html:root body .app :is(.lp-projects__new-project, .li-new-initiative) {
+    width: 32px; height: 32px; flex: 0 0 32px; justify-content: center; padding: 0; background: transparent;
+  }
+  .app :is(.lp-projects__new-project, .li-new-initiative) > span { display: none; }
+  html:root body .app [data-agent-chat-switcher] { height: 32px; padding-inline: 8px; }
+  html:root body .app [data-agent-chat-switcher] h2 { line-height: normal; }
+  html:root .sidebar-layout > .sidebar {
+    padding: 12.75px 12px 10px;
+    background: var(--bg-panel);
+  }
+  .sidebar .workspace-row { margin-bottom: 8.75px; }
+  html:root .sidebar .workspace-row > button.sidebar-top-action { width: 32px; }
+  html:root .sidebar .workspace-row > button.sidebar-compose { height: 32px; }
+  .sidebar-footer { height: 32px; flex-basis: 32px; margin-left: -2px; }
+  .sidebar-help { width: 32px; height: 32px; }
+  .sidebar .nav-item.active { background: var(--theme-surface-hover); }
+  .sidebar .section-action { width: 28px; height: 28px; flex-basis: 28px; opacity: 1; }
+  .sidebar .team-menu-trigger { opacity: 1; }
+  html:root[data-sidebar-mode] .sidebar-scrim.open { background: lch(0 0 0 / .4); }
+  html:root body .command-dialog {
+    top: var(--phone-menu-top);
+    max-height: min(450px, calc(100dvh - var(--phone-menu-top) - 16px));
+  }
+  html:root body .command-dialog .command-input { padding-right: 6px; }
+  html:root body .command-dialog .command-input > button,
+  html:root body .command-dialog .command-shortcut,
+  html:root body .command-dialog .command-option-shortcut { display: none; }
+  html:root body .command-dialog [cmdk-item]:not(#_) { font-size: 15px; font-weight: 400; line-height: 22.5px; }
+  html:root body .command-dialog [cmdk-group-heading] { font-size: 13px; }
+  html:root body .command-dialog [cmdk-list] {
+    max-height: min(403px, calc(100dvh - var(--phone-menu-top) - 63px));
+  }
+  .state-fill { min-height: 0; padding: 24px; text-align: center; overflow-wrap: anywhere; }
+}
+
+.phone-menu-overlay { position: fixed; inset: 0; z-index: 1200; background: transparent; }
+.phone-menu-surface {
+  position: fixed;
+  top: var(--phone-menu-top);
+  left: 16px;
+  z-index: 1201;
+  width: calc(100vw - 32px);
+  max-height: min(450px, calc(100dvh - var(--phone-menu-top) - 16px));
+  overflow: hidden;
+  border: .5px solid var(--pk-border);
+  border-radius: 12px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-card-shadow);
+  color: var(--pk-text);
+  outline: none;
+}
+.phone-menu-search { padding: 6px 6px 0; }
+.phone-menu-search input {
+  width: 100%; height: 40px; padding: 11px 12px; border: 0; border-radius: 12px;
+  outline: none; background: transparent; color: var(--pk-text); font: 400 13px/normal var(--font);
+}
+.phone-menu-search input::placeholder { color: var(--pk-faint); }
+.phone-menu-surface [cmdk-list] { max-height: min(403px, calc(100dvh - var(--phone-menu-top) - 63px)); padding: 6px; overflow: auto; overscroll-behavior: contain; }
+.phone-menu-surface [cmdk-item]:not(#_) { position: relative; min-width: 0; height: 46px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 8px; font-size: 15px; font-weight: 400; line-height: 22.5px; outline: none; }
+.phone-menu-surface [cmdk-item][data-selected="true"] { background: var(--pk-hover); color: var(--pk-text-strong); }
+.phone-menu-surface [cmdk-item] > svg { width: 16px; height: 16px; flex: none; }
+.phone-menu-surface [cmdk-item] > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone-menu-surface [cmdk-separator] { position: relative; height: 12px; }
+.phone-menu-surface [cmdk-separator]::after { content: ''; position: absolute; top: 6px; left: -6px; right: -6px; height: .5px; background: var(--pk-divider); }
+.phone-menu-surface [cmdk-group-heading] { height: 30px; display: flex; align-items: center; padding: 0 12px; color: var(--pk-muted); font-size: 13px; font-weight: 500; }
+.phone-menu-surface .phone-menu-current { margin-left: auto; }
+.phone-menu-check { width: 14px; height: 14px; flex: 0 0 14px; display: grid; place-items: center; }
+.workspace-phone-menu [cmdk-item][data-selected="true"] { background: transparent; color: inherit; }
+.phone-menu-heading { height: 34px; padding: 12px 14px 0; display: flex; align-items: flex-start; font-size: 12px; color: var(--pk-muted); }
+.phone-menu-heading > span { height: 22px; line-height: 22px; }
+.phone-menu-heading > .phone-menu-context { padding: 0 6px; border-radius: 10px; background: var(--command-typed-chip-bg); color: var(--pk-text); }
+.phone-menu-surface:has(.phone-menu-heading) [cmdk-list] { max-height: min(369px, calc(100dvh - var(--phone-menu-top) - 97px)); }
+.phone-property-trigger { display: contents; }
+
+@media (max-width: 767px) {
+  html:root body .phone-menu-surface.property-command-surface:not(#_) { padding: 0; width: calc(100vw - 32px); border-radius: 12px; }
+  html:root body .phone-menu-surface:not(#_) .property-command-search { height: 46px; padding: 6px 6px 0; border: 0; }
+  html:root body .phone-menu-surface:not(#_) .property-command-search input { height: 40px; padding: 11px 12px; font-size: 13px; }
+  html:root body .phone-menu-surface:not(#_) .property-command-search kbd,
+  html:root body .phone-menu-surface:not(#_) .property-command-options kbd,
+  html:root body .phone-menu-surface:not(#_) .property-command-shortcut,
+  html:root body .phone-menu-surface:not(#_) .property-command-search-shortcut { display: none; }
+  html:root body .phone-menu-surface:not(#_) .property-command-options:not(.virtual-property-options) { max-height: min(403px, calc(100dvh - var(--phone-menu-top) - 63px)); padding: 6px; overscroll-behavior: contain; }
+  html:root body .phone-menu-surface:not(#_) .property-command-options [role="option"] { height: 46px; padding-inline: 12px; font-size: 15px; font-weight: 400; line-height: 22.5px; }
+  html:root body .phone-menu-surface:not(#_) .property-command-group { font-size: 13px; }
+  html:root body .phone-menu-surface:not(#_):has(.phone-menu-heading) .property-command-options:not(.virtual-property-options) { max-height: min(369px, calc(100dvh - var(--phone-menu-top) - 97px)); }
+}
