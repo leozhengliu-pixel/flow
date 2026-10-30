@@ -178,6 +178,8 @@
   fill: var(--theme-text-tertiary);
 }
 
+.lp-projects__top { display: flex; flex: 0 0 auto; flex-direction: column; gap: 0; min-width: 0; }
+
 .lp-projects__header {
   align-items: center;
   border-bottom: .5px solid var(--lp-border);
@@ -806,6 +808,7 @@
 .lp-project-row__label-group>span,.lp-project-card__initiative{min-width:0;display:inline-flex;align-items:center;gap:5px;overflow:hidden;padding:2px 6px;border:.5px solid var(--theme-border);border-radius:9999px;text-overflow:ellipsis;white-space:nowrap}
 .lp-project-row__label-group i,.lp-project-card__initiative i{width:7px;height:7px;flex:none;border-radius:50%}
 .lp-project-card__initiative{max-width:150px;color:var(--theme-text-secondary);font-size:11px}
+.lp-project-row__milestone { display: none; }
 .lp-project-row__progress { border: 0; gap: 8px; }
 .lp-project-row__progress > svg { flex: none; height: 16px; width: 16px; }
 .lp-project-row__progress > span { color: var(--theme-text-primary); font-size: 12px; line-height: normal; }
@@ -1768,6 +1771,59 @@
   .lp-new-project__scroll { padding-inline: 16px; }
   .lp-new-project__identity { height: 105px; }
   .lp-new-project__toast { bottom: 16px; max-width: calc(100vw - 24px); right: 12px; }
+}
+
+@media (max-width: 767px) {
+  .lp-projects__top { background: var(--theme-surface-0); border: 0; border-radius: 0; box-shadow: none; display: block; gap: 12px; padding: 0; }
+  .lp-projects__top > .lp-projects__header { flex: none; gap: 0; height: 44px; padding: 0 8px; }
+  html:root body .app .lp-projects .lp-projects__top > .lp-projects__header { padding: 0 8px; }
+  .lp-projects__top > .lp-projects__header h1 { color: var(--text); border-style: none; font-size: 13px; font-weight: 500; line-height: normal; margin: 0 0 0 12px; }
+  html:root body .app .lp-projects .lp-projects__top > .lp-projects__header [data-sidebar-trigger].lp-projects__mobile-menu { display: grid; flex: 0 0 32px; height: 32px; min-width: 32px; width: 32px; place-items: center; margin: 0; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--text); font-size: 12px; font-weight: 500; line-height: normal; }
+  html:root body .app .lp-projects .lp-projects__header .lp-projects__new-project { box-sizing: border-box; flex: 0 0 32px; height: 32px; width: 32px; justify-content: center; gap: 0; margin-left: auto; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--ui-pill-fg); font: 500 12px var(--font); }
+  .lp-projects .lp-projects__new-project > span { display: none; }
+  .lp-projects__top > .lp-projects__toolbar { border-style: none; flex: none; gap: 6px; height: 43.5px; padding: 0 8px; }
+  .lp-projects__views { gap: 4px; }
+  .lp-projects__actions { border-style: none; gap: 6px; }
+  .lp-projects__toolbar .lp-projects__icon-button { flex: 0 0 32px; height: 32px; width: 32px; padding: 0 2px; font-size: 12px; font-weight: 500; line-height: normal; }
+  .lp-projects__toolbar .lp-projects__add-view { color: var(--project-toolbar-icon-fg); margin-left: 0; }
+  .lp-projects__view { height: 32px; line-height: normal; }
+  .lp-projects__view > span { border-style: none; font-size: 12px; font-weight: 500; line-height: normal; }
+
+  .lp-project-table,
+  .lp-project-table.is-virtual { display: block; min-width: 0; padding-bottom: 8px; }
+  .lp-project-table__header { display: none; }
+  .lp-project-group { display: block; }
+  .lp-project-group__header,
+  .lp-project-subgroup__header { display: none; }
+  .lp-project-table.is-virtual .lp-project-row { display: flex; min-width: 0; }
+  .lp-project-row { border-radius: 8px; border-style: none; column-gap: 6px; display: flex; height: 48px; padding: 0; }
+  .lp-project-row > *,
+  .lp-project-row > div { display: none; }
+  .lp-project-row > div.lp-project-row__name,
+  .lp-project-row > div.lp-project-row__health-cell,
+  .lp-project-row > div.lp-project-row__status { display: flex; }
+  .lp-project-row > div.lp-project-row__name { margin-left: 14px; }
+  .lp-project-row > div.lp-project-row__status { margin-right: 14px; }
+  .lp-project-row__name { flex: 1 1 auto; gap: 4px; min-width: 0; overflow: hidden; }
+  .lp-project-row__name > div { align-items: center; flex: 1 1 auto; gap: 12px; min-width: 0; overflow: hidden; }
+  .lp-project-row__name strong { border-style: none; color: var(--bright); flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; line-height: normal; }
+  .lp-project-row__name small,
+  .lp-project-row__id { display: none; }
+  .lp-project-row__project-icon { flex: 0 0 28px; height: 28px; width: 28px; padding: 6px; border: 0; border-radius: 8px; color: #fff; font-size: 13.3333px; font-weight: 400; line-height: normal; }
+  .lp-project-row__milestone { display: inline-flex; align-items: center; flex: none; gap: 4px; height: 27px; max-width: 210px; overflow: hidden; padding: 0 4px; border: 0; border-radius: 48px; background: transparent; color: var(--issue-muted); font: 450 12px var(--font); white-space: nowrap; }
+  .lp-project-row__milestone-icon { border-style: none; display: block; flex: none; height: 16px; width: 16px; }
+  .lp-project-row__milestone-name { border-style: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .lp-project-row__milestone-date { flex: none; }
+  .lp-project-row > div.lp-project-row__health-cell { flex: 0 0 50px; height: 32px; width: 50px; justify-content: flex-start; }
+  .lp-project-row__health { flex: none; gap: 0; height: 32px; width: 32px; justify-content: center; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; color: var(--text); font-size: 12px; font-weight: 500; line-height: normal; }
+  .lp-project-row__health > span:nth-child(2),
+  .lp-project-row__health small { display: none; }
+  .lp-project-row__health .lp-project-health,
+  .lp-project-row__health svg { height: 14px; width: 14px; }
+  .lp-project-row > div.lp-project-row__status { flex: 0 0 28px; gap: 0; height: 28px; width: 28px; }
+  .lp-project-row__progress { gap: 0; padding: 3px 6px; }
+  .lp-project-row__progress > span,
+  .lp-project-progress-sparkline { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
