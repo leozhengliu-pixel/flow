@@ -20,6 +20,8 @@ import { UserAvatar } from '@/components/ui/user-avatar'
 import { displayUserName } from '@/lib/runtime-preferences'
 import { TooltipBody } from '@/components/ui/tooltip'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { PhoneMenu } from '@/components/ui/phone-menu'
 
 export interface PropertyOption {
   searchOnly?: boolean
@@ -68,7 +70,7 @@ export interface PropertyOptionSubmenu {
 
 export type PropertyMenuKind = 'standard' | 'labels' | 'project-labels' | 'project' | 'milestone'
 
-export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, closeOnSelect, keepSelectedVisible = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, createOptionLabel, searchPlaceholder, searchShortcut, showGroupHeadings = true, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, hoverPlacement = 'left', valueIsEntityName = false, open: controlledOpen, onOpenChange, labelGroupId, embedded = false, tooltip, tooltipShortcut }: {
+export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, closeOnSelect, keepSelectedVisible = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, createOptionLabel, searchPlaceholder, searchShortcut, showGroupHeadings = true, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, hoverPlacement = 'left', valueIsEntityName = false, open: controlledOpen, onOpenChange, labelGroupId, embedded = false, tooltip, tooltipShortcut, menuContext }: {
   label: string
   value?: string
   icon?: ReactNode
@@ -111,8 +113,10 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   /** Plain hover tooltip for the trigger (label plus optional shortcut); `hoverContent` takes precedence. */
   tooltip?: string
   tooltipShortcut?: string
+  menuContext?: string
 }) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const directory = usePeopleDirectory()
   const menuOptions = useMemo(() => options.map(option => {
     const person = option.person ?? (isPeopleProperty(label) && option.id && !option.id.startsWith('__') && !['*','me','none','all'].includes(option.id) ? directoryPerson(directory.users, option.id) ?? { id: option.id, label: option.label } : undefined)
@@ -176,7 +180,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     command.onKeyDown(event)
   }
   const placeholder = searchPlaceholder ?? (kind === 'labels' ? 'Change or add labels…' : kind === 'project' ? 'Add to project…' : `Change ${label.toLowerCase()}…`)
-  const triggerButton = <button type="button" role={triggerRole === 'combobox' ? 'combobox' : undefined} className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open} data-state={open ? 'open' : 'closed'}>
+  const triggerButton = <button type="button" data-property={label.toLowerCase()} role={triggerRole === 'combobox' ? 'combobox' : undefined} className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open} data-state={open ? 'open' : 'closed'}>
         {trigger ?? (compact ? <>{icon ?? iconFor(label)}<span data-i18n-ignore={valueIsEntityName || undefined}>{value || label}</span></> : <><span>{icon ?? iconFor(label)}</span><span className="property-label">{label}</span><span className="property-value" data-i18n-ignore={valueIsEntityName || undefined}>{value || `Add ${label.toLowerCase()}`}</span></>)}
       </button>
   const popoverTrigger = <Popover.Trigger asChild>{triggerButton}</Popover.Trigger>
@@ -200,6 +204,13 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
           </div>}
         </div>
   if (embedded) return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}>{content}</Tooltip.Provider>
+  if (phone) return <>{customTrigger
+    ? customTrigger({ open, activeTrigger, openMenu: triggerId => { setActiveTrigger(triggerId); setOpen(true) } })
+    : <span className="phone-property-trigger" onClick={() => setOpen(true)}>{triggerButton}</span>}
+    <PhoneMenu heading={menuContext ? t(menuContext) : true} open={open} onOpenChange={setOpen} label={t(placeholder.replace(/…$/, ''))} className={`property-command-surface property-command-${kind}`}>
+      {content}
+    </PhoneMenu>
+  </>
   return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}><Tooltip.Root open={Boolean(tooltipContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false); else { setActiveTrigger(undefined); setOpenLabelGroupId(undefined); setOpenSubmenuId(undefined) } }}>
     {menuTrigger}
     <Popover.Portal>
@@ -214,13 +225,14 @@ function VirtualStandardOptions({ options, activeId, selected, label, multiple, 
   options: PropertyOption[]; activeId?: string; selected: Set<string>; label: string; multiple: boolean; listboxId: string; onChoose: (option: PropertyOption) => void; onActive: (id: string) => void
 }) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const ref = useRef<VirtuosoHandle>(null)
   const sections = useMemo(() => groupOptionSections(options), [options])
   const rows = useMemo(() => sections.flatMap(section => [...(section.label ? [{ key: `header:${section.id}`, heading: section.label, option: undefined as PropertyOption | undefined }] : []), ...section.options.map(option => ({ key: `option:${option.id}`, heading: '', option }))]), [sections])
   const indices = useMemo(() => new Map(rows.flatMap((row, index) => row.option ? [[row.option.id, index] as const] : [])), [rows])
   const activeIndex = activeId === undefined ? 0 : indices.get(activeId) ?? 0
   useEffect(() => { if (activeId !== undefined) ref.current?.scrollIntoView({ index: activeIndex }) }, [activeId, activeIndex])
-  return <Virtuoso ref={ref} id={listboxId} role="listbox" aria-label={label} aria-multiselectable={multiple || undefined} className="property-command-options virtual-property-options" data={rows} fixedItemHeight={32} initialTopMostItemIndex={activeIndex} increaseViewportBy={64} computeItemKey={(_index, row) => row.key} style={{height:Math.min(319, rows.length*32)}} itemContent={(_index,row) => row.option ? <CommandOption option={row.option} active={row.option.id===activeId} checked={selected.has(row.option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} onChoose={()=>onChoose(row.option!)} onActive={()=>onActive(row.option!.id)}/> : <div className="property-command-group" style={{height:32}}>{t(row.heading)}</div>}/>
+  return <Virtuoso ref={ref} id={listboxId} role="listbox" aria-label={label} aria-multiselectable={multiple || undefined} className="property-command-options virtual-property-options" data={rows} fixedItemHeight={phone ? undefined : 32} defaultItemHeight={phone ? 46 : 32} initialTopMostItemIndex={activeIndex} increaseViewportBy={64} computeItemKey={(_index, row) => row.key} style={{height:Math.min(phone ? 369 : 319, rows.length*(phone ? 46 : 32))}} itemContent={(_index,row) => row.option ? <CommandOption option={row.option} active={row.option.id===activeId} checked={selected.has(row.option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} onChoose={()=>onChoose(row.option!)} onActive={()=>onActive(row.option!.id)}/> : <div className="property-command-group" style={{height:phone ? 30 : 32}}>{t(row.heading)}</div>}/>
 }
 
 function groupLabelOptions(options: PropertyOption[], selectedIds: Set<string>) {

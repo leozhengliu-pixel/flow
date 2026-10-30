@@ -568,7 +568,7 @@ export function ExistingDraftDiscardDialog({ description = 'Your draft will be d
   return <DraftDialogFrame description={description} descriptionId="existing-draft-discard-description" focusRef={discardRef} onCancel={onCancel} open={open} title="Discard this draft?"><div className={styles.confirmActions}><span/><span/><button type="button" disabled={saving} onClick={onCancel}>Cancel</button><button ref={discardRef} type="button" className={primary ? styles.confirmSave : styles.confirmDiscard} disabled={saving} onClick={onDiscard}>Discard</button></div></DraftDialogFrame>
 }
 
-function MiniProperty(props: React.ComponentProps<typeof PropertyMenu>) { return <PropertyMenu compact {...props}/> }
+function MiniProperty(props: React.ComponentProps<typeof PropertyMenu>) { return <PropertyMenu compact menuContext="New issue" {...props}/> }
 function cycleIssueProgress(issues: Issue[], cycleId: string) { const scoped=issues.filter(issue=>issue.cycleId===cycleId&&!issue.archivedAt);return scoped.length?Math.round(scoped.filter(issue=>issue.state.type==='completed'||issue.state.type==='canceled').length/scoped.length*100):0 }
 
 /** The due date doubles as a recurring issue's first due date (the reference app's model). */
