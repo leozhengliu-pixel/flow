@@ -1431,5 +1431,58 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-customers-row__add { color: rgb(255,255,255); font: 400 13.3333px/normal var(--font); }
   .project-customers-row__add > span,
   .project-customers-row__add > svg { color: var(--pd-faint); }
+  .project-details-sidebar {
+    inset: 0 0 0 auto;
+    width: 350px;
+    background: transparent;
+    padding: 0 0 0 4px;
+  }
+  .project-details-sidebar__section { margin-right: 8px; }
+  .project-details-sidebar__section > header { margin-right: 12px; margin-left: 12px; }
+  .project-details-sidebar__section.is-compact > header { margin-right: 12px; margin-left: 12px; }
+  .project-details-sidebar__section > header > button:first-child { padding-left: 0; line-height: normal; }
+  .project-details-sidebar__section.is-compact > header > button:last-child:not(:first-child),
+  .project-details-sidebar__section.is-milestones > header > button:last-child:not(:first-child) {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    color: var(--phone-project-panel-text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  .project-details-sidebar__section.is-compact > header > button:last-child:not(:first-child) svg,
+  .project-details-sidebar__section.is-milestones > header > button:last-child:not(:first-child) svg { width: 14px; height: 14px; }
+  .project-details-sidebar__section > header > button:first-child,
+  .project-details-sidebar__section > header > button:first-child svg { color: var(--phone-project-panel-label); }
+  .project-details-sidebar__property-label { line-height: normal; color: var(--phone-project-panel-label); }
+  .project-details-sidebar__property-trigger { color: var(--phone-project-panel-text); }
+  .project-details-sidebar__property-trigger.is-empty { color: var(--phone-project-panel-label); }
+  .project-details-sidebar__property-trigger.is-status { color: var(--phone-project-panel-bright); }
+  .project-details-sidebar__property-trigger.is-labels { color: var(--phone-project-panel-label); }
+  .project-details-sidebar__property .lp-project-property-trigger { width: fit-content; max-width: 100%; height: 28px; display: inline-flex; align-items: center; justify-self: start; gap: 8px; padding: 3px 6px; border: 0; border-radius: 9999px; background: transparent; color: var(--phone-project-panel-bright); font-size: 12px; font-weight: 450; line-height: normal; }
+  .project-details-sidebar__property .lp-project-property-trigger.is-empty { color: var(--phone-project-panel-label); }
+  .project-details-sidebar__property .lp-project-property-trigger svg { width: 16px; height: 16px; flex: 0 0 16px; }
+  .project-details-sidebar__property .lp-project-property-trigger span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .project-label-control.is-sidebar { padding-left: 0; }
+  .project-details-sidebar__property .project-label-add { color: var(--phone-project-panel-label); font-size: 12px; font-weight: 450; line-height: normal; }
+  .project-details-sidebar__milestone { height: 36px; flex-basis: 36px; }
+  .project-details-sidebar__milestones { gap: 0; padding-bottom: .5px; }
+  .project-details-sidebar__properties { margin-bottom: 11.5px; }
+  .project-details-sidebar__milestone strong { color: var(--phone-project-panel-text); }
+  .project-details-sidebar__milestone.is-unassigned strong { color: var(--phone-project-panel-label); }
+  .project-details-sidebar__section > header > button.project-details-sidebar__see-all:last-child:not(:first-child) { width: auto; padding: 2px 0 !important; color: var(--phone-project-panel-label); }
+  .project-details-sidebar,
+  .project-details-sidebar__property-label,
+  .project-details-sidebar__property-trigger > span,
+  .project-details-sidebar__property .lp-project-property-trigger > span,
+  .project-details-sidebar__section > header > button:first-child > span,
+  .project-details-sidebar__milestone-summary strong,
+  .project-details-sidebar__milestone.is-unassigned > strong,
+  .project-details-sidebar__see-all > span,
+  .project-details-sidebar .project-label-add > span { border-style: none; }
   html:root body .app:has(.project-detail-page) .bottom-agent { display: none; }
 }

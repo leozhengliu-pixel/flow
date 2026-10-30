@@ -121,3 +121,60 @@ test.describe('mobile project overview', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/project-overview-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 })
+
+test.describe('mobile project properties panel', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('phone project details panel sits at the right edge over the overview with split date rows', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-projects-properties-${testInfo.project.name}-${testInfo.retry}`
+    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: 'Mobile project properties parity', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(response.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const created = await request.post('http://127.0.0.1:4180/api/projects', {
+      headers,
+      data: {
+        name: '[mobile] Compare Test',
+        summary: 'Properties panel parity fixture',
+        description: '<p>This project checks the phone properties panel.</p>',
+        statusId: 'ps_progress',
+        priority: 2,
+        startDate: '2026-09-28',
+      },
+    })
+    expect(created.status()).toBe(201)
+    const project = await created.json() as { id: string; slugId: string }
+    const initiative = await request.post('http://127.0.0.1:4180/api/initiatives', {
+      headers,
+      data: { name: '[mobile] test123', summary: 'Properties panel initiative', status: 'active' },
+    })
+    expect(initiative.status()).toBe(201)
+    const initiativeId = (await initiative.json() as { id: string }).id
+    expect((await request.patch(`http://127.0.0.1:4180/api/projects/${project.id}`, { headers, data: { initiatives: [initiativeId] } })).ok()).toBe(true)
+    expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/milestones`, { headers, data: { name: 'Alpha' } })).status()).toBe(201)
+    expect((await request.post('http://127.0.0.1:4180/api/projects', { headers, data: { name: '[mobile] Companion' } })).status()).toBe(201)
+
+    await page.goto(`/${workspaceKey}/project/${project.slugId}/overview`)
+
+    const aside = page.locator('.project-details-sidebar')
+    expect((await aside.boundingBox())?.x).toBe(40)
+    expect((await aside.boundingBox())?.width).toBe(350)
+    expect(await aside.evaluate(node => getComputedStyle(node).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
+
+    const properties = page.locator('.project-details-sidebar__section.is-compact')
+    expect((await properties.boundingBox())?.x).toBe(44)
+    expect((await properties.boundingBox())?.width).toBe(338)
+    expect((await page.locator('.project-details-sidebar__property-label').first().boundingBox())?.x).toBe(57)
+    expect((await page.locator('.project-details-sidebar__property-label').nth(4).textContent())).toBe('Start date')
+    expect((await page.locator('.project-details-sidebar__property-label').nth(5).textContent())).toBe('Target date')
+    expect((await page.locator('.project-details-sidebar__properties').boundingBox())?.height).toBe(352)
+    expect((await page.locator('.project-details-sidebar__property .lp-project-property-trigger > span').first().boundingBox())?.x).toBe(177)
+    expect((await page.locator('.project-details-sidebar__section.is-milestones').boundingBox())?.y).toBeCloseTo(501, 0)
+    expect((await page.locator('.project-details-sidebar__milestone').first().boundingBox())?.height).toBe(36)
+    expect((await page.locator('.project-details-sidebar__section').last().boundingBox())?.y).toBeCloseTo(623.5, 0)
+    expect((await page.locator('.project-details-sidebar__see-all > span').boundingBox())?.x).toBeCloseTo(331.5, 0)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/project-properties-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
+})
