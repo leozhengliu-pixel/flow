@@ -58,15 +58,31 @@ func TestProjectUpdateReminderLifecycle(t *testing.T) {
 	}
 	requestJSON[domain.ProjectUpdate](t, handler, http.MethodPost, "/api/projects/"+project.ID+"/updates", map[string]any{"body": "Update posted after reminder"}, http.StatusCreated)
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
-	reminderIndex := slices.IndexFunc(bootstrap.Notifications, func(item domain.Notification) bool {
+	projectIndex := slices.IndexFunc(bootstrap.Projects, func(item domain.Project) bool { return item.ID == project.ID })
+	if projectIndex < 0 {
+		t.Fatalf("posting a project update lost its records: project=%d", projectIndex)
+	}
+	if bootstrap.Projects[projectIndex].Health != "onTrack" {
+		t.Fatalf("posting a project update did not resolve its reminder: project=%#v", bootstrap.Projects[projectIndex])
+	}
+	// The full bootstrap only streams live notifications; the resolved
+	// reminder is archived and therefore served by the inbox history only.
+	if slices.ContainsFunc(bootstrap.Notifications, func(item domain.Notification) bool {
+		return item.ProjectID == project.ID && item.Type == "projectUpdateReminder"
+	}) {
+		t.Fatalf("archived project update reminder leaked into the bootstrap: %#v", bootstrap.Notifications)
+	}
+	history, err := repository.QueryNotifications(context.Background(), store.NotificationQuery{
+		Workspace: bootstrap.Workspace.URLKey, UserID: bootstrap.Viewer.ID, IncludeArchived: true, IncludeDeleted: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reminderIndex := slices.IndexFunc(history.Notifications, func(item domain.Notification) bool {
 		return item.ProjectID == project.ID && item.Type == "projectUpdateReminder"
 	})
-	projectIndex := slices.IndexFunc(bootstrap.Projects, func(item domain.Project) bool { return item.ID == project.ID })
-	if reminderIndex < 0 || projectIndex < 0 {
-		t.Fatalf("posting a project update lost its records: reminder=%d project=%d", reminderIndex, projectIndex)
-	}
-	if bootstrap.Notifications[reminderIndex].ArchivedAt == nil || bootstrap.Projects[projectIndex].Health != "onTrack" {
-		t.Fatalf("posting a project update did not resolve its reminder: notification=%#v project=%#v", bootstrap.Notifications[reminderIndex], bootstrap.Projects[projectIndex])
+	if reminderIndex < 0 || history.Notifications[reminderIndex].ArchivedAt == nil {
+		t.Fatalf("posting a project update did not archive its reminder: %#v", history.Notifications)
 	}
 }
 
