@@ -4,6 +4,9 @@
   .phone-create-issue:hover { background: var(--theme-surface-hover); }
   .phone-create-issue:focus-visible { outline: 2px solid var(--focus-ring); }
   :root { --phone-menu-top: min(110px, 13.04dvh); }
+  /* The reference app's phone pills clip their fill to the padding box, so the shared 0.5px ring paints over the page
+     background at the edge instead of lightening the pill's own fill. */
+  :root :is(.ui-pill,.pill-tab,.reviews-tabs a,.review-detail-tabs nav a,.reviews-icon-button,.pulse-toolbar>nav>a,.flow-release-tabs button,.flow-release-page-toolbar>button,.li-toolbar nav button,.li-icon-button,.flow-cycle-toolbar>button,.li-detail-toolbar>div button) { background-clip: padding-box !important; }
   html:root[data-sidebar-mode] .app > main,
   html:root[data-sidebar-mode] .app .flow-framed-workspace {
     width: 100%;
