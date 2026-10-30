@@ -251,6 +251,12 @@ func (s *SQLiteStore) ensureIssueRecords(ctx context.Context) error {
 		"issue_records_updated_idx ON issue_records(workspace_key,updated_at,id)",
 		"issue_records_created_idx ON issue_records(workspace_key,archived,created_at,id)",
 		"issue_records_priority_idx ON issue_records(workspace_key,archived,priority,id)",
+		"issue_records_cycle_state_idx ON issue_records(workspace_key,cycle_id,archived,state_type,id)",
+		"issue_records_team_assignee_state_idx ON issue_records(workspace_key,team_id,archived,assignee_id,state_type)",
+		"issue_records_assignee_state_idx ON issue_records(workspace_key,archived,assignee_id,state_type)",
+		"issue_records_team_updated_idx ON issue_records(workspace_key,team_id,archived,updated_at,id)",
+		"issue_records_search_ids_idx ON issue_records(workspace_key,id,archived,collection_order)",
+		"issue_records_search_candidates_idx ON issue_records(workspace_key,id,archived,updated_at,identifier)",
 		"issue_records_assignee_counts_idx ON issue_records(workspace_key,assignee_id,archived,state_id,team_id)",
 		"issue_records_creator_counts_idx ON issue_records(workspace_key,creator_id,archived,state_id,team_id)",
 		"issue_attributes_value_idx ON issue_attribute_records(workspace_key,field,value,issue_id)",
@@ -272,6 +278,17 @@ func (s *SQLiteStore) ensureIssueRecords(ctx context.Context) error {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil && !(s.dialect == "mysql" && isDuplicateIndex(err)) {
 			return err
 		}
+	}
+	// Priority ordering puts "No priority" (0) after Low (4); index the rank
+	// so both the workspace and team lists read the page from the index
+	// instead of sorting every matching row.
+	rank := "(CASE WHEN priority=0 THEN 5 ELSE priority END)"
+	statement := "CREATE INDEX IF NOT EXISTS issue_records_priority_rank_idx ON issue_records(workspace_key,archived," + rank + ",id)"
+	if s.dialect == "mysql" {
+		statement = "CREATE INDEX issue_records_priority_rank_idx ON issue_records(workspace_key,archived," + rank + ",id)"
+	}
+	if _, err := s.db.ExecContext(ctx, statement); err != nil && !(s.dialect == "mysql" && isDuplicateIndex(err)) {
+		return err
 	}
 	return nil
 }

@@ -948,7 +948,11 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 	raw, _ := json.Marshal(scope)
 	hash := fmt.Sprintf("%x", sha256.Sum256(raw))
 	if query.IncludeTotal {
-		if err := s.db.QueryRowContext(ctx, prefix+"SELECT COUNT(*) FROM issue_records i WHERE "+where, append(prefixArgs, args...)...).Scan(&page.Total); err != nil {
+		if total, ok, err := s.issueRecordTotal(ctx, query); err != nil {
+			return page, err
+		} else if ok {
+			page.Total = total
+		} else if err := s.db.QueryRowContext(ctx, prefix+"SELECT COUNT(*) FROM issue_records i WHERE "+where, append(prefixArgs, args...)...).Scan(&page.Total); err != nil {
 			return page, err
 		}
 	}
@@ -993,7 +997,14 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 		// The index is read from the far end; the page is turned around below.
 		scanDirection = map[string]string{"ASC": "DESC", "DESC": "ASC"}[direction]
 	}
-	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+payload+","+expression+","+descriptionColumn+" FROM issue_records i WHERE "+where+" ORDER BY "+expression+" "+scanDirection+",i.id "+scanDirection+" LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
+	from := "issue_records i"
+	if s.dialect == "mysql" && len(query.TeamIDs) > 0 && query.Sort == "updatedAt" {
+		// Read the team's rows in updatedAt order from the matching index;
+		// otherwise MySQL scans the whole workspace in updatedAt order and
+		// filters the team afterwards (slow for a saved view with no matches).
+		from = "issue_records i FORCE INDEX (issue_records_team_updated_idx)"
+	}
+	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+payload+","+expression+","+descriptionColumn+" FROM "+from+" WHERE "+where+" ORDER BY "+expression+" "+scanDirection+",i.id "+scanDirection+" LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
 	if err != nil {
 		return page, err
 	}
@@ -1063,6 +1074,71 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 		page.HasPrevious = false
 	}
 	return page, nil
+}
+
+// issueRecordTotal answers a query's total from the maintained issue
+// counters when the query is a plain scope count (a workspace or team list
+// with no other predicate). The counters are transactionally maintained by
+// every issue write, so this stays correct while avoiding a COUNT(*) over
+// the whole workspace.
+func (s *SQLiteStore) issueRecordTotal(ctx context.Context, query IssueRecordQuery) (int64, bool, error) {
+	if !issueFilterEmpty(query.Filter) || query.Text != "" || query.SearchText != "" ||
+		len(query.ProjectIDs) > 0 || len(query.StateIDs) > 0 || len(query.ReleaseIDs) > 0 ||
+		query.RestrictToIssueIDs || query.GroupBy != "" {
+		return 0, false, nil
+	}
+	access := query.Access
+	if len(query.TeamIDs) == 0 {
+		// A workspace-wide count must not include teams the viewer cannot see.
+		if access != nil && !access.Admin {
+			return 0, false, nil
+		}
+		if query.AllowedTeamIDs != nil {
+			return 0, false, nil
+		}
+		scopeType, scopeID := "workspace", ""
+		return s.sumIssueCounters(ctx, query, scopeType, []string{scopeID})
+	}
+	if access != nil && !access.Admin {
+		for _, team := range query.TeamIDs {
+			if !slices.Contains(access.VisibleTeamIDs, team) || slices.Contains(access.ArchivedTeamIDs, team) {
+				return 0, false, nil
+			}
+		}
+	}
+	if query.AllowedTeamIDs != nil {
+		for _, team := range query.TeamIDs {
+			if !slices.Contains(query.AllowedTeamIDs, team) {
+				return 0, false, nil
+			}
+		}
+	}
+	return s.sumIssueCounters(ctx, query, "team", query.TeamIDs)
+}
+
+func (s *SQLiteStore) sumIssueCounters(ctx context.Context, query IssueRecordQuery, scopeType string, ids []string) (int64, bool, error) {
+	clause, args := bindList("scope_id", ids)
+	where := []any{query.Workspace, scopeType}
+	statement := "SELECT COALESCE(SUM(total),0) FROM issue_scope_counts WHERE workspace_key=? AND scope_type=? AND " + clause
+	args = append(where, args...)
+	switch query.Archived {
+	case "", "false":
+		statement += " AND archived=0"
+	case "true":
+		statement += " AND archived=1"
+	case "all":
+	default:
+		return 0, false, nil
+	}
+	var total int64
+	if err := s.db.QueryRowContext(ctx, statement, args...).Scan(&total); err != nil {
+		return 0, false, err
+	}
+	return total, true, nil
+}
+
+func issueFilterEmpty(filter IssueFilter) bool {
+	return filter.Field == "" && len(filter.Values) == 0 && len(filter.And) == 0 && len(filter.Or) == 0 && filter.Not == nil
 }
 
 func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQuery) ([]IssueRecordGroup, error) {
