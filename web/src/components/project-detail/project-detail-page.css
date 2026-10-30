@@ -1518,7 +1518,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
     background: var(--agent-thread-surface);
   }
   .project-activity__composer[data-mode=comment] { min-height: 176px; }
-  .project-activity__composer > header { box-sizing: border-box; height: 41px; padding: 12px 12px 0; }
+  .project-activity__composer > header { box-sizing: border-box; height: 41px; gap: 6.5px; padding: 12px 12px 0; }
   .project-activity__composer > header > div { height: 29px; border-color: var(--my-issues-details-border); background: var(--agent-thread-surface); }
   .project-activity__composer > header > div button { box-sizing: border-box; height: 28px; border: 0; color: var(--my-issues-details-muted); }
   .project-activity__composer > header > div button[aria-selected=true] { background: var(--my-issues-details-tab-active-bg); box-shadow: var(--phone-project-tab-shadow); color: var(--agent-thread-text); }
@@ -1545,6 +1545,48 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
     color: var(--agent-thread-text);
     line-height: normal;
   }
+  .project-activity__composer[data-mode=update] {
+    position: relative;
+    height: 257px;
+    min-height: 257px;
+  }
+  .project-activity__composer[data-mode=update] > .project-activity__editor { flex: 0 0 70px; height: 70px; }
+  .project-activity__composer[data-mode=update] > footer { position: absolute; right: 0; bottom: 0; left: 0; justify-content: flex-end; }
+  .project-activity__composer > footer > button.project-activity__agent { display: none; }
+  .project-activity__composer .project-activity__health {
+    height: 28px;
+    gap: 0;
+    padding: 0 8px;
+    background: var(--theme-control);
+    line-height: 12px;
+    white-space: nowrap;
+  }
+  .project-activity__composer .project-activity__health svg { width: 16px; height: 16px; margin: 0 6px 0 -4px; }
+  .project-activity__composer .project-activity__health > span { font-size: 12px; font-weight: 500; line-height: normal; }
+  .project-activity__diff {
+    position: relative;
+    margin: 0 18px;
+    padding: 13px 0 13.5px 3px;
+  }
+  .project-activity__diff::before {
+    content: "";
+    position: absolute;
+    left: 1px;
+    top: 13px;
+    bottom: 13.5px;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--theme-control-hover);
+  }
+  .project-activity__diff-row { display: flex; align-items: center; gap: 2px; }
+  .project-activity__diff-label { box-sizing: border-box; width: 80.08px; flex: none; padding: 6px 12px; color: var(--agent-thread-muted); font-size: 12px; font-weight: 500; line-height: normal; }
+  .project-activity__diff-value { min-width: 0; display: flex; align-items: center; gap: 6px; padding: 6px 12px 6px 0; color: var(--agent-thread-text); font-size: 12px; font-weight: 500; line-height: normal; }
+  .project-activity__diff-from { display: inline-flex; align-items: center; gap: 6px; }
+  .project-activity__diff-from svg,
+  .project-activity__diff-to svg { width: 16px; height: 16px; flex: none; }
+  .project-activity__diff-to { display: inline-flex; align-items: center; gap: 3px; }
+  .project-activity__diff-prefix { color: var(--theme-text-secondary); }
+  .project-activity__diff-arrow { flex: none; color: var(--theme-text-secondary); }
   .project-activity__feed { display: flex; flex-direction: column; margin-top: 12px; }
   .project-activity__month {
     order: 1;
