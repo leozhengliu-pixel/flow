@@ -10,6 +10,7 @@ export const documentsListsZhCN: Record<string, string> = {
   'Choose a time in the future': '请选择未来的时间',
   'Clear selection': '清除选择',
   'Close search': '关闭搜索',
+  'Create document in {group}': '在{group}中创建文档',
   'Markdown': 'Markdown',
   'PDF': 'PDF',
   // team resources / favorites / deleted documents

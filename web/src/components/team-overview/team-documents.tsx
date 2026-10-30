@@ -5,7 +5,7 @@
  * issue lists (filter menu, applied-filter chips, advanced filter, display popover).
  */
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronRight, Search, X } from 'lucide-react'
+import { CalendarDays, Check, Search, X } from 'lucide-react'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 
 import { openCommandMenu, useRegisterCommandContext } from '@/components/command/command-context'
@@ -34,6 +34,7 @@ import { FlowTooltip, ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { VirtualColumnList } from '@/components/ui/virtual-column-list'
 import { documentPath } from '@/lib/app-routes'
+import { hexToLch } from '@/lib/color-space'
 import { AgentChatPanel } from '@/lib/route-pages'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, FlowDocument, Team, TeamPinnedResource } from '@/types/flow'
@@ -54,16 +55,26 @@ function PlusIcon() {
   return <svg aria-hidden="true" fill="currentColor" focusable="false" height={16} viewBox="0 0 16 16" width={16}><path d="M8.75 4C8.75 3.58579 8.41421 3.25 8 3.25C7.58579 3.25 7.25 3.58579 7.25 4V7.25H4C3.58579 7.25 3.25 7.58579 3.25 8C3.25 8.41421 3.58579 8.75 4 8.75H7.25V12C7.25 12.4142 7.58579 12.75 8 12.75C8.41421 12.75 8.75 12.4142 8.75 12V8.75H12C12.4142 8.75 12.75 8.41421 12.75 8C12.75 7.58579 12.4142 7.25 12 7.25H8.75V4Z"/></svg>
 }
 
+function SortGlyph({ ascending }: { ascending?: boolean }) {
+  return <svg aria-hidden="true" fill="currentColor" focusable="false" height={12} viewBox="0 0 16 16" width={12} style={ascending ? { transform: 'scaleY(-1)' } : undefined}><path d="M11.5361 10.2745C11.8024 10.0029 11.8249 9.56807 11.5762 9.26961C11.3275 8.97139 10.8961 8.91526 10.5811 9.12801L10.5195 9.17391L8.00001 11.2735L5.48048 9.17391L5.41895 9.12801C5.10388 8.91526 4.67252 8.97139 4.42384 9.26961C4.17512 9.56807 4.19758 10.0029 4.46387 10.2745L4.51954 10.3263L7.51954 12.8263C7.79767 13.058 8.20234 13.058 8.48048 12.8263L11.4805 10.3263L11.5361 10.2745Z"/><path d="M8.75 12.25C8.75 12.6642 8.41421 13 8 13C7.58579 13 7.25 12.6642 7.25 12.25L7.25 3.75C7.25 3.33579 7.58579 3 8 3C8.41421 3 8.75 3.33579 8.75 3.75V12.25Z"/></svg>
+}
+
+function CaretGlyph() {
+  return <svg aria-hidden="true" fill="currentColor" focusable="false" height={16} viewBox="0 0 16 16" width={16}><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z"/></svg>
+}
+
 function MoreIcon() {
   return <svg aria-hidden="true" fill="currentColor" focusable="false" height={16} viewBox="0 0 16 16" width={16}><path d="M3 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/></svg>
 }
 
-export function TeamDocuments({ creating, data, documents, onNavigate, onNew, onReload, onReloadResources, resources, team }: {
+export function TeamDocuments({ creating, data, documents, onNavigate, onNew, onNewInGroup, onReload, onReloadResources, resources, team }: {
   creating: boolean
   data: BootstrapData
   documents: FlowDocument[]
   onNavigate: (path: string) => void
   onNew: () => void
+  /** Creates a document inside a project group (the phone group header's plus). */
+  onNewInGroup?: (projectId?: string) => void
   /** Refreshes workspace metadata after a document write. */
   onReload: () => Promise<void>
   onReloadResources: () => Promise<void>
@@ -242,9 +253,9 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
   }, [data.workspace.urlKey, rowIdsRef, handlers, activeRef, selectionRef, visibleDocumentsRef])
   const visibleProperties = properties
   const hasDocuments = documents.some(document => !document.archivedAt)
-  const sortIcon = (key: DocumentOrdering) => ordering === key ? (descending ? <ArrowUp size={12}/> : <ArrowDown size={12}/>) : null
+  const sortIcon = (key: DocumentOrdering) => ordering === key ? <SortGlyph ascending={descending}/> : null
   const heading = (key: DocumentOrdering, label: string, className = '') => (
-    <button className={`team-docs-heading ${className}`} aria-label={`${t('Order by')} ${label}`} data-active={ordering === key || undefined} onClick={() => changeOrder(key)} type="button">{label}{sortIcon(key)}</button>
+    <button className={`team-docs-heading ${className}`} aria-label={`${t('Order by')} ${label}`} data-active={ordering === key || undefined} onClick={() => changeOrder(key)} type="button"><span className="team-docs-heading-label">{label}</span>{sortIcon(key)}</button>
   )
   const header = <header className="team-docs-header">
     <span className="team-docs-check-spacer"/>
@@ -258,14 +269,17 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
   const renderGroup = (group: DocumentGroup) => {
     const closed = isCollapsed(group.id)
     const icon = group.icon
+    const groupHue = group.color ? hexToLch(group.color)?.[2].toFixed(3) : undefined
+    const countColor = groupHue ? `lch(63.304% 7 ${groupHue})` : undefined
     return <div className="team-docs-group" data-collapsed={closed} style={group.color ? { '--team-docs-group-color': group.color } as CSSProperties : undefined}>
-      <button aria-expanded={!closed} aria-label={t(closed ? 'Expand group' : 'Collapse group')} className="team-docs-caret" onClick={() => toggleGroup(group.id)} type="button"><ChevronRight/></button>
+      <button aria-expanded={!closed} aria-label={t(closed ? 'Expand group' : 'Collapse group')} className="team-docs-caret" onClick={() => toggleGroup(group.id)} type="button"><CaretGlyph/></button>
       {icon?.kind === 'team' && <TeamIcon team={icon.team} size={16}/>}
       {icon?.kind === 'project' && <ViewGlyph color={icon.project.color} icon={normalizeProjectIcon(icon.project.icon)} style={{ width: 16, height: 16 }}/>}
       {icon?.kind === 'user' && <UserAvatar avatarUrl={icon.user.avatarUrl} className="team-docs-avatar" color={avatarColor(icon.user.id)} name={icon.user.displayName || icon.user.name}/>}
       {icon?.kind === 'cycle' && <CalendarDays size={16}/>}
       <span className="team-docs-group-title" data-i18n-ignore={group.entity || undefined}>{group.entity ? group.name : t(group.name)}</span>
-      <small>{group.items.length}</small>
+      <small style={countColor ? { '--team-docs-group-count-color': countColor } as CSSProperties : undefined}>{group.items.length}</small>
+      <button aria-label={t('Create document in {group}').replace('{group}', group.entity ? group.name : t(group.name))} className="team-docs-group-add" onClick={() => onNewInGroup?.(icon?.kind === 'project' ? icon.project.id : undefined)} type="button"><PlusIcon/></button>
     </div>
   }
 
@@ -292,7 +306,7 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
   return (
     <div className="team-documents" data-created={visibleProperties.has('created')} data-updated={visibleProperties.has('updated')} data-owner={visibleProperties.has('owner')}>
       <div className="team-documents-toolbar">
-        <button aria-label={t('New document')} disabled={creating} aria-busy={creating || undefined} className="team-documents-new" onClick={onNew} type="button"><PlusIcon/>{t('New document')}</button>
+        <button aria-label={t('New document')} disabled={creating} aria-busy={creating || undefined} className="team-documents-new" onClick={onNew} type="button"><PlusIcon/><span className="team-documents-new-label">{t('New document')}</span></button>
         <ScopedFlowTooltip label={t('Add Filter')} shortcut="F" disabled={filterOpen}><span className="team-documents-menu-anchor">
           <MyIssuesFilterMenu align="end" filters={filters} layout="documents" onAdvanced={addAdvancedFilter} onOpenChange={changeFilterOpen} onToggle={toggleFilter} open={filterOpen} options={documentOptions}
             trigger={<button aria-label={t('Add filter')} className="team-documents-icon-button" type="button"><FilterIcon/></button>}/>
@@ -362,6 +376,7 @@ function DocumentRow({ active, created, ctx, document, formatDate, formatRelativ
   const title = documentDisplayTitle(document, t)
   return <DocumentRowMenu ctx={ctx} document={document} team={team}>
     <a className="team-docs-row" data-active={active || undefined} data-document-id={document.id} data-flow-menu-row data-selected={selected} href={href} onClick={open} onFocus={() => onActive(document.id)}>
+      <div className="team-docs-row-inner">
       <FlowTooltip label={t('Select document')} shortcut="X">
         <label className="team-docs-check" onClick={event => event.stopPropagation()}>
           <input aria-label={t('Select document')} checked={selected} onChange={event => onToggle(document.id, event.target.checked)} type="checkbox"/>
@@ -384,6 +399,7 @@ function DocumentRow({ active, created, ctx, document, formatDate, formatRelativ
           </FlowDropdownMenuContent>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
+      </div>
     </a>
   </DocumentRowMenu>
 }
