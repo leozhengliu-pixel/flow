@@ -82,3 +82,26 @@ func TestBootstrapArrayStopsAfterDisconnectedClient(t *testing.T) {
 		t.Fatalf("continued writing after disconnect: writes=%d err=%v", w.writes, err)
 	}
 }
+
+// The full bootstrap streams issue records (which store the agent state empty)
+// but keeps the outline's delegated session status, so list rows can draw the
+// session pill without the paged issue-records endpoint.
+func TestBootstrapIssuesIncludeAgentSessionState(t *testing.T) {
+	s, handler, data, app := applicationFixture(t)
+	issue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Delegated work", "teamId": data.Teams[0].ID, "assigneeId": data.Viewer.ID}, http.StatusCreated)
+	updated := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issue-records/"+issue.ID, map[string]any{"delegateId": app.UserID}, http.StatusOK)
+	task, err := s.store.AgentTask(t.Context(), data.Workspace.URLKey, updated.AgentSessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	for _, item := range bootstrap.Issues {
+		if item.ID == issue.ID {
+			if item.AgentSessionState != task.Status {
+				t.Fatalf("bootstrap agent session state = %q, want %q", item.AgentSessionState, task.Status)
+			}
+			return
+		}
+	}
+	t.Fatalf("issue %s missing from bootstrap", issue.ID)
+}
