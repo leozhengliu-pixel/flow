@@ -1271,10 +1271,8 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-detail-page__top > .project-detail-page__header .project-detail-page__crumb {
     box-sizing: border-box;
     border: 0 none;
-    width: 108.89px;
     height: 24px;
-    flex: 0 0 108.89px;
-    gap: 4px;
+    gap: 5.29px;
     margin-left: 12px;
     overflow: hidden;
     color: var(--text);
