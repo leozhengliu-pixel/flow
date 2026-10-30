@@ -172,7 +172,7 @@ export function MyIssuesSurface({
     : t('{count} more').replace('{count}', String(overflowViews.length))
   const overflowVisibleLabel = activeHidden ? views[activeIndex].label : overflowLabel
   useEffect(() => { if (!overflowOpen) itemRefs.current = [] }, [overflowOpen])
-  return <ContentViewContainer framed inset="tall" data-my-issues-surface="true" data-my-issues-view={activeView} data-my-issues-grouping={displayOptions.grouping}>
+  return <ContentViewContainer framed inset="tall" data-my-issues-surface="true">
     <ContentViewHeader onOpenSidebar={onOpenSidebar} onCreateIssue={onCreateIssue}>
       <ContentViewHeaderTitle title="My issues" />
     </ContentViewHeader>

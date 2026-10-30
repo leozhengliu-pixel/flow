@@ -42,6 +42,8 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
   // returns them with the parent's page, wherever their own group is (like the full list). The board stays flat.
   const nested = layout === 'list' && nestedSubIssues
   const query = useMemo(() => nested ? { ...listQuery, nested: true } : listQuery, [listQuery, nested])
+  // "No grouping" is a flat list in the reference app: no "All issues" strip.
+  const hideGroupHeaders = Boolean(rowProps.hideGroupHeaders) || query.groupBy === 'none'
   const signature = pagedIssueListSignature(viewerId, data.workspace.id, query)
   const [retry, setRetry] = useState(0)
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -317,7 +319,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
       </div>
     }
     return <GroupedVirtuoso className={styles.virtualList} role="list" aria-label="Issues" style={listStyle} groupCounts={counts} context={revision} defaultItemHeight={44} increaseViewportBy={{ top: 176, bottom: 264 }}
-      groupContent={index => <MyIssuesGroupHeader group={descriptor(groups[index])} collapsed={Boolean(collapsedGroupIds?.has(groups[index].value))} createIssueLabel="Create new issue" onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>}
+      groupContent={index => hideGroupHeaders ? null : <MyIssuesGroupHeader group={descriptor(groups[index])} collapsed={Boolean(collapsedGroupIds?.has(groups[index].value))} createIssueLabel="Create new issue" onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>}
       itemContent={(index, groupIndex) => {
         const group = groups[groupIndex], localIndex = index - offsets[groupIndex]
         const pageIndex = cache.pageAt(group.value, localIndex), page = cache.get(group.value, pageIndex)
