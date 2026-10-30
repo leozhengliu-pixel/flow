@@ -109,12 +109,13 @@ func TestLabelDeletionUpdatesOnlyAssociatedEntitiesAndPersists(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	allowOnlyIssueHistoryWrites(t, repo, []string{issue.ID, suggested.ID})
 	writes := auditWrites(t, repo)
 	if err := repo.MutateLabelDeletion(t.Context(), "test-workspace", "label.deleted", label.ID, false, removeTestLabel(label.ID)); err != nil {
 		t.Fatal(err)
 	}
 	changed := writes()
-	if changed["issue_records"] != 2 || changed["workspace_metadata_records"] != 3 || changed["workspace_states"] != 0 || changed["workspace_content_records"] != 0 {
+	if changed["issue_records"] != 2 || changed["workspace_metadata_records"] != 3 || changed["workspace_states"] != 0 || changed["workspace_content_records"] != 2 {
 		t.Fatalf("unexpected cascade write amplification: %v", changed)
 	}
 	if err := repo.Close(); err != nil {

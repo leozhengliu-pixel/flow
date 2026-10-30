@@ -64,15 +64,20 @@ func TestWorkflowDeletionUpdatesOnlyAffectedIssuesAcrossBatches(t *testing.T) {
 	if _, err := repo.db.ExecContext(t.Context(), `UPDATE issue_records SET data='corrupt unrelated issue' WHERE state_id<>?`, old.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.db.ExecContext(t.Context(), `UPDATE workspace_content_records SET data='corrupt unrelated history'`); err != nil {
+	if _, err := repo.db.ExecContext(t.Context(), `UPDATE workspace_content_records SET data='corrupt unrelated history' WHERE kind<>? OR resource_id NOT IN (SELECT id FROM issue_records WHERE state_id=?)`, issueFieldHistoryKind, old.ID); err != nil {
 		t.Fatal(err)
 	}
+	ids := make([]string, 225)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("replace-%04d", i)
+	}
+	allowOnlyIssueHistoryWrites(t, repo, ids)
 	writes := auditWrites(t, repo)
 	if err := repo.DeleteWorkflowStateRecords(t.Context(), "test-workspace", old.TeamID, workflowDeletionPlan(old, next)); err != nil {
 		t.Fatal(err)
 	}
 	changes := writes()
-	if changes["issue_records"] != 225 || changes["workspace_metadata_records"] != 1 || changes["workspace_states"] != 0 || changes["workspace_content_records"] != 0 {
+	if changes["issue_records"] != 225 || changes["workspace_metadata_records"] != 1 || changes["workspace_states"] != 0 || changes["workspace_content_records"] != 225 {
 		t.Fatalf("unrelated workflow write amplification: %v", changes)
 	}
 	var count int
@@ -184,11 +189,12 @@ func TestWorkflowDeletionMaintainsLifecycleDates(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			allowOnlyIssueHistoryWrites(t, repo, []string{"replace-0000", "replace-0001"})
 			writes := auditWrites(t, repo)
 			if err := repo.DeleteWorkflowStateRecords(t.Context(), "test-workspace", old.TeamID, workflowDeletionPlan(old, replacement)); err != nil {
 				t.Fatal(err)
 			}
-			if changed := writes(); changed["issue_records"] != 2 || changed["workspace_metadata_records"] != 1 || changed["workspace_states"] != 0 || changed["workspace_content_records"] != 0 {
+			if changed := writes(); changed["issue_records"] != 2 || changed["workspace_metadata_records"] != 1 || changed["workspace_states"] != 0 || changed["workspace_content_records"] != 2 {
 				t.Fatalf("lifecycle fix broadened writes: %v", changed)
 			}
 			for _, id := range []string{"replace-0000", "replace-0001"} {
