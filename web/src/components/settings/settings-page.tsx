@@ -41,6 +41,7 @@ import {
 import { toast } from "@/lib/toast";
 import { useI18n } from "@/i18n/i18n";
 import { useChatPlatform } from "@/lib/chat-platform";
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
 
 import {
   DropdownMenu,
@@ -81,7 +82,7 @@ import type { NotificationSettingsView, SettingsPageId, TeamSettingsSection } fr
 import { AgentCursorGlyph, AgentHistoryGlyph } from '@/components/ui/agent-glyph'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { AppLink } from "@/components/ui/app-link";
-import { SettingsNavGlyph, type SettingsNavGlyphName } from './settings-nav-glyphs'
+import { SettingsBackChevronGlyph, SettingsNavGlyph, SettingsPlanGlyph, SettingsSearchGlyph, type SettingsNavGlyphName } from './settings-nav-glyphs'
 import {
   apiKeysSettingsPath,
   identityProviderSettingsPath,
@@ -129,7 +130,7 @@ import {
 import { WorkspaceTeamsSettings } from "./workspace-teams-settings";
 import { applyTheme } from "@/lib/theme";
 import { workspaceRegionLabel } from "@/components/workspace/workspace-regions";
-import { SidebarCustomization } from "@/components/layout/sidebar";
+import { HelpMenu, SidebarCustomization } from "@/components/layout/sidebar";
 import { useSidebarCustomizationState } from "@/components/layout/sidebar-customization-state";
 import { agentWebAccessEnabled } from "@/lib/agent-web-access";
 import { mcpConnectorsEnabled } from "@/lib/mcp-connectors";
@@ -474,6 +475,7 @@ const DEFAULT_VALUES: StoredSettings["values"] = {
 
 export function SettingsPage(props: SettingsPageProps) {
   const { locale, t } = useI18n();
+  const phoneLayout = usePhoneLayout();
   const [query, setQuery] = useState("");
   const [mobileNav, setMobileNav] = useState(false);
   const [sidebarCustomizationOpen, setSidebarCustomizationOpen] =
@@ -638,11 +640,11 @@ export function SettingsPage(props: SettingsPageProps) {
       <div className="settings-app">
         <aside ref={sidebarRef} className={`settings-sidebar${mobileNav ? " open" : ""}`}>
           <button className="settings-back" onClick={props.onBack}>
-            <ArrowLeft size={16} />
+            {phoneLayout ? <SettingsBackChevronGlyph size={14} /> : <ArrowLeft size={16} />}
             {t("Back to app")}
           </button>
           <label className="settings-search">
-            <Search size={15} />
+            {phoneLayout ? <SettingsSearchGlyph size={16} /> : <Search size={15} />}
             <input
               aria-label="Search settings"
               aria-controls="settings-search-results"
@@ -703,7 +705,7 @@ export function SettingsPage(props: SettingsPageProps) {
               </div>
             ) : visible.map((section) => (
               <section key={section.title}>
-                <h2>{t(section.title)}</h2>
+                <h2><span>{t(section.title)}</span></h2>
                 {section.title === "Integrations" && isWorkspaceAdmin(props.data) ? (
                   <EnabledIntegrationNav
                     data={props.data}
@@ -765,6 +767,21 @@ export function SettingsPage(props: SettingsPageProps) {
               </section>
             )}
           </nav>
+          <footer className="settings-sidebar-footer">
+            <HelpMenu
+              onSettings={() => { props.onNavigate("preferences"); setMobileNav(false); }}
+              onShortcuts={() => undefined}
+            />
+            <button
+              type="button"
+              className="settings-plan-button"
+              aria-label={t("Free plan")}
+              onClick={() => { props.onNavigate("billing"); setMobileNav(false); }}
+            >
+              <SettingsPlanGlyph size={16} />
+              <span>{t("Free plan")}</span>
+            </button>
+          </footer>
         </aside>
         <button
           className={`settings-sidebar-scrim${mobileNav ? " open" : ""}`}

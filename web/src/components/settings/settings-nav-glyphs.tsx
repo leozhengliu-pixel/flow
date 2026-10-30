@@ -52,6 +52,28 @@ export function SettingsNavGlyph({ name, size = 16, ...props }: GlyphProps) {
   </svg>
 }
 
+/** The drawer's "Back to app" chevron, copied from the reference app's 16×16 inline SVG. */
+export function SettingsBackChevronGlyph({ size = 14, ...props }: Omit<SVGProps<SVGSVGElement>, 'name'> & { size?: number | string }) {
+  return <svg aria-hidden="true" focusable="false" width={size} height={size} viewBox="0 0 16 16" fill="currentColor" data-settings-nav-glyph="back" {...props}>
+    <path d="M10.53033 11.4697C10.82322 11.7626 10.82322 12.2374 10.53033 12.5303C10.23744 12.8232 9.76256 12.8232 9.46967 12.5303L5.46967 8.53033C5.1793 8.23999 5.1764 7.77014 5.4632 7.47624L9.36581 3.47624C9.65508 3.17976 10.12991 3.17391 10.42639 3.46318C10.72287 3.75244 10.72872 4.22728 10.43946 4.52376L7.05417 7.99351L10.53033 11.4697Z"/>
+  </svg>
+}
+
+/** The settings search magnifier, copied from the reference app's 16×16 inline SVG. */
+export function SettingsSearchGlyph({ size = 16, ...props }: Omit<SVGProps<SVGSVGElement>, 'name'> & { size?: number | string }) {
+  return <svg aria-hidden="true" focusable="false" width={size} height={size} viewBox="0 0 16 16" fill="currentColor" data-settings-nav-glyph="search" {...props}>
+    <path d="M7 2C9.76142 2 12 4.23858 12 7C12 8.11012 11.6375 9.13519 11.0254 9.96484L13.7803 12.7197L13.832 12.7764C14.0723 13.0709 14.0549 13.5057 13.7803 13.7803C13.5057 14.0549 13.0709 14.0723 12.7764 13.832L12.7197 13.7803L9.96484 11.0254C9.13519 11.6375 8.11012 12 7 12C4.23858 12 2 9.76142 2 7C2 4.23858 4.23858 2 7 2ZM7 3.5C5.067 3.5 3.5 5.067 3.5 7C3.5 8.933 5.067 10.5 7 10.5C8.933 10.5 10.5 8.933 10.5 7C10.5 5.067 8.933 3.5 7 3.5Z"/>
+  </svg>
+}
+
+/** The plan pill's up-arrow-in-a-circle, copied from the reference app's 16×16 inline SVG. */
+export function SettingsPlanGlyph({ size = 16, ...props }: Omit<SVGProps<SVGSVGElement>, 'name'> & { size?: number | string }) {
+  return <svg aria-hidden="true" focusable="false" width={size} height={size} viewBox="0 0 16 16" fill="currentColor" data-settings-nav-glyph="plan" {...props}>
+    <path d="M5.24457 7.6542C4.91848 7.36772 4.91848 6.90326 5.24457 6.61678L7.40955 4.71486C7.73565 4.42838 8.26435 4.42838 8.59045 4.71486L10.7554 6.61678C11.0815 6.90326 11.0815 7.36772 10.7554 7.65419C10.4293 7.94067 9.90063 7.94067 9.57453 7.65419L8.83502 7.00454V10.7664C8.83502 11.1716 8.46117 11.5 8 11.5C7.53883 11.5 7.16498 11.1716 7.16498 10.7664L7.16498 7.00454L6.42547 7.6542C6.09937 7.94067 5.57067 7.94067 5.24457 7.6542Z"/>
+    <path fillRule="evenodd" clipRule="evenodd" d="M8 13.5C11.0376 13.5 13.5 11.0376 13.5 8C13.5 4.96243 11.0376 2.5 8 2.5C4.96243 2.5 2.5 4.96243 2.5 8C2.5 11.0376 4.96243 13.5 8 13.5ZM8 15C11.866 15 15 11.866 15 8C15 4.13401 11.866 1 8 1C4.13401 1 1 4.13401 1 8C1 11.866 4.13401 15 8 15Z"/>
+  </svg>
+}
+
 /** Projects › Statuses: a hexagon ring around an inner hexagon whose left half is masked out (a half-done status). */
 function ProjectStatusesGlyph({ size, ...props }: Omit<GlyphProps, 'name'>) {
   const maskId = `settings-nav-status-${useId().replaceAll(':', '')}`
