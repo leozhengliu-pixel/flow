@@ -3,6 +3,7 @@ import { Bell, BellOff, Check, Copy, Ellipsis, Link2, Pencil, SquarePen, Trash2 
 import type { ReactNode } from 'react'
 import { toast } from '@/lib/toast'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { useI18n } from '@/i18n/i18n'
 import './project-action-menu.css'
 import './project-comment-menu.css'
@@ -29,6 +30,8 @@ export type ProjectCommentMenuProps = {
   onNewIssue: () => void
   triggerClassName?: string
   iconSize?: number
+  /** The phone card uses the reference app's 14px ellipsis glyph. */
+  phone?: boolean
 }
 
 /**
@@ -36,7 +39,7 @@ export type ProjectCommentMenuProps = {
  * Resolve thread, copy actions, New issue from comment, and Delete, each
  * group divided by a hairline separator.
  */
-export function ProjectCommentMenu({ commentId, body, canEdit, canDelete, thread, resolved = false, onResolve, onEdit, onDelete, onNewIssue, triggerClassName, iconSize = 16 }: ProjectCommentMenuProps) {
+export function ProjectCommentMenu({ commentId, body, canEdit, canDelete, thread, resolved = false, onResolve, onEdit, onDelete, onNewIssue, triggerClassName, iconSize = 16, phone = false }: ProjectCommentMenuProps) {
   const { t } = useI18n()
   const copy = (value: string) => void navigator.clipboard.writeText(value)
     .then(() => toast.success(t('Copied to clipboard')))
@@ -59,7 +62,7 @@ export function ProjectCommentMenu({ commentId, body, canEdit, canDelete, thread
   const visible = groups.map(group => group.filter(Boolean)).filter(group => group.length > 0)
   return <DropdownMenu.Root>
     <DropdownMenu.Trigger asChild>
-      <button aria-label="Comment options" className={triggerClassName} type="button"><Ellipsis size={iconSize}/></button>
+      <button aria-label="Comment options" className={triggerClassName} type="button">{phone ? <FlowGlyph name="ellipsis" size={14}/> : <Ellipsis size={iconSize}/>}</button>
     </DropdownMenu.Trigger>
     <DropdownMenu.Portal>
       <DropdownMenu.Content data-flow-motion="floating" align="end" sideOffset={4} collisionPadding={16} className="project-action-menu project-comment-menu" aria-label={t('Comment options')}>
