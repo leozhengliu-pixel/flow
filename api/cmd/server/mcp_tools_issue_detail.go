@@ -50,7 +50,17 @@ func mcpUserName(data domain.Bootstrap, id string) string {
 func (s *server) getMCPIssue(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
 	issue, err := mcpFindIssue(data, stringArg(args, "id"))
 	if err != nil {
-		return nil, err
+		// Paged MCP metadata intentionally does not carry the workspace issue
+		// collection. Resolve the requested record through the same indexed,
+		// permission-aware point read used by the web detail endpoint.
+		q, queryErr := s.mcpIssueQuery(ctx, actor)
+		if queryErr != nil {
+			return nil, queryErr
+		}
+		issue, err = s.store.AuthorizedIssueRecord(ctx, q, stringArg(args, "id"))
+		if err != nil {
+			return nil, err
+		}
 	}
 	q, err := s.mcpIssueQuery(ctx, actor)
 	if err != nil {
