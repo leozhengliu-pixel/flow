@@ -1966,6 +1966,8 @@ export const zhCN: Record<string, string> = {
   "Flow Agent is not configured": "Flow Agent 尚未配置",
   "Flow Agent is unavailable": "Flow Agent 暂不可用",
   "Thinking…": "思考中…",
+  "every weekday": "每个工作日",
+  "Every weekday": "每个工作日",
   "Waiting for approval": "等待批准",
   "Approve tool": "批准工具",
   "Reject tool": "拒绝工具",

@@ -171,6 +171,9 @@ export function LoopAgentPanel({
         if (event.type === "session.completed" && event.session) {
           setMessages(event.session.messages);
           setStreamParts([]);
+          // The final event already contains the answer; don't keep the header in
+          // "Thinking…" while the stream request finishes its save handoff.
+          setLoading(false);
           // Catch save_loop results the stream did not report individually.
           const last = event.session.messages.filter((item) => item.role === "assistant").at(-1);
           for (const part of last?.parts ?? []) handleToolPart(part);

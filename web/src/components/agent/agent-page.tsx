@@ -287,6 +287,9 @@ export function AgentPage({
             if (mountedRef.current) onNavigate(agentPath(data.workspace.urlKey, next.slugId));
           }
           if (event.type === "session.completed") {
+            // The completion event contains the final answer. Stop the live chrome now;
+            // the request can finish persisting metadata/title work in the background.
+            setBusy(false);
             onSessionChange(next.id, next);
             // Don't pull someone back to the chat if they've left the page.
             if (mountedRef.current) onNavigate(agentPath(data.workspace.urlKey, next.slugId));

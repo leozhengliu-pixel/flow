@@ -174,6 +174,8 @@ export function triggerSummary(loop: Pick<Loop, "triggerType" | "triggerConfig">
     const interval = Number(config?.interval ?? 1) || 1;
     const names: Record<string, [string, string]> = { hour: ["Hourly", "hours"], day: ["Daily", "days"], week: ["Weekly", "weeks"], month: ["Monthly", "months"] };
     const [single, plural] = names[unit] ?? names.day;
+    const weekdays = configStrings(config, "weekdays");
+    if (unit === "day" && interval === 1 && weekdays.length === 5 && ["mon", "tue", "wed", "thu", "fri"].every((day) => weekdays.includes(day))) return t("Every weekday");
     return interval === 1 ? t(single) : t(`Every {count} ${plural}`).replace("{count}", String(interval));
   }
   const event = loopEvent(config);

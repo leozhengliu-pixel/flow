@@ -34,6 +34,11 @@ type Case = {
   followUp?: string
   verify: (c: Ctx, r: Result) => Promise<Check>
 }
+
+/** Optional builder guard: visible loop instructions must read like a teammate's runbook, not an API trace. */
+export function plainLoopInstructions(instructions: string) {
+  return !/(?:\b(?:list|search|get|save|delete|update|finish)_\w+\b|\b(?:updatedAt|completedAt|labelIds|teamId|issueId|documentId)\b|[\u4e00-\u9fff\w-]{2,}-[0-9a-f]{12,})/i.test(instructions)
+}
 export type Result = {
   arm: Arm; id: string; kind: string; status: string; body: string
   totalMs: number; firstActivityMs?: number; firstTextMs?: number
@@ -118,7 +123,15 @@ const referenceCases: Case[] = [
   { id: 'L19b', kind: 'unsupported write: cycle (P19)', prompt: () => 'Can you create a cycle for next week for the DEV team?',
     verify: async (_c, r) => responded(r) },
   { id: 'L21', kind: 'loop, disabled (P21/P22)', prompt: c => `Set up a loop (disabled for now) named "QA spike – ${c.tag} weekly export digest" that runs every Monday at 9am and comments a progress summary on ${c.issue}. Don't enable it.`,
-    verify: async (_c, r) => ({ pass: r.status === 'response' && used(r, 'save_loop'), note: '' }) },
+    verify: async (c, r) => {
+      if (r.status !== 'response' || !used(r, 'save_loop')) return { pass: false, note: 'loop was not saved' }
+      if (process.env.EVAL_LOOP_INSTRUCTIONS !== '1') return { pass: true, note: '' }
+      const payload: any = await c.mcp.loops()
+      const loops: any[] = Array.isArray(payload) ? payload : payload.items ?? payload.loops ?? []
+      const loop = loops.find(item => String(item.name).includes(`${c.tag} weekly export digest`))
+      const pass = Boolean(loop) && plainLoopInstructions(String(loop.instructions ?? ''))
+      return { pass, note: pass ? 'plain instructions' : 'implementation detail in visible instructions' }
+    } },
   { id: 'L23', kind: 'edit project description (P23)', prompt: c => `Add a "Risks" section with 3 bullets to the description of the project "${project(c)}". Keep the rest.`,
     verify: async c => { const p = await getProject(c); return { pass: /risks/i.test(p.description ?? ''), note: '' } } },
   { id: 'L24', kind: 'review latest update (P24)', prompt: c => `Is the latest status of project "${project(c)}" accurate given the current issue states? Point out anything missing and suggest a better health status if needed. Don't change anything.`,

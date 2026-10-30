@@ -163,7 +163,36 @@ func normalizeFlowToolArgs(tool flowMCPTool, args map[string]any) {
 			}
 		}
 	}
-	if tool.Name == "save_loop" {
+	// Models often describe issue fields with the names people see in the UI. Keep
+	// those aliases in the shared normalizer so the MCP schema check and the
+	// built-in agent agree before the call reaches the handler.
+	if strings.TrimPrefix(tool.Name, "mcp__flow.") == "list_issues" {
+		alias := func(field any, set func(any)) {
+			if name, ok := field.(string); ok {
+				switch strings.ToLower(strings.TrimSpace(name)) {
+				case "identifier", "key":
+					set("id")
+				case "state":
+					set("status")
+				case "assignees":
+					set("assignee")
+				case "labelids", "label_ids":
+					set("labels")
+				}
+			}
+		}
+		if fields, ok := args["fields"].([]any); ok {
+			for index, field := range fields {
+				alias(field, func(value any) { fields[index] = value })
+			}
+		}
+		if fields, ok := args["fields"].([]string); ok {
+			for index, field := range fields {
+				alias(field, func(value any) { fields[index] = value.(string) })
+			}
+		}
+	}
+	if strings.TrimPrefix(tool.Name, "mcp__flow.") == "save_loop" {
 		if days, ok := args["weekdays"].([]any); ok {
 			for index, day := range days {
 				if text, ok := day.(string); ok {

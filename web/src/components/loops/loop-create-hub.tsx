@@ -7,7 +7,7 @@ import { createLoop, uploadLoopAttachment } from "@/lib/api";
 import { newLoopPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop, LoopAttachment, LoopTemplate } from "@/types/flow";
-import { markLoopAgentAutostart, useLoopTemplates } from "./loop-data";
+import { activeTeams, markLoopAgentAutostart, useLoopTemplates } from "./loop-data";
 import { LoopGlyph, LoopIcon } from "./loop-glyph";
 import { loopIconColor } from "./loop-template-visuals";
 import { LoopLocationPicker, type LoopLocation } from "./loop-pickers";
@@ -63,26 +63,34 @@ export function LoopCreateHub({
     }
   };
 
-  const create = async (location: LoopLocation) => {
-    if (!entry || busy) return;
+  const create = async (location: LoopLocation, selectedEntry = entry) => {
+    if (!selectedEntry || busy) return;
     setBusy(true);
+    const pendingCreateId = `loop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const pendingPath = `${newLoopPath(data.workspace.urlKey, originTeamKey)}?pendingCreate=${encodeURIComponent(pendingCreateId)}`;
+    sessionStorage.setItem(`flow:pending-loop:${pendingCreateId}`, JSON.stringify({ status: "pending" }));
+    // Leave the picker immediately. The editor follows this handoff while the
+    // server creates the draft, so a slow API never leaves a dead dialog open.
+    onNavigate(pendingPath);
     try {
       const loop: Loop = await createLoop({
         level: location.level,
         ...(location.level === "team" ? { teamId: location.teamId } : {}),
-        ...(entry.kind === "template" ? { templateId: entry.template.id } : {}),
-        ...(entry.kind === "prompt" ? { prompt: entry.prompt, ...(entry.attachmentIds.length ? { attachmentIds: entry.attachmentIds } : {}) } : {}),
+        ...(selectedEntry.kind === "template" ? { templateId: selectedEntry.template.id } : {}),
+        ...(selectedEntry.kind === "prompt" ? { prompt: selectedEntry.prompt, ...(selectedEntry.attachmentIds.length ? { attachmentIds: selectedEntry.attachmentIds } : {}) } : {}),
         status: "draft",
       });
-      if (entry.kind !== "scratch") markLoopAgentAutostart(loop.id);
+      sessionStorage.setItem(`flow:pending-loop:${pendingCreateId}`, JSON.stringify({ status: "ready", draftId: loop.id }));
+      if (selectedEntry.kind !== "scratch") markLoopAgentAutostart(loop.id);
       setEntry(undefined);
       setPrompt("");
-      if (entry.kind === "prompt") setAttachments([]);
+      if (selectedEntry.kind === "prompt") setAttachments([]);
       onCreated?.();
       // The editor fetches the draft itself; refresh lists in the background.
       void onReload?.(loop).catch(() => undefined);
       onNavigate(`${newLoopPath(data.workspace.urlKey, originTeamKey)}?draftId=${encodeURIComponent(loop.id)}`);
     } catch (error) {
+      sessionStorage.removeItem(`flow:pending-loop:${pendingCreateId}`);
       toast.error(error instanceof Error ? error.message : t("Could not create loop"));
     } finally {
       setBusy(false);
@@ -90,7 +98,13 @@ export function LoopCreateHub({
   };
   const submitPrompt = () => {
     const text = prompt.trim();
-    if (text && !uploading) setEntry({ kind: "prompt", prompt: text, attachmentIds: attachments.flatMap((item) => (item.uploaded ? [item.uploaded.id] : [])) });
+    if (!text || uploading) return;
+    const next: Entry = { kind: "prompt", prompt: text, attachmentIds: attachments.flatMap((item) => (item.uploaded ? [item.uploaded.id] : [])) };
+    setEntry(next);
+    const teams = activeTeams(data.teams);
+    const mentioned = teams.find((team) => [team.name, team.key].some((value) => value && text.toLocaleLowerCase().includes(value.toLocaleLowerCase())));
+    const location = mentioned ? { level: "team" as const, teamId: mentioned.id } : undefined;
+    if (location) void create(location, next);
   };
   const template = entry?.kind === "template" ? entry.template : undefined;
 

@@ -19,7 +19,7 @@ const isRunning = (status?: string) => status === "running" || status === "pendi
 
 /**
  * The reference app's loop-builder reply, in order: intro, each question (chips → quoted answer) with the
- * "Updated workflow definition draft" card it led to, "Worked for N seconds ▸", the final reply and "Created automation".
+ * "Drafted the loop" card it led to, "Worked for N seconds ▸", the final reply and "Created automation".
  */
 export function LoopBuilderMessage({
   message,
@@ -82,7 +82,7 @@ export function LoopBuilderMessage({
   );
 }
 
-/** "Updated workflow definition draft" + loop row, or "Created automation" + loop card with runs and team. */
+/** "Drafted the loop" + loop row, or "Created automation" + loop card with runs and team. */
 export function LoopToolCard({
   call,
   teams = [],
@@ -105,7 +105,7 @@ export function LoopToolCard({
       : "Updating workflow definition draft…"
     : failed
       ? "Could not update the loop"
-      : (call?.title ?? (publish ? "Created automation" : "Updated workflow definition draft"));
+      : (publish ? "Created automation" : "Drafted the loop");
   const source = { templateId: visual?.templateId, icon: result?.icon ?? visual?.icon, color: result?.color ?? visual?.color };
   const team = result?.teamId ? teams.find((item) => item.id === result.teamId) : undefined;
   const teamName = team?.name ?? result?.teamName;

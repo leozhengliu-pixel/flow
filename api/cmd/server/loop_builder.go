@@ -66,27 +66,53 @@ func loopBuilderPrompt(data domain.Bootstrap, session domain.AgentSession) strin
 			continue
 		}
 		if template := loopTemplateByID(loop.TemplateID); template != nil {
+			intro := `I've opened a draft and written the instructions for you. A few details depend on how your workspace is set up, so I'll ask about those, and then you can publish it.`
+			if containsChinese(agentLatestUserText(session)) {
+				intro = "我已打开草稿并写好说明。有些细节取决于工作区设置，我会先询问，然后你可以发布它。"
+			}
 			fmt.Fprintf(&prompt, `This draft comes from the %q template; its name, trigger and instructions are already written.
-- Start your first reply with: "I've opened a draft and written the instructions for you. A few details depend on how your workspace is set up, so I'll ask about those, and then you can publish it."
+- Start your first reply with: %q
 - Then ask 1 to 3 questions about autonomy and scope, one at a time with %s, each with 2-3 short options (2-5 words). Good questions for this template:
-`, template.Name, loopQuestionTool)
+`, template.Name, intro, loopQuestionTool)
 			for _, question := range template.Questions {
 				fmt.Fprintf(&prompt, "  - %s (%s)\n", question.Question, strings.Join(question.Options, " / "))
 			}
-			prompt.WriteString(`- After each answer, call save_loop with the loop id to apply it: rewrite the affected instruction steps (keep the rest of the instructions intact) and, where it fits, the trigger filters (for example "Skip already assigned" → filters [{"field":"assignee","operator":"is","value":null}]). If the user skips a question, keep the template's default.
-- After the last answer, call save_loop with the loop id and publish: true to create and enable the loop.
-- Finish with one sentence saying the loop is live and what it will do. Do not repeat the instructions.
+			prompt.WriteString(`- After each answer, update the affected instruction steps (keep the rest intact) and, where it fits, the trigger filters. Describe those instructions in the language a teammate would use; never expose tool names, JSON paths, API field names, generated document slugs or internal IDs in the visible loop instructions.
+			- After the last answer, publish and enable the loop.
+			- Finish with one sentence saying the loop is live and what it will do. Do not repeat the instructions.
 `)
 			continue
 		}
-		prompt.WriteString(`This draft was started from scratch or from the user's request.
-- Fill it in from the request with one save_loop call using the loop id: a short name (2-5 words), the trigger (schedule: interval/unit/time/startDate/weekdays; events: event, value, teams, filters) and detailed instructions written as a short intro sentence plus numbered steps that say what to look up, what to change and what to report, like a well-written runbook.
+		closing := `It remains a draft for your review; I didn't publish, enable, or run it.`
+		if latest := agentLatestUserText(session); containsChinese(latest) {
+			closing = "它仍是供你审核的草稿；我没有发布、启用或运行它。"
+		}
+		fmt.Fprintf(&prompt, `This draft was started from scratch or from the user's request.
+- Fill it in from the request with one save_loop call using the loop id: a short name (2-5 words), the trigger and detailed instructions written as a short intro sentence plus numbered steps that say what a teammate should look up, what to change and what to report, like a well-written runbook. The visible instructions must be plain language in the user's language. Never include tool names, JSON/API field names, internal IDs, generated slugs or implementation details in them; keep those hints in this hidden prompt only.
 - Resolve relative dates against Today. Use the list tools to look up teams, people, labels and statuses you need to name.
 - Do not ask questions unless the request is impossible to act on. Do not publish, enable or run the loop.
-- Reply with one or two sentences on what you set up and end with: "It remains a draft for your review; I didn't publish, enable, or run it."
-`)
+- Reply with one or two sentences on what you set up and end with: %q
+`, closing)
 	}
 	return prompt.String()
+}
+
+func agentLatestUserText(session domain.AgentSession) string {
+	for index := len(session.Messages) - 1; index >= 0; index-- {
+		if session.Messages[index].Role == "user" {
+			return session.Messages[index].Content
+		}
+	}
+	return ""
+}
+
+func containsChinese(text string) bool {
+	for _, r := range text {
+		if r >= '\u4e00' && r <= '\u9fff' {
+			return true
+		}
+	}
+	return false
 }
 
 // sessionLoopTool reports whether a tool call edits a loop this conversation is

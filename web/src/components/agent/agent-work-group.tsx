@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { AgentMessage, AgentMessageAttachment, AgentToolCall } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import { AgentRichText } from "./agent-rich-text";
+import { AgentErrorDetail } from "./agent-error-detail";
 import { isProviderReasoning, readFileName, toolStatusLabel, translatePhaseTitle, translateToolTitle, workingLabel } from "./agent-step-labels";
 import styles from "./agent-page.module.css";
 import workStyles from "./agent-work-group.module.css";
@@ -14,7 +15,13 @@ export function AgentWorkGroup({ message, parts: allParts, onToolApproval, appro
   // The loop builder's ask_question calls render as answer chips, never as tool rows.
   // Provider reasoning is the model's scratchpad (often English in a Chinese UI):, only step labels and the
   // agent's own narration show. Older chats stored it; it stays hidden.
-  const parts = allParts.filter(part => !isProviderReasoning(part) && (part.type !== "toolCall" || Boolean(part.toolCall?.name) || !settled) && part.toolCall?.name !== "ask_question");
+  const visibleParts = allParts.filter(part => !isProviderReasoning(part) && (part.type !== "toolCall" || Boolean(part.toolCall?.name) || !settled) && part.toolCall?.name !== "ask_question");
+  // A failed call is an implementation detail once the model has retried it successfully.
+  const parts = visibleParts.filter((part, index) => {
+    if (part.type !== "toolCall" || part.toolCall?.status !== "error") return true;
+    const name = part.toolCall.name;
+    return !visibleParts.slice(index + 1).some(next => next.type === "toolCall" && next.toolCall?.name === name && next.toolCall.status === "completed");
+  });
   // A finished reply (older stopped chats saved calls as still running) is never "working…".
   const running = forceRunning || !settled && parts.some(part => part.status === "running" || part.status === "pending" || part.toolCall?.status === "running" || part.toolCall?.status === "pending");
   const failed = parts.some(part => part.status === "error" || part.toolCall?.status === "error");
@@ -67,10 +74,12 @@ function AgentToolCallItem({ part, onApproval, approvalBusy, attachments }: { at
   const running = call.status === "running" || call.status === "pending";
   const detail = readableToolDetail(call.arguments, call.result, call.name, attachments);
   const approvalPending = call.status === "pending" && Boolean(call.approvalId);
-  return <div className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`}>
-    <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined} data-i18n-ignore>{call.title && !running ? translateToolTitle(call.title, t, call) : toolStatusLabel(call.name, running, t, call.arguments, call.status === "running", call)}</span>{detail && <span data-i18n-ignore>{detail}</span>}</div>
+  const failed = call.status === "error";
+  const failedLabel = failed ? t("Couldn't complete this step — retried") : "";
+  return <div className={`${styles.toolCall} ${failed ? styles.toolCallError : ""}`}>
+    <div className={styles.toolCallRow} title={failed ? undefined : call.error || undefined}><span className={running ? styles.workShimmer : undefined} data-i18n-ignore>{failed ? failedLabel : call.title && !running ? translateToolTitle(call.title, t, call) : toolStatusLabel(call.name, running, t, call.arguments, call.status === "running", call)}</span>{!failed && detail && <span data-i18n-ignore>{detail}</span>}</div>
     {approvalPending && <div className={styles.approvalPrompt}><span>{t("Waiting for approval")}</span><span className={styles.approvalActions}><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "approve")} type="button">{t("Approve tool")}</button></span></div>}
-    {call.error && <p className={styles.toolCallErrorText} role="alert">{t(call.error)}</p>}
+    {failed && call.error && <div className={styles.toolCallErrorText} role="alert"><AgentErrorDetail error={call.error}/></div>}
   </div>;
 }
 
@@ -111,4 +120,3 @@ function readableToolDetail(value: Record<string, unknown> | undefined, result?:
 function WorkDisclosureIcon() {
   return <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><path d="M6.5 5.2v5.6a.4.4 0 0 0 .65.3l3.5-2.8a.4.4 0 0 0 0-.6l-3.5-2.8a.4.4 0 0 0-.65.3Z" fill="currentColor"/></svg>;
 }
-

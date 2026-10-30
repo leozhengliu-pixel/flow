@@ -554,7 +554,7 @@
   cursor: pointer;
 }
 .workGroup > summary:hover { color: var(--text); }
-.workFailed > summary { color: var(--semantic-danger-text); }
+.workFailed > summary { color: var(--theme-text-secondary); }
 .workGroup summary::-webkit-details-marker { display: none; }
 .workGroup > summary > svg {
   width: 16px;
@@ -584,7 +584,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.toolCallError .toolCallRow { color: var(--semantic-danger-text); }
+.toolCallError .toolCallRow { color: var(--theme-text-secondary); }
 .toolCallErrorText {
   margin: 6px 0 0;
   color: var(--theme-text-secondary);
@@ -980,7 +980,7 @@
 :global(:root[data-theme="light"]) .messageDocument pre { border-color: var(--theme-border); background: var(--theme-surface-1); }
 :global(:root[data-theme="light"]) .thinkingPlaceholder { color: var(--theme-text-tertiary); }
 :global(:root[data-theme="light"]) .workGroup > summary:hover { background: var(--theme-surface-hover); color: var(--theme-text-secondary); }
-:global(:root[data-theme="light"]) .workFailed > summary { color: var(--semantic-danger-text); }
+:global(:root[data-theme="light"]) .workFailed > summary { color: var(--theme-text-secondary); }
 :global(:root[data-theme="light"]) .approvalActions button { border-color: var(--theme-border); background: var(--theme-surface-2); color: var(--theme-text-primary); }
 :global(:root[data-theme="light"]) .approvalActions button:last-child { border-color: var(--accent-primary); background: var(--accent-primary); color: var(--on-accent); }
 :global(:root[data-theme="light"]) .toolCallError,

@@ -117,6 +117,7 @@ function useEditorLoop(data: BootstrapData, id: string | undefined) {
 export function LoopEditor({
   data,
   draftId,
+  pendingCreateId,
   loopId,
   teamKey,
   onOpenSidebar,
@@ -125,6 +126,7 @@ export function LoopEditor({
 }: {
   data: BootstrapData;
   draftId?: string;
+  pendingCreateId?: string;
   loopId?: string;
   /** The team whose Loops tab the new loop was started from (`/team/<key>/loops/new`). */
   teamKey?: string;
@@ -133,10 +135,32 @@ export function LoopEditor({
   onReload: (changed?: Loop) => Promise<void>;
 }) {
   const { t } = useI18n();
-  const legacyDraft = draftId ? data.drafts.find((item) => item.id === draftId && item.type === "loop") : undefined;
-  const [id, setId] = useState(legacyDraft ? undefined : (draftId ?? loopId));
+  const [pendingDraftId, setPendingDraftId] = useState<string>();
+  const sourceDraftId = draftId ?? pendingDraftId;
+  const legacyDraft = sourceDraftId ? data.drafts.find((item) => item.id === sourceDraftId && item.type === "loop") : undefined;
+  const [id, setId] = useState(legacyDraft ? undefined : (sourceDraftId ?? loopId));
   const { loop, setLoop, missing, refetch } = useEditorLoop(data, id);
   const migrating = useRef(false);
+
+  useEffect(() => {
+    if (!pendingCreateId || draftId || id) return;
+    const key = `flow:pending-loop:${pendingCreateId}`;
+    const read = () => {
+      try {
+        const value = JSON.parse(sessionStorage.getItem(key) ?? "null") as { status?: string; draftId?: string } | null;
+        if (value?.status === "ready" && value.draftId) {
+          setPendingDraftId(value.draftId);
+          setId(value.draftId);
+          sessionStorage.removeItem(key);
+          return true;
+        }
+      } catch { /* an invalid handoff will simply keep the loading shell */ }
+      return false;
+    };
+    if (read()) return;
+    const timer = window.setInterval(read, 50);
+    return () => window.clearInterval(timer);
+  }, [draftId, id, pendingCreateId]);
 
   // Drafts saved by older builds live in the Drafts table; move them onto a draft loop.
   useEffect(() => {
