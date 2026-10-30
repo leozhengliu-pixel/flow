@@ -154,6 +154,11 @@ async function main() {
   await measure('team-list', `/api/issue-records?workspace=${WORKSPACE}&teamId=${team}&limit=50&projection=list`)
   await measure('team-groups', `/api/issue-records/groups?workspace=${WORKSPACE}&teamId=${team}&groupBy=status`)
   await measure('filter-label', issueFilters([{ field: 'labels', operator: 'is', values: [label] }]))
+  const labelQuery = (labelId) =>
+    `/api/issue-records?workspace=${WORKSPACE}&teamId=${team}&sort=updatedAt&direction=desc&limit=50&projection=list&filter=${encodeURIComponent(JSON.stringify({ field: 'labels', operator: 'is', values: [labelId] }))}`
+  await measure('label-selective', labelQuery('label_perf_perf-main_31'))
+  await measure('label-broad', labelQuery('label_perf_perf-main_30'))
+  await measure('label-zero', labelQuery('label_perf_perf-main_missing'))
   await measure('filter-assignee', issueFilters([{ field: 'assignee', operator: 'is', values: ['usr_002'] }]))
   await measure('filter-priority', issueFilters([{ field: 'priority', operator: 'is', values: ['1'] }]))
   await measure('filter-project', `/api/issue-records?workspace=${WORKSPACE}&projectId=${project}&limit=50&projection=list`)
