@@ -45,6 +45,25 @@ describe('issue grouping engine', () => {
     expect(groups.map(group => [group.label, group.issues.map(issue => issue.id)])).toEqual([['Today', ['2']], ['Yesterday', ['1']], ['Not released', ['3', '4']]])
   })
 
+  it('groups activity by relative day, newest first', () => {
+    const rows = [
+      row('1', { myActivityAt: '2026-09-22T09:00:00' }),
+      row('2', { myActivityAt: '2026-09-21T09:00:00' }),
+      row('3', { myActivityAt: '2026-09-17T09:00:00' }),
+      row('4', { myActivityAt: '2026-09-16T09:00:00' }),
+      row('5', { myActivityAt: '2026-09-15T09:00:00' }),
+      row('6', { myActivityAt: '2026-09-24T09:00:00' }),
+      row('7', { myActivityAt: '2026-09-23T09:00:00' }),
+      row('8', { myActivityAt: '2026-08-01T09:00:00' }),
+    ]
+    const groups = buildIssueGroups(rows, createIssueDisplayOptions({ grouping: 'activityDate', completedWindow: 'all' }), { now: Date.parse('2026-09-24T12:00:00') })
+    expect(groups.map(group => [group.label, group.issues.map(issue => issue.id)])).toEqual([
+      ['Today', ['6']], ['Yesterday', ['7']], ['2 days ago', ['1']], ['3 days ago', ['2']],
+      ['7 days ago', ['3']], ['8 days ago', ['4']], ['9 days ago', ['5']], ['Older', ['8']],
+    ])
+    expect(groups.every(group => group.createContext === undefined)).toBe(true)
+  })
+
   it('groups by customer and agent by their real identity', () => {
     const rows = [row('1', { customerIds: ['c1'], customerNames: ['Acme'] }), row('2', { delegate: { id: 'agent', name: 'Codex' }, agentSessionId: 's1' }), row('3', { delegate: { id: 'agent', name: 'Codex' }, agentSessionId: 's2' })]
     expect(buildIssueGroups(rows, createIssueDisplayOptions({ grouping: 'customer', completedWindow: 'all' })).map(group => group.label)).toEqual(['Acme', 'No customer'])
