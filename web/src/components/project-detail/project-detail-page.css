@@ -1360,7 +1360,8 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-button svg { color: var(--phone-icon-fg); }
   .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-button.ui-pill:is([aria-pressed=true],[aria-expanded=true],[data-state=open]),
   .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-button:hover {
-    background: var(--project-toolbar-bg) !important;
+    background-color: var(--project-toolbar-bg) !important;
+    background-clip: padding-box !important;
     color: var(--text);
   }
 
