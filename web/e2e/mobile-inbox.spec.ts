@@ -551,7 +551,7 @@ test.describe('mobile inbox list', () => {
       data: { name: '[mobile] GitHub', config: { organization: 'mobile-other', webhookSecret: secret, codeAccess: 'true' }, scopes: ['repo'] },
     })
     expect(integration.status()).toBe(200)
-    const pullRequest = { number: 6, id: 9506, title: '[mobile] Add shout(name) with exclamation mark', body: 'Adds exported `shout(name)` in `src/greet.js`, returning the uppercase name followed by `!`, as confirmed.\n\nVerified `node -e "require(\'./src/greet.js\')"`, `git log --oneline -5`, and `git diff --check` completed successfully. No tests added or run, as requested.', html_url: 'https://github.com/mobile-e2e/repo/pull/6', state: 'open', draft: true, user: { login: 'flowuser' }, base: { ref: 'main' }, head: { ref: 'mobile/review-6', sha: 'abc' }, additions: 12, deletions: 3, commits: 1 }
+    const pullRequest = { number: 6, id: 9506, title: '[mobile] Add shout(name) with exclamation mark', body: 'Adds exported `shout(name)` in `src/greet.js`, returning the uppercase name followed by `!`, as confirmed.\n\nVerified `node -e "require(\'./src/greet.js\')"`, `git log --oneline -5`, and `git diff --check` completed successfully. No tests added or run, as requested.', html_url: 'https://github.com/mobile-e2e/repo/pull/6', state: 'open', draft: true, user: { login: 'flowuser' }, base: { ref: 'main' }, head: { ref: 'bcgroupdev/mobile-6-qa-session-question-shoutname-punctuation-31f7', sha: 'abc' }, additions: 12, deletions: 3, commits: 1 }
     const body = JSON.stringify({ action: 'opened', number: 6, pull_request: pullRequest, repository: { full_name: 'mobile-e2e/repo' }, sender: { login: 'flowuser' } })
     const signature = 'sha256=' + createHmac('sha256', secret).update(body).digest('hex')
     const webhook = await request.post('http://127.0.0.1:4180/api/integrations/github/webhook', {
@@ -593,7 +593,13 @@ test.describe('mobile inbox list', () => {
     near((await page.locator('.review-overview-title').boundingBox())?.y, 97.5)
     near((await page.locator('.review-byline-avatar').boundingBox())?.x, 16)
     near((await page.locator('.review-byline-author').boundingBox())?.x, 40)
-    near((await page.locator('.review-byline-branches .review-byline-branch:last-child').boundingBox())?.x, 62.8)
+    near((await page.locator('.review-byline-head').boundingBox())?.x, 62.8)
+    const branch = page.locator('.review-byline-head .review-byline-branch')
+    await expect(branch).toContainText('…')
+    const branchText = await branch.innerText()
+    expect(branchText.startsWith('bcgroupdev/mobile-6-')).toBe(true)
+    expect(branchText.endsWith('31f7')).toBe(true)
+    expect(await branch.evaluate((element) => getComputedStyle(element).fontFamily.toLowerCase())).toContain('mono')
     const statusLabel = page.locator('[data-mobile-property="status"] .review-mobile-label')
     near((await statusLabel.boundingBox())?.x, 16)
     near((await statusLabel.boundingBox())?.y, 230)
