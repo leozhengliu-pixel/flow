@@ -11,3 +11,9 @@
 }
 .estimate-chip .estimate-icon { color: currentColor; }
 .estimate-chip__value { font-variant-numeric: tabular-nums; }
+
+.board-estimate-icon { display: none; }
+@media (max-width: 767px) {
+  .estimate-chip--board > .estimate-icon:not(.board-estimate-icon) { display: none; }
+  .estimate-chip--board > .board-estimate-icon { display: block; }
+}
