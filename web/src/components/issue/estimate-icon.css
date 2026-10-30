@@ -1,11 +1,11 @@
 /* Estimate glyph and the "△ 8" chip on list rows, board cards and group headers. */
-.estimate-icon { flex: none; display: block; color: var(--theme-text-secondary); }
+.estimate-icon { flex: none; display: block; color: var(--issue-muted); }
 .estimate-chip {
   display: inline-flex;
   flex: none;
   align-items: center;
   gap: 4px;
-  color: var(--theme-text-secondary);
+  color: var(--issue-muted);
   font: 450 12px/normal var(--font);
   white-space: nowrap;
 }

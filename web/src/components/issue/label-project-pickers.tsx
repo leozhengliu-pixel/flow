@@ -1,6 +1,6 @@
 import type { Cycle, Issue, IssueLabel, LabelGroup, Project, ProjectSummary, TeamSettings } from '@/types/flow'
 import { estimateLabel } from '@/lib/estimates'
-import { EstimateValueIcon } from '@/components/issue/estimate-icon'
+import { EstimateIcon } from '@/components/issue/estimate-icon'
 import { estimateMenuProps } from '@/components/issue/estimate-menu'
 import { Plus } from 'lucide-react'
 import { CycleIcon, LabelIcon, NoProjectIcon, ProjectIcon } from '@/components/issue/issue-icons'
@@ -71,8 +71,8 @@ export function CyclePicker({ valueId, cycles, issues = [], teamId, onChange }: 
 export function EstimatePicker({ value, settings, onChange }: { value?: number; settings: TeamSettings | undefined; onChange: (estimate: number) => void | Promise<void> }) {
   const type = settings?.estimateType ?? 'notUsed'
   const hasValue = value !== undefined && value !== null && value >= 0
-  const label = hasValue ? estimateLabel(value, type) : 'Estimate'
-  return <div className="label-project-picker estimate-picker"><PropertyMenu {...estimateMenuProps(value, settings)} value={label} ariaLabel={hasValue ? `Change estimate. Current estimate is ${label}` : 'Set estimate'} triggerClassName="label-project-trigger" trigger={<><EstimateValueIcon value={value} settings={settings}/><span>{label}</span></>} onChange={id => onChange(Number(id))}/></div>
+  const label = hasValue ? estimateLabel(value, type) : 'Set estimate'
+  return <div className="label-project-picker estimate-picker"><PropertyMenu {...estimateMenuProps(value, settings)} value={label} ariaLabel={hasValue ? `Change estimate. Current estimate is ${label}` : 'Set estimate'} triggerClassName="label-project-trigger" trigger={<><EstimateIcon/><span>{label}</span></>} onChange={id => onChange(Number(id))}/></div>
 }
 
 function cycleProgress(issues: Issue[], cycleId: string) { const scoped=issues.filter(issue=>issue.cycleId===cycleId&&!issue.archivedAt);return scoped.length?Math.round(scoped.filter(issue=>issue.state.type==='completed'||issue.state.type==='canceled').length/scoped.length*100):0 }

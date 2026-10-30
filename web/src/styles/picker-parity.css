@@ -1043,7 +1043,8 @@ html:root body .issue-properties .labels-picker--inline .label-project-trigger:n
   margin-left: -4px;
   padding: 0 10px 0 6px;
 }
-html:root body .issue-properties .estimate-picker .label-project-trigger > svg:first-child:not(#_) { width: 16px; height: 16px; }
+html:root body .issue-properties .estimate-picker .label-project-trigger:not(#_) { color: var(--issue-fg); }
+html:root body .issue-properties .estimate-picker .label-project-trigger > svg:first-child:not(#_) { width: 16px; height: 16px; color: var(--issue-muted); }
 html:root body .issue-release-picker .issue-release-option:not(#_) { background: transparent; }
 html:root body .issue-release-picker .issue-release-option:not(#_)[aria-expanded=true] .issue-release-option-bg { background: var(--pk-hover); }
 html:root body .issue-release-picker .issue-release-submenu-trigger:not(#_) > svg { color: var(--pk-text); }
@@ -1290,8 +1291,8 @@ html:root body .property-command-surface.property-command-estimate:not(#_) .prop
   grid-template-columns: 16px minmax(0, 1fr) auto;
   padding: 0 15px 0 14px;
 }
-html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-icon > .estimate-icon { width: 16px; height: 16px; }
+html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-icon > .estimate-icon { width: 16px; height: 16px; color: var(--pk-muted); }
 /* "⇧" "E" keycaps: 18px wide, 3px apart. */
 html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-search-shortcut { gap: 3px; }
 html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-search-shortcut kbd { width: 18px; min-width: 18px; padding: 2px 0; }
-html:root body .property-command-surface.property-command-estimate .property-command-options [role=option][aria-selected=true] .estimate-icon { color: var(--pk-text-strong); }
+html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-options [role=option][aria-selected=true] .estimate-icon { color: var(--pk-text-strong); }

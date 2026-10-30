@@ -125,3 +125,11 @@ html:root body .command-dialog .command-option-current + .command-option-shortcu
 html:root body .command-dialog .command-invite-icon {
   color: var(--pk-muted);
 }
+html:root body .command-dialog .command-item-icon .estimate-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--pk-muted);
+}
+html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
+  color: var(--pk-text-strong);
+}

@@ -290,7 +290,7 @@ export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, estima
   return <header className={styles.groupHeader} data-subgroup={group.parentGroupId ? true : undefined}>
     <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={() => onGroupCollapsedChange?.(group.id, !collapsed)}><ChevronDown size={12}/></button>
     <GroupStateIcon state={group.state ?? group.issues[0]?.state} type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.totalCount ?? group.issues.length}</span>
-    {estimateSum !== undefined && <span className={`estimate-chip ${styles.groupEstimate}`} aria-label={`${estimateSum} estimate points`}><EstimateIcon level={0} size={14}/><span className="estimate-chip__value">{formatEstimatePoints(estimateSum)}</span></span>}
+    {estimateSum !== undefined && <span className={`estimate-chip ${styles.groupEstimate}`} aria-label={`${estimateSum} estimate points`}><EstimateIcon size={14}/><span className="estimate-chip__value">{formatEstimatePoints(estimateSum)}</span></span>}
     {onCreateIssue && <button className={styles.createButton} aria-label={createIssueLabel} onClick={() => onCreateIssue(group)}><Plus size={16}/></button>}
   </header>
 }

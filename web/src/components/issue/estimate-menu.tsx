@@ -4,7 +4,7 @@ import { EstimateValueIcon, type EstimateSettings } from './estimate-icon'
 
 /** Rows of the estimate picker: "No estimate", then the team's scale ("1 Point", "2 Points", …). */
 export function estimateMenuOptions(settings: EstimateSettings): PropertyOption[] {
-  return estimatePickerOptions(settings).map(option => ({ id: option.id, label: option.label, icon: <EstimateValueIcon value={option.value} settings={settings}/> }))
+  return estimatePickerOptions(settings).map(option => ({ id: option.id, label: option.label, icon: <EstimateValueIcon value={option.value}/> }))
 }
 
 /**
@@ -17,8 +17,8 @@ export function estimateBulkOptions(scales: readonly EstimateSettings[]): Proper
   if (!values.length) return undefined
   if (settings) return estimateMenuOptions(settings)
   return [
-    { id: String(NO_ESTIMATE), label: 'No estimate', icon: <EstimateValueIcon value={NO_ESTIMATE} settings={undefined}/> },
-    ...values.map(value => ({ id: String(value), label: estimateLabel(value, type), icon: <EstimateValueIcon value={value} settings={undefined}/> })),
+    { id: String(NO_ESTIMATE), label: 'No estimate', icon: <EstimateValueIcon value={NO_ESTIMATE}/> },
+    ...values.map(value => ({ id: String(value), label: estimateLabel(value, type), icon: <EstimateValueIcon value={value}/> })),
   ]
 }
 

@@ -111,19 +111,6 @@ export function formatEstimatePoints(points: number): string {
   return Number.isInteger(points) ? String(points) : String(Math.round(points * 10) / 10);
 }
 
-/**
- * How full the estimate icon is drawn (0–3 bars) for a value on the team's
- * scale: the scale is split into thirds by rank, so the largest values fill
- * the whole triangle.
- */
-export function estimateIconLevel(value: number | undefined, settings: EstimateScaleSettings | undefined): 0 | 1 | 2 | 3 {
-  if (value === undefined || value === null || value <= 0) return 0;
-  const scale = estimateValues(settings).filter((item) => item > 0);
-  if (!scale.length) return value <= 1 ? 1 : value <= 3 ? 2 : 3;
-  const rank = scale.filter((item) => item <= value).length;
-  return Math.max(1, Math.min(3, Math.ceil((rank / scale.length) * 3))) as 1 | 2 | 3;
-}
-
 /** Picker value for "No estimate"; the API treats -1 as clearing the estimate. */
 export const NO_ESTIMATE = -1;
 

@@ -7,6 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- Estimate icons now use the same filled-left triangle for every value and
+  property button, with a separate broken outline for "No estimate" menu options.
+
 ### Security
 
 - Upgrade `github.com/go-jose/go-jose/v4` to v4.1.6 to address panics in JSON
