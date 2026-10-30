@@ -1016,7 +1016,8 @@ func simpleMCPTeamCount(args map[string]any) bool {
 	// surface with list_issues, so a newly added predicate must not be silently
 	// ignored by the counter fast path.
 	for key := range args {
-		if key != "team" && key != "includeArchived" {
+		// __flowBaseURL is injected into every MCP tool call; it is not a filter.
+		if key != "team" && key != "includeArchived" && key != "__flowBaseURL" {
 			return false
 		}
 	}
