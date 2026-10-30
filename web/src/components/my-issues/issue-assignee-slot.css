@@ -7,10 +7,25 @@
 .issue-assignee-cluster__member {
   position: relative;
 }
+.issue-assignee-cluster__member {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--bright);
+  font: 400 16px/0 var(--font);
+}
 .issue-assignee-cluster[data-delegated] > .issue-assignee-cluster__member,
 .issue-assignee-cluster[data-delegated] > .issue-assignee-cluster__empty {
   position: relative;
   margin-left: -4.5px;
+}
+.issue-assignee-cluster[data-delegated] > .issue-assignee-cluster__member > *,
+.issue-assignee-cluster[data-delegated] > .issue-assignee-cluster__empty {
   border-radius: 50%;
   box-shadow: 0 0 0 1.5px var(--bg-panel, var(--theme-surface-1));
 }

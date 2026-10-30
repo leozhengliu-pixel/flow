@@ -42,6 +42,22 @@ test.describe('mobile issue lists and views', () => {
     await expect(page.getByRole('dialog', { name: 'Display options' })).toBeVisible()
     await page.keyboard.press('Escape')
 
+    // My issues / Assigned: the reference tab strip keeps two views plus an overflow pill,
+    // 32px pills, a 36px group header and 44px rows.
+    const tabBar = page.locator('[data-content-view-subheader]')
+    await expect(tabBar).toHaveCSS('height', '43.5px')
+    const assignedTab = await page.getByRole('link', { name: /^Assigned/ }).boundingBox()
+    expect(assignedTab?.height).toBe(32)
+    const overflow = page.getByRole('button', { name: /more$/ })
+    await expect(overflow).toBeVisible()
+    expect((await overflow.boundingBox())?.width).toBeCloseTo(74.96, 1)
+    await expect(page.locator('[data-my-issues-surface] [class*="groupHeader"]').first()).toHaveCSS('height', '36px')
+    const row = page.locator('[data-my-issues-surface] a[data-issue-row-id]').first()
+    expect((await row.boundingBox())?.height).toBe(44)
+    await overflow.click()
+    await expect(page.getByRole('button', { name: 'Subscribed', exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+
     await page.goto(`/${workspaceKey}/issues/all`)
     const display = page.getByRole('button', { name: 'Display options' }).first()
     await expect(display).toBeVisible()

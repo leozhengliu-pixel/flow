@@ -168,7 +168,10 @@ export function focusDescriptor(row: MyIssuesRowData, context: IssueGroupingCont
   if (type === 'completed') return bucket('focus-completed')
   if (type === 'canceled') return bucket('focus-canceled')
   if (isTriage(row)) return bucket('focus-triage')
-  if (row.delegate && row.agentSessionId && type !== 'backlog') return bucket('focus-agents')
+  // Only a session that still needs the viewer belongs here: a finished, stopped or merged
+  // session is ordinary issue history, not work waiting on an answer.
+  const agentNeedsAnswer = row.agentSessionState !== 'complete' && row.agentSessionState !== 'canceled' && row.agentSessionState !== 'merged' && row.agentSessionState !== 'stale'
+  if (row.delegate && row.agentSessionId && agentNeedsAnswer && type !== 'backlog') return bucket('focus-agents')
   if (row.priority === 1) return bucket('focus-urgent')
   const sla = slaDescriptor(row, now)
   if (sla.id !== 'sla-none' && sla.id !== 'sla-met') return bucket(`focus-${sla.id}`)

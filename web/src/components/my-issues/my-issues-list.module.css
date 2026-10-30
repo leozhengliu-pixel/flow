@@ -1,6 +1,6 @@
 .list{min-width:0;padding:0 0 8px;font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif}.virtualList{width:100%;height:100%;min-width:0;font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif;scrollbar-color:var(--scrollbar-thumb) transparent}.group{min-width:0;padding:0 0 2px}.groupHeader{height:36px;margin:0 8px;display:flex;align-items:center;gap:8px;padding:0 8px 0 0;overflow:hidden;border-radius:8px;background:var(--theme-surface-1)}
 .groupHeader+div{padding-top:2px}
-.collapseButton,.createButton{display:grid;place-items:center;border:0;background:transparent;color:var(--theme-text-secondary);padding:0;cursor:pointer}.collapseButton{width:28px;height:36px;flex:0 0 28px}.collapseButton[aria-expanded=false] svg{transform:rotate(-90deg)}.collapseButton svg{transition:transform 120ms}.groupState{width:14px;height:14px;display:grid;place-items:center;margin-left:-2px}.groupName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--theme-text-primary);font-size:13px;font-weight:500}.groupCount{color:var(--issue-muted);font-size:12px}.createButton{width:24px;height:24px;margin-left:auto;border-radius:999px}.createButton:hover,.collapseButton:hover{background:var(--bg-active);color:var(--text)}
+.groupCaret{display:none}.collapseButton,.createButton{display:grid;place-items:center;border:0;background:transparent;color:var(--theme-text-secondary);padding:0;cursor:pointer}.collapseButton{width:28px;height:36px;flex:0 0 28px}.collapseButton[aria-expanded=false] svg{transform:rotate(-90deg)}.collapseButton svg{transition:transform 120ms}.groupState{width:14px;height:14px;display:grid;place-items:center;margin-left:-2px}.groupName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--theme-text-primary);font-size:13px;font-weight:500}.groupCount{color:var(--issue-muted);font-size:12px}.createButton{width:24px;height:24px;margin-left:auto;border-radius:999px}.createButton:hover,.collapseButton:hover{background:var(--bg-active);color:var(--text)}
 .row{--row-lead-column:calc(18px + var(--nested-depth,0) * 24px);--row-columns:8px var(--row-lead-column) 16px var(--issue-identifier-width,52px) 22px minmax(80px,1fr) 60px 18px;position:relative;box-sizing:border-box;height:44px;width:100%;display:grid;grid-template-columns:var(--row-columns);column-gap:8px;align-items:center;border-radius:8px;color:var(--issue-fg);outline:0;cursor:pointer;text-decoration:none;transition:color .15s,background-color .15s}.row:hover{background:var(--bg-hover)}.row[data-selected=true]{background:var(--theme-selected)}.row[data-selected=true]:hover{background:var(--theme-selected-hover)}.row:focus-visible{background:var(--bg-subtle);box-shadow:inset 0 0 0 1px var(--row-focus-border)}
 .nestingGuide{position:absolute;z-index:0;inset:0 auto 0 0;width:calc(var(--nested-depth,1) * 24px);overflow:visible;pointer-events:none}.nestingSegment{position:absolute;left:calc(var(--nest-level) * 24px + 49.5px);top:0;bottom:0;width:1px;background:var(--nested-issue-line)}.nestingSegment.nestingLast{bottom:auto;height:16px}.nestingBranch{position:absolute;left:0;top:15px;width:10px;height:9px;overflow:visible;fill:var(--nested-issue-line)}
 .checkboxCell{width:15px;height:22px;margin-left:3px;display:flex;align-items:center}.checkbox{width:14px;height:14px;display:grid;place-items:center;padding:0;border:1px solid var(--sub-checkbox-border);border-radius:3px;background:transparent;color:var(--on-accent);opacity:0;cursor:pointer}.row:hover .checkbox,.row:focus-within .checkbox,.checkbox[data-checked=true]{opacity:1}.checkbox[data-checked=true]{border-color:var(--selection-border);background:var(--selection-fill)}.checkbox svg{stroke-width:2.5}.identifier{overflow:hidden;color:var(--issue-muted);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -98,3 +98,35 @@
 .groupEstimate:global(.estimate-chip){gap:4px;color:var(--estimate-group-total);font-size:13px;font-weight:450}
 .submenuItem>:global(.estimate-icon){flex:0 0 16px;color:var(--pk-muted)}
 .submenuItem[data-highlighted]>:global(.estimate-icon){color:var(--pk-text-strong)}
+
+/* Phone rows: the reference app shows priority, status, title and the assignee only.
+   A delegated session's state sits in a pill before (and around) the avatars. */
+@media(max-width:767px){
+  .row{padding:0;grid-template-columns:10px 16px 16px minmax(0,1fr);column-gap:8px;border-style:none}
+  .row>.checkboxCell,.row>.identifier,.row>.rowDate,.row>span[aria-hidden="true"]:last-child{display:none}
+  .badges{display:flex}
+  .statusTrigger{margin-left:-3px}
+  .statusTrigger{border-style:none}
+  .statusTrigger svg{color:var(--bright);border-style:none}
+  .priorityTrigger{border-style:none}
+  .priorityTrigger svg{color:var(--bright);font-size:16px;font-weight:400;line-height:24px;border-style:none}
+  .title{line-height:normal;color:var(--bright);border-style:none}
+  .titleProperties{padding-right:18px}
+  .groupHeader{padding-left:0;border-style:none}
+  .groupState{display:none}
+  .groupCaret{display:block;transform:rotate(90deg)}
+  .groupChevron{display:none}
+  .collapseButton[aria-expanded=false] .groupCaret{transform:none}
+  .collapseButton{width:20px;height:20px;flex:0 0 20px;margin-left:8px;padding:2px;border:0;border-radius:9999px;color:var(--bright);font-size:16px;font-weight:400;line-height:24px}
+  .groupName{line-height:normal;border-style:none}
+  .groupCount{font-size:13px;font-weight:450;line-height:normal;border-style:none}
+  .createButton{width:28px;height:28px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;font-size:12px;font-weight:500;line-height:normal}
+  .sessionPillTrigger{min-width:0;min-height:0;width:auto;height:auto;padding:0;border:0;border-radius:0;background:transparent}
+  .sessionPillTrigger:hover,.sessionPillTrigger[data-state=open]{background:transparent}
+  .sessionPill{display:flex;align-items:center;height:24px;padding:0 2.5px 0 4px;border:.5px solid var(--theme-border);border-radius:48px;background:var(--bg-panel);box-shadow:none;color:var(--issue-muted);white-space:nowrap;z-index:0}
+  .sessionPillLabel{margin:0 4px;padding:0;color:var(--issue-muted);font-size:12px;font-weight:400;line-height:18px;letter-spacing:normal;white-space:nowrap;border-style:none}
+  :global(:root[data-theme="dark"]) .groupHeader{background:var(--phone-group-bg)}
+  :global(:root[data-theme="dark"]) .groupName{color:var(--phone-group-title)}
+  :global(:root[data-theme="dark"]) .groupCount{color:var(--phone-group-count)}
+  :global(:root[data-theme="dark"]) .createButton{color:var(--phone-group-title);background:transparent}
+}
