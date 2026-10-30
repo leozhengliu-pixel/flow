@@ -35,7 +35,7 @@ export type ViewEditorControls = { filterButton: ReactNode; displayButton: React
 
 export function IssueExplorerSurface({
   children, scopeName, scopeHref, scopeTeam, activeView, viewHref, filters, filterBar, footer, viewEditor, viewEditorMode, draftName, draftPlaceholder, draftVisual, viewActions, displayOptions, detailsOpen, itemCount = 0,
-  creatingView = false, favorite = false, filterActive = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onAdvancedFilter, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar, displayMenuProps, resourceHeader, className, insightsLabel = 'view insights', detailsShortcutTooltip = false,
+  creatingView = false, favorite = false, filterActive = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onAdvancedFilter, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar, onCreateIssue, displayMenuProps, resourceHeader, className, insightsLabel = 'view insights', detailsShortcutTooltip = false,
 }: {
   children: ReactNode
   scopeName: string
@@ -80,6 +80,7 @@ export function IssueExplorerSurface({
   onSavedViewSelect?: (view: SavedView) => void
   onToggleFavorite?: () => void
   onOpenSidebar?: () => void
+  onCreateIssue?: () => void
   displayMenuProps?: Partial<Omit<MyIssuesDisplayMenuProps, 'open' | 'onOpenChange' | 'options' | 'onChange'>>
   /** Titled resource views (label, member, customer…) instead of the team/workspace breadcrumb and tabs. */
   resourceHeader?: { icon?: ReactNode; title: ReactNode; actions?: ReactNode; tabs?: { id: string; label: string; href: string; active: boolean; onSelect: () => void }[] }
@@ -119,7 +120,7 @@ export function IssueExplorerSurface({
   const renderSavedView = (item: SavedView) => <a key={item.id} href={savedViewHref?.(item) ?? '#'} className={`${styles.savedTab} ui-pill`} onClick={event => { event.preventDefault(); onSavedViewSelect?.(item) }}><ViewGlyph color={item.color} icon={item.icon}/><span data-i18n-ignore>{item.name}</span></a>
 
   const header = (
-    <ContentViewHeader compact onOpenSidebar={onOpenSidebar}>
+    <ContentViewHeader compact onOpenSidebar={onOpenSidebar} onCreateIssue={mode === 'view' ? onCreateIssue : undefined}>
       {mode === 'create' ? (
         <>
           <ContentViewHeaderBreadcrumb

@@ -1,12 +1,15 @@
 import type { HTMLAttributes, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import styles from './content-view.module.css'
+import { Plus } from 'lucide-react'
+import { useOptionalTranslate } from '@/i18n/i18n'
 
 export interface ContentViewHeaderProps extends HTMLAttributes<HTMLElement> {
   children: ReactNode
   compact?: boolean
   onOpenSidebar?: () => void
   sidebarLabel?: string
+  onCreateIssue?: () => void
 }
 
 /** Header bar host used by ContentView pages (44px the reference app list header). */
@@ -16,8 +19,10 @@ export function ContentViewHeader({
   compact = false,
   onOpenSidebar,
   sidebarLabel = 'Open sidebar',
+  onCreateIssue,
   ...rest
 }: ContentViewHeaderProps) {
+  const t = useOptionalTranslate()
   return (
     <header
       className={cn(styles.header, className)}
@@ -37,6 +42,7 @@ export function ContentViewHeader({
         </button>
       ) : null}
       {children}
+      {onCreateIssue && <button className="phone-create-issue" type="button" aria-label={t('New issue')} title={t('New issue')} onClick={onCreateIssue}><Plus size={16}/></button>}
     </header>
   )
 }
