@@ -2,9 +2,12 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { render, waitFor } from '@testing-library/react'
 import { VirtuosoMockContext } from 'react-virtuoso'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
+import { loadChineseDictionary } from '@/i18n/translate'
+import { buildIssueGroups } from '@/components/issue-explorer/issue-grouping'
+import { createIssueDisplayOptions } from './my-issues-display-defaults'
 import { MyIssuesList, type MyIssuesGroupData } from './my-issues-list'
 
 describe('MyIssuesList virtualization', () => {
@@ -129,5 +132,26 @@ describe('MyIssuesList virtualization', () => {
     expect(getByLabelText('1 customer').textContent).toContain('1')
     // Customer revenue follows the workspace format (monthly → /12) and currency.
     expect(getByLabelText(/Customer revenue/).getAttribute('aria-label')).toMatch(/€1(\.0)?K\/mo/)
+  })
+})
+
+describe('MyIssuesList activity labels in Chinese', () => {
+  beforeAll(async () => { await loadChineseDictionary() })
+  beforeEach(() => localStorage.setItem('flow:locale', 'zh-CN'))
+
+  it('translates generated Activity date group labels while leaving user data alone', async () => {
+    const state = { id: 'todo', name: 'Todo', type: 'unstarted' as const, color: '#999' }
+    const row = (id: string, myActivityAt: string): MyIssuesGroupData['issues'][number] => ({ id, identifier: `FLOW-${id}`, title: `Issue ${id}`, priority: 0, state, createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', myActivityAt })
+    const groups = buildIssueGroups([
+      row('1', '2026-09-24T09:00:00'),
+      row('2', '2026-09-23T09:00:00'),
+      row('3', '2026-09-22T09:00:00'),
+      row('4', '2026-08-01T09:00:00'),
+    ], createIssueDisplayOptions({ grouping: 'activityDate', completedWindow: 'all' }), { now: Date.parse('2026-09-24T12:00:00') })
+    const { container } = render(<I18nProvider><MyIssuesList groups={groups} displayProperties={new Set(['id'])}/></I18nProvider>)
+    await waitFor(() => expect(container.querySelectorAll('[class*="groupName"]').length).toBe(4))
+    const labels = [...container.querySelectorAll<HTMLElement>('[class*="groupName"]')]
+    expect(labels.map(label => label.textContent)).toEqual(['今天', '昨天', '2 天前', '更早'])
+    expect(labels.every(label => !label.hasAttribute('data-i18n-ignore'))).toBe(true)
   })
 })
