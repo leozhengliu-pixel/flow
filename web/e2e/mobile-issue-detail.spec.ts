@@ -70,7 +70,11 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
     expect(values['.issue-mobile-properties'].y).toBeCloseTo(145.75, 0)
     const status = page.locator('.issue-mobile-properties .core-property-trigger').first()
     await expect(status).toHaveCSS('height', '28px')
-    await expect(status).toHaveCSS('padding', '0px 8.5px 0px 6.5px')
+    await expect(status).toHaveCSS('padding', '0px 7.5px 0px 5.5px')
+    await expect(status).toHaveCSS('box-shadow', 'none')
+    expect((await page.locator('.issue-breadcrumb-current').boundingBox())?.x).toBe(48)
+    expect(values['.issue-header'].gap).toBe('0px')
+    expect(values['.issue-description-root .description-editor'].radius).toBe('0px')
     // Text metrics vary across browser platforms; the chip must size to its contents without clipping.
     expect(await status.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     expect(values['.issue-description-root .description-editor'].y).toBeCloseTo(viewport.width===390?229.75:195.75, 0)

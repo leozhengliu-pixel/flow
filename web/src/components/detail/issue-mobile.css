@@ -1,18 +1,20 @@
 @media (max-width: 767px) {
-  .issue-view .issue-header { height: 43.5px; flex-basis: 43.5px; padding: 0 12px 0 8px; }
+  .issue-view .issue-header { height: 43.5px; flex-basis: 43.5px; padding: 0 12px 0 8px; gap: 0; }
+  html:root body .app .issue-view .issue-header > [data-sidebar-trigger] { margin-right: 2px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--issue-header-fg); font-size: 12px; font-weight: 500; line-height: normal; }
   .issue-view .issue-header-context { width: auto; flex: 0 1 auto; padding: 0; gap: 6px; }
-  .issue-view .issue-breadcrumb { max-width: none; flex: 0 1 auto; padding: 0 4px 0 12px; }
+  .issue-view .issue-breadcrumb { max-width: 179.09px; flex: 0 1 auto; padding: 0 4px 0 10px; }
   .issue-view .issue-breadcrumb-current { max-width: 100%; }
-  .issue-view .issue-header-icon { width: 32px; height: 32px; flex-basis: 32px; }
-  .issue-view .issue-header-icon > svg { width: 16px; height: 16px; }
+  .issue-view .issue-breadcrumb-label { display: flex; align-items: center; min-width: 0; flex: 1 1 auto; }
+  .issue-view .issue-header-icon { width: 32px; height: 32px; flex-basis: 32px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--issue-header-fg); font-size: 12px; font-weight: 500; line-height: normal; }
+  .issue-view .issue-header-icon > svg { width: 14px; height: 14px; }
   .issue-view .issue-header-end { flex: none; gap: 4px; }
   .issue-view .issue-presence { display: none; }
   .issue-view .save-state:not(.error) { display: none; }
   .issue-view .save-state.error { position: absolute; top: 44px; left: 14px; z-index: 11; background: var(--bg-panel); }
-  .issue-view .issue-command-strip { display: flex; top: 43px; }
+  .issue-view .issue-command-strip { display: flex; top: 43.5px; }
   .issue-view .issue-command-buttons { height: 32px; }
-  .issue-view .issue-command-button { width: 32px; height: 32px; flex-basis: 32px; }
-  .issue-view .issue-command-button > svg { width: 16px; height: 16px; }
+  .issue-view .issue-command-button { width: 32px; height: 32px; flex-basis: 32px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: var(--issue-command-bg); color: var(--issue-header-fg); font-size: 12px; font-weight: 500; line-height: normal; }
+  .issue-view .issue-command-button > svg { width: 14px; height: 14px; }
   .issue-view .issue-work-control { display: none; }
   .issue-view .issue-document { padding: 22.25px 14px 60px; }
   .issue-view .issue-title-field { margin: 18px 0 18px; }
@@ -33,12 +35,12 @@
     min-height: 28px;
     max-width: 100%;
     margin: 0;
-    padding: 0 8.5px 0 6.5px;
+    padding: 0 7.5px 0 5.5px;
     gap: 4px;
-    border: 0;
+    border: .5px solid transparent;
     border-radius: 9999px;
     background: var(--issue-command-bg);
-    box-shadow: var(--ui-pill-shadow);
+    box-shadow: none;
     color: var(--ui-pill-fg);
     font-size: 12px;
     font-weight: 500;
@@ -55,10 +57,26 @@
   .issue-view .issue-empty-sub-issue-action > svg { color: var(--text); opacity: .6; }
   .issue-view .issue-mobile-relations-trigger > span { color: var(--text); }
   .issue-view .issue-mobile-properties .issue-due-date-row { margin: 0; }
+  html:root body .issue-view .issue-mobile-properties .issue-due-date-trigger:not(#_) {
+    width: auto;
+    height: 28px;
+    gap: 4px;
+    padding: 0 7.5px 0 5.5px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    background: var(--issue-command-bg);
+    box-shadow: none;
+    color: var(--ui-pill-fg);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 12px;
+  }
+  html:root body .issue-view .issue-mobile-properties .issue-due-date-trigger:not(#_) > svg { width: 14px; height: 14px; flex: 0 0 14px; }
+  html:root body .issue-view .issue-mobile-properties .issue-due-date-trigger:not(#_) > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 450; line-height: normal; }
   .issue-view .issue-description-root { margin-top: 22px; }
-  .issue-view .issue-description-root .description-editor { margin-top: 0; }
+  .issue-view .issue-description-root .description-editor { margin-top: 0; border-radius: 0; }
   .issue-view .document-actions { height: 32px; margin-top: 10px; gap: 0; }
-  .issue-view .document-actions .issue-document-action { width: 32px; height: 32px; padding: 0 2px; }
+  .issue-view .document-actions .issue-document-action { width: 32px; height: 32px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; color: var(--issue-header-fg); font-size: 12px; font-weight: 500; line-height: normal; }
   .issue-view .document-actions .issue-document-action svg { width: 16px; height: 16px; }
   .issue-view .flow-sub-issues { margin-top: 12px; padding-bottom: 16px; border-bottom: .5px solid var(--border); }
   .issue-view .flow-sub-issues > header { height: 32px; grid-template-columns: auto auto minmax(0,1fr) 32px 32px; gap: 6px; }
@@ -89,10 +107,13 @@
 @media (max-width: 389px) {
   .issue-view .issue-mobile-properties :is(.issue-mobile-priority,.issue-mobile-assignee)[data-empty=true] .core-property-trigger,
   .issue-view .issue-mobile-properties .labels-picker[data-empty=true] .label-project-trigger,
-  .issue-view .issue-mobile-relations-trigger { width: 24px; padding: 0 2px; justify-content: center; }
+  .issue-view .issue-mobile-relations-trigger { position: relative; width: 24px; justify-content: center; }
   .issue-view .issue-mobile-properties :is(.issue-mobile-priority,.issue-mobile-assignee)[data-empty=true] .core-property-trigger > span,
   .issue-view .issue-mobile-properties .labels-picker[data-empty=true] .label-project-trigger > span,
   .issue-view .issue-mobile-relations-trigger > span { display: none; }
+  .issue-view .issue-mobile-properties :is(.issue-mobile-priority,.issue-mobile-assignee)[data-empty=true] .core-property-trigger > svg,
+  .issue-view .issue-mobile-properties .labels-picker[data-empty=true] .label-project-trigger > svg,
+  .issue-view .issue-mobile-relations-trigger > svg { position: absolute; left: 50%; transform: translateX(-50%); }
 }
 
 .issue-mobile-command-overlay { position: fixed; inset: 0; z-index: 600; background: transparent; }
