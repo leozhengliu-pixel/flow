@@ -26,7 +26,7 @@ import { toast } from '@/lib/toast'
 
 import { DueDateCommand } from '@/components/issue/due-date-picker'
 import { FlowFavoriteFilledIcon, FlowFavoriteIcon, FlowOptionsIcon } from '@/components/issue/flow-header-icons'
-import { CalendarIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { DateTimeControl } from '@/components/ui/date-time-control'
@@ -37,6 +37,7 @@ import { useI18n } from '@/i18n/i18n'
 import { useCurrentTime, useCurrentTimeMs } from '@/hooks/use-current-time'
 import { issueDeleteConfirmation } from '@/lib/issue-delete-confirmation'
 import { IssueActionGlyph } from './issue-action-glyphs'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { CustomerRequestCreateDialog } from '@/components/customer/customer-request-create-dialog'
 import { requestIssueCustomerRequest } from '@/components/customer/customer-request-events'
 import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
@@ -85,7 +86,7 @@ interface IssueOptionsMenuProps {
   onShowDescriptionHistory?: () => void
 }
 
-type Submenu = 'release' | 'create' | 'mark' | 'remove' | 'copy' | 'convert' | 'remind'
+type Submenu = 'team' | 'release' | 'create' | 'mark' | 'remove' | 'copy' | 'convert' | 'remind'
 type DialogName = 'link' | 'review' | 'related' | 'reminder' | 'loop' | 'history' | 'recurrence' | null
 
 export function IssueOptionsMenu({
@@ -120,7 +121,7 @@ export function IssueOptionsMenu({
   const [busy, setBusy] = useState(false)
   const parentFilterRef = useRef<HTMLInputElement>(null)
   const parentMenuRef = useRef<HTMLDivElement>(null)
-  const anchors = useMemo(() => Object.fromEntries(['due','release','create','mark','remove','copy','convert','remind'].map(key => [key, createRef<HTMLDivElement>()])) as Record<Submenu | 'due', RefObject<HTMLDivElement | null>>, [])
+  const anchors = useMemo(() => Object.fromEntries(['team','due','release','create','mark','remove','copy','convert','remind'].map(key => [key, createRef<HTMLDivElement>()])) as Record<Submenu | 'due', RefObject<HTMLDivElement | null>>, [])
   const [focusNested, setFocusNested] = useState(false)
   const [highlight, setHighlight] = useState(false)
   const [rootQuery, setRootQuery] = useState('')
@@ -180,6 +181,7 @@ export function IssueOptionsMenu({
   }, [busy, closeMenu])
   const subscribed = Boolean(data?.viewer.id && issue.subscriberIds.includes(data.viewer.id))
   const cycles = data?.cycles.filter(cycle => cycle.teamId === issue.team.id).sort((a,b) => a.startsAt.localeCompare(b.startsAt)) ?? []
+  const hasReleaseSurface = Boolean(data && (data.releases.length > 0 || data.releasePipelines.length > 0))
   const nowMs = useCurrentTimeMs()
   const currentCycle = cycles.find(cycle => new Date(cycle.startsAt).getTime() <= nowMs && new Date(cycle.endsAt).getTime() > nowMs)
   const nextCycle = cycles.find(cycle => new Date(cycle.startsAt).getTime() > nowMs)
@@ -298,8 +300,9 @@ export function IssueOptionsMenu({
             <Command.Input ref={parentFilterRef} className={rootQuery ? 'issue-options-submenu-search' : 'issue-options-filter'} aria-label={t('Filter…')} placeholder={t('Filter…')} value={rootQuery} onValueChange={value => { setRootQuery(value); setHighlight(true); setSubmenu(null); setDatePickerOpen(false) }}/>
             <Command.List>
               <Command.Empty className="issue-options-empty">{t('No results')}</Command.Empty>
+              {mobile && <Option icon={<FlowGlyph name="leadTeam" size={16}/>} label="Team" nested="team" anchor={anchors.team} expanded={submenu === 'team'} onHover={() => openNested('team')} onSelect={() => openNested('team', true)}/>}
               <Option icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested="due" anchor={anchors.due} expanded={datePickerOpen} onHover={() => openNested('due')} onSelect={() => openNested('due', true)}/>
-              {data?.workspaceSettings.featureFlags.releases !== false && <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
+              {data?.workspaceSettings.featureFlags.releases !== false && (!mobile || hasReleaseSurface) && <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
               <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
               {data?.workspaceSettings.featureFlags['customer-requests'] !== false && <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut={isMacPlatform() ? 'Ctrl R' : 'Ctrl Option R'} onSelect={() => {
                 // The issue page shows "Select customer…" and its inline composer; elsewhere the composer opens in a dialog.
@@ -346,6 +349,9 @@ export function IssueOptionsMenu({
             </Command.List>
           </Command>
 
+          {submenu === 'team' && <SubmenuSurface label="Team" anchor={anchors.team} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
+            {data?.teams.map(team => <Option key={team.id} icon={<TeamIcon team={team}/>} label={team.name} onSelect={() => { if (team.id === issue.team.id) closeMenu(); else void perform(() => onUpdate({ teamId: team.id }), 'Team changed') }}/>)}
+          </SubmenuSurface>}
           {submenu === 'release' && (data ? <IssueReleasePicker data={data} issue={issue} externalAnchor={anchors.release} popoverOpen onPopoverOpenChange={next => !next && returnToParent()} onMenuEscape={closeMenu}/> : <SubmenuSurface label="Release" anchor={anchors.release} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}><div className="issue-options-empty">{t('No releases')}</div></SubmenuSurface>)}
           {submenu === 'create' && <SubmenuSurface label="Create related" anchor={anchors.create} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
             <Option icon={<FilePlus2/>} label="Issue..." onSelect={() => beginRelated('issue')}/>
