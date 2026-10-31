@@ -126,6 +126,7 @@ export const zhCN: Record<string, string> = {
   "Could not create token": "无法创建令牌",
   "Could not rotate secret": "无法轮换密钥",
   "View {count} issues": "查看 {count} 个事项",
+  "View {count} more": "再查看 {count} 项",
   "Save or submit": "保存或提交",
   "Save as team default": "保存为团队默认",
   "Reset to team default": "恢复团队默认",
