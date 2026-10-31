@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useI18n } from '@/i18n/i18n'
+import { SidebarLeftIcon } from '@/components/ui/view-action-icons'
 
 import styles from './views-page.module.css'
 
@@ -35,7 +36,7 @@ export function ViewsDirectoryHeader({
   const localizedAction = t(actionLabel)
   return <>
     <header className={styles.header}>
-      <button className={styles.mobileMenu} aria-label={t('Open workspace sidebar')} data-sidebar-trigger onClick={onOpenSidebar} type="button">{t('Menu')}</button>
+      <button className={styles.mobileMenu} aria-label={t('Open workspace sidebar')} data-sidebar-trigger onClick={onOpenSidebar} type="button"><SidebarLeftIcon className={styles.sidebarGlyph}/><span>{t('Menu')}</span></button>
       <h2>{t(title)}</h2>
       {afterTitle}
       <button aria-label={t(`Create ${actionLabel.toLowerCase()}`)} className={styles.createHeader} onClick={onAction} type="button">
@@ -43,7 +44,7 @@ export function ViewsDirectoryHeader({
         <span>{localizedAction}</span>
       </button>
     </header>
-    <div className={styles.toolbar}>
+    <div className={styles.toolbar} data-testid="views-toolbar">
       {tabs.length > 0 && <nav aria-label={t('View resources')} className={styles.tabs}>
         {tabs.map(tab => <a
           aria-current={activeResource === tab.resource ? 'page' : undefined}
