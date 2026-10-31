@@ -39,7 +39,7 @@ export function IssueSubscriberPicker({ issue, users, onToggle }: { issue: Issue
   }
   return <div ref={rootRef} className="issue-subscriber-picker">
     <Popover.Root open={open} onOpenChange={next => { setOpen(next); if (!next) command.onQueryChange('') }}>
-      <Popover.Trigger asChild><button type="button" className="subscriber-avatars" aria-label={t('Change subscribers')} aria-haspopup="dialog" aria-expanded={open}>{users.filter(user => selectedSet.has(user.id)).slice(0,3).map(user => <Avatar name={user.displayName} key={user.id}/>)}</button></Popover.Trigger>
+      <Popover.Trigger asChild><button type="button" className="subscriber-avatars" aria-label={t('Change subscribers')} aria-haspopup="dialog" aria-expanded={open}>{users.filter(user => selectedSet.has(user.id)).slice(0,3).map(user => <Avatar id={user.id} name={user.displayName} key={user.id}/>)}</button></Popover.Trigger>
       <Popover.Portal><Popover.Content data-flow-motion="floating" className="issue-subscriber-menu" role="dialog" aria-label={t('Change subscribers')} align="end" side="bottom" sideOffset={4} collisionPadding={8} onOpenAutoFocus={event => event.preventDefault()} onKeyDown={onKeyDown}>
         <label className="issue-subscriber-search"><input ref={searchInputRef}role="searchbox" aria-label={t('Change subscribers…')} aria-activedescendant={command.activeId ? `subscriber-${command.activeId}` : undefined} placeholder={t('Change subscribers…')} value={command.query} onChange={event => command.onQueryChange(event.target.value)}/><kbd>⌘ ⇧ S</kbd></label>
         <div className="issue-subscriber-options" role="listbox" aria-label={t('Subscribers')} aria-multiselectable="true">
@@ -56,7 +56,7 @@ export function IssueSubscriberPicker({ issue, users, onToggle }: { issue: Issue
 function SubscriberOption({ active, assignee, checked, option, user, onActive, onChoose }: { active: boolean; assignee: boolean; checked: boolean; option: { id: string; label: string }; user: User; onActive: () => void; onChoose: () => void }) {
   const { t } = useI18n()
   return <PersonHover person={user}><button id={`subscriber-${option.id}`} type="button" className="issue-subscriber-option" role="option" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
-    <span className="issue-subscriber-option-bg"/><span className="issue-subscriber-checkbox" role="checkbox" aria-checked={checked}>{checked && <CheckboxMark/>}</span><Avatar name={user.displayName}/><span className="issue-subscriber-name" data-i18n-ignore>{user.displayName}</span>{assignee && <small>{t('Assignee')}</small>}
+    <span className="issue-subscriber-option-bg"/><span className="issue-subscriber-checkbox" role="checkbox" aria-checked={checked}>{checked && <CheckboxMark/>}</span><Avatar id={user.id} name={user.displayName}/><span className="issue-subscriber-name" data-i18n-ignore>{user.displayName}</span>{assignee && <small>{t('Assignee')}</small>}
   </button></PersonHover>
 }
 

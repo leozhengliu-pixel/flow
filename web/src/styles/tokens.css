@@ -1036,3 +1036,4 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :root{--display-modified-dot:lch(47.918% 59.303 288.421)}
 :root{--phone-workspace-trigger-open-bg:lch(11.37% 1.3 272)}
 :root[data-theme="light"]{--phone-workspace-trigger-open-bg:var(--theme-control)}
+.avatar{background:var(--avatar,var(--avatar-fallback-alt))}

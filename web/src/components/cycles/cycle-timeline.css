@@ -80,7 +80,7 @@
   .flow-cycles-page .is-upcoming .cycle-timeline-title { color: var(--text); }
   .flow-cycles-page .cycle-timeline-icon { width: 16px; height: 16px; flex: none; }
   .flow-cycles-page .cycle-timeline-icon__track { stroke: var(--issue-dim); }
-  .flow-cycles-page .cycle-timeline-icon__value { stroke: var(--sub-issue-progress-value); }
+  .flow-cycles-page .cycle-timeline-icon__value { stroke: var(--accent-primary); }
   .flow-cycles-page .is-upcoming .cycle-timeline-icon { color: var(--issue-dim); }
   .flow-cycles-page .flow-cycle-cooldown { height: 48px; margin-bottom: 2px; padding: 0; border-radius: 8px; font: 450 13px/normal var(--font); color: var(--issue-dim); }
   .flow-cycles-page .flow-cycle-cooldown::after { left: 128px; }

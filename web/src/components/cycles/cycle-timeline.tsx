@@ -80,8 +80,8 @@ function TimelineChart({ graph, measure, label }: { graph?: CycleGraphData; meas
       ctx.beginPath()
       ctx.rect(0, 6, plotWidth, 172)
       ctx.clip()
-      ctx.strokeStyle = color('--theme-soft-overlay')
-      ctx.lineWidth = 2
+      ctx.strokeStyle = color('--issue-dim')
+      ctx.lineWidth = 1
       for (const day of series.points.filter(point => isWeekend(point.date))) {
         const left = x(day.index - .5), right = x(day.index + .5)
         ctx.save()

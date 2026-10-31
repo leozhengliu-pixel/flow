@@ -6,6 +6,7 @@ import type { SavedView, Team, User, Workspace } from '@/types/flow'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import styles from './saved-view-panels.module.css'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { avatarColor } from '@/components/issue/avatar-color'
 import { useI18n } from '@/i18n/i18n'
 import { listIssueRecordGroups, type IssueQueryInput } from '@/lib/api'
 import { EstimateIcon } from '@/components/issue/estimate-icon'
@@ -153,4 +154,4 @@ function SummaryMark({ color, kind, name, avatarUrl, unassigned, inline }: { col
   if (kind === 'team') return <ViewGlyph color={color} icon="Team"/>
   return kind === 'assignee' ? !inline ? <span className={styles.avatarMark} style={{ backgroundColor: color }}>•</span> : unassigned ? <NoAssigneeIcon size={18}/> : <UserAvatar className={styles.avatarMark} name={name} avatarUrl={avatarUrl} color={color}/> : kind === 'project' ? <span className={styles.projectMark}>◇</span> : <i className={styles.dot} style={{ backgroundColor: color }}/>
 }
-function InsightOwnerAvatar({ user }: { user?: User }) { const { t } = useI18n(); return <UserAvatar avatarUrl={user?.avatarUrl} className={styles.avatar} name={user?.displayName ?? t('Unknown user')}/> }
+function InsightOwnerAvatar({ user }: { user?: User }) { const { t } = useI18n(); return <UserAvatar avatarUrl={user?.avatarUrl} className={styles.avatar} color={user ? avatarColor(user.id) : undefined} name={user?.displayName ?? t('Unknown user')}/> }
