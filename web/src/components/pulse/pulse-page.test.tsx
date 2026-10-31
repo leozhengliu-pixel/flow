@@ -164,7 +164,7 @@ describe('Pulse page', () => {
   it('shows the reference app empty copy', async () => {
     vi.mocked(fetchPulseFeed).mockResolvedValue(page([]))
     renderPage()
-    expect(await screen.findByText('Updates from initiatives, projects that you’re a part of or subscribed to will show here.')).toBeInTheDocument()
+    expect(await screen.findByText('Updates from initiatives and projects that you’re a part of or subscribed to will show here.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'New update' })).toBeInTheDocument()
   })
 

@@ -561,10 +561,11 @@ function InboxMenuItem({
   disabled?: boolean
   onSelect: () => void
 }) {
+  const { t } = useI18n()
   return (
     <DropdownMenu.Item className="flow-inbox-menu__item" data-active={active || undefined} disabled={disabled} onSelect={onSelect}>
       {icon ? <span className="flow-inbox-menu__item-icon">{icon}</span> : null}
-      <span className="flow-inbox-menu__item-label">{children}</span>
+      <span className="flow-inbox-menu__item-label">{typeof children === 'string' ? t(children) : children}</span>
       {shortcut ? <kbd className="flow-inbox-menu__shortcut" aria-label={shortcut}>{[...shortcut].map((key, index) => <span key={index}>{key}</span>)}</kbd> : null}
       {trailing ? <span className="flow-inbox-menu__trailing">{trailing}</span> : null}
     </DropdownMenu.Item>

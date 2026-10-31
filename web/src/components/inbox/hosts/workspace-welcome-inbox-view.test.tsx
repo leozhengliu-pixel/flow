@@ -11,5 +11,8 @@ describe('workspace welcome inbox view', () => {
     expect(screen.getByText('Start here.')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Resources' })).toBeVisible()
     expect(screen.queryByText('Issue is no longer available')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Flow documentation' })).toHaveAttribute('href', 'https://github.com/leozhengliu-pixel/flow/tree/main/docs')
+    expect(screen.getByRole('link', { name: 'Community and support' })).toHaveAttribute('href', 'https://github.com/leozhengliu-pixel/flow/issues')
+    expect(screen.getByText('Introductory video unavailable')).toBeInTheDocument()
   })
 })

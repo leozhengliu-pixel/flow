@@ -68,7 +68,7 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
   const issueOptions = props.issue && props.onUpdateIssue && props.onDeleteIssue && props.onCreateRelation ? (
     <IssueOptionsMenu
       issue={props.issue}
-      issueUrl={props.onCopyLink ? undefined : window.location.href}
+      issueUrl={notification.href ? new URL(notification.href, window.location.origin).href : window.location.href}
       onUpdate={props.onUpdateIssue}
       onDelete={props.onDeleteIssue}
       onRelation={setRelationType}
