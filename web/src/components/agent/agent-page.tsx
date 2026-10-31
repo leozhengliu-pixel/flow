@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type Re
 import * as Popover from "@radix-ui/react-popover";
 import { AlertCircle, Plus } from "lucide-react";
 import { useLatestRef } from "@/hooks/use-latest-ref";
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import {
   fetchAgentStatus,
   getAgentSession,
@@ -18,6 +19,7 @@ import {
   AgentChevronDownIcon,
   AgentStopIcon,
   AgentSubmitIcon,
+  AgentWatermarkIcon,
 } from "./agent-icons";
 import { AgentRichText } from "./agent-rich-text";
 import { AgentDraftCard } from "./agent-draft-card";
@@ -57,6 +59,7 @@ import { FlowLogo } from '@/components/ui/flow-logo';
 import { AgentHistoryList } from './agent-history-list';
 import { AgentErrorDetail } from './agent-error-detail';
 import { agentSessionUnread, formatAgentHistoryTime, groupAgentHistory, useMarkAgentSessionRead } from './agent-read-state';
+import { buildChatHistory } from './agent-chat-history-model';
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { ScopedFlowTooltip as FlowTooltip } from '@/components/ui/tooltip'
 import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
@@ -368,14 +371,17 @@ export function AgentPage({
   // The buttons stay off until the reply shows the approval resolved (streamed here, or saved when the reply runs
   // without this page), so a second click never answers it twice.
   const { approvalBusy, decideToolApproval, retryApproval } = useAgentApprovalAnswer({ sessionId: current?.id, parts: shownParts, onError: setError, onStale: follow.refresh });
+  const phone = usePhoneLayout();
+  const [historyInteracting, setHistoryInteracting] = useState(false);
+  const historyListRef = useRef<HTMLDivElement>(null);
   const historyOptions = useMemo(
     () => [
-      { id: "__new__", label: t("New chat") },
+      ...(!phone ? [{ id: "__new__", label: t("New chat") }] : []),
       ...[...sessions]
         .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
         .map((item) => ({ id: item.id, label: item.title })),
     ],
-    [sessions, t],
+    [sessions, t, phone],
   );
   const {
     activeId: historyActiveId,
@@ -405,12 +411,28 @@ export function AgentPage({
     },
   });
   const historyGroups = useMemo(
-    () => groupAgentHistory(historyFilteredOptions
+    () => {
+      const filtered = historyFilteredOptions
       .filter((option) => option.id !== "__new__")
       .map((option) => sessions.find((session) => session.id === option.id))
-      .filter((session): session is AgentSession => Boolean(session))),
-    [historyFilteredOptions, sessions],
+      .filter((session): session is AgentSession => Boolean(session));
+      const groups = phone
+        ? (historyQuery.trim() ? [{ id: "results", label: "", count: undefined, sessions: filtered }] : buildChatHistory(filtered).sections)
+          .filter((section) => section.sessions.length > 0)
+          .map((section) => ({ ...section, label: section.count == null ? t(section.label) : t(section.label).replace("{count}", String(section.count)) }))
+        : groupAgentHistory(filtered).map((group) => ({ ...group, id: group.label }));
+      const headingHeight = phone && historyQuery.trim() ? 0 : 30;
+      return groups.map((group, index) => {
+        const top = 6 + groups.slice(0, index).reduce((offset, previous) => offset + headingHeight + previous.sessions.length * 46 + 12, 0);
+        return { ...group, top, headingHeight };
+      });
+    },
+    [historyFilteredOptions, sessions, phone, historyQuery, t],
   );
+  const historyListHeight = historyGroups.reduce((height, group) => group.top + group.headingHeight + group.sessions.length * 46 + 6, 12);
+  useEffect(() => {
+    if (phone && historyOpen && historyInteracting) historyListRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: "nearest" });
+  }, [phone, historyOpen, historyInteracting, historyActiveId]);
   // Like the reference app, the empty new-chat page opens ready to type: focus lands in the composer on arrival and whenever
   // the page goes back to a new chat. It never takes focus from another text field or an open dialog/menu.
   const emptyPage = !chatSlug && !shown;
@@ -453,7 +475,7 @@ export function AgentPage({
           data-sidebar-trigger onClick={onOpenSidebar}
           type="button"
         />
-        <Popover.Root open={historyOpen} onOpenChange={setHistoryOpen}>
+        <Popover.Root open={historyOpen} onOpenChange={(open) => { setHistoryOpen(open); setHistoryInteracting(false); }}>
           <Popover.Trigger asChild>
             <button
               aria-expanded={historyOpen}
@@ -470,23 +492,26 @@ export function AgentPage({
           </Popover.Trigger>
           <Popover.Portal>
             <Popover.Content data-flow-motion="floating"
+              data-testid="agent-chat-switcher-popover"
               align="start"
               alignOffset={8}
               className={styles.historyMenu}
               side="bottom"
               sideOffset={3}
               onOpenAutoFocus={(event) => event.preventDefault()}
-              onKeyDown={onHistoryKeyDown}
+              onKeyDown={(event) => { if (event.key !== "Escape") setHistoryInteracting(true); onHistoryKeyDown(event); }}
             >
               <input
                 ref={historyInputRef}
                 autoFocus
                 aria-label={t("Chat history")}
+                placeholder={phone ? t("Chat history") : undefined}
                 className={styles.historySearch}
                 value={historyQuery}
-                onChange={(event) => onHistoryQueryChange(event.target.value)}
+                onChange={(event) => { setHistoryInteracting(Boolean(event.target.value.trim())); onHistoryQueryChange(event.target.value); }}
               />
-              <div role="listbox">
+              <div role="listbox" aria-label={t("Chat history")} ref={historyListRef}>
+                {phone && <div className={styles.historyListSpacer} style={{ height: historyListHeight }} />}
                 {historyFilteredOptions.some(({ id }) => id === "__new__") && <button
                   aria-selected={historyActiveId === "__new__"}
                   className={styles.newChat}
@@ -498,16 +523,20 @@ export function AgentPage({
                   <Plus />
                   <span>{t("New chat")}</span>
                 </button>}
-                {historyGroups.map((group) => (
+                {historyGroups.map((group, groupIndex) => (
                   <Fragment key={group.label}>
-                    <div className={styles.historySeparator} role="separator" />
-                    <div aria-label={t(group.label)} className={styles.historyGroup} role="group">{t(group.label)}</div>
-                    {group.sessions.map((item) => {
+                    {(!phone || groupIndex > 0) && <div className={styles.historySeparator} role="separator" style={phone ? { top: group.top - 12 } : undefined}>
+                      <span data-testid="agent-chat-switcher-divider" />
+                    </div>}
+                    {(!phone || group.headingHeight > 0) && <div aria-label={t(group.label)} data-history-group={group.id} className={styles.historyGroup} role="group" style={phone ? { top: group.top } : undefined}>{t(group.label)}</div>}
+                    {group.sessions.map((item, rowIndex) => {
                       const option = historyFilteredOptions.find(({ id }) => id === item.id)!;
                       return <button
-                        aria-selected={historyActiveId === item.id}
+                        aria-selected={(!phone || historyInteracting) && historyActiveId === item.id}
+                        data-history-section={group.id}
+                        style={phone ? { top: group.top + group.headingHeight + rowIndex * 46 } : undefined}
                         key={item.id}
-                        onMouseMove={() => setHistoryActiveId(item.id)}
+                        onMouseMove={() => { setHistoryInteracting(true); setHistoryActiveId(item.id); }}
                         onClick={() => chooseHistory(option)}
                         role="option"
                         type="button"
@@ -610,7 +639,7 @@ export function AgentPage({
         <div className={shown ? styles.stagePassthrough : styles.emptyStage}>
         <div className={shown ? styles.stagePassthrough : styles.emptyColumn}>
         <div className={shown ? styles.stagePassthrough : styles.emptyComposerSlot}>
-        {!shown && <FlowLogo className={styles.emptyLogo} variant="outline" />}
+        {!shown && (phone ? <AgentWatermarkIcon className={styles.emptyLogo} /> : <FlowLogo className={styles.emptyLogo} variant="outline" />)}
         <div
           className={`${styles.composer}${shown ? ` ${styles.conversationComposer}` : ""}`}
           data-agent-composer=""
