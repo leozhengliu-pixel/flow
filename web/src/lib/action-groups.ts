@@ -58,6 +58,8 @@ export type ActionGroupId =
   | "Filter"
   | "Templates"
   | "Navigation"
+  | "Settings"
+  | "Help"
   | "Other"
   | "Search results";
 
@@ -160,6 +162,14 @@ export const ACTION_GROUP_DEFINITIONS: ActionGroupDefinition[] = [
   {
     id: "Navigation",
     band: "navigationActions",
+  },
+  {
+    id: "Settings",
+    band: "miscActions",
+  },
+  {
+    id: "Help",
+    band: "miscActions",
   },
   {
     id: "Other",

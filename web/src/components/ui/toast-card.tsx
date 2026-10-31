@@ -41,6 +41,7 @@ export function ToastCard({ id, content }: { id: string | number; content: Toast
   const { kind, title, description, entities, links } = content
   const dismiss = () => { sonnerToast.dismiss(id) }
   const icon = content.icon === false ? null : content.icon ?? toastKindIcon(kind, COPY_TITLE.test(titleText(title)))
+  const clipboardSuccess = kind === 'success' && content.icon === undefined && (COPY_TITLE.test(titleText(title)) || titleText(title).includes('复制'))
   const primary = primaryToastTarget(content)
   const primaryRef = useLatestRef(primary)
   const hasPrimary = Boolean(primary)
@@ -58,6 +59,7 @@ export function ToastCard({ id, content }: { id: string | number; content: Toast
     <div
       className="flow-toast"
       data-kind={kind}
+      data-clipboard={clipboardSuccess ? '' : undefined}
       data-flow-toast=""
       data-rich={description || entities.length || links.length ? '' : undefined}
       data-button={content.button ? '' : undefined}
@@ -65,6 +67,7 @@ export function ToastCard({ id, content }: { id: string | number; content: Toast
       role={kind === 'error' ? 'alert' : 'status'}
     >
       {icon ? <span aria-hidden="true" className="flow-toast__icon">{icon}</span> : null}
+      {clipboardSuccess ? <span aria-hidden="true" className="flow-toast__copy-icon"><ToastCopyIcon/></span> : null}
       <div className="flow-toast__body">
         <div className="flow-toast__title">{title}</div>
         {description ? <div className="flow-toast__description">{description}</div> : null}

@@ -6,6 +6,8 @@ import {
   FileText,
   FolderKanban,
   GitPullRequest,
+  Hand,
+  LifeBuoy,
   Inbox,
   Layers3,
   Lightbulb,
@@ -14,6 +16,7 @@ import {
   Search,
   SquareDot,
   Tag,
+  Trash2,
   UserRound,
 } from 'lucide-react'
 
@@ -67,15 +70,19 @@ export function CommandMenu({
   onCreateIssueTemplate,
   onCreateLabel,
   onCreateProject,
+  onCreateProjectTemplate,
   onCreateView,
   onCreateInitiative,
   onSearchWorkspace,
   onNavigateInbox,
   onNavigateMyIssues,
   onNavigateProjects,
+  onNavigateRecentlyDeletedProjects,
   onNavigateInitiatives,
   onNavigateViews,
   onNavigateMembers,
+  onNavigateSettings,
+  onReportPerformance,
   onCreateTeam,
   onNavigateCustomers,
   onGoToCustomers,
@@ -106,15 +113,19 @@ export function CommandMenu({
   /** "Create new label…": opens the issue label settings with the create row focused. */
   onCreateLabel?: () => void
   onCreateProject: () => void
+  onCreateProjectTemplate?: () => void
   onCreateView: () => void
   onCreateInitiative: () => void
   onSearchWorkspace: () => void
   onNavigateInbox: () => void
   onNavigateMyIssues: () => void
   onNavigateProjects: () => void
+  onNavigateRecentlyDeletedProjects?: () => void
   onNavigateInitiatives: () => void
   onNavigateViews: () => void
   onNavigateMembers: () => void
+  onNavigateSettings?: () => void
+  onReportPerformance?: () => void
   /** "Create a team…", listed when Settings › Security "Team creation" allows the viewer. */
   onCreateTeam?: () => void
   onNavigateCustomers: () => void
@@ -193,6 +204,7 @@ export function CommandMenu({
     ...(onCreateIssueFullscreen ? [{ id: 'create-issue-fullscreen', group: 'Issues', label: 'Create issue in fullscreen…', icon: <Maximize2/>, shortcut: ['V'], keywords: 'new ticket task expanded', run: closeAnd(onCreateIssueFullscreen) }] : []),
     ...(onCreateLabel ? [{ id: 'create-label', group: 'Issues', label: 'Create new label…', icon: <Tag/>, keywords: 'new tag label', run: closeAnd(onCreateLabel) }] : []),
     { id: 'create-project', group: 'Projects', label: 'Create new project…', icon: <FolderKanban/>, shortcut: ['N', 'then', 'P'], run: closeAnd(onCreateProject) },
+    ...(onCreateProjectTemplate ? [{ id: 'create-project-template', group: 'Projects', label: 'Create new project template…', icon: <FileText/>, run: closeAnd(onCreateProjectTemplate) }] : []),
     { id: 'create-view', group: 'Views', label: 'Create view…', icon: <Layers3/>, run: closeAnd(onCreateView) },
     { id: 'create-initiative', group: 'Initiatives', label: 'Create new initiative', icon: <Lightbulb/>, shortcut: ['N', 'then', 'I'], run: closeAnd(onCreateInitiative) },
     ...(onGoToCustomers ? [{ id: 'create-customer', group: 'Customers', label: 'Create new customer…', icon: <CustomerCommandIcon/>, keywords: 'add create', run: closeAnd(onNavigateCustomers) }] : []),
@@ -205,7 +217,9 @@ export function CommandMenu({
     ...(data && data.viewerRole !== 'guest' ? [{ id: 'view-admins', group: 'Navigation', label: 'View workspace admins', icon: <UserRound/>, keywords: 'admin owner members', run: closeAnd(onNavigateMembers) }] : []),
     { id: 'go-inbox', group: 'Navigation', label: 'Go to Inbox', icon: <Inbox/>, shortcut: ['G', 'then', 'I'], run: closeAnd(onNavigateInbox) },
     { id: 'go-my-issues', group: 'Navigation', label: 'Go to My issues', icon: <SquareDot/>, shortcut: ['G', 'then', 'M'], run: closeAnd(onNavigateMyIssues) },
-    { id: 'go-projects', group: 'Navigation', label: 'Go to Projects', icon: <FolderKanban/>, run: closeAnd(onNavigateProjects) },
+    { id: 'go-projects', group: 'Navigation', label: 'Go to projects', icon: <FolderKanban/>, run: closeAnd(onNavigateProjects) },
+    { id: 'open-project', group: 'Navigation', label: 'Open project…', icon: <FolderKanban/>, shortcut: ['O', 'then', 'P'], keywords: 'project picker', run: closeAnd(onNavigateProjects) },
+    ...(onNavigateRecentlyDeletedProjects ? [{ id: 'go-deleted-projects', group: 'Navigation', label: 'Go to recently deleted projects', icon: <Trash2/>, keywords: 'trash restore removed', run: closeAnd(onNavigateRecentlyDeletedProjects) }] : []),
     { id: 'go-initiatives', group: 'Navigation', label: 'Go to Initiatives', icon: <Lightbulb/>, run: closeAnd(onNavigateInitiatives) },
     { id: 'go-views', group: 'Navigation', label: 'Go to Views', icon: <Layers3/>, run: closeAnd(onNavigateViews) },
     { id: 'go-members', group: 'Navigation', label: 'Go to Members', icon: <UserRound/>, run: closeAnd(onNavigateMembers) },
@@ -219,6 +233,12 @@ export function CommandMenu({
     ...(onNavigatePulse ? [{ id: 'go-pulse', group: 'Navigation', label: 'Go to pulse', icon: <PulseIcon size={14}/>, shortcut: ['G', 'then', 'F'], keywords: 'feed updates', run: closeAnd(onNavigatePulse) }] : []),
     ...(pulseToggle ? [{ id: 'toggle-pulse', group: 'Pulse', label: pulseToggle.enabled ? 'Disable Pulse' : 'Enable Pulse', icon: <PulseIcon size={14}/>, keywords: 'feed updates', run: closeAnd(pulseToggle.run) }] : []),
     ...(onNavigateReviews ? [{ id: 'go-reviews', group: 'Reviews', label: 'Go to Reviews', icon: <GitPullRequest/>, shortcut: ['G', 'then', 'R'], run: closeAnd(onNavigateReviews) }] : []),
+    ...(onNavigateSettings ? [{ id: 'touch-optimized', group: 'Settings', label: 'Force UI optimized for touch', icon: <Hand/>, keywords: 'pro touch settings', run: closeAnd(onNavigateSettings) }] : []),
+    ...(onReportPerformance ? [
+      { id: 'report-performance', group: 'Help', label: 'Report performance problem', icon: <LifeBuoy/>, keywords: 'pro feedback diagnostics', run: closeAnd(onReportPerformance) },
+      { id: 'contact-support', group: 'Help', label: 'Contact support', icon: <LifeBuoy/>, keywords: 'pro', run: closeAnd(onReportPerformance) },
+      { id: 'whats-new', group: 'Help', label: "What's new", icon: <Lightbulb/>, keywords: 'pro', run: closeAnd(onReportPerformance) },
+    ] : []),
     { id: 'copy-url', group: 'Other', label: 'Copy current page link', icon: <Clipboard/>, run: closeAnd(() => void navigator.clipboard.writeText(window.location.href)) },
     ...displayCommands.map(command => ({ id: command.id, group: 'Display options', label: `Display options ${command.path.join(' ')}`, path: ['Display options', ...command.path], icon: <CustomerCommandIcon/>, keywords: `${t('Display options')} ${command.path.map(part => t(part)).join(' ')}`, run: closeAnd(command.run) })),
   ]
@@ -255,6 +275,9 @@ export function CommandMenu({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [groupIds.join("|"), allowedActionGroups, location.pathname, selectedModels],
   )
+  const firstSearchGroup = query.trim()
+    ? groups.find(group => actions.some(action => action.group === group && `${action.label} ${action.keywords ?? ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())))
+    : undefined
   // The context vanished (selection cleared, issue closed): nested pages no longer apply.
   useEffect(() => { if (!context) setPages(current => current.filter(item => GLOBAL_DOCUMENT_PAGES.has(item.id) || GLOBAL_RELEASE_PAGES.has(item.id))) }, [context])
   const onInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -288,7 +311,11 @@ export function CommandMenu({
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="command-dialog" overlayClassName="command-overlay" onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { if (pastChats) { event.preventDefault(); setPastChats(false); setQuery('') } else if (customerPicker && !initialCustomerPicker) { event.preventDefault(); setCustomerPicker(false); setQuery('') } else if (pages.length) { event.preventDefault(); back() } }}>
       <DialogTitle className="sr-only">Command menu</DialogTitle>
-      <Command shouldFilter loop>
+      <Command shouldFilter loop filter={(value, search, keywords) => {
+        if (!search.trim()) return 1
+        const needle = search.trim().toLocaleLowerCase()
+        return `${value} ${keywords ?? ''}`.toLocaleLowerCase().includes(needle) ? 1 : 0
+      }}>
         {(chip || page) && <div className="command-context" aria-label={t('Command context')}>
           {chip && (chip.type
             ? <span className="command-context-chip is-typed" title={`${chip.type} ⋅ ${chip.label}`}><span className="command-context-chip__type">{chip.type} ⋅</span> <span data-i18n-ignore={chip.entity || undefined}>{chip.label}</span></span>
@@ -342,7 +369,7 @@ export function CommandMenu({
               {action.checked && <span className="command-option-current" aria-label={t('Current')}><Check size={14}/></span>}
             </Command.Item>)}
           </Command.Group>}
-          {groups.map(group => <Command.Group key={group} heading={group}>
+          {groups.map(group => <Command.Group key={group} heading={group === firstSearchGroup ? undefined : group}>
             {actions.filter(action => action.group === group).map(action => <Command.Item key={action.id} value={`${action.label} ${action.keywords ?? ''}`} keywords={translatedKeywords(action.path ?? [action.label], t)} onSelect={() => void registry.execute(action.id, { source: 'command-menu' })}>
               <span className="command-item-icon">{action.icon}</span>
               {action.path ? <span className="command-path">{action.path.map((part, index) => <span key={index}>{index > 0 && <ChevronRight aria-hidden="true" size={12}/>}{t(part)}</span>)}</span> : <span>{action.label}</span>}

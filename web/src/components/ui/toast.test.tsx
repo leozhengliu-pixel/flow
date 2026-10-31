@@ -75,6 +75,18 @@ describe('toast system', () => {
     expect(items()).toHaveLength(2)
   })
 
+  it('marks clipboard successes for the desktop copy glyph without replacing compact success icons', async () => {
+    act(() => { toast.success('Issue URL copied to clipboard'); toast.success('已复制事项链接'); toast.success('Release created') })
+    await settle(50)
+    const confirmations = [...document.querySelectorAll('.flow-toast[data-clipboard]')]
+    expect(confirmations).toHaveLength(2)
+    for (const confirmation of confirmations) {
+      expect(confirmation.querySelector('.flow-toast__icon circle')).not.toBeNull()
+      expect(confirmation.querySelector('.flow-toast__copy-icon rect')).not.toBeNull()
+    }
+    expect(screen.getByText('Release created').closest('.flow-toast')).not.toHaveAttribute('data-clipboard')
+  })
+
   it('updates a toast in place: loading becomes success under the same id', async () => {
     act(() => { toast.loading('Creating release…', { id: 'create' }) })
     await settle(50)

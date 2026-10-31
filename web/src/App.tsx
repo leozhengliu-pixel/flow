@@ -269,6 +269,7 @@ import {
   routeBelongsToWorkspace,
   savedViewPathId,
   teamCyclesPath,
+  teamArchivePath,
   teamDocumentsPath,
   teamDashboardsPath,
   teamDashboardsNewPath,
@@ -1048,6 +1049,11 @@ function App() {
         return;
       }
       shortcutSequence.current = { key: "", at: 0 };
+      if (pressed === "v" && window.matchMedia("(min-width: 1024px)").matches) {
+        e.preventDefault();
+        openCreateIssue(undefined, { expanded: true });
+        return;
+      }
       if (pressed === "/" && data) {
         e.preventDefault();
         navigateTo(searchPath(data.workspace.urlKey));
@@ -7038,6 +7044,9 @@ function App() {
             onCreateProject={() =>
               navigateTo(`${projectsPath(data.workspace.urlKey)}?create=1`)
             }
+            onCreateProjectTemplate={() =>
+              navigateTo(newProjectTemplatePath(data.workspace.urlKey))
+            }
             onCreateView={() =>
               navigateTo(workspaceViewsNewPath(data.workspace.urlKey, "issues"))
             }
@@ -7054,6 +7063,11 @@ function App() {
             onNavigateProjects={() =>
               navigateTo(projectsPath(data.workspace.urlKey))
             }
+            onNavigateRecentlyDeletedProjects={() => {
+              const team = data.teams.find(item => !item.archivedAt) ?? data.teams[0]
+              if (team) navigateTo(teamArchivePath(data.workspace.urlKey, team.key, "recently-deleted-projects"))
+              else navigateTo(projectsPath(data.workspace.urlKey))
+            }}
             onNavigateInitiatives={() =>
               navigateTo(initiativesPath(data.workspace.urlKey))
             }
@@ -7063,6 +7077,8 @@ function App() {
             onNavigateMembers={() =>
               navigateTo(membersPath(data.workspace.urlKey))
             }
+            onNavigateSettings={() => navigateTo(settingsPath(data.workspace.urlKey, "preferences"))}
+            onReportPerformance={() => navigateTo(settingsPath(data.workspace.urlKey, "preferences"))}
             onCreateTeam={() => navigateTo(newTeamPath(data.workspace.urlKey))}
             onNavigateCustomers={() =>
               navigateTo(`${customersPath(data.workspace.urlKey)}?create=1`)
