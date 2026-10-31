@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Phone navigation labels, team glyphs, floating help control and backdrop now match the drawer styling; project customer-request labels and team document headers use their intended phone font weights without changing desktop layouts.
 - Desktop issue view pills no longer accumulate border-width drift; the add-view glyph and issue composer's team text, action glyphs, and undivided footer match the desktop shell styling without changing phone controls.
 - Phone Pulse, Reviews and project pages retain fractional font metrics on Linux instead of shifting tabs and actions; browser menu and shell checks create their own workspaces and use the API's normalized workspace keys.
 - The Inbox no longer shows notifications from an older navigation cache: the snapshot keeps inbox rows out of storage, reconciles them from the notifications API, and a cancelled or partial bootstrap stream is retried instead of leaving deleted rows on screen. The full bootstrap also omits deleted and archived notifications, and both workspace header spellings select the same workspace.

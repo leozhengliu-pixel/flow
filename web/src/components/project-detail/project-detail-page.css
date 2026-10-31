@@ -1538,6 +1538,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-overview__description { margin-top: 4px; padding-top: 10px; }
   .project-customers-row .project-overview__row-content { margin-top: 0; }
   .project-customers-row__add { color: rgb(255,255,255); font: 400 13.3333px/normal var(--font); }
+  .project-customers-row__add > span { font-size: 13px; font-weight: 500; }
   .project-customers-row__add > span,
   .project-customers-row__add > svg { color: var(--pd-faint); }
   .project-details-sidebar {

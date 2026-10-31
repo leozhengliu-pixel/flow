@@ -10,7 +10,6 @@ import {
   BookOpen,
   Check,
   CircleCheck,
-  CircleHelp,
   Copy,
   Download,
   Folder,
@@ -2345,7 +2344,7 @@ export function HelpMenu({
       { label: 'Download apps', icon: <Download/>, run: () => openExternal('https://github.com/leozhengliu-pixel/flow/releases') },
       { label: 'Settings', icon: <Settings/>, run: onSettings },
     ];
-    return <><button className="sidebar-help" type="button" aria-label={t('Open Help menu')} onClick={() => setOpen(true)}><CircleHelp/></button>
+    return <><button className="sidebar-help" type="button" aria-label={t('Open Help menu')} onClick={() => setOpen(true)}><ViewGlyph icon="QuestionMark" color="currentColor"/></button>
       <PhoneCommandMenu heading open={open} onOpenChange={setOpen} label={t('Help')}>
         {entries.map(item => <Command.Item key={item.label} onSelect={() => { setOpen(false); item.run() }}>{item.icon}<span>{t(item.label)}</span></Command.Item>)}
         <Command.Group heading={t('What’s new')}><Command.Item onSelect={() => { setOpen(false); openExternal('https://github.com/leozhengliu-pixel/flow/blob/main/CHANGELOG.md') }}>{t('Full changelog')}</Command.Item></Command.Group>
@@ -2579,6 +2578,13 @@ function ComposeIcon() {
   );
 }
 function IssuesIcon() {
+  const phone = usePhoneLayout();
+  if (phone) return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path fillRule="evenodd" clipRule="evenodd" d="M13.25 5.25C14.2165 5.25 15 6.0335 15 7V11.75C15 13.5449 13.5449 15 11.75 15H6.75C5.7835 15 5 14.2165 5 13.25C5 12.8358 5.33579 12.5 5.75 12.5C6.16421 12.5 6.5 12.8358 6.5 13.25C6.5 13.3881 6.61193 13.5 6.75 13.5H11.75C12.7165 13.5 13.5 12.7165 13.5 11.75V7C13.5 6.86193 13.3881 6.75 13.25 6.75C12.8358 6.75 12.5 6.41421 12.5 6C12.5 5.58579 12.8358 5.25 13.25 5.25Z"/>
+      <path fillRule="evenodd" clipRule="evenodd" d="M8.1543 1.00391C9.73945 1.08421 11 2.39489 11 4V8L10.9961 8.1543C10.9184 9.68834 9.68834 10.9184 8.1543 10.9961L8 11H4L3.8457 10.9961C2.31166 10.9184 1.08163 9.68834 1.00391 8.1543L1 8V4C1 2.39489 2.26055 1.08421 3.8457 1.00391L4 1H8L8.1543 1.00391ZM4 2.5C3.17157 2.5 2.5 3.17157 2.5 4V8C2.5 8.82843 3.17157 9.5 4 9.5H8C8.82843 9.5 9.5 8.82843 9.5 8V4C9.5 3.17157 8.82843 2.5 8 2.5H4Z"/>
+    </svg>
+  );
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <rect
@@ -2602,6 +2608,12 @@ function IssuesIcon() {
   );
 }
 function HomeIcon() {
+  const phone = usePhoneLayout();
+  if (phone) return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path fillRule="evenodd" clipRule="evenodd" d="M6.56055 1.52061C7.39447 0.826788 8.60553 0.826788 9.43945 1.52061L14.3027 5.56651C14.7446 5.93422 15 6.47993 15 7.05479V7.57042C14.9998 8.27774 14.6006 8.90369 14 9.2169V12.7491C13.9997 13.9916 12.9925 14.9991 11.75 14.9991H4.25C3.00752 14.9991 2.00026 13.9916 2 12.7491V9.2169C1.39944 8.90369 1.00017 8.27774 1 7.57042V7.05479C1 6.47993 1.25539 5.93422 1.69727 5.56651L6.56055 1.52061ZM8.47949 2.67393C8.20152 2.44266 7.79848 2.44266 7.52051 2.67393L2.65723 6.71983C2.55789 6.80255 2.5 6.92551 2.5 7.05479V7.57042C2.50021 7.74408 2.62489 7.89249 2.7959 7.92296C3.20319 7.99553 3.49983 8.3501 3.5 8.76378V12.7491C3.50026 13.1631 3.83594 13.4991 4.25 13.4991H5V10.2491C5 9.00649 6.00736 7.99913 7.25 7.99913H8.75C9.99264 7.99913 11 9.00649 11 10.2491V13.4991H11.75C12.1641 13.4991 12.4997 13.1631 12.5 12.7491V8.76378C12.5002 8.3501 12.7968 7.99553 13.2041 7.92296C13.3751 7.89249 13.4998 7.74408 13.5 7.57042V7.05479C13.5 6.92551 13.4421 6.80255 13.3428 6.71983L8.47949 2.67393ZM7.25 9.49913C6.83579 9.49913 6.5 9.83491 6.5 10.2491V13.4991H9.5V10.2491C9.5 9.83491 9.16421 9.49913 8.75 9.49913H7.25Z"/>
+    </svg>
+  );
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path
@@ -2770,20 +2782,22 @@ function CustomizeIcon() {
   );
 }
 function TeamDisclosureIcon() {
+  const phone = usePhoneLayout();
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M7.00194 10.6239C6.66861 10.8183 6.25 10.5779 6.25 10.192V5.80802C6.25 5.42212 6.66861 5.18169 7.00194 5.37613L10.7596 7.56811C11.0904 7.76105 11.0904 8.23895 10.7596 8.43189L7.00194 10.6239Z" />
+      <path d={phone ? "M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z" : "M7.00194 10.6239C6.66861 10.8183 6.25 10.5779 6.25 10.192V5.80802C6.25 5.42212 6.66861 5.18169 7.00194 5.37613L10.7596 7.56811C11.0904 7.76105 11.0904 8.23895 10.7596 8.43189L7.00194 10.6239Z"} />
     </svg>
   );
 }
 function SectionDisclosureIcon({ expanded }: { expanded: boolean }) {
+  const phone = usePhoneLayout();
   return (
     <svg
       className={expanded ? "expanded" : ""}
       viewBox="0 0 16 16"
       aria-hidden="true"
     >
-      <path d="M7.00194 10.6239C6.66861 10.8183 6.25 10.5779 6.25 10.192V5.80802C6.25 5.42212 6.66861 5.18169 7.00194 5.37613L10.7596 7.56811C11.0904 7.76105 11.0904 8.23895 10.7596 8.43189L7.00194 10.6239Z" />
+      <path d={phone ? "M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z" : "M7.00194 10.6239C6.66861 10.8183 6.25 10.5779 6.25 10.192V5.80802C6.25 5.42212 6.66861 5.18169 7.00194 5.37613L10.7596 7.56811C11.0904 7.76105 11.0904 8.23895 10.7596 8.43189L7.00194 10.6239Z"} />
     </svg>
   );
 }
