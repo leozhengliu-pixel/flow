@@ -717,7 +717,7 @@ function ProjectIssuesEmptyState({ onCreateIssue }: { onCreateIssue: () => void 
       <ProjectIssuesEmptyMarkPhone />
       <strong>Add issues to the project</strong>
       <p>Start building your project by creating an issue.</p>
-      <p><span className="project-issues__intro-note">You can also add teams, team members, and project dates in the project sidebar.</span><span className="project-issues__intro-hint">You can also add teams, team members, and project dates in the project sidebar with <kbd>⌘</kbd><kbd>I</kbd> .</span></p>
+      <p><span className="project-issues__intro-note">You can also add teams, team members, and project dates in the project sidebar.</span><span className="project-issues__intro-hint">You can also add teams, team members, and project dates in the project sidebar with <kbd>⌘</kbd><kbd>I</kbd>.</span></p>
       <div>
         <button onClick={onCreateIssue} type="button">
           Create new issue
