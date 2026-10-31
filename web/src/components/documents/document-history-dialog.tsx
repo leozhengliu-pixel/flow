@@ -27,6 +27,8 @@ export interface DocumentHistoryDialogProps {
   onRestore: (revisionId: string) => Promise<void>
 }
 
+const historyCloseIcon = <svg aria-hidden="true" height="14" viewBox="0 0 16 16" width="14"><path d="M2.96967 2.96967C3.26256 2.67678 3.73744 2.67678 4.03033 2.96967L8 6.939L11.9697 2.96967C12.2626 2.67678 12.7374 2.67678 13.0303 2.96967C13.3232 3.26256 13.3232 3.73744 13.0303 4.03033L9.061 8L13.0303 11.9697C13.2966 12.2359 13.3208 12.6526 13.1029 12.9462L13.0303 13.0303C12.7374 13.3232 12.2626 13.3232 11.9697 13.0303L8 9.061L4.03033 13.0303C3.73744 13.3232 3.26256 13.3232 2.96967 13.0303C2.67678 12.7374 2.67678 12.2626 2.96967 11.9697L6.939 8L2.96967 4.03033C2.7034 3.76406 2.6792 3.3474 2.89705 3.05379L2.96967 2.96967Z"/></svg>
+
 const authorName = (entry: HistoryEntry) => entry.author?.displayName || entry.author?.name || ''
 
 export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore }: DocumentHistoryDialogProps) {
@@ -39,6 +41,7 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
   const [highlight, setHighlight] = useState(true)
   const [activeChange, setActiveChange] = useState(1)
   const [busy, setBusy] = useState(false)
+  const [phoneLayout, setPhoneLayout] = useState(false)
   const [previewEl, setPreviewEl] = useState<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const listId = useId()
@@ -52,6 +55,13 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
     setActiveChange(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 720px)')
+    const update = () => setPhoneLayout(media.matches)
+    update()
+    media.addEventListener?.('change', update)
+    return () => media.removeEventListener?.('change', update)
+  }, [])
   // The selected version can disappear when the document reloads (e.g. after a restore).
   const selectedIndex = Math.max(0, entries.findIndex(entry => entry.id === selectedId))
   const selected = entries[selectedIndex] as HistoryEntry | undefined
@@ -119,6 +129,7 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
       <DialogContent
         aria-describedby={undefined}
         className="document-history-dialog"
+        closeIcon={historyCloseIcon}
         closeLabel={t('Close modal dialog')}
         data-dialog-placement="window"
         onOpenAutoFocus={event => {
@@ -127,43 +138,49 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
           listRef.current?.focus()
         }}
       >
-        <DialogTitle className="document-history-title">
-          <span>{t('History for')}</span>
-          <DocumentGlyph document={document}/>
-          <strong data-i18n-ignore>{document.title || t('Untitled')}</strong>
-        </DialogTitle>
-        {hasHistory && selected && preview ? (
-          <div className="document-history-panel">
-            <section aria-label={t('Version preview')} className="document-history-main">
-              <div className="document-history-scroll" ref={setPreviewEl}>
-                <span className="document-history-date" data-testid="history-date-chip">
-                  <b>{longDate(selected.createdAt)}</b>
-                  <span>{time(selected.createdAt)}</span>
-                </span>
-                <DocumentJsonView className="document-history-doc" doc={preview.doc} emptyLabel={t('Empty document')}/>
-              </div>
-              <div aria-label={t('Version actions')} className="document-history-pill" role="toolbar">
-                {previous && <label className="document-history-highlight">
-                  <Toggle checked={highlight} label={t('Highlight changes')} onChange={setHighlight} size="regular"/>
-                  <span>{t('Highlight changes')}</span>
-                </label>}
-                {previous && highlight && (
-                  <div className="document-history-navigator">
-                    <span aria-live="polite" data-testid="history-change-counter">{changes ? counter : t('No changes')}</span>
-                    <button aria-label={t('Previous change')} disabled={!changes} onClick={() => step(-1)} type="button"><ChevronUp size={14}/></button>
-                    <button aria-label={t('Next change')} disabled={!changes} onClick={() => step(1)} type="button"><ChevronDown size={14}/></button>
-                  </div>
-                )}
-                <div className="document-history-actions"><button
-                  className="document-history-restore"
-                  disabled={selected.current || busy}
-                  onClick={() => void restore()}
-                  title={selected.current ? t('This is the current version, you cannot restore it') : undefined}
-                  type="button"
-                >{t('Restore version')}</button></div>
-              </div>
-            </section>
-            <nav aria-label={t('Document versions')} className="document-history-versions">
+        <div className="document-history-shell-panel">
+          <DialogTitle className="document-history-title">
+            <span>{t('History for')}</span>
+            <span className="document-history-document-title">
+              <DocumentGlyph document={document}/>
+              <strong data-i18n-ignore>{document.title || t('Untitled')}</strong>
+            </span>
+          </DialogTitle>
+          {hasHistory && selected && preview ? (
+            <div className="document-history-panel">
+              <section aria-label={t('Version preview')} className="document-history-main">
+                <div className="document-history-scroll" ref={setPreviewEl}>
+                  {phoneLayout && <select aria-label={t('Select document version')} className="document-history-date-select" onChange={event => select(event.target.value)} value={selected.id}>
+                    {entries.map(entry => <option key={entry.id} value={entry.id}>{longDate(entry.createdAt)} {time(entry.createdAt)}{entry.current ? ` (${t('Current')})` : ''}</option>)}
+                  </select>}
+                  <span className="document-history-date" data-testid="history-date-chip">
+                    <b>{longDate(selected.createdAt)}</b>
+                    <span>{time(selected.createdAt)}</span>
+                  </span>
+                  <DocumentJsonView className="document-history-doc" doc={preview.doc} emptyLabel={t('Empty document')}/>
+                </div>
+                <div aria-label={t('Version actions')} className="document-history-pill" role="toolbar">
+                  {previous && <label className="document-history-highlight">
+                    <Toggle checked={highlight} label={t('Highlight changes')} onChange={setHighlight} size="regular"/>
+                    <span>{t('Highlight changes')}</span>
+                  </label>}
+                  {previous && highlight && (
+                    <div className="document-history-navigator">
+                      <span aria-live="polite" data-testid="history-change-counter">{changes ? counter : t('No changes')}</span>
+                      <button aria-label={t('Previous change')} disabled={!changes} onClick={() => step(-1)} type="button"><ChevronUp size={14}/></button>
+                      <button aria-label={t('Next change')} disabled={!changes} onClick={() => step(1)} type="button"><ChevronDown size={14}/></button>
+                    </div>
+                  )}
+                  <div className="document-history-actions"><button
+                    className="document-history-restore"
+                    disabled={selected.current || busy}
+                    onClick={() => void restore()}
+                    title={selected.current ? t('This is the current version, you cannot restore it') : undefined}
+                    type="button"
+                  >{t('Restore version')}</button></div>
+                </div>
+              </section>
+              <nav aria-label={t('Document versions')} className="document-history-versions">
               <div
                 aria-activedescendant={`${listId}-${selected.id}`}
                 aria-label={t('Document versions')}
@@ -200,11 +217,12 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
                   </div>
                 ))}
               </div>
-            </nav>
-          </div>
-        ) : (
-          <div className="document-history-empty">{t('There is no history yet.')}</div>
-        )}
+              </nav>
+            </div>
+          ) : (
+            <div className="document-history-empty">{t('There is no history yet.')}</div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   )
