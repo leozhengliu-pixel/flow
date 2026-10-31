@@ -57,7 +57,7 @@
 .issue-options-mobile-overlay { position: fixed; inset: 0; z-index: 599; background: var(--theme-overlay); }
 @media (max-width: 767px) {
   [data-radix-popper-content-wrapper]:has(> :is(.issue-options-popover,.issue-options-submenu,.issue-options-due-date)) {
-    top: 13.0332dvh !important;
+    top: min(110px, 13.04dvh) !important;
     left: 16px !important;
     transform: none !important;
     width: calc(100vw - 32px);
@@ -75,21 +75,32 @@
     box-shadow: var(--shadow-dialog);
     overflow: hidden;
   }
-  /* The phone panel is a bare box; the filled list surface inside it carries the rounded card. */
-  html:root body .issue-options-popover.issue-options-popover:not(#_) { border-radius: 0; background: transparent !important; border: 0 !important; outline: 0; box-shadow: none !important; clip-path: inset(0 round 12px); }
-  html:root body .issue-options-popover.issue-options-popover:not(#_)::before { content: ""; position: absolute; inset: 0; z-index: 0; border-radius: 12px; background: var(--work-menu-bg); box-shadow: inset 0 0 0 .5px var(--work-menu-border); pointer-events: none; }
-  .issue-options-popover > [cmdk-root] { position: relative; z-index: 1; }
+  html:root body .issue-options-popover.issue-options-popover:not(#_) {
+    border: .5px solid var(--pk-border) !important;
+    background: var(--pk-surface) !important;
+    outline: 0;
+    box-shadow: var(--pk-card-shadow);
+  }
+  .issue-options-popover > [cmdk-root] { position: relative; z-index: 1; width: calc(100vw - 32px); }
   .issue-options-popover[data-nested=true] { visibility: hidden; }
   .issue-options-popover > [cmdk-root],.issue-options-submenu > [cmdk-root] { height: 100%; max-height: 100%; }
-  .issue-options-popover > [cmdk-root] > :is(.issue-options-filter,.issue-options-submenu-search)::placeholder { color: var(--pk-faint); opacity: 1; }
-  .issue-options-popover > [cmdk-root] > :is(.issue-options-filter,.issue-options-submenu-search) {
+  .issue-options-search {
+    flex: none;
+    height: 40px;
+    margin: 6px 6px 0;
+    border-radius: 12px;
+    color: var(--pk-text);
+    font: 400 13px/19.5px var(--font);
+  }
+  .issue-options-search > input::placeholder { color: var(--pk-faint); opacity: 1; }
+  .issue-options-search > input {
     position: static;
     box-sizing: border-box;
     opacity: 1;
     flex: none;
-    width: auto;
-    height: 39.2px;
-    margin: 10.87px 8.97px 0 9.95px;
+    width: 100%;
+    height: 40px;
+    margin: 0;
     padding: 11px 12px;
     border: 0;
     border-radius: 12px;
@@ -112,17 +123,18 @@
     outline: 0;
     font: 13px var(--font);
   }
-  .issue-options-list-surface { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; z-index: 1; margin: 0 3.5px 4px; background: var(--work-menu-bg); box-shadow: none; overflow: hidden; }
+  .issue-options-list-surface { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; z-index: 1; margin: 0; background: var(--work-menu-bg); box-shadow: none; overflow: hidden; }
   .issue-options-popover [cmdk-list] { flex: 1; min-height: 0; padding: 0 6px; overflow: auto; }
   .issue-options-submenu [cmdk-list] { flex: 1; padding: 6px; }
   .issue-options-popover [cmdk-list-sizer] { position: relative; }
   .issue-options-popover [cmdk-list-sizer] > :is([cmdk-item],[cmdk-empty]) { left: 0; right: 0; }
   .issue-options-popover [cmdk-list-sizer] > .issue-options-separator { left: -6px; right: -6px; }
-  .issue-options-item { height: 45px; padding: 0 12px; line-height: normal; }
+  .issue-options-popover[data-filtered=true] .issue-options-separator { display: none; }
+  .issue-options-item { height: 46px; padding: 0 12px; line-height: normal; }
   .issue-options-label { font-size: 13px; font-weight: 450; line-height: 15.6px; }
-  .issue-options-icon { width: 15.68px; height: 15.68px; flex: 0 0 15.68px; }
-  .issue-options-icon svg { width: 15.68px; height: 15.68px; }
-  .issue-options-separator-line { top: 5.88px; }
+  .issue-options-icon { width: 16px; height: 16px; flex: 0 0 16px; }
+  .issue-options-icon svg { width: 16px; height: 16px; }
+  .issue-options-separator-line { top: 6px; border-color: var(--pk-divider); }
   .issue-options-item::before { inset: 0; }
   .issue-options-shortcut { display: none; }
   .issue-options-chevron { display: none; }

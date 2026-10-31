@@ -20,6 +20,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Match initiative overview spacing, property pills, header controls and latest update cards on phones without changing desktop layout.
 
 ### Fixed
+- Match the phone issue actions menu's filter, border, shadow, row spacing, dividers and pull request glyph without changing desktop menus.
 - Match the phone composer's status picker typography, selection highlight, and workflow glyphs without changing desktop pickers.
 
 - Isolate the phone agent-panel seed behind an explicit development flag, link its real issue, and match the panel surface, pressed agent toggle and tool-row spacing without changing desktop layout.
