@@ -196,13 +196,13 @@ describe('assignee picker agents', () => {
 })
 
 describe('filter menu Triage Intelligence submenu', () => {
-  it('replaces the top-level Suggested label with Triage Intelligence ▸ Suggested assignee ▸ users and agents', async () => {
+  it('keeps direct Suggested label alongside nested Triage Intelligence assignee values', async () => {
     const user = userEvent.setup(), onToggle = vi.fn()
     const issue = makeIssue({ suggestedAssigneeIds: [teammate.id] })
     const data = makeBootstrap({ users: [viewer, teammate, flow], issues: [issue] })
     const options = explorerPropertyOptions(data)
     render(<I18nProvider><MyIssuesFilterMenu open onOpenChange={vi.fn()} onToggle={onToggle} options={field => explorerFilterOptions(field, options)} trigger={<button type="button">Filter</button>}/></I18nProvider>)
-    expect(screen.queryByRole('option', { name: 'Suggested label' })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Suggested label' })).toBeInTheDocument()
     fireEvent.mouseMove(screen.getByRole('option', { name: 'Triage Intelligence' }))
     const submenu = await screen.findByRole('listbox', { name: 'Triage Intelligence' })
     for (const name of ['Suggested assignee', 'Suggested project', 'Suggested label', 'Suggested team']) expect(within(submenu).getByRole('option', { name })).toHaveAttribute('aria-haspopup', 'listbox')
@@ -216,6 +216,20 @@ describe('filter menu Triage Intelligence submenu', () => {
     await user.type(screen.getByRole('combobox', { name: 'Add Filter…' }), 'Teammate')
     await user.click(await screen.findByRole('option', { name: /Suggested assignee › Teammate/ }))
     expect(onToggle).toHaveBeenCalledWith('triageIntelligence', expect.objectContaining({ id: `assignee:${teammate.id}`, filterLabel: 'Suggested assignee' }))
+  })
+
+  it('selects the direct suggested-label filter without converting it to an assignee suggestion', async () => {
+    const onToggle = vi.fn()
+    const label = { id: 'label-suggestion', name: 'Suggestion target', color: '#5e6ad2' }
+    const data = makeBootstrap({ labels: [label], issues: [makeIssue({ suggestedLabelIds: [label.id] })] })
+    const options = explorerPropertyOptions(data)
+    render(<I18nProvider><MyIssuesFilterMenu open onOpenChange={vi.fn()} onToggle={onToggle} options={field => explorerFilterOptions(field, options)} trigger={<button type="button">Filter</button>}/></I18nProvider>)
+    fireEvent.mouseMove(screen.getByRole('option', { name: 'Suggested label' }))
+    const submenu = await screen.findByRole('listbox', { name: 'Suggested label' })
+    const target = within(submenu).getByRole('option', { name: /Suggestion target/ })
+    expect(target).toHaveTextContent(/1.*issue/)
+    fireEvent.click(target)
+    expect(onToggle).toHaveBeenCalledWith('suggestedLabel', expect.objectContaining({ id: label.id }))
   })
 })
 
