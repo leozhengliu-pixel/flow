@@ -15,6 +15,7 @@
 @media(min-width:1024px){
   .property-command-project.issue-project-menu--compact{width:186px;max-height:min(490px,calc(100vh - 20px))}
   .property-command-project.issue-project-menu--compact{text-rendering:geometricPrecision}
+  .property-command-project.issue-project-menu--compact button{text-rendering:inherit}
   .property-command-project.issue-project-menu--compact .property-command-options{max-height:454px}
   html:root body .property-command-project.issue-project-menu--compact .property-command-options [role=option]{grid-template-columns:16px minmax(0,1fr);gap:8px;padding:0 14px;border-radius:0}
   html:root body .property-command-project.issue-project-menu--compact .property-command-options [role=option]:has(.property-command-check){grid-template-columns:16px minmax(0,1fr) 16px auto}

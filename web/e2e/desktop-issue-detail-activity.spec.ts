@@ -34,6 +34,7 @@ test('fits compact project labels, hides redundant child history, and uses plain
   const menu = page.getByRole('dialog', { name: 'Change Project' })
   await expect.poll(async () => Math.round((await menu.boundingBox())!.width)).toBe(186)
   await expect(menu).toHaveCSS('text-rendering', 'geometricprecision')
+  await expect(menu.locator('.property-command-create span')).toHaveCSS('text-rendering', 'geometricprecision')
   for (const selector of ['.property-command-create span', '.property-command-label']) {
     for (const element of await menu.locator(selector).all()) {
       expect(await element.evaluate(el => el.scrollWidth <= el.clientWidth)).toBeTruthy()
