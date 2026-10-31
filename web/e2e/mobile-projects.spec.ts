@@ -21,6 +21,8 @@ workspaceTest.describe('mobile initiative overview', () => {
       const latest = page.getByTestId('initiative-latest-update')
       await expect(latest).toContainText('[mobile] On schedule.')
       await expect(latest).toContainText('On track')
+      expect((await latest.getByRole('button', { name: 'Comments', exact: true }).locator('svg').boundingBox())?.width).toBe(16)
+      expect(await latest.getByRole('button', { name: 'Comments', exact: true }).evaluate(node => getComputedStyle(node, '::after').boxShadow)).not.toBe('none')
       expect(Math.abs((await latest.boundingBox())!.y - 471.5)).toBeLessThanOrEqual(1)
       await expect(page.locator('.li-detail-sidebar')).toHaveCount(0)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
