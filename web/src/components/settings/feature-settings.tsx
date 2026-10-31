@@ -6,18 +6,15 @@ import {
   ChevronRight,
   Search,
   Smile,
-  Sparkles,
   Tag,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
-import { IntegrationBrandIcon } from './integration-brand-icon';
 import { DesktopIntegrations } from './desktop-integrations';
 import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import {
-  integrationCategories,
   integrationDisplayName,
-  isChatProvider,
+  INTEGRATION_SUBTYPES,
   isInstalledIntegrationConnection,
   primaryIntegrations,
 } from '@/lib/integration-catalog';
@@ -363,43 +360,52 @@ function EmojisPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<voi
 
 function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:IntegrationProvider|string)=>void;onReload:()=>Promise<void>}) {
   const desktop = useDesktopSettings();
-  const {t}=useI18n();
+  const {t, formatDate}=useI18n();
   const [query,setQuery]=useState("");
+  const [showAllEssentials, setShowAllEssentials] = useState(false);
   // Only integrations with a working backend are listed; placeholders are not.
   const catalog = primaryIntegrations(chatPlatformOf(data)).filter(item => item.availability === "supported");
   const normalized = query.trim().toLowerCase();
-  const list = catalog.filter(item => !normalized || `${item.name} ${integrationDisplayName(item, t)} ${item.description} ${t(item.description)}`.toLowerCase().includes(normalized));
-  const sections = integrationCategories(list).map(category => ({ category, items: list.filter(item => item.category === category) }));
   // Authorized applications are not integrations; Settings › Applications lists them.
-  const enabledCount = data.integrationConnections.filter(isInstalledIntegrationConnection).length;
   if (desktop) return <DesktopIntegrations data={data} onOpen={onOpen}/>;
-  return <div className="feature-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with a wide variety of add-ons and integrations">
-    <div className="feature-integration-toolbar">
-      <div className="feature-integration-search"><Search size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div>
-      <button type="button" className="feature-enabled-link" onClick={() => onOpen("enabled")}>
-        {t("Enabled")}{enabledCount ? ` (${enabledCount})` : ""} <ChevronRight size={14}/>
+  const enabled = data.integrationConnections.filter(isInstalledIntegrationConnection)
+    .map(connection => ({ connection, item: catalog.find(item => item.connectProvider === connection.provider) }))
+    .filter((value): value is { connection: typeof value.connection; item: NonNullable<typeof value.item> } => Boolean(value.item));
+  const essentialItems = [
+    ...INTEGRATION_SUBTYPES.filter(item => item.category === "Essentials" && item.slug === "slack-asks"),
+    ...["slack", "github"].map(slug => catalog.find(item => item.slug === slug)).filter((item): item is typeof catalog[number] => Boolean(item)),
+    ...catalog.filter(item => item.category === "Essentials" && item.slug !== "slack" && item.slug !== "github"),
+    ...INTEGRATION_SUBTYPES.filter(item => item.category === "Essentials" && item.slug !== "slack-asks"),
+  ];
+  const visibleEssentials = normalized
+    ? [...catalog, ...INTEGRATION_SUBTYPES].filter(item => `${item.name} ${integrationDisplayName(item, t)} ${t(item.description)}`.toLowerCase().includes(normalized))
+    : essentialItems;
+  const renderRow = (item: typeof essentialItems[number], connection?: BootstrapData["integrationConnections"][number]) => {
+    const provider = item.connectProvider;
+    const target = provider ?? item.slug;
+    const name = integrationDisplayName(item, t);
+    const date = connection?.createdAt ? formatDate(connection.createdAt) : "";
+    return <li key={`${item.slug}-${connection?.id ?? "catalog"}`} className="mobile-integration-row" data-provider={provider ?? item.slug}>
+      <button type="button" onClick={() => onOpen(target)} aria-label={name}>
+        <span className="mobile-integration-row-main">
+          <span className="mobile-integration-icon" aria-hidden="true" />
+          <span className="mobile-integration-row-copy"><span>{name}</span>{connection && <small>{t("Enabled by")} {data.viewer.displayName}{date ? ` ${t("on")} ${date}` : ""}</small>}</span>
+        </span>
+        <ChevronRight className="mobile-integration-chevron" size={16} aria-hidden="true" />
       </button>
-    </div>
-    {sections.map(({category,items})=><section className="feature-integration-section" key={category}>
-      <h2>{t(category)}</h2>
-      <div className="feature-integration-cards">{items.map(item=>{
-        const connection = item.connectProvider ? data.integrationConnections.find(value => value.provider === item.connectProvider) : undefined;
-        const code = item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "jira";
-        return <button type="button" key={item.slug} className="feature-integration-card" onClick={() => onOpen(code ? item.connectProvider as IntegrationProvider : item.slug)}>
-          <span className="feature-integration-card-head">
-            <span className="feature-integration-card-icon">{item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "slack" || item.connectProvider === "jira" || isChatProvider(item.connectProvider)
-              ? <IntegrationBrandIcon provider={item.connectProvider} size={20}/>
-              : <Sparkles size={16}/>}</span>
-            <strong data-i18n-ignore>{integrationDisplayName(item, t)}</strong>
-            {connection?.status === "connected" && <small>{t("Connected")}</small>}
-            {connection?.status === "pending_authorization" && isChatProvider(item.connectProvider) && <small>{t("Configured")}</small>}
-            {connection && connection.status === "error" && <small className="is-error">{t("Connection failed")}</small>}
-          </span>
-          <span className="feature-integration-card-description">{t(item.description)}</span>
-        </button>;
-      })}</div>
-    </section>)}
-    {!list.length&&<FeatureEmpty icon={Search} title="No integrations found"/>}
+    </li>;
+  };
+  const renderCard = (items: typeof essentialItems, className: string, limit?: number) => {
+    const shown = limit ? items.slice(0, limit) : items;
+    const rest = Math.max(0, items.length - shown.length);
+    const showConnections = className.includes("enabled");
+    return <div className={`mobile-integration-card-list ${className}`}><ul>{shown.map(item => renderRow(item, item.connectProvider && (showConnections || item.connectProvider === "github") ? data.integrationConnections.find(connection => connection.provider === item.connectProvider) : undefined))}{rest > 0 && <li className="mobile-integration-more"><button type="button" onClick={() => setShowAllEssentials(true)}><span>{t("View {count} more").replace("{count}", String(rest))}</span></button></li>}</ul></div>;
+  };
+  return <div className="feature-integrations mobile-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with a wide variety of add-ons and integrations">
+    <div className="feature-integration-toolbar mobile-integrations-search"><div className="feature-integration-search"><Search size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div></div>
+    {!normalized && <section className="mobile-integrations-section mobile-integrations-section-enabled"><h3>{t("Enabled")}</h3>{renderCard(enabled.map(value => value.item), "mobile-integration-card-enabled")}</section>}
+    <section className="mobile-integrations-section mobile-integrations-section-essentials"><h3>{t("Essentials")}</h3>{renderCard(visibleEssentials, "mobile-integration-card-essentials", normalized || showAllEssentials ? undefined : 3)}</section>
+    {normalized && !visibleEssentials.length && <FeatureEmpty icon={Search} title="No integrations found"/>}
   </FeatureShell></div>;
 }
 
