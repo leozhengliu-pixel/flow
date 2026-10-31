@@ -1019,7 +1019,7 @@
 }
 @media (min-width: 801px) {
   .skillsMenu { width: 171px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-  .skillsMenuHeader { display: block; height: 11px; padding: 8px 10px 0; color: var(--theme-text-secondary); font-size: 11px; font-weight: 450; }
+  .skillsMenuHeader { box-sizing: border-box; display: flex; align-items: center; height: 12px; padding: 0 10px; color: var(--theme-text-secondary); font-size: 11px; font-weight: 450; }
   .skillsMenu .menuSearch { display: none; }
   .skillsMenu [role="option"] { height: 31px; padding: 0 14px; }
 }
@@ -1419,7 +1419,7 @@
 :global(:root[data-theme="light"]) .attachments > span { border-color: var(--theme-border); background: var(--theme-surface-hover); }
 @media (min-width: 801px) {
   :global(:root[data-theme="light"]) .skillsMenu { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-  :global(:root[data-theme="light"]) .skillsMenuHeader { display: block; }
+  :global(:root[data-theme="light"]) .skillsMenuHeader { box-sizing: border-box; display: flex; align-items: center; height: 12px; padding: 0 10px; }
   :global(:root[data-theme="light"]) .skillsMenu [role="option"] { height: 31px; padding: 0 14px; }
 }
 /* Preflight strips list markers; answers show bullets and numbers. */
