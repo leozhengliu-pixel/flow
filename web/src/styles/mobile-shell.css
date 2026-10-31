@@ -163,3 +163,209 @@
     line-height: normal;
   }
 }
+
+/* Phone navigation drawer: the reference app's 330px drawer with a pinned 51.5px header, a
+   28px navigation grid and a 52px help/plan footer overlay. Desktop keeps the sidebar column. */
+.sidebar-header { display: contents; }
+@media (max-width: 767px) {
+  html:root .sidebar-layout > .sidebar {
+    padding: 0;
+    background: var(--bg-panel);
+  }
+  html:root .sidebar .sidebar-header {
+    display: block;
+    box-sizing: border-box;
+    height: 51.5px;
+    flex: 0 0 51.5px;
+    padding: 0 12px;
+  }
+  html:root .sidebar .sidebar-header > .workspace-row {
+    height: 34px;
+    margin: 12.75px 0 0;
+  }
+  html:root .sidebar .workspace-row > button.workspace-menu-trigger {
+    color: var(--text);
+    font-size: 13.3333px;
+    font-weight: 400;
+    line-height: normal;
+  }
+  html:root .sidebar .workspace-menu-trigger .workspace-avatar {
+    width: 20px;
+    height: 20px;
+    flex-basis: 20px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 0;
+    box-shadow: none;
+  }
+  html:root .sidebar .workspace-menu-trigger > svg { color: var(--text); }
+  html:root .sidebar .workspace-menu-trigger > strong {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 550;
+    line-height: 23px;
+    letter-spacing: -0.1px;
+  }
+  html:root .sidebar .workspace-row > button.sidebar-top-action {
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  html:root .sidebar .workspace-row > button.sidebar-compose {
+    color: var(--text);
+    background: var(--set-button);
+  }
+  html:root .sidebar .sidebar-top-action svg { color: var(--issue-muted); }
+  html:root .sidebar .sidebar-compose svg { color: var(--bright); }
+  html:root .sidebar .sidebar-nav {
+    margin: 4.5px 12px 0;
+  }
+  html:root .sidebar .nav-item {
+    gap: 8px;
+    padding: 0;
+    color: var(--bright);
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 24px;
+  }
+  html:root .sidebar .nav-label { color: var(--issue-muted); }
+  html:root .sidebar .nav-item > .nav-icon:first-child { margin-left: 8px; }
+  html:root .sidebar .sidebar-more-trigger > svg:first-child { margin-left: 8px; }
+  html:root .sidebar .nav-icon { color: var(--issue-muted); }
+  html:root .sidebar .nav-item.active .nav-icon { color: var(--bright); }
+  html:root .sidebar .sidebar-more-trigger > svg { color: var(--issue-muted); }
+  html:root .sidebar .sidebar-more-trigger > span { color: var(--issue-muted); }
+  html:root .sidebar .nav-item.active,
+  html:root .sidebar .nav-item.active .nav-icon,
+  html:root .sidebar .nav-item.active .nav-label { color: var(--bright); }
+  html:root .sidebar .nav-item.active { background: var(--set-drawer-nav-active-bg); }
+  html:root .sidebar .nav-label { height: 28px; line-height: normal; }
+  html:root .sidebar .section-label {
+    color: var(--issue-muted);
+    font-size: 13.3333px;
+    font-weight: 400;
+    line-height: 24px;
+  }
+  html:root .sidebar .section-label > span {
+    color: var(--issue-muted);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  html:root .sidebar .section-action {
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 24px;
+    opacity: 1;
+  }
+  html:root .sidebar .section-action svg { color: var(--issue-dim); }
+  html:root .sidebar .sidebar-more-trigger { margin-top: 1px; }
+  html:root .sidebar .team-links .nav-item { padding: 0; }
+  html:root .sidebar .team-links .nav-item > .nav-icon:first-child { margin-left: 6px; }
+  html:root .sidebar .team-heading { border-radius: 8px; }
+  html:root .sidebar .team-title {
+    height: 36px;
+    color: var(--issue-muted);
+    line-height: normal;
+  }
+  html:root .sidebar .team-title > svg:first-child { color: var(--text); }
+  html:root .sidebar .team-title strong {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  html:root .sidebar .team-menu-trigger {
+    right: 3px;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  html:root .sidebar .team-menu-trigger svg { color: var(--issue-dim); }
+  html:root .sidebar .sidebar-footer {
+    position: absolute;
+    z-index: 10;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 52px;
+    flex: none;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0;
+    padding: 10px;
+  }
+  html:root .sidebar .sidebar-help {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 50%;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  html:root .sidebar .sidebar-help::before,
+  html:root .sidebar .sidebar-plan-button::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    background: var(--set-panel-bg);
+    box-shadow: var(--set-drawer-pill-shadow);
+  }
+  html:root .sidebar .sidebar-help > svg,
+  html:root .sidebar .sidebar-plan-button > svg { position: relative; }
+  html:root .sidebar .sidebar-help > svg { width: 14px; height: 14px; color: var(--issue-muted); }
+  html:root .sidebar .sidebar-plan-button {
+    position: absolute;
+    top: 10px;
+    left: 50px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    padding: 1px 6px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--set-drawer-plan-text);
+    font-family: var(--font);
+    font-size: 13.3333px;
+    font-weight: 400;
+    line-height: normal;
+    white-space: nowrap;
+  }
+  html:root .sidebar .sidebar-plan-button > svg {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    color: var(--issue-muted);
+  }
+  html:root .sidebar .sidebar-plan-button > span {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 13px;
+    margin-right: 4px;
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: normal;
+  }
+}

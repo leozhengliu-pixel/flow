@@ -69,6 +69,7 @@ import { ReleasePipelineIcon, ReleaseStatusIcon } from "@/components/releases/re
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { WorkspaceMenu } from "@/components/workspace/workspace-menu";
 import { SettingsPlanGlyph } from "@/components/settings/settings-nav-glyphs";
+import { FlowGlyph } from "@/components/ui/menu-glyphs";
 import {
   agentPath,
   asksPath,
@@ -206,6 +207,7 @@ export function Sidebar({
   onReload?: (teamId?: string) => Promise<void>;
 }) {
   const { surfaceRef: sidebarSurfaceRef, ...layout } = useSidebarLayout(open, onOpenChange);
+  const phone = usePhoneLayout();
   const { t: translate } = useI18n();
   const currentLocation = useLocation();
   const navigationRoute = parseAppRoute(sourcePath?.split(/[?#]/)[0] ?? currentLocation.pathname);
@@ -691,35 +693,37 @@ export function Sidebar({
         data-sidebar-width={layout.width}
         data-sidebar-surface
       >
-        <div className="workspace-row">
-          <WorkspaceMenu
-            account={account}
-            data={data}
-            onSettings={onOpenSettings}
-            onSwitch={onSwitchWorkspace}
-            onCreate={onCreateWorkspace}
-            onLogout={onLogout}
-          />
-          <FlowTooltip label={translate('Search')} shortcut="/" contentClassName="sidebar-search-tooltip">
-            <button
-              className="sidebar-top-action"
-              type="button"
-              aria-label={translate('Search')}
-              onClick={() => { close(); onSearch() }}
-            >
-              <FlowIcon name="Search" />
-            </button>
-          </FlowTooltip>
-          <FlowTooltip label="Create new issue" shortcut="C">
-            <button
-              className="sidebar-top-action sidebar-compose"
-              type="button"
-              aria-label="Create new issue"
-              onClick={() => { close(); onCreate() }}
-            >
-              <ComposeIcon />
-            </button>
-          </FlowTooltip>
+        <div className="sidebar-header">
+          <div className="workspace-row">
+            <WorkspaceMenu
+              account={account}
+              data={data}
+              onSettings={onOpenSettings}
+              onSwitch={onSwitchWorkspace}
+              onCreate={onCreateWorkspace}
+              onLogout={onLogout}
+            />
+            <FlowTooltip label={translate('Search')} shortcut="/" contentClassName="sidebar-search-tooltip">
+              <button
+                className="sidebar-top-action"
+                type="button"
+                aria-label={translate('Search')}
+                onClick={() => { close(); onSearch() }}
+              >
+                {phone ? <FlowGlyph name="search" size={14} /> : <FlowIcon name="Search" />}
+              </button>
+            </FlowTooltip>
+            <FlowTooltip label="Create new issue" shortcut="C">
+              <button
+                className="sidebar-top-action sidebar-compose"
+                type="button"
+                aria-label="Create new issue"
+                onClick={() => { close(); onCreate() }}
+              >
+                <ComposeIcon />
+              </button>
+            </FlowTooltip>
+          </div>
         </div>
 
         <nav className="sidebar-nav">
@@ -783,7 +787,7 @@ export function Sidebar({
                 to={teamsPath(workspaceSlug)}
                 onClick={close}
               >
-                <Plus />
+                {phone ? <FlowGlyph name="plus" size={14} /> : <Plus />}
               </NavLink>
             }
           >
@@ -1721,6 +1725,7 @@ function MoreMenu({
   workspaceSlug: string;
 }) {
   const { t } = useI18n();
+  const phone = usePhoneLayout();
   const asks = workspaceFeatureEnabled(featureFlags, "asks");
   const visibleEntries = entries.filter((entry) =>
     sidebarEntryAvailable(entry, featureFlags),
@@ -1780,7 +1785,7 @@ function MoreMenu({
           type="button"
           aria-label="Show more links"
         >
-          <MoreHorizontal />
+          {phone ? <FlowGlyph name="ellipsis" size={14} /> : <MoreHorizontal />}
           <span>More</span>
         </button>
       </DropdownMenu.Trigger>

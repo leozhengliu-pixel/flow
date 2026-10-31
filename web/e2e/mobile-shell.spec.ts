@@ -35,6 +35,14 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await geometry(drawer, { x: 0, y: 0, width: 330, height: viewport.height })
       await geometry(drawer.locator('.nav-item').first(), { x: 12, y: 56, height: 28, width: 306 })
       await geometry(drawer.locator('.sidebar-compose'), { x: 286, width: 32, height: 32 })
+      await expect(drawer.locator('.sidebar-compose')).toHaveCSS('background-color', 'lch(10.149 0.689 272)')
+      await geometry(drawer.locator('.sidebar-header'), { x: 0, y: 0, width: 330, height: 51.5 })
+      await geometry(drawer.locator('.sidebar-footer'), { x: 0, y: viewport.height - 52, width: 330, height: 52 })
+      await geometry(drawer.locator('.sidebar-help'), { x: 10, y: viewport.height - 42, width: 32, height: 32 })
+      await geometry(drawer.locator('.sidebar-plan-button'), { x: 50, y: viewport.height - 42, height: 32 })
+      if (await drawer.locator('.sidebar-team .team-heading').count()) {
+        await geometry(drawer.locator('.sidebar-team .team-heading').first(), { x: 12, width: 306, height: 36 })
+      }
       if (shots) await page.screenshot({ path: `${shots}/flow-drawer-${viewport.width}.png` })
 
       await drawer.locator('.workspace-menu-trigger').click()
@@ -49,7 +57,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(drawer).toHaveAttribute('aria-hidden', 'true')
 
       await trigger.click()
-      await drawer.getByRole('button', { name: 'Search workspace', exact: true }).click()
+      await drawer.getByRole('button', { name: 'Search', exact: true }).click()
       await expect(page).toHaveURL(/\/search$/)
       await expect(drawer).toHaveAttribute('aria-hidden', 'true')
       await geometry(page.locator('.workspace-search-header'), { height: 44 })
@@ -108,7 +116,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await geometry(page.locator('.phone-menu-surface'), { width: viewport.width - 32 })
       await geometry(page.locator('.phone-menu-surface [cmdk-item]').first(), { height: 46 })
       await page.keyboard.press('Escape')
-      await drawer.getByRole('button', { name: 'Connect GitHub', exact: true }).click()
+      const github = drawer.getByRole('button', { name: 'Connect GitHub', exact: true })
+      await github.focus()
+      await page.keyboard.press('Enter')
       await expect(page.locator('.flow-toast')).toBeVisible()
       await page.waitForTimeout(500)
       await noOverflow(page)
