@@ -17,6 +17,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Match phone workspace-menu labels, panel sizing, both separators and the drawer inbox glyph, and clear the filter when switching to the workspace list without changing desktop menus.
 - Match the desktop issue comment placeholder to the saved reference glyph color while preserving the phone placeholder token.
 - Restore the phone cycles timeline, date rail, burndown chart and scope statistics without changing the desktop directory.
 - Match My issues phone filter-menu glyphs, row typography and full-width group dividers without changing desktop menus.

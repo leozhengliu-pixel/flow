@@ -19,3 +19,33 @@
 .workspace-region-menu{width:min(400px,calc(100vw - 24px))}
 /* Labels never wrap: "Switch workspace" sits on one line beside its "O then W" shortcut. */
 .workspace-primary-menu .menu-item{white-space:nowrap}
+
+@media (max-width: 767px) {
+  .workspace-phone-menu > [cmdk-root] { width: calc(100vw - 32px); margin-bottom: -2px; }
+  .workspace-phone-menu-input { height: 40px; border-radius: 12px; color: var(--pk-text); font-size: 13px; font-weight: 400; line-height: 19.5px; }
+  .workspace-phone-menu .phone-menu-search input {
+    padding: 0 12px;
+    color: var(--pk-text);
+    line-height: 19.5px;
+  }
+  .workspace-phone-menu .phone-menu-search input::placeholder { color: var(--pk-faint); }
+  .workspace-phone-menu-row { position: relative; height: 46px; }
+  .workspace-phone-menu-row[hidden] { display: none; }
+  .workspace-phone-menu.phone-menu-surface .workspace-phone-menu-row [cmdk-item]:not(#_) { position: absolute; inset: 0; border-radius: 0; }
+  .workspace-phone-menu-row [cmdk-item] > span {
+    font-size: 13px;
+    font-weight: 450;
+    line-height: 15.6px;
+    color: var(--pk-text);
+  }
+  .workspace-phone-menu-row [cmdk-item][data-selected="true"] > span { color: var(--pk-text-strong); }
+  .workspace-phone-menu [cmdk-separator]::after { display: none; }
+  .workspace-phone-menu [cmdk-separator] > span {
+    position: absolute;
+    top: 6px;
+    left: -6px;
+    right: -6px;
+    height: .5px;
+    border-top: .5px solid var(--pk-divider);
+  }
+}
