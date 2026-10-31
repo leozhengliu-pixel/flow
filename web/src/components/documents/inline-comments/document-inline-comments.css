@@ -255,11 +255,6 @@
   .document-thread-draft > .document-thread-avatar { background: var(--document-desktop-avatar-bg); color: var(--issue-activity-avatar-fg); }
 }
 
-@media (min-width: 1232px) {
-  .document-inline-gutter.is-popover .document-thread-draft { width: 298px; margin-left: 15.5px; }
-  .document-inline-gutter.is-popover .document-thread-draft .composer-send { transform: translateX(23.5px); }
-}
-
 .document-thread-quote {
   margin: 0 0 8px;
   padding: 2px 0 2px 10px;

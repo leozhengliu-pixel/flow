@@ -716,16 +716,13 @@ button.document-icon.is-empty:hover,
   .app:has(.document-page) { background: var(--bg-panel); }
   .document-page { overflow: auto; }
   .document-header {
-    gap: 12px;
+    gap: 4px;
     background: var(--bg-panel);
-    padding: 0 !important;
+    padding: 0 8px !important;
     border-bottom: 0 !important;
   }
   .document-header::after { content: ""; position: absolute; inset: auto 0 0; height: .5px; background: var(--border); }
   .document-mobile-menu {
-    position: absolute !important;
-    top: 5.75px !important;
-    left: 8px !important;
     width: 32px;
     height: 32px;
     flex-basis: 32px;
@@ -740,36 +737,22 @@ button.document-icon.is-empty:hover,
   .document-mobile-menu::after { content: none !important; }
   .document-mobile-menu svg { display: block !important; width: 14px !important; height: 14px !important; color: var(--phone-icon-fg) !important; }
   .document-breadcrumbs {
-    position: absolute;
-    top: 4.75px;
-    left: 52px;
-    right: 239.36px;
-    width: auto;
+    flex: 1 1 auto;
     height: 34px;
     padding-left: 0;
     overflow: hidden;
   }
   .document-breadcrumb-parent,
   .document-breadcrumbs > .document-breadcrumb-separator { display: flex; }
-  .document-breadcrumb-parent { flex-shrink: 0; }
-  .document-breadcrumb-parent > span:not(.document-breadcrumb-glyph) {
-    width: calc(75vw - 261.8px);
-    max-width: calc(75vw - 261.8px);
-  }
+  .document-breadcrumb-parent { min-width: 0; flex: 0 1 auto; }
   .document-breadcrumbs > .document-breadcrumb-separator {
-    position: absolute;
-    left: calc(75vw - 231.8px);
-    margin-left: 0;
+    margin: 0 6px;
   }
   .document-breadcrumb-documents { display: none; }
-  .document-breadcrumb-current { flex: 0 1 auto; margin-left: 21.2px; padding: 0; }
+  .document-breadcrumb-current { flex: 1 1 auto; margin-left: 0; padding: 0; }
   .document-title-actions {
-    position: absolute;
-    top: 5.75px;
-    right: 163.36px;
-    width: 70px;
     height: 32px;
-    gap: 6px;
+    gap: 4px;
   }
   .document-title-actions .document-icon-button,
   .document-header-actions .document-icon-button {
@@ -782,18 +765,14 @@ button.document-icon.is-empty:hover,
     border: .5px solid transparent !important;
   }
   .document-header-actions {
-    position: absolute;
-    top: 5.75px;
-    right: 8px;
-    width: 149.36px;
     height: 32px;
     margin-left: 0;
     gap: 4px;
   }
   .document-edited {
-    width: 77.36px;
+    width: auto;
     height: 32px;
-    flex: 0 0 77.36px;
+    flex: 0 0 auto;
     padding: 0 10px 0 8px;
     justify-content: flex-start;
   }
@@ -811,11 +790,9 @@ button.document-icon.is-empty:hover,
   /* The metadata sheet uses the compact phone surface rather than the desktop
      anchored popover. Keep its geometry independent of the edited-date label. */
   .document-edited-popover {
-    position: relative;
-    left: -10px;
-    width: 360.19px;
-    min-width: 360.19px;
-    max-width: 360.19px;
+    width: min(360px, calc(100vw - 32px));
+    min-width: 0;
+    max-width: calc(100vw - 32px);
     border: .5px solid var(--icon-picker-page-border);
     background: var(--document-popover-bg);
     box-shadow: var(--shadow-control);
@@ -835,14 +812,14 @@ button.document-icon.is-empty:hover,
     background: var(--toggle-compact-on);
   }
   .document-owner-row .document-person--button {
-    width: 141.04px;
+    flex: 1 1 auto;
   }
   .document-owner-row .document-person strong,
   .document-last-edit-row .document-person strong {
     color: var(--action-menu-text);
   }
   .document-last-edit-row time {
-    flex: 0 0 102.77px;
+    flex: 0 0 auto;
   }
   .document-history-action {
     padding: 8px;
@@ -891,8 +868,5 @@ button.document-icon.is-empty:hover,
     min-height: 458px;
     margin-left: -14px;
     padding: 10px 14px 384px;
-  }
-  .document-editor .flow-prosemirror > p:first-child {
-    display: inline;
   }
 }
