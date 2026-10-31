@@ -433,6 +433,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Wait for the inbox navigation snapshot's idle persistence before asserting its stored contents in browser tests, while keeping server-row and stale-ID checks strict.
 - MCP issue saves retain inherited team workflows; issue counts use the team
   counter only for team and archive arguments, leaving all other filters on
   the general query path.
