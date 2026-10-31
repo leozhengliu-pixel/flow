@@ -1,0 +1,103 @@
+import { expect } from '@playwright/test'
+import { test } from './workspace-fixture'
+
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', workspaceNamePrefix: '[audit] Shell remaining' })
+test.skip(({ isMobile }) => isMobile, 'desktop shell parity')
+
+test('all three create commands complete real writes and fullscreen has a working shortcut', async ({ page, workspaceKey }) => {
+  await page.goto(`/${workspaceKey}/agent`)
+  await expect(page.locator('.sidebar-compose')).toBeVisible()
+  const palette = page.locator('[cmdk-root]')
+  const shot = async (name: string) => {
+    if (!process.env.FLOW_CI_SHOTS) return
+    await page.waitForTimeout(1500)
+    await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/${name}.png` })
+  }
+  const command = async (query: string, name: string) => {
+    await page.keyboard.press('ControlOrMeta+k')
+    await expect(palette).toBeVisible()
+    await palette.locator('[cmdk-input]').fill(query)
+    await palette.getByRole('option', { name: new RegExp(`^${name}`) }).click()
+    await expect(palette).toBeHidden()
+  }
+  await command('fullscreen', 'Create issue in fullscreen…')
+  const composer = page.locator('[data-flow-motion="create"]')
+  await expect(composer).toHaveAttribute('data-expanded', 'true')
+  await composer.locator('.title-editor').fill('[audit] Fullscreen command issue')
+  await shot('command-fullscreen')
+  const issueSaved = page.waitForResponse(response => response.url().endsWith('/api/issues') && response.request().method() === 'POST')
+  await composer.getByRole('button', { name: 'Create issue', exact: true }).click()
+  expect((await issueSaved).status()).toBe(201)
+  await expect(composer).toBeHidden()
+  await page.keyboard.press('v')
+  await expect(composer).toHaveAttribute('data-expanded', 'true')
+  await composer.getByRole('button', { name: 'Close', exact: true }).click()
+
+  await command('Create new label', 'Create new label…')
+  const label = page.getByPlaceholder('Label name', { exact: true })
+  await expect(label).toBeFocused()
+  await label.fill('[audit] Command label')
+  const labelSaved = page.waitForResponse(response => response.url().endsWith('/api/labels') && response.request().method() === 'POST')
+  await label.press('Enter')
+  expect((await labelSaved).ok()).toBeTruthy()
+  await expect(page.getByRole('textbox', { name: '[audit] Command label', exact: true })).toHaveValue('[audit] Command label')
+  await shot('command-label-saved')
+
+  await page.getByRole('button', { name: 'Back to app', exact: true }).click()
+  await command('Create view', 'Create view…')
+  await page.getByRole('textbox', { name: 'View name', exact: true }).fill('[audit] Command view')
+  const viewSaved = page.waitForResponse(response => response.url().endsWith('/api/views') && response.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Create view', exact: true }).click()
+  expect((await viewSaved).ok()).toBeTruthy()
+  await expect(page.getByRole('textbox', { name: 'View name', exact: true })).toBeHidden()
+  await expect(page.locator('[data-content-view-header]').getByRole('heading', { name: '[audit] Command view', exact: true })).toBeVisible()
+  await shot('command-view-saved')
+})
+
+test('desktop text, query inset, shortcut focus and workspace menu retain their measured geometry', async ({ page, workspaceKey }) => {
+  await page.goto(`/${workspaceKey}/agent`)
+  await expect(page.locator('.sidebar-compose')).toBeVisible()
+  await page.keyboard.press('ControlOrMeta+k')
+  const palette = page.locator('.command-dialog')
+  await expect(palette.locator('[cmdk-input]')).toHaveCSS('padding-right', '112px')
+  await expect(palette.locator('[cmdk-item]').first()).toHaveCSS('line-height', '15.6px')
+  await expect(palette.locator('[cmdk-group-heading]').first()).toHaveCSS('padding-top', '8px')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('ControlOrMeta+/')
+  const search = page.getByRole('textbox', { name: 'Search shortcuts' })
+  await expect(search).toBeFocused()
+  await expect(search).toHaveCSS('border-color', 'lch(30.833 1.93 272)')
+  await page.keyboard.press('Escape')
+  await page.locator('.workspace-menu-trigger').click()
+  const menu = page.locator('.workspace-primary-menu')
+  await expect(menu.getByRole('menuitem').first()).toHaveCSS('line-height', 'normal')
+  await expect.poll(async () => (await menu.boundingBox())?.width).toBeCloseTo(219.5, 1)
+  await expect.poll(async () => (await menu.boundingBox())?.height).toBeCloseTo(192.08, 0)
+})
+
+test('clipboard toast uses a neutral desktop copy icon while compact styles stay unchanged', async ({ page, workspaceKey }) => {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.goto(`/${workspaceKey}/agent`)
+  await expect(page.locator('.sidebar-compose')).toBeVisible()
+  await page.locator('.sidebar').click({ position: { x: 4, y: 50 } })
+  await page.keyboard.press('v')
+  const composer = page.locator('[data-flow-motion="create"]')
+  await expect(composer).toBeVisible()
+  await composer.locator('.title-editor').fill('[audit] Clipboard shell issue')
+  const saved = page.waitForResponse(response => response.url().endsWith('/api/issues') && response.request().method() === 'POST')
+  await composer.getByRole('button', { name: 'Create issue', exact: true }).click()
+  const issue = await (await saved).json() as { identifier: string }
+  await page.goto(`/${workspaceKey}/issue/${issue.identifier}/audit-clipboard-shell-issue`)
+  await page.getByRole('button', { name: 'Copy issue URL', exact: true }).click()
+  const toast = page.locator('.flow-toast[data-clipboard]')
+  await expect(toast).toBeVisible()
+  await expect(toast).toHaveCSS('background-color', 'lch(12.72 0.85 272)')
+  await expect(toast.locator('.flow-toast__copy-icon')).toBeVisible()
+  await expect(toast.locator('.flow-toast__icon')).toBeHidden()
+  for (const width of [375, 390, 1023]) {
+    await page.setViewportSize({ width, height: 900 })
+    await expect(toast.locator('.flow-toast__copy-icon')).toBeHidden()
+    await expect(toast.locator('.flow-toast__icon')).toBeVisible()
+    await expect(toast).toHaveCSS('padding', '12px')
+  }
+})

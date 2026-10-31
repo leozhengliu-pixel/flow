@@ -148,6 +148,9 @@ html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
     right: 18px;
     transform: translateY(-50%);
   }
+  html:root body .command-dialog .command-input input {
+    padding-right: 112px;
+  }
   html:root body .command-dialog [cmdk-item] {
     line-height: 15.6px;
   }
@@ -156,6 +159,6 @@ html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
     align-items: flex-start;
     padding: 8px 12px 0;
     font-size: 12px;
-    line-height: 15.6px;
+    line-height: normal;
   }
 }
