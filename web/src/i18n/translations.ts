@@ -1226,6 +1226,7 @@ export const zhCN: Record<string, string> = {
   rolled_back: "已回滚",
   complete: "完成",
   "First month of the fiscal year": "财年首月",
+  "Edit URL": "编辑 URL",
   "Used when grouping projects and issues quarterly, half-yearly, and yearly":
     "用于按季度、半年和年度对项目与事项进行分组",
   January: "一月",

@@ -5,6 +5,37 @@ import { test as workspaceTest } from './workspace-fixture'
 const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`${viewport.width}px workspace general`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Workspace general' })
+
+    workspaceTest('stacks workspace fields and persists the fiscal month', async ({ page, workspaceKey }) => {
+      await page.goto(`/${workspaceKey}/settings/workspace`)
+      const card = page.locator('.settings-section:first-of-type .settings-card')
+      await expect(page.getByRole('heading', { name: 'Workspace', exact: true })).toBeVisible()
+      expect((await card.boundingBox())?.y).toBeCloseTo(115.5, 1)
+      expect((await card.boundingBox())?.height).toBeCloseTo(290, 1)
+      const name = page.getByRole('textbox', { name: 'Name', exact: true })
+      expect((await name.boundingBox())?.width).toBeCloseTo(256, 1)
+      const month = page.getByRole('combobox', { name: 'First month of the fiscal year' })
+      await expect(month).toHaveValue('January')
+      await expect(page.getByText('United States', { exact: true })).toBeVisible()
+      await page.getByRole('button', { name: 'Edit URL', exact: true }).click()
+      await expect(page.getByRole('textbox', { name: 'URL', exact: true })).toBeFocused()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/workspace-general-${viewport.width}.png`, scale: 'css', animations: 'disabled' })
+      await month.selectOption('April')
+      await expect(month).toHaveValue('April')
+      await page.reload()
+      await expect(month).toHaveValue('April')
+      await page.getByRole('button', { name: 'Configure announcements' }).click()
+      await expect(page.getByRole('dialog')).toBeVisible()
+      await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await expect(page.getByRole('dialog')).toBeHidden()
+    })
+  })
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   workspaceTest.describe(`${viewport.width}px account notifications`, () => {
     workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Account notifications' })
 
@@ -102,7 +133,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect((await page.locator('.settings-back').boundingBox())?.y).toBeCloseTo(14.25, 1)
       expect((await page.locator('.settings-search input').boundingBox())?.width).toBe(306)
       expect(await page.locator('.settings-search input').evaluate(input => getComputedStyle(input, '::placeholder').color)).toBe('lch(61.803 1.2 272)')
-      expect(await page.locator('.settings-search').evaluate(search => getComputedStyle(search, '::after').boxShadow)).toBe('lch(22.193 1.93 272) 0px 0px 0px 0.5px inset')
+      await expect(page.locator('.settings-search input')).toHaveCSS('border-color', 'lch(22.193 1.93 272)')
+      await expect(page.locator('.settings-search input')).toHaveCSS('border-style', 'solid')
       await expect(page.locator('.bottom-agent')).toBeHidden()
 
       const sections = page.locator('.settings-sidebar nav section h2 > span')
