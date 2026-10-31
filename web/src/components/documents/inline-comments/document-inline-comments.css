@@ -61,8 +61,8 @@
 }
 @media (min-width: 1232px) {
   .document-inline-gutter.is-popover .document-thread-card {
-    width: 298px;
-    max-width: 298px;
+    width: 360px;
+    max-width: 360px;
   }
   /* Keep the document readable at its normal column when a posted thread opens. */
   .document-page.has-comment-gutter:not(.has-agent) .document-canvas {
@@ -248,6 +248,10 @@
 .document-thread-draft { display: flex; align-items: center; gap: 9px; }
 .document-thread-draft > .document-thread-avatar { align-self: flex-start; margin-top: 3px; }
 .document-thread-draft-composer { flex: 1 1 auto; min-width: 0; }
+
+@media (min-width: 1232px) {
+  .document-inline-gutter.is-popover .document-thread-draft { width: 298px; margin-left: 15.5px; }
+}
 
 .document-thread-quote {
   margin: 0 0 8px;

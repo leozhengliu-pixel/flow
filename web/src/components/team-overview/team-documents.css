@@ -100,7 +100,7 @@
   align-items: center;
   min-width: 0;
   column-gap: 12px;
-  padding: 0 10px 0 10px;
+  padding: 0 10px 0 14px;
 }
 .team-docs-row:hover,
 .team-docs-row[data-active] { background: var(--theme-surface-hover); }
@@ -132,7 +132,7 @@
 .team-docs-row[data-selected="true"] .team-docs-check span svg { visibility: visible; }
 .team-docs-check input:focus-visible + span { opacity: 1; outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
-.team-docs-title { display: flex; flex: 1 1 0; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+.team-docs-title { display: flex; flex: 1 1 0; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
 .team-docs-title > .document-glyph,
 .team-docs-title > svg,
 .team-docs-title > span { flex: 0 0 16px; width: 16px; height: 16px; }
@@ -279,7 +279,6 @@
 
 @media (min-width: 768px) {
   .team-docs-group { margin: 0 8px 2px; background: var(--theme-surface-2); }
-  .team-docs-title > svg { width: 24px; height: 24px; flex-basis: 24px; }
   .team-docs-more-spacer { display: none; }
   .team-docs-more { position: absolute; top: 8px; right: 0; }
   .team-docs-heading.is-date,
