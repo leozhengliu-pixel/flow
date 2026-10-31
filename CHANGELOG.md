@@ -472,6 +472,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Keep native phone settings selectors and key policy controls aligned with their reference layouts, and assert selected options and CSV downloads through their real controls.
 - Preserve the measured phone settings rows, compact toolbars, Agent conversation actions and document metadata sheet after layout cleanup; keep off-screen tab measurements out of browser control assertions.
 - Preserve fractional Projects tab text metrics on Linux, and check label editing and compact composer states against their saved-reference styling.
 - Keep the phone Inbox header inside its page stacking context so it cannot intercept workspace drawer controls, and verify label-picker content independently of rounded hairlines.
