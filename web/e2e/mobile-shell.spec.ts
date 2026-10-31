@@ -60,7 +60,19 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(picker).toBeHidden()
       await expect(composer.locator('[data-property="status"]')).toHaveText('In Review')
       await composer.locator('[data-property="priority"]').click()
-      await expect(page.getByRole('dialog', { name: 'Change priority', exact: true }).getByRole('option').first()).toHaveCSS('font-size', '15px')
+      const priority = page.getByRole('dialog', { name: 'Change priority', exact: true })
+      await geometry(priority, { x: 16, y: Math.min(110, viewport.height * .1304), width: viewport.width - 32, height: 322 })
+      const priorityOptions = priority.getByRole('option')
+      await expect(priorityOptions).toHaveCount(5)
+      for (const name of ['No priority', 'Urgent', 'High', 'Medium', 'Low']) {
+        const option = priorityOptions.filter({ has: page.locator('.property-command-label', { hasText: new RegExp(`^${name}$`, 'i') }) })
+        await geometry(option, { x: 22.5, width: viewport.width - 44, height: 46 })
+        await expect(option.locator('.property-command-label')).toHaveCSS('font-size', '13px')
+        await expect(option.locator('.property-command-label')).toHaveCSS('font-weight', '450')
+      }
+      await expect(priorityOptions.filter({ hasText: 'No priority' })).toHaveAttribute('aria-checked', 'true')
+      await expect(priorityOptions.filter({ hasText: 'No priority' }).locator('.property-command-check svg')).toBeVisible()
+      await noOverflow(page)
     })
 
     test('search phone header, empty state and filter panels match', async ({ page, workspaceKey }) => {
