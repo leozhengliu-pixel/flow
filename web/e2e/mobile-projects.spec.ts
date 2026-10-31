@@ -49,6 +49,44 @@ workspaceTest.describe('mobile cycles timeline', () => {
   }
 })
 
+workspaceTest.describe('mobile cycle detail', () => {
+  workspaceTest.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  for (const width of [390, 375]) {
+    workspaceTest(`grouped estimate rows match the phone chrome at ${width}px`, async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Flow-Workspace': workspaceKey, 'X-Workspace-Key': workspaceKey }
+      const bootstrap = await (await request.get('/api/bootstrap', { headers })).json()
+      const team = bootstrap.teams[0] as { id: string; key: string }
+      expect((await request.patch(`/api/teams/${team.id}/settings`, { headers, data: { estimateType: 'fibonacci', estimateAllowZero: true } })).ok()).toBe(true)
+      expect((await request.patch(`/api/teams/${team.id}/cycle-settings`, { headers, data: { enabled: true, autoCreate: true, durationWeeks: 3, cooldownWeeks: 2, upcomingCount: 1 } })).ok()).toBe(true)
+      const cycles = (await (await request.get('/api/bootstrap', { headers })).json()).cycles as { id: string; number: number }[]
+      const cycle = cycles.find(item => item.number === 1)!
+      const create = async (title: string, input: Record<string, unknown> = {}) => {
+        const response = await request.post('/api/issues', { headers, data: { title, teamId: team.id, cycleId: cycle.id, stateId: 'state_todo', ...input } })
+        expect(response.status()).toBe(201)
+        return await response.json() as { id: string }
+      }
+      const parent = await create('Estimate test A', { estimate: 3, sortOrder: 1 })
+      const second = await create('Estimate test B', { estimate: 5, sortOrder: 0 })
+      await create('Nested child one', { estimate: 1, parentId: parent.id, sortOrder: 0 })
+      expect((await request.patch(`/api/issues/${second.id}`, { headers, data: { sortOrder: 0 } })).ok()).toBe(true)
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 667 })
+      await page.goto(`/${workspaceKey}/team/${team.key}/cycle/1`)
+      await page.getByRole('button', { name: 'Display options', exact: true }).click()
+      await page.locator('input[aria-label="Nested sub-issues"]').click()
+      await page.keyboard.press('Escape')
+      await expect(page.locator('[data-cycle-detail-header]')).toHaveCSS('height', '87.5px')
+      expect((await page.locator('[data-content-view-subheader]').boundingBox())?.y).toBe(44)
+      expect((await page.locator('[data-my-issues-group-header]').boundingBox())?.x).toBe(8)
+      await expect(page.locator('a[data-issue-row-id]').nth(0)).toContainText('Estimate test B')
+      await expect(page.locator('a[data-issue-row-id]').nth(1)).toContainText('Estimate test A')
+      await expect(page.locator('a[data-issue-row-id]').nth(2)).toContainText('Nested child one')
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      expect(second.id).toBeTruthy()
+    })
+  }
+})
+
 workspaceTest.describe('mobile initiative overview', () => {
   workspaceTest.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
 

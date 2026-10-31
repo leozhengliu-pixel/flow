@@ -12,6 +12,44 @@
 .flow-cycle-panel{padding:0 0 0 4px;border-left:0;background:transparent}.flow-cycle-panel.details{padding:0 8px 0 4px}.cycle-details-card{box-sizing:border-box;width:100%;margin:0;padding:10px;border:.5px solid var(--theme-border);border-radius:8px;background:var(--theme-surface-2);box-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft)}.cycle-panel-period{height:28px}.cycle-panel-heading{height:48px;display:grid;grid-template-columns:16px minmax(0,1fr) 24px 24px;align-items:center;gap:8px}.cycle-panel-heading h2{margin:0;font-size:15px;line-height:23px;font-weight:600}.cycle-panel-favorite{width:24px;height:24px;display:grid;place-items:center;padding:0;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--theme-text-secondary)}.cycle-panel-favorite:hover,.cycle-panel-favorite[aria-checked=true]{background:var(--theme-surface-hover);color:var(--theme-text-primary)}.cycle-panel-favorite svg{width:13px}.cycle-panel-heading>.cycle-row-menu{position:static;width:24px;height:24px}.cycle-resources{margin-top:1px}.cycle-resources>button{width:max-content}.cycle-details-card>section{margin-top:20px;border-top:.5px solid var(--theme-border)}.cycle-details-card>section>button{height:38px;padding:0 8px;border:0;background:transparent;color:var(--theme-text-primary);font:500 12px inherit}.cycle-details-card>section>button span{margin-left:3px;color:var(--theme-text-secondary)}.cycle-details-card dl{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:0;padding:0 8px 3px}.cycle-details-card dl>div{min-width:0;height:48px;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;border:0}.cycle-details-card dt{color:var(--theme-text-secondary);font-size:11px;white-space:nowrap}.cycle-details-card dd{margin:2px 0 0;font-size:13px;font-weight:500}.flow-cycle-panel.insights{padding:0 8px 0 4px}.flow-cycle-panel.insights:before{content:"";position:absolute;z-index:-1;inset:0 8px 0 4px;border:.5px solid var(--theme-border);border-radius:8px;background:var(--theme-surface-2);box-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft)}.flow-cycle-panel.insights>header{padding:12px 12px 0}.flow-cycle-panel.insights .cycle-graph,.cycle-insight-controls,.flow-cycle-panel.insights>p{margin-left:12px;margin-right:12px}.cycle-insight-save{right:20px}
 .flow-cycle-menu,.cycle-resource-menu,.cycle-command-menu,.cycle-display-menu{animation:cycle-menu-in .15s cubic-bezier(.16,1,.3,1)}@keyframes cycle-menu-in{from{opacity:0;transform:scale(.98) translateY(-2px)}to{opacity:1;transform:none}}
 @media(max-width:900px){.flow-cycle-panel{top:96px;background:var(--theme-background)}.flow-cycle-panel.details,.flow-cycle-panel.insights{padding:0}.cycle-details-card{max-height:100%;overflow:auto}.cycle-education{padding:72px 20px 20px}.cycle-education p,.cycle-education>div{width:min(308px,100%)}}
+
+.flow-cycle-header{display:contents}
+
+@media (max-width: 767px){
+  .flow-cycle-header{box-sizing:border-box;height:87.5px;flex:0 0 87.5px;display:flex;flex-direction:column;gap:12px;background:var(--theme-background)}
+  .flow-cycle-header [data-content-view-header]{border-bottom:0}
+  .flow-cycle-header [data-content-view-subheader]{border-bottom:0;margin-top:-12px;gap:6px}
+  .flow-cycle-detail [data-content-view-breadcrumb] a,
+  .flow-cycle-detail [data-content-view-breadcrumb] [data-current] strong{color:var(--text)}
+  .flow-cycle-detail [data-content-view-breadcrumb] > span:nth-child(2) a > span{display:block;width:42.21875px;height:16px;overflow:visible;font-size:16px !important;font-weight:400 !important;line-height:16px !important}
+  .flow-cycle-detail [data-content-view-favorite],
+  .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{box-sizing:border-box;width:32px !important;height:32px !important;flex:0 0 32px !important;padding:0 2px;border:.5px solid transparent;color:var(--text)}
+  .flow-cycle-detail [data-content-view-favorite],
+  .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{font-size:12px !important;font-weight:500 !important;line-height:normal !important}
+  .flow-cycle-detail [data-content-view-favorite]{margin-left:2px}
+  .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{margin-left:2px}
+  .flow-cycle-detail .cycle-switcher{box-sizing:border-box;width:81px;height:28px;padding:0 0 0 24px}
+  .flow-cycle-detail [data-content-view-breadcrumb] > span:first-child{display:none !important}
+  .flow-cycle-detail [data-content-view-breadcrumb] > span:nth-child(2) > span:first-child{display:none}
+  .flow-cycle-toolbar{gap:6px !important}
+  .flow-cycle-toolbar > button{box-sizing:border-box;width:32px !important;height:32px !important;flex:0 0 32px !important;padding:0 2px;font-size:12px !important;font-weight:500 !important;line-height:normal !important;color:var(--text) !important;background:var(--theme-control) !important;border:.5px solid transparent !important}
+  .flow-cycle-detail [data-content-view-favorite] svg,
+  .flow-cycle-detail [data-content-view-header] > .cycle-row-menu svg,
+  .flow-cycle-toolbar > button svg{opacity:.66}
+  .flow-cycle-toolbar > button[aria-label*="cycle insights"]{display:none}
+  .flow-cycle-count{font-size:13px;line-height:normal}
+  .flow-cycle-issues{min-width:0;padding:0}
+  .flow-cycle-issues [data-my-issues-group-header]{gap:8px}
+  .flow-cycle-issues [data-my-issues-group-header] > span:nth-of-type(1){display:grid;width:14px;height:18px;margin:0}
+  .flow-cycle-issues [data-my-issues-group-header] > span:nth-of-type(3){display:none}
+  .flow-cycle-issues .titleProperties{gap:8px}
+  .flow-cycle-issues [data-row-title] + button[aria-label*="sub-issues"]{box-sizing:border-box;height:24px;padding:0 8px;border:.5px solid var(--relation-chip-border);border-radius:48px;background:var(--bg-panel);color:var(--bright);font-size:16px !important;font-weight:400 !important;line-height:24px !important;z-index:0}
+  .flow-cycle-issues [data-row-title] + button[aria-label*="sub-issues"] > span{color:var(--issue-muted);font-size:12px !important;font-weight:450 !important;line-height:normal !important}
+  .flow-cycle-issues [data-row-title]:is(:first-child){margin-right:0}
+  .flow-cycle-issues [data-row-title] + button[aria-label*="sub-issues"]{margin-left:4px}
+  .flow-cycle-issues [data-my-issues-group-header] .estimate-chip__value{transform:translateX(-1px)}
+  .flow-cycle-count{padding-left:10px}
+}
 .cycle-education .cycle-empty-mark{width:91.11px}
 .cycle-details-card{border-radius:10px}
 .cycle-details-card dl{gap:2px;padding:0 2px}
