@@ -349,3 +349,48 @@ test.describe('mobile project issues empty state', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/project-issues-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 })
+
+test.describe('mobile project milestones section', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('phone overview scrolls to the description goals and milestone card', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-projects-milestones-${testInfo.project.name}-${testInfo.retry}`
+    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: 'Mobile project milestones parity', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(response.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const created = await request.post('http://127.0.0.1:4180/api/projects', {
+      headers,
+      data: {
+        name: 'Compare Test',
+        summary: 'Pixel-level comparison fixture',
+        description: '<p>This project is a fixture for comparing Flow with reference.</p><h2>Goals</h2><ul><li><p>Match layout</p></li><li><p>Match typography</p></li></ul>',
+        icon: 'Cube',
+        statusId: 'ps_progress',
+        priority: 2,
+        startDate: '2026-09-28',
+      },
+    })
+    expect(created.status()).toBe(201)
+    const project = await created.json() as { id: string; slugId: string }
+    for (const [title, url] of [['123', 'https://example.com/123'], ['New document', 'https://example.com/new'], ['GitHub', 'https://github.com/flow'], ['Example', 'https://example.com']]) {
+      expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/resources`, { headers, data: { type: 'link', title, url } })).status()).toBe(201)
+    }
+    expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/milestones`, { headers, data: { name: 'Alpha' } })).status()).toBe(201)
+
+    await page.goto(`/${workspaceKey}/project/${project.slugId}/overview`)
+    await page.locator('.project-detail-page__toolbar-actions button[aria-label="Close project details"]').click()
+    await page.locator('.project-overview__milestones > h3').click()
+
+    const near = (actual: number | undefined, expected: number) => actual !== undefined && Math.abs(actual - expected) <= 1
+    expect(near((await page.locator('.project-overview__description > h3').boundingBox())?.y, 317.5)).toBe(true)
+    expect(near((await page.locator('.project-overview__description-editor .ProseMirror > h2').boundingBox())?.y, 443.5)).toBe(true)
+    expect(near((await page.locator('.project-overview__milestones > h3').boundingBox())?.y, 611)).toBe(true)
+    expect((await page.locator('.project-overview__milestone').boundingBox())?.height).toBe(106)
+    expect((await page.locator('.project-overview__milestone-date').boundingBox())?.width).toBe(28)
+    expect((await page.locator('.project-overview__milestone-link').boundingBox())?.height).toBe(28)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/project-milestones-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
+})
