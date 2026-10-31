@@ -793,11 +793,11 @@ button.document-icon.is-empty:hover,
     padding: 0;
   }
 
-  /* Let the metadata determine its width, constrained only by the phone viewport. */
+  /* Keep the measured metadata width; collision handling keeps it on screen. */
   .document-edited-popover {
-    width: max-content;
-    min-width: 0;
-    max-width: 100vw;
+    width: 360.19px;
+    min-width: 360.19px;
+    max-width: 360.19px;
     border: .5px solid var(--icon-picker-page-border);
     background: var(--document-popover-bg);
     box-shadow: var(--shadow-control);
