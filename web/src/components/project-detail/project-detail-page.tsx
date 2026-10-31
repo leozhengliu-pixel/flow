@@ -49,6 +49,7 @@ import {
   promptAction,
 } from "@/components/ui/action-dialog-service";
 import "./project-detail-page.css";
+import "./project-detail-desktop.css";
 import "@/components/editor/rich-text-body.css";
 import { ProjectSlackDialog } from './project-slack-dialog';
 import { FlowTooltip } from "@/components/ui/tooltip";
