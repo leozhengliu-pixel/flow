@@ -11,7 +11,7 @@ import { LinkBehavior } from '@/components/editor/link-behavior'
 import { MarkdownPaste } from '@/components/editor/markdown-paste'
 import { OutlineMinimap } from '@/components/editor/outline/outline-minimap'
 import { Markdown } from '@tiptap/markdown'
-import { Editor as CoreEditor, getSchema } from '@tiptap/core'
+import { Editor as CoreEditor, getSchema, type Extensions } from '@tiptap/core'
 import type { EditorState } from '@tiptap/pm/state'
 import { handleEmoticonInput } from '@/components/editor/emoticon-input'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
@@ -68,6 +68,7 @@ interface DescriptionEditorProps {
   onBlur?: () => void
   onSubmit?: () => void
   editorRef?: (editor: Editor | null) => void
+  extensions?: Extensions
   className?: string
   placeholder?: string
   ariaLabel?: string
@@ -103,7 +104,7 @@ export function IssueDescriptionEditor(props: DescriptionEditorProps) {
   return <DescriptionEditorSession key={sessionKey} {...props}/>
 }
 
-function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [], onInsertImage, outline = false, readOnly = false }: DescriptionEditorProps) {
+function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, extensions = [], className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [], onInsertImage, outline = false, readOnly = false }: DescriptionEditorProps) {
   const { t } = useI18n()
   const getPlaceholder = useStableCallback(() => t(placeholder))
   const getDocumentId = useStableCallback(() => collaboration?.issueId ?? collaboration?.documentId)
@@ -224,6 +225,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       MentionLinksExtension.configure({ getData: getEntityData }),
       InlineCommentMark,
       SlashCommandExtension,
+      ...extensions,
       ...(collaborationSession ? [
         Collaboration.configure({ document: collaborationSession.document, field: 'prosemirror' }),
         CollaborationCaret.configure({ provider: collaborationSession.provider, user: collaboration?.viewer ? { ...collaboration.viewer, name: collaboration.viewer.displayName, color: collaborationColor(collaboration.viewer.id) } : undefined }),

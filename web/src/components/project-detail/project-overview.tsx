@@ -47,6 +47,7 @@ import { useEntityDescriptionSelectionActions } from '@/components/detail/descri
 import { EntityInlineComments, EntityResolvedCommentsPanel, type InlineCommentEntity } from '@/components/detail/entity-inline-comments'
 import { useEntityInlineComments } from '@/components/detail/entity-inline-comments-state'
 import { projectPath } from '@/lib/app-routes'
+import { projectDescriptionExtensions } from './project-description-text'
 
 type Props = ProjectDetailProps & { projectIssues: Issue[]; save: (input: ProjectMutationInput) => Promise<void> }
 
@@ -118,7 +119,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
     {customersEnabled && issueData && <ProjectCustomersRow data={issueData} project={project} issueIds={projectIssueIds}/>}
 
     <section className={`project-overview__latest${projectUpdates[0] ? '' : ' is-empty'}`}>
-      {projectUpdates[0] ? <div aria-label="Open latest project update" className="project-overview__latest-update" onClick={event => { if (!(event.target as HTMLElement).closest('a')) onTabChange('activity') }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onTabChange('activity') } }} role="button" tabIndex={0}><span className={`project-overview__health is-${projectUpdates[0].health}`}/><div><strong data-i18n-ignore>{projectUpdates[0].user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(projectUpdates[0].createdAt), { addSuffix: true })}</time><div className="project-overview__latest-update-body" data-i18n-ignore><RichComment body={projectUpdates[0].body} data={projectUpdates[0].bodyData}/></div></div></div> : <button className="project-overview__first-update" onClick={() => onTabChange('activity')} type="button"><FileText className="project-overview__desktop-icon" size={14}/><ProjectFirstUpdateIcon className="project-overview__mobile-icon" height={14} width={14}/>Write first project update</button>}
+      {projectUpdates[0] ? <div aria-label="Open latest project update" className="project-overview__latest-update" onClick={event => { if (!(event.target as HTMLElement).closest('a')) onTabChange('activity') }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onTabChange('activity') } }} role="button" tabIndex={0}><span className={`project-overview__health is-${projectUpdates[0].health}`}/><div><strong data-i18n-ignore>{projectUpdates[0].user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(projectUpdates[0].createdAt), { addSuffix: true })}</time><div className="project-overview__latest-update-body" data-i18n-ignore><RichComment body={projectUpdates[0].body} data={projectUpdates[0].bodyData}/></div></div></div> : <button className="project-overview__first-update" onClick={() => onTabChange('activity')} type="button"><FileText className="project-overview__desktop-icon" size={14}/><ProjectFirstUpdateIcon className="project-overview__mobile-icon"/>Write first project update</button>}
     </section>
 
     <section className="project-overview__description" id="project-overview-description">
@@ -255,7 +256,7 @@ function ProjectDescriptionEditor({ users, value, onCommit, selection, editorRef
   // Selecting text offers "Create issue from selection", "Ask agent" and "Comment", as in an issue description.
   const { actions, panels } = useEntityDescriptionSelectionActions(selection)
   return <>
-    <IssueDescriptionEditor users={users} ariaLabel="Project description" className="project-overview__description-editor" placeholder="Add description…" value={value} selectionActions={actions} editorRef={editorRef} onChange={snapshot => setDraft(snapshot.markdown)} onBlur={() => { const next = draft.trim(); if (next !== value) void onCommit(next) }}/>
+    <IssueDescriptionEditor users={users} ariaLabel="Project description" className="project-overview__description-editor" extensions={projectDescriptionExtensions} placeholder="Add description…" value={value} selectionActions={actions} editorRef={editorRef} onChange={snapshot => setDraft(snapshot.markdown)} onBlur={() => { const next = draft.trim(); if (next !== value) void onCommit(next) }}/>
     {panels}
   </>
 }
