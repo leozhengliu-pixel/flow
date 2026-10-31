@@ -81,6 +81,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Browser coverage in throwaway workspaces for Triage accept, decline, duplicate (3 and M M), snooze, next/previous navigation, and editor/dialog shortcut guards.
 - Phone-sized app frames fill the viewport, with matching navigation targets,
   searchable workspace menus and modal property pickers; the issue composer
   uses phone-sized controls without changing desktop layouts.
