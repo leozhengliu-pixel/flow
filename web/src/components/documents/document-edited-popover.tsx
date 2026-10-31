@@ -6,6 +6,7 @@ import * as Popover from '@radix-ui/react-popover'
 import { History } from 'lucide-react'
 
 import { FlowSlidersIcon } from '@/components/issue/flow-header-icons'
+import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { Toggle } from '@/components/ui/toggle'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
@@ -68,7 +69,7 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot
           <time dateTime={lastEditedAt}>{formatDate(lastEditedAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
         </div>
         <div className="document-history-action">
-          <Popover.Close asChild><button onClick={onShowHistory} type="button"><History size={14}/>{t('Show document history')}</button></Popover.Close>
+          <Popover.Close asChild><button onClick={onShowHistory} type="button"><IssueActionGlyph label="Show document history" fallback={<History size={14}/>} />{t('Show document history')}</button></Popover.Close>
         </div>
       </Popover.Content>
     </Popover.Portal>

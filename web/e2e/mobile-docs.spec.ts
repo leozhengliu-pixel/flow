@@ -85,6 +85,27 @@ test.describe('mobile document view', () => {
       await expect(page.locator('.document-breadcrumb-current')).toContainText('[mobile] Updated title')
     })
   }
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+    test(`edited-date metadata popover matches the phone sheet at ${viewport.width}px`, async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const response = await request.post('/api/documents', { headers, data: { title: '[mobile] Metadata parity', content: '[mobile] Body' } })
+      expect(response.status()).toBe(201)
+      const document = await response.json() as { slugId: string }
+      await page.setViewportSize(viewport)
+      await page.goto(`/${workspaceKey}/document/${document.slugId}`)
+
+      await page.locator('.document-edited').click()
+      const popover = page.locator('.document-edited-popover')
+      await expect(popover).toBeVisible()
+      await page.locator('.document-view-options input').check()
+      await expect(page.locator('.document-view-options input')).toBeChecked()
+      await expect(page.locator('.document-history-action button')).toContainText('Show document history')
+      expect((await popover.boundingBox())?.x).toBeCloseTo(0, 0)
+      expect((await popover.boundingBox())?.width).toBeCloseTo(360.19, 0)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  }
 })
 
 function advancedFilterParam() {
