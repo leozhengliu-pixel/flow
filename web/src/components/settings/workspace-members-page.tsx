@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { PhoneNativeSelect } from "@/components/ui/phone-native-select";
 import { FlowGlyph } from "@/components/ui/menu-glyphs";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { InviteMembersDialog } from "@/components/workspace-directory/invite-members-dialog";
@@ -553,9 +554,9 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
             </DropdownMenuPrimitive.RadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-        <select className="settings-members-phone-filter" aria-label={t("Member filter")} value={activeFilter} onChange={event => setFilter(event.target.value as MemberFilter)}>
+        <PhoneNativeSelect className="settings-members-phone-filter" aria-label={t("Member filter")} value={activeFilter} onChange={event => setFilter(event.target.value as MemberFilter)}>
           {filters.map(value => <option key={value} value={value}>{t(value)}</option>)}
-        </select>
+        </PhoneNativeSelect>
         <span />
         <button type="button" className="settings-action" onClick={exportCsv}>
           {t("Export CSV")}

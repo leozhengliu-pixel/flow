@@ -7,6 +7,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type Keyboard
 import { toast } from '@/lib/toast'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { PhoneNativeSelect } from '@/components/ui/phone-native-select'
 import { Toggle } from '@/components/ui/toggle'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { ViaApp } from '@/components/ui/via-app'
@@ -150,9 +151,9 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
             <div className="document-history-panel">
               <section aria-label={t('Version preview')} className="document-history-main">
                 <div className="document-history-scroll" ref={setPreviewEl}>
-                  {phoneLayout && <select aria-label={t('Select document version')} className="document-history-date-select" onChange={event => select(event.target.value)} value={selected.id}>
+                  {phoneLayout && <PhoneNativeSelect aria-label={t('Select document version')} className="document-history-date-select" onChange={event => select(event.target.value)} value={selected.id}>
                     {entries.map(entry => <option key={entry.id} value={entry.id}>{longDate(entry.createdAt)} {time(entry.createdAt)}{entry.current ? ` (${t('Current')})` : ''}</option>)}
-                  </select>}
+                  </PhoneNativeSelect>}
                   <span className="document-history-date" data-testid="history-date-chip">
                     <b>{longDate(selected.createdAt)}</b>
                     <span>{time(selected.createdAt)}</span>
