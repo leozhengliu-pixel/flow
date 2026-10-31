@@ -198,7 +198,7 @@
     width: 144px;
     min-width: 144px;
     height: 28px;
-    padding: 3px 24px 3px 12px;
+    padding: 3px 10px 3px 12px;
     border-radius: 8px;
     background: var(--pk-control-phone);
     box-shadow: var(--pk-control-inset-ring-phone);
