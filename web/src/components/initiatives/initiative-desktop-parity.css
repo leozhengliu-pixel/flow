@@ -1,0 +1,80 @@
+@media (min-width: 1024px) {
+  .li-page { --li-select-width: 32px; --li-column-status: 106px; --li-column-priority: 68px; --li-column-owner: 50px; --li-column-target: 112px; --li-column-projects: 59px; --li-column-health: 64px; --li-column-activeProjects: 104px; }
+  .li-detail-toolbar { height: 43px; flex-basis: 43px; padding: 0 8px; border-bottom-color: transparent; }
+  .li-detail-toolbar nav { gap: 4px; }
+  .li-detail-toolbar nav > a { box-sizing: border-box; height: 28px; padding: 0 10px; border-radius: 9999px; font: 500 12px var(--font); line-height: normal; }
+  .li-detail-body.has-details .li-detail-main { max-width: calc(100% - 400px); }
+  .li-detail .li-overview { width: min(805px, calc(100% - 96px)); margin: 0 auto; padding: 64px 0 90px; }
+  .li-overview-title { margin-bottom: 20px; }
+  .li-overview-title > .li-overview-icon { box-sizing: border-box; width: 36px; height: 36px; margin: 0 0 12px; padding: 6px; border-radius: 8px; background: color-mix(in srgb, var(--view-color) 18%, transparent); }
+  .li-overview-icon > svg { width: 24px; height: 24px; }
+  .li-detail .li-title-input { height: 32px; padding: 0; transform: none; font: 600 24px/32px var(--font); letter-spacing: 0; }
+  .li-detail .li-summary-input { height: 23px; margin-top: 4px; padding: 0; transform: none; font: 450 15px/23px var(--font); letter-spacing: 0; }
+  .li-overview > section { min-height: 28px; gap: 16px; margin-top: 12px; padding: 0; }
+  .li-overview > section:first-of-type { margin-top: 0; }
+  .li-overview .li-resources__content { min-height: 28px; margin: 0; }
+  .li-overview .li-resource-add { height: 28px; }
+  .li-detail .li-overview > .li-resources { padding: 0; min-height: 28px; }
+  .li-overview h3 { flex: 0 0 67.73px; width: 67.73px; margin: 0; font: 500 13px var(--font); line-height: 28px; }
+  .li-overview .li-properties { flex-wrap: wrap; gap: 4px; }
+  .li-overview .li-properties .lp-project-property-trigger,
+  .li-overview .li-properties .project-target-date-picker-trigger { height: 28px; padding: 0 6px; gap: 8px; font: 500 13px var(--font); line-height: normal; }
+  .li-overview .li-properties .phone-property-trigger:has(button[aria-label="Lead team"]),
+  .li-overview .li-properties button[data-property="lead team"],
+  .li-overview .li-properties .li-team-picker:not(:has(.li-team-mark)) { display: none; }
+  .li-overview .li-first-update.has-update { display: none; }
+  .li-detail .li-latest-update { display: block; position: relative; box-sizing: border-box; margin: 16px -16px 22px; padding: 8px 16px 16px; border: .5px solid var(--theme-control-hover); border-radius: 10px; }
+  .li-latest-update > header { display: flex; align-items: center; height: 28px; }
+  .li-latest-update h3 { width: auto; flex: 1; }
+  .li-latest-update button { display: inline-flex; align-items: center; justify-content: center; height: 28px; padding: 0 8px; border: 0; border-radius: 9999px; background: transparent; color: var(--theme-text-secondary); }
+  .li-latest-update button:hover { background: var(--theme-control-hover); }
+  .li-latest-update > header > button { gap: 6px; margin-right: -8px; font: 500 13px var(--font); }
+  .li-latest-update > header > button svg { width: 16px; height: 16px; }
+  .li-latest-update > header > button { display: none; }
+  .li-latest-update > .li-latest-update__desktop-action { position: absolute; top: 8px; right: 8px; display: inline-flex; gap: 6px; font: 500 13px var(--font); }
+  .li-latest-update__content { padding: 4.5px .5px 0; }
+  .li-latest-update__meta { display: flex; align-items: center; gap: 12px; height: 32px; color: var(--theme-text-secondary); font: 450 13px var(--font); white-space: nowrap; }
+  .li-latest-update__health, .li-latest-update__author { display: flex; align-items: center; gap: 8px; }
+  .li-latest-update__health.is-onTrack { color: var(--project-health-on-track); }
+  .li-latest-update__health.is-atRisk { color: var(--project-health-at-risk); }
+  .li-latest-update__health.is-offTrack { color: var(--project-health-off-track); }
+  .li-latest-update__author .avatar { width: 18px; height: 18px; }
+  .li-latest-update__meta > button { margin-left: auto; opacity: 0; }
+  .li-latest-update:hover .li-latest-update__meta > button,
+  .li-latest-update:focus-within .li-latest-update__meta > button { opacity: 1; }
+  .li-latest-update__body { margin-top: 12px; color: var(--theme-text-primary); font: 450 15px/24px var(--font); }
+  .li-latest-update__body p { margin: 0; }
+  .li-latest-update footer { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+  .li-latest-update__comments { min-width: 37px; background: var(--ui-pill-bg) !important; }
+  .li-detail .li-description { margin: 0; }
+  .li-description h3 { width: auto; }
+  .li-detail-sidebar { position: static; display: flex; flex-direction: column; width: 400px; flex: 0 0 400px; min-height: 0; padding: 0 8px 8px 4px; border: 0; background: transparent; box-shadow: none; }
+  .li-detail-sidebar > section { flex-shrink: 0; margin: 0 0 8px; padding: 6px 12px 12px; border: .5px solid var(--theme-control-hover); border-radius: 10px; background: var(--theme-surface-1); }
+  .li-detail-sidebar > section + section { margin-top: 0; padding: 6px 12px 12px; }
+  .li-detail-sidebar > section:nth-child(2) { order: 2; }
+  .li-detail-sidebar .li-sidebar-heading { height: 28px; font: 500 13px var(--font); line-height: normal; }
+  .li-detail-sidebar dl { grid-template-columns: 98px minmax(0, 1fr); padding: 4px 0 0; }
+  .li-detail-sidebar dt, .li-detail-sidebar dd { min-height: 36px; font: 450 12px var(--font); line-height: normal; }
+  .li-detail-sidebar > section:first-child dt:has(+ dd .li-properties--leadTeam),
+  .li-detail-sidebar > section:first-child dd:has(.li-properties--leadTeam),
+  .li-detail-sidebar > section:first-child dt:has(+ dd .li-properties--contributingTeams),
+  .li-detail-sidebar > section:first-child dd:has(.li-properties--contributingTeams) { display: none; }
+  .li-sidebar-teams { order: 3; }
+  .li-initiative-projects { --li-project-health: 56px; --li-project-priority: 68px; --li-project-lead: 80px; --li-project-target: 86px; --li-project-status: 72px; }
+  .li-initiative-projects__list { margin-inline: 0; }
+  .li-overview .li-initiative-projects > .li-initiative-projects__list { margin-inline: 0; }
+  .li-project-columns { font-size: 12px; }
+  .li-detail-project-row .li-health { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .li-detail-project-row { font-size: 12px; }
+  .li-project-count { white-space: nowrap; gap: 8px; }
+  .li-project-count__ring { display: block; width: 16px; height: 16px; flex-shrink: 0; }
+  .li-columns { line-height: normal; }
+  .li-name strong { line-height: normal; }
+}
+
+.li-project-count__ring, .li-latest-update > .li-latest-update__desktop-action, .li-sidebar-teams { display: none; }
+@media (min-width: 1024px) {
+  .li-project-count__ring { display: inline-flex; }
+  .li-detail .li-latest-update > .li-latest-update__desktop-action { display: inline-flex; }
+  .li-detail-sidebar > .li-sidebar-teams { display: block; }
+}

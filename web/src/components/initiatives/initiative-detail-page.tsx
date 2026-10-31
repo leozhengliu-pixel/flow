@@ -58,6 +58,8 @@ import { FlowFavoriteFilledIcon, FlowFavoriteIcon, FlowOptionsIcon, FlowUrlIcon 
 import { AddViewIcon, SidebarLeftIcon, SidebarRightIcon } from '@/components/ui/view-action-icons'
 import { InitiativeLatestUpdate } from './initiative-latest-update'
 import './initiative-detail-mobile.css'
+import './initiative-desktop-parity.css'
+import { useDesktopSettings } from '@/hooks/use-desktop-settings'
 import { InitiativeHistoryRows } from './initiative-history-rows'
 import { activityActor, attributedActionText, attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
 
@@ -145,7 +147,8 @@ export function InitiativeDetailPage(props: Props) {
     return ids
   }, [props.presence, props.viewer.active, props.viewer.id])
   const peopleChoices = useMemo(() => projectPeopleChoices(props.users, props.invitations, onlineUserIds), [onlineUserIds, props.invitations, props.users])
-  const [detailsOpen, setDetailsOpen] = useStoredBoolean(`flow:initiative:${initiative.id}:details`, false)
+  const desktop = useDesktopSettings()
+  const [detailsOpen, setDetailsOpen] = useStoredBoolean(`flow:initiative:${initiative.id}:details`, desktop)
   const [updatesOpen, setUpdatesOpen] = useState(false)
   // "Show resolved comments" (while the description has resolved inline threads) takes the details panel's place.
   const resolvedThreadCount = useResolvedInlineThreadCount(initiative.comments)
@@ -321,7 +324,7 @@ function InitiativeOverview(props: Props & { update: (input: InitiativeMutationI
     return a.status.name.localeCompare(b.status.name)
   })
   const projectColumns = ['health', 'priority', 'lead', 'target', 'status'].filter(property => projectProperties.has(property))
-  const projectGrid = { gridTemplateColumns: `minmax(200px,1fr) ${projectColumns.map(property => property === 'health' ? '115px' : property === 'priority' ? '90px' : property === 'lead' ? '80px' : '105px').join(' ')}` }
+  const projectGrid = { gridTemplateColumns: `minmax(200px,1fr) ${projectColumns.map(property => `var(--li-project-${property}, ${property === 'health' ? '115px' : property === 'priority' ? '90px' : property === 'lead' ? '80px' : '105px'})`).join(' ')}` }
   return <div className={`li-overview inline-comment-host${inlineComments.gutter ? ' has-comment-gutter' : ''}`} ref={overviewShellRef}>
     <div className="li-overview-title"><ViewIconPicker surface="page" color={initiative.color} icon={initiative.icon || 'Initiative'} onChange={update} triggerClassName="li-overview-icon"/><InitiativeEditableText className="li-title-input" label="Initiative name" value={initiative.name} onCommit={name => update({ name })}/><InitiativeEditableText className="li-summary-input" label="Initiative summary" placeholder="Add a short summary…" value={initiative.summary} onCommit={summary => update({ summary })}/></div>
     <InitiativeContributesTo initiative={initiative} initiatives={props.initiatives} onOpen={props.onOpenInitiative} onUpdate={props.onUpdate}/>
@@ -450,7 +453,7 @@ function initiativeCreatedItem(initiative: Initiative, viewer: User, users: User
   return { id: `created-${initiative.id}`, createdAt: initiative.createdAt, category: 'system', userIds: [creator.id], userNames: [actor.name], text: attributedActionText(actor, t('created the initiative'), t), actorLabel: actor.name }
 }
 
-function InitiativeSidebar({ initiatives, initiative, users, teams, labels, projects, projectUpdates, viewer, update, onCreateLabel, onTabChange }: Props & { update: (input: InitiativeMutationInput) => Promise<Initiative> }) {
+function InitiativeSidebar({ initiatives, initiative, initiativeUpdates, users, teams, labels, projects, projectUpdates, viewer, update, onCreateLabel, onTabChange }: Props & { update: (input: InitiativeMutationInput) => Promise<Initiative> }) {
   const { t } = useI18n()
   const [propertiesOpen, setPropertiesOpen] = useState(true)
   const [progressOpen, setProgressOpen] = useState(true)
@@ -461,11 +464,11 @@ function InitiativeSidebar({ initiatives, initiative, users, teams, labels, proj
   const updateMissing = linked.filter(project => !['completed', 'canceled'].includes(project.status.type) && !projectHasUpdates(project, projectUpdates)).length
   return <aside className="li-detail-sidebar"><section><button aria-expanded={propertiesOpen} className="li-sidebar-heading" onClick={() => setPropertiesOpen(open => !open)} type="button">Properties <ChevronDown size={11}/></button>{propertiesOpen && <dl><dt>Status</dt><dd><InitiativeProperties compact only="status" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Priority</dt><dd><InitiativeProperties compact only="priority" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Owner</dt><dd><InitiativeProperties compact only="owner" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Lead team</dt><dd><InitiativeProperties compact only="leadTeam" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Contributing teams</dt><dd><InitiativeProperties compact only="contributingTeams" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Target date</dt><dd><InitiativeProperties compact only="target" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Labels</dt><dd><InitiativeLabelsPicker initiative={initiative} labels={labels} onCreateLabel={onCreateLabel} onUpdate={update}/></dd></dl>}</section><section><button aria-expanded={progressOpen} className="li-sidebar-heading" onClick={() => setProgressOpen(open => !open)} type="button">Progress <ChevronDown size={11}/></button>{progressOpen && <div className="li-sidebar-progress"><div role="tablist">{(['health','status','leads'] as const).map(item => <button aria-selected={progressTab === item} key={item} onClick={() => setProgressTab(item)} role="tab" type="button">{titleCase(item)}</button>)}</div><ProgressBreakdown linked={linked} projectUpdates={projectUpdates} tab={progressTab} updateMissing={updateMissing}/></div>}</section><ActivitySidebarSection
     entityId={initiative.id}
-    items={[initiativeCreatedItem(initiative, viewer, users, t)]}
+    items={[...initiativeUpdates.map(item => ({ id: item.id, createdAt: item.createdAt, category: 'update' as const, userIds: [item.user.id], userNames: [item.user.displayName || item.user.name], text: t('posted an update') })), initiativeCreatedItem(initiative, viewer, users, t)]}
     onSeeAll={() => onTabChange('activity')}
     open={activityOpen}
     onOpenChange={setActivityOpen}
-  /></aside>
+  /><section className="li-sidebar-teams"><h3>{t('Teams')}</h3><dl><dt>{t('Lead team')}</dt><dd><InitiativeProperties compact only="leadTeam" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>{t('Contributing teams')}</dt><dd><InitiativeProperties compact only="contributingTeams" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd></dl></section></aside>
   return <aside className="li-detail-sidebar"><section><button aria-expanded={propertiesOpen} className="li-sidebar-heading" onClick={() => setPropertiesOpen(open => !open)} type="button">Properties <ChevronDown size={11}/></button>{propertiesOpen && <dl><dt>Status</dt><dd><InitiativeProperties compact only="status" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Priority</dt><dd><InitiativeProperties compact only="priority" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Owner</dt><dd><InitiativeProperties compact only="owner" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Lead team</dt><dd><InitiativeProperties compact only="leadTeam" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Contributing teams</dt><dd><InitiativeProperties compact only="contributingTeams" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Target date</dt><dd><InitiativeProperties compact only="target" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Labels</dt><dd><InitiativeLabelsPicker initiative={initiative} labels={labels} projects={projects} onCreateLabel={onCreateLabel} onUpdate={update}/></dd></dl>}</section><section><button aria-expanded={progressOpen} className="li-sidebar-heading" onClick={() => setProgressOpen(open => !open)} type="button">Progress <ChevronDown size={11}/></button>{progressOpen && <div className="li-sidebar-progress"><div role="tablist">{(['health','status','leads'] as const).map(item => <button aria-selected={progressTab === item} key={item} onClick={() => setProgressTab(item)} role="tab" type="button">{titleCase(item)}</button>)}</div><ProgressBreakdown linked={linked} projectUpdates={projectUpdates} tab={progressTab} updateMissing={updateMissing}/></div>}</section><section><button aria-expanded={activityOpen} className="li-sidebar-heading" onClick={() => setActivityOpen(open => !open)} type="button">Activity <ChevronDown size={11}/><span onClick={event => { event.stopPropagation(); onTabChange('activity') }}>See all</span></button>{activityOpen && <div className="li-sidebar-activity"><ViewGlyph color={initiative.color} icon={initiative.icon || 'Initiative'}/><span><strong data-i18n-ignore>{viewer.displayName || viewer.name}</strong> created the initiative · {new Date(initiative.createdAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</span></div>}</section></aside>
 }
 

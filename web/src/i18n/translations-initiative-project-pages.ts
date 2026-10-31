@@ -3,6 +3,7 @@
  * details sidebar). Merged into zhCN by translations.ts.
  */
 export const initiativeProjectPagesZhCN: Record<string, string> = {
+  "{completed} of {total} projects completed. Click to view projects.": "已完成 {completed} / {total} 个项目。点击查看项目。",
   "Milestone {name}. Progress: {progress}%.": "里程碑 {name}。进度：{progress}%。",
   "Latest update": "最新更新",
   "Write initiative update": "撰写目标更新",
