@@ -27,6 +27,12 @@ function renderMenu(overrides: Partial<InitiativeRowMenuProps> = {}) {
 }
 
 describe('InitiativeRowMenu', () => {
+  it('keeps phone selection available in the existing row menu', async () => {
+    const user = userEvent.setup(), onSelect = vi.fn()
+    renderMenu({ onSelect })
+    await user.click(screen.getByRole('menuitem', { name: 'Select initiative' }))
+    expect(onSelect).toHaveBeenCalledOnce()
+  })
   it('lists the reference app\'s initiative row menu in order with shared, left-aligned rows', () => {
     renderMenu()
     const menu = screen.getByRole('menu', { name: 'Initiative actions' })

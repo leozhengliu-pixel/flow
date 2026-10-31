@@ -2,7 +2,7 @@
   .agent-chat-options-phone-menu {
     box-sizing: border-box;
     border: 0.5px solid var(--pk-border);
-    padding: 0.5px;
+    padding: 0;
   }
   html:root body .agent-chat-options-phone-menu [cmdk-list-sizer] [cmdk-item]:not(#_) {
     border-radius: 0 !important;

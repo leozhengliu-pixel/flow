@@ -175,11 +175,11 @@ export function PullRequestHeader({
       </header>
       <div className="review-detail-tabs">
         <nav aria-label={t("Pull request sections")}>
-          {REVIEW_TABS.map((item, index) => (
+          {(phone ? [REVIEW_TABS[0], REVIEW_TABS[2], REVIEW_TABS[1]] : REVIEW_TABS).map((item) => (
             <a
               className={tab === item.id ? "active" : ""}
               aria-current={tab === item.id ? "page" : undefined}
-              title={`${t(item.id === "overview" ? "View overview" : item.id === "review" ? "View guide" : "View diff")}  ${index + 1}`}
+              title={`${t(item.id === "overview" ? "View overview" : item.id === "review" ? "View guide" : "View diff")}  ${REVIEW_TABS.indexOf(item) + 1}`}
               key={item.id}
               data-review-tab={item.id}
               href={reviewPath(workspace, review, item.id) + tabSearch}
