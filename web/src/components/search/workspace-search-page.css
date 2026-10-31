@@ -114,9 +114,9 @@
   .workspace-search-tool { position: relative; }
   .workspace-search-tool::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 .5px var(--ui-pill-ring), var(--ui-pill-shadow); pointer-events: none; }
   .workspace-search-tool svg { width: 14px; height: 14px; transform: translateX(.1px); color: var(--issue-muted); }
-  .workspace-search-empty-illustration { width: 180px; height: 120px; }
+  .workspace-search-empty-illustration { width: 180px; height: 120px; color: var(--theme-text-primary); }
   .workspace-search-empty strong { color: var(--bright); }
-  .workspace-search-empty span { color: var(--issue-muted); }
+  .workspace-search-empty span { color: var(--issue-muted); padding-inline: 0; }
   :root[data-theme="light"] .workspace-search-empty-illustration { filter: invert(1); }
   .phone-menu-surface:has(.workspace-search-filter-values .property-command-search) > [cmdk-root] > .phone-menu-search { display: none; }
   .phone-menu-surface:has(.workspace-search-advanced-option):has(~ .phone-menu-surface .workspace-search-filter-values) { visibility: hidden; }

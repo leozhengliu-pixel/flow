@@ -78,6 +78,24 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
         await geometry(tabs.getByRole('button', { name, exact: true }), { x, y: 49.75, height: 32 })
       }
       await expect(page.locator('.workspace-search-empty')).toBeVisible()
+      await geometry(page.locator('.workspace-search-empty-illustration'), {
+        x: viewport.width === 390 ? 105 : 97.5,
+        y: viewport.width === 390 ? 378.25 : 289.75,
+        width: 180,
+        height: 120,
+      })
+      await geometry(page.locator('.workspace-search-empty > div > strong'), {
+        x: viewport.width === 390 ? 173.17 : 165.67,
+        y: viewport.width === 390 ? 514.25 : 425.75,
+        height: 15.5,
+      })
+      await geometry(page.locator('.workspace-search-empty > div > span'), {
+        x: viewport.width === 390 ? 46.28 : 38.78,
+        y: viewport.width === 390 ? 537.75 : 449.25,
+        height: 15.5,
+      })
+      await expect(page.locator('.workspace-search-empty-illustration')).toHaveCSS('color', 'lch(100 0 272)')
+      await expect(page.locator('.workspace-search-empty > div > span')).toHaveCSS('padding-inline', '0px')
       await expect(page.locator('.workspace-search-results')).toHaveCount(0)
       await expect(page.locator('.bottom-agent')).toBeHidden()
       await expect(page.locator('.workspace-search-header [data-sidebar-trigger] path')).toHaveAttribute('d', /^M4.25 2C2.45508/)
