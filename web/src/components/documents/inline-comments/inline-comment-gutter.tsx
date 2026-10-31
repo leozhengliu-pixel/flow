@@ -270,7 +270,7 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
       const coords = editor.view.coordsAtPos(position)
       const box = shell.getBoundingClientRect()
       const left = inlineDraft
-        ? Math.max(0, Math.min(coords.left - box.left + 15.5, box.width - 298))
+        ? Math.max(0, Math.min(coords.left - box.left - POPOVER_INSET, box.width - 360))
         : Math.max(0, Math.min(coords.left - box.left - POPOVER_INSET, box.width - POPOVER_WIDTH))
       return { top: coords.bottom - box.top + POPOVER_GAP, left }
     } catch { return { top: 0, left: 0 } }
