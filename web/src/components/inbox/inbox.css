@@ -813,9 +813,10 @@
 .flow-inbox-row-menu .flow-inbox-menu__item { line-height: normal; }
 .flow-inbox-snooze-menu { width: 324px; height: 241.5px; box-sizing: border-box; padding-bottom: 7px; }
 .flow-inbox-snooze-menu .flow-inbox-menu__item { line-height: normal; }
-@media (min-width:801px){.flow-inbox__header h2{color:var(--text)}.flow-inbox__icon-button{color:var(--text)}.flow-inbox__icon-button:hover,.flow-inbox__icon-button[data-state="open"],.flow-inbox__icon-button[aria-expanded="true"],.flow-inbox__icon-button[data-active="true"],.flow-inbox__icon-button[aria-pressed="true"]{color:var(--bright)}}
+@media (min-width:801px){.flow-inbox__header{padding-left:8px}.flow-inbox__header-title-actions{margin-left:9px}.flow-inbox__header h2{color:var(--text);line-height:normal}.flow-inbox__icon-button{color:var(--text)}.flow-inbox__icon-button:hover,.flow-inbox__icon-button[data-state="open"],.flow-inbox__icon-button[aria-expanded="true"],.flow-inbox__icon-button[data-active="true"],.flow-inbox__icon-button[aria-pressed="true"]{color:var(--bright)}}
 .flow-inbox-detail__header--minimal .flow-inbox-detail__actions{margin-left:auto}
 @media (min-width:801px){.flow-inbox-detail__header .flow-inbox-detail__icon-button{color:var(--text)}.flow-inbox-detail__header .flow-inbox-detail__icon-button:hover,.flow-inbox-detail__header .flow-inbox-detail__icon-button[data-state="open"],.flow-inbox-detail__header .flow-inbox-detail__icon-button[aria-pressed="true"]{color:var(--bright)}}
+@media (min-width:801px){.flow-inbox-row__identifier,.flow-inbox-row__title,.flow-inbox-row__body,.flow-inbox-row__summary time{line-height:normal}.flow-inbox-row[data-read="false"] .flow-inbox-row__identifier,.flow-inbox-row[data-read="false"] .flow-inbox-row__title,.flow-inbox-row[data-active="true"] .flow-inbox-row__identifier,.flow-inbox-row[data-active="true"] .flow-inbox-row__title{color:var(--text)}}
 
 /* Phone inbox list: the reference app's 44px bar, 55px rows and 13/12px text. */
 @media (max-width: 767px) {
