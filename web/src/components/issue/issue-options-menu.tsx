@@ -6,6 +6,7 @@ import { parseDate } from 'chrono-node'
 import { addMonths } from 'date-fns'
 import {
   Bell,
+  Check,
   ChevronLeft,
   Copy,
   FilePlus2,
@@ -46,6 +47,7 @@ import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
 import { deleteRelation, refreshIssueSuggestions } from '@/lib/api'
 import { issueRemovableLinks, issueEverythingMarkdown, issueMarkdown, type IssueRemovableLink } from './issue-options-model'
+import { useIssuesById } from './use-issues-by-id'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
 export type RelatedIssueCreationKind = 'issue' | 'sub-issue' | 'parent' | 'blocked' | 'blocking' | 'copy'
@@ -75,6 +77,7 @@ interface IssueOptionsMenuProps {
   onUpdate: (input: IssueUpdateInput) => Promise<void>
   onDelete: () => Promise<void>
   onRelation: (type: IssueRelationType) => void
+  onDeleteRelation?: (relationId: string) => Promise<void>
   trigger?: ReactNode
   issueUrl?: string
   data?: BootstrapData
@@ -94,6 +97,7 @@ export function IssueOptionsMenu({
   onUpdate,
   onDelete,
   onRelation,
+  onDeleteRelation,
   trigger,
   issueUrl,
   data,
@@ -214,11 +218,16 @@ export function IssueOptionsMenu({
     void perform(() => onUpdate({ subscriberIds: next }), subscribed ? 'Unsubscribed from issue' : 'Subscribed to issue')
   }, [viewerId, issue.subscriberIds, onUpdate, perform, subscribed])
 
-  const removable = useMemo(() => data ? issueRemovableLinks(issue, data) : [], [data, issue])
+  const relationTargets = useIssuesById(data && !mobile ? [issue.parentId, ...issue.relations.map(relation => relation.relatedIssueId)] : [], data ?? { issues: [], workspace: { urlKey: '' } })
+  const removableMenuLinks = useMemo(() => {
+    if (!data) return []
+    const targets = [...relationTargets.values()].filter(target => target.id === issue.parentId || issue.relations.some(relation => relation.relatedIssueId === target.id))
+    return issueRemovableLinks(issue, mobile ? data : { ...data, issues: [...data.issues, ...targets] })
+  }, [data, issue, mobile, relationTargets])
   const removeLink = (link: IssueRemovableLink) => {
     closeMenu()
     // The reference app removes the link at once, without a confirmation.
-    const work = link.kind === 'parent' ? onUpdate({ parentId: '' }) : deleteRelation(link.ownerId, link.relationId)
+    const work = link.kind === 'parent' ? onUpdate({ parentId: '' }) : link.ownerId === issue.id && onDeleteRelation ? onDeleteRelation(link.relationId) : deleteRelation(link.ownerId, link.relationId)
     void work.catch(error => toast.error(error instanceof Error ? error.message : t('Could not remove relation')))
   }
   const findSuggestions = () => {
@@ -253,7 +262,12 @@ export function IssueOptionsMenu({
     const onKeyDown = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) return
       const key = event.key.toLowerCase()
-      if (!event.metaKey && !event.ctrlKey && !event.altKey && event.shiftKey && key === 'd') {
+      if (!mobile && (event.metaKey || event.ctrlKey) && event.shiftKey && !event.altKey && key === 'm' && data && data.teams.filter(team => !team.retiredAt && !team.archivedAt).length > 1) {
+        event.preventDefault()
+        setOpen(true)
+        setSubmenu('team')
+        setFocusNested(true)
+      } else if (!event.metaKey && !event.ctrlKey && !event.altKey && event.shiftKey && key === 'd') {
         event.preventDefault()
         setSubmenu(null)
         setOpen(true)
@@ -283,7 +297,7 @@ export function IssueOptionsMenu({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [actions, beginAddLink, confirmDelete, onFavoriteChange, onRemind, perform, toggleSubscription])
+  }, [actions, beginAddLink, confirmDelete, data, mobile, onFavoriteChange, onRemind, perform, toggleSubscription])
 
   const url = issueUrl ?? `${window.location.origin}/${data?.workspace.urlKey ?? ''}/issue/${issue.identifier}`
   const titleLink = `[${issue.title}](${url})`
@@ -322,7 +336,7 @@ export function IssueOptionsMenu({
             <div className="issue-options-list-surface">
               <Command.List>
                 <Command.Empty className="issue-options-empty">{t('No results')}</Command.Empty>
-                {mobile && <Option icon={<FlowGlyph name="leadTeam" size={16}/>} label="Team" nested="team" anchor={anchors.team} expanded={submenu === 'team'} onHover={() => openNested('team')} onSelect={() => openNested('team', true)}/>}
+                {(mobile || data && data.teams.filter(team => !team.retiredAt && !team.archivedAt).length > 1) && <Option icon={<FlowGlyph name="leadTeam" size={16}/>} label="Team" shortcut={mobile ? undefined : 'Command Shift M'} nested="team" anchor={anchors.team} expanded={submenu === 'team'} onHover={() => openNested('team')} onSelect={() => openNested('team', true)}/>}
                 <Option icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested="due" anchor={anchors.due} expanded={datePickerOpen} onHover={() => openNested('due')} onSelect={() => openNested('due', true)}/>
                 {data?.workspaceSettings.featureFlags.releases !== false && (!mobile || hasReleaseSurface) && <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
                 <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
@@ -336,7 +350,7 @@ export function IssueOptionsMenu({
                 <Separator/>
                 <Option icon={<Repeat2/>} label="Create related" nested="create" anchor={anchors.create} expanded={submenu === 'create'} onHover={() => openNested('create')} onSelect={() => openNested('create', true)}/>
                 <Option icon={<Link2/>} label="Mark as" nested="mark" anchor={anchors.mark} expanded={submenu === 'mark'} onHover={() => openNested('mark')} onSelect={() => openNested('mark', true)}/>
-                {removable.length > 0 && <Option icon={<X/>} label="Remove" nested="remove" anchor={anchors.remove} expanded={submenu === 'remove'} onHover={() => openNested('remove')} onSelect={() => openNested('remove', true)}/>}
+                {removableMenuLinks.length > 0 && <Option icon={<X/>} label="Remove" nested="remove" anchor={anchors.remove} expanded={submenu === 'remove'} onHover={() => openNested('remove')} onSelect={() => openNested('remove', true)}/>}
                 <Separator/>
                 <Option icon={<Copy/>} label="Copy" nested="copy" anchor={anchors.copy} expanded={submenu === 'copy'} onHover={() => openNested('copy')} onSelect={() => openNested('copy', true)}/>
                 <Option icon={<RefreshCw/>} label="Convert to" nested="convert" anchor={anchors.convert} expanded={submenu === 'convert'} onHover={() => openNested('convert')} onSelect={() => openNested('convert', true)}/>
@@ -373,7 +387,7 @@ export function IssueOptionsMenu({
           </Command>
 
           {submenu === 'team' && <SubmenuSurface label="Team" anchor={anchors.team} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
-            {data?.teams.map(team => <Option key={team.id} icon={<TeamIcon team={team}/>} label={team.name} onSelect={() => { if (team.id === issue.team.id) closeMenu(); else void perform(() => onUpdate({ teamId: team.id }), 'Team changed') }}/>)}
+            {data?.teams.filter(team => mobile || !team.retiredAt && !team.archivedAt).map(team => <Option key={team.id} icon={<TeamIcon team={team}/>} label={team.name} checked={!mobile && team.id === issue.team.id} onSelect={() => { if (team.id === issue.team.id) closeMenu(); else void perform(() => onUpdate({ teamId: team.id }), t('Team changed')) }}/>)}
           </SubmenuSurface>}
           {submenu === 'release' && (data ? <IssueReleasePicker data={data} issue={issue} externalAnchor={anchors.release} popoverOpen onPopoverOpenChange={next => !next && returnToParent()} onMenuEscape={closeMenu}/> : <SubmenuSurface label="Release" anchor={anchors.release} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}><div className="issue-options-empty">{t('No releases')}</div></SubmenuSurface>)}
           {submenu === 'create' && <SubmenuSurface label="Create related" anchor={anchors.create} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
@@ -392,7 +406,7 @@ export function IssueOptionsMenu({
             <Option icon={<Copy/>} label="Duplicate of..." shortcut="M, then M" onSelect={() => chooseRelation('duplicate')}/>
           </SubmenuSurface>}
           {submenu === 'remove' && <SubmenuSurface label="Remove" anchor={anchors.remove} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
-            {removable.map((link, index) => <RemoveOption key={link.key} link={link} separated={index > 0 && removable[index - 1].kind === 'parent'} onSelect={() => removeLink(link)}/>)}
+            {removableMenuLinks.map((link, index) => <RemoveOption key={link.key} link={link} separated={index > 0 && removableMenuLinks[index - 1].kind === 'parent'} onSelect={() => removeLink(link)}/>)}
           </SubmenuSurface>}
           {submenu === 'copy' && <SubmenuSurface label="Copy" anchor={anchors.copy} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
             <Option icon={<Copy/>} label="Copy ID" shortcut="Command ." onSelect={() => void copy(issue.identifier, 'Issue ID copied to clipboard')}/>
@@ -507,13 +521,14 @@ function IssueOptionsDialogFooter({ busy, disabled, action, onCancel, onSubmit }
   return <footer><button type="button" onClick={onCancel}>Cancel</button><button type="button" className="primary" disabled={disabled || busy} onClick={onSubmit}>{busy ? 'Working...' : action}</button></footer>
 }
 
-function Option({ icon, glyph, label, detail, shortcut, nested, anchor, expanded, danger, onHover, onSelect }: { icon: ReactNode; /** Replaces the label's action glyph. */ glyph?: ReactNode; label: string; detail?: string; shortcut?: string; nested?: Submenu | 'due'; anchor?: RefObject<HTMLDivElement | null>; expanded?: boolean; danger?: boolean; onHover?: () => void; onSelect?: () => void }) {
+function Option({ icon, glyph, label, detail, shortcut, nested, anchor, expanded, danger, checked, onHover, onSelect }: { icon: ReactNode; /** Replaces the label's action glyph. */ glyph?: ReactNode; label: string; detail?: string; shortcut?: string; nested?: Submenu | 'due'; anchor?: RefObject<HTMLDivElement | null>; expanded?: boolean; danger?: boolean; checked?: boolean; onHover?: () => void; onSelect?: () => void }) {
   const { t } = useI18n()
   const text = t(label.replaceAll('...', '…'))
   return <Command.Item ref={anchor} className={`issue-options-item${danger ? ' danger' : ''}`} value={label} keywords={[text]} data-submenu={nested} data-submenu-open={expanded || undefined} aria-expanded={nested ? Boolean(expanded) : undefined} onPointerEnter={onHover} onSelect={onSelect}>
     <span className="issue-options-icon" aria-hidden="true">{glyph ?? <IssueActionGlyph label={label} fallback={icon}/>}</span>
     <span className="issue-options-label">{text}</span>
     {detail && <small className="issue-options-detail">{detail}</small>}
+    {checked && <span className="issue-options-detail"><Check size={16}/></span>}
     {shortcut && <IssueOptionsShortcut value={shortcut}/>}
     {nested && <span className="issue-options-chevron" aria-hidden="true">▶</span>}
   </Command.Item>

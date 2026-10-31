@@ -7,6 +7,39 @@
 .issue-properties-rail > div {
   min-height: 0;
 }
+.issue-properties > .issue-team-property.core-property-picker { display: none; }
+@media (min-width: 1024px) {
+  .issue-view.full:not(.issue-view--triage):not(.issue-view--embedded) .issue-layout {
+    width: calc(100% - 95px);
+    grid-template-columns: minmax(0, 667.5px) minmax(0, 1fr);
+    gap: 48px;
+  }
+  .issue-properties > h3,
+  .issue-properties .property-group h4 {
+    width: fit-content;
+    height: 15.5px;
+    line-height: normal;
+    margin-top: 2.25px;
+    margin-bottom: 10.25px;
+    color: var(--issue-muted);
+  }
+  html:root body .issue-properties > .issue-team-property.core-property-picker { display: flex; align-items: center; gap: 4px; }
+  .issue-team-property .issue-assignee-profile svg { transform: rotate(-90deg); }
+  .issue-team-property:hover .issue-assignee-profile { opacity: 1; transform: none; }
+  .issue-properties .core-property-trigger.muted { color: var(--issue-muted); }
+  .issue-properties > .estimate-picker,
+  .issue-properties > .cycle-picker { min-height: 32px; display: flow-root; }
+  .issue-properties .issue-project-group { margin-top: 33.25px; }
+  .issue-properties > .property-group { margin-top: 31.25px; }
+  html:root body .issue-properties .estimate-picker .label-project-trigger { margin: 2px 0; line-height: normal; }
+}
+@media (min-width: 1024px) and (max-width: 1240px) {
+  .issue-view.full:not(.issue-view--triage):not(.issue-view--embedded) .issue-layout {
+    width: calc(100% - 58px);
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 24px;
+  }
+}
 @media (max-width: 800px) {
   .issue-properties-rail {
     padding: 0 14px 24px;

@@ -1110,6 +1110,13 @@ html:root body .agent-skills-trigger:not(#_)[data-state=open] {
 html:root body .agent-skills-trigger:not(#_) svg { width: 14px; height: 14px; }
 
 /* Pickers whose search stays hidden until you type. */
+@media (min-width: 1024px) {
+  html:root body .property-command-surface.issue-labels-menu .property-command-options [role=option] { grid-template-columns: 16px 18px minmax(0,1fr); gap: 6px; padding: 0 18px 0 14px; }
+  html:root body .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-checkbox { display: none; }
+  html:root body .property-command-surface.issue-labels-menu .property-command-options [role=option][aria-checked=true] .property-command-checkbox { display: grid; grid-column: 1; border: 0; background: transparent; box-shadow: none; }
+  html:root body .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-icon { grid-column: 2; }
+  html:root body .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-label { grid-column: 3; }
+}
 html:root body .property-command-surface .property-command-search.is-visually-hidden:not(#_) {
   position: fixed;
   left: -10000px;

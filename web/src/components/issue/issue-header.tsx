@@ -28,6 +28,7 @@ export type IssueSaveState = 'idle' | 'saving' | 'saved' | 'error'
 interface IssueHeaderProps {
   issue: Issue; states: WorkflowState[]; presence?: Presence[]; saveState: IssueSaveState; onRetrySave?: () => void
   data: BootstrapData; activities: ActivityEvent[]; issueOptionsActions?: IssueOptionsActions
+  onDeleteRelation?: (relationId: string) => Promise<void>
   /** 1-based position in the list the issue was opened from; `total` 0 when it was opened without a list (no counter). */
   position: number; total: number; onClose: () => void; onNavigate: (direction: 'next' | 'previous') => void
   /** Shows a close button: only previews need one, the full issue page closes with Esc and its breadcrumbs. */
@@ -43,7 +44,7 @@ interface IssueHeaderProps {
   variant?: 'page' | 'triage'
 }
 
-export function IssueHeader({ issue, presence = [], saveState, onRetrySave, data, activities, issueOptionsActions, position, total, closable = false, onClose, onNavigate, onNavigateRoot, returnPath, navigationTrail, onUpdate, onDelete, onRelation, triageActions, variant = 'page' }: IssueHeaderProps) {
+export function IssueHeader({ issue, presence = [], saveState, onRetrySave, data, activities, issueOptionsActions, position, total, closable = false, onClose, onNavigate, onNavigateRoot, returnPath, navigationTrail, onUpdate, onDelete, onRelation, onDeleteRelation, triageActions, variant = 'page' }: IssueHeaderProps) {
   const t = useOptionalTranslate()
   const favorite=data.favorites.some(item=>item.resourceType==='issue'&&item.resourceId===issue.id)
   const canGoNext=position<total, canGoPrevious=position>1
@@ -66,7 +67,7 @@ export function IssueHeader({ issue, presence = [], saveState, onRetrySave, data
   const presenceGroup=viewers.length>0?<IssuePresence viewers={viewers} label={t('People viewing this issue')}/>:null
   return <header className={triage?'issue-header issue-header--triage':'issue-header'}>
     <button type="button" data-sidebar-trigger aria-label="Open sidebar" onClick={() => window.dispatchEvent(new Event('flow:open-sidebar'))} />
-    <div className="issue-header-context"><nav className="issue-breadcrumb" aria-label="Issue breadcrumb">{!triage&&breadcrumbs.map((crumb,index)=><span className="issue-breadcrumb-segment" key={crumb.href}><BreadcrumbLink crumb={crumb} data={data} onClick={index===breadcrumbs.length-1 && hasOrigin && onNavigateRoot ?event=>activateLink(event,onNavigateRoot) : undefined}/><span className="issue-breadcrumb-separator" aria-hidden="true">›</span></span>)}<a className="issue-breadcrumb-current" href={issuePath(data.workspace.urlKey,issue)} aria-current="page"><span className="issue-breadcrumb-label"><strong>{issue.identifier}</strong><span>{issue.title}</span></span></a></nav><HeaderTooltip label={t(favorite?'Unfavorite issue':'Favorite issue')} shortcut="⌥ F"><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}>{favorite?<FlowFavoriteFilledIcon className="issue-header-favorite-filled"/>:<FlowFavoriteIcon/>}</button></HeaderTooltip><IssueOptionsMenu issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
+    <div className="issue-header-context"><nav className="issue-breadcrumb" aria-label="Issue breadcrumb">{!triage&&breadcrumbs.map((crumb,index)=><span className="issue-breadcrumb-segment" key={crumb.href}><BreadcrumbLink crumb={crumb} data={data} onClick={index===breadcrumbs.length-1 && hasOrigin && onNavigateRoot ?event=>activateLink(event,onNavigateRoot) : undefined}/><span className="issue-breadcrumb-separator" aria-hidden="true">›</span></span>)}<a className="issue-breadcrumb-current" href={issuePath(data.workspace.urlKey,issue)} aria-current="page"><span className="issue-breadcrumb-label"><strong>{issue.identifier}</strong><span>{issue.title}</span></span></a></nav><HeaderTooltip label={t(favorite?'Unfavorite issue':'Favorite issue')} shortcut="⌥ F"><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}>{favorite?<FlowFavoriteFilledIcon className="issue-header-favorite-filled"/>:<FlowFavoriteIcon/>}</button></HeaderTooltip><IssueOptionsMenu onDeleteRelation={onDeleteRelation} issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
     {saveState==='error'?<button type="button" className="save-state error" onClick={onRetrySave}>Save failed · Retry</button>:<span className={`save-state ${saveState}`} role="status" aria-live="polite">{saveState==='saving'?'Saving...':saveState==='saved'?'Saved':''}</span>}
     {triage&&presenceGroup}
     {triageActions}
