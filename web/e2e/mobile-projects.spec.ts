@@ -1,6 +1,54 @@
 import { expect, test } from '@playwright/test'
 import { test as workspaceTest } from './workspace-fixture'
 
+workspaceTest.describe('mobile cycles timeline', () => {
+  workspaceTest.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  for (const width of [390, 375]) {
+    workspaceTest(`cycle cards, cooldown, chart and navigation at ${width}px`, async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Flow-Workspace': workspaceKey, 'X-Workspace-Key': workspaceKey }
+      const bootstrap = await (await request.get('/api/bootstrap', { headers })).json()
+      const team = bootstrap.teams[0] as { id: string; key: string }
+      expect((await request.patch(`/api/teams/${team.id}/cycle-settings`, { headers, data: { enabled: true, autoCreate: true, durationWeeks: 3, cooldownWeeks: 2, upcomingCount: 1 } })).ok()).toBe(true)
+      const data = await (await request.get('/api/bootstrap', { headers })).json()
+      const cycles = data.cycles as { id: string; number: number; startsAt: string; endsAt: string }[]
+      const first = cycles.find(cycle => cycle.number === 1)!
+      const next = cycles.find(cycle => cycle.number === 2)!
+      expect((await request.patch(`/api/teams/${team.id}/cycle-settings`, { headers, data: { autoCreate: false } })).ok()).toBe(true)
+      expect((await request.patch(`/api/cycles/${first.id}`, { headers, data: { status: 'completed', name: '[mobile] Finished cycle' } })).ok()).toBe(true)
+      expect((await request.patch(`/api/cycles/${next.id}`, { headers, data: { name: '[mobile] Next cycle' } })).ok()).toBe(true)
+      expect((await request.post('/api/issues', { headers, data: { title: '[mobile] Planned work', teamId: team.id, cycleId: first.id, stateId: 'state_todo' } })).status()).toBe(201)
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 667 })
+      await page.goto(`/${workspaceKey}/team/${team.key}/cycles`)
+      const completed = page.getByTestId('cycle-timeline-1')
+      const upcoming = page.getByTestId('cycle-timeline-2')
+      await expect(completed).toBeVisible()
+      expect((await upcoming.boundingBox())?.y).toBe(44)
+      expect((await upcoming.boundingBox())?.height).toBe(70)
+      expect((await completed.boundingBox())?.y).toBe(164)
+      expect((await completed.boundingBox())?.height).toBe(419)
+      await expect(page.locator('.flow-cycle-cooldown')).toContainText('2 weeks cooldown')
+      await expect(completed.locator('.is-scope strong')).toHaveText('1')
+      await expect(completed.locator('.cycle-timeline-metric-label')).toHaveText(['Scope', 'Started', 'Completed'])
+      await expect(completed.locator('.estimate-icon')).toHaveCount(0)
+      const chart = completed.getByRole('img')
+      expect((await chart.boundingBox())?.width).toBe(width - 112)
+      await expect.poll(() => chart.evaluate(node => {
+        const canvas = node as HTMLCanvasElement
+        return canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 === 3 && value > 0)
+      })).toBe(true)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await page.getByRole('switch', { name: 'Add to favorites', exact: true }).click()
+      await expect(page.getByRole('switch', { name: 'Remove from favorites', exact: true })).toHaveAttribute('aria-checked', 'true')
+      await upcoming.click()
+      await expect(page).toHaveURL(/\/cycle\/2(?:\/|$)/)
+      await page.goBack()
+      await page.getByTestId('cycle-timeline-1').click()
+      await expect(page).toHaveURL(/\/cycle\/1(?:\/|$)/)
+    })
+  }
+})
+
 workspaceTest.describe('mobile initiative overview', () => {
   workspaceTest.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
