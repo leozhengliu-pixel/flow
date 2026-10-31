@@ -64,7 +64,7 @@ describe('context-aware command menu', () => {
     setup()
     expect(screen.queryByLabelText('Command context')).not.toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /Change status/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('option', { name: /Create new issue\.\.\.C/ })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /Create new issue…C/ })).toBeInTheDocument()
   })
 
   it('shows the open issue as a context chip and lists issue actions first', () => {
