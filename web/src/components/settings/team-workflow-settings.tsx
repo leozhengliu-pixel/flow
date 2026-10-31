@@ -592,6 +592,7 @@ function TeamOverview({
   };
   const desktopIcons: Partial<Record<TeamSettingsSection, typeof Settings>> = { general: Settings, security: LockKeyhole, members: Users, notifications: MessageSquare, 'issue-labels': Tag, 'project-labels': Tag, templates: FileText, 'recurring-issues': Repeat, statuses: CircleDot, 'project-statuses': FolderKanban, workflow: Layers, triage: Layers, cycles: Repeat };
   const mobileIcons: Partial<Record<TeamSettingsSection, ComponentType<{ size?: number }>>> = { general: () => <TeamSettingsIcon />, security: LockKeyhole, members: MembersIcon, notifications: SlackIcon, 'issue-labels': LabelIcon, 'project-labels': LabelIcon, templates: MobileTemplatesIcon, 'recurring-issues': MobileRecurringIcon, statuses: CircleDot, 'project-statuses': FolderKanban, workflow: Layers, triage: Layers, cycles: Repeat };
+  const primaryGroup: TeamSettingsSection[] = desktop ? ["general", "members", "notifications", "security"] : ["general", "members", "notifications"];
   const group = (title: string | undefined, ids: TeamSettingsSection[]) => (
     <TeamSection title={title}>
       <div className="team-overview-list" data-team-overview-group={ids.join("-")}>
@@ -616,7 +617,7 @@ function TeamOverview({
   );
   return (
     <div className="team-overview-page">
-      {group(undefined, ["general", "members", "notifications", "security"])}
+      {group(undefined, primaryGroup)}
       {group(t("Issues, projects, and documents"), [
         "issue-labels",
         "project-labels",

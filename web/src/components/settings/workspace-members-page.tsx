@@ -607,6 +607,9 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
           </div>
         )}
       </div>
+      <button type="button" className="settings-export-mobile" onClick={exportCsv}>
+        {t("Export CSV")}
+      </button>
       {selecting && (
         <div className="settings-members-bulk-bar" role="toolbar" aria-label={t("Selected members")}>
           <span>

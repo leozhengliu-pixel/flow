@@ -294,6 +294,11 @@ export function WorkspaceTeamsSettings({
         )}
       </div>
       )}
+      {admin && visibility !== "Recently deleted" && data.teams.length > 0 && (
+        <button className="settings-export-mobile" type="button" onClick={exportCsv}>
+          {t("Export CSV")}
+        </button>
+      )}
     </div>
   );
 }
