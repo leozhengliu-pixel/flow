@@ -7,7 +7,7 @@ test.skip(({ isMobile }) => isMobile, 'desktop keyboard shortcuts')
 const dialogRows = [
   'Open command menu', 'Save or submit', 'Send comment', 'Back', 'Open search',
   'Open help menu', 'View keyboard shortcuts', 'Switch workspace', 'Log out', 'Ask Flow',
-  'Toggle left sidebar', 'Toggle right sidebar', 'Open parent issue', 'Go to team', 'Go to inbox',
+  'Toggle left sidebar', 'Toggle right sidebar', 'Open issue', 'Open parent issue', 'Go to team', 'Go to inbox',
   'Go to Agent', 'Go to my issues', 'Go to reviews', 'Go to settings', 'Go to triage', 'Go to drafts',
   'Go to active issues', 'Go to backlog', 'Go to cycles', 'Go to projects', 'Go to pulse', 'Go to customers',
   'Open customer…', 'Open document…', 'New issue', 'Accept issue', 'Decline issue',

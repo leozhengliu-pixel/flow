@@ -76,7 +76,9 @@ func TestRepeatedPatchWritesNothing(t *testing.T) {
 	handler := newHandler(s)
 	// The delivery scheduler is a background writer; pause it so this test
 	// only counts the events its own requests produce.
-	defer s.stopDeliveryScheduler(context.Background())
+	if err := s.stopDeliveryScheduler(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	var mu sync.Mutex
 	pushed := 0
 	repository.SetRealtimeSink(func(workspace string, event domain.RealtimeEvent) {

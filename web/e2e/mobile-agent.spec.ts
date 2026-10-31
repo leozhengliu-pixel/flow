@@ -53,7 +53,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect(Math.abs(((await time.boundingBox())?.x ?? 0) + ((await time.boundingBox())?.width ?? 0) - (viewport.width - 33.5))).toBeLessThanOrEqual(1)
       await expect(popover.locator('[data-history-section="weeks-3"]').first().locator('time')).toHaveText('3w')
       await expect(popover).toHaveAttribute('data-phone-popover')
-      expect(await popover.evaluate(node => getComputedStyle(node, '::after').boxShadow)).toBe('lch(25.68 1.93 272) 0px 0px 0px 0.5px inset')
+      await expect(popover).toHaveCSS('border-top-style', 'solid')
+      await expect(popover).toHaveCSS('border-top-color', 'lch(25.68 1.93 272)')
       await expect(popover.getByRole('option').first()).toHaveAttribute('aria-selected', 'false')
       expect(await popover.getByRole('listbox').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true)
       expect(await popover.getByTestId('agent-chat-switcher-divider').count()).toBe(5)
@@ -76,7 +77,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/agent/switcher-3$`))
     })
 
-    test('phone display options retain both layout pill rings', async ({ page, request, workspaceKey }) => {
+    test('phone display options keep the measured layout pill borders without shadows', async ({ page, request, workspaceKey }) => {
       const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
       const { teams } = await response.json() as { teams: { key: string }[] }
       await page.goto(`/${workspaceKey}/team/${teams[0].key}/all`)
@@ -85,7 +86,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(dialog).toHaveAttribute('data-phone-popover')
       for (const name of ['List', 'Board']) {
         const tab = dialog.getByRole('tab', { name, exact: true })
-        expect(await tab.evaluate(node => getComputedStyle(node, '::after').boxShadow)).not.toBe('none')
+        await expect(tab).toHaveCSS('border-top-style', 'solid')
+        await expect(tab).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)')
+        await expect(tab).toHaveCSS('box-shadow', 'none')
+        await expect(tab).toHaveCSS('height', '28px')
       }
     })
   })
