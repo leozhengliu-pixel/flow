@@ -26,6 +26,7 @@
 }
 .label-settings-icon-button:focus-visible { outline: 0; box-shadow: 0 0 0 1px var(--focus-ring); }
 .label-settings-icon-button svg { width: 14px; height: 14px; }
+.domain-labels-search > svg { width: 14px; height: 14px; flex: none; }
 
 /* Applied filters: one rounded strip aligned with the page header. */
 .label-settings-filter-bar {
@@ -293,4 +294,203 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
 @media (max-width: 760px) {
   .label-settings-filter-bar { margin: 0 16px 8px; }
   .domain-labels-toolbar.label-settings-toolbar { grid-template-columns: minmax(0, 1fr) max-content max-content; }
+}
+
+/* The phone label list is full-bleed below the compact settings breadcrumb. */
+@media (max-width: 760px) {
+  html:root .settings-app .settings-main > .settings-content:has(.domain-labels-header) {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0 0 96px;
+  }
+  html:root .settings-app .settings-main .domain-labels-header {
+    box-sizing: border-box;
+    height: 36px;
+    min-height: 36px;
+    align-items: center;
+    gap: 12px;
+    margin: 0 22px 18px;
+    white-space: nowrap;
+  }
+  html:root .settings-app .settings-main .domain-labels-header h1 {
+    min-width: 0;
+    flex: 1;
+    overflow: visible;
+    white-space: nowrap;
+    letter-spacing: -.16px;
+  }
+  html:root .settings-app .settings-main .domain-labels-header .settings-header-actions {
+    flex: none;
+    gap: 8px;
+    margin: 0;
+  }
+  html:root .settings-app .settings-main .domain-labels-header .settings-action {
+    height: 36px;
+    min-height: 36px;
+    padding: 0 12px;
+    border-radius: 9999px;
+    line-height: normal;
+    letter-spacing: normal;
+  }
+  html:root .settings-app .settings-main .domain-labels-header .settings-action:first-child { width: 93.04px; }
+  html:root .settings-app .settings-main .domain-labels-header .settings-action:last-child { width: 86.09px; }
+  html:root .settings-app .settings-main .domain-labels-toolbar.label-settings-toolbar {
+    box-sizing: border-box;
+    width: 100%;
+    height: 32px;
+    grid-template-columns: minmax(0, 1fr) 32px 32px;
+    grid-template-rows: 32px;
+    column-gap: 6px;
+    margin: 0 0 8px;
+    padding: 0 22px 0 16px;
+    border-top: 0;
+  }
+  html:root .settings-app .settings-main .domain-labels-toolbar > * { position: relative; top: .25px; }
+  html:root .settings-app .settings-main .domain-labels-search {
+    grid-column: 1;
+    width: calc(100% - 18px);
+    height: 28px;
+    align-self: center;
+    margin: 0;
+  }
+  html:root .settings-app .settings-main .domain-labels-search > svg {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    color: var(--set-desc);
+  }
+  html:root .settings-app .settings-main .domain-labels-search input {
+    width: 100%;
+    height: 28px;
+    border: .5px solid transparent;
+    background: var(--set-panel-bg);
+    border-radius: 999px;
+    line-height: normal;
+  }
+  html:root .settings-app .settings-main .domain-labels-toolbar > span { display: none; }
+  html:root .settings-app .settings-main .label-settings-icon-button {
+    width: 32px;
+    height: 32px;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    box-shadow: none;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  html:root .settings-app .settings-main .label-settings-icon-button > svg { color: var(--set-desc); }
+  html:root .settings-app .settings-main .domain-labels-grid {
+    width: 100%;
+    grid-template-columns: [indent] 76px [title] minmax(0, 1fr) [menu] 28px [end-padding] 32px !important;
+    min-height: 480px;
+  }
+  html:root .settings-app .settings-main .domain-labels-table-header {
+    height: 30px;
+    align-items: start;
+  }
+  html:root .settings-app .settings-main .domain-labels-table-header button:first-child {
+    height: 28px;
+    margin-left: -7px;
+    padding: 0 6px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+    gap: 2px;
+    color: var(--set-button-text);
+  }
+  html:root .settings-app .settings-main .domain-labels-table-header button:first-child > span {
+    color: var(--set-desc);
+    font-size: 12px;
+    font-weight: 450;
+    line-height: normal;
+  }
+  html:root .settings-app .settings-main .domain-labels-table-header button:first-child > svg { color: var(--set-button-text); }
+  html:root .settings-app .settings-main .domain-labels-row {
+    width: 100%;
+    height: 44px;
+  }
+  html:root .settings-app .settings-main .domain-labels-row > .domain-label-select {
+    position: absolute;
+    left: 20px;
+    top: 11px;
+    width: 14px;
+    height: 22px;
+    display: block;
+    padding: 4px 0;
+  }
+  html:root .settings-app .settings-main .domain-labels-row > .domain-label-select input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    opacity: 1;
+    appearance: none;
+    margin-left: 3px;
+    border: .5px solid var(--set-desc);
+    border-radius: 4px;
+    background: transparent;
+  }
+  html:root .settings-app .settings-main .domain-labels-row > .domain-label-select input:checked {
+    border-color: var(--accent-primary);
+    background: var(--accent-primary);
+  }
+  html:root .settings-app .settings-main .domain-labels-row > .domain-label-name {
+    grid-column: title;
+    height: 28px;
+    padding-right: 12px;
+  }
+  html:root .settings-app .settings-main .domain-labels-row > .domain-label-menu-button {
+    grid-column: menu;
+    width: 36px;
+    height: 36px;
+    opacity: 0;
+    color: var(--set-button-text);
+    transform: none;
+  }
+  html:root .settings-app .settings-main .domain-label-menu-button svg { width: 16px; height: 16px; }
+  html:root .settings-app .settings-main .domain-label-name-input {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    height: 28.5px;
+    margin-left: -5px;
+    padding: 0 8px 0 5.5px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    outline: 0;
+    color: var(--set-button-text);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  html:root .settings-app .settings-main .domain-label-name-input span {
+    display: block;
+    color: inherit;
+    font: inherit;
+    line-height: normal;
+    white-space: nowrap;
+    position: relative;
+    top: .5px;
+  }
+  html:root .settings-app .settings-main .domain-label-name-input > input {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: transparent;
+    caret-color: transparent;
+    font: inherit;
+  }
+  html:root .settings-app .settings-main .domain-label-name-input > input:disabled { cursor: default; }
+  html:root .settings-app .settings-main .domain-label-name-input > span { position: relative; z-index: 2; pointer-events: none; }
+  html:root .settings-app .settings-main .domain-labels-row:not(.is-nested):not(.is-group) > .domain-label-name > .domain-label-color[data-kind="label"] {
+    margin-left: -6px;
+  }
+  html:root .settings-app .settings-main .domain-label-color { width: 25px; height: 25px; }
 }

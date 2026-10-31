@@ -55,6 +55,27 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
 }
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`${viewport.width}px issue labels`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Issue labels' })
+
+    workspaceTest('renders the compact label list with filter and actions', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      for (const [name, color] of [['[mobile] Bug', '#EB5757'], ['[mobile] Feature', '#BB87FC'], ['[mobile] Improvement', '#4EA7FC']]) {
+        expect((await request.post('/api/labels', { headers, data: { name, color, resourceType: 'issue' } })).status()).toBe(201)
+      }
+      await page.goto(`/${workspaceKey}/settings/issue-labels`)
+      await expect(page.locator('.domain-labels-header h1')).toHaveText('Issue labels')
+      await expect(page.locator('.domain-labels-header .settings-action')).toHaveCount(2)
+      await expect(page.locator('.domain-labels-search input')).toBeVisible()
+      const mobileRows = page.locator('.domain-labels-row[data-testid="domain-label-row"]', { hasText: '[mobile]' })
+      await expect(mobileRows).toHaveCount(3)
+      await expect(mobileRows.locator('.domain-label-color i')).toHaveCount(3)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  })
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   workspaceTest.describe(`${viewport.width}px workspace general`, () => {
     workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Workspace general' })
 
