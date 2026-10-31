@@ -140,6 +140,15 @@ export function timelineHeader(range: TimelineRange): { major: TimelineSegment[]
   }
 }
 
+export function desktopTimelineHeader(range: TimelineRange, locale: string) {
+  const tickDays = range.zoom === 'year' ? 14 : range.zoom === 'quarter' ? 7 : 1
+  return {
+    major: segments(range, date => new Date(date.getFullYear(), date.getMonth() + 1, 1), startOfMonth, date =>
+      new Intl.DateTimeFormat(locale, { month: 'short', ...(date.getMonth() === 0 ? { year: 'numeric' } : {}) }).format(date)),
+    minor: segments(range, date => addTimelineDays(date, tickDays), range.zoom === 'week' ? date => date : startOfWeek, date => String(date.getDate())),
+  }
+}
+
 export type TimelineSpan = { start: Date; end: Date; hasStart: boolean; hasTarget: boolean }
 
 /**

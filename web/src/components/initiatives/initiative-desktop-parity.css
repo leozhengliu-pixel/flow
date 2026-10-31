@@ -1,5 +1,17 @@
 @media (min-width: 1024px) {
   .li-page { --li-select-width: 32px; --li-column-status: 106px; --li-column-priority: 68px; --li-column-owner: 50px; --li-column-target: 112px; --li-column-projects: 59px; --li-column-health: 64px; --li-column-activeProjects: 104px; }
+  .li-detail, .li-page { height: calc(100% - 44px); margin-bottom: 36px; }
+  .li-detail-header { padding: 0 8px 0 17px; }
+  .li-detail .li-detail-all, .li-detail .li-detail-separator { display: none; }
+  .li-page .li-row { padding-right: 0; }
+  .li-page .li-columns button { padding-inline: 6px; }
+  .li-page .li-hierarchy-toggle:not([aria-expanded]),
+  .li-page .li-detail-phone-icon,
+  .li-page .li-health > i { display: none; }
+  .li-page .li-phone-health { display: block; width: 14px; height: 14px; }
+  .li-page .li-health.is-onTrack .li-phone-health { color: var(--project-health-on-track); }
+  .li-page .li-health.is-atRisk .li-phone-health { color: var(--project-health-at-risk); }
+  .li-page .li-health.is-offTrack .li-phone-health { color: var(--project-health-off-track); }
   .li-detail-toolbar { height: 43px; flex-basis: 43px; padding: 0 8px; border-bottom-color: transparent; }
   .li-detail-toolbar nav { gap: 4px; }
   .li-detail-toolbar nav > a { box-sizing: border-box; height: 28px; padding: 0 10px; border-radius: 9999px; font: 500 12px var(--font); line-height: normal; }
@@ -47,10 +59,17 @@
   .li-latest-update footer { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
   .li-latest-update__comments { min-width: 37px; background: var(--ui-pill-bg) !important; }
   .li-detail .li-description { margin: 0; }
-  .li-description h3 { width: auto; }
+  .li-description h3 { width: auto; height: 27.5px; line-height: 27.5px; }
+  .li-description .mention-text-field { box-sizing: border-box; min-height: 110px; }
+  .li-overview-lists { margin-top: 80px; }
+  .li-overview-list > header { min-height: 40px; }
   .li-detail-sidebar { position: static; display: flex; flex-direction: column; width: 400px; flex: 0 0 400px; min-height: 0; padding: 0 8px 8px 4px; border: 0; background: transparent; box-shadow: none; }
   .li-detail-sidebar > section { flex-shrink: 0; margin: 0 0 8px; padding: 6px 12px 12px; border: .5px solid var(--theme-control-hover); border-radius: 10px; background: var(--theme-surface-1); }
   .li-detail-sidebar > section + section { margin-top: 0; padding: 6px 12px 12px; }
+  .li-detail-sidebar > section:first-child { padding-bottom: 5px; }
+  .li-detail-sidebar .activity-sidebar-section__heading { height: 28px; font: 500 13px var(--font); line-height: normal; }
+  .li-detail-sidebar .activity-sidebar-section__see-all { font-size: 12px; font-weight: 450; }
+  .li-detail-sidebar .activity-sidebar-section__teaser li { font: 450 13px var(--font); line-height: normal; }
   .li-detail-sidebar > section:nth-child(2) { order: 2; }
   .li-detail-sidebar .li-sidebar-heading { height: 28px; font: 500 13px var(--font); line-height: normal; }
   .li-detail-sidebar dl { grid-template-columns: 98px minmax(0, 1fr); padding: 4px 0 0; }
@@ -62,8 +81,9 @@
   .li-sidebar-teams { order: 3; }
   .li-initiative-projects { --li-project-health: 56px; --li-project-priority: 68px; --li-project-lead: 80px; --li-project-target: 86px; --li-project-status: 72px; }
   .li-initiative-projects__list { margin-inline: 0; }
-  .li-overview .li-initiative-projects > .li-initiative-projects__list { margin-inline: 0; }
-  .li-project-columns { font-size: 12px; }
+  .li-overview .li-initiative-projects > .li-initiative-projects__list { margin-inline: 8px; width: calc(100% - 16px); }
+  .li-project-columns, .li-detail-project-row { box-sizing: border-box; min-width: 0; width: 100%; padding-inline: 0; }
+  .li-project-columns { height: 32px; font-size: 12px; line-height: normal; }
   .li-detail-project-row .li-health { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .li-detail-project-row { font-size: 12px; }
   .li-project-count { white-space: nowrap; gap: 8px; }
@@ -72,9 +92,12 @@
   .li-name strong { line-height: normal; }
 }
 
+.li-project-count__value { display: contents; }
 .li-project-count__ring, .li-latest-update > .li-latest-update__desktop-action, .li-sidebar-teams { display: none; }
 @media (min-width: 1024px) {
   .li-project-count__ring { display: inline-flex; }
+  .li-project-count { min-width: 57.4px; padding-inline: 2.5px; font-weight: 450; }
+  .li-project-count__value { display: inline; }
   .li-detail .li-latest-update > .li-latest-update__desktop-action { display: inline-flex; }
   .li-detail-sidebar > .li-sidebar-teams { display: block; }
 }

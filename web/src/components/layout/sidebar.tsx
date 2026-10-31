@@ -140,6 +140,7 @@ import { inboxUnread as inboxUnreadStore, useInboxUnread } from "@/lib/inbox-unr
 import { pulseAudio, usePulseAudio } from "@/lib/pulse-audio";
 import { Command } from 'cmdk';
 import { usePhoneLayout } from '@/hooks/use-phone-layout';
+import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import { PhoneCommandMenu } from '@/components/ui/phone-menu';
 
 export type PageId =
@@ -1624,6 +1625,8 @@ function TeamNavigation({
   const overviewPath = teamHomePath(workspaceSlug, team.key);
   const onOverview =
     typeof location !== "undefined" && location.pathname === overviewPath;
+  const hasCycles = data.cycles.some(cycle => cycle.teamId === team.id);
+  const desktop = useDesktopSettings();
   // Home reopens the team home tab the viewer last used (Overview, Documents, Loops or Members).
   const homeTab = useTeamHomeTab(data.viewer.id, team.id);
   const homePath = teamHomeTabPath(workspaceSlug, team.key, homeTab, workspaceFeatureEnabled(data.workspaceSettings?.featureFlags, "loops"));
@@ -1672,7 +1675,7 @@ function TeamNavigation({
             to={teamIssuesPath(workspaceSlug, team.key)}
             onClick={onNavigate}
           />
-          {cyclesEnabled && (
+          {cyclesEnabled && (!desktop || hasCycles) && (
             <Nav
               active={page === "cycles" || page === "cycle-detail"}
               icon={phone ? <PhoneCycleIcon /> : <FlowCycleIcon />}

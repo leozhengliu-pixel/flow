@@ -1,4 +1,8 @@
 import * as Tooltip from '@radix-ui/react-tooltip'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { ChevronDown } from 'lucide-react'
+import { useDesktopSettings } from '@/hooks/use-desktop-settings'
+import { useI18n } from '@/i18n/i18n'
 import { memo, useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { useCurrentTime } from '@/hooks/use-current-time'
 import { useLatestRef } from '@/hooks/use-latest-ref'
@@ -8,6 +12,7 @@ import type { ProjectDataGroup, ProjectPageItem } from './projects-data-view'
 import {
   addTimelineDays,
   daysBetween,
+  desktopTimelineHeader,
   isoTimelineDay,
   normalizeTimelineZoom,
   parseTimelineDay,
@@ -31,6 +36,7 @@ import {
   type TimelineZoom,
 } from './project-timeline-model'
 import './project-timeline.css'
+import './project-timeline-desktop.css'
 
 export const TIMELINE_LABEL_WIDTH = 240
 const ROW_HEIGHT = 36
@@ -41,6 +47,7 @@ type DateInput = { startDate?: string; targetDate?: string }
 
 export type ProjectTimelineProps = {
   groups: ProjectDataGroup[]
+  grouping?: string
   zoom?: TimelineZoom
   onZoomChange?: (zoom: TimelineZoom) => void
   onOpenProject?: (project: ProjectPageItem) => void
@@ -64,7 +71,12 @@ type Row =
   | { kind: 'group'; key: string; y: number; group: ProjectDataGroup }
   | { kind: 'project'; key: string; y: number; project: ProjectPageItem; span?: TimelineSpan }
 
-export function ProjectTimeline({ groups, zoom: zoomProp, onZoomChange, onOpenProject, onOpenMilestone, onUpdateProject, onUpdateMilestone, onCreateDependency, renderGroupIcon, groupCount, today: todayProp }: ProjectTimelineProps) {
+export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange, onOpenProject, onOpenMilestone, onUpdateProject, onUpdateMilestone, onCreateDependency, renderGroupIcon, groupCount, today: todayProp }: ProjectTimelineProps) {
+  const desktop = useDesktopSettings()
+  const { t, locale } = useI18n()
+  // On desktop the time axis spans the pane; project labels overlay its left edge.
+  const TIMELINE_LABEL_WIDTH = desktop ? 0 : 240
+  const ROW_HEIGHT = desktop ? 72 : 36
   const [localZoom, setLocalZoom] = useState<TimelineZoom>(() => normalizeTimelineZoom(zoomProp))
   const zoom = zoomProp ? normalizeTimelineZoom(zoomProp) : localZoom
   const [drag, setDragState] = useState<Drag>()
@@ -86,15 +98,17 @@ export function ProjectTimeline({ groups, zoom: zoomProp, onZoomChange, onOpenPr
     const output: Row[] = []
     let y = 0
     for (const group of flat) {
-      output.push({ kind: 'group', key: `group:${group.id}`, y, group })
-      y += GROUP_HEIGHT
+      if (!desktop || grouping !== 'No grouping') {
+        output.push({ kind: 'group', key: `group:${group.id}`, y, group })
+        y += GROUP_HEIGHT
+      }
       for (const project of group.projects) {
         output.push({ kind: 'project', key: `project:${group.id}:${project.id}`, y, project, span: projectTimelineSpan(project.rawStartDate, project.rawTargetDate) })
         y += ROW_HEIGHT
       }
     }
     return { rows: output, height: y }
-  }, [groups])
+  }, [groups, desktop, grouping, ROW_HEIGHT])
 
   const range = useMemo(() => {
     const dates: Date[] = []
@@ -103,9 +117,10 @@ export function ProjectTimeline({ groups, zoom: zoomProp, onZoomChange, onOpenPr
       if (row.span) dates.push(row.span.start, row.span.end)
       for (const milestone of row.project.milestones ?? []) { const date = parseTimelineDay(milestone.targetDate); if (date) dates.push(date) }
     }
-    return timelineRange(dates, today, zoom)
-  }, [rows, today, zoom])
-  const header = useMemo(() => timelineHeader(range), [range])
+    const range = timelineRange(dates, today, zoom)
+    return desktop && zoom === 'year' ? { ...range, pxPerDay: 2.5, width: range.days * 2.5 } : range
+  }, [rows, today, zoom, desktop])
+  const header = useMemo(() => desktop ? desktopTimelineHeader(range, locale) : timelineHeader(range), [range, desktop, locale])
   const gridLines = useMemo(() => (zoom === 'week' ? header.minor.filter(segment => segment.emphasis) : header.minor), [header, zoom])
   const todayX = timelineX(range, today) + range.pxPerDay / 2
 
@@ -124,7 +139,7 @@ export function ProjectTimeline({ groups, zoom: zoomProp, onZoomChange, onOpenPr
       map.set(row.project.id, { ...timelineBarBox(range, row.span), y: row.y + ROW_HEIGHT / 2, start: row.span.start, end: row.span.end })
     }
     return map
-  }, [range, rows])
+  }, [range, rows, ROW_HEIGHT])
   // Only the dragged bar gets a new box so memoised rows stay untouched while dragging.
   const boxes = useMemo(() => {
     if (drag?.kind !== 'bar' || !drag.delta) return baseBoxes
@@ -155,7 +170,7 @@ export function ProjectTimeline({ groups, zoom: zoomProp, onZoomChange, onOpenPr
     } else if (previous && previous.pxPerDay === range.pxPerDay && previous.start.getTime() !== range.start.getTime()) {
       node.scrollLeft += daysBetween(previous.start, range.start) * -range.pxPerDay
     }
-  }, [range])
+  }, [range, TIMELINE_LABEL_WIDTH])
 
   const centerDate = () => {
     const node = scrollerRef.current
@@ -292,10 +307,20 @@ export function ProjectTimeline({ groups, zoom: zoomProp, onZoomChange, onOpenPr
   return <Tooltip.Provider delayDuration={200} skipDelayDuration={150}>
     <div aria-label="Project timeline" className="lp-project-timeline" data-zoom={zoom} onKeyDown={onRootKeyDown} role="region">
       <div className="lp-project-timeline__toolbar">
+        {desktop && <>
+          <button aria-label={t('Center timeline on today')} className="lp-project-timeline__today" onClick={scrollToToday} type="button">{t('Today')}</button>
+          <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={t('Timeline zoom')} className="lp-project-timeline__zoom-menu" type="button">{t(TIMELINE_ZOOM_LABELS[zoom])}<ChevronDown size={12}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="lp-project-timeline__zoom-options" data-flow-motion="floating" align="end" sideOffset={4}>
+            <DropdownMenu.RadioGroup value={zoom} onValueChange={value => { if (TIMELINE_ZOOMS.includes(value as TimelineZoom)) changeZoom(value as TimelineZoom) }}>
+              {TIMELINE_ZOOMS.map(option => <DropdownMenu.RadioItem key={option} value={option}>{t(TIMELINE_ZOOM_LABELS[option])}</DropdownMenu.RadioItem>)}
+            </DropdownMenu.RadioGroup>
+          </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+        </>}
+        {!desktop && <>
         <div aria-label="Timeline zoom" className="lp-project-timeline__zoom" role="radiogroup" title="Zoom in with + and out with −">
           {TIMELINE_ZOOMS.map(option => <button aria-checked={zoom === option} className="lp-project-timeline__zoom-option" key={option} onClick={() => changeZoom(option)} role="radio" type="button">{TIMELINE_ZOOM_LABELS[option]}</button>)}
         </div>
         <button aria-label="Center timeline on today" className="lp-project-timeline__today" onClick={scrollToToday} type="button">Today</button>
+        </>}
       </div>
       <div className="lp-project-timeline__scroller" ref={scrollerRef}>
         <div className="lp-project-timeline__canvas" style={{ width: TIMELINE_LABEL_WIDTH + range.width }}>
@@ -395,9 +420,10 @@ type RowProps = {
 }
 
 const TimelineProjectRow = memo(function TimelineProjectRow({ project, span, box, y, range, dragging, draggingMilestoneId, milestoneDelta, linkTarget, canLink, canEdit, createGhost, consumeSuppressedClick, onHover, onNudge, onOpen, onOpenMilestone, onStartBarDrag, onStartMilestoneDrag, onStartCreate, onStartLink }: RowProps) {
+  const desktop = useDesktopSettings()
   const markers = useMemo(() => timelineMilestoneMarkers(range, project.milestones), [project.milestones, range])
   const open = () => { if (!consumeSuppressedClick()) onOpen?.(project) }
-  return <div className="lp-project-timeline__row" data-link-target={linkTarget || undefined} data-timeline-project={project.id} onPointerEnter={() => onHover(project.id)} onPointerLeave={() => onHover(undefined)} style={{ top: y, height: ROW_HEIGHT }}>
+  return <div className="lp-project-timeline__row" data-link-target={linkTarget || undefined} data-timeline-project={project.id} onPointerEnter={() => onHover(project.id)} onPointerLeave={() => onHover(undefined)} style={{ top: y, height: desktop ? 72 : ROW_HEIGHT }}>
     <div className="lp-project-timeline__label">
       <button aria-label={`Open ${project.name}`} onClick={() => onOpen?.(project)} type="button"><ViewGlyph color={project.color ?? 'var(--theme-text-tertiary)'} icon={project.icon || 'Project'}/><span data-i18n-ignore>{project.name}</span></button>
     </div>
@@ -407,7 +433,7 @@ const TimelineProjectRow = memo(function TimelineProjectRow({ project, span, box
           <em>Add dates</em>
           {createGhost && <span aria-hidden="true" className="lp-project-timeline__ghost" style={{ left: createGhost.left, width: createGhost.width }}/>}
         </button>
-        : <div className="lp-project-timeline__bar" data-dragging={dragging || undefined} data-open-start={!span.hasStart || undefined} data-open-end={!span.hasTarget || undefined} style={{ left: box.left, width: box.width, '--timeline-progress': `${Math.max(0, Math.min(100, project.progress))}%` } as CSSProperties}>
+        : <div className="lp-project-timeline__bar" data-project-name={project.name} data-dragging={dragging || undefined} data-open-start={!span.hasStart || undefined} data-open-end={!span.hasTarget || undefined} style={{ left: box.left, width: box.width, '--timeline-progress': `${Math.max(0, Math.min(100, project.progress))}%` } as CSSProperties}>
           <button aria-label={`${project.name} timeline bar`} onClick={open} onKeyDown={event => { if (!canEdit || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return; event.preventDefault(); onNudge(project, span, event.key === 'ArrowLeft' ? -1 : 1) }} onPointerDown={event => onStartBarDrag(event, project, span, 'move')} type="button">
             <span data-i18n-ignore>{project.name}</span>
           </button>
