@@ -103,63 +103,14 @@ html:root .settings-app .settings-main .billing-page .settings-page-header { mar
 .billing-invoices p { color: var(--set-label); font-size: 13px; font-weight: 450; }
 
 @media (max-width: 767px) {
-  html:root .settings-app .settings-main:has(.billing-mobile) > .settings-content {
-    box-sizing: border-box;
-    width: 100%;
-    max-width: 100%;
-    margin: 0;
-    padding: 0 0 32px;
-  }
   html:root .settings-app .settings-main .billing-mobile {
-    width: calc(100% - 44px);
-    margin: 0 auto;
     color: var(--set-text);
     font: 400 16px/24px var(--font);
   }
-  .billing-mobile-title {
-    position: relative;
-    box-sizing: border-box;
-    height: 72px;
-    margin: 0 0 24px;
-    padding: 0 16px;
-  }
-  .billing-mobile-title h1 {
-    height: 32px;
-    margin: 0;
-    color: var(--set-text);
-    font: 500 24px/32px var(--font);
-    letter-spacing: -.16px;
-  }
-  .billing-mobile-description {
-    position: absolute;
-    top: 36px;
-    left: 16px;
-    width: 314px;
-    height: 36px;
-    color: var(--set-group-desc);
-    font: 450 13px/18px var(--font);
-  }
-  .billing-mobile-description span,
-  .billing-mobile-description a { display: block; }
-  .billing-mobile-description a { color: var(--set-text); text-decoration: none; }
-  .billing-mobile-all-plans {
-    position: absolute;
-    top: 40px;
-    right: 10px;
-    box-sizing: border-box;
-    width: 83.69px;
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 6px 0 8px;
-    border: .5px solid transparent;
-    border-radius: 9999px;
-    background: transparent;
-    color: var(--set-group-title);
-    font: 500 12px/normal var(--font);
-    white-space: nowrap;
-  }
+  .billing-mobile-title { position: relative; margin: 0 16px 24px; }
+  .billing-mobile-title h1 { margin: 0; font: 500 24px/32px var(--font); letter-spacing: -.16px; }
+  .billing-mobile-description { margin-top: 4px; color: var(--set-group-desc); font: 450 13px/18px var(--font); }
+  .billing-mobile-description span, .billing-mobile-description a { display: block; }
   .billing-mobile-card {
     box-sizing: border-box;
     width: 100%;
@@ -171,182 +122,33 @@ html:root .settings-app .settings-main .billing-page .settings-page-header { mar
     text-align: left;
   }
   .billing-mobile-current {
-    height: 74.5px;
+    position: relative;
+    z-index: 1;
+    min-height: 74.5px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    margin: 0 0 12px;
+    margin-bottom: 12px;
     padding: 0;
     box-shadow: 0 .5px 1px 1px var(--shadow-color-card);
-    z-index: 1;
   }
-  .billing-mobile-current > div { margin-left: 16px; }
-  .billing-mobile-current h2 {
-    margin: 0 0 4px;
-    color: var(--set-text);
-    font: 500 15px/24px var(--font);
-    letter-spacing: -.009px;
-  }
-  .billing-mobile-current p,
-  .billing-mobile-upgrade-copy p {
-    margin: 0;
-    color: var(--set-desc);
-    font: 450 12px/normal var(--font);
-  }
-  .billing-mobile-ghost {
-    box-sizing: border-box;
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    padding: 0 8px;
-    border: .5px solid transparent;
-    border-radius: 9999px;
-    background: transparent;
-    color: var(--set-control-text);
-    font: 500 12px/normal var(--font);
-    white-space: nowrap;
-  }
-  .billing-mobile-current > .billing-mobile-ghost { width: 83.51px; margin-right: 24px; }
-  .billing-mobile-upgrade {
-    height: 196.5px;
-    margin: 0 0 20px;
-    overflow: hidden;
-  }
-  .billing-mobile-upgrade-main {
-    box-sizing: border-box;
-    height: 113px;
-    padding: 16px 10.6667px 0;
-    border-bottom: .5px solid var(--set-sep);
-  }
-  .billing-mobile-upgrade-copy { height: 45px; }
-  .billing-mobile-upgrade-copy h2 {
-    display: flex;
-    gap: 8px;
-    height: 15.5px;
-    margin: 0;
-    color: var(--set-text);
-    font: 500 13px/normal var(--font);
-  }
-  .billing-mobile-upgrade-copy p { margin-top: 7px; }
-  .billing-mobile-upgrade-copy p span:first-child { margin-right: 4px; }
-  .billing-mobile-upgrade-actions {
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .billing-mobile-view-plans,
-  .billing-mobile-primary {
-    box-sizing: border-box;
-    height: 36px;
-    padding: 0 12px;
-    border: .5px solid transparent;
-    border-radius: 9999px;
-    font: 500 13px/normal var(--font);
-    white-space: nowrap;
-  }
-  .billing-mobile-view-plans { width: 110.06px; margin-left: -12px; color: var(--set-control-text); background: transparent; }
-  .billing-mobile-primary { width: 108.44px; color: var(--set-primary-text); background: var(--set-primary); box-shadow: var(--set-primary-shadow); }
-  .billing-mobile-features {
-    box-sizing: border-box;
-    height: 83.5px;
-    display: grid;
-    grid-template-columns: repeat(3, calc((100% - 3.3px) / 3));
-    grid-auto-rows: 22.5px;
-    row-gap: 0;
-    padding: 8px;
-  }
-  .billing-mobile-feature {
-    box-sizing: border-box;
-    min-width: 0;
-    height: 22.5px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    color: var(--set-desc);
-    font: 450 12px/normal var(--font);
-  }
-  .billing-mobile-feature svg { flex: none; color: var(--set-primary); }
-  .billing-mobile-feature span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .billing-mobile-usage-flow {
-    position: relative;
-    height: 65px;
-  }
-  .billing-mobile-usage-slot {
-    position: absolute;
-    inset: 0;
-    height: 65px;
-    border-radius: 10px;
-  }
+  .billing-mobile-current > div { padding: 16px; }
+  .billing-mobile-current h2 { margin: 0 0 4px; font: 500 15px/24px var(--font); letter-spacing: -.009px; }
+  .billing-mobile-current p { margin: 0; color: var(--set-desc); font: 450 12px/normal var(--font); }
   .billing-mobile-usage {
-    position: relative;
-    height: 65px;
+    min-height: 65px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    position: absolute;
-    inset: 0;
-    padding: 0 10.6667px;
-    cursor: pointer;
-    background: var(--set-card);
-  }
-  .billing-mobile-usage > svg { color: var(--set-text); }
-  .billing-mobile-usage-copy { width: calc(100% - 24px); height: 33px; display: flex; flex-direction: column; gap: 3px; }
-  .billing-mobile-usage-copy strong { height: 15.5px; color: var(--set-text); font: 500 13px/normal var(--font); }
-  .billing-mobile-usage-copy > span { height: 14.5px; display: block; color: var(--set-desc); font: 450 12px/normal var(--font); }
-  .billing-mobile-usage-copy i { display: block; width: 60px; height: 8px; margin-top: 3.25px; border-radius: 9999px; background: var(--set-search-bg); }
-  .billing-mobile-invoices-title {
-    height: 23px;
-    margin: 24px 16px 16px;
-    color: var(--set-text);
-    font: 500 15px/23px var(--font);
-  }
-  .billing-mobile-invoice-slot {
-    box-sizing: border-box;
-    height: 68px;
+    gap: 8px;
     padding: 16px 10.6667px;
-    border-radius: 10px;
-    background: transparent;
-    box-shadow: none;
-    position: relative;
-    display: flex;
-    gap: 8px;
+    cursor: pointer;
   }
-  .billing-mobile-invoice {
-    position: absolute;
-    inset: 0;
-    height: 68px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0;
-    background: var(--set-card);
-    box-shadow: var(--set-card-shadow);
-  }
-  .billing-mobile-invoice-copy { display: flex; flex-direction: column; gap: 2px; margin-left: 10.6667px; }
-  .billing-mobile-invoice-copy strong { color: var(--set-text); font: 500 13px/normal var(--font); }
-  .billing-mobile-invoice-copy span { color: var(--set-desc); font: 450 13px/normal var(--font); }
-  .billing-mobile-invoice-action { display: flex; align-items: center; gap: 8px; }
-  .billing-mobile-invoice-action a { height: 36px; display: inline-flex; align-items: center; gap: 4px; margin-right: -6px; padding: 0 12px; color: var(--set-control-text); font: 500 13px/normal var(--font); text-decoration: none; }
-  .billing-mobile-invoice-action a svg { margin-left: 4px; }
-  .billing-mobile-invoice-action > span { color: var(--set-desc); font: 450 13px/normal var(--font); }
-
-  /* Real-data mobile state: only the usage action and empty invoice state remain. */
-  .billing-mobile-usage {
-    position: relative;
-    inset: auto;
-    width: 100%;
-    margin: 0 0 24px;
-    padding: 0 16px;
-  }
-  .billing-mobile-usage-copy { width: calc(100% - 24px); }
-  .billing-mobile-usage-copy > span { height: 14.5px; }
-  .billing-mobile-invoices {
-    height: 60px;
-    display: flex;
-    align-items: center;
-    padding: 0 16px;
-  }
+  .billing-mobile-usage-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .billing-mobile-usage-copy strong { font: 500 13px/normal var(--font); }
+  .billing-mobile-usage-copy > span { color: var(--set-desc); font: 450 12px/normal var(--font); }
+  .billing-mobile-usage > svg { flex: none; color: var(--set-desc); }
+  .billing-mobile-usage:hover { background: var(--bg-hover); }
+  .billing-mobile-invoices-title { margin: 24px 16px 16px; font: 500 15px/23px var(--font); }
+  .billing-mobile-invoices { min-height: 60px; display: flex; align-items: center; padding: 16px 10.6667px; }
   .billing-mobile-invoices p { margin: 0; color: var(--set-label); font: 450 13px/normal var(--font); }
 }

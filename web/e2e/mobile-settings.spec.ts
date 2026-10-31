@@ -6,12 +6,16 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   workspaceTest.describe(`${viewport.width}px billing`, () => {
     workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Billing' })
 
-    workspaceTest('renders the compact billing plan, usage and invoice surfaces', async ({ page, workspaceKey }) => {
+    workspaceTest('shows real credits and no invoice rows in a new workspace', async ({ page, workspaceKey }) => {
+      await page.route('**/api/workspace/ai-credits', route => route.fulfill({ json: { includedMicros: 5_000_000, spentMicros: 1_250_000, remainingMicros: 3_750_000 } }))
       await page.goto(`/${workspaceKey}/settings/billing`)
       await expect(page.locator('.billing-mobile-title h1')).toHaveText('Billing')
-      await expect(page.locator('.billing-mobile-upgrade')).toBeVisible()
-      await expect(page.locator('.billing-mobile-feature')).toHaveCount(9)
-      await expect(page.locator('.billing-mobile-invoice')).toContainText('Credits purchase')
+      await expect(page.locator('.billing-mobile-current')).toBeVisible()
+      await expect(page.locator('.billing-mobile-usage')).toBeVisible()
+      await expect(page.locator('.billing-mobile-usage')).toContainText('$3.75 remaining')
+      await expect(page.locator('.billing-mobile-invoices')).toContainText('No invoices yet')
+      await expect(page.locator('.billing-mobile-invoice')).toHaveCount(0)
+      await expect(page.locator('.billing-mobile').getByRole('button', { name: /plan|upgrade/i })).toHaveCount(0)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     })
   })

@@ -1,5 +1,6 @@
 import { ChevronRight, Info } from "lucide-react";
 import { useDesktopSettings } from '@/hooks/use-desktop-settings';
+import { usePhoneLayout } from '@/hooks/use-phone-layout';
 import { useI18n } from "@/i18n/i18n";
 import { formatCredits, useAICredits, type AICredits } from "@/lib/ai-credits";
 import { settingsPath } from '@/lib/app-routes';
@@ -49,9 +50,10 @@ export function BillingSettings({ data, onOpenUsage }: { data: BootstrapData; on
   const unavailable = t("Billing is not available in Flow");
   const credits = useAICredits();
   const desktop = useDesktopSettings();
+  const phone = usePhoneLayout();
   const UsageControl = desktop ? 'a' : 'button';
-  if (!desktop) {
-    return <MobileBillingSettings data={data} credits={credits} onOpenUsage={onOpenUsage} />;
+  if (phone) {
+    return <MobileBillingSettings users={users} credits={credits} onOpenUsage={onOpenUsage} />;
   }
   return (
     <div className="billing-page">
@@ -145,9 +147,8 @@ function MobileChevronGlyph({ size = 16 }: { size?: number }) {
   );
 }
 
-function MobileBillingSettings({ data, credits, onOpenUsage }: { data: BootstrapData; credits?: AICredits; onOpenUsage: () => void }) {
+function MobileBillingSettings({ users, credits, onOpenUsage }: { users: number; credits?: AICredits; onOpenUsage: () => void }) {
   const { t } = useI18n();
-  const users = (data.members ?? []).filter((member) => member.status === "active" && !member.user.app).length || 1;
   return (
     <div className="billing-mobile">
       <header className="billing-mobile-title">
@@ -166,11 +167,11 @@ function MobileBillingSettings({ data, credits, onOpenUsage }: { data: Bootstrap
       </section>
 
       <button type="button" className="billing-mobile-card billing-mobile-usage" onClick={onOpenUsage}>
-            <span className="billing-mobile-usage-copy">
-              <strong>{t("Usage")}</strong>
-              {credits && <span>{t("{amount} remaining").replace("{amount}", formatCredits(credits.remainingMicros))}</span>}
-            </span>
-            <MobileChevronGlyph />
+        <span className="billing-mobile-usage-copy">
+          <strong>{t("Usage")}</strong>
+          {credits && <span>{t("{amount} remaining").replace("{amount}", formatCredits(credits.remainingMicros))}</span>}
+        </span>
+        <MobileChevronGlyph />
       </button>
 
       <h2 className="billing-mobile-invoices-title">{t("Recent invoices")}</h2>
