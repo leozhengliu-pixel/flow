@@ -5687,6 +5687,8 @@ Object.assign(zhCN, {
   "This will delete the webhook and stop streaming audit events.": "这将删除该 Webhook 并停止流式传输审计事件。",
 
   // Workspace: API, applications, webhooks, import/export
+  "for help and questions.": "获取帮助和解答。",
+  "Join our developer community": "加入我们的开发者社区",
   "Flow’s API provides a programmable interface to your data. Use it to build public or private apps, workflows, and integrations for Flow.":
     "Flow API 为你的数据提供可编程接口。可用它为 Flow 构建公开或私有的应用、工作流和集成。",
   "Manage your organization's OAuth applications.": "管理组织的 OAuth 应用。",

@@ -5,10 +5,14 @@ import { applicationSettingsPath } from "@/lib/app-routes";
 import type { BootstrapData } from "@/types/flow";
 import { FlowTooltip } from "@/components/ui/tooltip";
 import { AppLogo } from "@/components/ui/app-logo";
+import { usePhoneLayout } from '@/hooks/use-phone-layout';
+import { FlowGlyph } from '@/components/ui/menu-glyphs';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { applicationEditPath } from '@/lib/app-routes';
+import { ApiApplicationPlaceholder, ApiDocsLink } from './mobile-api';
 
 import { SettingsRow as Row, SettingsSection as Section } from "./settings-primitives";
 import "./oauth-application-settings.css";
-import { SettingsDocsLink } from './settings-docs-link';
 
 /**
  * An application's icon: its uploaded/linked image, else the brand mark of a well-known client (Claude, Cursor, …, matched
@@ -22,17 +26,18 @@ export function OAuthAppAvatar({ logoUrl, name, redirectUris, size = 32 }: { log
 export function OAuthApplicationsSection({ data }: { data: BootstrapData }) {
   const { t, formatDate } = useI18n();
   const navigate = useNavigate();
+  const phone = usePhoneLayout();
   const apps = data.oauthApplications;
   const createPath = applicationSettingsPath(data.workspace.urlKey, "new");
   return (
-    <Section className="oauth-app-section" title={t("OAuth applications")} description={<>{t("Manage your organization's OAuth applications.")} <SettingsDocsLink file="oauth.md"/></>}>
+    <Section className="oauth-app-section" title={t("OAuth applications")} description={<>{t("Manage your organization's OAuth applications.")} <ApiDocsLink file="oauth.md"/></>}>
       {apps.length ? (
         <>
           <div className="oauth-app-list-header">
             <span>{apps.length === 1 ? t("1 OAuth application") : t("{count} OAuth applications").replace("{count}", String(apps.length))}</span>
             <FlowTooltip label={t("New OAuth application")}>
               <button type="button" className="oauth-app-icon-button is-medium" aria-label={t("New OAuth application")} onClick={() => navigate(createPath)}>
-                <PlusGlyph />
+                {phone ? <FlowGlyph name="plus" size={16} /> : <PlusGlyph />}
               </button>
             </FlowTooltip>
           </div>
@@ -48,12 +53,18 @@ export function OAuthApplicationsSection({ data }: { data: BootstrapData }) {
                     navigate(applicationSettingsPath(data.workspace.urlKey, app.id));
                   }}
                 >
-                  <OAuthAppAvatar logoUrl={app.logoUrl} name={app.name} redirectUris={app.redirectUris} />
+                  {phone ? <AppLogo className="oauth-app-avatar" logoUrl={app.logoUrl} name={app.name} redirectUris={app.redirectUris} fallback={<ApiApplicationPlaceholder />} /> : <OAuthAppAvatar logoUrl={app.logoUrl} name={app.name} redirectUris={app.redirectUris} />}
                   <span className="oauth-app-list-copy">
                     <strong data-i18n-ignore>{app.name}</strong>
-                    <span>{t("Updated {date}").replace("{date}", formatDate(app.updatedAt || app.createdAt, { month: "short", day: "numeric", year: "numeric" }))}</span>
+                    <span>{t("Updated {date}").replace("{date}", formatDate(app.updatedAt || app.createdAt, { month: "short", day: "numeric", ...(phone ? {} : { year: "numeric" as const }) }))}</span>
                   </span>
                 </a>
+                {phone && <DropdownMenu>
+                  <DropdownMenuTrigger className="oauth-app-icon-button oauth-app-list-menu" aria-label={t('Open menu')}><FlowGlyph name="ellipsis" size={16}/></DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => navigate(applicationEditPath(data.workspace.urlKey, app.id))}>{t('Edit application')}</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>}
               </li>
             ))}
           </ul>
