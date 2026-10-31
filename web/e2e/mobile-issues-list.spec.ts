@@ -1,12 +1,12 @@
-import { expect, test } from '@playwright/test'
-import { test as workspaceTest } from './workspace-fixture'
+import { expect } from '@playwright/test'
+import { test } from './workspace-fixture'
 import type { BootstrapData } from '../src/types/flow'
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
-  workspaceTest.describe(`phone Views directory ${viewport.width}`, () => {
-    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Views' })
+  test.describe(`phone Views directory ${viewport.width}`, () => {
+    test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Views' })
 
-    workspaceTest('matches the directory and opens its tabs, display settings and saved view', async ({ page, request, workspaceKey }) => {
+    test('matches the directory and opens its tabs, display settings and saved view', async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Workspace-Key': workspaceKey }
       const settings = await request.patch('/api/workspace/preferences', { headers, data: { featureFlags: { dashboards: false } } })
       expect(settings.ok()).toBe(true)
@@ -44,10 +44,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
 }
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
-  workspaceTest.describe(`phone filter command menu ${viewport.width}`, () => {
-    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Filter menu' })
+  test.describe(`phone filter command menu ${viewport.width}`, () => {
+    test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Filter menu' })
 
-    workspaceTest('matches the filter command rows and keeps search and field navigation usable', async ({ page, workspaceKey }) => {
+    test('matches the filter command rows and keeps search and field navigation usable', async ({ page, workspaceKey }) => {
       await page.goto(`/${workspaceKey}/my-issues/activity`)
       await page.getByRole('button', { name: 'Add filter', exact: true }).click()
       const menu = page.getByRole('dialog', { name: 'Add Filter…', exact: true })
@@ -76,7 +76,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await page.keyboard.press('Escape')
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     })
-    workspaceTest(`matches the status value picker with counts ${viewport.width}`, async ({ page, request, workspaceKey }) => {
+    test(`matches the status value picker with counts ${viewport.width}`, async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Workspace-Key': workspaceKey }
       const bootstrap = await (await request.get('/api/bootstrap', { headers })).json() as BootstrapData
       const team = bootstrap.teams[0]
@@ -120,10 +120,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   })
 }
 
-workspaceTest.describe('mobile issue lists and views', () => {
-  workspaceTest.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+test.describe('mobile issue lists and views', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
-  workspaceTest('keeps list, triage and views surfaces inside the phone viewport', async ({ page, request, workspaceKey }) => {
+  test('keeps list, triage and views surfaces inside the phone viewport', async ({ page, request, workspaceKey }) => {
     const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
     expect(response.ok()).toBeTruthy()
     const workspace = await response.json() as { teams?: Array<{ key: string }> }
@@ -151,7 +151,7 @@ workspaceTest.describe('mobile issue lists and views', () => {
     }
   })
 
-  workspaceTest('keeps filter, display and overflow views usable on the phone', async ({ page, request, workspaceKey }, testInfo) => {
+  test('keeps filter, display and overflow views usable on the phone', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
     const bootstrap = await request.get('/api/bootstrap', { headers })
     expect(bootstrap.ok()).toBeTruthy()
@@ -201,7 +201,7 @@ workspaceTest.describe('mobile issue lists and views', () => {
     await expect(moreViews).toBeHidden()
   })
 
-  workspaceTest('switches the workspace issue list to a horizontally scrollable phone board', async ({ page, workspaceKey }) => {
+  test('switches the workspace issue list to a horizontally scrollable phone board', async ({ page, workspaceKey }) => {
     await page.goto(`/${workspaceKey}/issues/all`)
     const display = page.getByRole('button', { name: 'Display options' }).first()
     await expect(display).toBeVisible()
@@ -219,16 +219,11 @@ workspaceTest.describe('mobile issue lists and views', () => {
 test.describe('mobile team display options', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('opens the compact team display sheet without phone overflow', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-team-display-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: '[mobile] Team display options', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  test('opens the compact team display sheet without phone overflow', async ({ page, request, workspaceKey }) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as { teams: Array<{ id: string; key: string }> }
+    const bootstrap = await (await request.get('/api/bootstrap', { headers })).json() as { teams: Array<{ id: string; key: string }> }
     const team = bootstrap.teams[0]
-    const child = await request.post(`http://127.0.0.1:4180/api/workspaces/${workspaceKey}/teams`, {
+    const child = await request.post(`/api/workspaces/${workspaceKey}/teams`, {
       headers,
       data: { name: '[mobile] Display sub-team', key: 'SUB', parentTeamId: team.id },
     })
@@ -248,25 +243,20 @@ test.describe('mobile team display options', () => {
 test.describe('mobile Created tab', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('phone Created tab is a flat list with the sub-issue parent trail', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-created-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: '[mobile] Created', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  test('phone Created tab is a flat list with the sub-issue parent trail', async ({ page, request, workspaceKey }) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as { viewer: { id: string }; teams: Array<{ id: string }>; states: Array<{ id: string; type: string }> }
+    const bootstrap = await (await request.get('/api/bootstrap', { headers })).json() as { viewer: { id: string }; teams: Array<{ id: string }>; states: Array<{ id: string; type: string }> }
     const teamId = bootstrap.teams[0].id
     const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
     const create = async (title: string, extra = {}) => {
-      const created = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description: '', teamId, stateId, ...extra } })
+      const created = await request.post('/api/issues', { headers, data: { title, description: '', teamId, stateId, ...extra } })
       expect(created.status()).toBe(201)
       return created.json() as Promise<{ id: string }>
     }
     const parent = await create('[mobile] Parent issue')
     await create('[mobile] Second issue')
     const child = await create('[mobile] Child #1', { parentId: parent.id, assigneeId: bootstrap.viewer.id })
-    const reordered = await request.patch(`http://127.0.0.1:4180/api/issues/${child.id}`, { headers, data: { sortOrder: 0 } })
+    const reordered = await request.patch(`/api/issues/${child.id}`, { headers, data: { sortOrder: 0 } })
     expect(reordered.ok()).toBe(true)
 
     await page.goto(`/${workspaceKey}/my-issues/created`)
@@ -292,14 +282,9 @@ test.describe('mobile Created tab', () => {
 test.describe('mobile Subscribed tab', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('phone Subscribed tab nests a sub-issue under its parent with an indent guide', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-subscribed-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: '[mobile] Subscribed', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  test('phone Subscribed tab nests a sub-issue under its parent with an indent guide', async ({ page, request, workspaceKey }) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as {
+    const bootstrap = await (await request.get('/api/bootstrap', { headers })).json() as {
       viewer: { id: string }
       teams: Array<{ id: string }>
       states: Array<{ id: string; type: string }>
@@ -307,10 +292,10 @@ test.describe('mobile Subscribed tab', () => {
     }
     const teamId = bootstrap.teams[0].id
     const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
-    const settings = await request.patch(`http://127.0.0.1:4180/api/teams/${teamId}/settings`, { headers, data: { estimateType: 'fibonacci' } })
+    const settings = await request.patch(`/api/teams/${teamId}/settings`, { headers, data: { estimateType: 'fibonacci' } })
     expect(settings.ok()).toBe(true)
     const create = async (title: string, extra = {}) => {
-      const created = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description: '', teamId, stateId, ...extra } })
+      const created = await request.post('/api/issues', { headers, data: { title, description: '', teamId, stateId, ...extra } })
       expect(created.status()).toBe(201)
       return created.json() as Promise<{ id: string }>
     }
@@ -318,9 +303,9 @@ test.describe('mobile Subscribed tab', () => {
     const child = await create('[mobile] Nested child one', { parentId: parent.id })
     const other = await create('[mobile] Label badge issue')
     const subscribed = [bootstrap.viewer.id]
-    await request.patch(`http://127.0.0.1:4180/api/issues/${parent.id}`, { headers, data: { subscriberIds: subscribed, estimate: 3, sortOrder: 0 } })
-    await request.patch(`http://127.0.0.1:4180/api/issues/${child.id}`, { headers, data: { subscriberIds: subscribed, sortOrder: 1 } })
-    await request.patch(`http://127.0.0.1:4180/api/issues/${other.id}`, { headers, data: { subscriberIds: subscribed, labelIds: bootstrap.labels[0] ? [bootstrap.labels[0].id] : [], sortOrder: 2 } })
+    await request.patch(`/api/issues/${parent.id}`, { headers, data: { subscriberIds: subscribed, estimate: 3, sortOrder: 0 } })
+    await request.patch(`/api/issues/${child.id}`, { headers, data: { subscriberIds: subscribed, sortOrder: 1 } })
+    await request.patch(`/api/issues/${other.id}`, { headers, data: { subscriberIds: subscribed, labelIds: bootstrap.labels[0] ? [bootstrap.labels[0].id] : [], sortOrder: 2 } })
 
     await page.goto(`/${workspaceKey}/my-issues/subscribed`)
     await expect(page.locator('main').first()).toBeVisible()
@@ -356,18 +341,13 @@ test.describe('mobile Subscribed tab', () => {
 test.describe('mobile Activity tab', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('phone Activity tab groups issues by relative activity day', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-activity-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: '[mobile] Activity', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  test('phone Activity tab groups issues by relative activity day', async ({ page, request, workspaceKey }) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as { viewer: { id: string }; teams: Array<{ id: string }>; states: Array<{ id: string; type: string }> }
+    const bootstrap = await (await request.get('/api/bootstrap', { headers })).json() as { viewer: { id: string }; teams: Array<{ id: string }>; states: Array<{ id: string; type: string }> }
     const teamId = bootstrap.teams[0].id
     const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
     const create = async (title: string) => {
-      const created = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description: '', teamId, stateId, assigneeId: bootstrap.viewer.id } })
+      const created = await request.post('/api/issues', { headers, data: { title, description: '', teamId, stateId, assigneeId: bootstrap.viewer.id } })
       expect(created.status()).toBe(201)
       return created.json() as Promise<{ id: string }>
     }
@@ -412,12 +392,7 @@ test.describe('mobile Activity tab', () => {
 test.describe('desktop my issues tab strip', () => {
   test.use({ viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false })
 
-  test('shows only the five tab links without the off-screen measurement row', async ({ page, request }, testInfo) => {
-    const workspaceKey = `desktop-issues-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: 'Desktop issue parity', urlKey: workspaceKey, region: 'us' },
-    })
-    expect(response.status()).toBe(201)
+  test('shows only the five tab links without the off-screen measurement row', async ({ page, workspaceKey }) => {
     await page.goto(`/${workspaceKey}/my-issues/assigned`)
     const nav = page.getByRole('navigation', { name: 'My issues views' })
     await expect(nav).toBeVisible()
@@ -436,18 +411,13 @@ test.describe('desktop my issues tab strip', () => {
 test.describe('mobile Assigned details panel', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('opens the right aligned details drawer over a scrim with four summary tabs', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-assigned-details-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: '[mobile] Assigned details', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  test('opens the right aligned details drawer over a scrim with four summary tabs', async ({ page, request, workspaceKey }) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as { viewer: { id: string }; teams: Array<{ id: string }>; states: Array<{ id: string; type: string }> }
+    const bootstrap = await (await request.get('/api/bootstrap', { headers })).json() as { viewer: { id: string }; teams: Array<{ id: string }>; states: Array<{ id: string; type: string }> }
     const teamId = bootstrap.teams[0].id
     const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
     for (const title of ['[mobile] Assigned detail one', '[mobile] Assigned detail two']) {
-      const created = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description: '', teamId, stateId, assigneeId: bootstrap.viewer.id } })
+      const created = await request.post('/api/issues', { headers, data: { title, description: '', teamId, stateId, assigneeId: bootstrap.viewer.id } })
       expect(created.status()).toBe(201)
     }
 
@@ -491,26 +461,20 @@ test.describe('mobile Assigned details panel', () => {
 test.describe('mobile team issues list', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('phone team header, estimate-only group and nested sub-issue match the reference', async ({ page, request }, testInfo) => {
-    const apiBase = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
-    const workspaceKey = `mobile-team-list-${testInfo.project.name}-${testInfo.retry}-${Date.now()}`
-    const response = await request.post(`${apiBase}/api/workspaces`, {
-      data: { name: '[mobile] Team list', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  test('phone team header, estimate-only group and nested sub-issue match the reference', async ({ page, request, workspaceKey }) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const bootstrap = await (await request.get(`${apiBase}/api/bootstrap`, { headers })).json() as {
+    const bootstrap = await (await request.get(`/api/bootstrap`, { headers })).json() as {
       teams: Array<{ id: string; key: string }>
       states: Array<{ id: string; type: string }>
     }
     const team = bootstrap.teams[0]
     const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
-    const renamed = await request.patch(`${apiBase}/api/workspaces/${workspaceKey}/teams/${team.id}`, {
+    const renamed = await request.patch(`/api/workspaces/${workspaceKey}/teams/${team.id}`, {
       headers,
       data: { name: 'Picker Test', icon: 'StarOutline', color: '#E719A5' },
     })
     expect(renamed.ok()).toBe(true)
-    const settings = await request.patch(`${apiBase}/api/teams/${team.id}/settings`, {
+    const settings = await request.patch(`/api/teams/${team.id}/settings`, {
       headers,
       data: {
         estimateType: 'fibonacci',
@@ -525,7 +489,7 @@ test.describe('mobile team issues list', () => {
     })
     expect(settings.ok()).toBe(true)
     const create = async (title: string, extra = {}) => {
-      const created = await request.post(`${apiBase}/api/issues`, {
+      const created = await request.post(`/api/issues`, {
         headers,
         data: { title, description: '', teamId: team.id, stateId, priority: 0, ...extra },
       })
@@ -575,25 +539,18 @@ test.describe('mobile team issues list', () => {
 test.describe('mobile Team issues board', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('phone board shows a 298px Todo column with the hidden columns column peeking in', async ({ page, request }, testInfo) => {
-    const apiBase = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
-    const response = await request.post(`${apiBase}/api/workspaces`, {
-      data: { name: '[mobile] Team board', urlKey: `mobile-team-board-${testInfo.project.name}-${testInfo.retry}-${Date.now()}`, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
-    const { workspace } = await response.json() as { workspace: { urlKey: string } }
-    const workspaceKey = workspace.urlKey
+  test('phone board shows a 298px Todo column with the hidden columns column peeking in', async ({ page, request, workspaceKey }) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const bootstrap = await (await request.get(`${apiBase}/api/bootstrap`, { headers })).json() as {
+    const bootstrap = await (await request.get(`/api/bootstrap`, { headers })).json() as {
       teams: Array<{ id: string; key: string }>
       states: Array<{ id: string; type: string }>
     }
     const team = bootstrap.teams[0]
     const stateId = bootstrap.states.find(state => state.type === 'unstarted')!.id
-    const settings = await request.patch(`${apiBase}/api/teams/${team.id}/settings`, { headers, data: { estimateType: 'fibonacci' } })
+    const settings = await request.patch(`/api/teams/${team.id}/settings`, { headers, data: { estimateType: 'fibonacci' } })
     expect(settings.ok()).toBe(true)
     const create = async (title: string, extra = {}) => {
-      const created = await request.post(`${apiBase}/api/issues`, {
+      const created = await request.post(`/api/issues`, {
         headers,
         data: { title, description: '', teamId: team.id, stateId, priority: 0, ...extra },
       })
@@ -638,34 +595,28 @@ test.describe('mobile Team issues board', () => {
 test.describe('mobile Team issues board scrolled to the hidden columns', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('phone board scrolls the hidden statuses column into view', async ({ page, request }, testInfo) => {
-    const apiBase = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
-    const workspaceKey = `mobile-scrolled-${testInfo.project.name}-${testInfo.retry}-${Date.now()}`
-    const response = await request.post(`${apiBase}/api/workspaces`, {
-      data: { name: '[mobile] Team board scrolled', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  test('phone board scrolls the hidden statuses column into view', async ({ page, request, workspaceKey }) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const created = await response.json() as { teams: Array<{ id: string; key: string }> }
+    const created = await (await request.get('/api/bootstrap', { headers })).json() as { teams: Array<{ id: string; key: string }> }
     const team = created.teams[0]
-    const review = await request.post(`${apiBase}/api/teams/${team.id}/states`, {
+    const review = await request.post(`/api/teams/${team.id}/states`, {
       headers,
       data: { name: 'In Review', type: 'started', color: '#2ECC71', position: 2.5 },
     })
     expect(review.status()).toBe(201)
-    const statesResponse = await request.get(`${apiBase}/api/teams/${team.id}/states`, { headers })
+    const statesResponse = await request.get(`/api/teams/${team.id}/states`, { headers })
     expect(statesResponse.ok()).toBe(true)
     const states = await statesResponse.json() as Array<{ id: string; type: string }>
     const stateId = states.find(state => state.type === 'unstarted')!.id
-    const renamed = await request.patch(`${apiBase}/api/workspaces/${workspaceKey}/teams/${team.id}`, {
+    const renamed = await request.patch(`/api/workspaces/${workspaceKey}/teams/${team.id}`, {
       headers,
       data: { name: '[mobile] UI', icon: 'StarOutline', color: '#E719A5' },
     })
     expect(renamed.ok()).toBe(true)
-    const settings = await request.patch(`${apiBase}/api/teams/${team.id}/settings`, { headers, data: { estimateType: 'fibonacci' } })
+    const settings = await request.patch(`/api/teams/${team.id}/settings`, { headers, data: { estimateType: 'fibonacci' } })
     expect(settings.ok()).toBe(true)
     const create = async (title: string, extra = {}) => {
-      const created = await request.post(`${apiBase}/api/issues`, {
+      const created = await request.post(`/api/issues`, {
         headers,
         data: { title, description: '', teamId: team.id, stateId, priority: 0, ...extra },
       })
