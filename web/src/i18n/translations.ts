@@ -2917,7 +2917,7 @@ export const zhCN: Record<string, string> = {
   "linked pull request {review}": "关联了合并请求 {review}",
   "deployed preview {environment}": "部署了预览 {environment}",
   "unlinked pull request {review}": "取消关联了合并请求 {review}",
-  "marked this as blocking {issue}": "标记为阻塞 {issue}",
+  "marked this issue as blocking {issue}": "将此事项标记为阻塞 {issue}",
   "marked this as blocked by {issue}": "标记为被 {issue} 阻塞",
   "marked this as a duplicate of {issue}": "标记为 {issue} 的重复事项",
   "marked this as parent of {issue}": "标记为 {issue} 的父事项",

@@ -138,6 +138,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
     await expect(events).toHaveCount(3)
     await expect(page.locator('.comment-card')).toHaveCount(0)
     await expect(events.nth(1).locator('.activity-relation-link')).toContainText('[mobile] B blocked')
+    await expect(events.nth(1)).toContainText('marked this issue as blocking')
     await expect(events.nth(2).locator('.activity-relation-link')).toContainText('[mobile] C related')
     await expect(events.nth(1).locator('[data-action-glyph=blocking]')).toBeVisible()
     await expect(events.nth(2).locator('[data-action-glyph=related]')).toBeVisible()
@@ -153,6 +154,23 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
     await expect(form.locator('.composer-send svg')).toHaveAttribute('viewBox', '0 0 16 16')
     await expect(form.locator('.composer-tools svg')).toHaveAttribute('viewBox', '0 0 16 16')
     await expect(events.first().locator('.activity-row')).toHaveCSS('line-height', '16.8px')
+    const initialsOffset = await events.first().locator('.activity-event-icon .avatar').evaluate(avatar => {
+      const circle = avatar.getBoundingClientRect()
+      const range = document.createRange()
+      range.selectNodeContents(avatar)
+      const initials = range.getBoundingClientRect()
+      return initials.x + initials.width / 2 - circle.x - circle.width / 2
+    })
+    expect(initialsOffset).toBeCloseTo(0, 1)
+    const link = (await events.nth(1).locator('.activity-relation-link').boundingBox())!
+    const time = (await events.nth(1).locator('.activity-time time').boundingBox())!
+    expect(time.y).toBeCloseTo(link.y, 1)
+    expect((await events.nth(1).locator('.activity-dot').boundingBox())?.width).toBe(12)
+    const placeholderColor = await form.locator('p.is-editor-empty').evaluate(element => getComputedStyle(element, '::before').color)
+    expect(placeholderColor).toBe('rgb(94, 95, 97)')
+    const connector = await events.first().evaluate(element => getComputedStyle(element, '::before').backgroundColor)
+    expect(connector).toBe('lch(27.12 1.48 272)')
+    expect(await events.last().evaluate(element => getComputedStyle(element, '::before').content)).toBe('none')
     await noOverflow(page)
     if (shots) await page.screenshot({ path: `${shots}/flow-activity-${viewport.width}.png`, scale: 'css' })
     await page.getByRole('button', { name: 'Unsubscribe', exact: true }).click()

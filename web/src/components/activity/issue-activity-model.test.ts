@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import type { ActivityEvent } from '@/types/flow'
 import { makeBootstrap, viewer } from '@/test/fixtures'
+import { loadChineseDictionary, translateToChinese } from '@/i18n/translate'
 import { ACTIVITY_COALESCE_WINDOW_MS, activityPartsText, activityTimeLabel, canCoalesceIssueEvents, coalesceIssueEvents, describeIssueActivity, describeIssueActivityParts, issueEventFieldCount, lastChangeSeparator } from './issue-activity-model'
 
 const event = (metadata: Record<string,string>, type = 'issue.updated'): ActivityEvent => ({ id: 'event', type, actor: viewer, createdAt: '2026-09-08T06:00:00Z', metadata })
 
 describe('issue activity projection', () => {
+  it('names this issue in blocking events in English and Chinese', async () => {
+    const context = makeBootstrap()
+    const target = context.issues[0]
+    const blocking = event({ type: 'blocks', relatedIssueId: target.id }, 'issue.relation_added')
+    expect(describeIssueActivity(blocking, context)).toBe(`marked this issue as blocking ${target.identifier}`)
+    await loadChineseDictionary()
+    expect(describeIssueActivity(blocking, context, translateToChinese)).toBe(`将此事项标记为阻塞 ${target.identifier}`)
+    expect(describeIssueActivity(event({ type: 'related', relatedIssueId: target.id }, 'issue.relation_added'), context)).toBe(`added related issue ${target.identifier}`)
+  })
+
   it('hides description autosaves and bookkeeping without modifying stored metadata', () => {
     const metadata = { description: 'updated', descriptionBefore: 'Private old text', descriptionStateBefore: '{"type":"doc"}', documentContent: 'doc-id' }
     expect(describeIssueActivity(event(metadata))).toBeNull()
