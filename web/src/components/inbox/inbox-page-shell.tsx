@@ -229,51 +229,55 @@ export function InboxHeader({
   const { t } = useI18n()
   const showRead = displayOptions.showRead
   return (
-    <header className="flow-inbox__header">
-      {onOpenSidebar ? (
-        <button
-          className="flow-inbox__icon-button flow-inbox__mobile-menu"
-          type="button"
-          aria-label="Open sidebar"
-          data-sidebar-trigger onClick={onOpenSidebar}
-        >
-          <SidebarIcon />
-        </button>
-      ) : null}
-      <div className="flow-inbox__header-title-actions">
-        <h2>Inbox</h2>
-        <NotificationActionsMenu
-          pending={bulkPending}
-          onMarkAllRead={onMarkAllRead}
-          onDeleteAll={onDeleteAll}
-          onDeleteAllRead={onDeleteAllRead}
-          onDeleteAllReadCompleted={onDeleteAllReadCompleted}
-          onOpenSettings={onOpenSettings}
-        />
-      </div>
-      <div className="flow-inbox__header-spacer" />
-      <div className="flow-inbox__header-toolbar-group">
-        <div className="flow-inbox__header-controls">
-          <FlowTooltip label={t(showRead ? 'Show unreads only' : 'Show read')}>
+    <div className="flow-inbox__header-wrapper">
+      <header className="flow-inbox__header">
+        <div className="flow-inbox__header-inner">
+          {onOpenSidebar ? (
             <button
-              aria-label={t(showRead ? 'Show unreads only' : 'Show read')}
-              aria-pressed={!showRead}
-              className="flow-inbox__icon-button"
-              data-active={!displayOptions.showRead || undefined}
-              onClick={() => onDisplayOptionsChange({ ...displayOptions, showRead: !displayOptions.showRead })}
+              className="flow-inbox__icon-button flow-inbox__mobile-menu"
               type="button"
-            ><UnreadFilterIcon /></button>
-          </FlowTooltip>
-          <InboxFilterBuilder
-            trigger={<IconButton label="Add filter" tooltip="Add Filter" shortcut="F" count={filters?.length ?? 0}><FilterIcon /></IconButton>}
-            filters={filters ?? []}
-            options={filterOptions}
-            onFiltersChange={nextFilters => onFiltersChange?.(nextFilters)}
-          />
-          <DisplayOptionsMenu value={displayOptions} onChange={onDisplayOptionsChange} />
+              aria-label="Open sidebar"
+              data-sidebar-trigger onClick={onOpenSidebar}
+            >
+              <SidebarIcon />
+            </button>
+          ) : null}
+          <div className="flow-inbox__header-title-actions">
+            <h2>Inbox</h2>
+            <NotificationActionsMenu
+              pending={bulkPending}
+              onMarkAllRead={onMarkAllRead}
+              onDeleteAll={onDeleteAll}
+              onDeleteAllRead={onDeleteAllRead}
+              onDeleteAllReadCompleted={onDeleteAllReadCompleted}
+              onOpenSettings={onOpenSettings}
+            />
+          </div>
+          <div className="flow-inbox__header-spacer" />
+          <div className="flow-inbox__header-toolbar-group">
+            <div className="flow-inbox__header-controls">
+              <FlowTooltip label={t(showRead ? 'Show unreads only' : 'Show read')}>
+                <button
+                  aria-label={t(showRead ? 'Show unreads only' : 'Show read')}
+                  aria-pressed={!showRead}
+                  className="flow-inbox__icon-button"
+                  data-active={!displayOptions.showRead || undefined}
+                  onClick={() => onDisplayOptionsChange({ ...displayOptions, showRead: !displayOptions.showRead })}
+                  type="button"
+                ><UnreadFilterIcon /></button>
+              </FlowTooltip>
+              <InboxFilterBuilder
+                trigger={<IconButton label="Add filter" tooltip="Add Filter" shortcut="F" count={filters?.length ?? 0}><FilterIcon /></IconButton>}
+                filters={filters ?? []}
+                options={filterOptions}
+                onFiltersChange={nextFilters => onFiltersChange?.(nextFilters)}
+              />
+              <DisplayOptionsMenu value={displayOptions} onChange={onDisplayOptionsChange} />
+            </div>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+    </div>
   )
 }
 

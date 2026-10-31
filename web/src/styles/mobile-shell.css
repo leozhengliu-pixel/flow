@@ -73,6 +73,7 @@
   .sidebar .workspace-row { margin-bottom: 8.75px; }
   html:root .sidebar .workspace-row > button.sidebar-top-action { width: 32px; }
   html:root .sidebar .workspace-row > button.sidebar-compose { height: 32px; }
+  html:root .sidebar .workspace-row > button.sidebar-compose { width: 32px; flex: 0 0 32px; }
   .sidebar-footer { height: 32px; flex-basis: 32px; margin: 0 0 0 -2px; padding: 0; }
   .sidebar-help { width: 32px; height: 32px; flex: 0 0 32px; box-shadow: none; }
   .sidebar-plan-button { display: none; }
