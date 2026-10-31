@@ -72,7 +72,7 @@
 
 .sidebar .workspace-row > button.workspace-menu-trigger:hover,
 .sidebar .workspace-row > button.workspace-menu-trigger[data-state="open"] { background: var(--theme-control); }
-.workspace-menu-trigger .workspace-avatar { width: 20px; height: 20px; flex: 0 0 20px; border-radius: 6px; font-size: 9px; }
+.workspace-menu-trigger .workspace-avatar { width: 20px; height: 20px; flex: 0 0 20px; border-radius: 8px; font-size: 11px; font-weight: 400; }
 .workspace-menu-trigger > svg { width: 8px; height: 8px; flex: 0 0 8px; color: #69696d; stroke-width: 1.8; }
 .workspace-menu-trigger + .sidebar-top-action { margin-left: auto; }
 
@@ -85,13 +85,15 @@
   color: var(--issue-muted);
   background: transparent;
   border: 0;
-  border-radius: 50%;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .sidebar .workspace-row > button.sidebar-top-action:hover,
 .sidebar .workspace-row > button.sidebar-top-action:focus-visible { color: var(--theme-text-primary); background: var(--theme-control); outline: 2px solid var(--focus-ring); outline-offset: -1px; }
 .sidebar-top-action svg { width: 15px; height: 15px; fill: currentColor; }
-.sidebar .workspace-row > button.sidebar-compose { color: var(--text); background: var(--bg-subtle); }
+.sidebar .workspace-row > button.sidebar-compose { color: var(--text); background: var(--sidebar-compose-bg); }
 .sidebar .workspace-row > button.sidebar-compose:hover { background: lch(13.845% 1.3 272); }
 .sidebar-compose svg { width: 16px; height: 16px; }
 .sidebar-compose svg { color: var(--bright); }
@@ -137,7 +139,7 @@
   gap: 6px;
   padding: 0 8px;
   overflow: hidden;
-  color: var(--issue-muted);
+  color: var(--sidebar-nav-fg);
   background: transparent;
   border: 0;
   border-radius: 8px;
@@ -163,6 +165,8 @@
 .nav-section { margin-top: 17px; }
 .sidebar-section-teams { margin-top: 17px; }
 .sidebar-section-try { margin-top: 16px; }
+.nav-section[data-expanded="false"] { padding-bottom: 1px; }
+.nav-section[data-expanded="false"] + .nav-section { margin-top: 8px; }
 .section-heading { height: 28px; display: flex; align-items: center; padding-left:5px; border-radius:8px; }
 .section-heading:hover,.section-heading:focus-within{background:lch(8.445% 1.3 272)}
 .section-label {
@@ -177,9 +181,9 @@
   background: transparent;
   border: 0;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  line-height:24px;
+  line-height: 14.5px;
   text-align: left;
 }
 .section-label:hover { color: var(--theme-text-secondary); }
@@ -303,26 +307,61 @@
 .try-dismiss svg { width: 12px; height: 12px; }
 
 .sidebar-footer {
-  height: 28px;
+  height: 44px;
   display: flex;
-  flex: 0 0 28px;
+  flex: 0 0 44px;
   align-items: center;
   gap: 8px;
-  padding: 0;
+  margin: 0 -12px -8px;
+  padding: 10px;
 }
 .sidebar-help {
   width: 24px;
   height: 24px;
   display: grid;
+  flex: 0 0 24px;
   place-items: center;
   padding: 0;
-  color: #85858a;
+  color: var(--text);
   background: transparent;
   border: 0;
   border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--theme-control);
+  font-size: 12px;
+  font-weight: 500;
+}
+.sidebar-plan-button {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  color: var(--bright);
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px var(--theme-control);
+  font-family: var(--font);
+  font-size: 13.3333px;
+  font-weight: 400;
+  line-height: normal;
+  white-space: nowrap;
+}
+.sidebar-plan-button:hover { background: var(--theme-control); }
+.sidebar-plan-button:focus-visible { background: var(--theme-control); outline: 2px solid var(--focus-ring); outline-offset: -1px; }
+.sidebar-plan-button > svg { width: 16px; height: 16px; flex: none; color: var(--sidebar-nav-fg); }
+.sidebar-plan-button > span {
+  display: inline-flex;
+  align-items: center;
+  height: 13px;
+  margin-right: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: normal;
 }
 .sidebar-help:hover,
 .sidebar-help[data-state="open"] { color: var(--theme-text-primary); background: var(--theme-control); }
+.sidebar-help > span { color: var(--sidebar-nav-fg); font-size: 12px; font-weight: 500; line-height: 1; }
 .sidebar-help svg { width: 15px; height: 15px; }
 .sidebar-popover {
   z-index: 1100;
