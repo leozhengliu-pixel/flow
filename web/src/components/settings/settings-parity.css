@@ -848,10 +848,22 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
   html:root .settings-app .settings-search > svg { left: 10px; width: 16px; height: 16px; }
   html:root .settings-app .settings-search > svg { color: var(--phone-icon-fg); }
   html:root .settings-app .settings-search input {
+    border-width: 0;
+    padding: 6.5px 25.5px 6.5px 32.5px;
     background: var(--set-drawer-search-bg);
     border-color: var(--set-drawer-search-border);
     color: var(--set-text);
   }
+  /* A shadow keeps the measured half-pixel edge from snapping to a full CSS pixel. */
+  html:root .settings-app .settings-search::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 .5px var(--set-drawer-search-border);
+    pointer-events: none;
+  }
+  html:root .settings-app .settings-search input::placeholder { color: var(--set-drawer-muted); }
   html:root .settings-app .settings-sidebar nav {
     margin: 0;
     padding: 26px 12px 4px;
