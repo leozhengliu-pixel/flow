@@ -2,7 +2,7 @@ import { useEffect, useInsertionEffect, useRef, useState, type ReactNode } from 
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { AgentBadge } from '@/components/agent/agent-badge'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Building2, Check, Ellipsis, LockKeyhole } from 'lucide-react'
+import { Building2, Check, LockKeyhole } from 'lucide-react'
 import { SlackIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { AddViewIcon, SubscriptionIcon } from '@/components/ui/view-action-icons'
@@ -129,6 +129,10 @@ export function SavedViewEditor({ actions, ariaLabel = 'New view', mode = 'creat
 
 function targetKey(target: SavedViewTarget) { return `${target.scope}:${target.teamId ?? ''}` }
 
+function SavedViewOptionsIcon() {
+  return <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/></svg>
+}
+
 export function SavedViewMenu({ view, users = [], teams = [], subscriptionEvents = [], onEdit, onDuplicate, onUpdate, onSetSubscriptionEvents, onCopy, onExport, onDelete }: { view: SavedView; users?: User[]; teams?: Team[]; subscriptionEvents?: string[]; onEdit: () => void; onDuplicate?: () => void; onUpdate?: (input: SavedViewMutationInput) => void; onSetSubscriptionEvents?: (events: string[]) => void; onCopy?: () => void; onExport?: () => void; onDelete: () => void }) {
   const { t } = useI18n()
   // Custom view notifications are a Slack integration feature; Lark and Feishu deployments do not offer them.
@@ -143,7 +147,7 @@ export function SavedViewMenu({ view, users = [], teams = [], subscriptionEvents
     onSetSubscriptionEvents?.([...next])
   }
   // The reference app's view menu: Edit… · Duplicate… · Owner ▸ · Move to ▸ | Subscribe ▸ · Configure custom view Slack notifications… | Copy link · Export … as CSV… | Delete.
-  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.menuTrigger} type="button" aria-label={t(view.resource === 'projects' ? 'Project view options' : 'Issue view options')}><Ellipsis size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" data-i18n-ignore className={styles.menu} align="end" collisionPadding={8} sideOffset={4}>
+  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.menuTrigger} type="button" aria-label={t(view.resource === 'projects' ? 'Project view options' : 'Issue view options')}><SavedViewOptionsIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" data-i18n-ignore className={styles.menu} align="end" collisionPadding={8} sideOffset={4}>
     <DropdownMenu.Item className={styles.menuItem} onSelect={onEdit}><MenuRow icon={<IssueActionGlyph label="Edit" fallback={null}/>} label={t('Edit…')}/></DropdownMenu.Item>
     {onDuplicate && <DropdownMenu.Item className={styles.menuItem} onSelect={onDuplicate}><MenuRow icon={<AddViewIcon/>} label={t('Duplicate…')}/></DropdownMenu.Item>}
     {onUpdate && <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><MenuRow icon={<FlowGlyph name="owner"/>} label={t('Owner')} submenu/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`${styles.menu} ${styles.subMenu} ${styles.ownerMenu}`} sideOffset={SUBMENU_SIDE_OFFSET} alignOffset={SUBMENU_ALIGN_OFFSET} collisionPadding={8}>{users.map(user => <DropdownMenu.Item key={user.id} className={styles.menuItem} onSelect={() => onUpdate({ ownerId: user.id })}><span className={styles.menuIcon} aria-hidden="true"><UserAvatar className={`people-menu-avatar ${styles.avatar}`} avatarUrl={user.avatarUrl} name={user.displayName || user.name}/></span><span className={styles.menuLabel} data-i18n-ignore>{user.displayName || user.name}</span>{user.app && <AgentBadge/>}{owner?.id === user.id && <Check className={styles.menuCheck} size={16} aria-hidden="true"/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}

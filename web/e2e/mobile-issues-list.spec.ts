@@ -240,6 +240,38 @@ test.describe('mobile team display options', () => {
   })
 })
 
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`phone saved issue view ${viewport.width}`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Saved view' })
+
+    workspaceTest('matches the grouped saved-view header and first status group', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const bootstrap = await (await request.get('/api/bootstrap', { headers })).json() as BootstrapData
+      const team = bootstrap.teams[0]
+      const created = await request.post('/api/views', { headers, data: { name: '[mobile] All issues', resource: 'issues', scope: 'workspace', view: 'all', filters: [], display: { grouping: 'status', groupOrder: 'desc', ordering: 'status', layout: 'list', properties: ['priority', 'status', 'assignee'], completedWindow: 'all', showTriageIssues: true } } })
+      expect(created.status()).toBe(201)
+      const view = await created.json() as { slugId: string }
+      for (let index = 1; index <= 7; index += 1) {
+        const response = await request.post('/api/issues', { headers, data: { title: `[mobile] In Progress issue ${index}`, teamId: team.id, stateId: 'state_progress', assigneeId: bootstrap.viewer.id } })
+        expect(response.status()).toBe(201)
+      }
+      for (let index = 8; index <= 24; index += 1) {
+        const response = await request.post('/api/issues', { headers, data: { title: `[mobile] Todo issue ${index}`, teamId: team.id, stateId: 'state_todo', assigneeId: bootstrap.viewer.id } })
+        expect(response.status()).toBe(201)
+      }
+
+      await page.goto(`/${workspaceKey}/view/${view.slugId}`)
+      const explorer = page.locator('[data-issue-explorer]')
+      await expect(explorer.locator('[data-content-view-header]')).toHaveCSS('height', '44px')
+      await expect(explorer.locator('[data-content-view-subheader]')).toHaveCSS('height', '43.5px')
+      await expect(explorer.locator('[data-my-issues-group-title]').first()).toHaveText('In Progress')
+      await expect(explorer.locator('[data-my-issues-group-header]').first()).toHaveCSS('height', '36px')
+      await expect(explorer.locator('[data-issue-row-id]').first()).toHaveCSS('height', '44px')
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  })
+}
+
 test.describe('mobile Created tab', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 

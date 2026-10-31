@@ -1,5 +1,5 @@
 import { Star } from 'lucide-react'
-import type { ButtonHTMLAttributes } from 'react'
+import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import styles from './content-view.module.css'
 
@@ -8,6 +8,7 @@ export interface ContentViewHeaderFavoriteActionButtonProps
   favorited?: boolean
   favoriteLabel?: string
   unfavoriteLabel?: string
+  icon?: ReactNode
 }
 
 /** LS-0139 — header favorite star (`FavoriteStarWithAction`). */
@@ -15,6 +16,7 @@ export function ContentViewHeaderFavoriteActionButton({
   favorited = false,
   favoriteLabel = 'Add to favorites',
   unfavoriteLabel = 'Remove from favorites',
+  icon,
   className,
   ...rest
 }: ContentViewHeaderFavoriteActionButtonProps) {
@@ -29,7 +31,7 @@ export function ContentViewHeaderFavoriteActionButton({
       data-content-view-favorite=""
       {...rest}
     >
-      <Star size={14} fill={favorited ? 'currentColor' : 'none'} />
+      {icon ?? <Star size={14} fill={favorited ? 'currentColor' : 'none'} />}
     </button>
   )
 }
