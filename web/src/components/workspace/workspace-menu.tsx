@@ -84,7 +84,7 @@ export function WorkspaceMenu({
   const workspace = data.workspace;
   const choose = (run: () => void) => { setOpen(false); run() };
   if (phone) return <>
-    <button className="workspace-menu-trigger" aria-label={`${workspace.name} ${t('Workspace Menu')}`} onClick={() => { setSwitching(false); setOpen(true) }}>
+    <button className="workspace-menu-trigger" aria-label={`${workspace.name} ${t('Workspace Menu')}`} aria-haspopup="dialog" aria-expanded={open} data-state={open ? 'open' : 'closed'} onClick={() => { setSwitching(false); setOpen(true) }}>
       <WorkspaceAvatar workspace={workspace}/><strong>{workspace.name}</strong><WorkspaceChevronIcon phone/>
     </button>
     <PhoneMenu className="workspace-phone-menu" open={open} onOpenChange={setOpen} label={t(switching ? 'Switch workspace' : 'Workspace Menu')}>

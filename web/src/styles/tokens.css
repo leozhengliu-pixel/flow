@@ -1034,3 +1034,5 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :root{--board-card-surface:lch(9.232% .85 272);--board-card-outline:lch(100% 0 0/.083);--board-card-muted:lch(63.304% 1.425 272);--board-add-issue-bg:lch(9.232% .85 272/.5);--board-add-issue-border:lch(16.793% 1.93 272);--board-add-issue-fg:#fff}
 :root[data-theme="light"]{--board-card-surface:lch(99.997% .5 282);--board-card-outline:lch(0% 0 0/.088);--board-card-muted:lch(37.776% 1.25 282);--board-add-issue-bg:lch(99.997% .5 282/.5);--board-add-issue-border:lch(86.5% 0 282);--board-add-issue-fg:lch(9.794% 0 282)}
 :root{--display-modified-dot:lch(47.918% 59.303 288.421)}
+:root{--phone-workspace-trigger-open-bg:lch(11.37% 1.3 272)}
+:root[data-theme="light"]{--phone-workspace-trigger-open-bg:var(--theme-control)}
