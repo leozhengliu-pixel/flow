@@ -1,6 +1,38 @@
 import { expect, test } from '@playwright/test'
 import { test as workspaceTest } from './workspace-fixture'
 
+workspaceTest.describe('mobile initiative overview', () => {
+  workspaceTest.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  for (const width of [390, 375]) {
+    workspaceTest(`closed details preserve the overview and latest update at ${width}px`, async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Flow-Workspace': workspaceKey, 'X-Workspace-Key': workspaceKey }
+      const created = await request.post('/api/initiatives', { headers, data: { name: '[mobile] Overview', status: 'active', color: '#e9b0a7' } })
+      expect(created.status()).toBe(201)
+      const initiative = await created.json() as { id: string; slugId: string }
+      const update = await request.post(`/api/initiatives/${initiative.id}/updates`, { headers, data: { body: '[mobile] On schedule.', health: 'onTrack' } })
+      expect(update.status()).toBe(201)
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 667 })
+      await page.goto(`/${workspaceKey}/initiative/${initiative.slugId}/overview`)
+      await expect(page.getByTestId('initiative-detail-header')).toBeVisible()
+      expect((await page.getByTestId('initiative-detail-header').boundingBox())?.height).toBe(87.5)
+      expect((await page.locator('.li-overview-icon').boundingBox())?.y).toBe(151.5)
+      expect((await page.locator('.li-resources > h3').boundingBox())?.y).toBe(388)
+      const latest = page.getByTestId('initiative-latest-update')
+      await expect(latest).toContainText('[mobile] On schedule.')
+      await expect(latest).toContainText('On track')
+      expect(Math.abs((await latest.boundingBox())!.y - 471.5)).toBeLessThanOrEqual(1)
+      await expect(page.locator('.li-detail-sidebar')).toHaveCount(0)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await latest.getByRole('button', { name: 'Update actions', exact: true }).click()
+      await expect(page.getByRole('menuitem', { name: 'Copy link' })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await latest.getByRole('button', { name: 'Comments', exact: true }).click()
+      await expect(page).toHaveURL(/\/activity$/)
+    })
+  }
+})
+
 workspaceTest.describe('mobile initiatives list', () => {
   workspaceTest.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
 

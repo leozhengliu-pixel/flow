@@ -1,6 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ExternalLink, FileText, Link2, MoreHorizontal, Plus, Trash2 } from 'lucide-react'
+import { PlusIcon } from '@/components/ui/view-action-icons'
 import { useMemo, useState } from 'react'
 import type { BootstrapData, FlowDocument, InitiativeResource } from '@/types/flow'
 import { createDocument } from '@/lib/api'
@@ -66,7 +67,7 @@ export function InitiativeResources({ data, documents, initiativeId, resources, 
         </DropdownMenu.Root>
       </div>
     })}
-    <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="li-resource-add" type="button"><Plus size={14}/>Add document or link…</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="li-menu li-resource-menu" sideOffset={4}><DropdownMenu.Label>Add document or link…</DropdownMenu.Label><DropdownMenu.Item onSelect={() => void createBoundDocument()}><FileText size={14}/>Create new document…</DropdownMenu.Item><DropdownMenu.Item onSelect={() => setDialog({})}><Link2 size={14}/>Add a link…<kbd>Ctrl L</kbd></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+    <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="li-resource-add" type="button"><Plus className="li-detail-desktop-icon" size={14}/><PlusIcon className="li-detail-phone-icon"/><span>Add document or link…</span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="li-menu li-resource-menu" sideOffset={4}><DropdownMenu.Label>Add document or link…</DropdownMenu.Label><DropdownMenu.Item onSelect={() => void createBoundDocument()}><FileText size={14}/>Create new document…</DropdownMenu.Item><DropdownMenu.Item onSelect={() => setDialog({})}><Link2 size={14}/>Add a link…<kbd>Ctrl L</kbd></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
   </div><InitiativeResourceDialog key={dialog?.resource?.id ?? (dialog ? 'create' : 'closed')} open={Boolean(dialog)} resource={dialog?.resource} onOpenChange={open => { if (!open) setDialog(undefined) }} onSubmit={async input => { if (dialog?.resource) await onUpdate(initiativeId, dialog.resource.id, input); else await onCreate(initiativeId, { type: 'link', title: input.title, url: input.url! }); setDialog(undefined) }}/></section>
 }
 

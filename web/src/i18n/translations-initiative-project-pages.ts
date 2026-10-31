@@ -3,6 +3,8 @@
  * details sidebar). Merged into zhCN by translations.ts.
  */
 export const initiativeProjectPagesZhCN: Record<string, string> = {
+  "Latest update": "最新更新",
+  "Write initiative update": "撰写目标更新",
   "Write first initiative update": "撰写第一条目标更新",
   "Activity preferences": "动态偏好设置",
   "Sub-initiative updates": "子目标更新",
