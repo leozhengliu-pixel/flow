@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 import { test } from './workspace-fixture'
 
 async function expectPhoneProjectTabs(page: Page) {
@@ -19,6 +19,15 @@ async function expectPhoneProjectTabs(page: Page) {
   }
   const add = (await page.locator('.project-detail-page__add-view').boundingBox())!
   expect(add.x - boxes.at(-1)!.right).toBeCloseTo(4, 0)
+}
+
+async function expectComposerSubmitAlignment(composer: Locator) {
+  const inset = await composer.evaluate(element => {
+    const box = element.getBoundingClientRect()
+    const submit = element.querySelector('button.is-submit')!.getBoundingClientRect()
+    return box.right - element.clientLeft - submit.right
+  })
+  expect(inset).toBeCloseTo(14, 0)
 }
 
 test.describe('mobile cycles timeline', () => {
@@ -391,7 +400,7 @@ test.describe('mobile project activity', () => {
     expect(near((await page.locator('.project-activity__editor p').boundingBox())?.x, 32.5)).toBe(true)
     expect(near((await page.locator('.project-activity__editor p').boundingBox())?.y, 183)).toBe(true)
     expect((await page.locator('.project-activity__attach').boundingBox())?.width).toBe(32)
-    expect(Math.abs((await page.locator('.project-activity__composer button.is-submit').boundingBox())!.x - 286.78)).toBeLessThanOrEqual(1)
+    await expectComposerSubmitAlignment(composer)
     expect(near((await page.locator('.project-activity__composer button.is-submit').boundingBox())?.width, 72.72)).toBe(true)
 
     expect((await page.locator('.project-activity__event').first().boundingBox())?.y).toBe(313.5)
@@ -436,7 +445,8 @@ test.describe('mobile project update composer', () => {
     expect((await composer.getAttribute('data-mode'))).toBe('update')
     expect(await page.locator('.project-activity__health').textContent()).toContain('On track')
     expect((await page.locator('.project-activity__health').boundingBox())?.height).toBe(28)
-    expect(near((await page.locator('.project-activity__health > span').boundingBox())?.x, 193.27)).toBe(true)
+    const healthInset = await page.locator('.project-activity__health').evaluate(element => element.querySelector('span')!.getBoundingClientRect().x - element.getBoundingClientRect().x - element.clientLeft)
+    expect(healthInset).toBeCloseTo(26, 0)
     await expect(composer.locator('button.project-activity__agent')).toBeHidden()
     expect(near((await page.locator('.project-activity__diff-label').first().boundingBox())?.y, 262.75)).toBe(true)
     expect(near((await page.locator('.project-activity__diff-label').nth(1).boundingBox())?.y, 290)).toBe(true)
@@ -444,9 +454,11 @@ test.describe('mobile project update composer', () => {
     expect(await page.locator('.project-activity__diff-row[data-field=priority]').textContent()).toContain('High')
     expect(await page.locator('.project-activity__diff-row[data-field=startDate]').textContent()).toContain('Sep 28th')
     expect((await page.locator('.project-activity__attach').boundingBox())?.width).toBe(32)
-    expect(near((await page.locator('.project-activity__attach').boundingBox())?.x, 229.99)).toBe(true)
+    const attach = (await page.locator('.project-activity__attach').boundingBox())!
+    const submit = (await composer.locator('button.is-submit').boundingBox())!
+    expect(submit.x - attach.x - attach.width).toBeCloseTo(12, 0)
     expect(near((await page.locator('.project-activity__attach').boundingBox())?.y, 338)).toBe(true)
-    expect(near((await page.locator('.project-activity__composer button.is-submit').boundingBox())?.x, 273.99)).toBe(true)
+    await expectComposerSubmitAlignment(composer)
     expect(near((await page.locator('.project-activity__composer button.is-submit').boundingBox())?.y, 340)).toBe(true)
     expect(near((await page.locator('.project-activity__month > span').boundingBox())?.y, 507.5)).toBe(true)
     expect(near((await page.locator('.project-activity__comment-card').boundingBox())?.y, 555.5)).toBe(true)

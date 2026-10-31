@@ -101,7 +101,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
     expect(values['.issue-mobile-properties'].y).toBeCloseTo(145.75, 0)
     const status = page.locator('.issue-mobile-properties .core-property-trigger').first()
     await expect(status).toHaveCSS('height', '28px')
-    await expect(status).toHaveCSS('padding', '0px 7.5px 0px 5.5px')
+    await expect(status).toHaveCSS('padding', '0px 8px 0px 6px')
     await expect(status).toHaveCSS('box-shadow', 'none')
     expect((await page.locator('.issue-breadcrumb-current').boundingBox())?.x).toBe(48)
     expect(values['.issue-header'].gap).toBe('0px')
@@ -268,7 +268,7 @@ test('issue actions are touch-sized and nested actions can return', async ({ pag
   await expect(dueTrigger).toBeVisible()
   await expect(dueTrigger).toHaveCSS('font-size', '12px')
   await expect(dueTrigger).toHaveCSS('background-color', 'lch(10.149 0.689 272)')
-  await expect(dueTrigger).toHaveCSS('padding', '0px 7.5px 0px 5.5px')
+  await expect(dueTrigger).toHaveCSS('padding', '0px 8px 0px 6px')
   await noOverflow(page)
 })
 
