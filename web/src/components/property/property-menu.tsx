@@ -301,14 +301,17 @@ function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, o
 
 function CommandOption({ option, active, checked, icon, labelHover = false, listboxId, multi = false, rowIndex, showGroupLabel = false, submenuOpen = false, onSubmenuOpenChange, onSubmenuChosen, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; labelHover?: boolean; listboxId: string; multi?: boolean; rowIndex?: number; showGroupLabel?: boolean; submenuOpen?: boolean; onSubmenuOpenChange?: (open: boolean) => void; onSubmenuChosen?: () => void; onChoose: () => void; onActive: () => void }) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   if (option.submenu) {
     const submenuRow = <OptionSubmenuRow option={option} submenu={option.submenu} active={active} checked={checked} listboxId={listboxId} multi={multi} open={submenuOpen} onOpenChange={next => onSubmenuOpenChange?.(next)} onChosen={onSubmenuChosen} onActive={onActive}/>
-    return option.hoverContent ? <OptionHover besideMenu={option.hoverBesideMenu} className={option.hoverClassName} content={option.hoverContent} suppressed={submenuOpen}>{submenuRow}</OptionHover> : submenuRow
+    return option.hoverContent && !phone ? <OptionHover besideMenu={option.hoverBesideMenu} className={option.hoverClassName} content={option.hoverContent} suppressed={submenuOpen}>{submenuRow}</OptionHover> : submenuRow
   }
   const indent = option.indent ?? 0
   const row = <button aria-disabled={option.disabled || undefined} className={showGroupLabel && option.groupLabel ? 'is-grouped-label' : undefined} data-indent={indent || undefined} style={indent || rowIndex !== undefined ? { '--option-indent': indent || undefined, '--property-option-index': rowIndex } as CSSProperties : undefined} disabled={option.disabled} id={`${listboxId}-${option.id || 'none'}`} role="option" type="button" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
     <span className="property-command-option-background"/>{multi && !option.action && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}{indent > 0 && <TreeElbow/>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span>{showGroupLabel && option.groupLabel && <span className="property-command-option-group" data-i18n-ignore>{option.groupLabel}</span>}{!multi && checked && <span className="property-command-check"><FlowGlyph name="check" width={16} height={16}/></span>}{option.end && <span className="property-command-option-end">{t(option.end)}</span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
   </button>
+  // A touch focus must not open a desktop hover card over the next tap target.
+  if (phone) return row
   if (option.hoverContent) return <OptionHover besideMenu={option.hoverBesideMenu} className={option.hoverClassName} content={option.hoverContent}>{row}</OptionHover>
   return labelHover && option.color ? <LabelHoverPreview label={{ name: option.label, color: option.color, description: option.description, issueCount: option.issueCount, scope: option.scope, resourceType: option.resourceType }}>{row}</LabelHoverPreview> : row
 }

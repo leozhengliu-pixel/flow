@@ -68,6 +68,8 @@ import { createIssueZhCN } from './translations-create-issue';
 import { chatIntegrationsZhCN } from './translations-chat-integrations';
 
 export const zhCN: Record<string, string> = {
+  "Assigned users": "已分配用户",
+  "Other agents": "其他代理",
   "Show {count} events": "显示 {count} 个事件",
   ": changed {fields}…": "：更改了{fields}…",
   "estimate": "估算",

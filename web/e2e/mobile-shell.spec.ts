@@ -28,6 +28,54 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   test.describe(`${viewport.width}px shell`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent, colorScheme: 'dark' })
 
+    test('composer assignee picker groups real candidates in the phone panel', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Flow-Workspace': workspaceKey, 'X-Workspace-Key': workspaceKey }
+      const data = await (await request.get(`${api}/api/bootstrap`, { headers })).json() as { viewer: { id: string; displayName: string }; teams: Array<{ id: string }> }
+      const tokenResponse = await request.post(`${api}/api/scim/tokens`, { headers, data: { name: '[mobile] Assignee fixture' } })
+      expect(tokenResponse.status()).toBe(201)
+      const token = await tokenResponse.json() as { id: string; secret: string }
+      const member = await request.post(`${api}/scim/v2/${workspaceKey}/Users`, {
+        headers: { Authorization: `Bearer ${token.secret}` },
+        data: { userName: `assignee-${workspaceKey}@example.test`, displayName: '[mobile] Team member', active: true },
+      })
+      expect(member.status()).toBe(201)
+      await request.delete(`${api}/api/scim/tokens/${token.id}`, { headers })
+      const appResponse = await request.post(`${api}/api/oauth-applications`, { headers, data: { name: '[mobile] App agent', scopes: ['read', 'app:assignable'] } })
+      expect(appResponse.status()).toBe(201)
+      const app = await appResponse.json() as { clientId: string }
+      expect((await request.post(`${api}/api/application-installations`, { headers, data: { clientId: app.clientId, teamIds: [data.teams[0].id], scopes: ['read', 'app:assignable'], active: true } })).status()).toBe(200)
+
+      await page.goto(`${base}/${workspaceKey}/my-issues/assigned`)
+      await page.getByRole('button', { name: 'New issue', exact: true }).click()
+      const composer = page.getByRole('dialog', { name: 'New issue', exact: true })
+      await composer.locator('[data-property=assignee]').click()
+      let picker = page.locator('.phone-menu-surface:has([role=listbox][aria-label=Assignee])')
+      await geometry(picker, { x: 16, y: Math.min(110, viewport.height * .1304), width: viewport.width - 32, height: 382 })
+      await expect(picker.getByText('Assigned users', { exact: true })).toBeVisible()
+      await expect(picker.getByText('Other agents', { exact: true })).toBeVisible()
+      await expect(picker.getByText('Team members', { exact: true })).toBeVisible()
+      await geometry(picker.getByRole('option').first(), { height: 46 })
+      await expect(picker.locator('.property-command-label').first()).toHaveCSS('font-size', '13px')
+      await expect(picker.locator('.property-command-label').first()).toHaveCSS('font-weight', '450')
+      await expect(picker.locator('kbd').first()).toBeHidden()
+      await picker.getByRole('option').filter({ has: page.locator('.property-command-label', { hasText: data.viewer.displayName }) }).click()
+      await expect(picker).not.toBeVisible()
+      await composer.locator('[data-property=assignee]').click()
+      picker = page.locator('.phone-menu-surface:has([role=listbox][aria-label=Assignee])')
+      const viewer = picker.getByRole('option').filter({ has: page.locator('.property-command-label', { hasText: data.viewer.displayName }) })
+      await expect(viewer).toHaveAttribute('aria-checked', 'true')
+      await geometry(viewer.locator('.core-person-picker-avatar'), { width: 18, height: 18 })
+      await expect(viewer.locator('.property-command-check svg')).toBeVisible()
+      await noOverflow(page)
+      await page.waitForTimeout(600)
+      if (shots) await page.screenshot({ path: `${shots}/flow-assignee-${viewport.width}.png` })
+      await picker.getByRole('textbox').fill('[mobile] App agent')
+      await expect(picker.getByRole('option')).toHaveCount(1)
+      await page.keyboard.press('Escape')
+      await expect(picker).not.toBeVisible()
+      await expect(composer).toBeVisible()
+    })
+
     test('issue actions menu matches phone geometry and filters its real actions', async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Workspace-Key': workspaceKey }
       const data = await (await request.get(`${api}/api/bootstrap`, { headers })).json() as { teams: Array<{ id: string }> }
