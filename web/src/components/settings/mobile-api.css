@@ -34,5 +34,6 @@
     .api-keys-section .settings-row-copy > span { font: 450 12px/normal var(--font); }
     .api-keys-section .settings-control { width: 100%; }
     .api-keys-section .settings-select { width: 100%; min-width: 0; height: 36px; font: 400 13px/normal var(--font); }
+    .api-keys-section .settings-select .settings-select-value > span { color: var(--set-text); }
   }
 }

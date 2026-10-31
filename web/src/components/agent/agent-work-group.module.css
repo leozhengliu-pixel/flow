@@ -27,3 +27,4 @@ div.reasoningText :is(p, ul, ol) + :is(p, ul, ol) { margin-top: 6px; }
 div.reasoningText :is(ul, ol) { margin: 0; padding-left: 16px; }
 div.reasoningText strong { color: var(--theme-text-primary); font-weight: 600; }
 div.reasoningText code { font: 11px/1.5 var(--font-monospace); }
+div.reasoningText code { font-variant-ligatures: none; }

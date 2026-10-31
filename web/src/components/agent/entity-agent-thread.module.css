@@ -146,3 +146,4 @@
 :global([data-variant='floating']) .composer:not(#_):not(#_) footer>button:last-child:disabled{opacity:1}
 :global([data-variant='floating']) .agentMessage :global(.agent-chat-document):not(#_){padding:0 10px}
 :global([data-variant='floating']) .replyActions:not(#_){margin-left:0}
+.messageDocument code { font-variant-ligatures: none; }

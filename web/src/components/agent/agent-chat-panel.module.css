@@ -106,3 +106,4 @@
   color: var(--text);
 }
 .messageDocument ul{list-style:disc}.messageDocument ol{list-style:decimal}.messageDocument li::marker{color:var(--theme-text-secondary)}
+.messageDocument code { font-variant-ligatures: none; }
