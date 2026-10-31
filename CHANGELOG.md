@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match workspace project status category spacing and action sizes on phones without changing desktop layouts.
+
 - Match the phone team triage header and two-line issue rows, with working navigation and list-to-detail transitions.
 
 - Match phone Projects toolbar sidebar glyphs and use viewport-width filter and display panels without changing desktop layout.

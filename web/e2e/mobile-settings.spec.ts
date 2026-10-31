@@ -5,6 +5,44 @@ import { test as workspaceTest } from './workspace-fixture'
 const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`${viewport.width}px project statuses`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Project statuses' })
+
+    workspaceTest('keeps status categories, counts and editing usable on phones', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Flow-Workspace': workspaceKey }
+      const bootstrap = await (await request.get('/api/bootstrap', { headers })).json()
+      const status = bootstrap.projectStatuses.find((item: { type: string }) => item.type === 'started')
+      expect((await request.post('/api/projects', { headers, data: { name: '[mobile] Active project', statusId: status.id, teamIds: [bootstrap.teams[0].id] } })).ok()).toBe(true)
+      await page.goto(`/${workspaceKey}/settings/project-statuses`)
+      const pageRoot = page.locator('.pst-page')
+      const card = pageRoot.locator('.pst-card')
+      await expect(pageRoot.getByRole('heading', { name: 'Project statuses', exact: true })).toBeVisible()
+      await expect(card.locator('.pst-group')).toHaveCount(5)
+      await expect(card.locator('.pst-row')).toHaveCount(5)
+      await expect(card.getByRole('button', { name: 'Open menu', exact: true })).toHaveCount(5)
+      expect((await card.boundingBox())!.y).toBeCloseTo(155.5, 1)
+      expect((await card.boundingBox())!.height).toBeCloseTo(500, 1)
+      const started = card.locator('[data-status-type=started]')
+      await expect(started.getByRole('link', { name: 'View projects' })).toHaveText('1 project')
+      await expect(started.getByRole('link')).toHaveCSS('font-size', '12px')
+      const backlog = card.locator('[data-status-type=backlog]')
+      const add = backlog.getByRole('button', { name: 'Create new project status' })
+      expect((await add.boundingBox())!.width).toBe(28)
+      await add.click()
+      await pageRoot.getByRole('textbox', { name: 'Name', exact: true }).fill('[mobile] Later')
+      await pageRoot.getByRole('button', { name: 'Submit', exact: true }).click()
+      await expect(backlog.locator('.pst-row')).toHaveCount(2)
+      const added = backlog.locator('.pst-row', { hasText: '[mobile] Later' })
+      await added.getByRole('button', { name: 'Open menu' }).click()
+      await page.getByRole('menuitem', { name: 'Edit', exact: true }).click()
+      await expect(pageRoot.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('[mobile] Later')
+      await pageRoot.getByRole('button', { name: 'Cancel', exact: true }).click()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  })
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   workspaceTest.describe(`${viewport.width}px integrations`, () => {
     workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Integrations' })
 

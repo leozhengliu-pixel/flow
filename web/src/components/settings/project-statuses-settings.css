@@ -75,3 +75,23 @@
   .pst-editor-actions{width:100%;justify-content:flex-end}
   .pst-more-wrap{opacity:1}
 }
+
+@media (max-width:767px){
+  .settings-main[data-settings-page="project-statuses"] .pst-page {
+    width:100%;
+    .pst-header{padding:0 16px;margin-bottom:24px}
+    .pst-header p{line-height:18px}
+    .pst-card{width:100%;padding:0}
+    .pst-card::before,.pst-card::after{content:"";display:block}
+    .pst-card::before{height:16px}
+    .pst-card::after{height:4px}
+    .pst-group-header{margin:0 12px}
+    .pst-add{width:28px;height:28px}
+    .pst-row{width:100%;padding:0;border-radius:0}
+    .pst-row-main{margin-left:16px}
+    .pst-mark{background:color-mix(in lch,var(--status-color) var(--project-status-icon-alpha),transparent)}
+    .pst-actions{width:44px;height:36px;margin-right:16px}
+    .pst-more-wrap,.pst-more{width:36px;height:36px}
+    .pst-more-wrap{opacity:1}
+  }
+}
