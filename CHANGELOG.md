@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match main issue lists on touch phones by leaving sub-issue selection targets usable without painting per-row checkboxes; keyboard focus still reveals them.
+
 - Keep selected documents' Ask agent action in the phone Actions menu rather than widening the bulk toolbar.
 
 - Let the phone document version selector fit its text and align the history header, preview border and restore action with their content insets.
