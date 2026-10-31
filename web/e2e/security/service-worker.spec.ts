@@ -145,9 +145,13 @@ test('a deployed kill-switch script unregisters on the next update check', async
   } } })
   const origin = `http://localhost:${gateway.port}`
   try {
-    const account = await signUp(context, origin, 'worker-server-disable')
     const violations = await watchViolations(page)
-    await page.goto(`${origin}/${account.workspaceKey}/issues/all`)
+    // Keep app bootstrap registration out of the update/unregister lifecycle being tested.
+    await page.goto(`${origin}/sw.js`)
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.register('/sw.js')
+      await navigator.serviceWorker.ready
+    })
     await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.state)).toBe('activated')
     script = "self.addEventListener('install', () => self.skipWaiting()); self.addEventListener('activate', event => event.waitUntil(self.registration.unregister()));"
     await page.evaluate(async () => { await (await navigator.serviceWorker.getRegistration())!.update() })
