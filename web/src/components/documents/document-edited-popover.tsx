@@ -8,6 +8,7 @@ import { History } from 'lucide-react'
 import { FlowSlidersIcon } from '@/components/issue/flow-header-icons'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { Toggle } from '@/components/ui/toggle'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
 import { ViaApp } from '@/components/ui/via-app'
@@ -35,6 +36,7 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot
   readOnly?: boolean
 }) {
   const { t, formatDate } = useI18n()
+  const phone = usePhoneLayout()
   const owner = documentOwner(document, ctx.data.users)
   const editedLabel = t('Edited {date}').replace('{date}', documentEditedDate(lastEditedAt, formatDate))
   const ownerName = owner ? owner.displayName || owner.name : t('No owner')
@@ -52,7 +54,7 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot
       </button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content align="end" className="document-edited-popover" collisionPadding={10} data-flow-motion="floating" onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
+      <Popover.Content align="end" className="document-edited-popover" collisionPadding={phone ? 0 : 10} data-flow-motion="floating" onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
         <label className="document-view-options">
           <span>{t('Show author names')}</span>
           <Toggle checked={showAuthorNames} label={t(showAuthorNames ? 'Hide author names' : 'Show author names')} onChange={onShowAuthorNames}/>

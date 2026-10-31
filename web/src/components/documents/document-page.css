@@ -793,12 +793,11 @@ button.document-icon.is-empty:hover,
     padding: 0;
   }
 
-  /* The metadata sheet uses the compact phone surface rather than the desktop
-     anchored popover. Keep its geometry independent of the edited-date label. */
+  /* Let the metadata determine its width, constrained only by the phone viewport. */
   .document-edited-popover {
-    width: min(360px, calc(100vw - 32px));
+    width: max-content;
     min-width: 0;
-    max-width: calc(100vw - 32px);
+    max-width: 100vw;
     border: .5px solid var(--icon-picker-page-border);
     background: var(--document-popover-bg);
     box-shadow: var(--shadow-control);
@@ -818,7 +817,7 @@ button.document-icon.is-empty:hover,
     background: var(--toggle-compact-on);
   }
   .document-owner-row .document-person--button {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
   }
   .document-owner-row .document-person strong,
   .document-last-edit-row .document-person strong {
@@ -831,7 +830,7 @@ button.document-icon.is-empty:hover,
     padding: 8px;
   }
   .document-history-action button {
-    width: calc(100% + 1px);
+    width: 100%;
     height: 32px;
     padding-left: 8px;
     border-color: transparent;

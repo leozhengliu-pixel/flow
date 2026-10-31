@@ -105,8 +105,14 @@ test.describe('mobile document view', () => {
       await page.locator('.document-view-options input').check()
       await expect(page.locator('.document-view-options input')).toBeChecked()
       await expect(page.locator('.document-history-action button')).toContainText('Show document history')
-      expect((await popover.boundingBox())?.x).toBeCloseTo(0, 0)
-      expect((await popover.boundingBox())?.width).toBeCloseTo(360.19, 0)
+      const box = (await popover.boundingBox())!
+      expect(box.x).toBeGreaterThanOrEqual(0)
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width)
+      const owner = (await page.locator('.document-owner-row .document-person--button').boundingBox())!
+      expect(owner.width).toBeLessThan(box.width / 2)
+      const history = (await page.locator('.document-history-action button').boundingBox())!
+      expect(history.x - box.x).toBeCloseTo(box.x + box.width - history.x - history.width, 0)
+      expect(history.width).toBeGreaterThan(box.width - 20)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     })
   }
