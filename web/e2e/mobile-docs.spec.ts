@@ -169,6 +169,12 @@ test.describe('mobile document history', () => {
       await page.getByRole('button', { name: 'Show document history', exact: true }).click()
       await expect(page.locator('.document-history-dialog')).toBeVisible()
       await expect(page.locator('.document-history-date-select')).toContainText('Current')
+      const selectBox = (await page.locator('.document-history-date-select').boundingBox())!
+      const panelBox = (await page.locator('.document-history-panel').boundingBox())!
+      expect(selectBox.width).toBeLessThan(panelBox.width - 32)
+      expect(selectBox.x - panelBox.x).toBeGreaterThanOrEqual(8)
+      expect(selectBox.x - panelBox.x).toBeLessThanOrEqual(9)
+      await expect(page.locator('.document-history-restore')).toHaveCSS('padding', '0px 8px')
       await expect(page.locator('.document-history-doc p')).toHaveText('123123123')
       await expect(page.getByRole('button', { name: 'Restore version' })).toBeDisabled()
       expect((await page.locator('.document-history-shell-panel').boundingBox())?.width).toBeGreaterThan(viewport.width - 64)
