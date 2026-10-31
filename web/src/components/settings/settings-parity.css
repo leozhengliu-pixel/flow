@@ -915,6 +915,177 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
   html:root .settings-app .settings-main .settings-members-page.settings-workspace-members > .settings-members-toolbar { grid-template-columns: 1fr auto auto; row-gap: 8px; }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-members-filter { justify-self: start; margin-left: 0; }
 }
+
+.settings-members-phone-search, .settings-members-phone-sort, .settings-members-phone-filter, .settings-members-phone-more { display: none; }
+.settings-members-desktop-sort { display: contents; }
+
+/* Members on phones become a compact two-column directory. Keep the desktop
+ * table intact and let the name column absorb the available width. */
+@media (max-width: 767px) {
+  html:root .settings-app .settings-main .settings-members-page.settings-workspace-members > .settings-page-header {
+    min-height: 32px;
+    margin: 0 0 12px;
+  }
+  html:root .settings-app .settings-main .settings-members-page.settings-workspace-members > .settings-members-toolbar {
+    height: 36px;
+    grid-template-rows: 36px;
+    grid-template-columns: minmax(0, 1fr) 132px auto;
+    column-gap: 6px;
+    margin: 0 0 22px;
+  }
+  html:root .settings-app .settings-main .settings-members-page.settings-workspace-members > .settings-members-toolbar > label { grid-column: auto; }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label {
+    width: auto;
+    height: 36px;
+    box-sizing: border-box;
+    padding: 0;
+    border: 0 !important;
+    background: transparent;
+    box-shadow: none;
+    color: var(--theme-text-primary);
+    font: 500 13px/normal var(--font);
+    position: relative;
+  }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 36px;
+    padding: 6px 25px 6px 32px;
+    border: .5px solid var(--settings-members-search-border);
+    border-radius: 8px;
+    background: var(--settings-members-control-bg);
+    box-shadow: none;
+    color: inherit;
+    font: inherit;
+  }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label > svg {
+    width: 16px;
+    height: 16px;
+    position: absolute;
+    left: 10px;
+    color: var(--theme-text-secondary);
+  }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label > .settings-members-desktop-search { display: none; }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label > .settings-members-phone-search { display: block; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-desktop-sort { display: none; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-phone-sort { display: block; color: var(--set-button-text); }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-phone-sort.is-descending { transform: rotate(180deg); }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label input::placeholder { color: var(--theme-text-secondary); }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-filter { display: none; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-phone-filter {
+    display: block;
+    box-sizing: border-box;
+    width: 132px;
+    height: 36px;
+    margin-left: 0;
+    padding: 6px 24px 6px 12px;
+    border: .5px solid transparent;
+    box-shadow: var(--settings-members-control-ring);
+    color: var(--theme-text-primary);
+    background: var(--settings-members-control-bg);
+    border-radius: 8px;
+    font: 400 13px/normal var(--font);
+  }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-action:not(.primary) { display: none; }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-action.primary {
+    height: 36px;
+    margin-left: 18px;
+    padding: 0 12px;
+    width: 58.84px;
+    font: 500 13px/normal var(--font);
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns,
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row {
+    grid-template-columns: minmax(0, 1fr) 154px;
+    column-gap: 0;
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-directory { width: 100vw; margin-left: -22px; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns {
+    height: 28px;
+    padding: 0 52px 0 69.5px;
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns > button:nth-child(2),
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns > :nth-child(n + 4) { display: none; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns > button {
+    height: 28px;
+    margin-left: 0;
+    padding: 0 6px;
+    border: .5px solid transparent;
+    color: var(--set-button-text);
+    font: 500 12px/normal var(--font);
+    gap: 2px;
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns > button[data-sort=name] { margin-left: 0; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns > button[data-sort=status] { margin-left: 0; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-column-label {
+    color: var(--theme-text-secondary);
+    font: 450 12px/normal var(--font);
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-group {
+    height: 32px;
+    margin-top: 2px;
+    padding: 0 10px 0 22px !important;
+    margin-left: 8px;
+    margin-right: 8px;
+    gap: 6px !important;
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-group > strong { margin-left: 2px; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row {
+    height: 50px;
+    padding: 0 !important;
+    grid-template-columns: 76px minmax(0, 1fr) 154px 52px;
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:first-child { grid-column: 2; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:nth-child(3) { display: block !important; grid-column: 3; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:nth-child(2),
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:nth-child(n + 4) { display: none; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:first-child { gap: 10px; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row .settings-member-avatar {
+    width: 18px;
+    height: 18px;
+    font-size: 9px;
+    line-height: 0;
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:first-child strong {
+    font-size: 13px;
+    line-height: normal;
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:first-child small {
+    font-size: 12px;
+    line-height: normal;
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-role {
+    padding: 2px 6px;
+    font: 450 12px/14.5px var(--font);
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-role.is-admin {
+    background: var(--settings-role-badge-bg);
+    color: var(--settings-role-badge-fg);
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-role > span {
+    display: inline;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: 450 12px/normal var(--font);
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-check {
+    top: 18px;
+    left: 23px;
+    opacity: 1;
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:last-child {
+    display: block;
+    position: absolute;
+    right: 24px;
+    overflow: visible;
+  }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-desktop-more { display: none; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-phone-more { display: block; }
+}
+@media (max-width: 380px) {
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-role { margin-left: 1px; }
+}
 /* The reference app leaves a 2px gap between a group header and its rows (header y203 → row y237 → header y289); rows within a group are contiguous (y417 → y467 → y517). */
 html:root .settings-app .settings-main .settings-workspace-members .settings-members-group + .settings-member-directory-row,
 html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row + .settings-members-group { margin-top: 2px; }

@@ -97,6 +97,64 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
 }
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`${viewport.width}px workspace members`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Members' })
+
+    workspaceTest('keeps grouped members and search, filter, invite and selection usable', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Flow-Workspace': workspaceKey, 'X-Workspace-Key': workspaceKey }
+      const bootstrap = await (await request.get('/api/bootstrap', { headers })).json()
+      const tokenResponse = await request.post('/api/scim/tokens', { headers, data: { name: '[mobile] Members seed' } })
+      expect(tokenResponse.status()).toBe(201)
+      const token = await tokenResponse.json()
+      const people: string[] = []
+      for (let index = 0; index < 4; index++) {
+        const response = await request.post(`/scim/v2/${workspaceKey}/Users`, {
+          headers: { Authorization: `Bearer ${token.secret}` },
+          data: { userName: `${workspaceKey}-${index}@example.test`, displayName: `[mobile] Person ${index}`, name: { formatted: `[mobile] Person ${index}` }, emails: [{ value: `${workspaceKey}-${index}@example.test`, primary: true }], active: true },
+        })
+        expect(response.status()).toBe(201)
+        const person = await response.json()
+        people.push(person.id)
+      }
+      const appResponse = await request.post('/api/oauth-applications', { headers, data: { name: '[mobile] Application', scopes: ['read'] } })
+      expect(appResponse.status()).toBe(201)
+      const application = await appResponse.json()
+      expect((await request.post('/api/application-installations', {
+        headers, data: { clientId: application.clientId, teamIds: [bootstrap.teams[0].id], scopes: ['read'], active: true },
+      })).ok()).toBe(true)
+      for (const id of people.slice(1)) {
+        const response = await request.post(`/api/workspaces/${workspaceKey}/members/${id}/suspend`, { headers })
+        expect(response.ok(), await response.text()).toBe(true)
+      }
+      expect((await request.patch(`/api/workspaces/${workspaceKey}/members/${bootstrap.viewer.id}`, {
+        headers, data: { displayName: '[mobile] Admin', email: `${workspaceKey}@example.test` },
+      })).ok()).toBe(true)
+
+      await page.goto(`/${workspaceKey}/settings/members`)
+      const directory = page.locator('.settings-workspace-members')
+      await expect(directory.locator('.settings-members-group')).toHaveText(['Active2', 'Application2', 'Inactive3'])
+      expect((await directory.getByRole('textbox', { name: 'Search by name or email' }).boundingBox())?.height).toBe(36)
+      expect((await directory.locator('[data-member-group=active]').boundingBox())?.y).toBeCloseTo(191.5, 1)
+      await expect(directory.getByRole('button', { name: 'Export CSV', exact: true })).toBeHidden()
+      await expect(directory.getByRole('button', { name: 'Order by Role', exact: true })).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await directory.getByRole('textbox', { name: 'Search by name or email' }).fill('Nobody matches')
+      await expect(directory.getByText('No matching members', { exact: true })).toBeVisible()
+      await directory.getByRole('button', { name: 'Clear filter' }).click()
+      await directory.getByRole('combobox', { name: 'Member filter' }).selectOption('Admins')
+      await expect(directory.locator('[data-member-row=active]')).toHaveCount(1)
+      await directory.getByRole('checkbox').check()
+      await expect(directory.getByRole('toolbar', { name: 'Selected members' })).toBeVisible()
+      await directory.getByRole('button', { name: 'Clear selected' }).click()
+      await directory.getByRole('button', { name: 'Invite', exact: true }).click()
+      await expect(page.getByRole('dialog')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('dialog')).toBeHidden()
+    })
+  })
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   workspaceTest.describe(`${viewport.width}px account notifications`, () => {
     workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Account notifications' })
 
