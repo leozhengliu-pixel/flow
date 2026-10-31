@@ -9,6 +9,7 @@ import {
   Bell,
   Check,
   ChevronLeft,
+  ChevronRight,
   Copy,
   FilePlus2,
   GitPullRequest,
@@ -532,7 +533,7 @@ function Option({ icon, glyph, label, detail, shortcut, nested, anchor, expanded
     {detail && <small className="issue-options-detail">{detail}</small>}
     {checked && <span className="issue-options-detail"><Check size={16}/></span>}
     {shortcut && <IssueOptionsShortcut value={shortcut}/>}
-    {nested && <span className="issue-options-chevron" aria-hidden="true">▶</span>}
+    {nested && <span className="issue-options-chevron" aria-hidden="true"><ChevronRight size={14} strokeWidth={1.5}/></span>}
   </Command.Item>
 }
 

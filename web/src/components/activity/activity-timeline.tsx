@@ -420,7 +420,7 @@ function EventGroupToggle({ events, open, onToggle }: { events: ActivityEvent[];
   const names: Record<string, string> = { delegate: 'agent', assignee: 'assignee', state: 'status', priority: 'priority', estimate: 'estimate', labels: 'labels', project: 'project', title: 'title', dueDate: 'due date' }
   const fields = [...new Set(events.flatMap(event => Object.keys(event.metadata ?? {}).flatMap(key => names[key] ? [t(names[key])] : [])))]
   const summary = fields.length ? t(': changed {fields}…').replace('{fields}', new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(fields)) : ''
-  return <button type="button" className="activity-event-group" aria-expanded={open} onClick={onToggle}><ChevronRight size={12}/><span><span>{t('Show {count} events').replace('{count}', String(events.length))}{summary}</span></span></button>
+  return <button type="button" className="activity-event-group" aria-expanded={open} onClick={onToggle}><ChevronRight size={12}/><span><span>{open ? t('Show less') : t('Show {count} events').replace('{count}', String(events.length))}{!open && summary}</span></span></button>
 }
 
 function ActivityIssueLink({ id, label, context }: { id: string; label: string; context: ActivityContext }) {

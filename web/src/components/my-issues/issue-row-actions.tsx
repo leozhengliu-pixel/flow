@@ -18,6 +18,7 @@ import type { MyIssuesCreateContext, MyIssuesRowData } from './my-issues-list'
 import { IssueRowActionContext, useIssueRowActions, type IssueRowActionContextValue } from './use-issue-row-actions'
 import styles from './my-issues-list.module.css'
 import { ContextMenuIcon } from './context-menu-icon'
+import { SubmenuChevron } from '@/components/ui/submenu-chevron'
 
 export function IssueRowActionsProvider({ value, children }: { value: IssueRowActionContextValue; children: ReactNode }) {
   return <IssueRowActionContext.Provider value={value}>{children}</IssueRowActionContext.Provider>
@@ -211,7 +212,7 @@ function Item({ label, icon, shortcut, checked, top = false, onSelect }: { label
 }
 
 function Sub({ label, shortcut, issueSearch = false, children }: { label: string; shortcut?: string; issueSearch?: boolean; children: ReactNode }) {
-  return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true">▶</span></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={issueSearch ? `${styles.contextSubmenu} ${styles.issueSubmenu}` : styles.contextSubmenu} sideOffset={3} alignOffset={-5}>{children}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
+  return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true"><SubmenuChevron/></span></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={issueSearch ? `${styles.contextSubmenu} ${styles.issueSubmenu}` : styles.contextSubmenu} sideOffset={3} alignOffset={-5}>{children}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
 }
 
 function IssueSearch({ data, exclude, onPick }: { data: BootstrapData; exclude: string; onPick: (issue: Issue) => void }) {

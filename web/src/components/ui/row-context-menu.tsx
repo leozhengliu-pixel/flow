@@ -6,6 +6,7 @@ import { isMacPlatform } from '@/components/project-detail/project-detail-shortc
 import { useI18n } from '@/i18n/i18n'
 import { AppLink } from './app-link'
 import { FlowGlyph } from './menu-glyphs'
+import { SubmenuChevron } from './submenu-chevron'
 import { createShortcutMatcher, shortcutSteps, takeQueuedShortcut } from './menu-shortcuts'
 import './row-context-menu.css'
 
@@ -109,7 +110,7 @@ export function FlowMenuRowContent({ icon, label, detail, shortcut, trailing, su
     {leading}
     {icon !== undefined && <span className="flow-menu__icon" aria-hidden="true">{icon}</span>}
     <span className="flow-menu__label"><span className="flow-menu__text">{label}</span>{detail && <span className="flow-menu__detail">{detail}</span>}{trailing}</span>
-    {(shortcut || submenu) && <span className="flow-menu__end">{shortcut && <FlowMenuShortcut value={shortcut}/>}{submenu && <span className="flow-menu__marker" aria-hidden="true">▶</span>}</span>}
+    {(shortcut || submenu) && <span className="flow-menu__end">{shortcut && <FlowMenuShortcut value={shortcut}/>}{submenu && <span className="flow-menu__marker" aria-hidden="true"><SubmenuChevron/></span>}</span>}
   </>
 }
 
