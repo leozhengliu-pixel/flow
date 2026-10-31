@@ -38,6 +38,7 @@
 }
 
 .flow-triage-list__title { min-width: 0; display: flex; align-items: center; gap: 2px; }
+.flow-triage-list__team { display: none; }
 .flow-triage-list__title h2 {
   margin: 0;
   padding: 0 4px 0 10px;
@@ -150,6 +151,16 @@
 .flow-triage-row__date { flex: none; margin-left: auto; color: var(--triage-row-meta-fg); font-size: 12px; font-weight: 450; white-space: nowrap; }
 
 .flow-triage-list__empty-filter { padding: 24px 8px; color: var(--triage-row-meta-fg); font-size: 13px; text-align: center; }
+
+@media (min-width: 1024px) {
+  .flow-triage-list__team { width: 16px; height: 16px; margin-left: 10px; display: grid; place-items: center; }
+  .flow-triage-list__team svg { width: 16px; height: 16px; }
+  .flow-triage-list__title h2 { padding-left: 4px; color: var(--text); line-height: normal; }
+  .flow-triage-row { margin-right: 8.5px; padding-top: 10px; padding-bottom: 12px; }
+  .flow-triage-row__title { color: var(--bright); line-height: normal; }
+  .flow-triage-row__id { color: var(--issue-muted); line-height: normal; }
+  .flow-triage-row__creator,.flow-triage-row__date { color: var(--issue-muted); line-height: normal; }
+}
 
 .flow-triage-skeleton { display: flex; flex-direction: column; }
 .flow-triage-skeleton__row { box-sizing: border-box; height: 59px; margin: 0 8px; padding: 12px 14px; display: flex; flex-direction: column; justify-content: center; gap: 9px; }

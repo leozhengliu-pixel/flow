@@ -22,3 +22,23 @@
 .noMatches{min-height:240px;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--theme-text-secondary);font-size:13px}
 .noMatches strong{color:var(--theme-text-primary);font-weight:500}
 .noMatchesArt{width:64px;height:48px;color:var(--theme-text-tertiary)}
+.noMatchesBlock{display:flex;flex-direction:column;align-items:center;gap:12px}
+.desktopArt,.desktopHeading,.emptyFilterCard{display:none}
+@media(min-width:1024px){
+  .noMatches{box-sizing:border-box;padding:120px 60px 148px}
+  .noMatchesBlock{width:350px;max-width:100%;flex:none;gap:20px}
+  .noMatchesArt,.phoneHeading{display:none}
+  .desktopArt{display:block;width:153px;height:90px;flex:none}
+  .desktopArt svg{display:block;width:153px;height:90px}
+  .desktopArt :global(.member-profile-empty__outline){stroke:var(--inbox-filter-empty-outline);stroke-width:1.5;stroke-dasharray:3 3}
+  .desktopArt :global(.member-profile-empty__bright){fill:var(--inbox-filter-empty-bar-light)}
+  .desktopArt :global(.member-profile-empty__dim){fill:var(--inbox-filter-empty-bar-dark)}
+  .noMatches .desktopHeading{display:block;color:var(--issue-muted);font-size:15px;font-weight:600;line-height:23px;text-align:center}
+  .emptyFilterCard{box-sizing:border-box;width:350px;max-width:100%;height:57px;flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:16px;border:.5px solid var(--description-math-border);border-radius:5px;color:var(--issue-muted);font-size:12px;font-weight:450;line-height:normal}
+  .emptyFilterCard>span{display:flex;align-items:center;min-width:0}
+  .emptyFilterCard b{padding:3px 5px;color:var(--bright);font-weight:500;white-space:nowrap}
+  .emptyFilterCard button{box-sizing:border-box;display:inline-flex;flex:none;align-items:center;justify-content:center;gap:6px;width:104px;height:24px;padding:0 8px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font-family:inherit;font-size:12px;font-weight:500;line-height:normal;white-space:nowrap;cursor:pointer}
+  .emptyFilterCard button svg{flex:none}
+  .emptyFilterCard button:hover{background:var(--theme-surface-hover)}
+  .emptyFilterCard button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+}

@@ -12,7 +12,7 @@ import { issueListState, pagedIssueListSignature, retainIssueList, trimPagedIssu
 import { ISSUE_QUERY_INVALIDATED, issueMayMatchQuery, queryUsesLabels, type IssueQueryInvalidation } from './paged-issue-invalidation'
 import styles from '@/components/my-issues/my-issues-list.module.css'
 import boardStyles from './issue-board.module.css'
-import { IssueBoardCard, IssueBoardGroupHeader } from './issue-board'
+import { HiddenBoardColumns, IssueBoardCard, IssueBoardGroupHeader } from './issue-board'
 import { LoadingContainer, LoadingListFooter } from '@/components/ui/loading-caret'
 /** The server's customer group for requests whose customer no longer exists. */
 const UNKNOWN_CUSTOMER_GROUP = '__unknown__'
@@ -315,7 +315,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
             }}/>
           </div>
         </VisibleIssueColumn>)}
-        {hiddenGroupIds.length > 0 && <section className={boardStyles.hiddenColumns}><strong>Hidden columns</strong>{groups.filter(group => hiddenGroupIds.includes(group.value)).map(group => <button key={group.value} onClick={() => onShowGroup?.(group.value)}><span data-i18n-ignore>{descriptor(group).label}</span><b>{group.count}</b></button>)}</section>}
+        <HiddenBoardColumns groups={groups.filter(group => hiddenGroupIds.includes(group.value)).map(descriptor)} onShowGroup={onShowGroup}/>
       </div>
     }
     return <GroupedVirtuoso className={styles.virtualList} role="list" aria-label="Issues" style={listStyle} groupCounts={counts} context={revision} defaultItemHeight={44} increaseViewportBy={{ top: 176, bottom: 264 }}

@@ -13,7 +13,7 @@ import { MyIssuesFilterBar } from '@/components/my-issues/my-issues-filter-bar'
 import { toggleFilterOption, updateFilterOperator, updateFilterValues, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
 import type { MyIssuesFilterKey } from '@/components/my-issues/my-issues-surface'
 import { applyExplorerFilters, explorerFilterOptions, explorerPropertyOptions, ISSUE_FILTER_LABELS } from '@/components/issue-explorer/issue-explorer-model'
-import { CalendarIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { DisplayIcon, FilterIcon } from '@/components/ui/view-action-icons'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { SelectControl } from '@/components/ui/select-control'
@@ -159,6 +159,7 @@ export function TriagePage({ data, team, onReload, onCreateIssue, onNavigate, se
 
   const header = <header className="flow-triage-list__header">
     <div className="flow-triage-list__title">
+      <span className="flow-triage-list__team" aria-hidden="true"><TeamIcon team={team}/></span>
       <h2>{t('Triage')}</h2>
       <FlowTooltip label={t(favorited ? 'Remove from favorites' : 'Favorite page')} shortcut="⌥ F">
         <ContentViewHeaderFavoriteActionButton className="flow-triage-list__favorite" favorited={favorited} favoriteLabel={t('Favorite page')} unfavoriteLabel={t('Remove from favorites')} onClick={() => void toggleFavoriteFor(data, 'triage', team.id, undefined, favorited)}/>

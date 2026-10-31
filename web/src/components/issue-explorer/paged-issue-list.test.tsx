@@ -31,6 +31,16 @@ afterEach(() => clearPagedIssueListCache())
 
 describe('server-backed issue groups', () => {
   beforeEach(() => vi.clearAllMocks())
+  it('uses the shared hidden-column controls and complete counts on paged boards', async () => {
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 240 }] })
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [], hasMore: false, total: 240 })
+    const show = vi.fn(), data = makeBootstrap({ issues: [], favorites: [], issueCollectionPaged: true })
+    render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} layout="board" hiddenGroupIds={['state-backlog']} onShowGroup={show} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    const restore = await screen.findByRole('button', { name: /Backlog\s*240/ })
+    await userEvent.click(restore)
+    expect(show).toHaveBeenCalledWith('state-backlog')
+    expect(screen.getByRole('region', { name: 'Hidden columns' })).toBeInTheDocument()
+  })
   it('uses complete group counts and fetches a separate cursor page as the viewport advances', async () => {
     vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 10000000 }] })
     vi.mocked(listIssueRecords).mockImplementation(async query => ({ items: Array.from({ length: 100 }, (_, index) => makeIssue({ id: `issue-${query?.cursor ? index + 100 : index}`, title: `Issue ${query?.cursor ? index + 100 : index}` })), hasMore: true, nextCursor: query?.cursor ? 'page-3' : 'page-2', total: -1 }))
