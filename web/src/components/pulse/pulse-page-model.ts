@@ -15,8 +15,8 @@ export function orderPulseViews(views: SavedView[], order: string[]) {
 }
 
 /** The reference app's empty copy: "Updates from initiatives, projects … will show here." */
-export function emptyCopy(tab: PulseRouteView, initiativesEnabled: boolean, t: (source: string) => string) {
-  const sources = initiativesEnabled ? t('initiatives, projects') : t('Projects') === 'Projects' ? 'projects' : t('Projects')
+export function emptyCopy(tab: PulseRouteView, initiativesEnabled: boolean, t: (source: string) => string, phone = false) {
+  const sources = initiativesEnabled ? t(phone ? 'initiatives, projects' : 'initiatives and projects') : t('Projects') === 'Projects' ? 'projects' : t('Projects')
   const template = tab === 'following' ? 'Updates from {sources} that you’re a part of or subscribed to will show here.' : tab === 'popular' ? 'Popular updates from {sources} will show here.' : 'Updates from {sources} in your workspace will show here.'
   return t(template).replace('{sources}', sources)
 }

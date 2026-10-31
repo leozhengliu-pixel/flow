@@ -38,6 +38,7 @@ import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { DocumentInboxView } from './hosts/document-inbox-view'
 import { ProjectAgentReplyInboxView } from './hosts/project-agent-reply-inbox-view'
 import { WorkspaceWelcomeInboxView } from './hosts/workspace-welcome-inbox-view'
+import { issuePath } from '@/lib/app-routes'
 import { documentNotificationKind, documentNotificationLine, isDocumentNotification, notificationDocument } from './hosts/document-inbox-model'
 
 const initialDisplayOptions: InboxDisplayOptions = {
@@ -339,11 +340,12 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
     activeTab={activeTab}
     onTabChange={onTabChange}
     tabCounts={tabCounts}
-    onCopyLink={onCopyIssueLink ? notification => {
+    onCopyLink={notification => {
       const projection = notifications.find(item => item.id === notification.id)
       const issue = projection ? issueById.get(projection.issueId) : undefined
-      if (issue) void onCopyIssueLink(issue)
-    } : undefined}
+      if (issue && onCopyIssueLink) void onCopyIssueLink(issue)
+      else if (notification.href) void copyText(new URL(notification.href, window.location.origin).href)
+    }}
     subscribed={notification => {
       const projection = notifications.find(item => item.id === notification.id)
       const issue = projection ? issueById.get(projection.issueId) : undefined
@@ -791,6 +793,7 @@ function projectInbox(data: BootstrapData, t: (source: string) => string): Inbox
     return [{
       id: notification.id,
       issueId: issue.id,
+      href: issuePath(data.workspace.urlKey, issue),
       sourceType,
       sourceId,
       notificationType: inboxNotificationCategory(notification, comment ? 'comment' : event ? activityKind(event) : notification.type),

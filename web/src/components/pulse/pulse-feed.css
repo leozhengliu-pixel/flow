@@ -446,3 +446,12 @@
   .flow-framed-workspace.pulse-page .pulse-empty-body>div>button,
   .flow-framed-workspace.pulse-page .pulse-empty-body>div>a{padding:0 10px;font-size:13px}
 }
+
+@media (min-width: 1024px) {
+  .flow-framed-workspace.pulse-page .pulse-empty-body { align-items: flex-start; gap: 0; text-align: left; }
+  .flow-framed-workspace.pulse-page .pulse-empty-body .pulse-empty-art { margin: 0 0 24px; }
+  .flow-framed-workspace.pulse-page .pulse-empty-body > strong { width: 100%; color: var(--text); }
+  .flow-framed-workspace.pulse-page .pulse-empty-body > div { justify-content: flex-start; }
+  .flow-framed-workspace.pulse-page .pulse-empty-body > div > button { font-size: 12px; }
+  .flow-framed-workspace.pulse-page .pulse-empty-body > div > a { color: var(--text); font-size: 12px; }
+}
