@@ -14,6 +14,20 @@ const project: ProjectPageItem = {
 }
 
 describe('ProjectsDataView project menu', () => {
+  it('exposes milestone and summary display state without a dead milestone button', () => {
+    const props = { groups: [{ id: 'all', name: '', projects: [{ ...project, milestone: 'Alpha', milestoneProgress: 25, summary: 'Delivery summary' }] }], grouping: 'No grouping' }
+    const { rerender } = render(<I18nProvider><ProjectsDataView {...props} visibleProperties={['Milestones']}/></I18nProvider>)
+    const row = screen.getByRole('row', { name: project.name })
+    expect(row).toHaveAttribute('data-show-milestones', 'true')
+    expect(row).toHaveAttribute('data-show-summary', 'false')
+    expect(row.querySelector('.lp-project-row__milestone')).toHaveTextContent('Alpha')
+    expect(row.querySelector('.lp-project-row__milestone')).not.toHaveAttribute('role', 'button')
+    expect(screen.getByLabelText('Milestone Alpha. Progress: 25%.')).toBeInTheDocument()
+    rerender(<I18nProvider><ProjectsDataView {...props} visibleProperties={['Summary']}/></I18nProvider>)
+    expect(row).toHaveAttribute('data-show-milestones', 'false')
+    expect(row).toHaveAttribute('data-show-summary', 'true')
+  })
+
   it('reuses grouped labels in the context menu and replaces a peer before saving', async () => {
     const user = userEvent.setup()
     const onPropertyChange = vi.fn()

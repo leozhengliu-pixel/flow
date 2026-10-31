@@ -1,0 +1,11 @@
+@media (min-width: 1024px) {
+  .project-overview__property-section,
+  .project-overview__row-section { grid-template-columns: 67.73px minmax(0, 1fr); }
+  .project-overview h3 { line-height: normal; }
+  .project-overview__row-section,
+  .project-overview__intro + .project-overview__row-section { margin-top: 12px; }
+  .project-overview .project-overview__name,
+  .project-overview .project-overview__summary { letter-spacing: 0; }
+  .project-overview__team { line-height: normal; }
+  .project-details-sidebar__property-label { line-height: normal; }
+}

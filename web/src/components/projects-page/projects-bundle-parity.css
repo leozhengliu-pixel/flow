@@ -9,3 +9,31 @@
 .lp-project-row.is-selected .lp-project-row__select > span {
   opacity: 1;
 }
+
+.lp-project-row__date-icon { display: none; }
+
+@media (min-width: 1024px) {
+  .lp-project-table {
+    --lp-health-width: 130px;
+    --lp-lead-width: 114px;
+    --lp-target-width: 91px;
+    --lp-issues-width: 49px;
+    --lp-status-width: 108px;
+  }
+  .lp-project-table__header { line-height: normal; }
+  .lp-project-row__name > div { align-items: center; overflow: hidden; }
+  .lp-project-row__name strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: normal; }
+  .lp-project-row[data-show-summary="false"] .lp-project-row__name small { display: none; }
+  .lp-project-row[data-show-milestones="true"] .lp-project-row__milestone {
+    display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; max-width: 45%;
+    color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; line-height: normal;
+  }
+  .lp-project-row__milestone-icon { width: 16px; height: 16px; flex: none; }
+  .lp-project-row__milestone-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lp-project-row__milestone-date { display: none; }
+  .lp-project-row__health { height: 24px; gap: 10px; font-weight: 500; line-height: normal; }
+  .lp-project-row__date.is-unset { width: 28px; padding: 0; justify-content: center; }
+  .lp-project-row__date.is-unset .lp-project-row__date-placeholder { display: none; }
+  .lp-project-row__date-icon { display: block; width: 16px; height: 16px; }
+  .lp-project-row__status .lp-project-progress-sparkline { display: none; }
+}

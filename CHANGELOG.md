@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Restore desktop project milestone chips, honor ungrouped rows and display properties, align list columns and compact date controls, and correct overview property spacing without changing phone layouts.
+
 - Phone history and display popovers paint a true half-pixel edge, chat switcher times align to the right inset and compact older weeks without changing sub-day units, and inactive display layout pills retain their ring. Desktop layouts and timestamps are unchanged.
 - Phone navigation drawers retain a visible compose fill, the team header and child spacing, indented cycle labels, and a dismissible Import issues entry without changing the desktop sidebar.
 - Phone initiative lists use compact touch-sized tabs and actions, full-width name and health rows, and matching navigation and health glyphs without changing desktop layouts.

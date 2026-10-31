@@ -3,6 +3,7 @@
  * details sidebar). Merged into zhCN by translations.ts.
  */
 export const initiativeProjectPagesZhCN: Record<string, string> = {
+  "Milestone {name}. Progress: {progress}%.": "里程碑 {name}。进度：{progress}%。",
   "Latest update": "最新更新",
   "Write initiative update": "撰写目标更新",
   "Write first initiative update": "撰写第一条目标更新",
