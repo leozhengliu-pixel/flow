@@ -311,6 +311,8 @@
   .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) .subTeamRow { margin-top: 4px; }
   .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] { margin-top: 1px; }
   .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="Grouping options"] { padding-bottom: 4px; }
+  .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] > .sectionLabel:first-child:not(#_) { margin-bottom: 2px; }
+  .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] > .nestedSelectRow + .switchRow { margin-top: 4px; }
   .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] { margin-top: 1px; }
   .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] > .sectionLabel:first-child:not(#_) { margin-bottom: 2px; }
   .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] > .sectionLabel:nth-of-type(2):not(#_) { margin-top: 8px; }
