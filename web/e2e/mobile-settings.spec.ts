@@ -2,6 +2,21 @@ import { expect, test } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import { test as workspaceTest } from './workspace-fixture'
 
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`${viewport.width}px billing`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Billing' })
+
+    workspaceTest('renders the compact billing plan, usage and invoice surfaces', async ({ page, workspaceKey }) => {
+      await page.goto(`/${workspaceKey}/settings/billing`)
+      await expect(page.locator('.billing-mobile-title h1')).toHaveText('Billing')
+      await expect(page.locator('.billing-mobile-upgrade')).toBeVisible()
+      await expect(page.locator('.billing-mobile-feature')).toHaveCount(9)
+      await expect(page.locator('.billing-mobile-invoice')).toContainText('Credits purchase')
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  })
+}
+
 const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
