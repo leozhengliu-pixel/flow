@@ -84,6 +84,20 @@
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootItem,.valueMenu .valueItem{height:46px;padding:0 12px;font-size:13px;font-weight:450;line-height:15.6px}
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootChevron{display:none}
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSeparator{margin:0 -6px}
+  .rootMenu[data-surface=my-issues][data-variant=root] .rootCommand{font-size:15px;font-weight:400;line-height:22.5px}
+  .rootMenu[data-surface=my-issues][data-variant=root] .rootList{margin:0}
+  .rootMenu[data-surface=my-issues] .rootGroup [cmdk-group-items]>.rootItem{width:calc(100% - 10px);margin:0 4.5px 0 5.5px}
+  :global([data-radix-popper-content-wrapper]:has(>[data-surface=my-issues][data-variant=root])){transform:translate(16px,round(nearest,13vh,1px))!important}
+  .phoneRowSlot{position:relative;height:46px;margin:0 4.5px 0 5.5px}
+  .phoneRowSlot:not(:has([cmdk-item])){display:none}
+  .rootMenu[data-surface=my-issues] .phoneRowSlot .rootItem{position:absolute;inset:0;font-size:15px;font-weight:400;line-height:22.5px}
+  .rootMenu[data-surface=my-issues] .rootItem>span:nth-child(2){font-size:13px;font-weight:450;line-height:15.6px}
+  .rootMenu[data-surface=my-issues] .rootIcon{color:var(--pk-text)}
+  .rootMenu[data-surface=my-issues] .rootIcon svg{fill:var(--pk-muted)}
+  .phoneSeparatorSlot{position:relative;height:12px}
+  .phoneSeparatorSlot:not(:has([cmdk-separator]:not([hidden]))){display:none}
+  .rootMenu[data-surface=my-issues] .phoneSeparatorSlot .rootSeparator{position:absolute;inset:0;margin:0;padding:6px 0;width:calc(100% + 1px)}
+  .rootMenu[data-surface=my-issues] .phoneSeparatorSlot .rootSeparator:after{height:1px;background:transparent;border-bottom:1px solid var(--pk-divider);transform:scaleY(.5);transform-origin:top}
 }
 
 /* Text-condition dialog ("Milestone name contains…", custom dates). */

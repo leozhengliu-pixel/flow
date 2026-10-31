@@ -25,6 +25,7 @@ import { AgentAvatarMark } from '@/components/ui/agent-glyph'
 import { isBuiltinAgentAvatarUrl } from '@/components/ui/agent-avatar-url'
 import { ReleasePipelineIcon } from '@/components/releases/release-icons'
 import { durationFilterOptions } from '@/components/issue-explorer/issue-date-filter'
+import { MyIssuesPhoneFilterIcon } from './my-issues-phone-filter-icons'
 
 export type IssueFilterScope = 'issues' | 'project'
 
@@ -47,6 +48,7 @@ export interface MyIssuesFilterMenuProps {
   align?: 'start' | 'center' | 'end'
   /** `documents`: the reference app's Documents list menu (Advanced filter, Creator / Owner, Project / Dates; short pickers hide the search). */
   layout?: 'issues' | 'documents'
+  surface?: 'my-issues'
 }
 
 const ISSUE_FILTER_SCOPE_HIDDEN: Record<IssueFilterScope, MyIssuesFilterKey[]> = {
@@ -87,9 +89,10 @@ const DOCUMENT_FILTER_GROUPS = [
 /** The reference app shows a value picker's search once it lists this many rows (Documents: Creator 3 rows has none, Owner 4 has one). */
 const DOCUMENT_SEARCH_MINIMUM = 4
 
-export function MyIssuesFilterMenu({ align = 'center', availableFields, layout = 'issues', filters = [], onAddGroup, onAdvanced, onOpenChange, onToggle, open, options, scope = 'issues', trigger, variant = 'root' }: MyIssuesFilterMenuProps) {
+export function MyIssuesFilterMenu({ align = 'center', availableFields, layout = 'issues', filters = [], onAddGroup, onAdvanced, onOpenChange, onToggle, open, options, scope = 'issues', surface, trigger, variant = 'root' }: MyIssuesFilterMenuProps) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
+  const phoneRoot = phone && surface === 'my-issues' && variant === 'root'
   const [activeField, setActiveField] = useState<MyIssuesFilterKey>()
   const [query, setQuery] = useState('')
   const [aiPending, setAiPending] = useState(false)
@@ -161,7 +164,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
   return <><Popover.Root open={open} onOpenChange={close}>
     <Popover.Trigger asChild>{isValidElement(trigger) ? cloneElement(trigger, { 'aria-expanded': open } as object) : trigger}</Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-layout={layout} data-variant={variant} data-submenu-open={activeField ? true : undefined} style={{ zIndex: rootLayer }} side="bottom" align={flushEnd ? 'end' : align} alignOffset={flushEnd ? -4000 : align === 'center' ? -15 : 0} sideOffset={3} collisionPadding={phone ? 11 : 14} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (keepFocus.current) { keepFocus.current = false; event.preventDefault() } }} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
+      <Popover.Content aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-layout={layout} data-surface={surface} data-variant={variant} data-submenu-open={activeField ? true : undefined} style={{ zIndex: rootLayer }} side="bottom" align={flushEnd ? 'end' : align} alignOffset={flushEnd ? -4000 : align === 'center' ? -15 : 0} sideOffset={3} collisionPadding={phone ? 11 : 14} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (keepFocus.current) { keepFocus.current = false; event.preventDefault() } }} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
         <Command label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} className={styles.rootCommand} defaultValue={phone && variant === 'root' ? '__none__' : undefined} loop filter={(value, search, keywords) => value.startsWith('__ai__') ? 0.0001 : defaultFilter(value, search, keywords)}>
           <div className={styles.rootSearch}>
             <Command.Input aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} placeholder={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} autoFocus value={query} onValueChange={setQuery}/>
@@ -171,13 +174,14 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
             <Command.Empty className={styles.empty}>{t('No filters found')}</Command.Empty>
             {onAddGroup && <><Command.Group className={styles.rootGroup}><Command.Item className={styles.rootItem} data-add-group="" value="Add filter group" keywords={translatedKeywords(['Add filter group'], t)} onMouseMove={() => setActiveField(undefined)} onSelect={() => { onAddGroup(); close(false) }}><span className={styles.rootIcon} aria-hidden="true"><FlowGlyph name="filterGroup"/></span><span>{t('Add filter group')}</span></Command.Item></Command.Group><Command.Separator className={styles.rootSeparator}/></>}
             {visibleGroups.map((visibleItems, groupIndex) => {
-              return <Fragment key={groupIndex}>{groupIndex > 0 && <Command.Separator className={styles.rootSeparator}/>}<Command.Group className={styles.rootGroup}>
+              return <Fragment key={groupIndex}>{groupIndex > 0 && (phoneRoot ? <div className={styles.phoneSeparatorSlot}><Command.Separator className={styles.rootSeparator}/></div> : <Command.Separator className={styles.rootSeparator}/>)}<Command.Group className={styles.rootGroup}>
               {visibleItems.map(item => {
                 const field = item.id as MyIssuesFilterKey
                 const hasValues = field === 'advanced' ? Boolean(onAdvanced) : Boolean(options?.(field)?.length)
                 const hasSubmenu = 'submenu' in item && item.submenu
                 const directApply = field === 'autoClosed' || field === 'advanced'
                 return <Popover.Root key={field} open={activeField === field} onOpenChange={next => setActiveField(next ? field : undefined)}>
+                  <div className={phoneRoot ? styles.phoneRowSlot : undefined} style={phoneRoot ? undefined : { display: 'contents' }}>
                   <Popover.Anchor asChild>
                     <Command.Item
                       className={styles.rootItem}
@@ -190,9 +194,10 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
                       onMouseMove={() => setActiveField(hasValues && !directApply ? field : undefined)}
                       onSelect={() => { if (field === 'advanced') { keepFocus.current = true; close(false); onAdvanced?.() } else if (directApply) { const option=options?.(field)?.[0]; if(option){onToggle(field,option);close(false)} } else openValues(field) }}
                     >
-                      <span className={styles.rootIcon} aria-hidden="true"><FilterFieldIcon field={field}/></span><span>{t(item.label)}</span>{hasSubmenu && <span className={styles.rootChevron} aria-hidden="true">▶</span>}
+                      <span className={styles.rootIcon} aria-hidden="true">{phoneRoot ? <MyIssuesPhoneFilterIcon field={field} fallback={<FilterFieldIcon field={field}/>}/> : <FilterFieldIcon field={field}/>}</span><span>{t(item.label)}</span>{hasSubmenu && <span className={styles.rootChevron} aria-hidden="true">▶</span>}
                     </Command.Item>
                   </Popover.Anchor>
+                  </div>
                   {hasValues && !directApply && <ValueMenu field={field} filters={filters} label={item.label} minSearchOptions={layout === 'documents' ? DOCUMENT_SEARCH_MINIMUM : undefined} options={options?.(field) ?? []} optionsFor={field => options?.(field)} layer={rootLayer + 1} onClose={() => setActiveField(undefined)} onToggle={choose} onToggleAny={onToggle}/>}
                 </Popover.Root>
               })}

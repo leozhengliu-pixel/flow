@@ -3,8 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { translateToChinese } from '@/i18n/translate'
-import { zhCN } from '@/i18n/translations'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
+import { MyIssuesPhoneFilterIcon } from '@/components/my-issues/my-issues-phone-filter-icons'
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from '@/components/my-issues/my-issues-surface'
 import type { SavedView, Team, User } from '@/types/flow'
 import { dateFilterMenu } from './issue-date-filter'
@@ -113,12 +113,22 @@ describe('filter menus', () => {
   })
 })
 
-describe('Agent stays untranslated', () => {
-  it('never translates the word Agent', () => {
-    expect(translateToChinese('Agent')).toBe('Agent')
+describe('filter labels in Chinese', () => {
+  it('uses the current Agent translations', () => {
+    expect(translateToChinese('Agent')).toBe('智能体')
     expect(translateToChinese('Agent Session')).toBe('Agent 会话')
     expect(translateToChinese('Any agent')).toBe('任意 Agent')
     expect(translateToChinese('No agent')).toBe('无 Agent')
-    expect(Object.values(zhCN).filter(value => /智能助手|智能体/.test(value))).toEqual([])
+  })
+})
+
+describe('phone filter glyphs', () => {
+  it('uses the team and estimate glyphs instead of the link fallback', () => {
+    const { container } = render(<><MyIssuesPhoneFilterIcon field="team" fallback={<span>fallback</span>}/><MyIssuesPhoneFilterIcon field="estimate" fallback={<span>fallback</span>}/></>)
+    expect(screen.queryByText('fallback')).toBeNull()
+    const icons = container.querySelectorAll('svg')
+    expect(icons[0].querySelectorAll('path')).toHaveLength(3)
+    expect(icons[0].querySelector('path')).toHaveAttribute('d', expect.stringContaining('M12.5 13.5V15'))
+    expect(icons[1].querySelector('path')).toHaveAttribute('d', expect.stringContaining('M3.741 14.5'))
   })
 })

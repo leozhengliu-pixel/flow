@@ -214,7 +214,7 @@ export function MyIssuesSurface({
       }
       end={
         <ToolbarButtonsNavigation className={styles.actions}>
-          <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onAdvanced={onAdvancedFilter} onToggle={(field, option) => { if (onFilterToggle) onFilterToggle(field, option); else onFilterSelect?.(field, option) }} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
+          <MyIssuesFilterMenu surface="my-issues" open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onAdvanced={onAdvancedFilter} onToggle={(field, option) => { if (onFilterToggle) onFilterToggle(field, option); else onFilterSelect?.(field, option) }} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
           <MyIssuesDisplayMenu {...displayMenuProps} open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={options => onDisplayOptionsChange?.(options)}/>
           <ToolbarButton label={insightsOpen ? 'Close insights' : 'Open insights'} pressed={insightsOpen} aria-expanded={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><InsightsIcon/></ToolbarButton>
           <FlowTooltip label={detailsOpen ? 'Close details' : 'Open details'} shortcut="⌘ I"><ToolbarButton label={detailsOpen ? 'Close details' : 'Open details'} pressed={detailsOpen} aria-expanded={detailsOpen} onClick={() => onDetailsOpenChange?.(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton></FlowTooltip>
