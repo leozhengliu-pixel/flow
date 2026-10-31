@@ -35,6 +35,8 @@ test('row menu fits its labels and typed snooze persists the chosen time', async
   expect(Math.abs(snoozeRect.x - parentRect.x - parentRect.width + 1.5)).toBeLessThanOrEqual(1)
   expect(Math.abs(snoozeRect.y - parentRect.y - 27)).toBeLessThanOrEqual(1)
   await expect(snooze.locator('time')).toHaveCount(5)
+  expect(Math.abs((await snooze.getByRole('textbox', { name: 'Snooze time' }).boundingBox())!.width - 291)).toBeLessThanOrEqual(1)
+  expect(await snooze.locator('time').first().evaluate(e => getComputedStyle(e.parentElement!).paddingRight)).toBe('12px')
   await expect(snooze.getByRole('menuitem', { name: 'Custom…' }).locator('svg')).toHaveCount(1)
   const mutation = page.waitForResponse(r => r.request().method() === 'PATCH' && /\/api\/notifications\//.test(r.url()))
   const start = Date.now()

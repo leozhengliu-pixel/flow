@@ -17,6 +17,10 @@
   white-space: nowrap;
 }
 
+@media (min-width: 1024px) {
+  .snoozeOption { padding-right: 12px; }
+}
+
 .snoozeOption :global(.flow-inbox-menu__item-label) {
   flex: 0 0 auto;
 }
