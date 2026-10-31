@@ -89,6 +89,16 @@ beforeEach(() => {
 })
 afterEach(() => { vi.unstubAllGlobals() })
 
+it('reuses the filled desktop action glyphs alongside the compact controls', async () => {
+  mount()
+  await settle()
+  for (const [label, glyph] of [['Expand', 'openFullPage'], ['Close', 'closeChat'], ['Attach images, files, or videos', 'attach']]) {
+    const button = screen.getByRole('button', { name: label })
+    expect(button.querySelector(`[data-flow-glyph="${glyph}"]`)).toHaveAttribute('fill', 'currentColor')
+    expect(button.querySelector('.lucide')).toBeInTheDocument()
+  }
+})
+
 describe('new issue: the status comes from the target team workflow', () => {
   it('a workspace Todo handed in for a custom-workflow team becomes that team default and is never offered', async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })

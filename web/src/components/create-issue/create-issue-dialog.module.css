@@ -16,6 +16,7 @@
 .confirmDiscard{border-color:var(--semantic-danger)!important;background:var(--semantic-danger)!important;color:var(--on-danger)!important}
 .iconButton:hover { background: lch(17.574% 1.589 272); }
 .iconButton svg { width: 15px; height: 15px; stroke-width: 1.8; }
+.iconButton .desktopGlyph, .attachButton .desktopGlyph { display: none; }
 .document { min-height: 0; flex: 1; padding: 0 18px; overflow: auto; }
 .titleField { width: 100%; margin: 0; padding: 8px 0 0; }
 .titleField :global(.title-editor) { min-height: 29px; padding: 3px 0 2px; border: 0; outline: 0; background: transparent; box-shadow: none; color: white; font-size: 18px; line-height: 28.8px; font-weight: 600; }
@@ -164,6 +165,14 @@
 .recurrenceChip:hover { background: var(--bg-active); color: var(--text); }
 .recurrenceChip svg { width: 13px; height: 13px; flex: none; }
 .recurrenceChip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (min-width: 1024px) {
+  .footer { border-top: 0; }
+  .header .team { color: var(--create-issue-fg); }
+  .iconButton .compactGlyph, .attachButton .compactGlyph { display: none; }
+  .iconButton .desktopGlyph { display: block; width: 16px; height: 16px; }
+  .attachButton .desktopGlyph { display: block; }
+  .iconButton .desktopGlyph, .attachButton .desktopGlyph { fill: var(--create-issue-icon-fg); }
+}
 @media (max-width: 767px) {
   :global(:root[data-theme="light"]) .properties :global(.mini-property-trigger) { height: 28px; border: 0; background: var(--theme-surface-hover); }
   :global(:root[data-theme="light"]) .submit { height: 32px; }

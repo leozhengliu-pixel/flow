@@ -30,6 +30,7 @@ import { useI18n } from '@/i18n/i18n'
 import { useUserPreferences } from '@/lib/runtime-preferences'
 import { defaultRecurrenceFirstDue, recurrenceDate, recurrencePresetOptions, toDateInput } from '@/lib/recurrence'
 import { AiBurstGlyph } from '@/components/ui/agent-glyph'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { teamContentAccessible } from '@/lib/team-access'
 import { teamDefaultState, teamForWorkflowState, teamHasWorkflowState, teamStateIdFor, teamWorkflowStates } from '@/lib/team-workflow'
 
@@ -500,8 +501,8 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialExpand
             {templateOptions.length > 0 && <PropertyMenu compact label="Template" ariaLabel="Choose a template" searchPlaceholder="Choose a template…" value={selectedTemplate?.name ?? 'Template'} valueIsEntityName={Boolean(selectedTemplate)} selectedId={templateId} triggerClassName={styles.team} trigger={<><TemplateGlyph name="page" size={13}/><span data-i18n-ignore={selectedTemplate ? true : undefined}>{selectedTemplate?.name ?? 'Template'}</span></>} options={[{ id: '', label: 'No template', icon: <TemplateGlyph name="page"/> }, ...templateOptions.map(item => ({ id: item.id, label: item.name, description: item.description, groupLabel: isWorkspaceIssueTemplate(item) ? 'Workspace' : data.teams.find(team => team.id === (item.visibilityTeamId || item.teamId))?.name, icon: <TemplateGlyph name="page"/>, i18nIgnore: true }))]} onChange={id => applyTemplate(id)}/>}
             <span className={styles.breadcrumb}>›</span><Dialog.Title>New issue</Dialog.Title>
             {serverDraftId ? <button type="button" className={styles.saveDraft} aria-label="Discard draft" disabled={saving} onClick={() => setDiscardConfirmOpen(true)}><Trash2/></button> : hasDraftContent && <button type="button" className={styles.saveDraft} aria-label="Save draft" disabled={saving} onClick={() => void saveDraft()}>{saving ? 'Saving...' : 'Save as draft'}</button>}
-            <button type="button" className={`${styles.iconButton} ${styles.expandButton}`} aria-label={expanded ? 'Collapse' : 'Expand'} aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? <Minimize2/> : <Maximize2/>}</button>
-            <Dialog.Close asChild><button type="button" className={styles.iconButton} aria-label="Close"><X/></button></Dialog.Close>
+            <button type="button" className={`${styles.iconButton} ${styles.expandButton}`} aria-label={t(expanded ? 'Collapse' : 'Expand')} aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? <Minimize2/> : <><Maximize2 className={styles.compactGlyph}/><FlowGlyph name="openFullPage" className={styles.desktopGlyph}/></>}</button>
+            <Dialog.Close asChild><button type="button" className={styles.iconButton} aria-label={t('Close')}><X className={styles.compactGlyph}/><FlowGlyph name="closeChat" className={styles.desktopGlyph}/></button></Dialog.Close>
           </header>
 
           <div className={styles.document}>
@@ -553,7 +554,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialExpand
           {error && <div className={styles.error} role="alert">{error}</div>}
 
           <footer className={styles.footer}>
-            <button type="button" className={styles.attachButton} aria-label="Attach images, files, or videos" onClick={() => fileRef.current?.click()}><Paperclip/></button>
+            <button type="button" className={styles.attachButton} aria-label={t('Attach images, files, or videos')} onClick={() => fileRef.current?.click()}><Paperclip className={styles.compactGlyph}/><FlowGlyph name="attach" className={styles.desktopGlyph}/></button>
             <input ref={fileRef} type="file" hidden multiple onChange={addFiles}/>
             <label className={styles.createMore}><Toggle checked={createMore} label="Create more" onChange={setCreateMore}/><span>Create more</span></label>
             <button className={styles.submit} type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create issue'}</button>
