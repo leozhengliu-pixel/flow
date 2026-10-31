@@ -236,10 +236,6 @@ function MyIssuesVirtualFooter({ context }: { context: MyIssuesListContext }) {
 }
 
 export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached, emptyState, hideGroupHeaders = false }: MyIssuesListProps) {
-  // The reference phone list keeps the sub-issue progress pill on a parent that
-  // also nests its children; desktop keeps hiding it to avoid the duplicate.
-  const phone = usePhoneLayout()
-  const showSubIssueProgress = phone || !nestedSubIssues
   const entries = useMemo<MyIssuesListEntry[]>(() => groups.flatMap((group, index) => {
     const collapsed = collapsedGroupIds.has(group.id)
     const header: MyIssuesListEntry = { key: `group:${group.id}`, kind: 'group', group, collapsed }
@@ -259,7 +255,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
     ? <MyIssuesParentGroupHeader label={entry.label} count={entry.count}/>
     : entry.kind === 'group'
     ? <div style={{ paddingBottom: !entry.collapsed && !entry.group.issues.length ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/></div>
-    : <div style={{ paddingBottom: entry.groupEnd ? 2 : 0 }}><MyIssuesRow issue={entry.issue} active={activeIssueId === entry.issue.id} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} showSubIssueProgress={showSubIssueProgress} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/></div>
+    : <div style={{ paddingBottom: entry.groupEnd ? 2 : 0 }}><MyIssuesRow issue={entry.issue} active={activeIssueId === entry.issue.id} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/></div>
   if (entries.length > VIRTUALIZATION_THRESHOLD) return <Virtuoso
     className={styles.virtualList}
     role="list"
@@ -281,7 +277,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
       return <section className={styles.group} key={group.id} aria-labelledby={hideGroupHeaders ? undefined : `my-issues-group-${group.id}`} data-subgroup={group.parentGroupId ? true : undefined}>
         {parentHeader && <MyIssuesParentGroupHeader label={group.parentLabel ?? ''} count={groups.filter(item => item.parentGroupId === group.parentGroupId).reduce((total, item) => total + item.issues.length, 0)}/>}
         {!hideGroupHeaders && <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} estimateSum={groupEstimate(group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>}
-        {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} active={activeIssueId === issue.id} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} showSubIssueProgress={showSubIssueProgress} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
+        {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} active={activeIssueId === issue.id} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
       </section>
     })}
   </div>
@@ -335,8 +331,8 @@ function PhoneNoPriorityIcon() {
     <rect x="11.5" y="7.25" width="3" height="1.5" rx="0.5" opacity="0.9"/>
   </svg>
 }
-function MyIssuesRowView({ issue, active = false, selected = false, displayProperties = DEFAULT_PROPERTIES, nestedLines=EMPTY_LINES, showSubIssueProgress=true, propertyOptions = EMPTY_OPTIONS, mutationError, onContextAction, onOpen, onPropertyChange, onRetryMutation, onSelect }: {
-  issue: MyIssuesRowData; active?: boolean; selected?: boolean; displayProperties?: ReadonlySet<MyIssuesProperty>; nestedLines?:readonly boolean[]; showSubIssueProgress?:boolean; propertyOptions?: MyIssuesRowPropertyOptions; mutationError?: string
+function MyIssuesRowView({ issue, active = false, selected = false, displayProperties = DEFAULT_PROPERTIES, nestedLines=EMPTY_LINES, propertyOptions = EMPTY_OPTIONS, mutationError, onContextAction, onOpen, onPropertyChange, onRetryMutation, onSelect }: {
+  issue: MyIssuesRowData; active?: boolean; selected?: boolean; displayProperties?: ReadonlySet<MyIssuesProperty>; nestedLines?:readonly boolean[]; propertyOptions?: MyIssuesRowPropertyOptions; mutationError?: string
   onContextAction?: (issue: MyIssuesRowData, action: MyIssuesContextAction) => void; onOpen?: (issue: MyIssuesRowData) => void
   onPropertyChange?: (issue: MyIssuesRowData, property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onRetryMutation?: (issue: MyIssuesRowData) => void
   onSelect?: (issueId: string, selected: boolean, range: boolean) => void
@@ -395,7 +391,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
         <div className={styles.titleProperties}>
           <span className={styles.title} data-row-title data-i18n-ignore>{issue.title}</span>
           {!nestedDepth&&issue.parent&&<IssueParentTrail ancestors={issue.ancestors??[issue.parent]}/>}
-          {showSubIssueProgress&&issue.subIssueProgress&&issue.subIssues?.length?<SubIssueProgress
+          {issue.subIssueProgress&&issue.subIssues?.length?<SubIssueProgress
             progress={issue.subIssueProgress}
             subIssues={issue.subIssues}
             onOpenSubIssue={onOpen}
@@ -403,7 +399,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
           <span className={styles.badges}>
             {displayProperties.has('labels') && issue.labels?.length ? <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${issue.labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={issue.labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => change('labels', toggleGroupedLabelIds(issue.labels?.map(label => label.id) ?? [], value, propertyOptions.labels))} triggerClassName={styles.labelsTrigger} trigger={<span className={styles.badgeGroup}>{issue.labels.map(label => <span key={label.id} className={styles.badgeSlot}><PropertyBadge label={label}/></span>)}</span>}/> : null}
         {displayProperties.has('project') && issue.project ? <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => change('project', value)} triggerClassName={`${styles.propertyTrigger} ${styles.projectTrigger}`} trigger={<PropertyBadge color={issue.project.color}>{issue.project.name}</PropertyBadge>}/> : null}
-            {displayProperties.has('cycle') && issue.cycleId ? <RowCommandPicker propertyLabel="Cycle" label={`Change cycle. Current cycle is ${issue.cycleName ?? issue.cycleId}`} searchLabel="Add to cycle..." selectedIds={[issue.cycleId]} options={propertyOptions.cycle ?? []} onSelect={value => change('cycle', value)} trigger={<span className={styles.dueDate}><CycleIcon size={13}/><span data-i18n-ignore>{issue.cycleName ?? issue.cycleId}</span></span>}/> : null}
+            {displayProperties.has('cycle') && issue.cycleId ? <RowCommandPicker propertyLabel="Cycle" label={`Change cycle. Current cycle is ${issue.cycleName ?? issue.cycleId}`} searchLabel="Add to cycle..." selectedIds={[issue.cycleId]} options={propertyOptions.cycle ?? []} onSelect={value => change('cycle', value)} trigger={<span className={`${styles.dueDate} ${styles.cycleChip}`}><CycleIcon size={13}/><span data-i18n-ignore>{issue.cycleName ?? issue.cycleId}</span></span>}/> : null}
             {displayProperties.has('release') && issue.releases?.length ? <IssueReleaseChip className={styles.dueDate} releases={issue.releases}/> : null}
             {displayProperties.has('milestone') && issue.milestoneName ? <span className={styles.dueDate} aria-label={`Milestone ${issue.milestoneName}`}><MilestoneProgressIcon overdue={isMilestoneDateOverdue(issue.rawMilestoneDate)} progress={issue.milestoneProgress ?? 0} size={13} /><span data-i18n-ignore>{issue.milestoneName}</span></span> : null}
             {displayProperties.has('customers') && (issue.customerCount ?? issue.customerIds?.length ?? 0) > 0 ? <CustomersRowChip customers={issue.customers ?? []} customerCount={issue.customerCount ?? issue.customerIds?.length ?? 0} importantCustomerIds={issue.importantCustomerIds ?? []} settings={issue.customerRevenueSettings}/> : null}

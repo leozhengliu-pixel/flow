@@ -161,7 +161,6 @@
 }
 
 @media(min-width:768px){
-  .row{--row-status-column:16px}
   .priorityTrigger,.statusTrigger{width:16px;height:36px;min-width:16px;min-height:36px;padding:0;border-radius:0;background:transparent}
   .priorityTrigger{margin-left:0}
   .priorityTrigger>.priority{width:16px;height:16px}
@@ -182,6 +181,9 @@
 }
 
 @media(min-width:1024px){
+  .row{--row-status-column:16px}
+  .cycleChip{padding-inline:9px;gap:6px;border-radius:48px;background:var(--bg-panel);box-shadow:inset 0 0 0 .5px var(--ui-pill-ring)}
+  .cycleChip svg{width:14px;height:14px}
   .rowDate{justify-content:flex-end}
   .titleProperties:has(+.rowDate){margin-right:-5px}
   .collapseButton{opacity:1}

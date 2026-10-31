@@ -272,8 +272,8 @@ describe('nested sub-issues in server-backed lists', () => {
     // Group headers count the nested rows under their parent's group, like the full list.
     expect(groupHeader('Backlog')).toHaveTextContent('5')
     expect(groupHeader('In progress')).toHaveTextContent('1')
-    // Nested rows show the hierarchy itself instead of the sub-issue progress chip.
-    expect(screen.getByRole('button', { name: 'Parent' })).toHaveAttribute('data-progress', 'false')
+    // Parent progress remains available alongside the nested hierarchy.
+    expect(screen.getByRole('button', { name: 'Parent' })).toHaveAttribute('data-progress', 'true')
   })
 
   it('shows a parent on a later page with its sub-issues, even one that sorts first in another status', async () => {
