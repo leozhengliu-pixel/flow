@@ -3456,6 +3456,8 @@ export const zhCN: Record<string, string> = {
   Home: "主页",
   Import: "导入",
   "Import & export": "导入与导出",
+  "Import issues": "导入事项",
+  "Dismiss Import issues": "关闭“导入事项”",
   "Import assistant": "导入助手",
   "In Progress": "进行中",
   "In progress": "进行中",

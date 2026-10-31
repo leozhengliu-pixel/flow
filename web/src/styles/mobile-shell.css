@@ -175,6 +175,16 @@
     padding: 0;
     background: var(--bg-panel);
   }
+  html:root .sidebar.is-floating::after {
+    content: "";
+    position: absolute;
+    z-index: 20;
+    inset: 0;
+    border: .5px solid var(--set-drawer-connector);
+    border-left: 0;
+    border-radius: inherit;
+    pointer-events: none;
+  }
   html:root .sidebar .sidebar-header {
     display: block;
     box-sizing: border-box;
@@ -221,12 +231,13 @@
   }
   html:root .sidebar .workspace-row > button.sidebar-compose {
     color: var(--text);
-    background: var(--set-button);
+    background: var(--sidebar-compose-bg);
   }
   html:root .sidebar .sidebar-top-action svg { width: 14px; height: 14px; color: var(--issue-muted); }
   html:root .sidebar .sidebar-compose svg { color: var(--bright); }
   html:root .sidebar .sidebar-nav {
     margin: 4.5px 12px 0;
+    padding-bottom: 53px;
   }
   html:root .sidebar .nav-item {
     gap: 6px;
@@ -273,9 +284,53 @@
   }
   html:root .sidebar .section-action svg { color: var(--issue-dim); }
   html:root .sidebar .sidebar-more-trigger { margin-top: 1px; }
-  html:root .sidebar .team-links .nav-item { padding: 0; }
+  html:root .sidebar .sidebar-section-teams > .section-content { margin-top: 3px; }
+  html:root .sidebar .sidebar-team-list { gap: 2px; }
+  html:root .sidebar .sidebar-section-try { margin-top: 17px; }
+  html:root .sidebar .sidebar-team-node { position: relative; padding-inline-start: 0 !important; }
+  html:root .sidebar .sidebar-team-node .team-title { padding-left: calc(9px + var(--team-depth) * 16px); }
+  html:root .sidebar .team-branch { position: absolute; left: 15px; top: 13px; width: 10px; height: 9px; color: var(--set-drawer-connector); }
+  html:root .sidebar .team-branch svg { display: block; width: 10px; height: 9px; fill: currentColor; }
+  html:root .sidebar .sidebar-team-node:has(+ [data-team-depth="1"])::after {
+    content: "";
+    position: absolute;
+    top: 36px;
+    bottom: -14px;
+    left: 15.5px;
+    width: 4px;
+    border-left: 1px solid var(--set-drawer-connector);
+    pointer-events: none;
+  }
+  html:root .sidebar .team-cycle-links > i { background: var(--set-drawer-connector); }
+  html:root .sidebar .team-links .nav-item {
+    padding: 0;
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 24px;
+  }
+  html:root .sidebar .team-links .nav-label {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  html:root .sidebar .team-sub-link .nav-label { padding-left: 6px; }
   html:root .sidebar .team-links .nav-item > .nav-icon:first-child { margin-left: 6px; }
   html:root .sidebar .team-heading { border-radius: 8px; }
+  html:root .sidebar .sidebar-team[data-expanded="false"] .team-heading { border-radius: 0; }
+  html:root .sidebar .sidebar-section-try > .section-heading {
+    color: var(--bright);
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 24px;
+  }
+  html:root .sidebar .sidebar-section-try .nav-item {
+    padding: 0 9px 0 8px;
+    color: var(--issue-muted);
+    line-height: normal;
+  }
+  html:root .sidebar .sidebar-section-try .nav-item > .nav-icon:first-child { margin-left: 0; }
+  html:root .sidebar .try-dismiss { right: 2px; }
+  html:root .sidebar .try-dismiss svg { width: 10px; height: 10px; }
   html:root .sidebar .team-title {
     height: 36px;
     color: var(--issue-muted);
@@ -322,6 +377,7 @@
     padding: 0 2px;
     border: .5px solid transparent;
     border-radius: 50%;
+    background: transparent;
     color: var(--text);
     font-size: 12px;
     font-weight: 500;

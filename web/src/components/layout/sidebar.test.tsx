@@ -141,6 +141,21 @@ describe('sidebar feature flags', () => {
     expect(container.querySelector('.sidebar-help use')).toHaveAttribute('href', '#QuestionMark')
   })
 
+  it('offers a dismissible phone import entry without adding it to desktop navigation', async () => {
+    const desktop = renderSidebar({})
+    expect(desktop.container.querySelector('.sidebar-section-try a[href$="/settings/import-export"]')).toBeNull()
+    desktop.unmount()
+    const media = Object.assign(new EventTarget(), { matches: true, media: '(max-width: 767px)' })
+    vi.stubGlobal('matchMedia', () => media)
+    const phone = renderSidebar({})
+    const entry = phone.container.querySelector('.sidebar-section-try a[href$="/settings/import-export"]')
+    expect(entry).toHaveTextContent('Import issues')
+    expect(entry?.querySelector('path')).toHaveAttribute('d', expect.stringContaining('M13.25 5.25'))
+    await userEvent.setup().click(phone.container.querySelector('[aria-label="Dismiss Import issues"]')!)
+    expect(phone.container.querySelector('.sidebar-section-try a[href$="/settings/import-export"]')).toBeNull()
+    expect(JSON.parse(localStorage.getItem('flow.sidebar.dismissed-try')!)).toContain('import')
+  })
+
   it.each([[false, false], [false, true], [true, false], [true, true]])('shows Asks=%s and Customers=%s independently after a settings refresh', async (asks, customers) => {
     const view = renderSidebar({ asks: !asks, 'customer-requests': !customers })
     await openMore()

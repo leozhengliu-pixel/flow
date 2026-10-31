@@ -85,7 +85,7 @@ export function WorkspaceMenu({
   const choose = (run: () => void) => { setOpen(false); run() };
   if (phone) return <>
     <button className="workspace-menu-trigger" aria-label={`${workspace.name} ${t('Workspace Menu')}`} onClick={() => { setSwitching(false); setOpen(true) }}>
-      <WorkspaceAvatar workspace={workspace}/><strong>{workspace.name}</strong><WorkspaceChevronIcon/>
+      <WorkspaceAvatar workspace={workspace}/><strong>{workspace.name}</strong><WorkspaceChevronIcon phone/>
     </button>
     <PhoneCommandMenu className="workspace-phone-menu" placeholder="Filter..." open={open} onOpenChange={setOpen} label={t(switching ? 'Switch workspace' : 'Workspace Menu')}>
       {switching ? <>
@@ -211,10 +211,10 @@ function initials(value: string) {
       : (parts[0] ?? "").slice(0, 2);
   return result.slice(0, 2).toUpperCase() || "W";
 }
-function WorkspaceChevronIcon() {
+function WorkspaceChevronIcon({ phone = false }: { phone?: boolean }) {
   return (
     <svg viewBox="0 0 13 9" aria-hidden="true">
-      <path d="M10.1611 .314 5.9946 4.4805 1.8282 .314A1.0707 1.0707 0 0 0 .314 1.8282l4.929 4.9289a1.0707 1.0707 0 0 0 1.5141 0L11.686 1.8282A1.0707 1.0707 0 0 0 10.1611 .314Z" />
+      <path d={phone ? "M10.1611 0.314094L5.99463 4.48054L1.82819 0.314094C1.4094 -0.104698 0.732886 -0.104698 0.314094 0.314094C-0.104698 0.732886 -0.104698 1.4094 0.314094 1.82819L5.24295 6.75705C5.66175 7.17584 6.33825 7.17584 6.75705 6.75705L11.6859 1.82819C12.1047 1.4094 12.1047 0.732886 11.6859 0.314094C11.2671 -0.0939598 10.5799 -0.104698 10.1611 0.314094Z" : "M10.1611 .314 5.9946 4.4805 1.8282 .314A1.0707 1.0707 0 0 0 .314 1.8282l4.929 4.9289a1.0707 1.0707 0 0 0 1.5141 0L11.686 1.8282A1.0707 1.0707 0 0 0 10.1611 .314Z"} />
     </svg>
   );
 }

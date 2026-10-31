@@ -3,6 +3,7 @@ import { test } from './workspace-fixture'
 
 const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
 const base = process.env.FLOW_MOBILE_BASE_URL ?? 'http://127.0.0.1:4173'
+const api = process.env.FLOW_MOBILE_API_URL ?? 'http://127.0.0.1:4180'
 const shots = process.env.FLOW_MOBILE_SHOTS
 
 test.use({ colorScheme: 'dark' })
@@ -26,8 +27,59 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   test.describe(`${viewport.width}px shell`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent, colorScheme: 'dark' })
 
+    test('bottom drawer keeps expanded cycles and Import issues clear of its pinned footer', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const bootstrap = await (await request.get(`${api}/api/bootstrap`, { headers })).json() as { teams: Array<{ id: string }> }
+      const secondResponse = await request.post(`${api}/api/workspaces/${workspaceKey}/teams`, { headers, data: { name: '[mobile] Second team', key: 'SECOND' } })
+      expect(secondResponse.status()).toBe(201)
+      const second = await secondResponse.json() as { id: string }
+      const thirdResponse = await request.post(`${api}/api/workspaces/${workspaceKey}/teams`, { headers, data: { name: '[mobile] Third team', key: 'THIRD', parentTeamId: second.id } })
+      expect(thirdResponse.status()).toBe(201)
+      const third = await thirdResponse.json() as { id: string }
+      for (const team of [bootstrap.teams[0], second, third]) {
+        expect((await request.patch(`${api}/api/teams/${team.id}/settings`, { headers, data: { showInitiatives: false } })).ok()).toBe(true)
+      }
+      expect((await request.patch(`${api}/api/teams/${second.id}/cycle-settings`, { headers, data: { enabled: true } })).ok()).toBe(true)
+      await page.goto(`${base}/${workspaceKey}/my-issues/assigned`)
+      await page.locator('[data-sidebar-trigger]').tap()
+      const drawer = page.locator('[data-sidebar-surface]')
+      const secondTeam = drawer.locator('.sidebar-team').filter({ has: page.locator('.team-title', { hasText: '[mobile] Second team' }) })
+      await drawer.locator('.team-title').filter({ hasText: '[mobile] Third team' }).tap()
+      for (const label of ['Invite people', 'Cycles', 'Connect GitHub']) {
+        const dismiss = drawer.getByRole('button', { name: `Dismiss ${label}`, exact: true })
+        if (await dismiss.count()) await dismiss.tap()
+      }
+      const nav = drawer.locator('.sidebar-nav')
+      await nav.evaluate(e => { e.scrollTop = e.scrollHeight })
+      await expect.poll(() => nav.evaluate(e => e.scrollHeight - e.clientHeight - e.scrollTop)).toBeLessThanOrEqual(1)
+      for (const label of ['Home', 'Issues', 'Cycles', 'Projects', 'Views']) {
+        await geometry(secondTeam.getByRole('link', { name: label, exact: true }), { x: 31, width: 287, height: 28 })
+      }
+      for (const label of ['Current', 'Upcoming']) {
+        const row = secondTeam.getByRole('link', { name: label, exact: true })
+        await geometry(row, { x: 51, width: 267, height: 28 })
+        await expect(row.locator('.nav-label')).toHaveCSS('font-size', '13px')
+        expect(await row.locator('.nav-label').evaluate(e => {
+          const range = document.createRange(); range.selectNodeContents(e)
+          return range.getBoundingClientRect().x
+        })).toBe(57)
+      }
+      const heading = await secondTeam.locator('.team-heading').boundingBox()
+      const home = await secondTeam.getByRole('link', { name: 'Home', exact: true }).boundingBox()
+      expect(home!.y + home!.height / 2 - heading!.y - heading!.height / 2).toBe(33)
+      await geometry(drawer.locator('.sidebar-footer'), { y: viewport.height - 52, height: 52 })
+      const importIssues = drawer.getByRole('link', { name: 'Import issues', exact: true })
+      await geometry(importIssues, { x: 12, y: viewport.height - 81, width: 306, height: 28 })
+      await expect(importIssues.locator('.nav-icon path').first()).toHaveAttribute('d', /^M13.25 5.25/)
+      await expect(drawer.locator('.sidebar-compose')).toHaveCSS('background-color', 'lch(10.149 0.689 272)')
+      await expect(page.locator('.bottom-agent')).toBeHidden()
+      await noOverflow(page)
+      if (shots) await page.screenshot({ path: `${shots}/drawer-bottom-${viewport.width}.png` })
+      await importIssues.tap()
+      await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/settings/import-export$`))
+    })
+
     test('phone drawer labels, floating footer, glyphs and focus remain usable', async ({ page, request }) => {
-      const api = process.env.FLOW_MOBILE_API_URL ?? 'http://127.0.0.1:4180'
       const key = `mobile-drawer-parity-${viewport.width}-${Date.now()}`
       const created = await request.post(`${api}/api/workspaces`, {
         data: { name: '[mobile] Drawer parity', urlKey: key, region: 'us', tutorial: false },
@@ -216,19 +268,14 @@ test.describe('main page headers', () => {
 
 test.describe('my issues phone toolbar', () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent })
-  test('matches the reference top bar, toolbar and grouped list', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-shell-myissues-${testInfo.project.name}-${testInfo.retry}`
-    const created = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: '[mobile] My issues shell', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(created.status()).toBe(201)
+  test('matches the reference top bar, toolbar and grouped list', async ({ page, request, workspaceKey }) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as {
+    const bootstrap = await (await request.get(`${api}/api/bootstrap`, { headers })).json() as {
       viewer: { id: string }; teams: Array<{ id: string }>; states: Array<{ id: string; type: string }>
     }
     const stateId = (bootstrap.states.find(state => state.type === 'started') ?? bootstrap.states[0]).id
     for (const title of ['[mobile] QA no-PR question: explain greet.js', '[mobile] QA remove agent: slow task']) {
-      const issue = await request.post('http://127.0.0.1:4180/api/issues', {
+      const issue = await request.post(`${api}/api/issues`, {
         headers,
         data: { title, description: '', teamId: bootstrap.teams[0].id, stateId, assigneeId: bootstrap.viewer.id },
       })

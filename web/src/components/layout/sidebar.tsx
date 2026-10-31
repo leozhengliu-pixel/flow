@@ -2,6 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ProjectGlyph } from "@/components/views/project-glyph";
 import { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog';
 import { SidebarTeamMenu } from './sidebar-team-menu';
+import { PhoneViewsIcon, PhoneTriageIcon, PhoneTeamBranchIcon } from './sidebar-phone-glyphs';
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import * as ContextMenu from "@radix-ui/react-context-menu";
@@ -793,7 +794,7 @@ export function Sidebar({
             <div className="sidebar-team-list">
               {sidebarTeams.map(({team, depth}) => {
                 return (
-                  <div key={team.id} style={{paddingInlineStart: Math.min(depth, 4) * 12, minWidth: 0}}><TeamNavigation
+                  <div key={team.id} className="sidebar-team-node" data-team-depth={depth} style={{paddingInlineStart: Math.min(depth, 4) * 12, minWidth: 0, '--team-depth': Math.min(depth, 4)} as CSSProperties}><TeamNavigation
                     data={data}
                     onReload={onReload}
                     key={team.id}
@@ -818,6 +819,15 @@ export function Sidebar({
           </Section>
 
           <Section label="Try" storageKey="try">
+            {phone && !dismissedTry.includes("import") && (
+              <TryItem
+                icon={<IssuesIcon />}
+                label="Import issues"
+                to={settingsPath(workspaceSlug, "import-export")}
+                onClick={close}
+                onDismiss={() => dismissTry("import")}
+              />
+            )}
             {(data.viewerRole === "admin" || data.viewerRole === "owner") &&
               !dismissedTry.includes("invite") && (
                 <TryItem
@@ -1604,6 +1614,7 @@ function TeamNavigation({
   initiativesEnabled: boolean;
   onNavigate: () => void;
 }) {
+  const phone = usePhoneLayout();
   const [expanded, setExpanded] = useState(() =>
     readExpandedSection(`team.${team.id}`),
   );
@@ -1618,6 +1629,7 @@ function TeamNavigation({
   return (
     <div className="sidebar-team" data-expanded={expanded}>
       <div className="team-heading">
+        {phone && data.teamSettings[team.id]?.parentTeamId && <span className="team-branch"><PhoneTeamBranchIcon /></span>}
         <button
           type="button"
           className="team-title"
@@ -1662,7 +1674,7 @@ function TeamNavigation({
           {cyclesEnabled && (
             <Nav
               active={page === "cycles" || page === "cycle-detail"}
-              icon={<FlowCycleIcon />}
+              icon={phone ? <PhoneCycleIcon /> : <FlowCycleIcon />}
               label="Cycles"
               to={teamCyclesPath(workspaceSlug, team.key)}
               onClick={onNavigate}
@@ -1846,6 +1858,7 @@ function TryItem({
   onDismiss: () => void;
   to?: string;
 }) {
+  const phone = usePhoneLayout();
   const content = (
     <>
       <span className="nav-icon">{icon}</span>
@@ -1871,7 +1884,7 @@ function TryItem({
         aria-label={`Dismiss ${label}`}
         onClick={onDismiss}
       >
-        <X />
+        {phone ? <FlowGlyph name="closeChat" size={10} /> : <X />}
       </button>
     </div>
   );
@@ -2464,6 +2477,8 @@ export function HelpMenu({
 }
 
 function FlowIcon({ name, style }: { name: string; style?: CSSProperties }) {
+  const phone = usePhoneLayout();
+  if (phone && name === "CustomView") return <PhoneViewsIcon />;
   return (
     <svg
       className="flow-sprite-icon"
@@ -2476,6 +2491,8 @@ function FlowIcon({ name, style }: { name: string; style?: CSSProperties }) {
   );
 }
 function TriageIcon() {
+  const phone = usePhoneLayout();
+  if (phone) return <PhoneTriageIcon />;
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path
@@ -2574,6 +2591,14 @@ function ComposeIcon() {
         clipRule="evenodd"
         d="M13.4326 1.26953C13.7913.910937 14.3728.910883 14.7314 1.26953C15.0897 1.6282 15.0899 2.20981 14.7314 2.56836L9.2373 8.06152C8.68101 8.6177 7.94043 8.95161 7.15527 9C7.06754 9.0052 6.99468 8.93248 7 8.84473C7.04847 8.05961 7.38232 7.31897 7.93848 6.7627L13.4326 1.26953Z"
       />
+    </svg>
+  );
+}
+function PhoneCycleIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 1C8.41421 1 8.75 1.33579 8.75 1.75C8.75 2.16421 8.41421 2.5 8 2.5C4.96243 2.5 2.5 4.96243 2.5 8C2.5 11.0376 4.96243 13.5 8 13.5C11.0376 13.5 13.5 11.0376 13.5 8C13.5 6.23619 12.6701 4.66687 11.377 3.65918C11.0503 3.40457 10.9925 2.93313 11.2471 2.60645C11.5017 2.27972 11.9731 2.22098 12.2998 2.47559C13.9418 3.75527 15 5.75433 15 8C15 11.866 11.866 15 8 15C4.13401 15 1 11.866 1 8C1 4.13401 4.13401 1 8 1Z" />
+      <path d="M6.85547 6.1123C7.07646 5.97571 7.35255 5.96305 7.58496 6.0791L10.085 7.3291L10.1758 7.38281C10.3769 7.52151 10.5 7.75131 10.5 8C10.5 8.24869 10.3769 8.47849 10.1758 8.61719L10.085 8.6709L7.58496 9.9209C7.35255 10.0369 7.07646 10.0243 6.85547 9.8877C6.63458 9.75099 6.5 9.50981 6.5 9.25V6.75L6.50586 6.65332C6.53467 6.43131 6.66226 6.23188 6.85547 6.1123Z" />
     </svg>
   );
 }
