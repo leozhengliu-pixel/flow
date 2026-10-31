@@ -89,6 +89,35 @@ test.describe('mobile issue lists and views', () => {
   })
 })
 
+test.describe('mobile team display options', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('opens the compact team display sheet without phone overflow', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-team-display-${testInfo.project.name}-${testInfo.retry}`
+    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: '[mobile] Team display options', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(response.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await (await request.get('http://127.0.0.1:4180/api/bootstrap', { headers })).json() as { teams: Array<{ id: string; key: string }> }
+    const team = bootstrap.teams[0]
+    const child = await request.post(`http://127.0.0.1:4180/api/workspaces/${workspaceKey}/teams`, {
+      headers,
+      data: { name: '[mobile] Display sub-team', key: 'SUB', parentTeamId: team.id },
+    })
+    expect(child.status()).toBe(201)
+
+    await page.goto(`/${workspaceKey}/team/${team.key}/all`)
+    await page.getByRole('button', { name: 'Display options', exact: true }).click()
+    const panel = page.getByRole('dialog', { name: 'Display options' })
+    await expect(panel).toBeVisible()
+    await expect(panel.getByRole('tab', { name: 'List', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(panel.locator('input[aria-label="Show sub-team issues"]')).toBeChecked()
+    await expect(panel.locator('button[aria-label="Nested sub-issues"]')).toContainText('Show matching')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+})
+
 test.describe('mobile Created tab', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
