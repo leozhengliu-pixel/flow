@@ -465,3 +465,87 @@ test.describe('mobile Team issues board', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   })
 })
+
+test.describe('mobile Team issues board scrolled to the hidden columns', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('phone board scrolls the hidden statuses column into view', async ({ page, request }, testInfo) => {
+    const apiBase = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
+    const workspaceKey = `mobile-scrolled-${testInfo.project.name}-${testInfo.retry}-${Date.now()}`
+    const response = await request.post(`${apiBase}/api/workspaces`, {
+      data: { name: '[mobile] Team board scrolled', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(response.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const created = await response.json() as { teams: Array<{ id: string; key: string }> }
+    const team = created.teams[0]
+    const review = await request.post(`${apiBase}/api/teams/${team.id}/states`, {
+      headers,
+      data: { name: 'In Review', type: 'started', color: '#2ECC71', position: 2.5 },
+    })
+    expect(review.status()).toBe(201)
+    const statesResponse = await request.get(`${apiBase}/api/teams/${team.id}/states`, { headers })
+    expect(statesResponse.ok()).toBe(true)
+    const states = await statesResponse.json() as Array<{ id: string; type: string }>
+    const stateId = states.find(state => state.type === 'unstarted')!.id
+    const renamed = await request.patch(`${apiBase}/api/workspaces/${workspaceKey}/teams/${team.id}`, {
+      headers,
+      data: { name: '[mobile] UI', icon: 'StarOutline', color: '#E719A5' },
+    })
+    expect(renamed.ok()).toBe(true)
+    const settings = await request.patch(`${apiBase}/api/teams/${team.id}/settings`, { headers, data: { estimateType: 'fibonacci' } })
+    expect(settings.ok()).toBe(true)
+    const create = async (title: string, extra = {}) => {
+      const created = await request.post(`${apiBase}/api/issues`, {
+        headers,
+        data: { title, description: '', teamId: team.id, stateId, priority: 0, ...extra },
+      })
+      expect(created.status()).toBe(201)
+      return created.json() as Promise<{ id: string }>
+    }
+    const parent = await create('[mobile] Estimate test A', { estimate: 3 })
+    await create('[mobile] Estimate test B', { estimate: 5 })
+    await create('[mobile] Nested child one', { estimate: 1, parentId: parent.id })
+
+    await page.goto(`/${workspaceKey}/team/${team.key}/all#hidden-columns`)
+    await expect(page.locator('main').first()).toBeVisible()
+    await page.getByRole('button', { name: 'Display options' }).first().click()
+    await page.getByRole('tab', { name: 'Board', exact: true }).click()
+    const emptyColumns = page.locator('input[aria-label="Show empty columns"]')
+    if (!(await emptyColumns.isChecked())) await emptyColumns.click()
+    for (const name of ['Backlog', 'In Progress', 'In Review', 'Done', 'Canceled', 'Duplicate']) {
+      await page.getByRole('button', { name: `Hide group ${name}`, exact: true }).click()
+    }
+    await page.keyboard.press('Escape')
+
+    const board = page.getByRole('list', { name: 'Issue board' })
+    await expect(board).toBeVisible()
+    expect(await board.evaluate(node => node.scrollLeft)).toBe(258)
+    const header = board.locator('[data-board-hidden-header-strip]')
+    const headerBox = await header.boundingBox()
+    expect(headerBox?.x).toBe(40)
+    expect(headerBox?.width).toBe(338)
+    expect(headerBox?.height).toBe(50)
+    await expect(header).toHaveCSS('position', 'sticky')
+    const collapse = board.locator('[data-board-hidden-header]')
+    expect((await collapse.boundingBox())?.x).toBe(41)
+    const rows = board.locator('[data-board-hidden-status]')
+    await expect(rows).toHaveCount(6)
+    const rowBox = await rows.first().boundingBox()
+    expect(rowBox?.x).toBe(40)
+    expect(rowBox?.width).toBe(338)
+    expect(rowBox?.height).toBe(37)
+    await expect(rows.first()).toContainText('Backlog')
+    const name = rows.first().locator('div > span')
+    const nameBox = await name.boundingBox()
+    expect(Math.abs((nameBox?.x ?? 0) - 80.5)).toBeLessThanOrEqual(1)
+    await expect(name).toHaveCSS('font-size', '13px')
+    await expect(name).toHaveCSS('line-height', '18.2px')
+    const count = rows.first().locator('div > b')
+    const countBox = await count.boundingBox()
+    expect(Math.abs((countBox?.x ?? 0) - 340.07)).toBeLessThanOrEqual(1)
+    expect(Math.abs((countBox?.width ?? 0) - 25.43)).toBeLessThanOrEqual(1)
+    await expect(count.locator('svg')).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+})
