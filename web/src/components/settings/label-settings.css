@@ -355,10 +355,10 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
     margin: 0;
   }
   html:root .settings-app .settings-main .domain-labels-search > svg {
-    width: 12px;
-    height: 12px;
+    width: 16px;
+    height: 16px;
     flex: none;
-    color: var(--set-desc);
+    color: var(--set-text);
   }
   html:root .settings-app .settings-main .domain-labels-search input {
     width: 100%;
@@ -386,11 +386,13 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
     min-height: 480px;
   }
   html:root .settings-app .settings-main .domain-labels-table-header {
-    position: relative;
     height: 30px;
     align-items: start;
   }
-  html:root .settings-app .settings-main .domain-labels-table-header::after {
+  html:root .settings-app .settings-main .domain-labels-header {
+    position: relative;
+  }
+  html:root .settings-app .settings-main .domain-labels-header::after {
     position: absolute;
     right: 0;
     bottom: 0;

@@ -18,7 +18,8 @@
 /* Favorite and options. */
 .issue-header-icon { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--issue-header-fg); }
 .issue-header-icon > svg { width: 14px; height: 14px; color: var(--issue-header-icon); }
-.issue-header-icon:hover, .issue-header-icon[data-state=open] { background: var(--issue-header-hover-bg); }
+.issue-header-icon:hover, .issue-header-icon[data-state=open], .issue-header-icon[aria-expanded=true] { background: var(--issue-header-hover-bg); }
+.issue-header-icon[data-state=open], .issue-header-icon[aria-expanded=true] { background: var(--theme-control); }
 .issue-header-icon:hover > svg, .issue-header-icon[data-state=open] > svg, .issue-header-icon[aria-checked=true] > svg { color: var(--issue-header-icon-hover); }
 /* A favorited issue: the reference's filled yellow star, at rest and on hover. */
 .issue-header-icon > svg.issue-header-favorite-filled { color: var(--issue-header-favorite); }
