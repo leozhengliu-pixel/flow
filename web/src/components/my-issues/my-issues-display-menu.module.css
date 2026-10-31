@@ -70,7 +70,7 @@
 .selectIndicator:not(#_) svg{width:14px;height:14px}
 /* Layout tabs sit 2px inside the field, 129 wide with 6px between them; chips and rows are 5px apart. */
 .layoutTabs:not(#_){padding:0 2px}
-.propertyGrid:not(#_){gap:6px}
+.propertyGrid:not(#_){gap:5px}
 
 @media (min-width: 1024px) {
   .desktopModeIcon,.desktopSortIcon{display:none}
