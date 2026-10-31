@@ -75,6 +75,16 @@ describe('TriagePage', () => {
     expect(screen.getByText('2 issues to triage')).toBeInTheDocument()
   })
 
+  it('opens workspace navigation from the phone header', () => {
+    const open = vi.fn()
+    window.addEventListener('flow:open-sidebar', open)
+    renderPage({ data: setup([triageIssue(1)]) })
+    fireEvent.click(screen.getByRole('button', { name: 'Open sidebar' }))
+    expect(open).toHaveBeenCalledOnce()
+    expect(document.querySelector('.flow-triage-page')).toHaveAttribute('data-triage-selected', 'false')
+    window.removeEventListener('flow:open-sidebar', open)
+  })
+
   it('persists display options per team and user and orders by them', async () => {
     const user = userEvent.setup()
     const data = setup([triageIssue(1, { priority: 4 }), triageIssue(2, { priority: 1 }), triageIssue(3, { priority: 0 })])

@@ -3,7 +3,7 @@ import { ViaApp } from '@/components/ui/via-app'
 import { attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { ArrowDownNarrowWide, ArrowDownWideNarrow, ChevronRight, CircleCheck, CircleX, Clock3, Copy, Link2, Settings2, UserRoundCog } from 'lucide-react'
+import { ArrowDownNarrowWide, ArrowDownWideNarrow, ChevronRight, CircleCheck, CircleX, Clock3, Copy, Link2, Settings2, Star, UserRoundCog } from 'lucide-react'
 import { toast } from '@/lib/toast'
 import { useScopedIssueRecords } from '@/hooks/use-scoped-issue-records'
 import { IssuesSplitViewPage } from '@/components/issues-split-view'
@@ -14,7 +14,8 @@ import { toggleFilterOption, updateFilterOperator, updateFilterValues, type MyIs
 import type { MyIssuesFilterKey } from '@/components/my-issues/my-issues-surface'
 import { applyExplorerFilters, explorerFilterOptions, explorerPropertyOptions, ISSUE_FILTER_LABELS } from '@/components/issue-explorer/issue-explorer-model'
 import { CalendarIcon, TeamIcon } from '@/components/issue/issue-icons'
-import { DisplayIcon, FilterIcon } from '@/components/ui/view-action-icons'
+import { DisplayIcon, FilterIcon, SidebarLeftIcon } from '@/components/ui/view-action-icons'
+import { FlowFavoriteFilledIcon, FlowFavoriteIcon } from '@/components/issue/flow-header-icons'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { SelectControl } from '@/components/ui/select-control'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -158,11 +159,12 @@ export function TriagePage({ data, team, onReload, onCreateIssue, onNavigate, se
   if (!enabled) return <TriageDisabledPage team={team} onOpenSettings={onNavigate ? () => onNavigate(settingsPath(data.workspace.urlKey, 'team', team.key, 'triage')) : undefined}/>
 
   const header = <header className="flow-triage-list__header">
+    <button type="button" className="flow-triage-list__sidebar flow-triage-icon-button" data-sidebar-trigger aria-label={t('Open sidebar')} onClick={() => window.dispatchEvent(new Event('flow:open-sidebar'))}><SidebarLeftIcon width={14} height={14}/></button>
     <div className="flow-triage-list__title">
       <span className="flow-triage-list__team" aria-hidden="true"><TeamIcon team={team}/></span>
       <h2>{t('Triage')}</h2>
       <FlowTooltip label={t(favorited ? 'Remove from favorites' : 'Favorite page')} shortcut="⌥ F">
-        <ContentViewHeaderFavoriteActionButton className="flow-triage-list__favorite" favorited={favorited} favoriteLabel={t('Favorite page')} unfavoriteLabel={t('Remove from favorites')} onClick={() => void toggleFavoriteFor(data, 'triage', team.id, undefined, favorited)}/>
+        <ContentViewHeaderFavoriteActionButton className="flow-triage-list__favorite" favorited={favorited} favoriteLabel={t('Favorite page')} unfavoriteLabel={t('Remove from favorites')} icon={<><span className="flow-triage-list__phone-star">{favorited ? <FlowFavoriteFilledIcon/> : <FlowFavoriteIcon/>}</span><Star className="flow-triage-list__desktop-star" size={14} fill={favorited ? 'currentColor' : 'none'}/></>} onClick={() => void toggleFavoriteFor(data, 'triage', team.id, undefined, favorited)}/>
       </FlowTooltip>
     </div>
     <div className="flow-triage-list__actions">
@@ -207,7 +209,7 @@ export function TriagePage({ data, team, onReload, onCreateIssue, onNavigate, se
     ? <div className="flow-triage-not-selected" aria-busy="true"/>
     : active.length === 0 ? <TriageEmptyPage onCreate={onCreateIssue}/> : <TriageNotSelectedPage issueCount={active.length} onCreate={onCreateIssue}/>)
 
-  return <section className="flow-triage-page" aria-label={t('Triage')}>
+  return <section className="flow-triage-page" aria-label={t('Triage')} data-triage-selected={Boolean(selectedKey)}>
     <IssuesSplitViewPage surface="triage" list={list} detail={rightPane} aria-label={t('Triage split view')}/>
     {menuAction ? <TriageActionDialogs issue={menuAction.issue} data={data} open={menuAction.kind} onOpenChange={kind => setMenuAction(kind ? { ...menuAction, kind } : undefined)} onDone={settle}/> : null}
     {responsibilityOpen ? <TriageResponsibilityDialog data={data} team={team} open onOpenChange={setResponsibilityOpen} onSaved={() => onReload?.()}/> : null}
@@ -259,10 +261,10 @@ function TriageRow({ issue, data, selected, showId, showDue, formatDate, t, onOp
       <a className="flow-triage-row" role="listitem" href={href} data-triage-row={issue.id} data-selected={selected || undefined} aria-current={selected ? 'page' : undefined} onClick={click}>
         <span className="flow-triage-row__line">
           <span className="flow-triage-row__title" data-i18n-ignore>{issue.title}</span>
-          {showId ? <span className="flow-triage-row__id" data-i18n-ignore>{issue.identifier}</span> : null}
+          {showId ? <span className="flow-triage-row__id" data-i18n-ignore><span>{issue.identifier}</span></span> : null}
         </span>
         <span className="flow-triage-row__line is-meta">
-          <UserAvatar className="flow-triage-row__avatar" name={creator} avatarUrl={attributedActorAvatar(issue.creator, issue.botActor)}/>
+          <span className="flow-triage-row__avatar-slot"><UserAvatar className="flow-triage-row__avatar" name={creator} avatarUrl={attributedActorAvatar(issue.creator, issue.botActor)}/></span>
           <span className="flow-triage-row__creator" data-i18n-ignore>{creator}<ViaApp user={issue.creator} botActor={issue.botActor}/></span>
           {showDue && issue.dueDate ? <span className="flow-triage-row__due"><CalendarIcon/>{formatDate(issue.dueDate.length === 10 ? `${issue.dueDate}T00:00:00` : issue.dueDate, { month: 'short', day: 'numeric' })}</span> : null}
           {snoozed && issue.snoozedUntil ? <span className="flow-triage-row__snoozed"><Clock3 size={12}/>{formatSnoozeDate(new Date(issue.snoozedUntil))}</span> : null}

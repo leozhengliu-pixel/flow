@@ -3,6 +3,53 @@ import { test } from './workspace-fixture'
 import type { BootstrapData } from '../src/types/flow'
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  test.describe(`phone triage ${viewport.width}`, () => {
+    test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Triage' })
+
+    test('shows three two-line rows and keeps navigation and display controls usable', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const data = await (await request.get('/api/bootstrap', { headers })).json() as BootstrapData
+      const team = data.teams[0]
+      const settings = await request.patch(`/api/teams/${team.id}/settings`, { headers, data: { triageEnabled: true } })
+      expect(settings.ok()).toBe(true)
+      for (let index = 1; index <= 3; index += 1) {
+        const issue = await request.post('/api/issues', { headers, data: { title: `[mobile] Triage issue ${index}`, teamId: team.id, stateId: data.states.find(state => state.type === 'backlog')!.id } })
+        expect(issue.status()).toBe(201)
+      }
+      await page.goto(`/${workspaceKey}/team/${team.key}/triage`)
+      const header = page.locator('.flow-triage-list__header')
+      await expect(header).toBeVisible()
+      expect((await header.boundingBox())?.height).toBe(44)
+      const rows = page.locator('a[data-triage-row]')
+      await expect(rows).toHaveCount(3)
+      expect(await rows.first().boundingBox()).toMatchObject({ x: 0, y: 52, width: viewport.width, height: 59 })
+      await expect(rows.first().locator('.flow-triage-row__title')).toHaveCSS('font-size', '13px')
+      await expect(rows.first().locator('.flow-triage-row__creator')).toHaveCSS('font-size', '12px')
+      await header.getByRole('button', { name: 'Display options', exact: true }).click()
+      const display = page.getByRole('dialog', { name: 'Display options', exact: true })
+      await display.getByRole('button', { name: 'ID', exact: true }).click()
+      await expect(rows.first().locator('.flow-triage-row__id')).toHaveCount(0)
+      await display.getByRole('button', { name: 'ID', exact: true }).click()
+      await page.keyboard.press('Escape')
+      await header.getByRole('button', { name: 'Add filter', exact: true }).click()
+      await expect(page.getByRole('dialog', { name: 'Add Filter…', exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('dialog', { name: 'Add Filter…', exact: true })).toBeHidden()
+      await header.getByRole('button', { name: 'Open sidebar', exact: true }).click()
+      await expect(page.getByRole('complementary', { name: 'Workspace navigation' })).toBeVisible()
+      await page.getByRole('button', { name: 'Close sidebar', exact: true }).click({ position: { x: viewport.width - 8, y: 300 } })
+      await expect(page.locator('.sidebar-scrim')).not.toHaveClass(/open/)
+      await rows.first().click()
+      await expect(page).toHaveURL(/\/issue\//)
+      await expect(header).toBeHidden()
+      await page.goBack()
+      await expect(header).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  })
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   test.describe(`phone Views directory ${viewport.width}`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Views' })
 
@@ -241,10 +288,10 @@ test.describe('mobile team display options', () => {
 })
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
-  workspaceTest.describe(`phone saved issue view ${viewport.width}`, () => {
-    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Saved view' })
+  test.describe(`phone saved issue view ${viewport.width}`, () => {
+    test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Saved view' })
 
-    workspaceTest('matches the grouped saved-view header and first status group', async ({ page, request, workspaceKey }) => {
+    test('matches the grouped saved-view header and first status group', async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Workspace-Key': workspaceKey }
       const bootstrap = await (await request.get('/api/bootstrap', { headers })).json() as BootstrapData
       const team = bootstrap.teams[0]
