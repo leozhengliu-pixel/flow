@@ -2,6 +2,8 @@
 .header{height:44px;flex:0 0 44px;display:flex;align-items:center;padding:0 8.5px 0 18px;border-bottom:.5px solid var(--border)}
 .header h2{margin:1px 0 0;color:var(--theme-text-primary);font-size:13px;font-weight:500;line-height:normal}
 .mobileMenu{display:none}
+.sidebarGlyph{display:none}
+.scopeAvatarFrame{display:contents}
 .favoriteHeader,.createHeader,.displayTrigger{position:relative;height:28px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font-size:12px;font-weight:500;line-height:normal;outline:0;transition:border .15s,background-color .15s,color .15s,opacity .15s}
 .favoriteHeader,.displayTrigger{width:28px;padding:0 2px}
 .favoriteHeader{margin-left:8px}
@@ -157,6 +159,35 @@
 .contextMenu,.displayPopover,.orderingList{border-radius:var(--filter-popover-radius)}
 
 .toolbarEnd :global(.cvh-search){margin-right:4px}
+@media(max-width:767px){
+  .page .header{padding:0 8px;gap:12px}
+  .page .header h2{margin:0;color:var(--phone-control-fg)}
+  .page .mobileMenu,.page .createHeader,.page .displayTrigger{width:32px;height:32px;flex:0 0 32px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;font-size:12px;font-weight:500;line-height:normal;letter-spacing:normal}
+  html:root[data-sidebar-mode] body :global(.app) .page .mobileMenu{margin:0;color:var(--phone-control-fg);padding:0 2px;border:.5px solid transparent;border-radius:9999px;font-size:12px;line-height:normal}
+  .page .mobileMenu>span{display:none}
+  html:root body :global(.app) .page .mobileMenu:before,html:root body :global(.app) .page .mobileMenu:after{display:none}
+  html:root body :global(.app) .page .mobileMenu>.sidebarGlyph{display:block;width:14px;height:14px}
+  .page .sidebarGlyph,.page .displayTrigger>svg{color:var(--phone-icon-fg)}
+  .page .createHeader{color:var(--phone-icon-fg)}
+  .page .toolbar{padding:0 8px;gap:6px;overflow:visible}
+  .page .tabs a{height:32px;border-width:.5px;background:var(--ui-pill-bg);color:var(--phone-icon-fg);box-shadow:none}
+  .page .tabs a[aria-current=page]{background:var(--ui-pill-active-bg);color:var(--ui-pill-active-fg)}
+  html:root .page .toolbar .displayTrigger{background:var(--phone-control-bg);color:var(--phone-control-fg)}
+  .page .displayTrigger>svg{width:14px;height:14px;flex-basis:14px}
+  .page .columns{display:none}
+  .page .groupHeader{height:36px;margin:0 8px 2px;padding:0 26px 0 10px;gap:16px;border-radius:8px;background:var(--phone-group-bg)}
+  .page .scopeAvatarFrame{display:block;flex:0 0 18px;width:18px;height:18px;margin-left:-1px;margin-right:-6px;color:var(--ui-pill-active-fg);font-size:16px;font-weight:400;line-height:0}
+  .page .scopeAvatar{border-radius:9999px}
+  .page .groupHeader strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--phone-group-title);font-size:13px;font-weight:500;line-height:normal}
+  .page .groupHeader>span:nth-of-type(2){display:block;flex-shrink:0;margin-left:-12px;color:var(--phone-group-count);font-size:13px;font-weight:500;line-height:normal}
+  .page .groupHeader>button{width:28px;height:28px;flex:0 0 28px;display:flex;align-items:center;justify-content:center;transform:none;padding:0 2px;border:.5px solid transparent;color:var(--phone-group-title);font-size:12px;font-weight:500;line-height:normal;letter-spacing:normal}
+  .page .groupHeader>button svg{width:14px;height:14px;color:var(--phone-group-count)}
+  .page .row{padding:0;z-index:0}
+  .page .identity{align-items:center;gap:11px;padding:0 34px 0 18px}
+  .page .viewIcon{width:16px;height:16px;flex:0 0 16px;margin:0}
+  .page .identity strong{color:var(--ui-pill-active-fg);line-height:24px}
+  .page .identity small{display:none}
+}
 @media(min-width:1024px){
   .header h2{color:var(--text)}
   .groupHeader{height:36px;margin:0 8px;padding:0 10px;border-radius:8px;background:var(--my-issues-details-bg)}

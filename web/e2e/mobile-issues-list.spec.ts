@@ -3,6 +3,47 @@ import { test as workspaceTest } from './workspace-fixture'
 import type { BootstrapData } from '../src/types/flow'
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`phone Views directory ${viewport.width}`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Views' })
+
+    workspaceTest('matches the directory and opens its tabs, display settings and saved view', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const settings = await request.patch('/api/workspace/preferences', { headers, data: { featureFlags: { dashboards: false } } })
+      expect(settings.ok()).toBe(true)
+      const created = await request.post('/api/views', { headers, data: { name: '[mobile] All issues', resource: 'issues', scope: 'workspace', icon: 'CustomView', color: '#bec2c8' } })
+      expect(created.status()).toBe(201)
+      await page.goto(`/${workspaceKey}/views/issues`)
+      const directory = page.getByTestId('views-directory')
+      const toolbar = directory.getByTestId('views-toolbar')
+      await expect(toolbar.getByRole('link', { name: 'Issues', exact: true })).toHaveAttribute('aria-current', 'page')
+      await expect(toolbar.getByRole('link', { name: 'Dashboards', exact: true })).toHaveCount(0)
+      expect((await directory.locator('header').boundingBox())?.height).toBe(44)
+      expect((await toolbar.boundingBox())?.height).toBe(43.5)
+      expect((await directory.getByTestId('views-group-header').boundingBox())?.y).toBe(87.5)
+      await expect(directory.getByTestId('views-group-scope')).toBeVisible()
+      const row = directory.getByTestId('views-row')
+      const box = await row.boundingBox()
+      expect(box).toMatchObject({ x: 0, y: 125.5, width: viewport.width, height: 60 })
+      await expect(row.locator('strong')).toHaveCSS('font-size', '13px')
+      await expect(row.locator('strong')).toHaveCSS('line-height', '24px')
+      await expect(row.locator('small')).toBeHidden()
+      await directory.getByRole('button', { name: 'Display options', exact: true }).click()
+      await expect(page.getByText('Ordering', { exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(page.getByText('Ordering', { exact: true })).toBeHidden()
+      await toolbar.getByRole('link', { name: 'Projects', exact: true }).click()
+      await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/views/projects$`))
+      await expect(page.getByTestId('views-toolbar').getByRole('link', { name: 'Projects', exact: true })).toHaveAttribute('aria-current', 'page')
+      await page.getByTestId('views-toolbar').getByRole('link', { name: 'Issues', exact: true }).click()
+      await expect(page.getByTestId('views-toolbar').getByRole('link', { name: 'Issues', exact: true })).toHaveAttribute('aria-current', 'page')
+      await page.getByTestId('views-row').click()
+      await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/view/`))
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  })
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   workspaceTest.describe(`phone filter command menu ${viewport.width}`, () => {
     workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Filter menu' })
 
