@@ -102,10 +102,15 @@
 /* Phone rows: the reference app shows priority, status, title and the assignee only.
    A delegated session's state sits in a pill before (and around) the avatars. */
 @media(max-width:767px){
+  /* Keep the real selection control available to touch/automation users without
+     taking a column in the compact phone row. It remains visually transparent
+     until selected, matching the reference's uncluttered rows. */
+  .row>.checkboxCell{position:absolute;z-index:2;left:0;top:15px;width:14px;height:14px;margin:0;display:block;pointer-events:auto}
+  .row>.checkboxCell .checkbox{opacity:.001}
   /* The lead column grows with the nesting depth so a sub-issue row shifts 24px
      right of its parent; the priority icon stays flush with the column's end. */
   .row{padding:0;grid-template-columns:10px calc(16px + var(--nested-depth,0) * 24px) 16px minmax(0,1fr);column-gap:8px;border-style:none}
-  .row>.checkboxCell,.row>.identifier,.row>.rowDate,.row>span[aria-hidden="true"]:last-child{display:none}
+  .row>.identifier,.row>.rowDate,.row>span[aria-hidden="true"]:last-child{display:none}
   .badges{display:flex}
   /* The avatar's 3px trigger padding sits inside the badge gap, so an estimate
      chip 5px from the trigger lands 8px from the avatar like the reference. */

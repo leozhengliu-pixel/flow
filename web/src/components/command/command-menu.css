@@ -162,3 +162,56 @@ html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
     line-height: normal;
   }
 }
+
+/* The phone command palette is a compact issue-action sheet. The reference
+   keeps its context chip and input on their own 46px rhythm, then virtualizes
+   the action rows inside the scrolling list. */
+@media (max-width: 767px) {
+  html:root body .command-dialog:has(.command-context-chip) .command-context {
+    height: 33.5px;
+    box-sizing: border-box;
+    padding: 11.5px 13.5px 0;
+  }
+  html:root body .command-dialog:has(.command-context-chip) .command-context-chip {
+    box-sizing: border-box;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: var(--command-typed-chip-bg);
+    box-shadow: none;
+    font-weight: 400;
+    line-height: 18px;
+  }
+  html:root body .command-dialog:has(.command-context-chip) .command-input {
+    padding: 6px 4.5px 0 5.5px;
+  }
+  html:root body .command-dialog:has(.command-context-chip) .command-input input {
+    box-sizing: border-box;
+    padding: 0 !important;
+    border-radius: 12px !important;
+    line-height: 19.5px !important;
+  }
+  html:root body .command-dialog:has(.command-context-chip) [cmdk-list] {
+    padding: 6px 4.5px 6px 5.5px;
+  }
+  html:root body .command-dialog:has(.command-context-chip) .command-context-actions [cmdk-group-heading] {
+    display: none;
+  }
+  html:root body .command-dialog:has(.command-context-chip) .command-context-actions [cmdk-group-items] {
+    position: relative;
+  }
+  html:root body .command-dialog:has(.command-context-chip) .command-context-actions [cmdk-item] {
+    position: absolute !important;
+    border-radius: 0 !important;
+  }
+  html:root body .command-dialog:has(.command-context-chip) .command-context-actions [cmdk-item] > span:not(.command-item-icon):not(.command-shortcut) {
+    font-size: 13px;
+    font-weight: 450;
+    line-height: 15.6px;
+  }
+  html:root body .command-dialog:has(.command-context-chip) .command-context-actions .command-item-icon {
+    color: var(--pk-muted);
+  }
+  html:root body .command-dialog:has(.command-context-chip) .command-context-actions [cmdk-item][data-selected="true"] .command-item-icon {
+    color: var(--pk-text-strong);
+  }
+}

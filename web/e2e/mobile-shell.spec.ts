@@ -487,6 +487,37 @@ test.describe('my issues phone toolbar', () => {
   })
 })
 
+test.describe('phone command menu', () => {
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent })
+  test('opens the selected issue actions at the phone-sheet geometry', async ({ page, request, workspaceKey }) => {
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await (await request.get(`${api}/api/bootstrap`, { headers })).json() as {
+      viewer: { id: string }; teams: Array<{ id: string }>; states: Array<{ id: string; type: string }>
+    }
+    const stateId = (bootstrap.states.find(state => state.type === 'started') ?? bootstrap.states[0]).id
+    const issue = await request.post(`${api}/api/issues`, {
+      headers,
+      data: { title: '[mobile] Command menu parity', description: '', teamId: bootstrap.teams[0].id, stateId, assigneeId: bootstrap.viewer.id },
+    })
+    expect(issue.status()).toBe(201)
+
+    await page.goto(`${base}/${workspaceKey}/my-issues/assigned`)
+    await page.locator('[data-issue-row-container] [role="checkbox"]').first().click()
+    await page.keyboard.press('Meta+k')
+    const menu = page.locator('.command-dialog')
+    await expect(menu).toBeVisible()
+    await geometry(menu, { x: 16, y: 110, width: 358, height: 450 })
+    for (const label of ['Assign to…', 'Un-assign from me', 'Change status…', 'Set priority…', 'Add to project…', 'Add labels…', 'Move to a different team…', 'Set due date…']) {
+      await expect(menu.getByRole('option').filter({ hasText: label.replace('…', '') })).toBeVisible()
+    }
+    await expect(page.locator('[data-my-issues-bulk-bar]')).toBeHidden()
+    await noOverflow(page)
+    if (shots) await page.screenshot({ path: `${shots}/flow-command-menu-390.png` })
+    await page.keyboard.press('Escape')
+    await expect(menu).not.toBeVisible()
+  })
+})
+
 test('desktop frame stays docked at 1280px', async ({ browser, workspaceKey }) => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 768 } })
   await page.goto(`${base}/${workspaceKey}/inbox`)
