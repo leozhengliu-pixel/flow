@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ArrowRight, ArrowUp, FileText, Paperclip } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -41,6 +41,7 @@ export function LoopCreateHub({
   const { templates } = useLoopTemplates();
   const [prompt, setPrompt] = useState("");
   const [entry, setEntry] = useState<Entry>();
+  const [category, setCategory] = useState("Featured");
   const [busy, setBusy] = useState(false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -107,6 +108,12 @@ export function LoopCreateHub({
     if (location) void create(location, next);
   };
   const template = entry?.kind === "template" ? entry.template : undefined;
+  const categories = ["Featured", "Engineering", "Triage", "Reporting", "Security", "Support"];
+  const visibleTemplates = useMemo(() => {
+    if (!templates || category === "Featured") return templates;
+    const needle = category.toLowerCase();
+    return templates.filter((item) => `${item.name} ${item.description} ${item.triggerLabel} ${item.actionLabel}`.toLowerCase().includes(needle));
+  }, [category, templates]);
 
   return (
     <div className={`loops-hub is-${variant}`}>
@@ -176,12 +183,13 @@ export function LoopCreateHub({
           </button>
         </footer>
       </form>
-      {templates?.length !== 0 && <div className="loops-hub-templates">
+      <nav className="loops-hub-categories" aria-label={t("Loop template categories")}>{categories.map((item) => <button key={item} type="button" className={category === item ? "is-active" : undefined} aria-pressed={category === item} onClick={() => setCategory(item)}>{t(item)}</button>)}</nav>
+      {visibleTemplates?.length !== 0 && <div className="loops-hub-templates">
         <h3>{t("or pick a template")}</h3>
         <div className="loops-template-grid">
           {templates === undefined
             ? Array.from({ length: 4 }, (_, index) => <div aria-hidden="true" className="loops-template-card is-loading" key={index} />)
-            : templates.map((item) => (
+            : visibleTemplates?.map((item) => (
                 <button className="loops-template-card" key={item.id} type="button" onClick={() => setEntry({ kind: "template", template: item })}>
                   {/* The reference app: an inset panel with the icon, name and description; the trigger → action footer sits below it. */}
                   <span className="loops-template-main">

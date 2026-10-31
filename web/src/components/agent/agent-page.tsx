@@ -766,9 +766,9 @@ export function AgentPage({
               aria-label={t("Submit comment")}
               className={styles.sendButton}
               data-agent-send=""
-              // Like the reference app, an empty composer keeps the quiet send button (hover included); text turns it accent.
-              data-state={!status?.enabled ? "unavailable" : input.trim() && !filesUploading ? "ready" : "empty"}
-              disabled={!input.trim() || filesUploading || !status?.enabled}
+              // Empty chats keep the accent send control visible; submitting an empty draft is a no-op.
+              data-state={!status?.enabled ? "unavailable" : phone && !input.trim() ? "empty" : "ready"}
+              disabled={filesUploading || !status?.enabled || (phone && !input.trim())}
               onClick={() => void send()}
               type="button"
             ><AgentSubmitIcon /></button></FlowTooltip>}
@@ -786,6 +786,19 @@ export function AgentPage({
           onOpen={(session) => onNavigate(agentPath(data.workspace.urlKey, session.slugId))}
           onOpenInToolbar={(session) => void updateAgentSession(session.id, { location: "toolbar" }).then(saveSession)}
         />}
+        {!shown && !sessions.length && status?.enabled && <section className={styles.examples} aria-label={t("Get started with some examples")}>
+          <p>{t("Get started with some examples")}</p>
+          <div className={styles.exampleGrid}>
+            {[
+              ["Summarize the latest project updates", "Pull together a concise update from recent project activity."],
+              ["Research a topic for my team", "Find useful context and turn it into clear next steps."],
+              ["Build a workflow for recurring work", "Describe a repetitive process and shape it into a Loop."],
+            ].map(([title, description]) => <button className={styles.exampleCard} key={title} type="button" onClick={() => writeInput(t(title))}>
+              <strong>{t(title)}</strong>
+              <span>{t(description)}</span>
+            </button>)}
+          </div>
+        </section>}
         </div>
         </div>
       </section>

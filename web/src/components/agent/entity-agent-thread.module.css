@@ -27,7 +27,7 @@
 .messageDocument ul,.messageDocument ol{display:grid;gap:3px;margin:6px 0 0;padding-left:20px}
 .messageDocument li p{margin:0}
 .messageDocument h2,.messageDocument h3{margin:10px 0 5px;font-size:13px;font-weight:600}
-.messageDocument code{padding:1px 3px;border:.5px solid var(--theme-border);border-radius:4px;background:var(--theme-surface-1);font:11px/18px ui-monospace,SFMono-Regular,Menlo,monospace}
+.messageDocument code{padding:1px 3px;border:.5px solid var(--theme-border);border-radius:4px;background:var(--theme-surface-1);font:11px/18px "Berkeley Mono","SFMono-Regular",Consolas,monospace}
 .messageDocument pre{overflow:auto;margin:9px 0 0;padding:8px;border:.5px solid var(--theme-border);border-radius:6px;background:var(--theme-surface-1)}
 .messageDocument pre code{padding:0;border:0;background:transparent}
 .thinking{display:flex;align-items:center;gap:7px;color:var(--theme-text-secondary);font-size:12px}

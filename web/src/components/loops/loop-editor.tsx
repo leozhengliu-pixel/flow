@@ -228,7 +228,9 @@ function LoopEditorForm({
   const { t } = useI18n();
   const draft = isLoopDraft(loop);
   const workspace = data.workspace.urlKey;
+  const teams = activeTeams(data.teams);
   const [form, setForm] = useState<Form>(() => formOf(loop));
+  const levelTeam = form.level === "team" ? teams.find((team) => team.id === form.teamId) : undefined;
   const [dirty, setDirty] = useState(false);
   const [draftSaving, setDraftSaving] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -268,7 +270,7 @@ function LoopEditorForm({
       setInstructionsRevision((value) => value + 1);
       setDirty(false);
     }
-  }, [refetch]);
+  }, [refetch, setDirty, setForm, setInstructionsRevision]);
 
   const finish = async (next: Loop) => {
     onLoopChange(next);
@@ -306,8 +308,6 @@ function LoopEditorForm({
     onNavigate(loopsPath(workspace));
   };
 
-  const teams = activeTeams(data.teams);
-  const levelTeam = form.level === "team" ? teams.find((team) => team.id === form.teamId) : undefined;
   const originTeam = teamKey ? data.teams.find((team) => team.key.toLowerCase() === teamKey.toLowerCase()) : undefined;
   const accessTeamIds = configStrings(form.triggerConfig, "teamIds");
   const entity = ENTITY_NAMES[form.triggerType].toLowerCase();
@@ -371,7 +371,6 @@ function LoopEditorForm({
               triggerClassName="loops-icon-picker"
             />
             <input aria-label={t("Loop name")} className="loops-name-input" value={form.name} onChange={(event) => update({ name: event.target.value })} placeholder={t("Loop name")} />
-            {/* The reference app picks the location while creating; published loops move from the loop menu. */}
             {draft && (
             <DropdownMenu>
               <DropdownMenuTrigger className="loops-level-button" aria-label={t("Loop level")}>

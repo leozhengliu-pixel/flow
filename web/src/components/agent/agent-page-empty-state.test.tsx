@@ -51,9 +51,10 @@ describe('agent page empty state', () => {
     expect(container.querySelector('main')?.className).toContain('emptyPage')
   })
 
-  it('shows nothing under the composer when there are no chats', () => {
+  it('shows starter examples when there are no chats', async () => {
     renderPage([])
     expect(screen.queryByRole('navigation', { name: 'Recent agent chats' })).not.toBeInTheDocument()
+    expect(await screen.findByText('Get started with some examples')).toBeVisible()
   })
 
   it('lists recent chats newest first with an unread dot only on unread ones', () => {
