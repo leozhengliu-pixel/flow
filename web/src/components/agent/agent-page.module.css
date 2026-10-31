@@ -216,9 +216,6 @@
   mask-image: linear-gradient(black, transparent 61.2%);
 }
 @media (min-width: 801px) {
-  .emptyColumn:has(.examples) { position: relative; display: block; }
-  .emptyColumn:has(.examples) .emptyComposerSlot { position: absolute; top: 236px; right: 0; left: 0; }
-  .emptyColumn:has(.examples) .examples { position: absolute; top: 342px; right: 0; left: 0; }
   .emptyLogo { top: -166px; }
 }
 .history {
@@ -1046,13 +1043,10 @@
   height: 14px;
 }
 @media (min-width: 801px) {
-  .skillsMenu { box-sizing: border-box; width: 170.5px; height: 43.1px; overflow: hidden; padding: 0; border: 0.5px solid var(--popover-border); border-radius: 12px; background: var(--theme-surface-2); box-shadow: var(--shadow-dialog); }
+  .skillsMenu { box-sizing: border-box; width: 240px; max-width: calc(100vw - 32px); padding: 6px; border: 0.5px solid var(--popover-border); border-radius: 12px; background: var(--theme-surface-2); box-shadow: var(--shadow-dialog); }
   .skillsMenuHeader { box-sizing: border-box; display: flex; align-items: center; height: 12px; padding: 0 10px; color: var(--theme-text-secondary); font-size: 11px; font-weight: 450; }
-  .skillsMenu .menuSearch { display: none; }
   .skillsMenu [role="option"] { height: 31px; padding: 0 14px; }
   .editorScroll > div > .editor { min-height: 44px; }
-  .emptyComposerSlot > .composer { top: 2px; }
-  .emptyComposerSlot > .composer > footer { position: relative; top: 8px; }
   .emptyComposerSlot > .composer .skillsButton { padding-right: 5px; }
 }
 .danger {
@@ -1103,8 +1097,8 @@
   .examples { display: none; }
   .page > header {
     position: relative;
-    gap: 12px;
-    padding: 0 !important;
+    gap: 4px;
+    padding: 0 8px !important;
     border-bottom-width: 0;
     background: var(--bg-panel);
   }
@@ -1119,8 +1113,8 @@
   }
   .mobileMenu {
     display: grid;
-    margin-left: 8px;
-    margin-right: -8px !important;
+    flex: none;
+    margin: 0 !important;
     padding: 0 2px !important;
     border: 0.5px solid transparent !important;
     border-radius: 9999px !important;
@@ -1145,6 +1139,9 @@
     opacity: 0.65 !important;
   }
   .switcher {
+    min-width: 0;
+    flex: 0 1 auto;
+    margin: 0;
     gap: 12px;
     border-width: 0.5px;
     color: var(--text);
@@ -1153,6 +1150,8 @@
     line-height: normal;
   }
   .switcher h2 {
+    min-width: 0;
+    max-width: none;
     color: var(--text);
   }
   .switcher > svg {
@@ -1219,15 +1218,12 @@
   .historyRow[data-unread] {
     color: var(--text);
   }
-  /* The reference app's conversation header: the title pill keeps its measured width, so the star and
-     overflow controls sit at the right edge with the chat title clipped, and the move-to-toolbar control is absent. */
   .page > header {
     padding-bottom: 0.5px;
   }
   .page > header:has(> .headerIcon) .switcher {
     box-sizing: border-box;
-    width: 275.69px;
-    margin-right: -8px;
+    min-width: 0;
   }
   .page > header:has(> .headerIcon) .switcher h2 {
     min-width: 0;
@@ -1238,7 +1234,7 @@
     width: 32px;
     height: 32px;
     flex: none;
-    margin-right: -12px;
+    margin-right: 0;
     padding: 0 2px;
     border: 0.5px solid transparent;
     color: var(--text);
@@ -1249,52 +1245,12 @@
   .page > header > .headerIcon svg {
     color: var(--agent-thread-muted);
   }
-  /* Keep the measured header rules resilient to generated CSS-module class names. */
-  .page > header:has(> [class*="headerIcon"]) .switcher {
-    box-sizing: border-box;
-    width: auto !important;
-    max-width: 275.69px;
-    flex: 0 1 auto !important;
-    margin-right: -8px;
-  }
-  .page > header:has(> [class*="headerIcon"]) .switcher h2 {
-    min-width: 0;
-    max-width: calc(100vw - 100px);
-    flex: 0 1 auto;
-  }
-  .page > header > [class*="headerIcon"] {
-    width: 32px !important;
-    height: 32px !important;
-    flex: none;
-    margin-right: -12px;
-    padding: 0 2px;
-    border: 0.5px solid transparent;
-    color: var(--text);
-    font-size: 12px;
-    font-weight: 500;
-    line-height: normal;
-  }
-  .page > header > [class*="headerIcon"] svg {
-    color: var(--agent-thread-muted);
-  }
   .page > header > [class*="headerIcon"][aria-label="Chat options"][data-state="open"] {
     background: var(--cs-agent-toggle-on-bg) !important;
     color: var(--cs-agent-toggle-on-fg) !important;
   }
   .page > header > [class*="headerIcon"][aria-label="Chat options"][data-state="open"] svg {
     color: var(--cs-agent-toggle-on-fg) !important;
-  }
-  /* The title owns only the space its text and chevron need; the action buttons
-     stay pinned to the measured right edge while long titles truncate. */
-  .page > header > [class*="headerIcon"] {
-    position: absolute;
-    top: 5.75px;
-    margin-right: 0;
-  }
-  .page > header > [class*="headerIcon"][aria-label="Add to favorites"] { left: 323.69px; }
-  .page > header > [class*="headerIcon"][aria-label="Chat options"] { left: 355.69px; }
-  .headerSpacer + .headerIcon {
-    display: none;
   }
   .conversation {
     bottom: 148px;
@@ -1496,7 +1452,7 @@
 :global(:root[data-theme="light"]) .danger { color: var(--semantic-danger); }
 :global(:root[data-theme="light"]) .attachments > span { border-color: var(--theme-border); background: var(--theme-surface-hover); }
 @media (min-width: 801px) {
-  :global(:root[data-theme="light"]) .skillsMenu { box-sizing: border-box; width: 170.5px; height: 43.1px; border: 0.5px solid var(--popover-border); border-radius: 12px; background: var(--theme-surface-2); box-shadow: var(--shadow-dialog); }
+  :global(:root[data-theme="light"]) .skillsMenu { border: 0.5px solid var(--popover-border); border-radius: 12px; background: var(--theme-surface-2); box-shadow: var(--shadow-dialog); }
   :global(:root[data-theme="light"]) .skillsMenuHeader { box-sizing: border-box; display: flex; align-items: center; height: 12px; padding: 0 10px; }
   :global(:root[data-theme="light"]) .skillsMenu [role="option"] { height: 31px; padding: 0 14px; }
 }
