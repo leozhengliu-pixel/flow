@@ -5,6 +5,56 @@ import { test as workspaceTest } from './workspace-fixture'
 const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`${viewport.width}px teams`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Teams' })
+
+    workspaceTest('keeps the team table scrollable with working hierarchy, sorting and filters', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const bootstrap = await request.get('/api/bootstrap', { headers })
+      const initial = (await bootstrap.json()).teams[0]
+      expect((await request.patch(`/api/workspaces/${workspaceKey}/teams/${initial.id}`, { headers, data: { name: '[mobile] Alpha', key: 'ALP' } })).ok()).toBe(true)
+      const parentResponse = await request.post(`/api/workspaces/${workspaceKey}/teams`, { headers, data: { name: '[mobile] Parent', key: 'PAR' } })
+      expect(parentResponse.status()).toBe(201)
+      const parent = await parentResponse.json()
+      expect((await request.post(`/api/workspaces/${workspaceKey}/teams`, { headers, data: { name: '[mobile] Child', key: 'CHD', parentTeamId: parent.id } })).status()).toBe(201)
+      await page.goto(`/${workspaceKey}/settings/teams`)
+      const table = page.locator('.mobile-teams-table')
+      const rows = table.locator('.mobile-team-row')
+      await expect(rows).toHaveCount(3)
+      await expect(table.locator('.mobile-teams-group')).toHaveText('Active2')
+      expect((await rows.first().boundingBox())!.y).toBeCloseTo(225.5, 1)
+      expect((await rows.first().boundingBox())!.height).toBe(44)
+      expect((await table.boundingBox())!.width).toBe(504)
+      await expect(rows.first()).toHaveAttribute('data-team-key', 'ALP')
+      await expect(table.locator('[data-team-key=CHD]')).toHaveAttribute('data-depth', '1')
+      await page.getByRole('button', { name: 'Collapse team', exact: true }).click()
+      await expect(rows).toHaveCount(2)
+      await page.getByRole('button', { name: 'Expand team', exact: true }).click()
+      await expect(rows).toHaveCount(3)
+      await page.getByRole('button', { name: 'Order by Name', exact: true }).click()
+      await expect(rows.first()).toHaveAttribute('data-team-key', 'PAR')
+      const filter = page.getByRole('textbox', { name: 'Filter by name…', exact: true })
+      await filter.fill('Child')
+      await expect(rows).toHaveCount(1)
+      await expect(rows.first()).toContainText('[mobile] Child')
+      await filter.fill('')
+      const status = page.getByRole('combobox', { name: 'Team visibility filter' })
+      await status.click()
+      await page.getByRole('option', { name: 'Retired', exact: true }).click()
+      await expect(rows).toHaveCount(0)
+      await status.click()
+      await page.getByRole('option', { name: 'Active', exact: true }).click()
+      await expect(rows).toHaveCount(3)
+      await page.locator('.mobile-teams-scroll').evaluate(node => { node.scrollLeft = 114 })
+      expect(await page.locator('.mobile-teams-scroll').evaluate(node => node.scrollLeft)).toBeGreaterThan(0)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await page.getByRole('button', { name: 'Create team', exact: true }).click()
+      await expect(page.getByRole('heading', { name: 'Create a new team', exact: true })).toBeVisible()
+    })
+  })
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   workspaceTest.describe(`${viewport.width}px workspace general`, () => {
     workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Workspace general' })
 

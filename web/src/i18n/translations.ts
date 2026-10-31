@@ -3259,6 +3259,8 @@ export const zhCN: Record<string, string> = {
   "Create release": "创建发布版本",
   "Create saved view": "创建保存视图",
   "Create team": "创建团队",
+  "Collapse team": "收起团队",
+  "Expand team": "展开团队",
   "Create view": "创建视图",
   "Create view…": "创建视图…",
   "Create workspace": "创建工作区",
