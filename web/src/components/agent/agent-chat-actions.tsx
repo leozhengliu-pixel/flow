@@ -27,6 +27,10 @@ export function AgentChatMenu({ align = 'start', className, unsaved = false, onC
   const phone = usePhoneLayout()
   const [phoneOpen, setPhoneOpen] = useState(false)
   const feedbackEnabled = useUsageFeedbackEnabled()
+  const choosePhone = (action: () => void) => {
+    setPhoneOpen(false)
+    action()
+  }
   if (phone) {
     return <>
       <button
@@ -49,16 +53,23 @@ export function AgentChatMenu({ align = 'start', className, unsaved = false, onC
         open={phoneOpen}
         placeholder="Filter…"
       >
-        <Command.Item className="menu-item" disabled={unsaved} onSelect={onRename} value={t('Rename…')}>
+        <Command.Group>
+        <Command.Item className="menu-item" disabled={unsaved} onSelect={() => choosePhone(onRename)} value={t('Rename…')}>
           <FlowGlyph name="edit" size={16}/><span>{t('Rename…')}</span>
         </Command.Item>
-        <Command.Item className="menu-item" onSelect={onCopy} value={t('Copy as markdown')}>
+        <Command.Item className="menu-item" onSelect={() => choosePhone(onCopy)} value={t('Copy as markdown')}>
           <FlowGlyph name="copy" size={16}/><span>{t('Copy as markdown')}</span>
         </Command.Item>
+        {feedbackEnabled && <Command.Item className="menu-item" onSelect={() => choosePhone(onFeedback)} value={t('Leave feedback…')}>
+          <FlowGlyph name="thumbsDown" size={16}/><span>{t('Leave feedback…')}</span>
+        </Command.Item>}
+        </Command.Group>
         <Command.Separator><span aria-hidden="true" className="agent-chat-options-divider" /></Command.Separator>
-        <Command.Item className="menu-item" disabled={unsaved} onSelect={onDelete} value={t('Delete')}>
+        <Command.Group>
+        <Command.Item className="menu-item" disabled={unsaved} onSelect={() => choosePhone(onDelete)} value={t('Delete')}>
           <FlowGlyph name="delete" size={16}/><span>{t('Delete')}</span>
         </Command.Item>
+        </Command.Group>
       </PhoneCommandMenu>
     </>
   }

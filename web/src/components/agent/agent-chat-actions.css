@@ -1,29 +1,10 @@
 @media (max-width: 767px) {
-  body:has(.agent-chat-options-phone-menu) { overflow-x: hidden; }
-  html:has(body .agent-chat-options-phone-menu) { overflow-x: hidden; }
-  body:has(.agent-chat-options-phone-menu) main > header { left: max(0px, calc(388px - 100vw)); }
   .agent-chat-options-phone-menu {
     box-sizing: border-box;
-    border-width: 0;
+    border: 0.5px solid var(--pk-border);
     padding: 0.5px;
   }
-  .agent-chat-options-phone-menu::after {
-    content: "";
-    position: absolute;
-    z-index: 2;
-    inset: 0;
-    border-radius: inherit;
-    box-shadow: inset 0 0 0 0.5px var(--pk-border);
-    pointer-events: none;
-  }
-  .agent-chat-options-phone-menu [cmdk-list-sizer] {
-    position: relative;
-    height: 150px;
-  }
   html:root body .agent-chat-options-phone-menu [cmdk-list-sizer] [cmdk-item]:not(#_) {
-    position: absolute !important;
-    left: 0;
-    right: 0;
     border-radius: 0 !important;
     background: transparent;
     color: var(--pk-text);
@@ -34,21 +15,16 @@
     color: var(--pk-text);
   }
   .agent-chat-options-phone-menu [cmdk-item] > svg { color: var(--pk-muted); }
-  .agent-chat-options-phone-menu [cmdk-list-sizer] [cmdk-item]:nth-child(1) { top: 0; }
-  .agent-chat-options-phone-menu [cmdk-list-sizer] [cmdk-item]:nth-child(2) { top: 46px; }
-  .agent-chat-options-phone-menu [cmdk-list-sizer] [cmdk-item]:nth-child(4) { top: 104px; }
   .agent-chat-options-phone-menu [cmdk-list-sizer] [cmdk-separator] {
-    position: absolute;
-    top: 92px;
-    right: -6px;
-    left: -6px;
+    position: relative;
     height: 12px;
   }
+  .agent-chat-options-phone-menu [cmdk-separator]::after { content: none; }
   .agent-chat-options-divider {
     position: absolute;
     top: 6px;
-    right: 0;
-    left: 0;
+    right: -6px;
+    left: -6px;
     height: 0.5px;
     border-top: 0.5px solid var(--pk-divider);
     box-sizing: border-box;
