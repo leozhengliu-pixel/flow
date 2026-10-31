@@ -64,6 +64,33 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
 }
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  test.describe(`${viewport.width}px account preferences`, () => {
+    test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+    test('matches the compact preferences groups', async ({ page, request }) => {
+      const requestedKey = `settings-preferences-${randomUUID()}`
+      const created = await request.post(`${API}/api/workspaces`, {
+        data: { name: '[mobile] Account preferences', urlKey: requestedKey, region: 'us', tutorial: false },
+      })
+      expect(created.status()).toBe(201)
+      const { workspace: { urlKey: workspaceKey } } = await created.json() as { workspace: { urlKey: string } }
+
+      await page.goto(`/${workspaceKey}/settings/account/preferences`)
+      await expect(page.locator('.bottom-agent')).toBeHidden()
+      await expect(page.locator('.settings-mobile-header')).toHaveCSS('height', '43.5px')
+      expect((await page.locator('.personal-page-header h1').boundingBox())?.x).toBeCloseTo(38, 1)
+      expect((await page.locator('.personal-section:first-of-type > .settings-card').boundingBox())?.x).toBeCloseTo(22, 1)
+      expect((await page.locator('.personal-section:first-of-type > .settings-card').boundingBox())?.height).toBeCloseTo(386, 1)
+      await expect(page.locator('.personal-section:first-of-type > .settings-card > .settings-row:first-child')).toBeHidden()
+      await expect(page.getByRole('combobox', { name: 'Default home view' })).toHaveText('Flow Agent (default)')
+      await expect(page.getByRole('checkbox', { name: 'Convert text emoticons into emojis' })).toBeChecked()
+      await expect(page.locator('.personal-section:nth-of-type(2) .personal-action')).toHaveCSS('height', '36px')
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  })
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   test.describe(`${viewport.width}px settings navigation drawer scrolled to the end`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
