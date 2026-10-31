@@ -273,8 +273,14 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await geometry(page.locator('.workspace-search-header [data-sidebar-trigger]'), { x: 8, y: 5.75, width: 32, height: 32 })
       const tabs = page.getByRole('navigation', { name: 'Search resource type' })
       await expect(tabs.getByRole('button', { name: 'All', exact: true })).toHaveAttribute('aria-pressed', 'true')
-      for (const [name, x] of [['All', 8], ['Issues', 51.55], ['Projects', 117.49], ['2 more', 193.29]] as const) {
-        await geometry(tabs.getByRole('button', { name, exact: true }), { x, y: 49.75, height: 32 })
+      let previousRight = 0
+      for (const name of ['All', 'Issues', 'Projects', '2 more']) {
+        const tab = tabs.getByRole('button', { name, exact: true })
+        await geometry(tab, { y: 49.75, height: 32 })
+        const box = (await tab.boundingBox())!
+        expect(box.x - previousRight).toBeCloseTo(8, 1)
+        await expect(tab).toHaveCSS('padding-inline', '10px')
+        previousRight = box.x + box.width
       }
       await expect(page.locator('.workspace-search-empty')).toBeVisible()
       await geometry(page.locator('.workspace-search-empty-illustration'), {
@@ -371,8 +377,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(page.locator('.sidebar-primary-links a[href$="/inbox"] svg path')).toHaveAttribute('d', /^M11.0069 1.00879/)
       await page.locator('.workspace-menu-trigger').tap()
       const menu = page.getByRole('dialog', { name: 'Workspace Menu', exact: true })
-      await geometry(menu, { x: 16, y: Math.min(110, viewport.height * .1304), width: viewport.width - 32, height: 312 })
-      await expect(menu.getByRole('option')).toHaveCount(5)
+      await geometry(menu, { x: 16, y: Math.min(110, viewport.height * .1304), width: viewport.width - 32, height: 266 })
+      await expect(menu.getByRole('option')).toHaveCount(4)
+      await expect(menu.getByRole('option', { name: 'Download desktop app', exact: true })).toHaveCount(0)
       await expect(page.locator('.workspace-menu-trigger')).toHaveAttribute('aria-expanded', 'true')
       await expect(page.locator('.workspace-menu-trigger')).toHaveCSS('background-color', 'lch(11.37 1.3 272)')
       const settings = menu.getByRole('option', { name: 'Settings', exact: true })
@@ -384,7 +391,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(settings).toHaveAttribute('data-selected', 'false')
       await expect.poll(() => invite.evaluate(e => getComputedStyle(e, '::before').backgroundColor)).toBe('lch(20.82 1.3 272)')
       await page.keyboard.press('ArrowUp')
-      for (const name of ['Settings', 'Invite and manage members', 'Download desktop app', 'Switch workspace', 'Log out']) {
+      for (const name of ['Settings', 'Invite and manage members', 'Switch workspace', 'Log out']) {
         const row = menu.getByRole('option', { name, exact: true })
         await geometry(row, { x: 22.5, width: viewport.width - 44, height: 46 })
         await expect(row.locator('span')).toHaveCSS('font-size', '13px')
