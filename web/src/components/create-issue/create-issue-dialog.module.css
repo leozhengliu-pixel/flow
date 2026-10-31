@@ -113,6 +113,31 @@
 }
 
 @media (max-width: 767px) {
+  html:root body .labelsMenu { height: 260px !important; box-shadow: var(--pk-card-shadow) !important; }
+  html:root body .dialog:has([data-property="labels"][aria-expanded="true"]) .header h2 { font-weight: 450; }
+  html:root body .dialog:has([data-property="labels"][aria-expanded="true"]) .properties :global(.mini-property-trigger[data-property="labels"]) { color: var(--theme-text-secondary) !important; }
+  html:root body .dialog:has([data-property="labels"][aria-expanded="true"]) .createMore,
+  html:root body .dialog:has([data-property="labels"][aria-expanded="true"]) .createMore * { font-weight: 400 !important; }
+  html:root body .labelsMenu :global(.phone-menu-heading) { height: 40px; }
+  html:root body .labelsMenu :global(.phone-menu-context) { padding: 2px 6px; font: 400 12px/18px var(--font); }
+  html:root body .labelsMenu :global(.property-command-search) { box-sizing: border-box !important; width: calc(100% - 10px) !important; height: 40px !important; margin: 0 6px !important; padding: 0 !important; border: 0 !important; border-radius: 12px; font: 400 13px/19.5px var(--font); }
+  html:root body .labelsMenu :global(.property-command-search input) { height: 40px !important; padding: 10px 12px !important; border-radius: 12px; }
+  html:root body .labelsMenu :global(.property-command-options) { position: relative; }
+  html:root body .labelsMenu :global(.property-command-options) { flex: 0 0 179px !important; min-height: 179px !important; }
+  html:root body .labelsMenu :global(.property-command-group) { position: absolute; top: 5.5px; left: 5.5px; width: calc(100% - 11px); padding: 8px 12px; font-size: 12px !important; }
+  html:root body .labelsMenu :global(.property-command-options [role="option"]) { position: absolute !important; left: 5.5px; right: 5.5px; width: auto; grid-template-columns: 16px 20px minmax(0, 1fr) !important; gap: 8px !important; height: 46px !important; padding: 0 12px !important; font: 450 13px/normal var(--font) !important; }
+  html:root body .labelsMenu :global(.property-command-options [role="option"]:nth-of-type(1)) { top: 35.5px; }
+  html:root body .labelsMenu :global(.property-command-options [role="option"]:nth-of-type(2)) { top: 81.5px; }
+  html:root body .labelsMenu :global(.property-command-options [role="option"]:nth-of-type(3)) { top: 127.5px; }
+  html:root body .labelsMenu :global(.property-command-options [role="option"] .property-command-checkbox) { position: relative !important; left: auto !important; justify-self: center; padding: 2px; }
+  html:root body .labelsMenu :global(.property-command-options [role="option"] .property-command-icon) { justify-self: end; }
+  html:root body .labelsMenu :global(.property-command-options [role="option"] .property-command-label) { font: 450 13px/normal var(--font) !important; color: var(--pk-text-strong); }
+  html:root body .labelsMenu :global(.property-command-options [role="option"] .option-dot) { width: 9px; height: 9px; }
+  html:root body .labelsMenu :global(.property-command-search input::placeholder) { color: var(--agent-composer-placeholder); }
+  html:root body .labelsMenu :global(.property-command-options) { width: calc(100% + 2px) !important; height: 179px; padding-bottom: 3px !important; }
+}
+
+@media (max-width: 767px) {
   html:root body .statusMenu:not(#_) { --property-option-count: 0; --property-option-index: 0; box-shadow: var(--pk-card-shadow); }
   html:root body .priorityMenu:not(#_) { --property-option-count: 0; --property-option-index: 0; box-shadow: var(--pk-card-shadow); }
   .statusMenu :global(.phone-menu-context) { padding-block: 2px; font-weight: 400; line-height: 18px; letter-spacing: normal; }
