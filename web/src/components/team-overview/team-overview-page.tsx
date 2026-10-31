@@ -314,7 +314,7 @@ export function TeamOverviewPage({
       if (!widths.length) return;
       const activePill = measure.querySelector<HTMLElement>("[data-team-tab-measure-active]");
       const activePillWidth = activePill?.getBoundingClientRect().width ?? (widths[activeTeamTabIndex] ?? 0) + 35;
-      const countPillWidth = 74.96, gap = 8;
+      const gap = 8;
       let count = 0, used = 0;
       for (let index = 0; index < teamTabItems.length; index++) {
         const next = used + (count ? gap : 0) + widths[index];
@@ -323,6 +323,7 @@ export function TeamOverviewPage({
           if (next <= available + 0.5) { count = index + 1; used = next; }
           break;
         }
+        const countPillWidth = measure.querySelector<HTMLElement>(`[data-team-tab-measure-count="${remaining}"]`)?.getBoundingClientRect().width ?? 0;
         const pill = activeTeamTabIndex <= index ? countPillWidth : activePillWidth;
         if (next + gap + pill <= available + 0.5) { count = index + 1; used = next; } else break;
       }
@@ -417,6 +418,7 @@ export function TeamOverviewPage({
         )}
         {phone && <div ref={teamTabsMeasureRef} className="team-home-tabs-measure" aria-hidden="true">
           {teamTabItems.map(tab => <span key={tab.id} data-team-tab-measure className="team-home-tabs-measure-pill">{tab.label}</span>)}
+          {teamTabItems.map((_, index) => <span key={index} data-team-tab-measure-count={index + 1} className="team-home-tabs-overflow-pill">{t("{count} more").replace("{count}", String(index + 1))}</span>)}
           <span data-team-tab-measure-active className="team-home-tabs-measure-pill is-active"><span>{activeTeamTab.label}</span><TabsOverflowIcon className="team-home-tab-caret" /></span>
         </div>}
       </nav>
