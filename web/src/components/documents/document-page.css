@@ -38,6 +38,9 @@
   color: var(--theme-text-primary);
   padding: 0;
 }
+.document-header-row,
+.document-header-context,
+.document-header-title-group { display: contents; }
 /* Breadcrumb, measured in the reference app (1470px wide, dark and light): the 34px row is inset 10px,
    each crumb link is a 24px pill padded 4px left / 5px right with matching negative margins, 13px/500;
    the glyph is 16px with a 6px gap; the separator sits 8px from both neighbours. */
@@ -716,11 +719,14 @@ button.document-icon.is-empty:hover,
   .app:has(.document-page) { background: var(--bg-panel); }
   .document-page { overflow: auto; }
   .document-header {
-    gap: 4px;
+    gap: 12px;
     background: var(--bg-panel);
-    padding: 0 8px !important;
+    padding: 0 !important;
     border-bottom: 0 !important;
   }
+  .document-header-row { box-sizing: border-box; width: 100%; min-width: 0; height: 43.5px; display: flex; align-items: center; gap: 6px; padding: 0 8px; }
+  .document-header-context { min-width: 0; flex: 1; display: flex; align-items: center; gap: 2px; }
+  .document-header-title-group { min-width: 0; flex: 1; display: flex; align-items: center; gap: 6px; padding-left: 10px; }
   .document-header::after { content: ""; position: absolute; inset: auto 0 0; height: .5px; background: var(--border); }
   .document-mobile-menu {
     width: 32px;
@@ -746,13 +752,13 @@ button.document-icon.is-empty:hover,
   .document-breadcrumbs > .document-breadcrumb-separator { display: flex; }
   .document-breadcrumb-parent { min-width: 0; flex: 0 1 auto; }
   .document-breadcrumbs > .document-breadcrumb-separator {
-    margin: 0 6px;
+    margin: -2px 8px 0;
   }
   .document-breadcrumb-documents { display: none; }
   .document-breadcrumb-current { flex: 1 1 auto; margin-left: 0; padding: 0; }
   .document-title-actions {
     height: 32px;
-    gap: 4px;
+    gap: 6px;
   }
   .document-title-actions .document-icon-button,
   .document-header-actions .document-icon-button {

@@ -267,7 +267,9 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   // An issue made from a comment's selection goes to the document's team and project.
   return <SelectionIssueProvider value={{ teamId: document.teamIds[0], projectId: document.projectIds[0] }}><IssueAgentTasksProvider resourceType="document" issue={{ id: document.id }} data={data}><main className={`main-panel document-page${deleted ? ' is-deleted' : ''}${commentGutter && !deleted ? ' has-comment-gutter' : ''}`}>
     <header className="document-header">
+      <div className="document-header-row"><div className="document-header-context">
       <button aria-label={t('Open sidebar')} className="document-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button"><SidebarLeftIcon/></button>
+      <div className="document-header-title-group">
       <DocumentBreadcrumb data={data} document={{ ...document, title }} origin={origin} onBack={onBack}/>
       {deleted && <span className="document-deleted-badge">{t('Deleted')}</span>}
       <div className="document-title-actions">
@@ -299,6 +301,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
       </div>
+      </div></div>
       <div className="document-header-actions">
         {saveState === 'error' && <span className="document-save-state error">{t('Could not save')}</span>}
         {collaborators.slice(0, 4).map(user => { const name = user.displayName || user.name || '?'; return <span className="document-presence__avatar" key={user.id} title={t('{name} is editing').replace('{name}', name)}>{name.slice(0, 2).toUpperCase()}</span> })}
@@ -308,6 +311,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
           <button aria-label={documentUrlLabel} className="document-icon-button" onClick={() => void copyDocumentUrl(ctx, document)} type="button"><FlowUrlIcon/></button>
         </ScopedFlowTooltip>
         {!deleted && <DocumentSubscribersPopover ctx={ctx} document={document} subscribed={subscribed} busy={subscriptionBusy} onToggleViewer={toggleSubscription} open={subscribersOpen} onOpenChange={setSubscribersOpen}/>}
+      </div>
       </div>
     </header>
     <article className="document-canvas">
