@@ -500,6 +500,7 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
     box-sizing: border-box;
     padding: 0 15px;
     background: var(--set-panel-bg);
+    border-bottom: .5px solid var(--set-sep);
   }
   html:root .settings-app .settings-mobile-menu {
     position: relative;
@@ -568,7 +569,10 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
     height: 36px;
     padding: 6px 24px 6px 12px;
     box-shadow: 0 0 0 .5px var(--cs-code-ring) inset;
+    color: var(--set-label);
   }
+  html:root .settings-app .settings-main .settings-select > span:last-child { right: 7px; }
+  html:root .settings-app .settings-main .settings-select > span:last-child svg { color: var(--set-label); }
   html:root .settings-app .settings-main .personal-action {
     height: 36px;
   }
@@ -592,6 +596,14 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
   html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(5) .settings-row-copy > span {
     height: 14.5px;
   }
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(3) .settings-row-copy > span { height: 29px; }
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(4) .settings-row-copy > span { height: 14.5px; }
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(6) .settings-row-copy > span { height: 29px; }
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(1) .settings-row-copy > span { height: 29px; }
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(2) .settings-row-copy > span { height: 14.5px; }
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(3) .settings-row-copy > span { height: 29px; }
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(4) .settings-row-copy > span { height: 14.5px; }
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(5) .settings-row-copy > span { height: 29px; }
   html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(2) { height: 94px; }
   html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(3) { height: 79.5px; }
   html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(4) { height: 68px; }
@@ -611,6 +623,8 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
 
 @media (max-width: 380px) {
   html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(3) { height: 94px; }
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(3) .settings-row-copy > span { height: 43.5px; }
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(5) .settings-row-copy > span { height: 43.5px; }
 }
 
 /* Team page header: title with an optional description underneath */

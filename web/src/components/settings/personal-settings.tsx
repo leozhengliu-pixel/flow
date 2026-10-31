@@ -191,8 +191,8 @@ const PERSONAL_ZH: Record<string, string> = {
   Default: "默认",
   Large: "大",
   "Use pointer cursors": "使用指针光标",
-  "Change the cursor to a pointer when hovering over interactive elements":
-    "悬停在交互元素上时使用指针光标",
+  "Change the cursor to a pointer when hovering over any interactive elements":
+    "悬停在任何交互元素上时使用指针光标",
   "Underline links": "为链接添加下划线",
   "Always underline links in text content": "始终为正文中的链接添加下划线",
   "Disable animated images & emoji": "停用动画图片和 Emoji",
@@ -839,7 +839,7 @@ function Preferences({
         <PersonalRow
           title={p("Use pointer cursors")}
           description={p(
-            "Change the cursor to a pointer when hovering over interactive elements",
+            "Change the cursor to a pointer when hovering over any interactive elements",
           )}
         >
           <SettingsToggle
