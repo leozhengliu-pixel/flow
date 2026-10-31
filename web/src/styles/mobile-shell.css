@@ -69,7 +69,7 @@
   .sidebar .nav-item.active { background: var(--theme-surface-hover); }
   .sidebar .section-action { width: 28px; height: 28px; flex-basis: 28px; opacity: 1; }
   .sidebar .team-menu-trigger { opacity: 1; }
-  html:root[data-sidebar-mode] .sidebar-scrim.open { background: lch(0 0 0 / .4); }
+  html:root[data-sidebar-mode] .sidebar-scrim.open { background: var(--set-drawer-scrim); opacity: .45; }
   html:root body .command-dialog {
     top: var(--phone-menu-top);
     max-height: min(450px, calc(100dvh - var(--phone-menu-top) - 16px));
@@ -202,7 +202,7 @@
     line-height: 0;
     box-shadow: none;
   }
-  html:root .sidebar .workspace-menu-trigger > svg { color: var(--text); }
+  html:root .sidebar .workspace-menu-trigger > svg { color: var(--issue-muted); fill: currentColor; }
   html:root .sidebar .workspace-menu-trigger > strong {
     color: var(--text);
     font-size: 13px;
@@ -223,17 +223,17 @@
     color: var(--text);
     background: var(--set-button);
   }
-  html:root .sidebar .sidebar-top-action svg { color: var(--issue-muted); }
+  html:root .sidebar .sidebar-top-action svg { width: 14px; height: 14px; color: var(--issue-muted); }
   html:root .sidebar .sidebar-compose svg { color: var(--bright); }
   html:root .sidebar .sidebar-nav {
     margin: 4.5px 12px 0;
   }
   html:root .sidebar .nav-item {
-    gap: 8px;
+    gap: 6px;
     padding: 0;
     color: var(--bright);
-    font-size: 16px;
-    font-weight: 400;
+    font-size: 13px;
+    font-weight: 500;
     line-height: 24px;
   }
   html:root .sidebar .nav-label { color: var(--issue-muted); }
@@ -249,6 +249,7 @@
   html:root .sidebar .nav-item.active { background: var(--set-drawer-nav-active-bg); }
   html:root .sidebar .nav-label { height: 28px; line-height: normal; }
   html:root .sidebar .section-label {
+    gap: 2px;
     color: var(--issue-muted);
     font-size: 13.3333px;
     font-weight: 400;
@@ -297,6 +298,7 @@
     line-height: normal;
   }
   html:root .sidebar .team-menu-trigger svg { color: var(--issue-dim); }
+  html:root .sidebar .team-disclosure { color: var(--issue-dim); }
   html:root .sidebar .sidebar-footer {
     position: absolute;
     z-index: 10;
@@ -309,8 +311,11 @@
     gap: 8px;
     margin: 0;
     padding: 10px;
+    pointer-events: none;
   }
+  html:root .sidebar .sidebar-footer > button { pointer-events: auto; }
   html:root .sidebar .sidebar-help {
+    position: relative;
     width: 32px;
     height: 32px;
     flex: 0 0 32px;
@@ -333,7 +338,15 @@
   }
   html:root .sidebar .sidebar-help > svg,
   html:root .sidebar .sidebar-plan-button > svg { position: relative; }
-  html:root .sidebar .sidebar-help > svg { width: 14px; height: 14px; color: var(--issue-muted); }
+  html:root .sidebar .sidebar-help::before {
+    inset: auto;
+    width: 32px;
+    height: 32px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+  html:root .sidebar .sidebar-help > svg { width: 14px; height: 14px; color: var(--text); opacity: .64; }
   html:root .sidebar .sidebar-plan-button {
     position: absolute;
     top: 10px;

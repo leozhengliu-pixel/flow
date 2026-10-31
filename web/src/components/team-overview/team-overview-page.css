@@ -1251,7 +1251,7 @@
   .app .team-home-mobile[data-sidebar-trigger]::before,
   .app .team-home-mobile[data-sidebar-trigger]::after { content: none; }
   .team-home-top-icon { margin-left: 6px; color: var(--bright); }
-  .team-home-topbar h2 { font: 500 13px/normal var(--font); }
+  .team-home-topbar h2 { font: 450 13px/normal var(--font); }
   .team-home-top-actions { gap: 2px; }
   .team-home-top-actions > button,
   .team-home-top-actions [data-radix-collection-item],

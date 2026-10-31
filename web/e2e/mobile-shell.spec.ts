@@ -24,7 +24,58 @@ async function noOverflow(page: Page) {
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   test.describe(`${viewport.width}px shell`, () => {
-    test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent })
+    test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent, colorScheme: 'dark' })
+
+    test('phone drawer labels, floating footer, glyphs and focus remain usable', async ({ page, request }) => {
+      const api = process.env.FLOW_MOBILE_API_URL ?? 'http://127.0.0.1:4180'
+      const key = `mobile-drawer-parity-${viewport.width}-${Date.now()}`
+      const created = await request.post(`${api}/api/workspaces`, {
+        data: { name: '[mobile] Drawer parity', urlKey: key, region: 'us', tutorial: false },
+      })
+      expect(created.status()).toBe(201)
+      const headers = { 'X-Flow-Workspace': key }
+      for (let i = 0; i < 5; i++) {
+        const team = await request.post(`${api}/api/workspaces/${key}/teams`, { headers, data: { name: `[mobile] Drawer team ${i}`, key: `DR${i}` } })
+        expect(team.status()).toBe(201)
+      }
+      await page.goto(`${base}/${key}/my-issues/assigned`)
+      await page.locator('[data-sidebar-trigger]').tap()
+      const drawer = page.locator('[data-sidebar-surface]')
+      const workspace = drawer.locator('.workspace-menu-trigger')
+      await expect(workspace).toBeFocused()
+      expect(await workspace.evaluate(e => e.matches(':focus-visible'))).toBe(false)
+      for (const label of await drawer.locator('.nav-label, .sidebar-more-trigger > span').all()) {
+        await expect(label).toHaveCSS('font-size', '13px')
+        await expect(label).toHaveCSS('font-weight', '500')
+      }
+      await geometry(drawer.locator('.sidebar-primary-links .nav-label').first(), { x: 40 })
+      await geometry(drawer.locator('.team-links .nav-label').first(), { x: 57 })
+      await geometry(drawer.locator('.sidebar-footer'), { x: 0, y: viewport.height - 52, width: 330, height: 52 })
+      await expect(drawer.locator('.sidebar-footer')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      const help = drawer.locator('.sidebar-help')
+      await geometry(help, { x: 10, y: viewport.height - 42, width: 32, height: 32 })
+      await expect(help.locator('use')).toHaveAttribute('href', '#QuestionMark')
+      await geometry(help.locator('use'), { x: 23.52, y: viewport.height - 30.38, width: 5.2, height: 8.75 })
+      const fill = await help.evaluate(e => {
+        const s = getComputedStyle(e, '::before')
+        return { background: s.backgroundColor, width: s.width, height: s.height }
+      })
+      expect(fill).toEqual({ background: 'lch(5.52 0.4 272)', width: '32px', height: '32px' })
+      const home = drawer.locator('.team-links a').filter({ hasText: 'Home' }).first()
+      expect(await home.locator('.nav-icon path').getAttribute('d')).toContain('M6.56055 1.52061')
+      const nav = drawer.locator('.sidebar-nav')
+      await page.mouse.move(240, viewport.height - 25)
+      await page.mouse.wheel(0, 350)
+      await expect.poll(() => nav.evaluate(e => e.scrollTop)).toBeGreaterThan(0)
+      await nav.evaluate(e => { e.scrollTop = 0 })
+      await geometry(help, { x: 10, y: viewport.height - 42 })
+      await page.keyboard.press('Tab')
+      await page.keyboard.press('Shift+Tab')
+      await expect(workspace).toBeFocused()
+      expect(await workspace.evaluate(e => e.matches(':focus-visible'))).toBe(true)
+      expect(await workspace.evaluate(e => getComputedStyle(e).outlineStyle)).not.toBe('none')
+      if (shots) await page.screenshot({ path: `${shots}/drawer-parity-${viewport.width}.png` })
+    })
 
     test('navigation, workspace menus, search, commands and composer geometry', async ({ page, workspaceKey }) => {
       await page.goto(`${base}/${workspaceKey}/inbox`)

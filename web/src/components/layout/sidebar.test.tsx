@@ -128,6 +128,19 @@ describe('sidebar feature flags', () => {
   })
   afterEach(() => { vi.unstubAllGlobals() })
 
+  it('uses filled team navigation and the standalone help glyph on phones', () => {
+    const media = Object.assign(new EventTarget(), { matches: true, media: '(max-width: 767px)' })
+    vi.stubGlobal('matchMedia', () => media)
+    const { container } = renderSidebar({})
+    const home = container.querySelector('.team-links a[href$="/overview"] .nav-icon svg')
+    const issues = container.querySelector('.team-links a[href$="/all"] .nav-icon svg')
+    expect(home?.querySelector('path')).toHaveAttribute('d', expect.stringContaining('M6.56055 1.52061'))
+    expect(issues?.querySelectorAll('path')).toHaveLength(2)
+    expect(issues?.querySelector('rect')).toBeNull()
+    expect(container.querySelector('.team-disclosure path')).toHaveAttribute('d', expect.stringContaining('M6.75194 10.6239'))
+    expect(container.querySelector('.sidebar-help use')).toHaveAttribute('href', '#QuestionMark')
+  })
+
   it.each([[false, false], [false, true], [true, false], [true, true]])('shows Asks=%s and Customers=%s independently after a settings refresh', async (asks, customers) => {
     const view = renderSidebar({ asks: !asks, 'customer-requests': !customers })
     await openMore()
