@@ -572,7 +572,15 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
     color: var(--set-label);
   }
   html:root .settings-app .settings-main .settings-select > span:last-child { right: 7px; }
-  html:root .settings-app .settings-main .settings-select > span:last-child svg { color: var(--set-label); }
+  html:root .settings-app .settings-main .settings-select > span:last-child svg { color: var(--set-group-desc); }
+  html:root .settings-app .settings-main[data-settings-page="preferences"] .settings-select-value,
+  html:root .settings-app .settings-main[data-settings-page="preferences"] .settings-select-value > span {
+    color: var(--set-label);
+  }
+  html:root .settings-app .settings-main[data-settings-page="preferences"] .personal-section .settings-row-copy > span {
+    position: relative;
+    top: -.25px;
+  }
   html:root .settings-app .settings-main .personal-action {
     height: 36px;
   }
@@ -604,6 +612,21 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
   html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(3) .settings-row-copy > span { height: 29px; }
   html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(4) .settings-row-copy > span { height: 14.5px; }
   html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(5) .settings-row-copy > span { height: 29px; }
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(3) .settings-row-copy > span,
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(6) .settings-row-copy > span,
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(1) .settings-row-copy > span,
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(3) .settings-row-copy > span,
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(5) .settings-row-copy > span {
+    line-height: 14.5px;
+  }
+  html:root .settings-app .settings-main .personal-emoticon-emoji {
+    display: inline-block;
+    position: relative;
+    top: -1px;
+    margin-left: 0;
+    font: 450 11px/13px var(--font);
+    vertical-align: baseline;
+  }
   html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(2) { height: 94px; }
   html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(3) { height: 79.5px; }
   html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(4) { height: 68px; }
