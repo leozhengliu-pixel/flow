@@ -137,6 +137,36 @@ test.describe('mobile document subscribers', () => {
   }
 })
 
+test.describe('mobile document history', () => {
+  test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+    test(`current version history sheet matches the phone layout at ${viewport.width}px`, async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const response = await request.post('/api/documents', { headers, data: { title: '123', content: '123123123' } })
+      expect(response.status()).toBe(201)
+      const document = await response.json() as { id: string; slugId: string; updatedAt: string }
+      const createdAt = new Date(Date.parse(document.updatedAt) - 60_000).toISOString()
+      const imported = await request.post(`/api/workspace/documents/${document.id}/revisions/import`, {
+        headers,
+        data: { title: '123', content: '123123123', createdAt },
+      })
+      expect(imported.status()).toBe(201)
+
+      await page.setViewportSize(viewport)
+      await page.goto(`/${workspaceKey}/document/${document.slugId}`)
+      await page.locator('.document-edited').click()
+      await page.getByRole('button', { name: 'Show document history', exact: true }).click()
+      await expect(page.locator('.document-history-dialog')).toBeVisible()
+      await expect(page.locator('.document-history-date-select')).toContainText('Current')
+      await expect(page.locator('.document-history-doc p')).toHaveText('123123123')
+      await expect(page.getByRole('button', { name: 'Restore version' })).toBeDisabled()
+      expect((await page.locator('.document-history-shell-panel').boundingBox())?.width).toBeGreaterThan(viewport.width - 64)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  }
+})
+
 function advancedFilterParam() {
   const filters = [{ id: 'advanced_ref', field: 'advanced', fieldLabel: 'Advanced filter', operator: 'is', value: '', valueLabel: '', values: [], tree: { id: 'advanced_ref-root', conjunction: 'and', items: [] } }]
   return Buffer.from(JSON.stringify(filters), 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
