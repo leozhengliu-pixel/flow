@@ -30,6 +30,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Match the phone Help panel's chip, filter, support rows and glyphs, and close the drawer when opening it without changing desktop menus.
 - Match phone Teams filters, scrollable columns, team counts and expandable child rows without changing the desktop table.
 - Refine phone workspace fiscal controls, initials, description wrapping, and onboarding text tones.
+- Match the phone workspace members directory, search, role filter, invite control and grouped rows without changing desktop settings.
 - Restore the phone workspace trigger's open pill and the keyboard-selected workspace-menu row highlight.
 - Stack workspace general fields on phones, refine time and region spacing, and keep announcement settings accessible without changing desktop layout.
 - Match desktop project and initiative add-view glyphs and empty initiative property labels, lower the initiative description placeholder, and verify sortable team settings rows without changing phone layouts.

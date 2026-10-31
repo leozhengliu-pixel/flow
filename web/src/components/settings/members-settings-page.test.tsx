@@ -136,6 +136,17 @@ function row(text: string) {
     .closest(".settings-member-directory-row") as HTMLElement;
 }
 
+it("offers the native phone role filter without changing the stored filter semantics", async () => {
+  const user = userEvent.setup();
+  renderMembers();
+  const filter = screen.getByRole("combobox", { name: "Member filter" });
+  await user.selectOptions(filter, "Admins");
+  expect(groups()).toEqual(["Active1"]);
+  expect(filter).toHaveValue("Admins");
+  expect(localStorage.getItem("flow:settings-members-filter")).toBe("Admins");
+  expect(screen.getByRole("button", { name: "Order by Role" })).toBeVisible();
+});
+
 async function menuItems(user: ReturnType<typeof userEvent.setup>, label: string) {
   await user.click(screen.getByRole("button", { name: `Open menu ${label}` }));
   const items = screen.getAllByRole("menuitem").map((item) => item.textContent);
@@ -160,14 +171,14 @@ it("groups rows: Active, Invited, Application, Inactive", () => {
   expect(screen.queryByRole("button", { name: /Order by Teams/ })).toBeNull();
 
   const viewerRow = row("Viewer");
-  expect(within(viewerRow).getByText("Admin")).toHaveClass("settings-member-role", "is-admin");
+  expect(within(viewerRow).getByText("Admin").parentElement).toHaveClass("settings-member-role", "is-admin");
   expect(within(viewerRow).getByText("Online")).toBeVisible();
   expect(within(viewerRow).getByRole("link", { name: "Viewer" })).toHaveAttribute(
     "href",
     "/workspace/profiles/viewer",
   );
   // Members get the neutral pill; the app user shows "Application" without an email or a checkbox.
-  expect(within(row("Teammate")).getByText("Member")).toHaveClass("settings-member-role");
+  expect(within(row("Teammate")).getByText("Member").parentElement).toHaveClass("settings-member-role");
   expect(within(row("Teammate")).getByText("Member")).not.toHaveClass("is-admin");
   const appRow = row("Helper bot");
   expect(within(appRow).getByText("Application")).not.toHaveClass("settings-member-role");
@@ -376,4 +387,3 @@ it("removes a member from the workspace", async () => {
   await user.click(within(dialog).getByRole("button", { name: "Remove" }));
   await waitFor(() => expect(api.removeMember).toHaveBeenCalledWith("workspace", teammate.id));
 });
-

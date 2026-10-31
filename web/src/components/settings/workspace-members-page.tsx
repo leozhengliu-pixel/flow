@@ -29,10 +29,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { FlowGlyph } from "@/components/ui/menu-glyphs";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { InviteMembersDialog } from "@/components/workspace-directory/invite-members-dialog";
 import type { BootstrapData, Invitation, WorkspaceMember } from "@/types/flow";
 import { SettingsPageTitle as PageTitle } from "./settings-primitives";
+import { SettingsSearchGlyph } from "./settings-nav-glyphs";
 import "./workspace-members-scim.css";
 import {
   MEMBER_GROUPS,
@@ -62,6 +64,15 @@ type ConfirmKind = "suspend" | "activate" | "remove" | "revoke";
 const ASSIGNABLE_ROLES: AssignableRole[] = ["admin", "member", "guest"];
 const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 const FILTER_STORAGE_KEY = "flow:settings-members-filter";
+
+function MembersSortGlyph({ descending }: { descending: boolean }) {
+  return (
+    <svg className={`settings-members-phone-sort${descending ? " is-descending" : ""}`} aria-hidden viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
+      <path d="M11.5361 10.2745C11.8024 10.0029 11.8249 9.56807 11.5762 9.26961C11.3275 8.97139 10.8961 8.91526 10.5811 9.12801L10.5195 9.17391L8.00001 11.2735L5.48048 9.17391L5.41895 9.12801C5.10388 8.91526 4.67252 8.97139 4.42384 9.26961C4.17512 9.56807 4.19758 10.0029 4.46387 10.2745L4.51954 10.3263L7.51954 12.8263C7.79767 13.058 8.20234 13.058 8.48048 12.8263L11.4805 10.3263L11.5361 10.2745Z" />
+      <path d="M8.75 12.25C8.75 12.6642 8.41421 13 8 13C7.58579 13 7.25 12.6642 7.25 12.25L7.25 3.75C7.25 3.33579 7.58579 3 8 3C8.41421 3 8.75 3.33579 8.75 3.75V12.25Z" />
+    </svg>
+  );
+}
 
 function title(value: string) {
   return value ? value[0].toUpperCase() + value.slice(1) : value;
@@ -327,8 +338,11 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
       aria-label={`${t("Order by")} ${t(label)}${sort === key ? `, ${t(descending ? "sorted descending" : "sorted ascending")}` : ""}`}
       onClick={() => order(key)}
     >
-      {t(label)}
-      {sort === key && (descending ? <ArrowUp aria-hidden size={12} /> : <ArrowDown aria-hidden size={12} />)}
+      <span className="settings-members-column-label">{t(label)}</span>
+      {sort === key && <>
+        <span className="settings-members-desktop-sort">{descending ? <ArrowUp aria-hidden size={12} /> : <ArrowDown aria-hidden size={12} />}</span>
+        <MembersSortGlyph descending={descending} />
+      </>}
     </button>
   );
   // Group labels share English words with unrelated UI ("Active" projects), so their Chinese copy is keyed by context.
@@ -343,7 +357,8 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button type="button" className="settings-member-more" aria-label={`${t("Open menu")} ${label}`}>
-            <MoreHorizontal size={16} />
+            <MoreHorizontal size={16} className="settings-members-desktop-more" />
+            <FlowGlyph name="ellipsis" size={16} className="settings-members-phone-more" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="settings-members-menu settings-member-action-menu" data-i18n-ignore>
@@ -353,7 +368,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
     ) : null;
 
   const invitationRow = (invitation: Invitation, key: string) => (
-    <div className="settings-member-directory-row is-invited" key={key}>
+    <div className="settings-member-directory-row is-invited" data-member-row="invitation" key={key}>
       <span>
         <UserAvatar className="settings-member-avatar is-inactive" name={invitation.email} />
         <i>
@@ -390,6 +405,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
     return (
       <div
         className={`settings-member-directory-row${selected ? " is-selected" : ""}${inactive && !app ? " is-inactive" : ""}`}
+        data-member-row={app ? "application" : inactive ? "inactive" : "active"}
         key={key}
       >
         <span>
@@ -432,7 +448,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
         </span>
         <span>
           {pill ? (
-            <em className={`settings-member-role${isAdminRole(member.role) ? " is-admin" : ""}`}>{t(status)}</em>
+            <em className={`settings-member-role${isAdminRole(member.role) ? " is-admin" : ""}`}><span>{t(status)}</span></em>
           ) : (
             t(status)
           )}
@@ -513,7 +529,8 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
       <PageTitle>{t("Members")}</PageTitle>
       <div className="settings-members-toolbar">
         <label>
-          <Search size={14} />
+          <Search size={14} className="settings-members-desktop-search" />
+          <SettingsSearchGlyph size={16} className="settings-members-phone-search" />
           <input aria-label={t("Search by name or email")} placeholder={t("Search by name or email")} value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
         <DropdownMenu phoneSheet={false}>
@@ -536,6 +553,9 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
             </DropdownMenuPrimitive.RadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+        <select className="settings-members-phone-filter" aria-label={t("Member filter")} value={activeFilter} onChange={event => setFilter(event.target.value as MemberFilter)}>
+          {filters.map(value => <option key={value} value={value}>{t(value)}</option>)}
+        </select>
         <span />
         <button type="button" className="settings-action" onClick={exportCsv}>
           {t("Export CSV")}
@@ -550,7 +570,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
             <div className="settings-members-columns">
               {sortButton("name", "Name")}
               {sortButton("email", "Email")}
-              {sortButton(desktop ? "role" : "status", desktop ? "Role" : "Status")}
+              {sortButton(desktop ? "role" : "status", "Role")}
               <span>{t("Teams")}</span>
               {sortButton("joined", "Joined")}
               {sortButton("lastSeen", "Last seen")}
@@ -558,7 +578,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
             </div>
             {groups.map(([group, items]) => (
               <Fragment key={group}>
-                <div className="settings-members-group" role="presentation">
+                <div className="settings-members-group" data-member-group={group.toLowerCase()} role="presentation">
                   <strong>{groupLabel(group)}</strong>
                   <span>{items.length}</span>
                 </div>
