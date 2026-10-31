@@ -131,4 +131,7 @@
   .valueMenu .checkbox{padding:2px;border-color:var(--label-picker-checkbox-border);}
   .valueMenu .optionSlot>svg{color:var(--pk-text);}
   .valueMenu .count{padding-left:0;line-height:normal;}
+  /* Pointer movement owns the active row on touch-sized pickers; do not leave
+     the keyboard row painted underneath a different hovered row. */
+  .valueList:has(.valueItem:hover) .valueItem[aria-selected="true"]:not(:hover)::before { background: transparent; }
 }

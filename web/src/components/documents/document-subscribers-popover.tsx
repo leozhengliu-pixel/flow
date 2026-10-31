@@ -11,6 +11,7 @@ import { FlowBellCheckIcon, FlowBellIcon } from '@/components/issue/flow-header-
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { avatarColor } from '@/components/issue/avatar-color'
 import { useI18n } from '@/i18n/i18n'
 import type { FlowDocument, User } from '@/types/flow'
 import { setDocumentSubscribers, type DocumentActionContext } from './document-actions'
@@ -80,7 +81,7 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
             const kind = user.builtinAgent ? 'agent' : user.app ? 'oauth' : 'member'
             return <button aria-checked={checked} aria-label={name} className="document-subscribers__row" data-subscribed={checked} data-subscriber-kind={kind} disabled={busy || Boolean(pending)} key={user.id} onClick={() => void toggle(user, checked)} role="checkbox" type="button">
               <span className="document-subscribers__check" data-checked={checked}>{checked && <CheckboxMark/>}</span>
-              <span className="document-subscribers__avatar-wrap"><UserAvatar avatarUrl={user.avatarUrl} className="document-meta-avatar" name={name}/>{kind !== 'agent' && <span aria-hidden="true" className="document-subscribers__avatar-label">{name}</span>}</span>
+              <span className="document-subscribers__avatar-wrap"><UserAvatar avatarUrl={user.avatarUrl} className="document-meta-avatar" color={avatarColor(user.id)} name={name}/>{kind !== 'agent' && <span aria-hidden="true" className="document-subscribers__avatar-label">{name}</span>}</span>
               <span className="document-subscribers__name" data-i18n-ignore>{name}</span>
               {user.app && <span className="document-subscribers__badge">{t('Agent')}</span>}
             </button>

@@ -117,7 +117,7 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--chart-cyan);
+  background: var(--avatar, var(--chart-cyan));
   color: var(--on-accent);
   font-size: 8px;
   font-weight: 600;

@@ -235,7 +235,7 @@
   flex: 0 0 18px;
   overflow: hidden;
   border-radius: 50%;
-  background: var(--chart-cyan);
+  background: var(--avatar, var(--chart-cyan)); /* background: var(--chart-cyan); */
   color: var(--on-accent);
   font: 500 9px/18px var(--font);
   text-align: center;
@@ -609,6 +609,7 @@ button.document-icon.is-empty:hover,
     border-radius: 0;
     font: 450 13px/15.6px var(--font);
   }
+  .document-subscribers__row[data-subscribed="true"]::before { background: transparent; }
   .document-subscribers__row .document-meta-avatar { width: 18px; height: 18px; flex-basis: 18px; }
   .document-subscribers__avatar-wrap { position: relative; width: 18px; height: 18px; flex: 0 0 18px; }
   .document-subscribers__avatar-label { position: absolute; inset: 0; overflow: hidden; opacity: 0; pointer-events: none; font: 400 9px/normal var(--font); white-space: nowrap; }

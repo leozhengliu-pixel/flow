@@ -309,6 +309,8 @@
     font-weight: 500;
     line-height: normal;
   }
+  html:root .sidebar .nav-count,
+  html:root .sidebar .nav-unread { margin-right: 7px; }
   html:root .sidebar .team-sub-link .nav-label { padding-left: 6px; }
   html:root .sidebar .team-links .nav-item > .nav-icon:first-child { margin-left: 6px; }
   html:root .sidebar .team-heading { border-radius: 8px; }
