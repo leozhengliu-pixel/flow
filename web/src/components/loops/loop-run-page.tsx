@@ -363,7 +363,7 @@ export function LoopRunPage({
         <button className="loops-mobile-menu" aria-label={t("Open sidebar")} data-sidebar-trigger onClick={onOpenSidebar}>
           <Settings2 />
         </button>
-        <LoopBreadcrumb data={data} loop={loop} loopId={loopId} current={t("Run history")} onNavigate={onNavigate} />
+        <LoopBreadcrumb data={data} loop={loop} loopId={loopId} onNavigate={onNavigate} />
         {loop && (
           <div className="loops-topbar-actions">
             <button className="loops-icon-button is-plain" aria-label={t("Copy link")} title={t("Copy link")} onClick={() => void copyText(loopUrl(workspace, loop), t("Link copied"))}>
