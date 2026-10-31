@@ -1,0 +1,78 @@
+.notification-phone-chevron { display: none; }
+
+@media (max-width: 767px) {
+  html:root .settings-app .settings-main[data-settings-page="notifications"] .personal-notifications-overview {
+    .personal-section { margin-bottom: 24px; }
+    .personal-section > .settings-section-description { font: 450 13px/18px var(--font); }
+    .personal-section > .settings-card > .settings-row {
+      height: auto;
+      min-height: 65px;
+      align-items: center;
+      padding: 16px 10.6667px;
+      border-radius: 0;
+    }
+    .personal-section:first-of-type > .settings-card > .settings-row:first-child { display: flex; }
+    .personal-section:first-of-type > .settings-card > .settings-row { min-height: 79.5px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(n) { height: 79.5px; }
+    .personal-section > .settings-card > .settings-row:nth-child(n) .settings-row-copy > span {
+      height: auto;
+      font: 450 12px/normal var(--font);
+    }
+    .personal-section .settings-row-copy > strong { font: 500 13px/normal var(--font); }
+    .personal-row-link.is-disabled { opacity: 1; }
+    .personal-row-link.is-disabled .settings-row-copy > strong { opacity: .5; }
+    .personal-section:first-of-type > .settings-card > .personal-row-link.is-disabled .settings-row-copy > span { color: var(--set-desc); opacity: .5; }
+    .personal-row-link.is-disabled .personal-row-link-meta { color: var(--agent-action-icon); }
+    .personal-row-link-meta { font: 450 12px/normal var(--font); gap: 0; white-space: nowrap; }
+    .personal-row-link-meta .personal-priority-count { display: block; font: inherit; color: inherit; }
+    .personal-row-link-meta > .lucide { display: none; }
+    .notification-phone-chevron { display: block; flex: none; }
+    .personal-row-link-meta > .notification-phone-chevron { margin-left: 12px; }
+    .personal-row-link .settings-control { gap: 0; }
+    .personal-channel {
+      height: 65px;
+      min-height: 65px;
+      grid-template-columns: 32px minmax(0, 1fr) 16px;
+      gap: 8px;
+      padding: 16px 10.6667px;
+      color: var(--set-text);
+      font: 400 16px/24px var(--font);
+    }
+    .personal-channel > span:nth-child(2) { gap: 3px; }
+    .personal-channel-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      background: var(--agent-conversation-composer-bg);
+      color: var(--set-desc);
+    }
+    .personal-channel-action {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      border: 0;
+      border-radius: inherit;
+      background: transparent;
+      color: var(--set-text);
+      font: 400 16px/24px var(--font);
+    }
+    .personal-channel-action:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+    .personal-channel:first-child { border-radius: 10px 10px 0 0; }
+    .personal-channel:last-child { border-radius: 0 0 10px 10px; }
+    .personal-channel > .notification-phone-chevron { transform: none; color: var(--set-desc); }
+    .personal-channel small { position: relative; margin-left: 10px; }
+    .personal-channel-status {
+      position: absolute;
+      left: -10px;
+      bottom: 4.25px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--agent-action-icon);
+    }
+    .personal-channel-status.is-enabled { background: var(--pulse-health-text-on-track); }
+  }
+  html:root .settings-app .settings-main[data-settings-page="notifications"]:has(.personal-notifications-overview) .settings-mobile-menu > svg { color: var(--set-desc); transform: translateX(.1px); }
+}

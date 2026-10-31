@@ -1,7 +1,11 @@
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useDesktopSettings } from '@/hooks/use-desktop-settings';
+import { usePhoneLayout } from '@/hooks/use-phone-layout';
+import { NotificationChevron, NotificationSlackGlyph } from './notification-glyphs';
+import './mobile-notifications.css';
 import { avatarInitials } from '@/lib/avatar-initials';
+import { ViewGlyph } from '@/components/views/view-icon-picker';
 import {
   useCallback,
   useEffect,
@@ -620,7 +624,7 @@ export function PersonalSettings(props: Props) {
   else if (props.page === "connections")
     content = <Connections {...props} p={p} />;
   else content = <Agents {...props} p={p} />;
-  return <div className="personal-settings">{content}</div>;
+  return <div className={`personal-settings${props.page === "notifications" && !props.notificationChannel ? " personal-notifications-overview" : ""}`}>{content}</div>;
 }
 
 type PersonalProps = Props & { p: PersonalTranslate };
@@ -1205,6 +1209,7 @@ function ProfileEditGlyph() {
 
 function Notifications({ data, values, setValue, onReload, onNavigate, p, notificationChannel, onNavigateNotification }: PersonalProps) {
   const { formatDate } = useI18n();
+  const phone = usePhoneLayout();
   const chat = useChatPlatform(data);
   // Lark/Feishu personal notifications need a healthy integration and the member's linked account.
   const chatIntegration = useChatIntegrationSettings(chat.provider);
@@ -1297,7 +1302,7 @@ function Notifications({ data, values, setValue, onReload, onNavigate, p, notifi
           onClick={() => { if (values.priorityInbox) openChannel("priority-filter"); }}
           onKeyDown={(event) => { if (values.priorityInbox && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openChannel("priority-filter"); } }}
         >
-          <span className="personal-row-link-meta">{priorityTypes} {p("types")}<ChevronRight size={14} /></span>
+          <span className="personal-row-link-meta">{phone ? <><span className="personal-priority-count">{priorityTypes} {p("types")}</span><NotificationChevron /></> : <>{priorityTypes} {p("types")}<ChevronRight size={14} /></>}</span>
         </PersonalRow>
       </PersonalSection>
       <PersonalSection
@@ -1307,7 +1312,7 @@ function Notifications({ data, values, setValue, onReload, onNavigate, p, notifi
         )}
       >
         <NotificationChannel
-          icon={<Monitor />}
+          icon={phone ? <ViewGlyph icon="Computer" color="currentColor" /> : <Monitor />}
           href={`${settingsPath(data.workspace.urlKey, 'notifications')}/desktop`}
           enabled={preferences.desktop.enabled}
           title={p("Desktop")}
@@ -1315,13 +1320,13 @@ function Notifications({ data, values, setValue, onReload, onNavigate, p, notifi
           onClick={() => openChannel("desktop")}
         />
         <NotificationChannel
-          icon={<Smartphone />}
+          icon={phone ? <ViewGlyph icon="MobilePhone" color="currentColor" /> : <Smartphone />}
           title={p("Mobile")}
           status={p("Not available in Flow web")}
           disabled
         />
         <NotificationChannel
-          icon={<Mail />}
+          icon={phone ? <ViewGlyph icon="Email" color="currentColor" /> : <Mail />}
           href={`${settingsPath(data.workspace.urlKey, 'notifications')}/email`}
           enabled={preferences.email.enabled}
           title={p("Email")}
@@ -1341,7 +1346,7 @@ function Notifications({ data, values, setValue, onReload, onNavigate, p, notifi
           entityName
           onClick={() => openChannel("chat")}
         /> : <NotificationChannel
-          icon={<MessageCircle />}
+          icon={phone ? <NotificationSlackGlyph /> : <MessageCircle />}
           title={chat.name}
           status={p("Not connected")}
           entityName
@@ -1454,6 +1459,13 @@ function NotificationChannel({
   enabled?: boolean;
 }) {
   const desktop = useDesktopSettings();
+  const phone = usePhoneLayout();
+  if (phone) return <div className="personal-channel">
+    <span className="personal-channel-icon">{icon}</span>
+    <span><strong data-i18n-ignore={entityName || undefined}>{title}</strong><small><i className={`personal-channel-status${enabled ? ' is-enabled' : ''}`} aria-hidden="true"/>{status}</small></span>
+    <NotificationChevron />
+    {href && !disabled ? <NavLink className="personal-channel-action" aria-label={title} to={href} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && onClick) { event.preventDefault(); onClick(); } }} /> : <button type="button" className="personal-channel-action" aria-label={title} disabled={disabled} onClick={onClick} />}
+  </div>;
   const content = <><span className="personal-channel-icon">{icon}</span><span><strong data-i18n-ignore={entityName || undefined}>{title}</strong><small>{desktop && enabled !== undefined && <i className={`personal-channel-status${enabled ? ' is-enabled' : ''}`} aria-hidden="true"/>}{status}</small></span><ChevronDown size={14}/></>;
   if (desktop && href && !disabled) return <NavLink className="personal-channel" to={href} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && onClick) { event.preventDefault(); onClick(); } }}>{content}</NavLink>;
   return (

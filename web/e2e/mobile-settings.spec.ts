@@ -5,6 +5,41 @@ import { test as workspaceTest } from './workspace-fixture'
 const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`${viewport.width}px account notifications`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Account notifications' })
+
+    workspaceTest('shows the priority control and opens supported notification channels', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Flow-Workspace': workspaceKey, 'X-Workspace-Key': workspaceKey }
+      const response = await request.get('/api/notification-preferences', { headers })
+      expect(response.ok()).toBe(true)
+      const preferences = await response.json()
+      expect((await request.patch('/api/notification-preferences', { headers, data: { ...preferences, desktop: { ...preferences.desktop, enabled: false }, email: { ...preferences.email, enabled: true } } })).ok()).toBe(true)
+      await page.goto(`/${workspaceKey}/settings/account/notifications`)
+      const priority = page.getByRole('checkbox', { name: 'Priority inbox', exact: true })
+      await expect(priority).toBeVisible()
+      await expect(priority).not.toBeChecked()
+      const inboxCard = page.locator('.personal-section:first-of-type > .settings-card')
+      expect((await inboxCard.boundingBox())?.y).toBeCloseTo(192.5, 1)
+      expect((await inboxCard.boundingBox())?.height).toBeCloseTo(159, 1)
+      const channels = page.locator('.personal-channel')
+      await expect(channels).toHaveCount(4)
+      await expect(channels.nth(0)).toContainText('Disabled')
+      await expect(channels.nth(2)).toContainText('Enabled for all notifications')
+      await expect(page.getByRole('button', { name: 'Mobile', exact: true })).toBeDisabled()
+      await expect(channels.nth(0).locator('.personal-channel-icon')).toHaveCSS('width', '32px')
+      await expect(channels.nth(0).locator('.personal-channel-status')).toBeVisible()
+      expect((await channels.nth(0).boundingBox())?.y).toBeCloseTo(470.5, 1)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await page.getByRole('link', { name: 'Desktop', exact: true }).click()
+      await expect(page.getByRole('checkbox', { name: 'Enable desktop notifications' })).not.toBeChecked()
+      await page.getByRole('main').getByRole('button', { name: 'Notifications', exact: true }).click()
+      await page.getByRole('link', { name: 'Email', exact: true }).click()
+      await expect(page.getByRole('checkbox', { name: 'Enable email notifications' })).toBeChecked()
+    })
+  })
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   workspaceTest.describe(`${viewport.width}px account profile`, () => {
     workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Account profile' })
 
