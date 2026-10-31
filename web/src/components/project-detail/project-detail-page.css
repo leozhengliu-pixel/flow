@@ -1072,6 +1072,7 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
 .project-issues__intro { min-height: 360px; display: flex; flex-direction: column; align-items: center; padding: 120px 20px 40px; color: var(--theme-text-secondary); }
 .project-issues__intro > * { width: min(308px, 100%); }
 .project-issues__intro-mark { width: 86px; height: 80px; margin-bottom: 22px; overflow: visible; }
+.project-issues__intro-mark-phone, .project-issues__intro-hint { display: none; }
 .project-issues__intro-shadow, .project-issues__intro-card { fill: var(--theme-background); stroke-width: 1.5; }
 .project-issues__intro-shadow { stroke: var(--theme-text-tertiary); }
 .project-issues__intro-card, .project-issues__intro-line { stroke: var(--theme-text-primary); stroke-width: 1.5; stroke-linecap: round; }
@@ -1381,6 +1382,90 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
     background-color: var(--project-toolbar-bg) !important;
     background-clip: padding-box !important;
     color: var(--text);
+  }
+
+  /* Project issues: the reference app's phone empty state. */
+  .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-button[aria-label="Add filter"],
+  .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-actions > button[aria-label="Display options"] {
+    box-sizing: border-box;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    background-color: var(--project-toolbar-bg);
+    background-clip: padding-box;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+  }
+  .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-button[aria-label="Add filter"] svg,
+  .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-actions > button[aria-label="Display options"] svg { width: 14px; height: 14px; color: var(--phone-icon-fg); }
+  .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-actions > button[aria-label*="project details"] { background-color: var(--project-toolbar-bg); background-clip: padding-box; }
+  .project-issues { min-width: 0; min-height: 100%; display: flex; flex-direction: column; padding: 0; }
+  .project-issues__intro {
+    box-sizing: border-box;
+    flex: 1;
+    min-height: 0;
+    padding: 0 max(12px, calc((100% - 340px) / 2));
+    align-items: flex-start;
+    justify-content: center;
+    color: var(--issue-muted);
+  }
+  .project-issues__intro > * { width: 340px; max-width: 100%; }
+  .project-issues__intro-mark { display: none; }
+  .project-issues__intro > .project-issues__intro-mark-phone { display: block; width: 64.86px; height: 60px; margin-bottom: 24px; overflow: visible; color: var(--bright); }
+  .project-issues__intro-phone-body { fill: none; stroke: var(--issue-dim); stroke-width: 1.5; }
+  .project-issues__intro-phone-opening { fill: var(--pd-bg); }
+  .project-issues__intro-phone-rim { fill: none; stroke: var(--issue-dim); stroke-width: 1.5; }
+  .project-issues__intro-phone-half { fill: var(--issue-muted); }
+  .project-issues__intro-phone-ring { fill: none; stroke: var(--text); stroke-width: 1.4; }
+  .project-issues__intro-phone-done { fill: var(--text); }
+  .project-issues__intro-phone-check { fill: none; stroke: var(--pd-bg); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .project-issues__intro > strong { margin: 0 0 8px; color: var(--text); font-size: 15px; font-weight: 600; line-height: 23px; }
+  .project-issues__intro > p { margin: 0; color: var(--issue-muted); font-size: 13px; font-weight: 450; line-height: 18.2px; }
+  .project-issues__intro > p:nth-of-type(1) { margin-bottom: 16px; }
+  .project-issues__intro > p:nth-of-type(2) { margin-bottom: 24px; }
+  .project-issues__intro-note { display: none; }
+  .project-issues__intro-hint { display: inline; }
+  .project-issues__intro-hint kbd {
+    box-sizing: border-box;
+    width: 18px;
+    height: 17.1px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 2px;
+    border: .5px solid var(--phone-keycap-border);
+    border-radius: 4px;
+    color: var(--issue-muted);
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 450;
+    line-height: 12.1px;
+    vertical-align: middle;
+  }
+  .project-issues__intro-hint kbd + kbd { margin-left: 3px; }
+  .project-issues__intro > div { height: 32px; display: flex; align-items: center; gap: 8px; }
+  .project-issues__intro > div button { box-sizing: border-box; height: 32px; gap: 6px; padding: 0 10px; border: .5px solid transparent; border-radius: 9999px; background: var(--accent-primary); color: var(--on-accent); font-size: 12px; font-weight: 500; line-height: normal; box-shadow: var(--shadow); }
+  .project-issues__intro > div button kbd {
+    box-sizing: border-box;
+    width: 18px;
+    height: 17.1px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    border: .5px solid color-mix(in srgb, var(--on-accent) 40%, transparent);
+    border-radius: 4px;
+    color: var(--on-accent);
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 12.1px;
   }
 
   .project-overview { width: calc(100% - 80px); padding: 64px 0 72px; }

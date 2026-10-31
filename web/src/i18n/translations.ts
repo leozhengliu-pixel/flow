@@ -2174,6 +2174,7 @@ export const zhCN: Record<string, string> = {
   "Add issues to the project": "向项目添加事项",
   "Start building your project by creating an issue.": "创建一个事项，开始构建你的项目。",
   "You can also add teams, team members, and project dates in the project sidebar.": "你还可以在项目侧边栏中添加团队、团队成员和项目日期。",
+  "You can also add teams, team members, and project dates in the project sidebar with": "你还可以在项目侧边栏中添加团队、团队成员和项目日期，快捷键",
   "Toggle cycle details": "切换周期详情",
   "Unfinished issues, comments, and documents appear here automatically.":
     "未完成的事项、评论和文档会自动显示在这里。",
