@@ -81,7 +81,9 @@
 }html.flow-inbox-is-resizing * {
   cursor: col-resize !important;
   user-select: none !important;
-}.flow-inbox__header {
+}.flow-inbox__header-wrapper { display: contents; }
+.flow-inbox__header-inner { display: contents; }
+.flow-inbox__header {
   display: flex;
   align-items: center;
   gap: 0;
@@ -407,14 +409,17 @@
     box-shadow: none;
   }
   .flow-inbox-story { padding: 0; }
-  .flow-inbox-page-composition { width: 100%; height: calc(100% - 36px); margin: 0 0 36px; }
+  .flow-inbox-page-composition { width: 100%; height: 100%; margin: 0; }
   .flow-inbox-mutation-error { right: 8px; bottom: 8px; }
 
   .flow-inbox[data-detail-open="true"] { display: block; }
 
   .flow-inbox__list-pane { width: 100%; height: 100%; border-right: 0; }
   .flow-inbox__resize-handle { display: none; }
-  .flow-inbox__header { padding: 0 8px; }
+  .flow-inbox__header-wrapper { display: block; height: 44px; position: relative; z-index: 96; background: transparent; }
+  .flow-inbox__header { height: 44px; padding: 0; gap: 12px; background: var(--inbox-bg); }
+  .flow-inbox__header-inner { display: flex; width: calc(100% - 16px); height: 43.5px; margin: 0 8px; align-items: center; gap: 6px; }
+  html:root body .app .flow-inbox__header-inner [data-sidebar-trigger] { margin-right: 6px; }
   .flow-inbox__mobile-menu { display: inline-flex; }
   .flow-inbox__detail { display: none; }
   .flow-inbox[data-detail-open="true"] .flow-inbox__list-pane { display: none; }
@@ -428,7 +433,7 @@
   .flow-inbox-detail__icon-button[data-detail-action="subscription"] { margin-left: 0; }
   .flow-inbox-detail__icon-button { width: 26px; flex: 0 0 26px; }
   .flow-inbox-row { width: 100%; margin: 0; }
-  .flow-inbox-row__inner { padding: 0 16px; }
+  .flow-inbox-row__inner { width: calc(100% - 32px); margin: 0 16px; padding: 0; }
   .flow-inbox-row__issue-state { margin-left: 10px; }
   .flow-inbox-menu--actions { max-width: calc(100vw - 16px); }
   .flow-inbox-menu--filters { max-width: calc(100vw - 16px); }
@@ -846,8 +851,8 @@
     padding-left: 0;
   }
   html:root body .app .flow-inbox__header .flow-inbox__mobile-menu {
-    margin-left: 8px;
-    margin-right: 0;
+    margin-left: 0;
+    margin-right: 6px;
     color: var(--text);
     font-size: 12px;
     font-weight: 500;
@@ -878,7 +883,7 @@
   html:root body .app .flow-inbox__header [data-sidebar-trigger]::after { background: var(--phone-icon-fg); }
   html:root body .app .flow-inbox__header-toolbar-group {
     gap: 4px;
-    margin-right: 8px;
+    margin-right: 0;
     border-style: none;
   }
   html:root body .app .flow-inbox__header-controls {
@@ -893,7 +898,9 @@
     z-index: 0;
   }
   html:root body .app .flow-inbox-row__inner {
-    padding: 0 8px;
+    width: calc(100% - 32px);
+    margin: 0 16px;
+    padding: 0;
   }
   html:root body .app .flow-inbox-row__avatar-frame {
     color: var(--bright);

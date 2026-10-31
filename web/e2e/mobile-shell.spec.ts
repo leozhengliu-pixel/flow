@@ -671,13 +671,48 @@ test.describe('my issues phone toolbar', () => {
 
     // The filter menu and its value pickers use the reference's full-width phone panel, not an anchored popover.
     await page.getByRole('button', { name: 'Add filter', exact: true }).click()
-    await geometry(page.getByRole('dialog', { name: 'Add Filter…' }), { x: 16, width: 358 })
+    await geometry(page.getByRole('dialog', { name: 'Add filter' }), { x: 16, width: 358 })
     await page.getByRole('option', { name: /Status/ }).first().click()
     await geometry(page.locator('[role="dialog"][data-field="status"]'), { x: 16, width: 358 })
     await page.keyboard.press('Escape')
     await page.mouse.click(200, 22)
     await expect(page.getByRole('dialog', { name: 'Add Filter…' })).not.toBeVisible()
     if (shots) await page.screenshot({ path: `${shots}/flow-myissues-390.png` })
+  })
+})
+
+test.describe('inbox phone top bar', () => {
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent })
+  test('matches the single action row and notification list', async ({ page, request, workspaceKey }) => {
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await (await request.get(`${api}/api/bootstrap`, { headers })).json() as {
+      teams: Array<{ id: string }>; states: Array<{ id: string; type: string }>
+    }
+    const issue = await request.post(`${api}/api/issues`, {
+      headers,
+      data: { title: '[mobile] Inbox top bar', description: '', teamId: bootstrap.teams[0].id, stateId: bootstrap.states[0].id },
+    })
+    expect(issue.status()).toBe(201)
+    const { id } = await issue.json() as { id: string }
+    const reminder = await request.post(`${api}/api/issues/${id}/reminders`, {
+      headers,
+      data: { remindAt: new Date(Date.now() + 500).toISOString() },
+    })
+    expect(reminder.status()).toBe(201)
+    await page.waitForTimeout(900)
+
+    await page.goto(`${base}/${workspaceKey}/inbox`)
+    await geometry(page.locator('.flow-inbox__header-wrapper'), { x: 0, y: 0, width: 390, height: 44 })
+    await geometry(page.locator('.flow-inbox__header-inner'), { x: 8, y: 0, width: 374, height: 43.5 })
+    await geometry(page.locator('.flow-inbox__header-controls button').first(), { x: 274, y: 5.75, width: 32, height: 32 })
+    await geometry(page.locator('.flow-inbox-notification-list > [role="listitem"] .flow-inbox-row').first(), { x: 0, y: 52, width: 390, height: 55 })
+    await expect(page.locator('.bottom-agent')).toBeHidden()
+    await noOverflow(page)
+
+    await page.getByRole('button', { name: 'Add filter', exact: true }).click()
+    await geometry(page.getByRole('dialog', { name: 'Add filter' }), { x: 16, width: 358 })
+    await page.keyboard.press('Escape')
+    if (shots) await page.screenshot({ path: `${shots}/flow-inbox-topbar-390.png` })
   })
 })
 
