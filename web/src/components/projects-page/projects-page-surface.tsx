@@ -14,7 +14,7 @@ import {
   SidebarIcon,
 } from './projects-page-icons'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
-import { InsightsIcon } from '@/components/ui/view-action-icons'
+import { InsightsIcon, SidebarLeftIcon, SidebarRightIcon } from '@/components/ui/view-action-icons'
 import { ProjectsDisplayMenu } from './projects-display-menu'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import { usePropertyCommand } from '@/components/property/use-property-command'
@@ -185,7 +185,7 @@ export function ProjectsPageSurface({
   return <div className="lp-projects">
     <div className="lp-projects__top" data-projects-header>
       <header className="lp-projects__header">
-        <button type="button" data-sidebar-trigger className="lp-projects__mobile-menu" aria-label="Open workspace sidebar" onClick={onOpenAppSidebar} />
+        <button type="button" data-sidebar-trigger className="lp-projects__mobile-menu" aria-label="Open workspace sidebar" onClick={onOpenAppSidebar}><SidebarLeftIcon/></button>
         {creatingView ? <><span className="lp-projects__new-view-parent">Views</span><ChevronRight size={13}/><h1>All projects</h1><IconButton className="lp-projects__copy-url" label="Copy URL" onClick={() => void navigator.clipboard.writeText(window.location.href)}><Link2 size={14}/></IconButton><IconButton active={sidebarOpen} label={sidebarOpen ? 'Close Insights' : 'Open Insights'} onClick={onToggleSidebar}><InsightsIcon/></IconButton></> : <><h1>Projects</h1><button aria-label="New project" className="lp-projects__new-project" onClick={onCreateProject} type="button"><PlusIcon/><span>New project</span></button></>}
       </header>
       {/* The reference app: the view card carries the resource pills and its own filter / display buttons; the toolbar hides while it is open. */}
@@ -210,7 +210,7 @@ export function ProjectsPageSurface({
             label="Display options"
             onClick={() => toggleSurface('display', 'toolbar')}
           ><DisplayIcon /></IconButton>
-          {creatingView ? <IconButton active={sidebarOpen} label={sidebarOpen ? 'Close Insights' : 'Open Insights'} onClick={onToggleSidebar}><InsightsIcon/></IconButton> : <IconButton active={sidebarOpen} label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'} onClick={onToggleSidebar}><SidebarIcon /></IconButton>}
+          {creatingView ? <IconButton active={sidebarOpen} label={sidebarOpen ? 'Close Insights' : 'Open Insights'} onClick={onToggleSidebar}><InsightsIcon/></IconButton> : <IconButton active={sidebarOpen} label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'} onClick={onToggleSidebar}><SidebarIcon className="lp-projects__desktop-sidebar-icon"/><SidebarRightIcon className="lp-projects__phone-sidebar-icon"/></IconButton>}
           {!creatingView && viewActions}
         </div>
 
