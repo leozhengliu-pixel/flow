@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -28,6 +28,26 @@ function setup(selected = false, properties = new Set<'status' | 'id' | 'cycle' 
 
 describe('issue board cards', () => {
   beforeEach(() => localStorage.clear())
+
+  it('collapses hidden columns and restores a column through the supplied display action', async () => {
+    const user = userEvent.setup(), onShowGroup = vi.fn()
+    render(<I18nProvider><IssueBoard groups={[{ id: 'backlog', label: 'Backlog', issues: [], totalCount: 23 }]} hiddenGroupIds={['backlog']} properties={new Set()} selectedIds={new Set()} onMove={vi.fn()} onOpenIssue={vi.fn()} onSelectIssue={vi.fn()} onShowGroup={onShowGroup}/></I18nProvider>)
+    const panel = screen.getByRole('region', { name: 'Hidden columns' })
+    expect(within(panel).getByRole('button', { name: /Backlog\s*23/ })).toBeVisible()
+    expect(screen.queryByRole('listitem', { name: 'Backlog' })).not.toBeInTheDocument()
+    await user.click(within(panel).getByRole('button', { name: 'Collapse group' }))
+    expect(within(panel).queryByRole('button', { name: /Backlog\s*23/ })).not.toBeInTheDocument()
+    await user.click(within(panel).getByRole('button', { name: 'Expand group' }))
+    await user.click(within(panel).getByRole('button', { name: /Backlog\s*23/ }))
+    expect(onShowGroup).toHaveBeenCalledWith('backlog')
+  })
+
+  it('restores the column key rather than the compound swimlane key', async () => {
+    const onShowGroup = vi.fn()
+    render(<I18nProvider><IssueBoard groups={[{ id: 'backlog::p1', label: 'Alpha', parentGroupId: 'backlog', parentLabel: 'Backlog', issues: [] }]} hiddenGroupIds={['backlog']} properties={new Set()} selectedIds={new Set()} onMove={vi.fn()} onOpenIssue={vi.fn()} onSelectIssue={vi.fn()} onShowGroup={onShowGroup}/></I18nProvider>)
+    await userEvent.click(screen.getByRole('button', { name: /Backlog\s*0/ }))
+    expect(onShowGroup).toHaveBeenCalledWith('backlog')
+  })
 
   it('selects every issue in a swimlane and collapses or expands all rows', async () => {
     const user = userEvent.setup()

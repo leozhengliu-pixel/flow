@@ -3,6 +3,7 @@ import { ChevronDown, X } from 'lucide-react'
 import { DropdownMenuContent } from '@/components/ui/dropdown-menu'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
+import { IssueListEmptyIllustration } from '@/components/workspace-directory/member-profile-empty'
 import styles from './saved-view-filter-band.module.css'
 
 /**
@@ -38,15 +39,23 @@ export function HiddenByFiltersFooter({ hidden, onClear }: { hidden: number; onC
 }
 
 /** The reference app's empty list while filters match nothing. */
-export function NoMatchingIssues() {
+export function NoMatchingIssues({ hidden = 0, onClear }: { hidden?: number; onClear?: () => void }) {
   const { t } = useI18n()
   return <div className={styles.noMatches} role="status">
+    <div className={styles.noMatchesBlock}>
+    <div className={styles.desktopArt}><IssueListEmptyIllustration/></div>
     <svg aria-hidden="true" className={styles.noMatchesArt} viewBox="0 0 64 48" fill="none">
       <rect x="6" y="6" width="40" height="30" rx="5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3"/>
       <path d="M14 15h24M14 21h16M14 27h20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
       <circle cx="46" cy="32" r="8" fill="var(--theme-surface-0)" stroke="currentColor" strokeWidth="1.5"/>
       <path d="m52 38 5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
-    <strong>{t('No matching issues')}</strong>
+    <strong className={styles.phoneHeading}>{t('No matching issues')}</strong>
+    <strong className={styles.desktopHeading}>{t('No issues matching the filters')}</strong>
+    {hidden > 0 && onClear && <div className={styles.emptyFilterCard} data-filter-empty-card>
+      <span><b>{t(hidden === 1 ? '1 issue' : '{count} issues').replace('{count}', String(hidden))}</b><span>{t('hidden by filters')}</span></span>
+      <button type="button" onClick={onClear}><span>{t('Clear Filters')}</span><X size={12}/></button>
+    </div>}
+    </div>
   </div>
 }

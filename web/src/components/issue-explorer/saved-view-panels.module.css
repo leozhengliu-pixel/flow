@@ -209,9 +209,11 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--chart-cyan);
+  background: var(--avatar,var(--chart-cyan));
   color: var(--on-accent);
+  overflow:hidden;
 }
+.avatarMark img{width:100%;height:100%;object-fit:cover}
 .projectMark {
   width: 18px;
   height: 18px;
@@ -286,3 +288,10 @@
 .panel.inline .identityCard { min-height: 0; grid-template-rows: 28px auto; padding: 12px 10px 12px 12px; }
 .panel.inline .summaryCard { flex: 1; min-height: 0; overflow: auto; }
 .panel.inline.belowFilterBar { padding-top: 8px; }
+@media(min-width:1024px){
+  .panel.inline{width:400px;flex-basis:400px;padding-left:4px}
+  .panel.inline :is(.identityCard,.metadataCard,.summaryCard){background:var(--board-card-surface);border:.5px solid var(--board-add-issue-border)}
+  .panel.inline .metadataCard{padding:12px}
+  .panel.inline .metadataCard>div{height:30px}
+  .panel.inline .avatarMark{font-size:8px}
+}

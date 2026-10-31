@@ -93,6 +93,18 @@ describe('editing a saved view', () => {
 })
 
 describe('temporary filters on a saved view (the reference app band)', () => {
+  it('clears only temporary filters from the empty-state recovery card', async () => {
+    const user = userEvent.setup()
+    const { data, savedView } = setup({ filters: [high] })
+    history.replaceState(null, '', `/workspace/view/mine-view-1?filter=${encodeFiltersParam([urgent as never])}`)
+    render(page(data, { savedView }))
+    expect(screen.getAllByText('1 issue').length).toBeGreaterThan(0)
+    await user.click(screen.getAllByRole('button', { name: 'Clear Filters' })[0])
+    await screen.findByText('High one')
+    expect(screen.queryByText('Urgent one')).not.toBeInTheDocument()
+    expect(savedView.filters).toEqual([high])
+    expect(new URLSearchParams(location.search).has('filter')).toBe(false)
+  })
   it('shows the band with Clear and Save ⌄, the hidden-by-filters footer and a shareable ?filter=', async () => {
     const user = userEvent.setup()
     const { data, savedView } = setup()

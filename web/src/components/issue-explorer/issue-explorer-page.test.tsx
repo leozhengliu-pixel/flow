@@ -9,7 +9,7 @@ import type { MyIssuesDisplayOptions } from '@/components/my-issues/my-issues-su
 import { IssueExplorerPage, type IssueExplorerPageProps } from './issue-explorer-page'
 
 vi.mock('./issue-explorer-surface', () => ({
-  IssueExplorerSurface: ({ children, displayOptions, onDisplayOptionsChange, onInsightsOpenChange }: { children: ReactNode; displayOptions: MyIssuesDisplayOptions; onDisplayOptionsChange: (display: MyIssuesDisplayOptions) => void; onInsightsOpenChange: (open: boolean) => void }) => <div><button onClick={() => onDisplayOptionsChange({ ...displayOptions, grouping: 'priority' })}>Group by priority</button><button onClick={() => onInsightsOpenChange(true)}>Open insights</button><button onClick={() => onInsightsOpenChange(false)}>Close insights</button>{children}</div>,
+  IssueExplorerSurface: ({ children, displayOptions, onDisplayOptionsChange, onInsightsOpenChange, detailsOpen, onDetailsOpenChange }: { children: ReactNode; displayOptions: MyIssuesDisplayOptions; onDisplayOptionsChange: (display: MyIssuesDisplayOptions) => void; onInsightsOpenChange: (open: boolean) => void; detailsOpen: boolean; onDetailsOpenChange: (open: boolean) => void }) => <div><button onClick={() => onDisplayOptionsChange({ ...displayOptions, grouping: 'priority' })}>Group by priority</button><button onClick={() => onInsightsOpenChange(true)}>Open insights</button><button onClick={() => onInsightsOpenChange(false)}>Close insights</button><button aria-pressed={detailsOpen} onClick={() => onDetailsOpenChange(!detailsOpen)}>Toggle details</button>{children}</div>,
 }))
 vi.mock('@nivo/bar', () => ({ ResponsiveBar: () => <svg/> }))
 
@@ -23,6 +23,38 @@ function dataWithGroups(first: number, second: number) {
 
 describe('complete issue grouping', () => {
   beforeEach(() => localStorage.clear())
+
+  it('counts only issues in the current display and clears persisted team filters from the empty state', async () => {
+    const data = dataWithGroups(0, 3)
+    const key = `${data.workspace.urlKey}:issue-explorer:workspace:all:filters`
+    localStorage.setItem(key, JSON.stringify([{ id: 'none', field: 'priority', fieldLabel: 'Priority', operator: 'is', value: '4', valueLabel: 'Low' }]))
+    render(page(data))
+    expect(screen.getByText('No issues matching the filters')).toBeInTheDocument()
+    expect(screen.getByText('3 issues')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Filters' }))
+    await screen.findByText('Issue 1')
+    expect(JSON.parse(localStorage.getItem(key)!)).toEqual([])
+    expect(screen.queryByText('hidden by filters')).not.toBeInTheDocument()
+  })
+
+  it('defaults saved details open only on desktop and remembers an explicit close independently from team details', () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: query.includes('min-width'), addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    const data = dataWithGroups(0, 3)
+    const savedView = { id: 'saved', name: 'Saved', resource: 'issues', scope: 'personal', view: 'all', filters: [], display: {} } as unknown as SavedView
+    localStorage.setItem(`${data.workspace.urlKey}:issue-explorer:workspace:details`, 'false')
+    const first = render(page(data, { savedView }))
+    expect(screen.getByRole('button', { name: 'Toggle details' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle details' }))
+    first.unmount()
+    const second = render(page(data, { savedView }))
+    expect(screen.getByRole('button', { name: 'Toggle details' })).toHaveAttribute('aria-pressed', 'false')
+    expect(localStorage.getItem(`${data.workspace.urlKey}:issue-explorer:view:saved:desktop:details`)).toBe('false')
+    second.unmount()
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    render(page(data, { savedView: { ...savedView, id: 'new' } }))
+    expect(screen.getByRole('button', { name: 'Toggle details' })).toHaveAttribute('aria-pressed', 'false')
+    vi.unstubAllGlobals()
+  })
 
   it('opens workspace insights without a saved view and restores the list after closing a drill', async () => {
     const { container } = render(page(dataWithGroups(2, 3)))

@@ -61,6 +61,7 @@ describe('TriagePage', () => {
   it('renders the reference app two-line rows: title and identifier, creator and when it was added', () => {
     renderPage({ data: setup([triageIssue(1, { dueDate: '2026-12-01' }), triageIssue(2)]) })
     const rows = screen.getAllByRole('listitem')
+    expect(document.querySelector('.flow-triage-list__team svg')).toBeInTheDocument()
     expect(rows).toHaveLength(2)
     expect(within(rows[0]).getByText('Triage issue 1')).toBeInTheDocument()
     expect(within(rows[0]).getByText('TST-1')).toBeInTheDocument()

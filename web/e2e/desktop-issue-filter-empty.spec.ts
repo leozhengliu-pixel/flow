@@ -1,0 +1,28 @@
+import { test, expect } from './issue-list-fixture'
+
+test.skip(({ isMobile }) => isMobile, 'Desktop filter empty state')
+test.use({ viewport: { width: 1440, height: 900 } })
+
+test('counts the hidden issues and clears the real filters without changing the team scope', async ({ page, issueList }) => {
+  await page.goto(issueList.route)
+  await page.getByRole('button', { name: 'Add filter', exact: true }).click()
+  await page.getByRole('option', { name: 'Priority', exact: true }).hover()
+  await page.getByRole('option', { name: /^Urgent/ }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.getByText('No issues matching the filters', { exact: true })).toBeVisible()
+  const card = page.locator('[data-filter-empty-card]')
+  await expect(card).toHaveText('3 issueshidden by filtersClear Filters')
+  const rect = await card.boundingBox()
+  expect(rect?.width).toBe(350)
+  expect(rect?.height).toBe(57)
+  expect(await card.evaluate(node => getComputedStyle(node).borderRadius)).toBe('5px')
+  const action = card.getByRole('button', { name: 'Clear Filters', exact: true })
+  expect(await action.boundingBox()).toMatchObject({ width: 104, height: 24 })
+  expect((await action.locator('span').boundingBox())!.height).toBeLessThan(16)
+  await action.click()
+  await expect(page.locator('[data-issue-row-id]')).toHaveCount(3)
+  await expect(card).toHaveCount(0)
+  await expect(page).toHaveURL(new RegExp(issueList.route + '$'))
+  await page.reload()
+  await expect(page.locator('[data-issue-row-id]')).toHaveCount(3)
+})

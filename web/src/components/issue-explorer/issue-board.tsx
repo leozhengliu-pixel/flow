@@ -63,7 +63,7 @@ export function IssueBoard(props: IssueBoardProps) {
           onCollapseAll={() => setCollapsed(new Set(lanes.map(item => item.id)))}
         />
       </header>
-      {!collapsed.has(lane.id) && <div className={styles.swimlaneBoard}><IssueBoardColumns {...props} groups={lane.groups} hiddenGroupIds={(props.hiddenGroupIds ?? []).flatMap(id => [id, `${id}::${lane.id}`])} onHideGroup={props.onHideGroup ? id => props.onHideGroup!(id.split('::')[0]) : undefined}/></div>}
+      {!collapsed.has(lane.id) && <div className={styles.swimlaneBoard}><IssueBoardColumns {...props} groups={lane.groups} hiddenGroupIds={(props.hiddenGroupIds ?? []).flatMap(id => [id, `${id}::${lane.id}`])} onHideGroup={props.onHideGroup ? id => props.onHideGroup!(id.split('::')[0]) : undefined} onShowGroup={props.onShowGroup ? id => props.onShowGroup!(id.split('::')[0]) : undefined}/></div>}
     </section>)}
   </div>
 }
@@ -103,14 +103,8 @@ function IssueBoardColumns({ groups, hiddenGroupIds = [], properties, propertyOp
   const { t } = useI18n()
   const [draggingId, setDraggingId] = useState<string>()
   const [over, setOver] = useState<{ groupId: string; index: number }>()
-  const [hiddenCollapsed, setHiddenCollapsed] = useState(false)
-  const hiddenSectionRef = useRef<HTMLElement>(null)
   const visibleGroups = useMemo(() => groups.filter(group => !hiddenGroupIds.includes(group.id)), [groups, hiddenGroupIds])
   const hiddenGroups = useMemo(() => groups.filter(group => hiddenGroupIds.includes(group.id)), [groups, hiddenGroupIds])
-  useEffect(() => {
-    if (typeof window === 'undefined' || window.location.hash !== '#hidden-columns') return
-    hiddenSectionRef.current?.scrollIntoView({ inline: 'start', block: 'nearest' })
-  }, [hiddenGroups.length])
   const sourceGroup = groups.find(group => group.issues.some(issue => issue.id === draggingId))
   const rejectMove = (issue: MyIssuesRowData, sourceId: string, targetId: string) => {
     const reason = canDrop?.(issue, sourceId, targetId)
@@ -173,16 +167,28 @@ function IssueBoardColumns({ groups, hiddenGroupIds = [], properties, propertyOp
         style={{ height: '100%', width: '100%' }}
       />
     ) : visibleGroups.map(group => renderColumn(group))}
-    {hiddenGroups.length>0&&<section ref={hiddenSectionRef} id="hidden-columns" className={styles.hiddenColumns} aria-label={t('Hidden columns')} data-board-hidden>
+    <HiddenBoardColumns groups={hiddenGroups} onShowGroup={onShowGroup}/>
+  </div>
+}
+
+export function HiddenBoardColumns({ groups, onShowGroup }: { groups: MyIssuesGroupData[]; onShowGroup?: (id: string) => void }) {
+  const { t } = useI18n()
+  const [hiddenCollapsed, setHiddenCollapsed] = useState(false)
+  const hiddenSectionRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.location.hash !== '#hidden-columns') return
+    hiddenSectionRef.current?.scrollIntoView({ inline: 'start', block: 'nearest' })
+  }, [groups.length])
+  if (!groups.length) return null
+  return <section ref={hiddenSectionRef} id="hidden-columns" className={styles.hiddenColumns} aria-label={t('Hidden columns')} data-board-hidden>
       <div className={styles.hiddenHeader} data-board-hidden-header-strip>
         <button className={styles.hiddenToggle} type="button" aria-label={t(hiddenCollapsed?'Expand group':'Collapse group')} aria-expanded={!hiddenCollapsed} data-board-hidden-header onClick={()=>setHiddenCollapsed(value=>!value)}>
           <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z" fill="currentColor"/></svg>
           <strong>{t('Hidden columns')}</strong>
         </button>
       </div>
-      {!hiddenCollapsed&&<div className={styles.hiddenList}>{hiddenGroups.map(group=><button className={styles.hiddenStatus} key={group.id} type="button" data-board-hidden-status onClick={()=>onShowGroup?.(group.id)}><div className={styles.hiddenStatusCard}><StatusIcon state={{id:group.id,name:group.label,type:group.stateType??'unstarted',color:group.state?.color??'var(--status-neutral)'}} size={14}/><span className={styles.hiddenStatusName} data-i18n-ignore>{group.label}</span><b><BoardWarningIcon size={14}/><span>{group.totalCount ?? group.issues.length}</span></b></div></button>)}</div>}
-    </section>}
-  </div>
+      {!hiddenCollapsed&&<div className={styles.hiddenList}>{groups.map(group=><button className={styles.hiddenStatus} key={group.id} type="button" data-board-hidden-status onClick={()=>onShowGroup?.(group.id)}><div className={styles.hiddenStatusCard}><StatusIcon state={{id:group.id,name:group.label,type:group.stateType??'unstarted',color:group.state?.color??'var(--status-neutral)'}} size={14}/><span className={styles.hiddenStatusName} data-i18n-ignore>{group.label}</span><b><span className={styles.desktopIcon}><EstimateIcon size={14}/></span><span className={styles.phoneIcon}><BoardWarningIcon size={14}/></span><span>{group.totalCount ?? group.issues.length}</span></b></div></button>)}</div>}
+    </section>
 }
 
 function IssueBoardColumn({ group, createIssueLabel, properties, propertyOptions, selectedIds, draggingId, over, onCreateIssue, onHideGroup, onSelectIssue, onDragStart, onDragEnd, onSetOver, onDrop, onOpenIssue, onPropertyChange }: {
