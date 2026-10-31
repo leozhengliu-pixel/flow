@@ -106,6 +106,8 @@ export interface InlineCommentGutterProps {
   onGutterChange?: (shown: boolean) => void
   /** A side panel takes the room beside the text, so threads open as popovers. */
   railOpen?: boolean
+  /** Documents compose below the selection without moving the article. */
+  inlineDraft?: boolean
   actions: ThreadActions
   muted: (thread: InlineThread) => boolean
   renderAgentThread?: RenderAgentThread
@@ -113,7 +115,7 @@ export interface InlineCommentGutterProps {
   onReload: () => Promise<void>
 }
 
-export function InlineCommentGutter({ comments, viewer, users, editor, shell, draft, onDraftChange, canComment, writesMarks, canModerate, visible = true, onGutterChange, railOpen = false, actions, muted, renderAgentThread, createThread, onReload }: InlineCommentGutterProps) {
+export function InlineCommentGutter({ comments, viewer, users, editor, shell, draft, onDraftChange, canComment, writesMarks, canModerate, visible = true, onGutterChange, railOpen = false, inlineDraft = false, actions, muted, renderAgentThread, createThread, onReload }: InlineCommentGutterProps) {
   const { t } = useI18n()
   const { open } = useInlineThreads(comments)
   const [active, setActive] = useState<string>()
@@ -124,7 +126,7 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
   const [layoutTick, setLayoutTick] = useState(0)
   // Unknown until the page has been measured: threads stay closed (popover rules) rather than flashing as gutter cards.
   const [narrow, setNarrow] = useState<boolean | undefined>(undefined)
-  const popover = narrow !== false || railOpen
+  const popover = narrow !== false || railOpen || (inlineDraft && Boolean(draft))
   const materialized = useRef(new Set<string>())
   const [cardRegistry] = useState(() => new CardRegistry())
   // Resolving the thread being read also closes it.
@@ -267,10 +269,12 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
       const position = Math.min(Math.max(range.from, 0), editor.state.doc.content.size)
       const coords = editor.view.coordsAtPos(position)
       const box = shell.getBoundingClientRect()
-      const left = Math.max(0, Math.min(coords.left - box.left - POPOVER_INSET, box.width - POPOVER_WIDTH))
+      const left = inlineDraft
+        ? Math.max(0, Math.min(coords.left - box.left + 15.5, box.width - 298))
+        : Math.max(0, Math.min(coords.left - box.left - POPOVER_INSET, box.width - POPOVER_WIDTH))
       return { top: coords.bottom - box.top + POPOVER_GAP, left }
     } catch { return { top: 0, left: 0 } }
-  }, [editor, shell])
+  }, [editor, shell, inlineDraft])
 
   // A popover shows only the thread being read (or the composer being written); the others wait to be clicked.
   const visibleThreads = visible ? (popover ? open.filter(thread => thread.root.id === active) : open) : []

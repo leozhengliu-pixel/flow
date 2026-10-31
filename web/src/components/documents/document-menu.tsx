@@ -93,7 +93,7 @@ export function DocumentMenuItems({ ctx, document, variant, team, showAuthorName
         <FlowMenuOptions options={teams.map(item => ({ id: item.id, label: item.name, translate: false, icon: <TeamIcon team={item} size={14}/> }))} selected={pinSelected} multiple emptyLabel="No teams" onChoose={id => { const target = teams.find(item => item.id === id); if (target) void toggleDocumentPinnedToTeam(ctx, document, target) }}/>
       </FlowSubmenu>}
     <FlowMenuItem icon={<IssueActionGlyph label="Duplicate" fallback={null}/>} label="Duplicate" onSelect={() => void duplicateDocument(ctx, document).then(created => { if (created && variant === 'page') ctx.navigate(documentPath(data.workspace.urlKey, created)) })}/>
-    {phone && rename}
+    {rename}
     <FlowSubmenu icon={<IssueActionGlyph label="New template from document" fallback={null}/>} label="New template from document">
       <FlowMenuItem icon={<Building2 size={14}/>} label="Workspace" onSelect={() => void createTemplateFromDocument(ctx, document, '')}/>
       {teams.length > 0 && <FlowMenuSeparator/>}
@@ -106,7 +106,6 @@ export function DocumentMenuItems({ ctx, document, variant, team, showAuthorName
         if (template) void applyTemplateToDocument(ctx, document, template)
       }}/>}
     </FlowSubmenu>}
-    {!phone && rename}
     <FlowMenuSeparator/>
     <FlowMenuItem icon={<FlowGlyph name="favorite"/>} label={favorited ? 'Remove from favorites' : 'Favorite'} shortcut="⌥ F" onSelect={() => void toggleDocumentFavorite(ctx, document)}/>
     <FlowSubmenu icon={<IssueActionGlyph label="Copy" fallback={null}/>} label="Copy">

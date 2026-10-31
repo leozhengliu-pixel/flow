@@ -14,7 +14,7 @@
   background: transparent;
 }
 :root[data-theme="light"] .team-documents-toolbar { background: transparent; }
-.team-documents-toolbar > .team-documents-new { font-size: 13px; padding: 0 10px; }
+.team-documents-toolbar > .team-documents-new { gap: 4px; font-size: 12px; padding: 0 10px 0 8px; }
 .team-docs-list { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 0; }
 
 /* Column header: 32px, pill buttons on the same columns as the rows. */
@@ -40,13 +40,13 @@
   border-radius: 9999px;
   background: transparent;
   color: inherit;
-  font: 450 12px/normal var(--font);
+  font: 500 12px/normal var(--font);
   cursor: pointer;
   white-space: nowrap;
 }
 .team-docs-heading.is-name { flex: 0 1 auto; min-width: 0; justify-content: flex-start; margin-right: auto; }
-.team-docs-heading.is-date { flex: 0 0 120px; width: 120px; justify-content: flex-start; }
-.team-docs-heading.is-owner { flex: 0 0 148px; width: 148px; justify-content: flex-start; }
+.team-docs-heading.is-date { flex: 0 0 120px; width: 120px; justify-content: flex-start; position: relative; left: 6px; }
+.team-docs-heading.is-owner { flex: 0 0 148px; width: 148px; justify-content: flex-start; position: relative; left: 6px; }
 .team-docs-heading:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 .team-docs-heading svg { flex: none; }
 
@@ -100,7 +100,7 @@
   align-items: center;
   min-width: 0;
   column-gap: 12px;
-  padding: 0 10px 0 14px;
+  padding: 0 10px 0 10px;
 }
 .team-docs-row:hover,
 .team-docs-row[data-active] { background: var(--theme-surface-hover); }
@@ -132,7 +132,7 @@
 .team-docs-row[data-selected="true"] .team-docs-check span svg { visibility: visible; }
 .team-docs-check input:focus-visible + span { opacity: 1; outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
-.team-docs-title { display: flex; flex: 1 1 0; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
+.team-docs-title { display: flex; flex: 1 1 0; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
 .team-docs-title > .document-glyph,
 .team-docs-title > svg,
 .team-docs-title > span { flex: 0 0 16px; width: 16px; height: 16px; }
@@ -277,6 +277,16 @@
 .team-docs-owner:focus-visible,
 .team-docs-caret:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
+@media (min-width: 768px) {
+  .team-docs-group { margin: 0 8px 2px; background: var(--theme-surface-2); }
+  .team-docs-title > svg { width: 24px; height: 24px; flex-basis: 24px; }
+  .team-docs-more-spacer { display: none; }
+  .team-docs-more { position: absolute; top: 8px; right: 0; }
+  .team-docs-heading.is-date,
+  .team-docs-heading.is-owner { left: 8px; }
+  .team-docs-date { position: relative; left: 2px; }
+}
+
 @media (max-width: 900px) {
   .team-docs-heading.is-created,
   .team-docs-date.is-created { display: none; }
@@ -298,7 +308,21 @@
 .team-documents-filter-bar.team-documents-filter-bar { flex: none; min-height: 0; margin: 0 8px 8px; padding: 10px; border: .5px solid var(--theme-border); border-radius: 8px; background: var(--theme-surface-hover); }
 
 /* Phone: measured from the reference app at 390x844 (documents list). Desktop keeps the layout above. */
-.team-docs-group-add { display: none; }
+.team-docs-group-add {
+  display: grid;
+  flex: 0 0 24px;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+}
+.team-docs-group-add:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 .team-docs-row-inner { box-sizing: border-box; }
 
 @media (max-width: 767px) {

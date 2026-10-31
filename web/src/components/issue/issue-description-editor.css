@@ -590,7 +590,7 @@
 /* ---- Slash menu: groups, dividers, empty state ---- */
 .description-slash-menu.description-slash-menu { padding: 4px 0; }
 /* Portaled to the page (fixed) so dialogs and scrolling panes never clip it; pointer-events: auto because a modal dialog disables them on the body. */
-.description-slash-menu.description-slash-menu--floating { position: fixed; z-index: 1100; pointer-events: auto; }
+.description-slash-menu.description-slash-menu--floating { position: fixed; z-index: 1100; pointer-events: auto; max-height: min(482.5px, calc(100vh - 24px)); }
 .description-slash-menu .description-slash-separator { height: .5px; margin: 4px 0; background: var(--theme-border); }
 .description-slash-menu .description-slash-empty { height: 34px; justify-content: space-between; gap: 16px; padding: 0 14px; }
 .description-slash-menu .description-slash-empty .description-slash-dismiss {
@@ -605,4 +605,3 @@
 }
 .description-slash-menu .description-slash-empty .description-slash-dismiss::before { inset: 0; }
 .description-slash-menu .description-slash-empty .description-slash-dismiss:hover { color: var(--theme-text-primary); }
-

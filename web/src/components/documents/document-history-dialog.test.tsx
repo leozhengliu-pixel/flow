@@ -64,7 +64,7 @@ describe('DocumentHistoryDialog', () => {
 
   it('titles the modal with the document and lists versions grouped by day with the Current tag and authors', () => {
     renderDialog(makeDocument())
-    expect(screen.getByRole('dialog')).toHaveAccessibleName(/Restore version for\s*Roadmap/)
+    expect(screen.getByRole('dialog')).toHaveAccessibleName(/History for\s*Roadmap/)
     expect(screen.getByRole('button', { name: 'Close modal dialog' })).toBeInTheDocument()
     const groups = screen.getAllByRole('group')
     expect(groups.map(group => group.getAttribute('aria-label'))).toEqual(['Today', 'Yesterday', expect.any(String)])
@@ -232,7 +232,7 @@ describe('DocumentHistoryDialog', () => {
   it('shows the zh-CN copy', () => {
     localStorage.setItem('flow:locale', 'zh-CN')
     renderDialog(makeDocument())
-    expect(screen.getByText('恢复版本：')).toBeInTheDocument()
+    expect(screen.getByText('历史版本')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '恢复版本' })).toBeInTheDocument()
     expect(screen.getAllByText('当前')).toHaveLength(1)
     expect(screen.getByRole('group', { name: '今天' })).toBeInTheDocument()
@@ -249,7 +249,7 @@ describe('history dialog css', () => {
   })
 
   it('fits the viewport with internal scroll areas', () => {
-    expect(css).toMatch(/height:\s*min\(566px,\s*calc\(100dvh/)
+    expect(css).toMatch(/height:\s*min\(721px,\s*calc\(100dvh/)
     expect(css).toMatch(/max-height:\s*calc\(100dvh/)
     expect(css).toMatch(/\.document-history-scroll\s*{[^}]*overflow:\s*auto/)
     expect(css).toMatch(/\.document-history-list\s*{[^}]*overflow:\s*auto/)

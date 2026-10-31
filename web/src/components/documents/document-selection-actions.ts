@@ -10,17 +10,20 @@ type Translate = (source: string) => string
  * (in the document's team and project, else the first team) and puts a mention of it where the text was; "Ask agent"
  * hands the selection to the floating chat.
  */
-export function documentSelectionActions({ data, document, t, onAskAgent, onComment }: {
+export function documentSelectionActions({ data, document, t, onAskAgent, onMoveToNewDocument, onComment }: {
   data: BootstrapData | undefined
   document: Pick<FlowDocument, 'teamIds' | 'projectIds'>
   t: Translate
   /** Opens the agent chat with the selected text quoted. */
   onAskAgent: (selection: SelectedDescription, editor?: Editor) => void
+  /** Moves the selected text into a new document. */
+  onMoveToNewDocument?: DescriptionSelectionActions['onMoveToNewDocument']
   /** Starts an inline comment on the selection (omitted for viewers). */
   onComment?: DescriptionSelectionActions['onComment']
 }): DescriptionSelectionActions {
   return {
     onComment,
+    onMoveToNewDocument,
     onCreateIssue: createIssueFromSelectionAction(data, { teamId: document.teamIds[0] ?? data?.teams[0]?.id, projectId: document.projectIds[0] }, t),
     // Like the reference app, the selection rides into the floating chat as a "selected text" chip, not as prefilled prose.
     onAskAgent: (selection, editor) => { if (selection.text.trim()) onAskAgent(selection, editor) },
