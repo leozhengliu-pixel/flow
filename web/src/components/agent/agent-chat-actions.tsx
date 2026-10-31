@@ -1,12 +1,16 @@
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Dialog from '@radix-ui/react-dialog'
+import { Command } from 'cmdk'
 import { useI18n } from '@/i18n/i18n'
 import { FlowDropdownMenuContent, FlowMenuItem, FlowMenuSeparator } from '@/components/ui/row-context-menu'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
+import { PhoneCommandMenu } from '@/components/ui/phone-menu'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { useUsageFeedbackEnabled } from '@/lib/usage-feedback'
 import { RENAME_CHAT_SHORTCUT, deleteChatShortcut } from './agent-chat-commands'
 import './agent-rename-palette.css'
+import './agent-chat-actions.css'
 
 /** The "…" chat menu shared by the Agent page and the floating chat. */
 export function AgentChatMenu({ align = 'start', className, unsaved = false, onCopy, onDelete, onFeedback, onRename }: {
@@ -20,7 +24,44 @@ export function AgentChatMenu({ align = 'start', className, unsaved = false, onC
   onRename: () => void
 }) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
+  const [phoneOpen, setPhoneOpen] = useState(false)
   const feedbackEnabled = useUsageFeedbackEnabled()
+  if (phone) {
+    return <>
+      <button
+        aria-expanded={phoneOpen}
+        aria-haspopup="dialog"
+        aria-label={t('Chat options')}
+        className={className}
+        data-state={phoneOpen ? 'open' : 'closed'}
+        onClick={() => setPhoneOpen(open => !open)}
+        type="button"
+      ><FlowGlyph name="ellipsis" size={14}/></button>
+      <PhoneCommandMenu
+        className="agent-chat-options-phone-menu"
+        label={t('Chat options')}
+        onCloseAutoFocus={event => {
+          event.preventDefault()
+          document.querySelector<HTMLButtonElement>('button[aria-label="Chat options"]')?.focus({ preventScroll: true })
+        }}
+        onOpenChange={setPhoneOpen}
+        open={phoneOpen}
+        placeholder="Filter…"
+      >
+        <Command.Item className="menu-item" disabled={unsaved} onSelect={onRename} value={t('Rename…')}>
+          <FlowGlyph name="edit" size={16}/><span>{t('Rename…')}</span>
+        </Command.Item>
+        <Command.Item className="menu-item" onSelect={onCopy} value={t('Copy as markdown')}>
+          <FlowGlyph name="copyMarkdown" size={16}/><span>{t('Copy as markdown')}</span>
+        </Command.Item>
+        <Command.Separator><span aria-hidden="true" className="agent-chat-options-divider" /></Command.Separator>
+        <Command.Item className="menu-item" disabled={unsaved} onSelect={onDelete} value={t('Delete')}>
+          <FlowGlyph name="delete" size={16}/><span>{t('Delete')}</span>
+        </Command.Item>
+      </PhoneCommandMenu>
+    </>
+  }
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>

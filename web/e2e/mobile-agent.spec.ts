@@ -240,6 +240,16 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect(await send.evaluate(node => getComputedStyle(node).backgroundColor)).toBe('lch(17.574 1.589 272)')
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 
+      await page.locator('main > header button[aria-label="Chat options"]').click()
+      const chatOptions = page.locator('.agent-chat-options-phone-menu')
+      await expect(chatOptions).toBeVisible()
+      expect((await chatOptions.boundingBox())?.x).toBe(16)
+      expect((await chatOptions.boundingBox())?.width).toBe(viewport.width - 32)
+      expect((await chatOptions.boundingBox())?.height).toBe(208)
+      await expect(chatOptions.locator('input')).toHaveAttribute('placeholder', 'Filter…')
+      await expect(chatOptions.getByRole('option')).toHaveText(['Rename…', 'Copy as markdown', 'Delete'])
+      expect(await chatOptions.locator('.agent-chat-options-divider').evaluate(node => getComputedStyle(node).height)).toBe('0.5px')
+
       if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/agent-conversation-${viewport.width}.png`, scale: 'css', animations: 'disabled' })
     })
   })
