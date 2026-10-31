@@ -4,7 +4,7 @@
 .popover{width:301px;height:min(531px,calc(100vh - 103px));padding:8px 0 0;overflow:auto;border-radius:12px;scrollbar-width:none;animation:popoverIn 120ms ease-out}.popover::-webkit-scrollbar{display:none}
 .layoutTabs{height:32px;margin:6px 16px 8px;display:flex;align-items:center;gap:6px;border-radius:5px}.layoutTabs button{height:28px;flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 8px;border:.5px solid transparent;border-radius:9999px;background:var(--control-muted-bg);color:var(--theme-text-secondary);font:500 12px/20px inherit;cursor:pointer}.layoutTabs button[aria-selected=true]{background:var(--theme-surface-active);box-shadow:0 1px 2px var(--shadow-color-deep);color:var(--bright)}.layoutTabs button:disabled{opacity:1;cursor:not-allowed}
 .section{padding:8px 16px}.section+.section{border-top:.5px solid var(--theme-border)}
-.groupingControl,.selectField{height:32px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}.rowLabel,.selectField>span,.sectionLabel{color:var(--theme-text-secondary);font-size:12px;font-weight:500;white-space:nowrap}.groupingActions{display:flex;align-items:center;justify-content:flex-end;gap:4px}.orderButton{width:24px;height:24px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--theme-text-primary);cursor:pointer}.orderButton:hover{background:var(--theme-border)}.orderButton[data-order=desc] svg{transform:scaleY(-1)}
+.groupingControl,.selectField,.nestedSelectRow{height:32px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}.nestedSelectRow{display:none}.rowLabel,.selectField>span,.sectionLabel{color:var(--theme-text-secondary);font-size:12px;font-weight:500;white-space:nowrap}.groupingActions{display:flex;align-items:center;justify-content:flex-end;gap:4px}.orderButton{width:24px;height:24px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--theme-text-primary);cursor:pointer}.orderButton:hover{background:var(--theme-border)}.orderButton[data-order=desc] svg{transform:scaleY(-1)}
 .selectField>.selectTrigger{justify-self:end}.selectTrigger{width:auto;min-width:99px;height:24px;display:flex;align-items:center;justify-content:space-between;gap:5px;padding:1px 8px;border:.5px solid transparent;border-radius:8px;background:var(--control-muted-hover);color:var(--bright);font:400 12px/20px inherit;text-align:left;cursor:pointer}.selectTrigger:hover:not(:disabled),.selectTrigger[data-state=open]{background:var(--control-muted-active)}.selectTrigger:disabled{background:var(--control-muted-bg);color:var(--theme-text-tertiary);cursor:not-allowed}.selectTrigger svg{color:var(--issue-muted)}
 .selectMenu{min-width:118px;max-height:min(360px,calc(100vh - 20px));overflow:hidden;border-radius:12px;scrollbar-width:none;animation:menuIn 100ms ease-out}.selectViewport{padding:4px 0}.selectItem{position:relative;height:24px;display:flex;align-items:center;gap:14px;justify-content:space-between;padding:0 8px;outline:0;color:var(--theme-text-primary);font-size:12px;white-space:nowrap;cursor:default}.selectItem[data-highlighted],.selectItem[data-state=checked]{background:var(--theme-surface-hover)}.selectIndicator{display:flex;margin-left:auto;color:var(--theme-text-primary)}
 .switchRow{height:32px;display:flex;align-items:center;justify-content:space-between;color:var(--theme-text-secondary);font-size:12px;font-weight:500}
@@ -114,4 +114,160 @@
 /* Phone: the reference marks a display that is not the default list with a small accent dot. */
 @media(max-width:767px){
   .triggerDot{position:absolute;top:2.8px;right:2.9px;width:7px;height:7px;display:block;border-radius:50%;background:var(--display-modified-dot)}
+}
+
+/* The issue explorer's phone menu is a compact, fixed-height sheet. Keep this
+   override below the shared picker rules so the desktop menu remains intact. */
+@media (max-width: 767px) {
+  [data-issue-display-trigger="true"][aria-pressed="true"] {
+    background: var(--inbox-toolbar-open-bg) !important;
+    color: var(--bright) !important;
+  }
+  .popover[data-issue-display-menu="true"] {
+    height: 550px;
+    max-height: 550px;
+    margin-top: 1px;
+    padding-top: 0;
+    border-radius: 12px;
+  }
+  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) {
+    height: 32px;
+    margin: 14px 7.5px 10px;
+    padding: 0;
+    gap: 2px;
+    background: var(--pk-surface);
+    font: 400 16px/24px var(--font);
+    color: var(--phone-menu-fg-strong);
+  }
+  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button {
+    height: 28px;
+    padding: 6px 8px;
+    line-height: normal;
+    box-shadow: none;
+    flex: 0 0 137px;
+  }
+  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button + button { margin-left: 4px; }
+  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button { transform: translateX(2px); }
+  .popover[data-issue-display-menu="true"] .section {
+    padding: 8px 16px;
+  }
+  .popover[data-issue-display-menu="true"] .groupingControl,
+  .popover[data-issue-display-menu="true"] .selectField,
+  .popover[data-issue-display-menu="true"] .nestedSelectRow {
+    height: 36px;
+    align-items: flex-start;
+  }
+  .popover[data-issue-display-menu="true"] .rowLabel,
+  .popover[data-issue-display-menu="true"] .selectField > span,
+  .popover[data-issue-display-menu="true"] .nestedSelectRow > .rowLabel {
+    display: flex;
+    align-items: center;
+    height: 14.5px;
+    margin-top: 6.75px;
+    line-height: normal;
+  }
+  .popover[data-issue-display-menu="true"] .groupingActions {
+    gap: 4px;
+  }
+  .popover[data-issue-display-menu="true"] .orderButton {
+    width: 28px;
+    height: 28px;
+    color: var(--pk-text);
+    font: 500 12px/normal var(--font);
+  }
+  .popover[data-issue-display-menu="true"] .selectTrigger:not(#_) {
+    width: 144px;
+    min-width: 144px;
+    height: 28px;
+    padding: 3px 24px 3px 12px;
+    border-radius: 8px;
+    background: var(--pk-control-phone);
+    box-shadow: var(--pk-control-inset-ring-phone);
+    font: 400 12px/normal var(--font);
+  }
+  .popover[data-issue-display-menu="true"] button[aria-label="Ordering"]:not(#_) { color: var(--pk-text-strong); }
+  .popover[data-issue-display-menu="true"] .switchRow {
+    height: 36px;
+    align-items: flex-start;
+  }
+  .popover[data-issue-display-menu="true"] .switchRow > span {
+    display: flex;
+    align-items: center;
+    height: 28px;
+    line-height: normal;
+  }
+  .popover[data-issue-display-menu="true"] .switchRow input {
+    align-self: flex-start;
+    margin-top: 7px;
+    background: var(--pk-toggle-off-phone);
+  }
+  .popover[data-issue-display-menu="true"] .switchRow input:checked {
+    background: var(--toggle-compact-on);
+  }
+  .popover[data-issue-display-menu="true"] .nestedSelectRow {
+    display: none;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .popover[data-issue-display-menu="true"] section[aria-label="List options"] > .switchRow:first-of-type {
+    display: none;
+  }
+  .popover[data-issue-display-menu="true"] section[aria-label="List options"] > .nestedSelectRow {
+    display: grid;
+  }
+  .popover[data-issue-display-menu="true"] .sectionLabel:not(#_) {
+    margin: 8px 0 4px;
+    height: 14.5px;
+    padding: 0;
+    line-height: normal;
+  }
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) {
+    margin-top: 12px;
+    gap: 0;
+  }
+  .popover[data-issue-display-menu="true"] section[aria-label="List options"] {
+    padding-top: 2.5px;
+  }
+  .popover[data-issue-display-menu="true"] section[aria-label="List options"] > .sectionLabel:first-child:not(#_) {
+    margin-bottom: 6px;
+  }
+  .popover[data-issue-display-menu="true"] section[aria-label="List options"] > .sectionLabel:nth-of-type(2):not(#_) {
+    margin-top: 4px;
+    margin-bottom: 9px;
+  }
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button {
+    height: 28px;
+    margin: 0 4px 4px 0;
+    box-shadow: none;
+    font: 500 12px/normal var(--font);
+  }
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-active="true"] {
+    background: var(--pk-chip-on);
+    color: var(--pk-text-strong);
+    box-shadow: none;
+  }
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-active="false"] {
+    background: var(--pk-control);
+    color: var(--pk-muted);
+    box-shadow: none;
+  }
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="id"],
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="cycle"],
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="dueDate"],
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="milestone"],
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="sla"],
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="estimate"],
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="release"],
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="labels"],
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="links"],
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="customers"],
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="customerRevenue"],
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="myActivity"],
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="created"],
+  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="updated"] {
+    display: none;
+  }
+  .popover[data-issue-display-menu="true"] section[aria-label="Group ordering"],
+  .popover[data-issue-display-menu="true"] > .footer {
+    display: none;
+  }
 }

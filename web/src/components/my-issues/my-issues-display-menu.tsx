@@ -31,6 +31,8 @@ export interface MyIssuesDisplayMenuProps {
   resetLabel?: string
   onSaveDefault?: () => void
   saveDefaultLabel?: string
+  /** The issue explorer uses the compact phone parity sheet. */
+  phoneIssueMenu?: boolean
 }
 
 type DisplayPatch = Partial<MyIssuesDisplayOptions>
@@ -55,6 +57,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'id', label: 'ID' },
   { value: 'status', label: 'Status' },
   { value: 'assignee', label: 'Assignee' },
+  { value: 'creator', label: 'Creator' },
   { value: 'priority', label: 'Priority' },
   { value: 'project', label: 'Project' },
   { value: 'cycle', label: 'Cycle' },
@@ -74,7 +77,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'pullRequests', label: 'Pull requests' },
 ]
 
-export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view' }: MyIssuesDisplayMenuProps) {
+export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false }: MyIssuesDisplayMenuProps) {
   const { t } = useI18n()
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
   const toggleProperty = (property: MyIssuesProperty) => {
@@ -90,13 +93,13 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
 
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>
-      <button type="button" className={`${styles.trigger} ui-pill`} aria-label={t('Display options')} aria-pressed={open}>
+      <button type="button" data-issue-display-trigger={phoneIssueMenu ? 'true' : undefined} className={`${styles.trigger} ui-pill`} aria-label={t('Display options')} aria-pressed={open}>
         <DisplayIcon />
         {options.layout !== 'list' && <span className={styles.triggerDot} aria-hidden="true"/>}
       </button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content data-flow-motion="floating" className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
+      <Popover.Content data-flow-motion="floating" data-issue-display-menu={phoneIssueMenu ? 'true' : undefined} className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
         <div className={styles.layoutTabs} role="tablist" aria-label="Layout">
           <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><List size={14} />{t('List')}</button>
           <button type="button" role="tab" aria-selected={options.layout === 'board'} disabled={options.grouping === 'focus'} onClick={() => change({ layout: 'board' })}><LayoutGrid size={13} />{t('Board')}</button>
@@ -140,22 +143,33 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
 
         <section className={styles.section} aria-label={t('Visible issues')}>
           <SelectField label="Completed issues" value={options.completedWindow} options={completedOptions} onChange={completedWindow => change({ completedWindow })} />
-          <SwitchRow label="Show sub-issues" checked={options.showSubIssues} onChange={showSubIssues => change({ showSubIssues, nestedSubIssues: showSubIssues ? options.nestedSubIssues : false })} />
           {toggles.includes('triage') && <SwitchRow label="Show triage issues" checked={options.showTriageIssues !== false} onChange={showTriageIssues => change({ showTriageIssues })} />}
           {toggles.includes('archived') && <SwitchRow label="Show archived issues" checked={Boolean(options.showArchived)} onChange={showArchived => change({ showArchived })} />}
           {toggles.includes('subTeam') && <SwitchRow label="Show sub-team issues" checked={options.showSubTeamIssues !== false} onChange={showSubTeamIssues => change({ showSubTeamIssues })} />}
+          <SwitchRow label="Show sub-issues" checked={options.showSubIssues} onChange={showSubIssues => change({ showSubIssues, nestedSubIssues: showSubIssues ? options.nestedSubIssues : false })} />
         </section>
 
         <section className={styles.section} aria-label={t(options.layout === 'board' ? 'Board options' : 'List options')}>
           <span className={styles.sectionLabel}>{t(options.layout === 'board' ? 'Board options' : 'List options')}</span>
           {options.layout === 'board' && <SwitchRow label="Show empty columns" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
-          {options.layout === 'list' && <SwitchRow label="Nested sub-issues" checked={options.nestedSubIssues} onChange={nestedSubIssues => change({ nestedSubIssues, showSubIssues: nestedSubIssues || options.showSubIssues })} />}
+          {options.layout === 'list' && <>
+            <SwitchRow label="Nested sub-issues" checked={options.nestedSubIssues} onChange={nestedSubIssues => change({ nestedSubIssues, showSubIssues: nestedSubIssues || options.showSubIssues })} />
+            <div className={styles.nestedSelectRow}>
+              <span className={styles.rowLabel}>{t('Nested sub-issues')}</span>
+              <SelectControl
+                ariaLabel="Nested sub-issues"
+                value={options.showSubIssues ? (options.nestedSubIssues ? 'all' : 'matching') : 'none'}
+                options={[{ value: 'matching', label: 'Show matching' }, { value: 'all', label: 'Show all' }, { value: 'none', label: 'Hide all' }]}
+                onChange={value => change({ nestedSubIssues: value === 'all', showSubIssues: value !== 'none' })}
+              />
+            </div>
+          </>}
           {options.layout === 'list' && <SwitchRow label="Show empty groups" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
           <span className={styles.sectionLabel}>{t('Display properties')}</span>
           <div className={styles.propertyGrid}>
             {propertyOptions.filter(property => !hiddenProperties.includes(property.value)).map(property => {
               const active = options.properties.has(property.value)
-              return <button key={property.value} type="button" data-active={active} aria-pressed={active} onClick={() => toggleProperty(property.value)}>
+              return <button key={property.value} type="button" data-property={property.value} data-active={active} aria-pressed={active} onClick={() => toggleProperty(property.value)}>
                 <span>{t(property.label)}</span>
               </button>
             })}

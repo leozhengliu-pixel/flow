@@ -304,6 +304,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const menuGroups = groupSummaries(groups)
   const listGroups = groups.filter(group => !display.hiddenGroupIds.includes(group.id) && !display.hiddenGroupIds.includes(group.parentGroupId ?? ''))
   const displayMenuProps = {
+    phoneIssueMenu: true,
     groups: menuGroups,
     labelGroupOptions: labelGroups(data.labels),
     availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
