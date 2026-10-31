@@ -116,15 +116,19 @@
   .issue-view .detail-pane__activity .activity-event-icon { position: relative; left: -.5px; padding-top: 3px; }
   .issue-view .activity-event-icon .avatar { width: 17px; height: 17px; flex-basis: 17px; }
   .issue-view .activity-actor-avatar { width: 17px; height: 17px; font-size: 16px; font-weight: 400; line-height: 24px; color: var(--bright); }
-  .issue-view .activity-actor-avatar .avatar { display: flex; color: var(--issue-activity-avatar-fg); background: var(--avatar,var(--issue-activity-avatar-bg)); font-weight: 500; box-shadow: none; }
+  .issue-view .activity-actor-avatar .avatar { display: grid; place-items: center; color: var(--issue-activity-avatar-fg); background: var(--avatar,var(--issue-activity-avatar-bg)); font-weight: 400; line-height: 0; box-shadow: none; }
   .issue-view .activity-blocking-target { display: inline-block; max-width: 100%; }
   .issue-view .activity-blocking-target > a { position: relative; top: 1px; }
+  .issue-view .activity-blocking-target + .activity-time { position: relative; top: 1px; }
+  .issue-view .issue-activity-timeline .activity-dot { display: inline-block; width: 12px; margin: 0; font-weight: 600; text-align: center; }
   .issue-view .activity-blocking-icon { color: var(--relation-ink); }
   .issue-view .activity-blocking-icon > svg { width: 14px; height: 14px; background: var(--bg-panel); box-shadow: 0 0 0 3px var(--bg-panel); }
-  .issue-view .issue-activity-timeline::before { left: 17.5px; top: 14px; bottom: 20px; width: .5px; background: var(--border-strong); }
+  .issue-view .issue-activity-timeline::before { display: none; }
+  .issue-view .issue-activity-timeline > .timeline-item:not(:last-child)::before { content: ""; position: absolute; left: 17px; top: 14px; bottom: -10px; width: .5px; background: var(--issue-activity-connector); pointer-events: none; }
   .issue-view .issue-comment-form { width: calc(100% + 16px); margin: 0 -8px; padding: 0; }
   .issue-view .issue-comment-form > .composer { width: 100%; margin: 0; border-width: .5px; }
   .issue-view .issue-comment-form .comment-prosemirror { padding-right: 32px; }
+  .issue-view .issue-comment-form .comment-prosemirror p.is-editor-empty:first-child::before { color: var(--issue-comment-placeholder); }
   .issue-view .composer-toolbar { height: 29px; padding: 0 2px 2px 0; }
   .issue-view .composer-tools > button { width: 28px; height: 28px; flex-basis: 28px; border: .5px solid transparent; font-size: 12px; font-weight: 500; line-height: normal; }
   .issue-view .composer-submit .composer-send { border: .5px solid transparent; line-height: normal; }
