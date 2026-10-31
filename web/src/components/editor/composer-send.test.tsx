@@ -27,6 +27,15 @@ const renderComposer = (props: Parameters<typeof Composer>[0]) => render(<I18nPr
 const box = () => screen.findByRole('textbox', { name: 'Leave a comment…' })
 
 describe('sending a comment', () => {
+  it('uses the filled mobile issue glyphs only when requested', async () => {
+    const { container } = renderComposer({ mobileIssue: true })
+    await box()
+    expect(container.querySelector('.composer-tools svg')).toHaveAttribute('viewBox', '0 0 16 16')
+    expect(container.querySelector('.composer-send svg path')).toHaveAttribute('d', expect.stringContaining('M11.48 5.674'))
+    expect(container.querySelector('.composer-tools svg path')).toHaveAttribute('d', expect.stringContaining('M12.6429 7.69048'))
+    expect(screen.getByRole('button', { name: 'Submit comment' })).toBeDisabled()
+  })
+
   it('keeps typed inline dollar math as literal paragraph text', async () => {
     const submit = vi.fn().mockResolvedValue(undefined)
     const { container } = renderComposer({ onSubmit: submit })

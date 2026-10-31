@@ -362,10 +362,15 @@ const ACTORLESS_ACTIVITY = new Set(['issue.coding_session_archived'])
 function ActivityRow({ event, description, context, now }: { event: ActivityEvent; description: ActivityPart[]; context?: ActivityContext; now: number }) {
   const { locale } = useI18n()
   const phone = usePhoneLayout()
-  const relationType = event.type === 'issue.relation_added' ? event.metadata?.type : undefined
-  const inlineRelation = phone && event.type === 'issue.relation_added' && (!relationType || relationType === 'related')
+  const inlineRelation = phone && event.type === 'issue.relation_added'
   const sentence = description.map((part, index) => typeof part === 'string' ? part : inlineRelation && part.type === 'issue' && context?.workspace
-    ? (() => { const target = context.issues.find(issue => issue.id === part.id); return target ? <a key={`${index}-${part.type}-${part.id}`} className="activity-relation-link" href={issuePath(context.workspace.urlKey, target)}><b>{target.identifier}</b> {target.title}</a> : part.label })()
+    ? (() => {
+      const key = `${index}-${part.type}-${part.id}`
+      const target = context.issues.find(issue => issue.id === part.id)
+      if (!target) return <MentionReference key={key} id={part.id} label={part.label} type={part.type}/>
+      const link = <a key={key} className="activity-relation-link" href={issuePath(context.workspace.urlKey, target)}><b>{target.identifier}</b> {target.title}</a>
+      return event.metadata?.type === 'blocks' ? <span key={key} className="activity-blocking-target">{link}</span> : link
+    })()
     : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)
   return (
     <p className="activity-row" data-i18n-ignore>
@@ -412,11 +417,13 @@ function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?:
   if (event.type.startsWith('attachment.')) return <Paperclip size={14} />
   if (event.type.includes('relation')) {
     const type = event.metadata?.type
+    if (phone && type === 'blocks') return <span className="activity-blocking-icon"><IssueActionGlyph label="Blocking…" fallback={null}/></span>
     return phone && (!type || type === 'related') ? <IssueActionGlyph label="Related to…" fallback={null} /> : <Link2 size={14} />
   }
   if (event.type.includes('review')) return <Link2 size={14} />
   const actor = activityActor(event.actor, event.botActor, context?.users)
-  return <Avatar name={actor.name} avatarUrl={actor.avatarUrl} />
+  const avatar = <Avatar name={actor.name} avatarUrl={actor.avatarUrl} />
+  return phone ? <span className="activity-actor-avatar">{avatar}</span> : avatar
 }
 
 export function CommentMenu({

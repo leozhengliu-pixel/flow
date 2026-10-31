@@ -1,4 +1,5 @@
 import { ArrowUp, Paperclip } from 'lucide-react'
+import { AttachmentIcon, CommentSendIcon } from '@/components/issue/issue-icons'
 import Placeholder from '@tiptap/extension-placeholder'
 import { ClipboardOrigin } from '@/components/editor/clipboard-origin'
 import { FlowStarterKit } from '@/components/editor/flow-starter-kit'
@@ -37,7 +38,7 @@ import { commentShortcutMatches } from '@/lib/runtime-preferences'
 import { handleEmoticonInput } from './emoticon-input'
 import { useI18n } from '@/i18n/i18n'
 
-export function Composer({ placeholder = 'Leave a comment…', initialValue = '', initialData, compact = false, onCancel, onSubmit, onAttach, onUpload, draftType, draftResourceId, drafts = [], draftTitle = '', draftMetadata, users }: { users?:User[]; placeholder?: string; initialValue?: string; initialData?: Record<string,unknown>; compact?: boolean; onCancel?: () => void; onSubmit?: (body: string, bodyData?: Record<string, unknown>) => Promise<void>; onAttach?:()=>void; onUpload?: (file: File) => Promise<string>; draftType?: ComposerDraftType; draftResourceId?: string; drafts?: Draft[]; draftTitle?: string; draftMetadata?: Record<string, unknown> }) {
+export function Composer({ placeholder = 'Leave a comment…', initialValue = '', initialData, compact = false, mobileIssue = false, onCancel, onSubmit, onAttach, onUpload, draftType, draftResourceId, drafts = [], draftTitle = '', draftMetadata, users }: { users?:User[]; placeholder?: string; initialValue?: string; initialData?: Record<string,unknown>; compact?: boolean; mobileIssue?: boolean; onCancel?: () => void; onSubmit?: (body: string, bodyData?: Record<string, unknown>) => Promise<void>; onAttach?:()=>void; onUpload?: (file: File) => Promise<string>; draftType?: ComposerDraftType; draftResourceId?: string; drafts?: Draft[]; draftTitle?: string; draftMetadata?: Record<string, unknown> }) {
   const { t } = useI18n()
   const directory=usePeopleDirectory()
   const mentionUsers=(users??[...directory.users.values()]).filter(user=>user.active&&(!user.app||user.appScopes?.includes('app:mentionable')))
@@ -145,8 +146,8 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
     {editor && toolbarHost && <BubbleMenu editor={editor} appendTo={toolbarHost === 'body' ? () => document.body : undefined} style={{ zIndex: 690 }} options={{ strategy: toolbarHost === 'body' ? 'fixed' : 'absolute', placement: 'top', offset: 6, shift: { padding: 12 }, flip: true }} shouldShow={showsSelectionToolbar}><SelectionToolbar editor={editor} actions={selectionActions}/></BubbleMenu>}
     {error &&<div className="composer-error" role="alert">{error}<button type="button" onClick={() => void submit(Boolean(failedSend.current))}>Retry</button></div>}
     <div className="composer-toolbar"><div className="composer-tools">
-      <button type="button" aria-label="Attach images, files, or videos" onClick={attachFiles}><Paperclip size={14}/></button>
-    </div><div className="composer-submit">{onCancel && <Button className="composer-cancel" type="button" variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>}<Button className="composer-send" type="button" size="icon" aria-label="Submit comment" disabled={saving || empty} onClick={() => void submit()}><ArrowUp size={14}/></Button></div></div>
+      <button type="button" aria-label="Attach images, files, or videos" onClick={attachFiles}>{mobileIssue ? <AttachmentIcon size={14}/> : <Paperclip size={14}/>}</button>
+    </div><div className="composer-submit">{onCancel && <Button className="composer-cancel" type="button" variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>}<Button className="composer-send" type="button" size="icon" aria-label="Submit comment" disabled={saving || empty} onClick={() => void submit()}>{mobileIssue ? <CommentSendIcon size={14}/> : <ArrowUp size={14}/>}</Button></div></div>
     {mention&&editor&&<MentionMenu options={mentionOptionList} selectedIndex={mention.index} anchor={caretAnchor(editor,mention.to)} query={mention.query} onSelect={option=>insertMention(editor,option)}/>}
   </div>
 }

@@ -102,15 +102,34 @@
   .issue-view .detail-sub-badge { display: none; }
   .issue-view .detail-sub-checkbox { opacity: 0; }
   .issue-view .detail-sub-checkbox:focus-visible,.issue-view .detail-sub-checkbox[aria-checked=true] { opacity: 1; }
-  .issue-view .activity-heading { height: 36px; margin: 18px 0 15.5px; }
+  .issue-view .activity-heading { height: 36px; margin: 18.5px 0 0; }
   .issue-view .activity-heading > span { color: var(--bright); font-size: 15px; font-weight: 600; line-height: 23px; }
-  .issue-view .activity-heading :is(.issue-subscribe-toggle,.issue-subscriber-trigger) { height: 36px; }
-  .issue-view .detail-pane__activity .activity-row { font-size: 12px; line-height: 18.8px; }
-  .issue-view .detail-pane__activity { padding-right: 10px; }
+  .issue-view .activity-heading .issue-subscribe-toggle { height: 36px; padding: 0 11.5px; border: .5px solid transparent; line-height: normal; }
+  .issue-view .activity-heading .subscriber-avatars { min-width: 36px; height: 36px; border: 0 solid transparent; border-radius: 9999px; background: transparent; color: var(--text); line-height: normal; }
+  .issue-view .activity-heading .subscriber-avatars .avatar { color: var(--issue-activity-avatar-fg); background: var(--avatar,var(--issue-activity-avatar-bg)); font-size: 9px; font-weight: 500; line-height: 0; box-shadow: none; }
+  .issue-view .issue-activity-mobile { padding: 0 0 60px; }
+  .issue-view .detail-pane__activity { padding: 16px 10px 0 0; }
+  .issue-view .detail-pane__activity .issue-activity-timeline { padding-bottom: 8px; }
+  .issue-view .detail-pane__activity .timeline-item.event { min-height: 31px; padding: 0 0 4px; }
+  .issue-view .detail-pane__activity .timeline-item.event > div:last-child { padding: 0; }
+  .issue-view .detail-pane__activity .activity-row { position: relative; top: -2px; left: -4.5px; width: calc(100% + 8.5px); padding: 4px; font-size: 12px; line-height: 16.8px; }
+  .issue-view .detail-pane__activity .activity-event-icon { position: relative; left: -.5px; padding-top: 3px; }
   .issue-view .activity-event-icon .avatar { width: 17px; height: 17px; flex-basis: 17px; }
-  .issue-view .issue-document > .composer { width: calc(100% + 16px); margin: 14px -8px 0; }
+  .issue-view .activity-actor-avatar { width: 17px; height: 17px; font-size: 16px; font-weight: 400; line-height: 24px; color: var(--bright); }
+  .issue-view .activity-actor-avatar .avatar { display: flex; color: var(--issue-activity-avatar-fg); background: var(--avatar,var(--issue-activity-avatar-bg)); font-weight: 500; box-shadow: none; }
+  .issue-view .activity-blocking-target { display: inline-block; max-width: 100%; }
+  .issue-view .activity-blocking-target > a { position: relative; top: 1px; }
+  .issue-view .activity-blocking-icon { color: var(--relation-ink); }
+  .issue-view .activity-blocking-icon > svg { width: 14px; height: 14px; background: var(--bg-panel); box-shadow: 0 0 0 3px var(--bg-panel); }
+  .issue-view .issue-activity-timeline::before { left: 17.5px; top: 14px; bottom: 20px; width: .5px; background: var(--border-strong); }
+  .issue-view .issue-comment-form { width: calc(100% + 16px); margin: 0 -8px; padding: 0; }
+  .issue-view .issue-comment-form > .composer { width: 100%; margin: 0; border-width: .5px; }
+  .issue-view .issue-comment-form .comment-prosemirror { padding-right: 32px; }
   .issue-view .composer-toolbar { height: 29px; padding: 0 2px 2px 0; }
-  .issue-view .composer-tools > button { width: 28px; height: 28px; flex-basis: 28px; }
+  .issue-view .composer-tools > button { width: 28px; height: 28px; flex-basis: 28px; border: .5px solid transparent; font-size: 12px; font-weight: 500; line-height: normal; }
+  .issue-view .composer-submit .composer-send { border: .5px solid transparent; line-height: normal; }
+  .issue-view .issue-comment-form .composer-send:disabled > svg { opacity: .6; }
+  .issue-view .issue-comment-form .composer-tools > button > svg { opacity: .35; }
   .issue-view .composer { overflow-wrap: anywhere; }
   .issue-view .comment-card__actions { opacity: 1; padding-left: 4px; gap: 0; }
   .issue-view .comment-card__actions button { width: 32px; height: 32px; }
