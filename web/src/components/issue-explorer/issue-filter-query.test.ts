@@ -12,6 +12,10 @@ const data = {
 const filter = (field: MyIssuesAppliedFilter['field'], values: string[], operator: MyIssuesAppliedFilter['operator'] = 'is'): MyIssuesAppliedFilter => ({ id: field, field, fieldLabel: field, operator, value: values[0] ?? '', valueLabel: '', values: values.map(value => ({ value, valueLabel: value })) })
 
 describe('filter → server query translation', () => {
+  it('filters a summary team selection in both server-query modes', () => {
+    expect(filterToQueryNode(filter('team', ['team-1']), { data })).toEqual({ field: 'teamId', operator: 'in', values: ['team-1'] })
+    expect(issueFiltersToQueryAst([filter('team', ['team-1'])])).toEqual({ and: [{ field: 'teamId', operator: 'is', values: ['team-1'] }] })
+  })
   it('resolves workspace-dependent fields to ids', () => {
     expect(filterToQueryNode(filter('initiative', ['i1']), { data })).toEqual({ field: 'project', operator: 'in', values: ['p1'] })
   })

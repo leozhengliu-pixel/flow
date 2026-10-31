@@ -45,11 +45,12 @@
 .createPanel .cardBar>:first-child{min-height:28px;align-items:center}
 
 @media(min-width:801px){
-  .filterBar{min-height:45px;flex:0 0 45px;margin:0 8px 8px;padding:10px;border:.5px solid var(--theme-border);border-radius:8px;background:var(--inbox-applied-panel-bg)}
-  .filterBar :global([class*="_condition_"]){height:24px}
-  .filterBar :global([class*="_condition_"]>span),.filterBar :global([class*="_condition_"]>button){height:23px}
-  .filterBar :global([class*="_commands_"] button:first-child){border:.5px solid var(--theme-border);border-radius:9999px}
-  .filterBar :global([class*="_commands_"] button:last-child){border-radius:9999px;background:var(--theme-surface-1)}
+  .filterBar{min-height:45px;flex:0 0 45px;margin:0 8px 8px;padding:10px;border:0;border-radius:8px;background:var(--inbox-applied-panel-bg);box-shadow:inset 0 0 0 .5px var(--border)}
+  .filterBar [data-filter-chip]{height:24px}
+  .filterBar [data-filter-chip]>span,.filterBar [data-filter-chip]>button{height:23px}
+  .filterBar [data-applied-filter-commands]{gap:0}
+  .filterBar [data-applied-filter-commands] button:first-child{padding-inline:8.5px;border:0;border-radius:9999px;background:transparent;color:var(--text);font-weight:500;line-height:normal}
+  .filterBar [data-applied-filter-commands] button:last-child{min-width:45px;padding-inline:8.5px;border:0;border-radius:9999px;background:var(--project-toolbar-bg);box-shadow:0 0 0 .5px var(--ui-pill-ring);color:var(--text);font-weight:500;line-height:normal}
 }
 
 /* Phone parity for the team issues list: the reference header breadcrumb and
@@ -72,6 +73,9 @@
   [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb]>span:first-child>a{height:24px;margin-left:6px;padding:0 5px 0 4px;border-radius:8px;line-height:normal}
   [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb]>span:first-child>a>span:first-child{width:16px;height:16px;flex:0 0 16px}
   [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [class*="headerNewIssue"]{padding-right:9px}
+  [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb] :global([class*="_breadcrumbChevron_"]){width:5.2px;height:15.5px;margin:0 8px 0 3px;color:var(--issue-muted);transform:translateY(-1px)}
+  [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb] :global([class*="_breadcrumbChevron_"])::before{content:'\203a';font:500 13px/normal var(--font)}
+  [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb] :global([class*="_breadcrumbChevron_"]) :global(svg){display:none}
   .tab,.savedTab{line-height:normal}
   .insightsButton{order:-1}
 }

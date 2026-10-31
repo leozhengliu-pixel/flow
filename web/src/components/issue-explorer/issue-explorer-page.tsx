@@ -383,14 +383,14 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     const current = list === 'extra' ? extraFilters : filters
     return {
       filters: current,
-      filterOptions: (filter: MyIssuesAppliedFilter) => explorerFilterOptions(filter.field, rowOptions),
+      filterOptions: (filter: MyIssuesAppliedFilter) => filter.field === 'team' ? data.teams.map(team => ({ id: team.id, label: team.name, color: team.color })) : explorerFilterOptions(filter.field, rowOptions),
       renderFilter: renderAdvanced(list),
       onAdd: () => setFilterOpenSignal(value => value + 1),
       onClear: () => setListFilters(list, []),
       onOperatorChange: (id: string, operator: MyIssuesAppliedFilter['operator']) => updateList(list, items => updateFilterOperator(items, id, operator)),
       onRemove: (id: string) => updateList(list, items => items.filter(filter => filter.id !== id)),
       onValuesChange: (id: string, options: MyIssuesFilterOption[]) => updateList(list, items => updateFilterValues(items, id, options)),
-      ...(list === 'base' ? { onSave: () => setViewEditor('create'), saveLabel: t('Create new view…') } : {}),
+      ...(list === 'base' ? { onSave: () => setViewEditor('create'), saveLabel: t(desktop ? 'Save' : 'Create new view…') } : {}),
     }
   }
 
@@ -627,7 +627,8 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
           favorite={savedViewFavorite}
           menu={savedViewMenu}
           onClose={() => changeDetails(false)}
-          onSummaryItemSelect={(dimension, id, label, color) => addFilter(dimension === 'assignee' ? 'assignee' : dimension === 'project' ? 'project' : 'labels', { id, label, color })}
+          onSummaryItemSelect={(dimension, id, label, color) => addFilter(dimension, { id, label, color })}
+          teams={data.teams}
           onToggleFavorite={() => { if (onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) }}
           rows={desktop ? summaryRows : rows}
           summaryQuery={desktop && data.issueCollectionPaged ? pagedQuery : undefined}
@@ -709,7 +710,8 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
               favorite={savedViewFavorite}
               menu={savedViewMenu}
               onClose={() => changeDetails(false)}
-              onSummaryItemSelect={(dimension, id, label, color) => addFilter(dimension === 'assignee' ? 'assignee' : dimension === 'project' ? 'project' : 'labels', { id, label, color })}
+              onSummaryItemSelect={(dimension, id, label, color) => addFilter(dimension, { id, label, color })}
+              teams={data.teams}
               onToggleFavorite={() => { if (onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) }}
               rows={desktop ? summaryRows : rows}
               summaryQuery={desktop && data.issueCollectionPaged ? pagedQuery : undefined}
@@ -747,7 +749,8 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
               favorite={savedViewFavorite}
               menu={savedViewMenu}
               onClose={() => changeDetails(false)}
-              onSummaryItemSelect={(dimension, id, label, color) => addFilter(dimension === 'assignee' ? 'assignee' : dimension === 'project' ? 'project' : 'labels', { id, label, color })}
+              onSummaryItemSelect={(dimension, id, label, color) => addFilter(dimension, { id, label, color })}
+              teams={data.teams}
               onToggleFavorite={() => { if (onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) }}
               rows={desktop ? summaryRows : rows}
               summaryQuery={desktop && data.issueCollectionPaged ? pagedQuery : undefined}

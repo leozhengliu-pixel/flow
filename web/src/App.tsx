@@ -6209,13 +6209,7 @@ function App() {
               )
             }
             onNavigateSavedView={(view) =>
-              navigateTo(
-                teamSavedViewPath(
-                  data.workspace.urlKey,
-                  route.teamKey,
-                  savedViewPathId(view),
-                ),
-              )
+              navigateTo(savedIssuePathFor(view))
             }
             onCreateSavedView={addSavedView}
             onUpdateSavedView={changeSavedView}
@@ -6344,13 +6338,7 @@ function App() {
                 )
               }
               onNavigateSavedView={(view) =>
-                navigateTo(
-                  teamSavedViewPath(
-                    data.workspace.urlKey,
-                    route.teamKey,
-                    savedViewPathId(view),
-                  ),
-                )
+                navigateTo(savedIssuePathFor(view))
               }
               onCreateSavedView={addSavedView}
               onUpdateSavedView={changeSavedView}
