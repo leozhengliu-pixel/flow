@@ -549,6 +549,8 @@ function App() {
     // The New release composer opened from ⌘K or N then R.
     [releaseComposer, setReleaseComposer] = useState<ReleasePipeline | undefined>(),
     [createOpen, setCreateOpen] = useState(false),
+    // "Create issue in fullscreen…" (V) opens the composer expanded.
+    [createExpanded, setCreateExpanded] = useState(false),
     [createDraftId, setCreateDraftId] = useState<string>(),
     [createTeamId, setCreateTeamId] = useState<string>(),
     [createStateId, setCreateStateId] = useState<string>(),
@@ -559,10 +561,11 @@ function App() {
   const createStateRef = useRef<string | undefined>(undefined);
   const createPresent = useExitPresence(createOpen);
   const openCreateIssue = useCallback(
-    (contextOrState?: MyIssuesCreateContext | string) => {
+    (contextOrState?: MyIssuesCreateContext | string, options?: { expanded?: boolean }) => {
       const context: MyIssuesCreateContext = typeof contextOrState === "string"
         ? { stateId: contextOrState }
         : contextOrState ?? {};
+      setCreateExpanded(Boolean(options?.expanded));
       // No status preset: the dialog starts in the selected team's default status.
       const next = context.stateId || undefined;
       createStateRef.current = next;
@@ -7037,6 +7040,10 @@ function App() {
             onReleasesChanged={async () => { await reloadWorkspaceMetadata(data.workspace.urlKey); }}
             documentHost={{ reload: async () => { await reloadWorkspaceMetadata(data.workspace.urlKey); }, navigate: navigateTo }}
             onCreateIssue={() => openCreateIssue()}
+            onCreateIssueFullscreen={() => openCreateIssue(undefined, { expanded: true })}
+            onCreateLabel={() =>
+              navigateTo(`${settingsPath(data.workspace.urlKey, "issue-labels")}?create=1`)
+            }
             onCreateIssueTemplate={() =>
               navigateTo(newIssueTemplatePath(data.workspace.urlKey))
             }
@@ -7116,6 +7123,7 @@ function App() {
         {createPresent && (
           <CreateIssueDialog
             open={createOpen}
+            initialExpanded={createExpanded}
             draftId={createDraftId}
             initialContext={createContext}
             initialTeamId={createTeamId}
@@ -7130,6 +7138,7 @@ function App() {
             onOpenChange={(open) => {
               setCreateOpen(open);
               if (!open) {
+                setCreateExpanded(false);
                 setCreateDraftId(undefined);
                 setCreateContext(undefined);
                 setCreateTeamId(undefined);
