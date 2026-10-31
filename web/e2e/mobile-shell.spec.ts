@@ -27,6 +27,37 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   test.describe(`${viewport.width}px shell`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent, colorScheme: 'dark' })
 
+    test('workspace panel keeps compact labels, both dividers and a working filter', async ({ page, workspaceKey }) => {
+      await page.goto(`${base}/${workspaceKey}/my-issues/assigned`)
+      await page.locator('[data-sidebar-trigger]').tap()
+      await expect(page.locator('.sidebar-primary-links a[href$="/inbox"] svg path')).toHaveAttribute('d', /^M11.0069 1.00879/)
+      await page.locator('.workspace-menu-trigger').tap()
+      const menu = page.getByRole('dialog', { name: 'Workspace Menu', exact: true })
+      await geometry(menu, { x: 16, y: Math.min(110, viewport.height * .1304), width: viewport.width - 32, height: 312 })
+      await expect(menu.getByRole('option')).toHaveCount(5)
+      for (const name of ['Settings', 'Invite and manage members', 'Download desktop app', 'Switch workspace', 'Log out']) {
+        const row = menu.getByRole('option', { name, exact: true })
+        await geometry(row, { x: 22.5, width: viewport.width - 44, height: 46 })
+        await expect(row.locator('span')).toHaveCSS('font-size', '13px')
+        await expect(row.locator('span')).toHaveCSS('font-weight', '450')
+        await expect(row.locator('span')).toHaveCSS('line-height', '15.6px')
+      }
+      await expect(menu.locator('[cmdk-separator] > span')).toHaveCount(2)
+      await noOverflow(page)
+      if (shots) await page.screenshot({ path: `${shots}/workspace-menu-${viewport.width}.png` })
+      await menu.getByRole('combobox').fill('Switch')
+      await expect(menu.getByRole('option')).toHaveCount(1)
+      await menu.getByRole('option', { name: 'Switch workspace', exact: true }).tap()
+      const switcher = page.getByRole('dialog', { name: 'Switch workspace', exact: true })
+      await expect(switcher.getByRole('combobox')).toHaveValue('')
+      await expect(switcher.getByRole('option', { name: new RegExp(`Verify ${workspaceKey.slice(-8)}$`) })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(switcher).toHaveCount(0)
+      await page.locator('.workspace-menu-trigger').tap()
+      await menu.getByRole('option', { name: 'Invite and manage members', exact: true }).tap()
+      await expect(page).toHaveURL(/\/settings\/members$/)
+    })
+
     test('bottom drawer keeps expanded cycles and Import issues clear of its pinned footer', async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Workspace-Key': workspaceKey }
       const bootstrap = await (await request.get(`${api}/api/bootstrap`, { headers })).json() as { teams: Array<{ id: string }> }

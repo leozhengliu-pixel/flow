@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { Command } from 'cmdk';
-import { PhoneCommandMenu } from '@/components/ui/phone-menu';
+import { PhoneMenu } from '@/components/ui/phone-menu';
 import { usePhoneLayout } from '@/hooks/use-phone-layout';
 import { useOptionalTranslate } from '@/i18n/i18n';
 import type { AccountBootstrap, BootstrapData, Workspace } from "@/types/flow";
@@ -87,25 +87,30 @@ export function WorkspaceMenu({
     <button className="workspace-menu-trigger" aria-label={`${workspace.name} ${t('Workspace Menu')}`} onClick={() => { setSwitching(false); setOpen(true) }}>
       <WorkspaceAvatar workspace={workspace}/><strong>{workspace.name}</strong><WorkspaceChevronIcon phone/>
     </button>
-    <PhoneCommandMenu className="workspace-phone-menu" placeholder="Filter..." open={open} onOpenChange={setOpen} label={t(switching ? 'Switch workspace' : 'Workspace Menu')}>
-      {switching ? <>
-        <Command.Group heading={account.viewer.email}>
-          {account.workspaces.map(({ workspace: item }) => <Command.Item key={item.id} value={item.id} keywords={[item.name]} onSelect={() => choose(() => onSwitch(item))}>
-            <WorkspaceAvatar workspace={item}/><span data-i18n-ignore>{item.name}</span>{item.id === workspace.id && <Check className="phone-menu-current"/>}
-          </Command.Item>)}
-        </Command.Group>
-        <Command.Separator/>
-        <Command.Item onSelect={() => choose(onCreate)}>{t('Create or join a workspace…')}</Command.Item>
-      </> : <>
-        <Command.Item onSelect={() => choose(() => onSettings('workspace'))}>{t('Settings')}</Command.Item>
-        {(data.viewerRole === 'admin' || data.viewerRole === 'owner') && <Command.Item onSelect={() => choose(() => onSettings('members'))}>{t('Invite and manage members')}</Command.Item>}
-        <Command.Item onSelect={() => choose(() => { window.open('https://flow.app/download', '_blank') })}>{t('Download desktop app')}</Command.Item>
-        <Command.Separator/>
-        <Command.Item onSelect={() => setSwitching(true)}>{t('Switch workspace')}</Command.Item>
-        <Command.Separator/>
-        <Command.Item onSelect={() => choose(() => { void onLogout() })}>{t('Log out')}</Command.Item>
-      </>}
-    </PhoneCommandMenu>
+    <PhoneMenu className="workspace-phone-menu" open={open} onOpenChange={setOpen} label={t(switching ? 'Switch workspace' : 'Workspace Menu')}>
+      <Command key={switching ? 'switch' : 'workspace'} label={t(switching ? 'Switch workspace' : 'Workspace Menu')}>
+        <div className="phone-menu-search"><div className="workspace-phone-menu-input"><Command.Input aria-label={t('Command menu')} placeholder={t('Filter...')}/></div></div>
+        <Command.List>
+          {switching ? <>
+            <Command.Group heading={account.viewer.email}>
+              {account.workspaces.map(({ workspace: item }) => <Command.Item key={item.id} value={item.id} keywords={[item.name]} onSelect={() => choose(() => onSwitch(item))}>
+                <WorkspaceAvatar workspace={item}/><span data-i18n-ignore>{item.name}</span>{item.id === workspace.id && <Check className="phone-menu-current"/>}
+              </Command.Item>)}
+            </Command.Group>
+            <Command.Separator><span/></Command.Separator>
+            <Command.Item onSelect={() => choose(onCreate)}>{t('Create or join a workspace…')}</Command.Item>
+          </> : <>
+            <WorkspacePhoneItem onSelect={() => choose(() => onSettings('workspace'))}>{t('Settings')}</WorkspacePhoneItem>
+            {(data.viewerRole === 'admin' || data.viewerRole === 'owner') && <WorkspacePhoneItem onSelect={() => choose(() => onSettings('members'))}>{t('Invite and manage members')}</WorkspacePhoneItem>}
+            <WorkspacePhoneItem onSelect={() => choose(() => { window.open('https://flow.app/download', '_blank') })}>{t('Download desktop app')}</WorkspacePhoneItem>
+            <Command.Separator><span/></Command.Separator>
+            <WorkspacePhoneItem onSelect={() => setSwitching(true)}>{t('Switch workspace')}</WorkspacePhoneItem>
+            <Command.Separator><span/></Command.Separator>
+            <WorkspacePhoneItem onSelect={() => choose(() => { void onLogout() })}>{t('Log out')}</WorkspacePhoneItem>
+          </>}
+        </Command.List>
+      </Command>
+    </PhoneMenu>
   </>;
   return (
     <>
@@ -200,6 +205,10 @@ export function WorkspaceAvatar({ workspace }: { workspace: Workspace }) {
     </span>
   );
 }
+function WorkspacePhoneItem({ children, onSelect }: { children: string; onSelect: () => void }) {
+  return <Command.Group className="workspace-phone-menu-row"><Command.Item onSelect={onSelect}><span>{children}</span></Command.Item></Command.Group>;
+}
+
 function WorkspaceMenuShortcut({ children }: { children: React.ReactNode }) {
   return <kbd className="workspace-shortcut">{children}</kbd>;
 }

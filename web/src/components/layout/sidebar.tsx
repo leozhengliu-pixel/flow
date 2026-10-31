@@ -2,7 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ProjectGlyph } from "@/components/views/project-glyph";
 import { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog';
 import { SidebarTeamMenu } from './sidebar-team-menu';
-import { PhoneViewsIcon, PhoneTriageIcon, PhoneTeamBranchIcon } from './sidebar-phone-glyphs';
+import { PhoneInboxIcon, PhoneViewsIcon, PhoneTriageIcon, PhoneTeamBranchIcon } from './sidebar-phone-glyphs';
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import * as ContextMenu from "@radix-ui/react-context-menu";
@@ -2488,6 +2488,7 @@ export function HelpMenu({
 function FlowIcon({ name, style }: { name: string; style?: CSSProperties }) {
   const phone = usePhoneLayout();
   if (phone && name === "CustomView") return <PhoneViewsIcon />;
+  if (phone && name === "Inbox") return <PhoneInboxIcon />;
   return (
     <svg
       className="flow-sprite-icon"
