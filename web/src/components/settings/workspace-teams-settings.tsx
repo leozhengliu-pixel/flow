@@ -155,7 +155,7 @@ export function WorkspaceTeamsSettings({
           onChange={(value) => setVisibility(visibilities.find((item) => t(item) === value) ?? "Active")}
         />
         <span />
-        {!phone && admin && visibility !== "Recently deleted" && data.teams.length > 0 && (
+        {admin && visibility !== "Recently deleted" && data.teams.length > 0 && (
           <button className="settings-action" type="button" onClick={exportCsv}>
             {t("Export CSV")}
           </button>
