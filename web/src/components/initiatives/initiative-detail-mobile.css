@@ -69,7 +69,8 @@
   .li-detail .li-resource-add svg { width: 16px; height: 16px; color: var(--issue-dim); }
   .li-detail .li-resource-add > span { color: var(--issue-dim); font: 500 13px var(--font); line-height: normal; }
   .li-detail .li-first-update.has-update { display: none; }
-  .li-detail .li-latest-update { display: block; margin: 0 -12px 12px; padding: 8px 12px 12px; border: .5px solid var(--phone-project-card-border); border-radius: 10px; background: var(--bg-panel); }
+  /* Inset strokes retain half-pixel coverage where browser borders round up. */
+  .li-detail .li-latest-update { display: block; margin: 0 -12px 12px; padding: 8.5px 12.5px 12.5px; border: 0; border-radius: 10px; background: var(--bg-panel); box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--phone-project-card-border) 94%, var(--bg-panel)); }
   .li-latest-update > header { display: flex; align-items: center; height: 32px; }
   .li-detail .li-latest-update h3 { margin: 0; }
   .li-latest-update button { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; color: var(--text); background: transparent; font: 500 12px var(--font); line-height: normal; letter-spacing: normal; }
@@ -88,7 +89,8 @@
   .li-latest-update__body { margin-top: 12px; color: var(--text); font: 450 15px/24px var(--font); letter-spacing: 0; }
   .li-latest-update__body p { margin: 0; }
   .li-latest-update footer { display: flex; align-items: flex-start; gap: 8px; margin-top: 16px; }
-  .li-latest-update footer .li-latest-update__comments { width: auto; min-width: 37px; height: 28px; padding: 5px 10px; border-radius: 30px; background: var(--ui-pill-bg); color: var(--issue-muted); font-size: 13px; }
+  .li-latest-update footer .li-latest-update__comments { width: auto; min-width: 37px; height: 28px; padding: 5px 10px; border-radius: 30px !important; background: var(--ui-pill-bg); color: var(--issue-muted); font-size: 13px; }
+  .li-detail .li-latest-update footer .li-latest-update__comments > svg { width: 16px; height: 16px; }
   .li-detail .li-description { padding: 10px 0 0 !important; }
   .li-detail .li-description h3 { margin-bottom: 0; }
   .li-detail .li-description .mention-text-field { padding: 16px 14px; }

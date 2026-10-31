@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { MessageCircle } from 'lucide-react'
+import { ToolbarGlyph } from '@/components/issue/editor/selection-toolbar-glyphs'
 import { Avatar } from '@/components/issue/issue-row'
 import { AddReactionIcon } from '@/components/issue/issue-icons'
 import { FlowOptionsIcon } from '@/components/issue/flow-header-icons'
@@ -8,6 +8,8 @@ import { RichComment } from '@/components/activity/rich-comment'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import { toggleInitiativeUpdateReaction } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
+import { activityTimeLabel } from '@/components/activity/issue-activity-model'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import { formatRelativeTime } from '@/lib/relative-time'
 import type { Initiative, InitiativeUpdate, User } from '@/types/flow'
 
@@ -19,6 +21,10 @@ export function InitiativeLatestUpdate({ initiative, update, viewer, onOpen, onR
   onReload: () => Promise<void>
 }) {
   const { t, locale } = useI18n()
+  const now = useCurrentTimeMs()
+  const timeLabel = now - new Date(update.createdAt).getTime() < 3_600_000
+    ? activityTimeLabel(update.createdAt, now, locale)
+    : formatRelativeTime(update.createdAt, locale, now)
   const react = async (emoji: string) => {
     await toggleInitiativeUpdateReaction(initiative.id, update.id, emoji)
     await onReload()
@@ -29,11 +35,11 @@ export function InitiativeLatestUpdate({ initiative, update, viewer, onOpen, onR
       <div className="li-latest-update__meta">
         <div className={`li-latest-update__health is-${update.health}`}><HealthGlyph health={update.health}/><span>{t(({ onTrack: 'On track', atRisk: 'At risk', offTrack: 'Off track', noUpdate: 'No updates' } as const)[update.health])}</span></div>
         <div className="li-latest-update__author"><Avatar name={update.user.displayName || update.user.name}/><span data-i18n-ignore>{update.user.displayName || update.user.name}</span></div>
-        <time dateTime={update.createdAt} title={new Date(update.createdAt).toLocaleString(locale)}>{formatRelativeTime(update.createdAt, locale)}</time>
+        <time dateTime={update.createdAt} title={new Date(update.createdAt).toLocaleString(locale)}>{timeLabel}</time>
         <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={t('Update actions')} title={t('Update actions')} type="button"><FlowOptionsIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="li-menu" data-flow-motion="floating" align="end"><DropdownMenu.Item onSelect={onOpen}>{t('View initiative updates')}</DropdownMenu.Item><DropdownMenu.Item onSelect={() => void navigator.clipboard.writeText(`${window.location.href}#${update.id}`)}>{t('Copy link')}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
       </div>
       <div className="li-latest-update__body" data-i18n-ignore><RichComment body={update.body} data={update.bodyData}/></div>
-      <footer><button aria-label={t('Comments')} className="li-latest-update__comments" onClick={onOpen} type="button"><MessageCircle size={16}/>{update.comments.length || null}</button><EmojiPicker onSelect={react}><button aria-label={t('Add reaction')} title={t('Add reaction')} type="button"><AddReactionIcon size={14}/></button></EmojiPicker><ReactionPills reactions={update.reactions} viewerId={viewer.id} onToggle={react}/></footer>
+      <footer><button aria-label={t('Comments')} className="li-latest-update__comments ui-pill" onClick={onOpen} type="button"><ToolbarGlyph name="comment"/>{update.comments.length || null}</button><EmojiPicker onSelect={react}><button aria-label={t('Add reaction')} title={t('Add reaction')} type="button"><AddReactionIcon size={14}/></button></EmojiPicker><ReactionPills reactions={update.reactions} viewerId={viewer.id} onToggle={react}/></footer>
     </div>
   </article>
 }
