@@ -760,6 +760,8 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-description [data-mention-body]{margin-top:7.5px;color:var(--text);font:450 15px/24px var(--font);letter-spacing:-.1px}
   html:root body .app .review-description [data-mention-body] p{margin:0 0 16px}
   html:root body .app .review-description [data-mention-body] p:last-child{margin-bottom:0}
+  /* An explicit fallback avoids Linux's generic monospace metrics expanding inline-code lines. */
+  html:root body .app .review-description [data-mention-body] code{font-family:"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;line-height:0}
   html:root body .app .review-document-actions{display:flex;align-items:flex-start;gap:0;box-sizing:border-box;height:46px;margin:0 -4px;padding:12px 0 2px}
   html:root body .app .review-document-actions button{box-sizing:border-box;width:32px;height:32px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font:500 12px/normal var(--font)}
   html:root body .app .review-document-actions button svg{width:14px;height:14px;color:var(--issue-muted)}

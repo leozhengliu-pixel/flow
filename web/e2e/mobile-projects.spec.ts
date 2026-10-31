@@ -273,7 +273,7 @@ test.describe('mobile project update composer', () => {
     expect(await page.locator('.project-activity__health').textContent()).toContain('On track')
     expect((await page.locator('.project-activity__health').boundingBox())?.height).toBe(28)
     expect(near((await page.locator('.project-activity__health > span').boundingBox())?.x, 193.27)).toBe(true)
-    expect((await composer.locator('button.project-activity__agent').count())).toBe(0)
+    await expect(composer.locator('button.project-activity__agent')).toBeHidden()
     expect(near((await page.locator('.project-activity__diff-label').first().boundingBox())?.y, 262.75)).toBe(true)
     expect(near((await page.locator('.project-activity__diff-label').nth(1).boundingBox())?.y, 290)).toBe(true)
     expect(await page.locator('.project-activity__diff-row[data-field=priority]').textContent()).toContain('No priority')

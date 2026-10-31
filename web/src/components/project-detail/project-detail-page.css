@@ -1484,7 +1484,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   }
   .project-overview__icon svg { color: var(--view-color) !important; }
   :root .project-overview .project-overview__name { letter-spacing: -0.16px; }
-  .project-overview .project-overview__summary { color: var(--text); }
+  .project-overview .project-overview__summary { display: block; color: var(--text); }
   .project-overview__property-section { grid-template-columns: 1fr; row-gap: 12px; margin-top: 20px; }
   .project-overview__properties { margin-right: 32px; gap: 2px 4px; }
   .project-overview__properties .mini-property-trigger > span,

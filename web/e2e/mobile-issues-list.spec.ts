@@ -409,11 +409,12 @@ test.describe('mobile Team issues board', () => {
 
   test('phone board shows a 298px Todo column with the hidden columns column peeking in', async ({ page, request }, testInfo) => {
     const apiBase = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
-    const workspaceKey = `mobile-team-board-${testInfo.project.name}-${testInfo.retry}-${Date.now()}`
     const response = await request.post(`${apiBase}/api/workspaces`, {
-      data: { name: '[mobile] Team board', urlKey: workspaceKey, region: 'us', tutorial: false },
+      data: { name: '[mobile] Team board', urlKey: `mobile-team-board-${testInfo.project.name}-${testInfo.retry}-${Date.now()}`, region: 'us', tutorial: false },
     })
     expect(response.status()).toBe(201)
+    const { workspace } = await response.json() as { workspace: { urlKey: string } }
+    const workspaceKey = workspace.urlKey
     const headers = { 'X-Workspace-Key': workspaceKey }
     const bootstrap = await (await request.get(`${apiBase}/api/bootstrap`, { headers })).json() as {
       teams: Array<{ id: string; key: string }>

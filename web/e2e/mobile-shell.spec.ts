@@ -1,8 +1,11 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
+import { test } from './workspace-fixture'
 
 const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
 const base = process.env.FLOW_MOBILE_BASE_URL ?? 'http://127.0.0.1:4173'
 const shots = process.env.FLOW_MOBILE_SHOTS
+
+test.use({ colorScheme: 'dark' })
 
 async function geometry(locator: Locator, expected: Partial<{ x: number; y: number; width: number; height: number }>) {
   await expect(locator).toBeVisible()
@@ -23,8 +26,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   test.describe(`${viewport.width}px shell`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent })
 
-    test('navigation, workspace menus, search, commands and composer geometry', async ({ page }) => {
-      await page.goto(`${base}/verify/inbox`)
+    test('navigation, workspace menus, search, commands and composer geometry', async ({ page, workspaceKey }) => {
+      await page.goto(`${base}/${workspaceKey}/inbox`)
       const main = page.locator('.app > main, .app > .flow-framed-workspace')
       await geometry(main, { x: 0, y: 0, width: viewport.width, height: viewport.height })
       const trigger = page.locator('[data-sidebar-trigger]').first()
@@ -50,7 +53,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await geometry(menu, { x: 16, y: Math.min(110, viewport.height * .1304), width: viewport.width - 32 })
       await geometry(menu.locator('[cmdk-item]').first(), { height: 46 })
       await menu.getByRole('option', { name: 'Switch workspace', exact: true }).click()
-      await expect(menu.getByRole('option', { name: /Verify$/ })).toBeVisible()
+      await expect(menu.getByRole('option', { name: new RegExp(`Verify ${workspaceKey.slice(-8)}$`) })).toBeVisible()
       await page.keyboard.press('Escape')
       await expect(menu).not.toBeVisible()
       await page.locator('.sidebar-scrim.open').click({ position: { x: viewport.width - 12, y: 100 } })
@@ -70,6 +73,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(page.locator('.phone-menu-surface').getByRole('option')).toHaveCount(1)
       await page.locator('.phone-menu-surface').getByRole('option', { name: 'Documents' }).click()
       await expect(page).toHaveURL(/type=document/)
+      await expect(page.locator('.phone-menu-surface')).not.toBeVisible()
 
       await page.keyboard.press('Escape')
       await page.locator('.workspace-search-header input').blur()
@@ -129,9 +133,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
 
 test.describe('shared search empty state', () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent })
-  test('fits the phone frame without recent history', async ({ page }) => {
+  test('fits the phone frame without recent history', async ({ page, workspaceKey }) => {
     await page.route('**/api/search?*', route => route.fulfill({ json: { results: [], history: [], recent: [] } }))
-    await page.goto(`${base}/verify/search`)
+    await page.goto(`${base}/${workspaceKey}/search`)
     await expect(page.locator('.workspace-search-empty')).toBeVisible()
     await geometry(page.locator('.workspace-search-header input'), { x: 66, height: 22 })
     await geometry(page.locator('.workspace-search-empty-illustration'), { x: 105, y: 378.25, width: 180, height: 120 })
@@ -143,15 +147,15 @@ test.describe('shared search empty state', () => {
 
 test.describe('main page headers', () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent })
-  test('keeps phone navigation and page actions aligned', async ({ page }) => {
+  test('keeps phone navigation and page actions aligned', async ({ page, workspaceKey }) => {
     for (const route of ['my-issues/assigned', 'projects/all', 'initiatives/active', 'reviews', 'agent']) {
-      await page.goto(`${base}/verify/${route}`)
+      await page.goto(`${base}/${workspaceKey}/${route}`)
       await geometry(page.locator('.app > main, .app > .flow-framed-workspace'), { x: 0, y: 0, width: 390, height: 844 })
       await geometry(page.locator('[data-sidebar-trigger]').first(), { x: 8, width: 32, height: 32 })
       await geometry(page.locator('main h1, main h2').first(), { x: route === 'agent' ? 52.5 : 52 })
       await noOverflow(page)
     }
-    await page.goto(`${base}/verify/my-issues/assigned`)
+    await page.goto(`${base}/${workspaceKey}/my-issues/assigned`)
     await geometry(page.getByRole('button', { name: 'New issue', exact: true }), { x: 350, width: 32, height: 32 })
     if (shots) await page.screenshot({ path: `${shots}/flow-header-390.png` })
     await page.getByRole('button', { name: 'New issue', exact: true }).click()
@@ -202,9 +206,9 @@ test.describe('my issues phone toolbar', () => {
   })
 })
 
-test('desktop frame stays docked at 1280px', async ({ browser }) => {
+test('desktop frame stays docked at 1280px', async ({ browser, workspaceKey }) => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 768 } })
-  await page.goto(`${base}/verify/inbox`)
+  await page.goto(`${base}/${workspaceKey}/inbox`)
   await expect(page.locator('[data-sidebar-surface]')).not.toHaveAttribute('aria-hidden')
   await expect(page.locator('[data-sidebar-trigger]').first()).not.toBeVisible()
   await expect(page.locator('.app > main, .app > .flow-framed-workspace')).toHaveCSS('border-top-left-radius', '12px')
