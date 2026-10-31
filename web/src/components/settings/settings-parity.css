@@ -1435,7 +1435,8 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="templates"],
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="recurring-issues"] { height: 79.5px; min-height: 79.5px; }
   @media (max-width: 380px) {
-    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="issue-labels"] { height: 79.5px; min-height: 79.5px; }
+    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="issue-labels"],
+    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="project-labels"] { height: 79.5px; min-height: 79.5px; }
   }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-icon {
     box-sizing: border-box;
@@ -1445,10 +1446,11 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
     display: grid;
     place-items: center;
     border-radius: 8px;
-    background: var(--set-control);
+    background: var(--theme-control);
     color: var(--set-text);
+    opacity: 1;
   }
-  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-icon svg { width: 16px; height: 16px; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-icon svg { width: 16px; height: 16px; opacity: .55; }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-copy {
     min-width: 0;
     display: flex;
@@ -1473,23 +1475,11 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
     font: 450 12px/normal var(--font);
     white-space: nowrap;
   }
-  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-summary.is-plan {
-    width: 159.67px;
-    max-width: 159.67px;
-    color: var(--set-button-text);
-    font: 500 13px/18px var(--font);
-    white-space: normal;
-    text-align: left;
-  }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > :is(button, a, div) > svg {
     flex: 0 0 16px;
     width: 16px;
     height: 16px;
     color: var(--set-desc);
-  }
-  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="project-labels"] { height: 78.5px; min-height: 78.5px; }
-  @media (max-width: 380px) {
-    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="project-labels"] { height: 93px; min-height: 93px; }
   }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-page .settings-card {
     color: var(--set-text);
@@ -1527,8 +1517,7 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
   }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > :is(button, a, div) > .team-overview-icon { margin-left: 10.6667px; }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > :is(button, a, div) > svg { margin-right: 10.6667px; }
-  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > :is(button, a, div) > .team-overview-summary.is-plan { margin-right: 10.6667px; }
-  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > .team-overview-unavailable { opacity: .55; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:has(> [data-team-overview-row="project-labels"]) > :is(button, a, div) > .team-overview-copy { align-self: flex-start; margin-top: 16px; }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:first-child > :is(button, a, div) { border-radius: 10px 10px 0 0; }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:last-child > :is(button, a, div) { border-radius: 0 0 10px 10px; }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > [data-team-overview-row="general"],
@@ -1541,8 +1530,10 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:has(> [data-team-overview-row="recurring-issues"]) { height: 79.5px; min-height: 79.5px; }
   @media (max-width: 380px) {
     html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > [data-team-overview-row="issue-labels"] { height: 79.5px; }
-    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > [data-team-overview-row="project-labels"] { height: 93px; }
-    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:has(> [data-team-overview-row="issue-labels"]) { height: 79.5px; min-height: 79.5px; }
+    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:has(> [data-team-overview-row="issue-labels"]),
+    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:has(> [data-team-overview-row="project-labels"]) { height: 79.5px; min-height: 79.5px; }
     html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:has(> [data-team-overview-row="project-labels"]) { height: 93px; min-height: 93px; }
+    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:has(> [data-team-overview-row="project-labels"]) > [data-team-overview-row="project-labels"] { height: 93px; }
   }
+  html:root .settings-app .settings-content:has(.team-overview-page) [data-team-overview-row="notifications"] .team-overview-icon svg { filter: grayscale(1); }
 }
