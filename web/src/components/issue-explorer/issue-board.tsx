@@ -1,7 +1,7 @@
 import { IssueWidgetAdornments } from '@/components/issues-split-view'
 import { CustomerRevenueRowChip, CustomersRowChip } from '@/components/customer/customer-row-properties'
 import { ProjectGlyph } from '@/components/views/project-glyph'
-import { useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { Clock3, Ellipsis, Link2, Plus } from 'lucide-react'
@@ -104,8 +104,13 @@ function IssueBoardColumns({ groups, hiddenGroupIds = [], properties, propertyOp
   const [draggingId, setDraggingId] = useState<string>()
   const [over, setOver] = useState<{ groupId: string; index: number }>()
   const [hiddenCollapsed, setHiddenCollapsed] = useState(false)
+  const hiddenSectionRef = useRef<HTMLElement>(null)
   const visibleGroups = useMemo(() => groups.filter(group => !hiddenGroupIds.includes(group.id)), [groups, hiddenGroupIds])
   const hiddenGroups = useMemo(() => groups.filter(group => hiddenGroupIds.includes(group.id)), [groups, hiddenGroupIds])
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.location.hash !== '#hidden-columns') return
+    hiddenSectionRef.current?.scrollIntoView({ inline: 'start', block: 'nearest' })
+  }, [hiddenGroups.length])
   const sourceGroup = groups.find(group => group.issues.some(issue => issue.id === draggingId))
   const rejectMove = (issue: MyIssuesRowData, sourceId: string, targetId: string) => {
     const reason = canDrop?.(issue, sourceId, targetId)
@@ -168,14 +173,14 @@ function IssueBoardColumns({ groups, hiddenGroupIds = [], properties, propertyOp
         style={{ height: '100%', width: '100%' }}
       />
     ) : visibleGroups.map(group => renderColumn(group))}
-    {hiddenGroups.length>0&&<section className={styles.hiddenColumns} aria-label={t('Hidden columns')} data-board-hidden>
-      <div className={styles.hiddenHeader}>
+    {hiddenGroups.length>0&&<section ref={hiddenSectionRef} id="hidden-columns" className={styles.hiddenColumns} aria-label={t('Hidden columns')} data-board-hidden>
+      <div className={styles.hiddenHeader} data-board-hidden-header-strip>
         <button className={styles.hiddenToggle} type="button" aria-label={t(hiddenCollapsed?'Expand group':'Collapse group')} aria-expanded={!hiddenCollapsed} data-board-hidden-header onClick={()=>setHiddenCollapsed(value=>!value)}>
           <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z" fill="currentColor"/></svg>
           <strong>{t('Hidden columns')}</strong>
         </button>
       </div>
-      {!hiddenCollapsed&&<div className={styles.hiddenList}>{hiddenGroups.map(group=><button className={styles.hiddenStatus} key={group.id} type="button" data-board-hidden-status onClick={()=>onShowGroup?.(group.id)}><StatusIcon state={{id:group.id,name:group.label,type:group.stateType??'unstarted',color:group.state?.color??'var(--status-neutral)'}} size={14}/><span data-i18n-ignore>{group.label}</span><b><EstimateIcon size={14}/>{group.totalCount ?? group.issues.length}</b></button>)}</div>}
+      {!hiddenCollapsed&&<div className={styles.hiddenList}>{hiddenGroups.map(group=><button className={styles.hiddenStatus} key={group.id} type="button" data-board-hidden-status onClick={()=>onShowGroup?.(group.id)}><div className={styles.hiddenStatusCard}><StatusIcon state={{id:group.id,name:group.label,type:group.stateType??'unstarted',color:group.state?.color??'var(--status-neutral)'}} size={14}/><span className={styles.hiddenStatusName} data-i18n-ignore>{group.label}</span><b><BoardWarningIcon size={14}/><span>{group.totalCount ?? group.issues.length}</span></b></div></button>)}</div>}
     </section>}
   </div>
 }
@@ -231,6 +236,10 @@ function IssueBoardColumn({ group, createIssueLabel, properties, propertyOptions
 
 function BoardEllipsisIcon({ size = 14 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/></svg>
+}
+
+function BoardWarningIcon({ size = 14 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3.741 14.5h8.521c1.691 0 2.778-1.795 1.993-3.293l-4.26-8.134c-.842-1.608-3.144-1.608-3.986 0l-4.26 8.134C.962 12.705 2.05 14.5 3.74 14.5ZM8 3.368a.742.742 0 0 0-.663.402l-4.26 8.134A.75.75 0 0 0 3.741 13H8V3.367Z"/></svg>
 }
 
 function BoardPlusIcon({ size = 14 }: { size?: number }) {
