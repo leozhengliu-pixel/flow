@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Phone project descriptions keep paragraphs, headings and all list levels unclipped with aligned markers; resource-add controls and the first-update card use the matching spacing, hairline and compose glyph size without changing desktop layouts.
 - Command-menu search keeps its result group registered while queries change, avoiding a deferred sorting crash. Desktop issue tabs, the sidebar plan control, and phone hidden-board counts retain fractional font metrics on Linux. Browser fixtures select their own workspace with the supported header, phone navigation checks run as separate workflows instead of exhausting a shared deadline, and service-worker retirement checks avoid racing app registration.
 - Phone Agent chat switching shows a visible history filter, calendar-week groups, taller rows and full-width hairline separators in a viewport-sized popover; desktop history menus are unchanged.
 - Phone settings search uses the measured placeholder tone and hairline edge, the shared Agent/history footer stays hidden on settings routes, and team overview tab fills no longer brighten their rings; desktop layouts are unchanged.

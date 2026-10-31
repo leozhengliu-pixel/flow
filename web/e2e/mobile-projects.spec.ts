@@ -352,15 +352,17 @@ test.describe('mobile project issues empty state', () => {
 
 test.describe('mobile project milestones section', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+  const apiBase = process.env.FLOW_MOBILE_API_BASE ?? 'http://127.0.0.1:4180'
 
   test('phone overview scrolls to the description goals and milestone card', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-projects-milestones-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: 'Mobile project milestones parity', urlKey: workspaceKey, region: 'us', tutorial: false },
+    const requestedKey = `mobile-projects-milestones-${testInfo.project.name}-${Date.now()}`
+    const response = await request.post(`${apiBase}/api/workspaces`, {
+      data: { name: 'Mobile project milestones parity', urlKey: requestedKey, region: 'us', tutorial: false },
     })
     expect(response.status()).toBe(201)
+    const { workspace: { urlKey: workspaceKey } } = await response.json() as { workspace: { urlKey: string } }
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const created = await request.post('http://127.0.0.1:4180/api/projects', {
+    const created = await request.post(`${apiBase}/api/projects`, {
       headers,
       data: {
         name: 'Compare Test',
@@ -375,9 +377,9 @@ test.describe('mobile project milestones section', () => {
     expect(created.status()).toBe(201)
     const project = await created.json() as { id: string; slugId: string }
     for (const [title, url] of [['123', 'https://example.com/123'], ['New document', 'https://example.com/new'], ['GitHub', 'https://github.com/flow'], ['Example', 'https://example.com']]) {
-      expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/resources`, { headers, data: { type: 'link', title, url } })).status()).toBe(201)
+      expect((await request.post(`${apiBase}/api/projects/${project.id}/resources`, { headers, data: { type: 'link', title, url } })).status()).toBe(201)
     }
-    expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/milestones`, { headers, data: { name: 'Alpha' } })).status()).toBe(201)
+    expect((await request.post(`${apiBase}/api/projects/${project.id}/milestones`, { headers, data: { name: 'Alpha' } })).status()).toBe(201)
 
     await page.goto(`/${workspaceKey}/project/${project.slugId}/overview`)
     await page.locator('.project-detail-page__toolbar-actions button[aria-label="Close project details"]').click()
@@ -385,12 +387,54 @@ test.describe('mobile project milestones section', () => {
 
     const near = (actual: number | undefined, expected: number) => actual !== undefined && Math.abs(actual - expected) <= 1
     expect(near((await page.locator('.project-overview__description > h3').boundingBox())?.y, 317.5)).toBe(true)
-    expect(near((await page.locator('.project-overview__description-editor .ProseMirror > h2').boundingBox())?.y, 443.5)).toBe(true)
+    expect(near((await page.locator('.project-overview__description-editor h2 > .project-description-text').boundingBox())?.y, 443.5)).toBe(true)
     expect(near((await page.locator('.project-overview__milestones > h3').boundingBox())?.y, 611)).toBe(true)
     expect((await page.locator('.project-overview__milestone').boundingBox())?.height).toBe(106)
     expect((await page.locator('.project-overview__milestone-date').boundingBox())?.width).toBe(28)
     expect((await page.locator('.project-overview__milestone-link').boundingBox())?.height).toBe(28)
+    expect((await page.locator('.project-overview__latest').boundingBox())?.height).toBe(69)
+    expect((await page.locator('.project-overview__first-update .project-overview__mobile-icon').boundingBox())?.width).toBe(16)
+    const lines = await page.locator('.project-overview__description-editor li p').evaluateAll(nodes => nodes.map(node => {
+      const rect = node.getBoundingClientRect(), style = getComputedStyle(node)
+      return { y: rect.y, height: rect.height, overflow: style.overflow, transform: style.transform }
+    }))
+    expect(lines.every(line => line.height === 24 && line.overflow === 'visible' && line.transform === 'none')).toBe(true)
+    expect(lines[1].y - lines[0].y).toBe(30)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/project-milestones-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
+
+  for (const width of [390, 375]) {
+    test(`phone descriptions keep wrapped, ordered and nested list text unclipped at ${width}px`, async ({ page, request }, testInfo) => {
+      const requestedKey = `mobile-projects-description-${width}-${testInfo.project.name}-${Date.now()}`
+      const response = await request.post(`${apiBase}/api/workspaces`, {
+        data: { name: '[mobile] Description lists', urlKey: requestedKey, region: 'us', tutorial: false },
+      })
+      expect(response.status()).toBe(201)
+      const { workspace: { urlKey: workspaceKey } } = await response.json() as { workspace: { urlKey: string } }
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const created = await request.post(`${apiBase}/api/projects`, {
+        headers,
+        data: {
+          name: '[mobile] Description lists',
+          description: '<p>A long project description with typography and descenders that should wrap onto several lines without clipping any of its content.</p><h2>A heading long enough to wrap across several lines on a phone</h2><ul><li><p>Typography, grouping and layout stay fully visible when this list item wraps across multiple lines.</p><ul><li><p>Nested typography stays aligned.</p></li></ul></li><li><p>Second bullet typography.</p></li><li><p>Third bullet grouping.</p></li></ul><ol><li><p>Ordered typography also wraps across multiple lines without losing any descenders.</p></li><li><p>Another ordered paragraph.</p><p>A second paragraph within the same item.</p></li></ol>',
+        },
+      })
+      expect(created.status()).toBe(201)
+      const project = await created.json() as { slugId: string }
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 667 })
+      await page.goto(`/${workspaceKey}/project/${project.slugId}/overview`)
+      await page.locator('button[aria-label="Close project details"]').click()
+      const blocks = await page.locator('.project-overview__description-editor .ProseMirror :is(p,h2)').evaluateAll(nodes => nodes.map(node => {
+        const rect = node.getBoundingClientRect(), style = getComputedStyle(node)
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        return { text: node.textContent, height: rect.height, lineHeight: Number.parseFloat(style.lineHeight), overflow: style.overflow, transform: style.transform, textBottom: range.getBoundingClientRect().bottom - rect.top }
+      }))
+      expect(blocks.length).toBeGreaterThan(8)
+      expect(blocks.filter(block => block.text).every(block => block.overflow === 'visible' && block.transform === 'none' && block.textBottom <= block.height)).toBe(true)
+      expect(blocks.filter(block => block.height > block.lineHeight).length).toBeGreaterThanOrEqual(3)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  }
 })
