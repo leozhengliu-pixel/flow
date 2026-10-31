@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { persistUserSettings } from '@/lib/settings-persistence';
@@ -506,14 +507,24 @@ export function SettingsPage(props: SettingsPageProps) {
   const allSidebarTeams = useMemo(() => settingsSidebarTeams(props.data, ""), [props.data]);
   const sidebarTeams = allSidebarTeams;
   const visible = useMemo(
-    () =>
-      NAV.map((section) => ({
+    () => {
+      const sections = NAV.map((section) => ({
         ...section,
         items: section.items
           .filter((item) => workspaceSettingsAccess(props.data, item.id) !== "hidden")
           .map((item) => item.id === "integrations" && isWorkspaceAdmin(props.data) ? { ...item, label: "All integrations" } : item),
-      })).filter((section) => section.items.length),
-    [props.data],
+      })).filter((section) => section.items.length);
+      if (!phoneLayout) return sections;
+      // On phones the drawer lists the workspace's MCP connector controls in
+      // Administration, between Security and API, like the reference drawer.
+      return sections.map((section) => section.title !== "Administration" ? section : {
+        ...section,
+        items: section.items.flatMap((item) => item.id === "security"
+          ? [item, { id: "ai", label: "MCP connectors", glyph: "mcp" } as NavItem]
+          : [item]),
+      });
+    },
+    [props.data, phoneLayout],
   );
   const accessiblePageIds = useMemo(
     () => new Set(visible.flatMap(section => section.items.map(item => item.id))),
@@ -721,7 +732,7 @@ export function SettingsPage(props: SettingsPageProps) {
                   <SettingsNavButton
                     key={item.id}
                     item={item}
-                    active={settingsNavPage(props.page) === item.id}
+                    active={settingsNavPage(props.page) === item.id && item.label !== "MCP connectors"}
                     onClick={() => {
                       props.onNavigate(item.id);
                       setMobileNav(false);
@@ -732,11 +743,16 @@ export function SettingsPage(props: SettingsPageProps) {
             ))}
             {!trimmedQuery && props.data.viewerRole !== "guest" && (
               <section>
-                <h2>{t("Your teams")}</h2>
-                {sidebarTeams.map(({ team, depth }) => (
+                <h2><span>{t("Your teams")}</span></h2>
+                {sidebarTeams.map(({ team, depth }, index) => (
                     <button
                       key={team.id}
-                      style={depth ? { paddingInlineStart: 10 + Math.min(depth, 6) * 18 } : undefined}
+                      data-depth={depth}
+                      data-has-children={sidebarTeams[index + 1]?.depth > depth ? "" : undefined}
+                      style={{
+                        ...(depth ? { paddingInlineStart: 10 + Math.min(depth, 6) * 18 } : {}),
+                        "--team-depth": Math.min(depth, 6),
+                      } as CSSProperties}
                       aria-current={props.page === 'team' && props.teamKey?.toLowerCase() === team.key.toLowerCase() ? 'page' : undefined}
                       className={
                         props.page === "team" &&
