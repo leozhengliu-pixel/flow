@@ -154,6 +154,10 @@
 .issue-relation-card__title:hover {
   background: var(--issue-rel-card-hover);
 }
+@media(min-width:1024px){
+  .issue-relation-card__identifier{font-size:12px;font-weight:450}
+  .issue-relation-card__title{font-weight:450}
+}
 .issue-relation-card__properties {
   display: flex;
   align-items: center;

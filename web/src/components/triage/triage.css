@@ -455,4 +455,17 @@ html:root body .triage-snooze-dialog [cmdk-item]:not(#_) { font-size: 15px; }
   .issue-view--triage .issue-document { max-width: none; padding: 21.75px 14px 72px; }
   .issue-view--triage .issue-title-field { margin-top: 32px; }
   .issue-view--triage .issue-mobile-properties { margin-top: 16px; margin-bottom: 16px; }
+  .issue-view--triage .issue-mobile-properties { height: 24px; min-height: 24px; margin: 18px 0 22px 6px; }
+  .issue-view--triage .issue-mobile-properties > * { height: 24px; min-height: 24px; }
+  .issue-view--triage .issue-mobile-properties .issue-assignee-group { min-height: 24px; }
+  .issue-view--triage .issue-mobile-properties .core-property-trigger,
+  .issue-view--triage .issue-mobile-properties .label-project-trigger { padding: 0 5px; line-height: 12px; }
+  .issue-view--triage .issue-mobile-properties .core-property-trigger,
+  .issue-view--triage .issue-mobile-properties .label-project-trigger { background: var(--issue-comment-bg); }
+  .issue-view--triage .issue-mobile-properties .label-project-trigger { padding-right: 4.5px; padding-left: 4.5px; }
+  .issue-view--triage .issue-mobile-properties .core-property-trigger.muted { color: var(--issue-muted); }
+  .issue-view--triage .issue-mobile-properties .core-property-trigger > svg,
+  .issue-view--triage .issue-mobile-properties .label-project-trigger > svg { width: 14px; height: 14px; flex-basis: 14px; }
+  .issue-view--triage .issue-header--triage { padding-right: 8px; }
+  .issue-view--triage .issue-triage-header-actions { padding-left: 0; }
 }

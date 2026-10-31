@@ -1,0 +1,40 @@
+@media (min-width: 1024px) {
+  .issue-view .document-actions .issue-document-action { padding: 0 2px; color: var(--issue-fg); }
+  .issue-view .document-actions .issue-document-action svg { width: 14px; height: 14px; }
+  .issue-view .flow-sub-issues { margin-top: 9px; }
+  .issue-view .flow-sub-issues > header span { font-size: 12px; line-height: normal; }
+  html:root body .issue-view .sub-issues-collapse:not(#_) > span { color: var(--issue-fg); }
+  .issue-view .flow-sub-issues .sub-issues-progress > span { color: var(--issue-muted); }
+  .issue-view .detail-sub-issue-row { grid-template-columns: 30px 16px minmax(80px,1fr) auto; padding-left: calc(var(--sub-depth, 0) * 28px); padding-right: 0; }
+  .issue-view .detail-sub-issue-row[data-has-status=false] { grid-template-columns: 30px minmax(80px,1fr) auto; }
+  .issue-view .detail-sub-title { max-width: 100%; justify-self: start; line-height: normal; }
+  .issue-view .activity-heading { margin-top: 34.5px; }
+  .issue-view .issue-empty-sub-issue-row + .activity-heading { margin-top: 44.5px; }
+  .issue-view .activity-heading > span { color: var(--bright); }
+  .issue-view .issue-activity-timeline .activity-row { position: relative; left: -4.5px; top: -1px; width: calc(100% - 1.5px); padding: 4px 0; }
+  .issue-view .issue-activity-timeline .timeline-item.event > div:last-child { padding: 0; }
+  .issue-view .issue-activity-timeline .timeline-item.event { min-height: 28.8px; padding: 1px 0; }
+  .issue-view .detail-pane__activity { padding-top: 6px; }
+  .issue-view .issue-activity-timeline .activity-event-icon { position: relative; left: -.5px; height: 18px; min-height: 18px; padding-top: 0; margin-top: 1.5px; }
+  .issue-view .activity-blocking-icon { color: var(--relation-ink); }
+  .issue-view .activity-blocking-icon svg { width: 14px; height: 14px; }
+  .issue-view .issue-activity-timeline .activity-relation-link { padding: 0; border: 0; border-radius: 0; background: transparent; font-size: 13px; font-weight: 450; line-height: normal; }
+  .issue-view .issue-document > .composer { width: calc(100% + 16px); min-height: 83px; margin-top: 10px; margin-left: -8px; }
+  .issue-view .issue-document > .composer .composer-tools > button,
+  .issue-view .issue-document > .composer .composer-send:disabled { color: var(--issue-muted); }
+  .issue-view .issue-activity-timeline .comment-thread { background: var(--issue-comment-bg); }
+  .issue-view .issue-activity-timeline .timeline-item.comment { padding-top: 9px; }
+  .issue-view .issue-activity-timeline .comment-thread .comment-card { padding: 16px 16px 15.5px; }
+  .issue-view .issue-activity-timeline .comment-thread .comment-body { margin-top: 4px; }
+  .issue-view .issue-activity-timeline .comment-card__actions { gap: 0; margin-right: -5px; transform: translateY(-1px); }
+  .issue-view .issue-activity-timeline .comment-card__actions button { width: 28px; height: 28px; border-radius: 9999px; }
+  .issue-view .issue-activity-timeline .comment-thread__reply { position: relative; height: 46.5px; padding: 11px 16px 11px 43px; font: 450 15px/24px var(--font); }
+  .issue-view .comment-thread__reply > .avatar { position: absolute; left: 16px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); font-size: 8px; }
+  .issue-view .issue-activity-timeline .activity-event-group { min-height: 36.8px; width: 100%; display: flex; align-items: flex-start; gap: 16px; margin-top: 10px; padding: 2px 0 0 8px; border: 0; background: transparent; color: var(--issue-muted); font: 450 12px/16.8px var(--font); text-align: left; }
+  .issue-view .activity-event-group[aria-expanded=true] > svg { transform: rotate(90deg); }
+  .issue-view .issue-parent-context > span { line-height: normal; }
+  .issue-view .issue-parent-context > a { height: 26px; padding: 5px 4px; border-radius: 8px; font-weight: 500; line-height: normal; }
+  .issue-view .issue-parent-context > a > strong { color: var(--issue-muted); }
+  .issue-view .issue-parent-context > a > span { color: var(--issue-fg); }
+  .issue-view .issue-empty-sub-issue-action { gap: 3px; font-size: 12px; line-height: normal; }
+}

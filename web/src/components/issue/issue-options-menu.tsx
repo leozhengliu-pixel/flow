@@ -5,6 +5,7 @@ import { Command } from 'cmdk'
 import { parseDate } from 'chrono-node'
 import { addMonths } from 'date-fns'
 import {
+  AlarmClock,
   Bell,
   Check,
   ChevronLeft,
@@ -36,6 +37,7 @@ import './issue-options-menu.css'
 import { IssueReleasePicker } from './issue-release-picker'
 import { useI18n } from '@/i18n/i18n'
 import { useCurrentTime, useCurrentTimeMs } from '@/hooks/use-current-time'
+import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { issueDeleteConfirmation } from '@/lib/issue-delete-confirmation'
 import { IssueActionGlyph } from './issue-action-glyphs'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
@@ -579,18 +581,27 @@ function reminderDate(kind: 'hour' | 'tomorrow' | 'week' | 'month') {
 
 export function ReminderChoices({ data, teamId, onChoose, onCustom }: { data?: BootstrapData; teamId?: string; onChoose: (date: Date) => void; onCustom: () => void }) {
   const { t, locale } = useI18n()
+  const desktop = useDesktopLayout()
   const [query, setQuery] = useState('')
   const now = useCurrentTime()
   const nextCycle = data?.cycles.filter(cycle => cycle.teamId === teamId && new Date(cycle.startsAt).getTime() > now.getTime()).sort((a,b) => a.startsAt.localeCompare(b.startsAt))[0]
   const options = [
-    {label:'An hour from now',date:reminderDate('hour')}, {label:'Tomorrow',date:reminderDate('tomorrow')},
+    {label:'An hour from now',date:reminderDate('hour')},
+    ...(desktop ? [{label:'In 3 hours',date:new Date(now.getTime() + 3 * 60 * 60 * 1000)}] : []),
+    {label:'Tomorrow',date:reminderDate('tomorrow')},
     {label:'Next week',date:reminderDate('week')}, {label:'A month from now',date:reminderDate('month')},
     ...(nextCycle ? [{label:'Next cycle',date:new Date(nextCycle.startsAt)}] : []),
   ]
   const matches = options.filter(option => `${option.label} ${t(option.label)}`.toLowerCase().includes(query.toLowerCase()))
   const parsed = query.trim() && !matches.length ? parseDate(query, now, {forwardDate:true}) : null
-  const format = (date: Date) => date.toLocaleString(locale, {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
-  return <Command loop defaultValue="__no_selection__" shouldFilter={false}><Command.Input className="issue-options-submenu-search" aria-label={t('Remind me')} placeholder={t('Try: 4 pm, 2 days, in 5 weeks…')} value={query} onValueChange={setQuery}/><Command.List>{matches.map(option => <Option key={option.label} icon={<CalendarIcon/>} label={option.label} detail={format(option.date)} onSelect={() => onChoose(option.date)}/>)}{parsed && parsed.getTime() > now.getTime() && <Option icon={<CalendarIcon/>} label={format(parsed)} onSelect={() => onChoose(parsed)}/>}<Option icon={<CalendarIcon/>} label="Custom…" onSelect={onCustom}/></Command.List></Command>
+  const format = (date: Date) => {
+    if (!desktop || !locale.startsWith('en')) return date.toLocaleString(locale, {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+    const parts = new Intl.DateTimeFormat('en-GB', {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).formatToParts(date)
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(item => item.type === type)?.value ?? ''
+    return `${part('weekday')}, ${part('day')} ${part('month')}, ${part('hour')}:${part('minute')} ${part('dayPeriod').toUpperCase()}`
+  }
+  const icon = desktop ? <AlarmClock/> : <CalendarIcon/>
+  return <Command loop defaultValue="__no_selection__" shouldFilter={false}><Command.Input className="issue-options-submenu-search" aria-label={t('Remind me')} placeholder={t('Try: 4 pm, 2 days, in 5 weeks…')} value={query} onValueChange={setQuery}/><Command.List>{matches.map(option => <Option key={option.label} icon={icon} label={option.label} detail={format(option.date)} onSelect={() => onChoose(option.date)}/>)}{parsed && parsed.getTime() > now.getTime() && <Option icon={icon} label={format(parsed)} onSelect={() => onChoose(parsed)}/>}<Option icon={icon} label="Custom…" onSelect={onCustom}/></Command.List></Command>
 }
 
 function toLocalDateTime(date: Date) {
