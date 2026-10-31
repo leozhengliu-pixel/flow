@@ -206,6 +206,7 @@ body .feature-select-menu{z-index:500;box-sizing:border-box;min-width:93px;width
   html:root .settings-app .mobile-integration-row-copy { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
   html:root .settings-app .mobile-integration-row-copy > span { overflow: hidden; color: var(--set-text); font: 500 13px/normal var(--font); text-overflow: ellipsis; white-space: nowrap; }
   html:root .settings-app .mobile-integration-row-copy > small { overflow: hidden; color: var(--set-desc); font: 450 12px/normal var(--font); text-overflow: ellipsis; white-space: nowrap; }
+  html:root .settings-app .mobile-integration-card-essentials .mobile-integration-row[data-provider="slack"] .mobile-integration-row-copy { transform: translateY(8px); }
   html:root .settings-app .mobile-integration-chevron { flex: 0 0 16px; margin-right: 10.6667px; color: var(--theme-text-tertiary); }
   html:root .settings-app .mobile-integration-more { height: 60px; }
   html:root .settings-app .mobile-integration-more > button {
