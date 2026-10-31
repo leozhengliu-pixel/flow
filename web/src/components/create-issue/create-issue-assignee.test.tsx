@@ -39,6 +39,7 @@ describe('new issue: assignee picker', () => {
     const data = makeBootstrap({ users: [viewer, teammate, flow, helper], teamSettings: {}, cycleSettings: {}, teamMembers: [], issueTemplates: [] } as unknown as Partial<BootstrapData>)
     render(<Shell data={data}><CreateIssueDialog open data={data} initialTeamId="team-1" initialContext={{ assigneeId: viewer.id }} onOpenChange={vi.fn()} onCreate={vi.fn()}/></Shell>)
     await settle()
+    expect(within(screen.getByRole('combobox', { name: /Assignee/ })).getAllByText(viewer.displayName)).toHaveLength(1)
     await user.click(screen.getByRole('combobox', { name: /Assignee/ }))
     const list = await screen.findByRole('listbox', { name: 'Assignee' })
     expect(within(list).getAllByRole('option').map(row => row.querySelector('.property-command-label')?.textContent)).toEqual(['No assignee', viewer.displayName, 'Flow', 'Helper', teammate.displayName])
