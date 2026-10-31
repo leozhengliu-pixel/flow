@@ -1,7 +1,7 @@
 import { ChevronRight, Info } from "lucide-react";
 import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import { useI18n } from "@/i18n/i18n";
-import { formatCredits, useAICredits } from "@/lib/ai-credits";
+import { formatCredits, useAICredits, type AICredits } from "@/lib/ai-credits";
 import { settingsPath } from '@/lib/app-routes';
 import type { BootstrapData } from "@/types/flow";
 import { SettingsPageTitle } from "./settings-primitives";
@@ -51,7 +51,7 @@ export function BillingSettings({ data, onOpenUsage }: { data: BootstrapData; on
   const desktop = useDesktopSettings();
   const UsageControl = desktop ? 'a' : 'button';
   if (!desktop) {
-    return <MobileBillingSettings data={data} onOpenUsage={onOpenUsage} />;
+    return <MobileBillingSettings data={data} credits={credits} onOpenUsage={onOpenUsage} />;
   }
   return (
     <div className="billing-page">
@@ -137,33 +137,6 @@ export function BillingSettings({ data, onOpenUsage }: { data: BootstrapData; on
   );
 }
 
-const MOBILE_FEATURES = [
-  "Unlimited file upload size",
-  "Unlimited issues",
-  "Admin roles",
-  "Guided reviews",
-  "Loops",
-  "Third-party app management",
-  "Restrict new user invitations",
-  "Restrict agent invocation to full workspace members",
-];
-
-function MobileCheckGlyph() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M14.6722 3.27047C15.0901 3.6482 15.1112 4.28103 14.7195 4.68394L6.94174 12.6839C6.74966 12.8815 6.48271 12.9955 6.2019 12.9999C5.9211 13.0042 5.65047 12.8986 5.45189 12.7071L1.30374 8.70711C0.898753 8.31659 0.898753 7.68342 1.30374 7.2929C1.70873 6.90237 2.36534 6.90237 2.77033 7.2929L6.16115 10.5626L13.2064 3.31606C13.5981 2.91315 14.2544 2.89274 14.6722 3.27047Z" fill="currentColor" />
-    </svg>
-  );
-}
-
-function MobileArrowGlyph() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M11.75 10a.75.75 0 1 1-1.5 0V6.81l-4.72 4.72a.75.75 0 1 1-1.06-1.06l4.72-4.72H6a.75.75 0 0 1 0-1.5h5a.75.75 0 0 1 .75.75z" fill="currentColor" />
-    </svg>
-  );
-}
-
 function MobileChevronGlyph({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -172,10 +145,9 @@ function MobileChevronGlyph({ size = 16 }: { size?: number }) {
   );
 }
 
-function MobileBillingSettings({ data, onOpenUsage }: { data: BootstrapData; onOpenUsage: () => void }) {
+function MobileBillingSettings({ data, credits, onOpenUsage }: { data: BootstrapData; credits?: AICredits; onOpenUsage: () => void }) {
   const { t } = useI18n();
   const users = (data.members ?? []).filter((member) => member.status === "active" && !member.user.app).length || 1;
-  const features = [`${data.teams.length} teams`, ...MOBILE_FEATURES];
   return (
     <div className="billing-mobile">
       <header className="billing-mobile-title">
@@ -184,7 +156,6 @@ function MobileBillingSettings({ data, onOpenUsage }: { data: BootstrapData; onO
           <span>{t("For questions about billing,")}</span>
           <a className="billing-link" href={DOCS_URL} target="_blank" rel="noreferrer">{t("contact us")}</a>
         </div>
-        <button type="button" className="billing-mobile-all-plans">{t("All plans")}<MobileChevronGlyph size={14} /></button>
       </header>
 
       <section className="billing-mobile-card billing-mobile-current" aria-label={t("Current plan")}>
@@ -192,44 +163,20 @@ function MobileBillingSettings({ data, onOpenUsage }: { data: BootstrapData; onO
           <h2>{t("Free plan")}</h2>
           <p>{t("Free for all users")} · {users === 1 ? t("1 user") : `${users} ${t("users")}`}</p>
         </div>
-        <button type="button" className="billing-mobile-ghost">{t("Switch plan")}</button>
       </section>
 
-      <section className="billing-mobile-card billing-mobile-upgrade" aria-label={t("Basic plan")}>
-        <div className="billing-mobile-upgrade-main">
-          <div className="billing-mobile-upgrade-copy">
-            <h2>{t("Upgrade to Basic plan")}</h2>
-            <p><span>$ 12</span> <span>{t("per user/mo")}</span></p>
-          </div>
-          <div className="billing-mobile-upgrade-actions">
-            <button type="button" className="billing-mobile-ghost billing-mobile-view-plans">{t("View all plans")}</button>
-            <button type="button" className="billing-mobile-primary">{t("Upgrade now")}</button>
-          </div>
-        </div>
-        <div className="billing-mobile-features">
-          {features.map(feature => <div className="billing-mobile-feature" key={feature}><MobileCheckGlyph /><span title={t(feature)}>{t(feature)}</span></div>)}
-        </div>
-      </section>
-
-      <div className="billing-mobile-usage-flow">
-        <div className="billing-mobile-usage-slot">
-          <button type="button" className="billing-mobile-card billing-mobile-usage" onClick={onOpenUsage}>
+      <button type="button" className="billing-mobile-card billing-mobile-usage" onClick={onOpenUsage}>
             <span className="billing-mobile-usage-copy">
               <strong>{t("Usage")}</strong>
-              <span aria-label={t("Usage remaining")}><i /></span>
+              {credits && <span>{t("{amount} remaining").replace("{amount}", formatCredits(credits.remainingMicros))}</span>}
             </span>
             <MobileChevronGlyph />
-          </button>
-        </div>
-      </div>
+      </button>
 
       <h2 className="billing-mobile-invoices-title">{t("Recent invoices")}</h2>
-      <div className="billing-mobile-invoice-slot">
-        <section className="billing-mobile-card billing-mobile-invoice" aria-label={t("Recent invoices")}>
-          <div className="billing-mobile-invoice-copy"><strong>Oct 19, 2026</strong><span>{t("Credits purchase")}</span></div>
-          <div className="billing-mobile-invoice-action"><a href="#invoice" onClick={event => event.preventDefault()}>{t("View")}<MobileArrowGlyph /></a><span>$10.00</span></div>
-        </section>
-      </div>
+      <section className="billing-mobile-card billing-mobile-invoices" aria-label={t("Recent invoices")}>
+        <p>{t("No invoices yet")}</p>
+      </section>
     </div>
   );
 }

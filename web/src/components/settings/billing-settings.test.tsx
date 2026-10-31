@@ -9,7 +9,8 @@ import type { WorkspaceMember } from '@/types/flow'
 import { BillingSettings } from './billing-settings'
 
 vi.mock('@/lib/ai-credits-api', () => ({ fetchAICredits: vi.fn().mockResolvedValue({ includedMicros: 5_000_000, spentMicros: 1_250_000, remainingMicros: 3_750_000 }) }))
-vi.mock('@/hooks/use-desktop-settings', () => ({ useDesktopSettings: () => true }))
+const desktopSettings = vi.hoisted(() => ({ value: true }))
+vi.mock('@/hooks/use-desktop-settings', () => ({ useDesktopSettings: () => desktopSettings.value }))
 
 const members = [{ user: viewer, role: 'owner', status: 'active', joinedAt: '2026-01-01T00:00:00Z' }] as unknown as WorkspaceMember[]
 
@@ -54,4 +55,12 @@ it('opens Usage & limits from the usage row', async () => {
   const onOpenUsage = renderBilling()
   await userEvent.click(screen.getByRole('link', { name: 'Usage' }))
   expect(onOpenUsage).toHaveBeenCalledTimes(1)
+})
+
+it('shows the real empty invoice state on phones when there are no invoices', () => {
+  desktopSettings.value = false
+  renderBilling()
+  expect(screen.getByRole('region', { name: 'Recent invoices' })).toHaveTextContent('No invoices yet')
+  expect(screen.queryByText('Credits purchase')).not.toBeInTheDocument()
+  desktopSettings.value = true
 })
