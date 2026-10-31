@@ -27,6 +27,42 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   test.describe(`${viewport.width}px shell`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent, colorScheme: 'dark' })
 
+    test('composer status picker matches phone rows and preserves the workspace workflow', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const data = await (await request.get(`${api}/api/bootstrap`, { headers })).json() as { teams: Array<{ id: string }> }
+      const review = await request.post(`${api}/api/teams/${data.teams[0].id}/states`, {
+        headers, data: { name: 'In Review', type: 'started', color: 'lch(60% 64.37 141.95)', position: 3 },
+      })
+      expect(review.status()).toBe(201)
+      await page.goto(`${base}/${workspaceKey}/my-issues/assigned`)
+      await page.getByRole('button', { name: 'New issue', exact: true }).click()
+      const composer = page.getByRole('dialog', { name: 'New issue', exact: true })
+      await composer.locator('[data-property="status"]').click()
+      const picker = page.getByRole('dialog', { name: 'Change status', exact: true })
+      await geometry(picker, { x: 16, y: Math.min(110, viewport.height * .1304), width: viewport.width - 32 })
+      const options = picker.getByRole('option')
+      // Reserved and custom statuses remain driven by the workspace, never by phone layout.
+      await expect(options).toHaveCount(7)
+      for (const name of ['Backlog', 'Todo', 'In Progress', 'In Review', 'Done', 'Canceled', 'Duplicate']) {
+        const option = options.filter({ has: page.locator('.property-command-label', { hasText: new RegExp(`^${name}$`) }) })
+        await geometry(option, { height: 46 })
+        await expect(option.locator('.property-command-label')).toHaveCSS('font-size', '13px')
+        await expect(option.locator('.property-command-label')).toHaveCSS('font-weight', '450')
+      }
+      await expect(options.filter({ hasText: 'Backlog' })).toHaveAttribute('aria-checked', 'true')
+      await expect(options.filter({ hasText: 'Backlog' }).locator('.property-command-check svg')).toBeVisible()
+      await expect(page.locator('.bottom-agent')).toBeHidden()
+      await noOverflow(page)
+      if (shots) await page.screenshot({ path: `${shots}/composer-status-${viewport.width}.png` })
+      await picker.getByRole('textbox').fill('In Review')
+      await expect(options).toHaveCount(1)
+      await options.first().click()
+      await expect(picker).toBeHidden()
+      await expect(composer.locator('[data-property="status"]')).toHaveText('In Review')
+      await composer.locator('[data-property="priority"]').click()
+      await expect(page.getByRole('dialog', { name: 'Change priority', exact: true }).getByRole('option').first()).toHaveCSS('font-size', '15px')
+    })
+
     test('search phone header, empty state and filter panels match', async ({ page, workspaceKey }) => {
       await page.goto(`${base}/${workspaceKey}/search`)
       const input = page.getByRole('textbox', { name: 'Search issues, projects, and documents…' })
