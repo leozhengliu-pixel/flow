@@ -8,6 +8,7 @@
   .issue-view .issue-breadcrumb-current { max-width: 100%; }
   .issue-view .issue-breadcrumb-label { display: flex; align-items: center; min-width: 0; flex: 1 1 auto; }
   .issue-view .issue-header-icon { width: 32px; height: 32px; flex-basis: 32px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--issue-header-fg); font-size: 12px; font-weight: 500; line-height: normal; }
+  html:root body .app .issue-view .issue-header-icon[aria-expanded=true] { background: var(--theme-control); }
   .issue-view .issue-header-icon > svg { width: 14px; height: 14px; }
   .issue-view .issue-header-end { flex: none; gap: 4px; }
   .issue-view .issue-presence { display: none; }
