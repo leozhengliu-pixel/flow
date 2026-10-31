@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { IntegrationBrandIcon } from './integration-brand-icon';
 import { DesktopIntegrations } from './desktop-integrations';
 import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import {
@@ -384,11 +385,11 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
     const provider = item.connectProvider;
     const target = provider ?? item.slug;
     const name = integrationDisplayName(item, t);
-    const date = connection?.createdAt ? formatDate(connection.createdAt) : "";
+    const date = connection?.createdAt ? formatDate(connection.createdAt, { month: "short", day: "numeric" }) : "";
     return <li key={`${item.slug}-${connection?.id ?? "catalog"}`} className="mobile-integration-row" data-provider={provider ?? item.slug}>
       <button type="button" onClick={() => onOpen(target)} aria-label={name}>
         <span className="mobile-integration-row-main">
-          <span className="mobile-integration-icon" aria-hidden="true" />
+          <span className="mobile-integration-icon" aria-hidden="true">{provider && <IntegrationBrandIcon provider={provider} size={32} />}</span>
           <span className="mobile-integration-row-copy"><span>{name}</span>{connection && <small>{t("Enabled by")} {data.viewer.displayName}{date ? ` ${t("on")} ${date}` : ""}</small>}</span>
         </span>
         <MobileIntegrationChevron />
