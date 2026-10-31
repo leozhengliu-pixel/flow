@@ -18,6 +18,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Match initiative overview spacing, property pills, header controls and latest update cards on phones without changing desktop layout.
 
 ### Fixed
+- Match the phone composer's status picker typography, selection highlight, and workflow glyphs without changing desktop pickers.
 
 - Keep the Chinese Agent label consistent across filters, settings and OAuth applications with one shared translation.
 - Stop background delivery writes before checking no-op API requests, and align browser assertions with the saved control and shortcut references.

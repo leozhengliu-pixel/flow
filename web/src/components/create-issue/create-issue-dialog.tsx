@@ -33,6 +33,8 @@ import { AiBurstGlyph } from '@/components/ui/agent-glyph'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { teamContentAccessible } from '@/lib/team-access'
 import { teamDefaultState, teamForWorkflowState, teamHasWorkflowState, teamStateIdFor, teamWorkflowStates } from '@/lib/team-workflow'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { ComposerStatusGlyph } from './composer-status-glyph'
 
 export interface CreateIssueInput {
   title: string
@@ -113,6 +115,7 @@ type StatusRequest = { candidates: (string | undefined)[]; picked: boolean }
 function statusRequest(...candidates: (string | undefined)[]): StatusRequest { return { candidates, picked: false } }
 
 export function CreateIssueDialog({ data, draftId, initialContext, initialExpanded = false, initialProjectId, initialProjectMilestoneId, initialTeamId, initialStateId, initialTemplateId, onCreate, onCreateLabel, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
+  const phone = usePhoneLayout()
   const { t } = useI18n()
   // "Auto-assign to self" (Settings › Preferences) is off by default, so a new issue starts unassigned.
   const { autoAssign } = useUserPreferences()
@@ -513,7 +516,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialExpand
           </div>
 
           <div className={styles.properties}>
-            <MiniProperty label="Status" value={inTriage ? TRIAGE_STATUS.name : state?.name ?? 'Status'} selectedId={stateId} icon={inTriage || state ? <StatusIcon state={inTriage || !state ? TRIAGE_STATUS : state}/> : <CircleDashed aria-hidden="true"/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={pickStatus}/>
+            <MiniProperty label="Status" phoneSurfaceClassName={styles.statusMenu} value={inTriage ? TRIAGE_STATUS.name : state?.name ?? 'Status'} selectedId={stateId} icon={inTriage || state ? <StatusIcon state={inTriage || !state ? TRIAGE_STATUS : state}/> : <CircleDashed aria-hidden="true"/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:phone ? <ComposerStatusGlyph state={item}/> : <StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={pickStatus}/>
             <MiniProperty label="Priority" value={priority ? priorityNames[priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={[0,1,2,3,4].map(item => ({ id:String(item),label:priorityNames[item],icon:<PriorityIcon priority={item}/>,shortcut:String(item) }))} onChange={value => setPriority(Number(value))}/>
             <MiniProperty label="Assignee" value={assignee?.displayName ?? 'Assignee'} selectedId={assigneeId} icon={assignee ? <Avatar name={assignee.displayName}/> : <NoAssigneeIcon/>} options={assigneeMenuOptions(data.users.filter(user => user.active), { teamId, allowAgents: agentsAvailable(data) })} searchPlaceholder="Assign to…" onChange={setAssigneeId}/>
             <MiniProperty label="Project" value={project?.name ?? 'Project'} valueIsEntityName={Boolean(project)} selectedId={projectId} icon={project ? <ProjectGlyph project={project}/> : <ProjectIcon/>} options={[{id:'',label:'No project',icon:<NoProjectIcon/>},...data.projects.map(item => ({id:item.id,label:item.name,color:item.color,icon:<ProjectGlyph project={item}/>,i18nIgnore:true }))]} onChange={value => { setProjectId(value); setProjectMilestoneId('') }}/>
