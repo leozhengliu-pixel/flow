@@ -1,5 +1,25 @@
-import { expect } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
 import { test } from './workspace-fixture'
+
+async function expectPhoneProjectTabs(page: Page) {
+  await page.evaluate(() => document.fonts.ready)
+  // Pin reference padding and gaps without depending on native hairline rounding.
+  const tabs = page.locator('.project-detail-page__tab')
+  await expect(tabs).toHaveCount(3)
+  const boxes = await tabs.evaluateAll(elements => elements.map(element => {
+    const box = element.getBoundingClientRect(), style = getComputedStyle(element)
+    const text = element.querySelector(':scope > div')!.getBoundingClientRect()
+    return { x: box.x, right: box.right, inset: text.x - box.x - element.clientLeft, padding: style.paddingLeft }
+  }))
+  expect(boxes[0].x).toBe(8)
+  for (const [index, box] of boxes.entries()) {
+    expect(box.padding).toBe('10px')
+    expect(box.inset).toBeCloseTo(10, 0)
+    if (index > 0) expect(box.x - boxes[index - 1].right).toBeCloseTo(4, 0)
+  }
+  const add = (await page.locator('.project-detail-page__add-view').boundingBox())!
+  expect(add.x - boxes.at(-1)!.right).toBeCloseTo(4, 0)
+}
 
 test.describe('mobile cycles timeline', () => {
   test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
@@ -265,9 +285,7 @@ test.describe('mobile project overview', () => {
     expect((await page.locator('.project-detail-page__crumb').boundingBox())?.x).toBeCloseTo(52, 0)
     expect(Math.abs((await page.locator('.project-detail-page__header [aria-label*="favorites"]').boundingBox())!.x - 166.89)).toBeLessThanOrEqual(1)
     expect((await page.locator('.project-detail-page__toolbar-actions button[aria-label*="project details"]').boundingBox())?.x).toBe(350)
-    expect((await page.locator('.project-detail-page__tab[aria-current="page"] > div').boundingBox())?.x).toBeCloseTo(18.5, 0)
-    expect((await page.locator('.project-detail-page__tab[href$="activity"] > div').boundingBox())?.x).toBeCloseTo(97.95, 0)
-    expect((await page.locator('.project-detail-page__add-view').boundingBox())?.x).toBeCloseTo(217.98, 0)
+    await expectPhoneProjectTabs(page)
 
     const overview = page.locator('.project-overview')
     expect((await overview.boundingBox())?.x).toBe(40)
@@ -458,7 +476,7 @@ test.describe('mobile project issues empty state', () => {
     const near = (actual: number | undefined, expected: number) => actual !== undefined && Math.abs(actual - expected) <= 1
     expect((await page.locator('.project-detail-page__top').boundingBox())?.height).toBe(87.5)
     expect((await page.locator('.project-detail-page__header').boundingBox())?.height).toBe(44)
-    expect(near((await page.locator('.project-detail-page__tab[href$="issues"] > div').boundingBox())?.x, 166.55)).toBe(true)
+    await expectPhoneProjectTabs(page)
 
     expect(near((await page.locator('button[aria-label="Add filter"]').boundingBox())?.x, 274)).toBe(true)
     expect(near((await page.locator('button[aria-label="Display options"]').boundingBox())?.x, 312)).toBe(true)

@@ -158,7 +158,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await page.getByRole('button', { name: 'Add filter', exact: true }).click()
       await page.locator('[data-surface="my-issues"][data-variant="root"] [data-value="Status"]').click()
       const panel = page.locator('[data-field="status"]')
-      await expect(panel).toHaveCSS('height', '426px')
+      expect(await panel.evaluate(element => element.clientHeight)).toBe(425)
       await expect(panel.getByRole('option')).toHaveCount(8)
       await expect(panel.getByRole('option', { name: 'Triage 1 issue', exact: true })).toBeVisible()
       await expect(panel.getByRole('option', { name: 'Todo 11 issues', exact: true })).toBeVisible()

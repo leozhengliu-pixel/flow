@@ -656,17 +656,16 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
 
 @media (max-width: 767px) {
   html:root .settings-app .settings-main[data-settings-page="preferences"] {
-    .personal-section:first-of-type > .settings-card > .settings-row:first-child { display: none; }
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(2) { border-radius: 10px 10px 0 0; height: 94px; }
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(3) { height: 79.5px; }
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(4) { height: 68px; }
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(5) { height: 65px; }
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(6) { height: 79.5px; }
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(2) .settings-row-copy > span { height: 43.5px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(1) { border-radius: 10px 10px 0 0; height: 94px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(2) { height: 79.5px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(3) { height: 68px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(4) { height: 65px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(5) { height: 79.5px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(1) .settings-row-copy > span { height: 43.5px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(2) .settings-row-copy > span,
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(5) .settings-row-copy > span { height: 29px; }
     .personal-section:first-of-type > .settings-card > .settings-row:nth-child(3) .settings-row-copy > span,
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(6) .settings-row-copy > span { height: 29px; }
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(4) .settings-row-copy > span,
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(5) .settings-row-copy > span { height: 14.5px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(4) .settings-row-copy > span { height: 14.5px; }
     .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(1),
     .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(3),
     .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(5) { height: 79.5px; }
@@ -677,10 +676,10 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
     .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(5) .settings-row-copy > span { height: 29px; }
     .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(2) .settings-row-copy > span,
     .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(4) .settings-row-copy > span { height: 14.5px; }
-    .personal-section:first-of-type .settings-row:nth-child(2) .settings-select { width: 171px; }
-    .personal-section:first-of-type .settings-row:nth-child(3) .settings-select { width: 100.5px; }
-    .personal-section:first-of-type .settings-row:nth-child(4) .settings-select { width: 109.5px; }
-    .personal-section:first-of-type .settings-row:nth-child(6) .settings-select { width: 91px; }
+    .personal-section:first-of-type .settings-row:nth-child(1) .settings-select { width: 171px; }
+    .personal-section:first-of-type .settings-row:nth-child(2) .settings-select { width: 100.5px; }
+    .personal-section:first-of-type .settings-row:nth-child(3) .settings-select { width: 109.5px; }
+    .personal-section:first-of-type .settings-row:nth-child(5) .settings-select { width: 91px; }
     .personal-section:nth-of-type(2) .settings-row:nth-child(2) .settings-select { width: 83px; }
   }
 }
