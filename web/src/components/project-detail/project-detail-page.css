@@ -1643,12 +1643,12 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
     background: var(--agent-thread-surface);
   }
   .project-activity__composer[data-mode=comment] { min-height: 176px; }
-  .project-activity__composer > header { box-sizing: border-box; height: 41px; gap: 6.5px; padding: 12px 12px 0; }
+  .project-activity__composer > header { box-sizing: border-box; height: 41px; gap: 8px; padding: 12px 12px 0; }
   .project-activity__composer > header > div { height: 29px; border-color: var(--my-issues-details-border); background: var(--agent-thread-surface); }
   .project-activity__composer > header > div button { box-sizing: border-box; height: 28px; border: 0; color: var(--my-issues-details-muted); }
   .project-activity__composer > header > div button[aria-selected=true] { background: var(--my-issues-details-tab-active-bg); box-shadow: var(--phone-project-tab-shadow); color: var(--agent-thread-text); }
   .project-activity__composer > .project-activity__editor { margin-top: 12px; }
-  .project-activity__composer > footer { box-sizing: border-box; height: 56.5px; padding: 12px 13.5px 12.5px 12px; }
+  .project-activity__composer > footer { box-sizing: border-box; height: 56.5px; padding: 12px 14px 12.5px 12px; }
   .project-activity__composer > footer > div { gap: 12px; }
   .project-activity__composer > footer > div button.project-activity__attach {
     width: 32px;
@@ -1665,7 +1665,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
     position: relative;
     box-sizing: border-box;
     height: 28px;
-    padding: 0 7.5px;
+    padding: 0 8px;
     border: .5px solid transparent;
     background: var(--chip-bg);
     background-clip: padding-box;

@@ -395,7 +395,7 @@
     background: transparent;
     color: var(--text);
     font: 500 12px/normal var(--font);
-    padding: 0 7.5px;
+    padding: 0 8px;
   }
   .team-documents-filter-bar [data-advanced-chip],
   .team-documents-filter-bar [data-advanced-chip][data-empty] {

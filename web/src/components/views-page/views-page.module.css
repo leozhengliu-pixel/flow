@@ -175,8 +175,8 @@
   html:root .page .toolbar .displayTrigger{background:var(--phone-control-bg);color:var(--phone-control-fg)}
   .page .displayTrigger>svg{width:14px;height:14px;flex-basis:14px}
   .page .columns{display:none}
-  .page .groupHeader{height:36px;margin:0 8px 2px;padding:0 26px 0 10px;gap:4px;border-radius:8px;background:var(--phone-group-bg)}
-  .page .scopeAvatarFrame{display:block;flex:0 0 18px;width:18px;height:18px;margin-left:-1px;margin-right:6px;color:var(--ui-pill-active-fg);font-size:16px;font-weight:400;line-height:0}
+  .page .groupHeader{height:36px;margin:0 8px 2px;padding:0 26px 0 10px;gap:16px;border-radius:8px;background:var(--phone-group-bg)}
+  .page .scopeAvatarFrame{display:block;flex:0 0 18px;width:18px;height:18px;margin-left:-1px;margin-right:-7px;color:var(--ui-pill-active-fg);font-size:16px;font-weight:400;line-height:0}
   .page .scopeAvatar{border-radius:9999px}
   .page .groupHeader strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--phone-group-title);font-size:13px;font-weight:500;line-height:normal}
   .page .groupHeader>span:nth-of-type(2){display:block;flex-shrink:0;color:var(--phone-group-count);font-size:13px;font-weight:500;line-height:normal}

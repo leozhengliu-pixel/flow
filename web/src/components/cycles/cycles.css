@@ -27,8 +27,8 @@
   .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{box-sizing:border-box;width:32px !important;height:32px !important;flex:0 0 32px !important;padding:0 2px;border:.5px solid transparent;color:var(--text)}
   .flow-cycle-detail [data-content-view-favorite],
   .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{font-size:12px !important;font-weight:500 !important;line-height:normal !important}
-  .flow-cycle-detail [data-content-view-favorite]{margin-left:2px}
-  .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{margin-left:2px}
+  .flow-cycle-detail [data-content-view-favorite]{margin-left:0}
+  .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{margin-left:1px}
   .flow-cycle-detail .cycle-switcher{box-sizing:border-box;min-width:0;height:28px;gap:8px;padding:0}
   .flow-cycle-detail .cycle-switcher strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .flow-cycle-detail .cycle-switcher-play{flex:none;width:16px;height:16px;display:grid;place-items:center;color:var(--theme-text-secondary);transform:translateY(2px)}
@@ -57,6 +57,7 @@
   .flow-cycle-issues [data-row-title] + button[aria-label*="sub-issues"]{margin-left:4px}
   .flow-cycle-issues [data-my-issues-group-header] .estimate-chip__value{transform:translateX(-1px)}
   .flow-cycle-count{padding-left:10px}
+  .flow-cycle-issues [aria-label*="sub-issues"] > span{margin:0 3px 0 1px}
 }
 .cycle-display-filter{height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:8px;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-text);font:500 12px/normal inherit;text-align:left}
 .cycle-display-filter svg{width:14px;height:14px}
