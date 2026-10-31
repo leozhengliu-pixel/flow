@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Anchor phone document metadata at the viewport edge when needed, with content-sized owner and history controls.
+
 - Keep the phone document header's navigation, breadcrumbs and actions in their natural compact groups without changing desktop layout.
 
 - Remove fabricated phone billing offers, invoices and balance placeholders; show the workspace's actual credits and the empty invoice state.
