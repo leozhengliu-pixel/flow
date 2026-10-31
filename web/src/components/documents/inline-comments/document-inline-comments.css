@@ -251,6 +251,7 @@
 
 @media (min-width: 1232px) {
   .document-inline-gutter.is-popover .document-thread-draft { width: 298px; margin-left: 15.5px; }
+  .document-inline-gutter.is-popover .document-thread-draft .composer-send { transform: translateX(23.5px); }
 }
 
 .document-thread-quote {
