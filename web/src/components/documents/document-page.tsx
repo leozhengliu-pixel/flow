@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Menu } from 'lucide-react'
+import { SidebarLeftIcon } from '@/components/ui/view-action-icons'
 import type { Editor } from '@tiptap/react'
 import { askAgentAboutSelection } from '@/components/editor/selection-issue'
 import type { SelectedDescription } from '@/components/issue/editor/structured-blocks'
@@ -243,7 +243,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   // An issue made from a comment's selection goes to the document's team and project.
   return <SelectionIssueProvider value={{ teamId: document.teamIds[0], projectId: document.projectIds[0] }}><IssueAgentTasksProvider resourceType="document" issue={{ id: document.id }} data={data}><main className={`main-panel document-page${deleted ? ' is-deleted' : ''}${commentGutter && !deleted ? ' has-comment-gutter' : ''}`}>
     <header className="document-header">
-      <button aria-label={t('Open sidebar')} className="document-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button"><Menu size={18}/></button>
+      <button aria-label={t('Open sidebar')} className="document-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button"><SidebarLeftIcon/></button>
       <DocumentBreadcrumb data={data} document={{ ...document, title }} origin={origin} onBack={onBack}/>
       {deleted && <span className="document-deleted-badge">{t('Deleted')}</span>}
       <div className="document-title-actions">
@@ -279,7 +279,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
           : <DocumentIconPicker document={document} onChange={visual => void updateDocument(document.id, visual).then(onReload)} triggerClassName={`document-icon${defaultDocumentIcon ? ' is-empty' : ''}`}/>}
         {canEdit && <DocumentTemplateChip ctx={ctx} document={document} className="document-template-chip"/>}
       </div>
-      <input
+      <div className="document-title-editor"><input
         aria-label={t('Document title')}
         className="document-title"
         onBlur={() => { setTitleFocused(false); if (canEdit && title !== document.title) { window.clearTimeout(pending.current); void updateDocument(document.id, { title }).then(onReload) } }}
@@ -288,7 +288,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
         placeholder={t('New document')}
         readOnly={!canEdit}
         value={title}
-      />
+      /></div>
       <div className="document-editor-shell" ref={setShell}>
         <DocumentAuthorLabels document={document} enabled={authorNamesOpen} lastEditor={lastEditor} shell={shell} state={body.state}/>
         <DocumentContentProvider documentId={document.id} content={body.value} contentState={body.state} presence={presence}>

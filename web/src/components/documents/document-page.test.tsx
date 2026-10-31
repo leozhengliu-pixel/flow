@@ -433,6 +433,15 @@ describe('DocumentPage deleted state', () => {
 })
 
 describe('DocumentPage mobile header and print', () => {
+  it('keeps one editable title and separate translated desktop and compact date labels', () => {
+    const { container } = renderPage()
+    expect(screen.getAllByRole('textbox', { name: 'Document title' })).toHaveLength(1)
+    expect(container.querySelector('.document-title-editor > input')).toHaveValue('Document one')
+    const compactDate = container.querySelector('.document-edited__label--phone')?.textContent
+    expect(compactDate).toBeTruthy()
+    expect(container.querySelector('.document-edited__label--desktop')).toHaveTextContent(`Edited ${compactDate}`)
+  })
+
   it('has a sidebar trigger for the mobile header', async () => {
     const user = userEvent.setup()
     const onOpenSidebar = vi.fn()
@@ -464,7 +473,8 @@ describe('DocumentPage mobile header and print', () => {
     expect(documentPageCss).toContain('--document-column: 805px')
     expect(documentPageCss).toMatch(/\.document-title\s*\{[^}]*font:\s*600 24px\/32px/)
     expect(documentPageCss).toMatch(/\.document-icon\.is-empty\s*\{[^}]*width:\s*32px;[^}]*height:\s*36px/)
-    expect(documentPageCss).not.toMatch(/384px/)
+    expect(documentPageCss.split('@media (max-width: 767px)')[0]).not.toMatch(/384px/)
+    expect(documentPageCss).toMatch(/@media \(max-width: 767px\)[\s\S]*padding: 10px 14px 384px/)
     expect(documentPageCss).not.toMatch(/rgba?\(/)
     expect(documentPageCss).not.toMatch(/:root\[data-theme/)
   })

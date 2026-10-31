@@ -1,6 +1,42 @@
 import { expect, type APIRequestContext } from '@playwright/test'
 import { test } from './workspace-fixture'
 
+test.describe('mobile document view', () => {
+  test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+    test(`short project document retains its header and editable body at ${viewport.width}px`, async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const bootstrap = await (await request.get('/api/bootstrap', { headers })).json() as { teams: { id: string }[] }
+      const project = await (await request.post('/api/projects', { headers, data: { name: '[mobile] Compare Test', teamIds: [bootstrap.teams[0].id] } })).json() as { id: string }
+      const response = await request.post('/api/documents', { headers, data: { title: '123', content: '123123123', color: '#bec2c8', projectIds: [project.id] } })
+      expect(response.status()).toBe(201)
+      const document = await response.json() as { slugId: string }
+      await page.setViewportSize(viewport)
+      await page.goto(`/${workspaceKey}/document/${document.slugId}`)
+
+      await expect(page.getByRole('textbox', { name: 'Document title', exact: true })).toHaveValue('123')
+      await expect(page.getByRole('textbox', { name: 'Document content', exact: true })).toContainText('123123123')
+      await expect(page.getByRole('link', { name: '[mobile] Compare Test' })).toBeVisible()
+      await expect(page.locator('.document-edited__label--phone')).toBeVisible()
+      expect((await page.locator('.document-title').boundingBox())?.y).toBe(150)
+      expect((await page.locator('.document-editor .flow-prosemirror').boundingBox())?.x).toBe(-2)
+      for (const selector of ['.document-mobile-menu', '.document-title-actions button[role="switch"]', '.document-title-actions button[aria-label="Document options"]', '.document-edited', '.document-header-actions button[aria-label="Copy document URL"]', '.document-header-actions button[aria-label="Change document subscribers"]']) {
+        const bounds = await page.locator(selector).boundingBox()
+        expect(bounds?.height).toBe(32)
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+
+      await page.locator('.document-edited').click()
+      await expect(page.locator('.document-owner-row')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await page.getByRole('textbox', { name: 'Document title', exact: true }).fill('[mobile] Updated title')
+      await page.getByRole('textbox', { name: 'Document title', exact: true }).blur()
+      await expect(page.locator('.document-breadcrumb-current')).toContainText('[mobile] Updated title')
+    })
+  }
+})
+
 function advancedFilterParam() {
   const filters = [{ id: 'advanced_ref', field: 'advanced', fieldLabel: 'Advanced filter', operator: 'is', value: '', valueLabel: '', values: [], tree: { id: 'advanced_ref-root', conjunction: 'and', items: [] } }]
   return Buffer.from(JSON.stringify(filters), 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')

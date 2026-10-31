@@ -47,7 +47,7 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>
       <button aria-label={t('Document display options and metadata; {edited}').replace('{edited}', editedLabel)} className="document-edited" type="button">
-        <FlowSlidersIcon/><span className="document-edited__label">{editedLabel}</span>
+        <FlowSlidersIcon/><span className="document-edited__label document-edited__label--desktop">{editedLabel}</span><span className="document-edited__label document-edited__label--phone">{documentEditedDate(lastEditedAt, formatDate)}</span>
       </button>
     </Popover.Trigger>
     <Popover.Portal>
