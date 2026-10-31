@@ -1,4 +1,11 @@
 /* Measured against the directory surface at a 1470px viewport. */
+.cycle-team-breadcrumb { display: none; }
+@media (min-width: 1024px) {
+  .flow-cycles-page { height: calc(100% - 44px); margin-bottom: 36px; }
+  .flow-cycles-page .flow-cycles-header { padding-inline: 18px; gap: 8px; }
+  .cycle-team-breadcrumb { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--font); line-height: normal; }
+  .flow-cycles-empty strong { font: 500 20px var(--font); line-height: normal; }
+}
 .flow-cycles-header {
   height: 44px;
   flex: 0 0 44px;

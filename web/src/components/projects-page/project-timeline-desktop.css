@@ -1,0 +1,30 @@
+@media (min-width: 1024px) {
+  .lp-project-timeline { --timeline-label-width: 0px; --project-timeline-bar-bg: var(--theme-control); --project-timeline-bar-progress: var(--theme-border-strong); --project-timeline-bar-border: var(--theme-border); position: relative; }
+  .lp-project-timeline__toolbar { position: absolute; top: 5px; right: 10px; z-index: 8; gap: 4px; padding: 0; }
+  .lp-project-timeline__today,
+  .lp-project-timeline__zoom-menu { box-sizing: border-box; height: 24px; display: inline-flex; align-items: center; gap: 4px; padding: 0 10px; border: .5px solid var(--theme-border); border-radius: 9999px; background: var(--bg-panel); color: var(--theme-text-secondary); font: 500 12px var(--font); }
+  .lp-project-timeline__zoom-options { min-width: 130px; z-index: 500; padding: 6px; border: .5px solid var(--popover-border); border-radius: 8px; background: var(--theme-surface-2); box-shadow: var(--shadow-control); color: var(--theme-text-primary); font: 450 13px var(--font); }
+  .lp-project-timeline__zoom-options [role=menuitemradio] { display: flex; align-items: center; min-height: 28px; padding: 0 8px; border-radius: 6px; outline: none; }
+  .lp-project-timeline__zoom-options [data-highlighted],
+  .lp-project-timeline__zoom-options [data-state=checked] { background: var(--theme-control-hover); }
+  .lp-project-timeline__today { width: 52.1px; padding-inline: 0; justify-content: center; }
+  .lp-project-timeline__zoom-menu { width: 56.9px; padding-inline: 0; justify-content: center; }
+  .lp-project-timeline__header { height: 32px; }
+  .lp-project-timeline__corner { display: none; }
+  .lp-project-timeline__major, .lp-project-timeline__minor { height: 16px; }
+  .lp-project-timeline__minor { top: 16px; }
+  .lp-project-timeline__major > span, .lp-project-timeline__minor > span { height: 16px; line-height: 16px; }
+  .lp-project-timeline__major > span { padding-left: 4px; }
+  .lp-project-timeline__major > span > b { left: 4px; text-transform: uppercase; }
+  .lp-project-timeline__minor > span { font-size: 13px; }
+  .lp-project-timeline__today-chip { top: 16px; }
+  .lp-project-timeline__body { min-height: 100%; }
+  .lp-project-timeline__grid > i { border-left-style: dashed; }
+  .lp-project-timeline__label { box-sizing: border-box; width: 320px; flex: 0 0 320px; border: 0; }
+  .lp-project-timeline__track { position: absolute; inset: 0; }
+  .lp-project-timeline__bar { top: 24px; }
+  .lp-project-timeline__bar > button { font-size: 0; }
+  .lp-project-timeline__bar::before { content: attr(data-project-name); position: absolute; bottom: 28px; left: 0; color: var(--theme-text-primary); font: 450 13px var(--font); white-space: nowrap; }
+  .lp-project-timeline__milestone { top: 29px; }
+  .lp-project-timeline__add-dates { top: 24px; }
+}

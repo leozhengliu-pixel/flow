@@ -695,6 +695,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
             <button
               aria-label={t(insightsOpen ? "Close project insights" : "Open project insights")}
               aria-pressed={insightsOpen}
+              data-project-insights=""
               className="project-detail-page__toolbar-button ui-pill"
               onClick={() => {
                 setInsightsOpen((value) => !value);

@@ -1,4 +1,5 @@
 @media (min-width: 1024px) {
+  .project-detail-page__toolbar-actions > [data-project-insights] { order: -1; }
   .project-overview__property-section,
   .project-overview__row-section { grid-template-columns: 67.73px minmax(0, 1fr); }
   .project-overview h3 { line-height: normal; }
@@ -8,4 +9,28 @@
   .project-overview .project-overview__summary { letter-spacing: 0; }
   .project-overview__team { line-height: normal; }
   .project-details-sidebar__property-label { line-height: normal; }
+  .project-details-sidebar__section > header > button:first-child { line-height: normal; }
+  .project-details-sidebar__milestone { height: 36px; flex-basis: 36px; }
+  .project-details-sidebar__section.is-milestones > header { height: 37px; }
+  .project-details-sidebar__section > header > .project-details-sidebar__see-all { padding-inline: 2px !important; }
+  .project-milestone-menu { margin-top: 3px; padding-block: 4px; font: 450 13px var(--font); line-height: normal; }
+  .project-milestone-menu [role=menuitem] { padding-left: 12px; }
+  .project-issues { min-height: 100%; display: flex; flex-direction: column; padding: 0; }
+  .project-issues__intro { box-sizing: border-box; flex: 1; min-height: 0; padding: 0 max(12px, calc((100% - 340px) / 2)); align-items: flex-start; justify-content: center; }
+  .project-issues__intro > * { width: 340px; max-width: 100%; }
+  .project-issues__intro > strong { margin: 0 0 8px; font: 600 15px/23px var(--font); }
+  .project-issues__intro > p { margin: 0 0 16px; font: 450 13px/18.2px var(--font); }
+  .project-issues__intro > p:nth-of-type(2) { margin-bottom: 24px; }
+  .project-issues__intro button { font: 500 12px var(--font); line-height: normal; }
+  .project-issues__intro kbd { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: .5px solid color-mix(in srgb, var(--on-accent) 30%, transparent); border-radius: 4px; font: 500 11px var(--font); line-height: normal; }
+  .project-issues__intro-mark { display: none; }
+  .project-issues__intro > .project-issues__intro-mark-phone { display: block; width: 86.5px; height: 80px; margin-bottom: 24px; overflow: visible; }
+  .project-issues__intro-phone-body, .project-issues__intro-phone-rim { fill: none; stroke: var(--issue-dim); stroke-width: 1.5; }
+  .project-issues__intro-phone-opening { fill: var(--pd-bg); }
+  .project-issues__intro-phone-half { fill: var(--issue-muted); }
+  .project-issues__intro-phone-ring { fill: none; stroke: var(--text); stroke-width: 1.4; }
+  .project-issues__intro-phone-ring ellipse:first-child { stroke-dasharray: 1.3 3.8; }
+  .project-issues__intro-phone-done { fill: var(--text); }
+  .project-issues__intro-phone-check { fill: none; stroke: var(--pd-bg); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  .project-activity__month { display: block; margin: 48px 16px 24px; color: var(--theme-text-primary); font: 500 18px var(--font); line-height: normal; }
 }
