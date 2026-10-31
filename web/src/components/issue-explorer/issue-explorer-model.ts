@@ -311,12 +311,15 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
   const teamStates = issueTeamIds.length === 1 ? teamWorkflowStates(data, issueTeamIds[0]) : []
   const scopedStates = teamStates.length ? teamStates : data.states
   const projectsById = new Map(data.projects.map(project => [project.id, project]))
-  const statusCounts = new Map<string, number>(), priorityCounts = new Map<string, number>(), assigneeCounts = new Map<string, number>(), creatorCounts = new Map<string, number>(), agentCounts = new Map<string, number>(), labelCounts = new Map<string, number>(), projectCounts = new Map<string, number>(), initiativeCounts = new Map<string, number>(), cycleCounts = new Map<string, number>(), addedToCycleCounts = new Map<string, number>(), subscriberCounts = new Map<string, number>(), externalSourceCounts = new Map<string, number>(), templateCounts = new Map<string, number>(), suggestedLabelCounts = new Map<string, number>()
+  const statusCounts = new Map<string, number>(), priorityCounts = new Map<string, number>(), estimateCounts = new Map<string, number>(), teamCounts = new Map<string, number>(), assigneeCounts = new Map<string, number>(), creatorCounts = new Map<string, number>(), agentCounts = new Map<string, number>(), labelCounts = new Map<string, number>(), projectCounts = new Map<string, number>(), initiativeCounts = new Map<string, number>(), cycleCounts = new Map<string, number>(), addedToCycleCounts = new Map<string, number>(), subscriberCounts = new Map<string, number>(), externalSourceCounts = new Map<string, number>(), templateCounts = new Map<string, number>(), suggestedLabelCounts = new Map<string, number>()
   const agentSessionStateCounts = new Map<string, number>(), triageCounts = emptyTriageCounts()
-  let noAssignee = 0, noAgent = 0, anyAgent = 0, noProject = 0, noInitiative = 0, noCycle = 0, noSubscribers = 0, noExternalSource = 0, autoClosed = 0, notAutoClosed = 0, noTemplate = 0, noSuggestedLabel = 0, withLinks = 0
+  let noEstimate = 0, noAssignee = 0, noAgent = 0, anyAgent = 0, noProject = 0, noInitiative = 0, noCycle = 0, noSubscribers = 0, noExternalSource = 0, autoClosed = 0, notAutoClosed = 0, noTemplate = 0, noSuggestedLabel = 0, withLinks = 0
   for (const issue of issues) {
     incrementCount(statusCounts, issue.state.id)
     incrementCount(priorityCounts, String(issue.priority))
+    if (issue.estimate === undefined || issue.estimate === null || issue.estimate < 0) noEstimate += 1
+    else incrementCount(estimateCounts, String(issue.estimate))
+    incrementCount(teamCounts, issue.team.id)
     if (issue.assignee) incrementCount(assigneeCounts, issue.assignee.id); else noAssignee += 1
     incrementCount(creatorCounts, issue.creator.id)
     if (issue.delegate) { incrementCount(agentCounts, issue.delegate.id); anyAgent += 1 } else noAgent += 1
@@ -339,6 +342,8 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
     status: [...scopedStates].sort((a, b) => (a.position??0) - (b.position??0)).map(state => ({ id: state.id, teamId: state.teamId, label: state.name, color: state.color, count: statusCounts.get(state.id) ?? 0, kind: 'status' as const, stateType: state.type })),
     statusFilter: statusFilterOptions(data, scopedStates, statusCounts),
     priority: PRIORITIES.map(priority => ({ ...priority, count: priorityCounts.get(priority.id) ?? 0 })),
+    team: data.teams.map(team => ({ id: team.id, label: team.name, count: teamCounts.get(team.id) ?? 0 })),
+    estimate: [{ id: '', label: 'No estimate', count: noEstimate }, ...[...estimateCounts.keys()].sort((a, b) => Number(a) - Number(b)).map(id => ({ id, label: id, count: estimateCounts.get(id) ?? 0 }))],
     // The Assignee filter lists people only; delegated agents are filtered under "Agent".
     assigneeFilter: [{ id: '', label: 'No assignee', count: noAssignee, kind: 'assignee' as const }, ...data.users.filter(user => user.active && !user.app).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: assigneeCounts.get(user.id) ?? 0, kind: 'assignee' as const }))],
     // What the assignee pickers and bulk "Assign to…" offer: people, then the agents that accept delegation.
@@ -410,7 +415,7 @@ export function explorerFilterOptions(field: MyIssuesFilterKey, options: Explore
   if (field === 'labels') return [{ id: '', label: 'No labels', kind: 'labels' as const }, ...options.labels]
   if (field === 'assignee') return options.assigneeFilter
   if (field === 'status') return options.statusFilter
-  if (field==='agent'||field==='agentSession'||field==='creator'||field==='priority'||field==='relations'||field==='triageIntelligence'||field==='suggestedLabel'||field==='dates'||field==='projectMilestone'||field==='project'||field==='projectProperties'||field==='initiative'||field==='cycle'||field==='addedToCycle'||field==='releases'||field==='customers'||field==='subscribers'||field==='externalSource'||field==='autoClosed'||field==='content'||field==='links'||field==='template') return options[field]
+  if (field==='team'||field==='estimate'||field==='agent'||field==='agentSession'||field==='creator'||field==='priority'||field==='relations'||field==='triageIntelligence'||field==='suggestedLabel'||field==='dates'||field==='projectMilestone'||field==='project'||field==='projectProperties'||field==='initiative'||field==='cycle'||field==='addedToCycle'||field==='releases'||field==='customers'||field==='subscribers'||field==='externalSource'||field==='autoClosed'||field==='content'||field==='links'||field==='template') return options[field]
 }
 
 /** Bulk action choices; with the selection's teams, the status choices are the ones their workflows can use. */
@@ -556,6 +561,8 @@ export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAp
   const comparison = filter.operator === 'before' || filter.operator === 'after' ? filter.operator : undefined
   let matched = true
   if (filter.field === 'priority') matched = values.includes(String(issue.priority))
+  else if (filter.field === 'team') matched = values.includes(issue.teamId ?? '')
+  else if (filter.field === 'estimate') matched = values.includes(issue.estimate == null || issue.estimate < 0 ? '' : String(issue.estimate))
   else if (filter.field === 'status') matched = values.includes(issue.state.id) || values.includes(issue.state.type) || Boolean(statusGroups && values.some(value => statusGroups.memberIds(value).includes(issue.state.id)))
   // Older saved filters may hold an agent under Assignee: it matches the issues delegated to it (agents are never assignees).
   else if (filter.field === 'assignee') matched = values.includes(issue.assignee?.id ?? '') || Boolean(issue.delegate && values.includes(issue.delegate.id))

@@ -56,6 +56,8 @@ function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], {
     // A status matches its whole status group: the same name and type in every team's workflow.
     case 'status': return { field: 'status', operator: 'in', values: data.states?.length && data.teams ? [...new Set(values.flatMap(value => statusGroupIndex({ states: data.states!, teams: data.teams!, teamSettings: data.teamSettings }).memberIds(value)))] : values }
     case 'priority': return { field: 'priority', operator: 'in', values }
+    case 'team': return { field: 'teamId', operator: 'in', values }
+    case 'estimate': return nullable('estimate', values)
     case 'assignee': {
       // Agents listed under Assignee match the issues delegated to them.
       const agents = new Set((data.users ?? []).filter(user => user.app).map(user => user.id))

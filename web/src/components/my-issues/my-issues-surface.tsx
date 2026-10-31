@@ -93,10 +93,10 @@ const filterGroups = [
   { items: [{ id: 'ai', label: 'AI filter' }] },
   { items: [{ id: 'advanced', label: 'Advanced filter' }] },
   { items: [
-    { id: 'status', label: 'Status', submenu: true }, { id: 'assignee', label: 'Assignee', submenu: true },
+    { id: 'team', label: 'Team', submenu: true }, { id: 'status', label: 'Status', submenu: true }, { id: 'assignee', label: 'Assignee', submenu: true },
     { id: 'agent', label: 'Agent', submenu: true }, { id: 'agentSession', label: 'Agent Session', submenu: true },
-    { id: 'creator', label: 'Creator', submenu: true }, { id: 'priority', label: 'Priority', submenu: true },
-    { id: 'labels', label: 'Labels', submenu: true }, { id: 'relations', label: 'Relations', submenu: true },
+    { id: 'creator', label: 'Creator', submenu: true }, { id: 'priority', label: 'Priority', submenu: true }, { id: 'estimate', label: 'Estimate', submenu: true },
+    { id: 'labels', label: 'Labels', submenu: true }, { id: 'relations', label: 'Relations', submenu: true }, { id: 'suggestedLabel', label: 'Suggested label', submenu: true },
     { id: 'triageIntelligence', label: 'Triage Intelligence', submenu: true }, { id: 'dates', label: 'Dates', submenu: true },
   ] },
   { items: [
