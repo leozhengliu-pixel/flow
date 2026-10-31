@@ -27,6 +27,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Stop background delivery writes before checking no-op API requests, and align browser assertions with the saved control and shortcut references.
 - Preserve fractional compact project-picker text metrics and avoid an unused desktop Members scrollbar gutter on Linux.
 - Match phone Search empty-state illustration colour and explanatory text spacing without changing desktop layout.
+- Apply compact picker text rendering to native buttons, exercise navigation shortcuts independently, and keep phone filter tests scoped to their viewport and current panels.
 - Match the phone Help panel's chip, filter, support rows and glyphs, and close the drawer when opening it without changing desktop menus.
 - Match phone Teams filters, scrollable columns, team counts and expandable child rows without changing the desktop table.
 - Refine phone workspace fiscal controls, initials, description wrapping, and onboarding text tones.

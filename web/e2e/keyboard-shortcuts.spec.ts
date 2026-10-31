@@ -24,25 +24,12 @@ test('every listed shortcut has a visible row and the shell handlers respond', a
   await expect(dialog).toBeVisible()
   await expect(dialog.locator('dt')).toHaveText(dialogRows)
   await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
 
-  const navigation: Array<[string, string]> = [
-    ['i', '/inbox'], ['j', '/agent'], ['m', '/my-issues/assigned'], ['r', '/reviews'],
-    ['s', '/settings/'], ['d', '/drafts'], ['a', '/issues/active'], ['b', '/issues/backlog'],
-    ['p', '/projects/all'],
-  ]
-  for (const [key, suffix] of navigation) {
-    await page.goto(`/${workspaceKey}/my-issues/assigned`)
-    await expect(page.locator('.sidebar')).toBeVisible()
-    await page.keyboard.press('g')
-    await page.keyboard.press(key)
-    await expect(page).toHaveURL(new RegExp(`${workspaceKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}${suffix.replace('/', '\\/')}`))
-  }
-
-  await page.goto(`/${workspaceKey}/my-issues/assigned`)
-  await expect(page.locator('.sidebar')).toBeVisible()
   await page.keyboard.press('?')
   await expect(page.locator('.sidebar-help-menu')).toBeVisible()
   await page.keyboard.press('Escape')
+  await expect(page.locator('.sidebar-help-menu')).toBeHidden()
   const detailsButton = page.getByRole('button', { name: /details/ })
   await expect(detailsButton).toBeVisible()
   await page.keyboard.press(']')
@@ -56,3 +43,19 @@ test('every listed shortcut has a visible row and the shell handlers respond', a
   await page.keyboard.press('?')
   await expect(page.locator('.sidebar-help-menu')).toBeHidden()
 })
+
+const navigation: Array<[string, string]> = [
+  ['i', '/inbox'], ['j', '/agent'], ['m', '/my-issues/assigned'], ['r', '/reviews'],
+  ['s', '/settings/'], ['d', '/drafts'], ['a', '/issues/active'], ['b', '/issues/backlog'],
+  ['p', '/projects/all'],
+]
+
+for (const [key, suffix] of navigation) {
+  test(`G then ${key} navigates to ${suffix}`, async ({ page, workspaceKey }) => {
+    await page.goto(`/${workspaceKey}/my-issues/assigned`)
+    await expect(page.locator('.sidebar')).toBeVisible()
+    await page.keyboard.press('g')
+    await page.keyboard.press(key)
+    await expect(page).toHaveURL(new RegExp(`${workspaceKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}${suffix.replace('/', '\\/')}`))
+  })
+}

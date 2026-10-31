@@ -1,26 +1,28 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, type APIRequestContext, type Page } from '@playwright/test'
+import { test } from './workspace-fixture'
 
 const base = process.env.FLOW_MOBILE_BASE_URL ?? 'http://127.0.0.1:4173'
 const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
 
 async function seedWorkspace(request: APIRequestContext, workspaceKey: string) {
-  const created = await request.post(`${base}/api/workspaces`, { data: { name: 'Search date filter', urlKey: workspaceKey, region: 'us' } })
-  expect(created.status()).toBe(201)
-  const workspace = await created.json() as { teams: Array<{ id: string }> }
-  const issue = await request.post(`${base}/api/issues`, { headers: { 'X-Workspace-Key': workspaceKey }, data: { title: '[e2e] Dated result', teamId: workspace.teams[0].id } })
+  const headers = { 'X-Workspace-Key': workspaceKey }
+  const response = await request.get(`${base}/api/bootstrap`, { headers })
+  expect(response.ok()).toBe(true)
+  const workspace = await response.json() as { teams: Array<{ id: string }> }
+  const issue = await request.post(`${base}/api/issues`, { headers, data: { title: '[e2e] Dated result', teamId: workspace.teams[0].id } })
   expect(issue.status()).toBe(201)
   const record = await issue.json() as { id: string }
   const recent = await request.post(`${base}/api/recent`, { headers: { 'X-Workspace-Key': workspaceKey }, data: { type: 'issue', id: record.id } })
   expect(recent.ok()).toBe(true)
 }
 
-async function applyDateFilter(page: Page, workspaceKey: string) {
+async function applyDateFilter(page: Page, workspaceKey: string, phone = false) {
   const searches: string[] = []
   page.on('request', request => { if (request.url().includes('/api/search?')) searches.push(request.url()) })
   await page.goto(`${base}/${workspaceKey}/search`)
   await expect(page.locator('a[data-result-index]').first()).toBeVisible()
   await page.getByRole('button', { name: 'Add filter', exact: true }).click()
-  await page.getByRole('menuitem', { name: /Updated date/ }).click()
+  await page.getByRole(phone ? 'option' : 'menuitem', { name: 'Updated date', exact: true }).click()
   await page.getByRole('button', { name: 'Updated date', exact: true }).click()
   await expect(page.locator('.date-time-popover')).toBeVisible()
 
@@ -44,9 +46,8 @@ async function applyDateFilter(page: Page, workspaceKey: string) {
 test.describe('workspace search date filter', () => {
   test.describe('desktop', () => {
     test.use({ viewport: { width: 1440, height: 900 } })
-    test('picks a date and applies the filter', async ({ page, request }, testInfo) => {
+    test('picks a date and applies the filter', async ({ page, request, workspaceKey }, testInfo) => {
       test.skip(testInfo.project.name !== 'chromium', 'Desktop geometry runs once')
-      const workspaceKey = `search-date-desktop-${testInfo.retry}`
       await seedWorkspace(request, workspaceKey)
       await applyDateFilter(page, workspaceKey)
     })
@@ -54,11 +55,10 @@ test.describe('workspace search date filter', () => {
 
   test.describe('phone', () => {
     test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent })
-    test('picks a date and applies the filter', async ({ page, request }, testInfo) => {
+    test('picks a date and applies the filter', async ({ page, request, workspaceKey }, testInfo) => {
       test.skip(testInfo.project.name !== 'mobile-chromium', 'Phone geometry runs once')
-      const workspaceKey = `search-date-phone-${testInfo.retry}`
       await seedWorkspace(request, workspaceKey)
-      await applyDateFilter(page, workspaceKey)
+      await applyDateFilter(page, workspaceKey, true)
     })
   })
 })
