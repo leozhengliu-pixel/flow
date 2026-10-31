@@ -114,8 +114,8 @@ describe('filter menus', () => {
 })
 
 describe('filter labels in Chinese', () => {
-  it('uses the current Agent translations', () => {
-    expect(translateToChinese('Agent')).toBe('智能体')
+  it('keeps Agent consistent with settings and session labels', () => {
+    expect(translateToChinese('Agent')).toBe('Agent')
     expect(translateToChinese('Agent Session')).toBe('Agent 会话')
     expect(translateToChinese('Any agent')).toBe('任意 Agent')
     expect(translateToChinese('No agent')).toBe('无 Agent')
