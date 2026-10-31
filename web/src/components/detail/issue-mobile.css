@@ -38,7 +38,7 @@
     min-height: 28px;
     max-width: 100%;
     margin: 0;
-    padding: 0 7.5px 0 5.5px;
+    padding: 0 8px 0 6px;
     gap: 4px;
     border: .5px solid transparent;
     border-radius: 9999px;
@@ -57,14 +57,14 @@
   .issue-view .issue-mobile-properties .issue-project-open { display: none; }
   .issue-view .issue-empty-sub-issue-action { color: var(--text); }
   .issue-view .issue-empty-sub-issue-action > span { color: var(--issue-muted); }
-  .issue-view .issue-empty-sub-issue-action > svg { color: var(--text); opacity: .6; }
+  .issue-view .issue-empty-sub-issue-action > svg { width: 14px; height: 14px; margin-right: 3px; color: var(--text); opacity: .6; }
   .issue-view .issue-mobile-relations-trigger > span { color: var(--text); }
   .issue-view .issue-mobile-properties .issue-due-date-row { margin: 0; }
   html:root body .issue-view .issue-mobile-properties .issue-due-date-trigger:not(#_) {
     width: auto;
     height: 28px;
     gap: 4px;
-    padding: 0 7.5px 0 5.5px;
+    padding: 0 8px 0 6px;
     border: .5px solid transparent;
     border-radius: 9999px;
     background: var(--issue-command-bg);

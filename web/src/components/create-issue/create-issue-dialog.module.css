@@ -184,9 +184,9 @@
   .header { height: 60px; flex-basis: 60px; padding: 12px; align-items: flex-start; }
   .header h2 { margin-top: 6.25px; color: lch(91.201% 1.65 272); font-size: 13px; font-weight: 450; line-height: normal; }
   .team { height: 28px; gap: 0; padding-left: 5px; }
-  .team > svg { margin-right: 3px; border-radius: 8px; }
+  .team > svg { margin-right: 2px; border-radius: 8px; }
   .team { color: lch(91.201% 1.65 272); line-height: 12px; }
-  .team { margin-right: -2.06px; }
+  .team { margin-right: 0; }
   .team > span { color: lch(100% 0 272); font-weight: 450; }
   .breadcrumb { margin-top: 6.25px; color: lch(64.805% 1.65 272); font-size: 13px; font-weight: 450; line-height: normal; }
   .iconButton { font-size: 13px; font-weight: 500; line-height: normal; }
@@ -205,8 +205,7 @@
   .properties { height: auto; flex-basis: auto; gap: 0; padding: 6px 12px 24px; min-height: 92px; overflow: visible; }
   .propertyGroup { width: 100%; min-height: 62px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; }
   .properties :global(.mini-property-trigger) { height: 28px; border: 0; background: var(--create-issue-control-bg); }
-  .properties :global(.mini-property-trigger) { border: .5px solid transparent; color: var(--project-status-usage); gap: 3.5px; font-size: 12px; font-weight: 500; line-height: 12px; }
-  .properties :global(.mini-property-trigger) > svg:first-child { margin-left: -0.5px; }
+  .properties :global(.mini-property-trigger) { border: .5px solid transparent; color: var(--project-status-usage); gap: 4px; font-size: 12px; font-weight: 500; line-height: 12px; }
   .properties :global(.mini-property-trigger) > :global(.avatar:first-child) { margin-left: -2px; width: 17px; height: 17px; }
   .properties :global(.mini-property-trigger) > span:not(:global(.avatar)) { font-weight: 450; }
   .properties :global(.mini-property-trigger) > span:not(:global(.avatar)) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -227,7 +226,7 @@
   .footer { height: 44px; flex-basis: 44px; padding: 0 12px 12px; border-top: 0; gap: 18px; }
   .attachButton { width: 32px; height: 32px; flex: 0 0 32px; padding: 0 2px; font-size: 12px; font-weight: 500; line-height: normal; }
   .submit { box-sizing: border-box; min-width: 0; width: 92.63px; height: 32px; flex: 0 0 92.63px; padding: 0 10px; box-shadow: var(--set-search-shadow); line-height: normal; white-space: nowrap; }
-  .createMore { min-width: 0; gap: 7px; font-weight: 400; white-space: nowrap; }
+  .createMore { min-width: 0; gap: 6px; margin-right: -6px; font-weight: 400; white-space: nowrap; }
   .createMore :global([data-control="toggle"]) { background: var(--create-issue-toggle-off); }
   .confirmActions { height: auto; min-height: 40px; display: flex; flex-wrap: wrap; justify-content: flex-end; }
   .confirmActions > span { display: none; }

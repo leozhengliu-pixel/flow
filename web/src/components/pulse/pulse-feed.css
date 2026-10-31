@@ -289,7 +289,7 @@
   }
   html:root body .app .pulse-page .pulse-view-tabs > a.pulse-tab {
     height: 32px;
-    padding: 0 9.5px;
+    padding: 0 10px;
     border-radius: 9999px;
     border: .5px solid transparent;
     font-size: 12px;

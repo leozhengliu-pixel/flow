@@ -546,8 +546,8 @@ button.document-icon.is-empty:hover,
   .document-subscribers > .document-subscribers__document,
   .document-subscribers > .document-subscribers__search,
   .document-subscribers > .document-subscribers__list {
-    width: calc(100% + 2px);
-    margin-left: -.5px;
+    width: calc(100% + 1px);
+    margin-left: 0;
   }
   .document-subscribers__document > span {
     box-sizing: border-box;

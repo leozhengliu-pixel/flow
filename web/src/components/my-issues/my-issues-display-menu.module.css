@@ -70,7 +70,7 @@
 .selectIndicator:not(#_) svg{width:14px;height:14px}
 /* Layout tabs sit 2px inside the field, 129 wide with 6px between them; chips and rows are 5px apart. */
 .layoutTabs:not(#_){padding:0 2px}
-.propertyGrid:not(#_){gap:5px}
+.propertyGrid:not(#_){gap:6px}
 
 @media (min-width: 1024px) {
   .desktopModeIcon,.desktopSortIcon{display:none}
@@ -116,7 +116,7 @@
   .popover[data-list-display]:not(#_) .switchRow > span { display: flex; align-items: center; line-height: normal; }
   .popover[data-list-display]:not(#_) .switchRow input { align-self: center; background: var(--pk-toggle-off-phone); }
   .popover[data-list-display]:not(#_) .sectionLabel { height: auto; margin: 8px 0 4px; padding: 0; line-height: normal; }
-  .popover[data-list-display]:not(#_) .propertyGrid { margin-top: 7px; gap: 0; padding-bottom: 0; }
+  .popover[data-list-display]:not(#_) .propertyGrid { margin-top: 7px; gap: 1px; padding-bottom: 0; }
   .popover[data-list-display]:not(#_) .propertyGrid button {
     height: 28px;
     margin: 0 4px 4px 0;

@@ -1171,7 +1171,7 @@
     min-height: 28px;
     max-width: 100%;
     margin: 0;
-    padding: 0 7.5px 0 5.5px;
+    padding: 0 8px 0 6px;
     gap: 4px;
     border: .5px solid transparent;
     border-radius: 9999px;
@@ -1224,7 +1224,7 @@
     font-family: inherit;
   }
   html:root body .app .flow-inbox-detail__body--full-bleed .issue-empty-sub-issue-action > span { color: var(--issue-muted); }
-  html:root body .app .flow-inbox-detail__body--full-bleed .issue-empty-sub-issue-action svg { color: var(--text); opacity: .6; }
+  html:root body .app .flow-inbox-detail__body--full-bleed .issue-empty-sub-issue-action svg { width: 14px; height: 14px; margin-right: 3px; color: var(--text); opacity: .6; }
   html:root body .app .flow-inbox-detail__body--full-bleed .issue-empty-sub-issue-row + .activity-heading { margin-top: 44.5px; }
   html:root body .app .flow-inbox-detail__body--full-bleed .activity-heading { border: 0; }
   html:root body .app .flow-inbox-detail__body--full-bleed .activity-heading > span { border-style: none; }

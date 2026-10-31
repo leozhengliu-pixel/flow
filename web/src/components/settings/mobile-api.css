@@ -27,7 +27,7 @@
     .api-placeholder-lines circle { fill: none; stroke: var(--set-text); stroke-width: 1.5; }
     .api-webhooks-section .settings-row { min-height: 68px; gap: 8px; padding: 16px 10.6667px; }
     .api-webhooks-section .settings-row--action .settings-row-copy > strong { color: var(--set-desc); font: 450 13px/normal var(--font); }
-    .api-webhooks-section .settings-row--action .settings-action { height: 36px; margin-right: -6px; padding: 0 12px 0 10px; gap: 5px; border: .5px solid transparent; border-radius: 9999px; background: transparent; box-shadow: none; color: var(--set-control-text); font: 500 13px/normal var(--font); }
+    .api-webhooks-section .settings-row--action .settings-action { height: 36px; margin-right: -5px; padding: 0 12px 0 10px; gap: 5px; border: .5px solid transparent; border-radius: 9999px; background: transparent; box-shadow: none; color: var(--set-control-text); font: 500 13px/normal var(--font); }
     .api-keys-section .settings-card > .settings-row { gap: 8px; padding: 16px 10.6667px; }
     .api-keys-section .settings-card > .settings-row:first-child { flex-direction: column; align-items: stretch; }
     .api-keys-section .settings-row-copy { flex: none; }
