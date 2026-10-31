@@ -34,12 +34,12 @@ describe('document menu: Apply document template…', () => {
   })
   afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
 
-  it('is offered between New template from document and Rename when templates exist', async () => {
+  it('is offered after Rename when templates exist', async () => {
     open([template])
     const rows = (await screen.findAllByRole('menuitem')).map(row => row.textContent ?? '')
     const apply = rows.findIndex(label => label.includes('Apply document template…'))
     expect(apply).toBeGreaterThan(rows.findIndex(label => label.includes('New template from document')))
-    expect(apply).toBeLessThan(rows.findIndex(label => label.includes('Rename…')))
+    expect(apply).toBeGreaterThan(rows.findIndex(label => label.includes('Rename…')))
   })
 
   it('is hidden when the workspace has no templates', async () => {

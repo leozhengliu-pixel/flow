@@ -7,6 +7,7 @@ test.skip(({ isMobile }) => isMobile, 'desktop shell parity')
 test('all three create commands complete real writes and fullscreen has a working shortcut', async ({ page, workspaceKey }) => {
   await page.goto(`/${workspaceKey}/agent`)
   await expect(page.locator('.sidebar-compose')).toBeVisible()
+  await page.locator('.sidebar').click({ position: { x: 4, y: 50 } })
   const palette = page.locator('[cmdk-root]')
   const shot = async (name: string) => {
     if (!process.env.FLOW_CI_SHOTS) return
@@ -43,7 +44,7 @@ test('all three create commands complete real writes and fullscreen has a workin
   await expect(page.getByRole('textbox', { name: '[audit] Command label', exact: true })).toHaveValue('[audit] Command label')
   await shot('command-label-saved')
 
-  await page.getByRole('button', { name: 'Back to app', exact: true }).click()
+  await page.getByRole('link', { name: 'Back to app', exact: true }).click()
   await command('Create view', 'Create view…')
   await page.getByRole('textbox', { name: 'View name', exact: true }).fill('[audit] Command view')
   const viewSaved = page.waitForResponse(response => response.url().endsWith('/api/views') && response.request().method() === 'POST')
@@ -57,6 +58,7 @@ test('all three create commands complete real writes and fullscreen has a workin
 test('desktop text, query inset, shortcut focus and workspace menu retain their measured geometry', async ({ page, workspaceKey }) => {
   await page.goto(`/${workspaceKey}/agent`)
   await expect(page.locator('.sidebar-compose')).toBeVisible()
+  await page.locator('.sidebar').click({ position: { x: 4, y: 50 } })
   await page.keyboard.press('ControlOrMeta+k')
   const palette = page.locator('.command-dialog')
   await expect(palette.locator('[cmdk-input]')).toHaveCSS('padding-right', '112px')

@@ -237,8 +237,8 @@ describe('embedded surface parity (floating chat panel, thread cards, reactions,
     // Cards sit 2px right of the 833px editor; it keeps 34px from the sidebar, is centred on wide pages and gives up width before overlapping the gutter.
     expect(css).toContain('left: calc(100% + 16px)')
     expect(css).toContain('max(33.5px')
-    expect(css).toContain('calc(100% - 1127.5px)')
-    expect(css).toContain('calc(100% - var(--document-shift) - 294.5px)')
+    expect(css).toContain('calc(100cqw - 1127.5px)')
+    expect(css).toContain('calc(100cqw - var(--document-shift) - 294.5px)')
     // Cards fill the rest of the page, 10px short of its right edge, from 284px up to 372px.
     expect(css).toContain('width: min(372px, calc(100cqw - var(--document-shift) - var(--document-canvas-width) - 10px))')
     expect(css).toMatch(/\.document-inline-gutter\.is-popover \.document-thread-card \{ width: 360px;/)

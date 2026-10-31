@@ -42,7 +42,7 @@ it('shows the live document title with its icon and the shared document menu', a
   await user.click(screen.getByRole('button', { name: 'Notes actions' }))
   const menu = await screen.findByRole('menu')
   expect(menu).toHaveAttribute('aria-label', 'Document actions')
-  expect(within(menu).getAllByRole('menuitem').map(item => item.querySelector('.flow-menu__text')?.textContent)).toEqual(['Move to', 'Pin to team', 'Duplicate', 'New template from document', 'Rename…', 'Favorite', 'Copy', 'Remind me', 'Show document history', 'Delete', 'Remove resource'])
+  expect(within(menu).getAllByRole('menuitem').map(item => item.querySelector('.flow-menu__text')?.textContent)).toEqual(['Move to', 'Pin to team', 'Duplicate', 'Rename…', 'New template from document', 'Favorite', 'Copy', 'Remind me', 'Show document history', 'Delete', 'Remove resource'])
 })
 
 it('labels an untitled document Untitled, also when the stored title is stale', () => {
