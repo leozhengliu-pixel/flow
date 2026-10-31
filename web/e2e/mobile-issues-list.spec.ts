@@ -1,14 +1,13 @@
 import { expect, test } from '@playwright/test'
+import { test as workspaceTest } from './workspace-fixture'
+import type { BootstrapData } from '../src/types/flow'
 
-test.describe('mobile issue lists and views', () => {
-  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+workspaceTest.describe('mobile issue lists and views', () => {
+  workspaceTest.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
-  test('keeps list, board, triage and views surfaces inside the phone viewport', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-issues-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: 'Mobile issue parity', urlKey: workspaceKey, region: 'us' },
-    })
-    expect(response.status()).toBe(201)
+  workspaceTest('keeps list, triage and views surfaces inside the phone viewport', async ({ page, request, workspaceKey }) => {
+    const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
+    expect(response.ok()).toBeTruthy()
     const workspace = await response.json() as { teams?: Array<{ key: string }> }
     const teamKey = workspace.teams?.[0]?.key
     expect(teamKey).toBeTruthy()
@@ -32,7 +31,15 @@ test.describe('mobile issue lists and views', () => {
       expect(geometry.height).toBe(844)
       expect(geometry.overflow, `${route} should not overflow horizontally`).toBe(true)
     }
+  })
 
+  workspaceTest('keeps filter, display and overflow views usable on the phone', async ({ page, request, workspaceKey }, testInfo) => {
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await request.get('/api/bootstrap', { headers })
+    expect(bootstrap.ok()).toBeTruthy()
+    const data = await bootstrap.json() as BootstrapData
+    const issue = await request.post('/api/issues', { headers, data: { title: 'Assigned phone issue', teamId: data.teams[0].id, assigneeId: data.viewer.id } })
+    expect(issue.status()).toBe(201)
     await page.goto(`/${workspaceKey}/my-issues/assigned`)
     await page.getByRole('button', { name: 'Add filter', exact: true }).click()
     await expect(page.getByRole('dialog', { name: 'Add Filter…' })).toBeVisible()
@@ -74,7 +81,9 @@ test.describe('mobile issue lists and views', () => {
     await page.keyboard.press('ArrowDown')
     await page.keyboard.press('Enter')
     await expect(moreViews).toBeHidden()
+  })
 
+  workspaceTest('switches the workspace issue list to a horizontally scrollable phone board', async ({ page, workspaceKey }) => {
     await page.goto(`/${workspaceKey}/issues/all`)
     const display = page.getByRole('button', { name: 'Display options' }).first()
     await expect(display).toBeVisible()
@@ -577,6 +586,7 @@ test.describe('mobile Team issues board scrolled to the hidden columns', () => {
     expect(Math.abs((countBox?.width ?? 0) - 25.43)).toBeLessThanOrEqual(1)
     await expect(count.locator('.estimate-icon')).toBeHidden()
     await expect(count.locator('svg:not(.estimate-icon)')).toBeVisible()
+    if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/phone-hidden-board.png`, animations: 'disabled' })
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   })
 })
