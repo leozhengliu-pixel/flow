@@ -33,6 +33,7 @@ function setup(context?: CommandContext, agent: { sessions?: AgentSession[] } = 
   const onUpdateIssue = vi.fn(async (id: string, input: IssueUpdateInput) => ({ ...(id === second.id ? second : first), ...input }) as Issue)
   const onUpdateIssues = vi.fn(async (ids: string[], input: IssueUpdateInput) => ids.map(id => ({ ...(id === second.id ? second : first), ...input }) as Issue))
   const onOpenChange = vi.fn()
+  const onOpenResult = vi.fn()
   const noop = vi.fn()
   function Harness() {
     const [open, setOpen] = useState(true)
@@ -41,12 +42,12 @@ function setup(context?: CommandContext, agent: { sessions?: AgentSession[] } = 
       <CommandMenu open={open} onOpenChange={value => { onOpenChange(value); setOpen(value) }} data={bootstrap} onUpdateIssue={onUpdateIssue} onUpdateIssues={onUpdateIssues}
         onCreateIssue={noop} onCreateIssueTemplate={noop} onCreateProject={noop} onCreateView={noop} onCreateInitiative={noop} onSearchWorkspace={noop}
         onNavigateInbox={noop} onNavigateMyIssues={noop} onNavigateProjects={noop} onNavigateInitiatives={noop} onNavigateViews={noop} onNavigateMembers={noop}
-        onNavigateCustomers={noop} onNavigateAgent={noop} onOpenResult={noop}
+        onNavigateCustomers={noop} onNavigateAgent={noop} onOpenResult={onOpenResult}
         onAskAgent={onAskAgent} onAskAgentQuery={onAskAgentQuery} agentSessions={agent.sessions} onOpenAgentSession={onOpenAgentSession}/>
     </>
   }
   render(<MemoryRouter><I18nProvider><Harness/></I18nProvider></MemoryRouter>)
-  return { onUpdateIssue, onUpdateIssues, onOpenChange, onAskAgent, onAskAgentQuery, onOpenAgentSession, user: userEvent.setup() }
+  return { onUpdateIssue, onUpdateIssues, onOpenChange, onOpenResult, onAskAgent, onAskAgentQuery, onOpenAgentSession, user: userEvent.setup() }
 }
 
 const input = () => document.querySelector<HTMLInputElement>('[cmdk-input]')!
@@ -65,6 +66,34 @@ describe('context-aware command menu', () => {
     expect(screen.queryByLabelText('Command context')).not.toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /Change status/ })).not.toBeInTheDocument()
     expect(screen.getByRole('option', { name: /Create new issue…C/ })).toBeInTheDocument()
+  })
+
+  it('opens a searchable issue picker, includes server-only results, and navigates on selection', async () => {
+    const remote = makeIssue({ id: 'remote', identifier: 'TST-99', title: 'Server-only issue' })
+    api.listIssueRecords.mockResolvedValue({ items: [remote] })
+    const { user, onOpenResult, onOpenChange } = setup()
+    const command = screen.getByRole('option', { name: /Open issue…/ })
+    expect([...command.querySelectorAll('kbd')].map(key => key.textContent)).toEqual(['O', 'I'])
+    await user.click(command)
+    expect(screen.getByLabelText('Command context')).toHaveTextContent('Open issue…')
+    await user.type(input(), 'TST-99')
+    await user.click(await screen.findByRole('option', { name: /Server-only issue/ }))
+    expect(api.listIssueRecords).toHaveBeenCalledWith(expect.objectContaining({ q: 'TST-99' }), expect.any(AbortSignal))
+    expect(onOpenResult).toHaveBeenCalledWith(expect.objectContaining({ type: 'issue', id: remote.id, identifier: 'TST-99' }))
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('returns from the issue picker to root commands with Escape or an empty Backspace', async () => {
+    const { user } = setup()
+    await user.click(screen.getByRole('option', { name: /Open issue…/ }))
+    await user.click(input())
+    await user.keyboard('{Escape}')
+    expect(screen.queryByLabelText('Command context')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: /Open issue…/ }))
+    await user.click(input())
+    await user.keyboard('{Backspace}')
+    expect(screen.queryByLabelText('Command context')).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /Open issue…/ })).toBeVisible()
   })
 
   it('shows the open issue as a context chip and lists issue actions first', () => {

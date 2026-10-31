@@ -2649,6 +2649,7 @@ export const zhCN: Record<string, string> = {
   "Loading issue description": "正在加载事项描述",
   "Mark as": "标记为",
   "Open issue": "打开事项",
+  "Open issue…": "打开事项…",
   "Optional title": "可选标题",
   "Remove link": "移除链接",
   "Save failed · Retry": "保存失败 · 重试",

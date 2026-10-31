@@ -546,6 +546,7 @@ function App() {
     [commandCustomerPicker, setCommandCustomerPicker] = useState(false),
     // "O then D" opens it on "Open document…".
     [commandDocumentPicker, setCommandDocumentPicker] = useState(false),
+    [commandIssuePicker, setCommandIssuePicker] = useState(false),
     // "N then R" opens it on "Create new release…" (pipeline picker).
     [commandReleasePicker, setCommandReleasePicker] = useState(false),
     // The New release composer opened from ⌘K or N then R.
@@ -1097,6 +1098,13 @@ function App() {
         e.preventDefault();
         shortcutSequence.current = { key: "", at: 0 };
         setCommandDocumentPicker(true);
+        setCommandOpen(true);
+        return;
+      }
+      if (inSequence && sequence.key === "o" && pressed === "i" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        setCommandIssuePicker(true);
         setCommandOpen(true);
         return;
       }
@@ -7104,9 +7112,10 @@ function App() {
         {commandOpen && (
           <CommandMenu
             open={commandOpen}
-            onOpenChange={open => { setCommandOpen(open); if (!open) { setCommandCustomerPicker(false); setCommandDocumentPicker(false); setCommandReleasePicker(false); } }}
+            onOpenChange={open => { setCommandOpen(open); if (!open) { setCommandCustomerPicker(false); setCommandDocumentPicker(false); setCommandIssuePicker(false); setCommandReleasePicker(false); } }}
             initialCustomerPicker={commandCustomerPicker}
             initialDocumentPicker={commandDocumentPicker}
+            initialIssuePicker={commandIssuePicker}
             initialReleasePicker={commandReleasePicker}
             releaseHost={releasesAvailable(data) ? { navigate: navigateTo, createRelease: setReleaseComposer } : undefined}
             onReleasesChanged={async () => { await reloadWorkspaceMetadata(data.workspace.urlKey); }}

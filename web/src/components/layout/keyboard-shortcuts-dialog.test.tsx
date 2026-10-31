@@ -11,6 +11,7 @@ it('shows supported shortcuts in a searchable Help panel', async () => {
 
   expect(screen.getByRole('heading', { name: 'Keyboard Shortcuts' })).toBeVisible()
   expect(screen.getByText('Go to settings')).toBeVisible()
+  expect(screen.getByText('Open issue').closest('div')).toHaveTextContent('Open issueOthenI')
   expect(screen.getByText('New project')).toBeVisible()
   expect(screen.queryByText('Customize in Settings')).toBeNull()
   expect(screen.getByRole('heading', { name: 'Triage' })).toBeVisible()
