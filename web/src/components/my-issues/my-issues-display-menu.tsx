@@ -103,7 +103,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
     <Popover.Trigger asChild>
       <button type="button" data-issue-display-trigger={phoneIssueMenu ? 'true' : undefined} className={`${styles.trigger} ui-pill`} aria-label={t('Display options')} aria-pressed={open}>
         <DisplayIcon />
-        {options.layout !== 'list' && <span className={styles.triggerDot} aria-hidden="true"/>}
+        {(options.layout !== 'list' || options.grouping !== 'focus') && <span className={styles.triggerDot} aria-hidden="true"/>}
       </button>
     </Popover.Trigger>
     <Popover.Portal>

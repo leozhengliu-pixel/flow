@@ -633,6 +633,42 @@ test.describe('my issues phone toolbar', () => {
   })
 })
 
+test.describe('team issues phone toolbar', () => {
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent })
+  test('matches the team breadcrumb, selected all-issues tab and grouped toolbar', async ({ page, request, workspaceKey }) => {
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await (await request.get(`${api}/api/bootstrap`, { headers })).json() as {
+      teams: Array<{ id: string; key: string }>; states: Array<{ id: string; type: string }>
+    }
+    const team = bootstrap.teams[0]
+    const started = bootstrap.states.find(state => state.type === 'started')!.id
+    const todo = bootstrap.states.find(state => state.type === 'unstarted')!.id
+    for (let index = 1; index <= 7; index += 1) {
+      const response = await request.post(`${api}/api/issues`, { headers, data: { title: `[mobile] Team started ${index}`, teamId: team.id, stateId: started } })
+      expect(response.status()).toBe(201)
+    }
+    for (let index = 1; index <= 10; index += 1) {
+      const response = await request.post(`${api}/api/issues`, { headers, data: { title: `[mobile] Team todo ${index}`, teamId: team.id, stateId: todo } })
+      expect(response.status()).toBe(201)
+    }
+    const defaults = { grouping: 'status', groupOrder: 'desc', ordering: 'importance', layout: 'list', properties: ['id', 'status', 'assignee', 'priority', 'project', 'estimate', 'labels', 'created'], completedWindow: 'all', showTriageIssues: false, showSubIssues: true, nestedSubIssues: false, showEmptyGroups: false }
+    expect((await request.patch(`${api}/api/teams/${team.id}/settings`, { headers, data: { issueViewDefaults: { all: defaults } } })).ok()).toBe(true)
+
+    await page.goto(`${base}/${workspaceKey}/team/${team.key}/all`)
+    await geometry(page.locator('[data-issue-explorer] [data-content-view-header]'), { x: 0, y: 0, width: 390, height: 44 })
+    await geometry(page.locator('[data-issue-explorer] [data-content-view-subheader]'), { x: 0, y: 44, width: 390, height: 43.5 })
+    await expect(page.locator('[data-content-view-breadcrumb] [data-current]')).toHaveText('Issues')
+    await expect(page.locator('[data-content-view-subheader] nav a[aria-current="page"]')).toHaveText('All issues')
+    await geometry(page.locator('[data-my-issues-group-header]').first(), { x: 8, y: 87.5, width: 374, height: 36 })
+    await expect(page.locator('[data-my-issues-group-title]').first()).toHaveText('In Progress')
+    await expect(page.locator('[data-my-issues-group-header]').first().locator('[class*="groupCount"]')).toHaveText('7')
+    await expect(page.locator('[data-issue-display-trigger] span[aria-hidden="true"]')).toBeVisible()
+    await expect(page.locator('.bottom-agent')).toBeHidden()
+    await noOverflow(page)
+    if (shots) await page.screenshot({ path: `${shots}/flow-team-topbar-390.png` })
+  })
+})
+
 test.describe('phone command menu', () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent })
   test('opens the selected issue actions at the phone-sheet geometry', async ({ page, request, workspaceKey }) => {
