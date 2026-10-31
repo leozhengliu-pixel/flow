@@ -22,7 +22,7 @@ import { SearchMenus, SearchFilterChips } from './search-menus'
 
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import './workspace-search-page.css'
-import phoneSearchArtwork from '@/assets/search-empty-mobile.svg'
+import phoneSearchArtwork from '@/assets/search-empty-mobile.svg?raw'
 
 const tabs: Array<{ id: SearchTab; label: string }> = [
   { id: 'all', label: 'All' },
@@ -197,7 +197,7 @@ function SearchEmpty() {
 function SearchEmptyIllustration() {
   const {t}=useI18n()
   const phone = usePhoneLayout()
-  if (phone) return <img alt={t('No search results illustration')} className="workspace-search-empty-illustration" src={phoneSearchArtwork}/>
+  if (phone) return <svg role="img" aria-label={t('No search results illustration')} className="workspace-search-empty-illustration workspace-search-empty-illustration--phone" viewBox="15 30 150 100" dangerouslySetInnerHTML={{ __html: phoneSearchArtwork.replace(/^<svg[^>]*>|<\/svg>$/g, '') }}/>
   return <svg role="img" aria-label={t('No search results illustration')} className="workspace-search-empty-illustration" fill="none" viewBox="0 0 156 72">
     <g fill="currentColor" opacity=".08">{[4,32,60,88,116,144].flatMap((x,index)=>[8,36,64].map((y,row)=><rect height={index===2&&row===1?16:10} key={`${x}-${y}`} rx="2" width={index===2&&row===1?16:10} x={x-5} y={y-5}/>))}</g>
     <circle cx="78" cy="36" fill="var(--theme-surface-2)" r="20" stroke="var(--theme-border-strong)"/>

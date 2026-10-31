@@ -92,6 +92,9 @@
 .work-menu-separator::before { content: ""; display: block; height: .5px; background: var(--work-menu-separator); }
 
 @media (max-width: 800px) {
-  .issue-header .issue-sequence, .issue-header .issue-command-strip { display: none; }
+  .issue-header .issue-command-strip { display: none; }
+  .issue-header .issue-sequence { display: flex; height: 32px; gap: 3px; }
+  .issue-header .issue-sequence-count { display: none; }
+  .issue-header .issue-sequence-buttons { height: 32px; }
+  .issue-header .issue-sequence-buttons button { width: 32px; height: 32px; flex-basis: 32px; }
 }
-
