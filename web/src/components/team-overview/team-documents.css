@@ -45,8 +45,8 @@
   white-space: nowrap;
 }
 .team-docs-heading.is-name { flex: 0 1 auto; min-width: 0; justify-content: flex-start; margin-right: auto; }
-.team-docs-heading.is-date { flex: 0 0 120px; width: 120px; justify-content: flex-start; position: relative; left: 6px; }
-.team-docs-heading.is-owner { flex: 0 0 148px; width: 148px; justify-content: flex-start; position: relative; left: 6px; }
+.team-docs-heading.is-date { flex: 0 0 114px; width: 114px; justify-content: flex-start; margin-left: 0; padding-inline: 0; }
+.team-docs-heading.is-owner { flex: 0 0 142px; width: 142px; justify-content: flex-start; margin-left: 0; padding-inline: 0; }
 .team-docs-heading:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 .team-docs-heading svg { flex: none; }
 
@@ -281,9 +281,6 @@
   .team-docs-group { margin: 0 8px 2px; background: var(--theme-surface-2); }
   .team-docs-more-spacer { display: none; }
   .team-docs-more { position: absolute; top: 8px; right: 0; }
-  .team-docs-heading.is-date,
-  .team-docs-heading.is-owner { left: 8px; }
-  .team-docs-date { position: relative; left: 2px; }
 }
 
 @media (max-width: 900px) {
