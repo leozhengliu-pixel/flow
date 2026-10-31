@@ -394,6 +394,7 @@
   .assigneeTrigger{right:8px}
   .column:hover .addIssue{opacity:0}
   .addIssue{opacity:0;width:calc(100% - 4px);height:28px;margin:0 2px;padding:6px 8px;line-height:normal;border:.5px solid var(--board-add-issue-border);border-radius:9999px;background:var(--board-add-issue-bg);color:var(--board-add-issue-fg);font-size:12px;font-weight:500}
+  .addIssue:hover{background:var(--board-add-issue-bg);color:var(--board-add-issue-fg)}
   .hiddenColumns{width:350px;min-width:350px;padding:0 12px 0 0;border-left:0}
   .hiddenHeader{height:50px;position:sticky;top:0;z-index:10;background:var(--bg-panel);display:flex;align-items:center;gap:4px}
   .hiddenToggle{height:28px;gap:4px;margin-left:1px;padding:0 8px 0 6px;border:.5px solid transparent;border-radius:9999px;color:var(--issue-fg);font-size:12px;font-weight:500;line-height:normal}
