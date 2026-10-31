@@ -1283,10 +1283,9 @@
   .team-home-tab-caret { width: 8px; height: 9px; flex: 0 0 8px; }
   .team-home-tabs-overflow-pill {
     box-sizing: border-box;
-    width: 74.96px;
     height: 32px;
     display: inline-flex;
-    flex: 0 0 74.96px;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: center;
     padding: 0 10px;
