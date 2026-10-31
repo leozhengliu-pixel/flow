@@ -223,6 +223,7 @@
 .project-overview__initiatives .mini-property-trigger:hover { background: var(--theme-control); color: var(--theme-text-secondary); }
 .project-overview__initiative { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 7px; border-radius: 5px; color: var(--theme-text-secondary); font-size: 12px; }
 .project-overview__initiative svg { color: #cf6b7c; }
+.project-overview__initiative-add { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border-radius: 9999px; }
 .project-overview__string-item { min-height: 24px; display: inline-flex; align-items: center; gap: 4px; margin: 1px; padding: 3px 6px; border-radius: 9999px; color: var(--pd-copy); font-size: 13px; line-height: 18px; background: var(--theme-surface-1); }
 .project-overview__string-item>i { width: 8px; height: 8px; border-radius: 50%; }
 .project-overview__string-item button { width: 20px; height: 20px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #66666b; opacity: 0; }

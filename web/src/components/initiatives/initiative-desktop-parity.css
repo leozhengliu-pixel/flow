@@ -15,10 +15,12 @@
   .li-detail-toolbar { height: 43px; flex-basis: 43px; padding: 0 8px; border-bottom-color: transparent; }
   .li-detail-toolbar nav { gap: 4px; }
   .li-detail-toolbar nav > a { box-sizing: border-box; height: 28px; padding: 0 10px; border-radius: 9999px; font: 500 12px var(--font); line-height: normal; }
+  .li-detail-toolbar nav > button[aria-label="Add new view"] { color: var(--theme-text-primary); background: transparent; }
+  .li-detail-toolbar > div > button[aria-label*="initiative updates"] { display: none; }
   .li-detail-body.has-details .li-detail-main { max-width: calc(100% - 400px); }
   .li-detail .li-overview { width: min(805px, calc(100% - 96px)); margin: 0 auto; padding: 64px 0 90px; }
   .li-overview-title { margin-bottom: 20px; }
-  .li-overview-title > .li-overview-icon { box-sizing: border-box; width: 36px; height: 36px; margin: 0 0 12px; padding: 6px; border-radius: 8px; background: color-mix(in srgb, var(--view-color) 18%, transparent); }
+  .li-overview-title > .li-overview-icon { box-sizing: border-box; width: 36px; height: 36px; margin: 0 0 12px; padding: 6px; transform: none; border-radius: 8px !important; background: color-mix(in srgb, var(--view-color) 18%, transparent) !important; }
   .li-overview-icon > svg { width: 24px; height: 24px; }
   .li-detail .li-title-input { height: 32px; padding: 0; transform: none; font: 600 24px/32px var(--font); letter-spacing: 0; }
   .li-detail .li-summary-input { height: 23px; margin-top: 4px; padding: 0; transform: none; font: 450 15px/23px var(--font); letter-spacing: 0; }
@@ -69,11 +71,14 @@
   .li-detail-sidebar > section:first-child { padding-bottom: 5px; }
   .li-detail-sidebar .activity-sidebar-section__heading { height: 28px; font: 500 13px var(--font); line-height: normal; }
   .li-detail-sidebar .activity-sidebar-section__see-all { font-size: 12px; font-weight: 450; }
-  .li-detail-sidebar .activity-sidebar-section__teaser li { font: 450 13px var(--font); line-height: normal; }
+  .li-detail-sidebar .activity-sidebar-section__teaser li { font: 450 12px/16.8px var(--font); }
   .li-detail-sidebar > section:nth-child(2) { order: 2; }
   .li-detail-sidebar .li-sidebar-heading { height: 28px; font: 500 13px var(--font); line-height: normal; }
   .li-detail-sidebar dl { grid-template-columns: 98px minmax(0, 1fr); padding: 4px 0 0; }
   .li-detail-sidebar dt, .li-detail-sidebar dd { min-height: 36px; font: 450 12px var(--font); line-height: normal; }
+  .li-detail-sidebar dd .lp-project-property-trigger { color: var(--theme-text-primary); font-weight: 450; }
+  .li-detail-sidebar dd .lp-project-property-trigger > span:last-child { color: var(--theme-text-primary); }
+  .li-detail-sidebar .flow-disclosure-triangle { width: 16px; height: 16px; }
   .li-detail-sidebar > section:first-child dt:has(+ dd .li-properties--leadTeam),
   .li-detail-sidebar > section:first-child dd:has(.li-properties--leadTeam),
   .li-detail-sidebar > section:first-child dt:has(+ dd .li-properties--contributingTeams),

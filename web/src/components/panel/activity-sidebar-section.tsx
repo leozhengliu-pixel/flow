@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { DisclosureTriangle } from '@/components/ui/disclosure-triangle'
 import {
   actorBadgeLabel,
   groupActivityHistory,
@@ -12,6 +12,8 @@ export type ActivitySidebarFilter = 'all' | 'updates' | 'comments' | 'history'
 export type ActivitySidebarItem = GroupableActivityItem & {
   text: string
   actorLabel?: string
+  date?: string
+  icon?: ReactNode
 }
 
 export type ActivitySidebarSectionProps = {
@@ -96,7 +98,7 @@ export function ActivitySidebarSection({
         type="button"
       >
         <span>Activity</span>
-        <ChevronDown size={11} data-open={open || undefined} />
+        <DisclosureTriangle open={open} />
         {onSeeAll && (
           <span
             className="activity-sidebar-section__see-all"
@@ -164,8 +166,9 @@ export function ActivitySidebarSection({
             <ul className="activity-sidebar-section__teaser">
               {visible.map(item => (
                 <li key={item.id}>
+                  {item.icon && <span className="activity-sidebar-section__icon">{item.icon}</span>}
                   <strong>{item.actorLabel ?? item.userNames?.[0] ?? 'Someone'}</strong>
-                  <span>{item.text}</span>
+                  <span>{item.text}{item.date && <> · <time>{item.date}</time></>}</span>
                 </li>
               ))}
             </ul>
