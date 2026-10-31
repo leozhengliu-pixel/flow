@@ -4,6 +4,7 @@ import { IssueExplorerPage } from '@/components/issue-explorer/issue-explorer-pa
 import type { MyIssuesCreateContext } from '@/components/my-issues/my-issues-list'
 import { memberProfileHandle, memberProfilePath } from '@/lib/app-routes'
 import type { BootstrapData, Issue, IssueUpdateInput, User } from '@/types/flow'
+import type { IssueConversionKind } from '@/components/issue/issue-options-menu'
 
 import { MemberProfileAside } from './member-profile-aside'
 import { MemberProfileEmpty } from './member-profile-empty'
@@ -16,7 +17,7 @@ import './member-profile-page.css'
  * with Assigned / Created tabs. Filters, display options, bulk actions and paging come from the explorer;
  * the header opens a user switcher and "Open details" shows the member's profile aside.
  */
-export function MemberProfilePage({ data, user, view, onNavigate, onOpenMember, onOpenIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues, onCreateIssue, renderIssuePreview, onOpenSidebar }: {
+export function MemberProfilePage({ data, user, view, onNavigate, onOpenMember, onOpenIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues, onConvertIssue, onCreateIssue, renderIssuePreview, onOpenSidebar }: {
   data: BootstrapData
   user: User
   view: 'assigned' | 'created'
@@ -27,6 +28,7 @@ export function MemberProfilePage({ data, user, view, onNavigate, onOpenMember, 
   onUpdateIssue: (id: string, input: IssueUpdateInput) => Promise<Issue>
   onUpdateIssues?: (ids: string[], input: IssueUpdateInput) => Promise<Issue[]>
   onDeleteIssues?: (ids: string[]) => Promise<void>
+  onConvertIssue?: (issue: Issue, kind: IssueConversionKind) => Promise<void>
   onCreateIssue?: (context?: MyIssuesCreateContext) => void
   renderIssuePreview?: (issue: Issue, onClose: () => void) => ReactNode
   onOpenSidebar?: () => void
@@ -72,5 +74,6 @@ export function MemberProfilePage({ data, user, view, onNavigate, onOpenMember, 
     onUpdateIssue={onUpdateIssue}
     onUpdateIssues={onUpdateIssues ?? (async (ids, input) => Promise.all(ids.map(id => onUpdateIssue(id, input))))}
     onDeleteIssues={onDeleteIssues ?? (async () => undefined)}
+    onConvertIssue={onConvertIssue}
   />
 }

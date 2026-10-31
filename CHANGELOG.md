@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Desktop issue row menus now include working Convert to and Move actions, and display options use the heavier list, board, sorting and select glyphs without changing phone layouts.
+
 - Use the measured solid border and border-box sizing for phone initiative update cards.
 
 - Refine initiative phone update-card strokes, comment controls and compact activity timestamps.

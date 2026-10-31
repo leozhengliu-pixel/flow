@@ -5,6 +5,7 @@ import { clearSelectedModels, setSelectedModels } from '@/lib/selected-models-st
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { teamHierarchy } from '@/lib/team-hierarchy'
 import type { BootstrapData, Issue, IssueUpdateInput, SavedView, SavedViewMutationInput, Team } from '@/types/flow'
+import type { IssueConversionKind } from '@/components/issue/issue-options-menu'
 import { settingsPath, type TeamIssuesRouteView } from '@/lib/app-routes'
 import { toggleFavoriteFor } from '@/lib/favorites'
 import { MyIssuesBulkActionBar } from '@/components/my-issues/my-issues-bulk-action-bar'
@@ -92,6 +93,7 @@ export interface IssueExplorerPageProps {
   onUpdateIssue: (issueId: string, input: IssueUpdateInput) => Promise<Issue>
   onUpdateIssues: (issueIds: string[], input: IssueUpdateInput) => Promise<Issue[]>
   onDeleteIssues: (issueIds: string[]) => Promise<void>
+  onConvertIssue?: (issue: Issue, kind: IssueConversionKind) => Promise<void>
   /** Replaces the view-summary details panel (member profiles show a profile aside beside the list). */
   detailsPanel?: ReactNode
   /** localStorage key for the details open state; defaults to the scope's key. */
@@ -104,7 +106,7 @@ export interface IssueExplorerPageProps {
   insightsLabel?: string
 }
 
-export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourceHeader, scopeFilter, scopeConditions, defaultDisplayOverrides, data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues, detailsPanel, detailsStorageKey, emptyState, className, insightsLabel }: IssueExplorerPageProps) {
+export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourceHeader, scopeFilter, scopeConditions, defaultDisplayOverrides, data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues, onConvertIssue, detailsPanel, detailsStorageKey, emptyState, className, insightsLabel }: IssueExplorerPageProps) {
   const storageScope = scope.kind === 'team' ? `team:${scope.team.id}` : 'workspace'
   const preferencesKey = `${data.workspace.urlKey}:issue-explorer:${preferenceScope ?? storageScope}:${boardRoute ? 'board' : view}`
   const sourceView = savedView ?? duplicateFrom
@@ -565,7 +567,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     else if (scope.kind === 'team' && !creatingView) { await updateStructuredTeamSettings(scope.team.id, { issueViewInsights: { [teamViewKey]: value } }); setTeamInsightDefault(value) }
     else setDraftInsights(config)
   }
-  const rowActions = { data, onUpdateIssue, onDeleteIssues, onOpenIssue: (issue: Issue) => onOpenIssue(issue), onCreateIssue }
+  const rowActions = { data, onUpdateIssue, onDeleteIssues, onOpenIssue: (issue: Issue) => onOpenIssue(issue), onCreateIssue, onConvertIssue }
   return <IssueRowActionsProvider value={rowActions}>
     <IssueExplorerSurface
       onCreateIssue={onCreateIssue ? () => onCreateIssue(scope.kind === 'team' ? { teamId: scope.team.id } : undefined) : undefined}
