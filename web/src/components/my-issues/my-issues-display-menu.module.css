@@ -167,23 +167,6 @@
     box-shadow: none;
     flex: 0 0 137px;
   }
-  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button[aria-selected="false"]::after {
-    content: "";
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    box-shadow: var(--pk-control-ring);
-    pointer-events: none;
-  }
-  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button[aria-selected="true"] { position: relative; }
-  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button[aria-selected="true"]::after {
-    content: "";
-    position: absolute;
-    inset: -1px;
-    box-shadow: var(--pk-control-ring-selected);
-    border-radius: 9999px;
-    pointer-events: none;
-  }
   .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button + button { margin-left: 4px; }
   .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button { transform: translateX(2px); }
   .popover[data-issue-display-menu="true"] .section {
