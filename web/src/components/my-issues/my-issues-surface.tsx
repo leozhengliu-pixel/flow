@@ -5,7 +5,7 @@ import { DetailsIcon, FilterIcon, TabsOverflowIcon } from './my-issues-icons'
 import { InsightsIcon } from '@/components/ui/view-action-icons'
 import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { useIssueSurfaceControls } from './use-issue-surface-controls'
-import { MyIssuesDisplayMenu, type MyIssuesDisplayMenuProps } from './my-issues-display-menu'
+import { DisplayMenuActionRow, MyIssuesDisplayMenu, type MyIssuesDisplayMenuProps } from './my-issues-display-menu'
 import { MyIssuesFilterMenu } from './my-issues-filter-menu'
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
@@ -217,8 +217,8 @@ export function MyIssuesSurface({
       end={
         <ToolbarButtonsNavigation className={styles.actions}>
           <MyIssuesFilterMenu surface="my-issues" open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onAdvanced={onAdvancedFilter} onToggle={(field, option) => { if (onFilterToggle) onFilterToggle(field, option); else onFilterSelect?.(field, option) }} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
-          <MyIssuesDisplayMenu {...displayMenuProps} open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={options => onDisplayOptionsChange?.(options)}/>
-          <ToolbarButton label={insightsOpen ? 'Close insights' : 'Open insights'} pressed={insightsOpen} aria-expanded={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><InsightsIcon/></ToolbarButton>
+          <MyIssuesDisplayMenu {...displayMenuProps} phoneExtraActions={<DisplayMenuActionRow label="Insights" checked={insightsOpen} onChange={value => onInsightsOpenChange?.(value)}/>} open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={options => onDisplayOptionsChange?.(options)}/>
+          {!phone && <ToolbarButton className={styles.insightsButton} label={insightsOpen ? 'Close insights' : 'Open insights'} pressed={insightsOpen} aria-expanded={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><InsightsIcon/></ToolbarButton>}
           <FlowTooltip label={detailsOpen ? 'Close details' : 'Open details'} shortcut="⌘ I"><ToolbarButton label={detailsOpen ? 'Close details' : 'Open details'} pressed={detailsOpen} aria-expanded={detailsOpen} onClick={() => onDetailsOpenChange?.(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton></FlowTooltip>
         </ToolbarButtonsNavigation>
       }

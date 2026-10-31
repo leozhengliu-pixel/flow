@@ -137,20 +137,22 @@
     color: var(--bright) !important;
   }
   .popover[data-issue-display-menu="true"] {
-    max-height: calc(100dvh - 32px);
+    max-height: 550px;
     margin-top: 1px;
     padding-top: 0;
     border-radius: 12px;
   }
   .popover[data-my-issues-display-menu="true"] {
-    max-height: calc(100dvh - 32px);
+    max-height: 478px;
     margin-top: 1px;
     padding-top: 0;
     border-radius: 12px;
   }
+  .popover[data-my-issues-display-menu="true"] .layoutTabs:not(#_) { margin-bottom: 6px; }
+  .popover[data-my-issues-display-menu="true"] section[aria-label="Visible issues"] > .switchRow:first-of-type { margin-top: 4px; }
   .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) {
     height: 32px;
-    margin: 14px 7.5px 10px;
+    margin: 14px 7.5px 6px;
     padding: 0;
     gap: 2px;
     background: var(--pk-surface);
@@ -163,8 +165,9 @@
     line-height: normal;
     box-shadow: none;
     flex: 1 1 0;
+    margin: 0 2px;
   }
-  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button + button { margin-left: 4px; }
+  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button + button { margin-left: 2px; }
   .popover[data-issue-display-menu="true"] .section {
     padding: 8px 16px;
   }
@@ -274,7 +277,7 @@
   }
   .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button {
     height: 28px;
-    margin: 0 4px 5px 0;
+    margin: 0 5px 5px 0;
     box-shadow: none;
     font: 500 12px/normal var(--font);
   }
@@ -303,4 +306,12 @@
     height: .5px;
     background: var(--pk-divider);
   }
+  .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] { margin-top: 5px; }
+  .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) .recencyRow { margin-top: 4px; }
+  .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) .subTeamRow { margin-top: 4px; }
+  .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] { margin-top: 1px; }
+  .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="Grouping options"] { padding-bottom: 4px; }
+  .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] { margin-top: 1px; }
+  .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] > .sectionLabel:first-child:not(#_) { margin-bottom: 2px; }
+  .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] > .sectionLabel:nth-of-type(2):not(#_) { margin-top: 8px; }
 }
