@@ -732,6 +732,7 @@ function Preferences({
   onCustomizeSidebar,
 }: PersonalProps) {
   const { locale, setLocale } = useI18n();
+  const emoticonDescription = p("Strings like :) will be converted to 🙂");
   return (
     <>
       <PersonalPageTitle>{p("Preferences")}</PersonalPageTitle>
@@ -796,7 +797,13 @@ function Preferences({
         </PersonalRow>
         <PersonalRow
           title={p("Convert text emoticons into emojis")}
-          description={p("Strings like :) will be converted to 🙂")}
+          description={
+            <>
+              {emoticonDescription.replace(/\s*🙂\s*$/, "")}
+              {" "}
+              <span className="personal-emoticon-emoji">🙂</span>
+            </>
+          }
         >
           <SettingsToggle
             label={p("Convert text emoticons into emojis")}
