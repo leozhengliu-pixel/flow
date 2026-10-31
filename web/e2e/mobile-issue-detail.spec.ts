@@ -61,6 +61,23 @@ test('phone work actions stay available in issue options without widening the co
   await expect(page).toHaveURL(/settings\/account\/code-and-reviews\/coding-tools$/)
 })
 
+test('long project names stay inside phone issue properties', async ({ page, request }) => {
+  const headers = { 'X-Workspace-Key': workspaceKey }
+  const data = await (await request.get('/api/bootstrap', { headers })).json()
+  const project = await request.post('/api/projects', { headers, data: { name: '[mobile] \u56fd\u9645\u5316 Very long project name that must truncate within the phone property picker', teamIds: [data.teams[0].id] } })
+  expect(project.status()).toBe(201)
+  expect((await request.patch(`/api/issues/${parent.id}`, { headers, data: { projectId: (await project.json()).id } })).ok()).toBe(true)
+  for (const width of [390, 375]) {
+    await page.setViewportSize({ width, height: 844 })
+    await openIssue(page)
+    const picker = page.locator('.issue-mobile-properties .issue-project-trigger')
+    const box = (await picker.boundingBox())!
+    expect(box.x + box.width).toBeLessThanOrEqual(width)
+    await expect(picker.locator('> span')).toHaveCSS('text-overflow', 'ellipsis')
+    await noOverflow(page)
+  }
+})
+
 async function geometry(page: Page) {
   return page.evaluate(() => Object.fromEntries(['.issue-header','.title-editor','.issue-mobile-properties','.issue-description-root .description-editor','.document-actions','.flow-sub-issues','.detail-sub-issue-row','.activity-heading','.composer'].map(selector => {
     const element = document.querySelector(selector)!
