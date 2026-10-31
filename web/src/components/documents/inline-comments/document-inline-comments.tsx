@@ -113,6 +113,7 @@ export function DocumentInlineComments({ data, document, comments, editor, shell
   const canModerate = data.viewerRole === 'admin' || String(data.viewerRole) === 'owner'
   const createThread = useCallback((input: { body: string; bodyData?: Record<string, unknown>; anchorId: string; quotedText: string }) => createDocumentComment(document.id, input), [document.id])
   return <InlineCommentGutter
+    inlineDraft
     comments={comments}
     viewer={data.viewer}
     users={data.users}

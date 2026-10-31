@@ -34,8 +34,8 @@
 }
 @media (min-width: 1232px) {
   .document-page.has-comment-gutter:not(.has-agent) .document-canvas {
-    --document-shift: max(33.5px, min(calc((100% - var(--document-column) - 2 * var(--document-gutter)) / 2), calc(100% - 1127.5px)));
-    --document-canvas-width: min(calc(var(--document-column) + 2 * var(--document-gutter)), calc(100% - var(--document-shift) - 294.5px));
+    --document-shift: max(33.5px, min(calc((100cqw - var(--document-column) - 2 * var(--document-gutter)) / 2), calc(100cqw - 1127.5px)));
+    --document-canvas-width: min(calc(var(--document-column) + 2 * var(--document-gutter)), calc(100cqw - var(--document-shift) - 294.5px));
     margin-left: var(--document-shift);
     margin-right: 0;
     width: var(--document-canvas-width);
@@ -58,6 +58,24 @@
   box-shadow: var(--document-comment-card-shadow);
   transform: none;
   z-index: 4;
+}
+@media (min-width: 1232px) {
+  .document-inline-gutter.is-popover .document-thread-card {
+    width: 298px;
+    max-width: 298px;
+  }
+  /* Keep the document readable at its normal column when a posted thread opens. */
+  .document-page.has-comment-gutter:not(.has-agent) .document-canvas {
+    --document-shift: 0px;
+    --document-canvas-width: calc(var(--document-column) + 2 * var(--document-gutter));
+    margin: 0 auto;
+    width: var(--document-canvas-width);
+  }
+  .document-page.has-comment-gutter:not(.has-agent) .document-inline-gutter:not(.is-popover) {
+    left: calc(100% - 107.5px);
+    width: 284.5px;
+  }
+  .document-page.has-comment-gutter:not(.has-agent) .document-inline-gutter:not(.is-popover) .document-thread-card.is-active { transform: none; }
 }
 
 .document-thread-card {

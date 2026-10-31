@@ -96,6 +96,12 @@ describe('selection toolbar behaviour', () => {
       expect(callback).toHaveBeenCalledWith({text:'Selected requirement',from:1,to:21}, expect.objectContaining({ commands: expect.anything() }))
     }
   })
+  it('shows and invokes moving the selection when a document provides the action', async () => {
+    const onMoveToNewDocument = vi.fn()
+    setup({ actions: { onCreateIssue: vi.fn(), onMoveToNewDocument, onAskAgent: vi.fn(), onComment: vi.fn() } })
+    await userEvent.click(screen.getByRole('button', { name: 'Move selection to new document' }))
+    expect(onMoveToNewDocument).toHaveBeenCalledWith({ text: 'Selected requirement', from: 1, to: 21 }, expect.objectContaining({ commands: expect.anything() }))
+  })
   it('marks active formatting as pressed', async () => {
     setup(); const user = userEvent.setup()
     expect(screen.getByRole('button',{name:'Bold'})).toHaveAttribute('aria-pressed','false')

@@ -72,7 +72,7 @@ describe('team documents list', () => {
   it('opens the full document menu on right click, with the reference app order and "Pin to overview"', async () => {
     const { container } = setup([makeDocument()])
     fireEvent.contextMenu(container.querySelector('.team-docs-row')!)
-    expect(menuLabels()).toEqual(['Move to', 'Pin to overview', 'Duplicate', 'New template from document', 'Rename…', 'Favorite', 'Copy', 'Remind me', 'Show document history', 'Delete'])
+    expect(menuLabels()).toEqual(['Move to', 'Pin to overview', 'Duplicate', 'Rename…', 'New template from document', 'Favorite', 'Copy', 'Remind me', 'Show document history', 'Delete'])
     const separators = within(screen.getByRole('menu')).getAllByRole('separator')
     expect(separators).toHaveLength(3)
   })
@@ -107,7 +107,7 @@ describe('team documents list', () => {
     const user = userEvent.setup()
     setup([makeDocument()])
     await user.click(screen.getByRole('button', { name: 'Open menu' }))
-    expect(menuLabels()).toEqual(['Move to', 'Pin to overview', 'Duplicate', 'New template from document', 'Rename…', 'Favorite', 'Copy', 'Remind me', 'Show document history', 'Delete'])
+    expect(menuLabels()).toEqual(['Move to', 'Pin to overview', 'Duplicate', 'Rename…', 'New template from document', 'Favorite', 'Copy', 'Remind me', 'Show document history', 'Delete'])
   })
 
   it('shows "Untitled" for an empty title and keeps the row a link', () => {

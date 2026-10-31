@@ -1,4 +1,5 @@
 import type { Editor } from '@tiptap/react'
+import { FilePlus2 } from 'lucide-react'
 import { useEditorState } from '@tiptap/react'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useI18n } from '@/i18n/i18n'
@@ -79,7 +80,7 @@ export function SelectionToolbar({ editor, actions }: { editor: Editor; actions?
   }, [editor])
   const heading = state.block !== 'paragraph'
   const style = TEXT_STYLES.find(item => item.id === state.block) ?? TEXT_STYLES[0]
-  const hasActions = Boolean(actions?.onCreateIssue || actions?.onAskAgent || actions?.onComment)
+  const hasActions = Boolean(actions?.onCreateIssue || actions?.onMoveToNewDocument || actions?.onAskAgent || actions?.onComment)
   return <TooltipProvider><div className="description-bubble-menu selection-toolbar" role="toolbar" aria-label={t('Text formatting')} ref={rootRef}>
     {state.editable && <>
       <span className="selection-toolbar-item">
@@ -130,6 +131,7 @@ export function SelectionToolbar({ editor, actions }: { editor: Editor; actions?
         </ToolbarMenu>}
       </span>
     </>}
+    {actions?.onMoveToNewDocument && <ToolbarItem label={t('Move selection to new document')} onPress={() => actions.onMoveToNewDocument?.(selection(), editor)}><FilePlus2 size={16}/></ToolbarItem>}
     {state.editable && hasActions && <span className="selection-toolbar-separator" role="separator" aria-orientation="vertical"/>}
     {actions?.onCreateIssue && <ToolbarItem label={t('Create issue from selection')} shortcut={TOOLBAR_SHORTCUTS['Create issue from selection']} onPress={() => actions.onCreateIssue?.(selection(), editor)}><ToolbarGlyph name="createIssue"/></ToolbarItem>}
     {actions?.onAskAgent && <ToolbarItem label={t('Ask agent')} shortcut={TOOLBAR_SHORTCUTS['Ask agent']} onPress={() => actions.onAskAgent?.(selection(), editor)}><AgentCursorGlyph size={16}/></ToolbarItem>}

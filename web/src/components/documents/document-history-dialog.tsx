@@ -120,6 +120,7 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
         aria-describedby={undefined}
         className="document-history-dialog"
         closeLabel={t('Close modal dialog')}
+        data-dialog-placement="window"
         onOpenAutoFocus={event => {
           if (!hasHistory) return
           event.preventDefault()
@@ -127,7 +128,7 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
         }}
       >
         <DialogTitle className="document-history-title">
-          <span>{t('Restore version for')}</span>
+          <span>{t('History for')}</span>
           <DocumentGlyph document={document}/>
           <strong data-i18n-ignore>{document.title || t('Untitled')}</strong>
         </DialogTitle>

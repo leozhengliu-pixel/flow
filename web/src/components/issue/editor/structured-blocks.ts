@@ -16,6 +16,7 @@ export type SelectedDescription = { text: string; from: number; to: number }
 /** The floating toolbar's selection actions; each gets the selection and the editor it was made in (when known). */
 export type DescriptionSelectionActions = {
   onCreateIssue?: (selection: SelectedDescription, editor?: Editor) => void
+  onMoveToNewDocument?: (selection: SelectedDescription, editor?: Editor) => void
   onAskAgent?: (selection: SelectedDescription, editor?: Editor) => void
   onComment?: (selection: SelectedDescription, editor?: Editor) => void
 }

@@ -217,7 +217,7 @@ describe('DocumentPage header', () => {
     const user = userEvent.setup()
     renderPage()
     await user.click(screen.getByRole('button', { name: 'Document options' }))
-    expect(menuRows()).toEqual(['Move to', 'Pin to team', 'Duplicate', 'New template from document', 'Rename…', 'Favorite', 'Copy', 'Download', 'Remind me', 'Show author names', 'Show document history', 'People with access', 'Delete'])
+    expect(menuRows()).toEqual(['Move to', 'Pin to team', 'Duplicate', 'Rename…', 'New template from document', 'Favorite', 'Copy', 'Download', 'Remind me', 'Show author names', 'Show document history', 'People with access', 'Delete'])
   })
 
   it('hides People with access and Delete from viewers who cannot manage the document', async () => {
@@ -492,12 +492,11 @@ describe('DocumentPage mobile header and print', () => {
     expect(documentPrintCss).not.toMatch(/#[0-9a-f]{3,8}\b/i)
   })
 
-  it('uses the 805px column, 24px title and the measured 32x36 empty-document icon from tokens only', () => {
+  it('uses the 805px column, 24px title and the transparent 24px empty-document icon', () => {
     expect(documentPageCss).toContain('--document-column: 805px')
     expect(documentPageCss).toMatch(/\.document-title\s*\{[^}]*font:\s*600 24px\/32px/)
-    expect(documentPageCss).toMatch(/\.document-icon\.is-empty\s*\{[^}]*width:\s*32px;[^}]*height:\s*36px/)
-    expect(documentPageCss.split('@media (max-width: 767px)')[0]).not.toMatch(/384px/)
-    expect(documentPageCss).toMatch(/@media \(max-width: 767px\)[\s\S]*padding: 10px 14px 384px/)
+    expect(documentPageCss).toMatch(/\.document-icon\.is-empty\s*\{[^}]*width:\s*24px;[^}]*height:\s*24px/)
+    expect(documentPageCss).toMatch(/padding:\s*10px\s+14px\s+384px/)
     expect(documentPageCss).not.toMatch(/rgba?\(/)
     expect(documentPageCss).not.toMatch(/:root\[data-theme/)
   })

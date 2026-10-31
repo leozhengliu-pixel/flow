@@ -24,7 +24,8 @@ import { queueFlowMenuShortcut } from '@/components/ui/menu-shortcuts'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
 import { documentSelectionActions } from '@/components/documents/document-selection-actions'
-import { addSubscription, listDocumentPermissions, removeSubscription, replaceDocumentPermissions, restoreDocumentRevision, updateDocument, uploadDocumentAttachment } from '@/lib/api'
+import { addSubscription, createDocument, listDocumentPermissions, removeSubscription, replaceDocumentPermissions, restoreDocumentRevision, updateDocument, uploadDocumentAttachment } from '@/lib/api'
+import { documentPath } from '@/lib/app-routes'
 import type { BootstrapData, Comment, DocumentPermission, FlowDocument, TrashEntry, User } from '@/types/flow'
 
 import './document-page.css'
@@ -145,6 +146,25 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   // Like the reference app: the selection goes to the floating chat as a chip and the editor lets go of it (the toolbar closes).
   // The quoted text keeps a faint highlight while its chip is in the chat.
   const askAgent = (selection: SelectedDescription, editor?: Editor) => askAgentAboutSelection(selection, editor ?? liveEditor ?? undefined)
+  const moveSelectionToNewDocument = async (selection: SelectedDescription, editor?: Editor) => {
+    if (!editor || !selection.text.trim()) return
+    try {
+      const firstLine = selection.text.split(/\r?\n/, 1)[0].trim().slice(0, 120)
+      const created = await createDocument({
+        title: firstLine,
+        content: selection.text,
+        projectIds: document.projectIds,
+        teamIds: document.teamIds,
+      })
+      editor.chain().focus().deleteSelection().run()
+      await updateDocument(document.id, { content: editor.getMarkdown(), contentData: editor.getJSON() as Record<string, unknown> })
+      await onReload()
+      toast.success(t('Selection moved to new document'))
+      navigate(documentPath(data.workspace.urlKey, created))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('Could not move selection to new document'))
+    }
+  }
   const defaultDocumentIcon = !document.icon
   const lastRevision = document.revisions.length ? latestRevision(document) : undefined
   const lastEditor = lastRevision?.author ?? document.creator
@@ -256,7 +276,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
         <DropdownMenu.Root open={menuOpen} onOpenChange={open => { setMenuOpen(open); if (!open) setMenuQuery('') }}>
           <DropdownMenu.Trigger asChild><button aria-label={t('Document options')} className="document-icon-button" type="button"><FlowOptionsIcon/></button></DropdownMenu.Trigger>
           <DropdownMenu.Portal>
-            <FlowDropdownMenuContent label={t('Document actions')} className={phone && !deleted ? 'document-page-options' : ''}>
+            <FlowDropdownMenuContent label={t('Document actions')} className={`${phone && !deleted ? 'document-page-options' : ''} document-actions-menu`}>
               {phone && !deleted && <div className="document-page-options-search">
                 <input aria-label={t('Command menu')} placeholder={t('Filter...')} value={menuQuery} onChange={event => setMenuQuery(event.target.value)} onKeyDown={event => {
                   if (event.key === 'Escape') return
@@ -314,7 +334,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
             : <CollaborativeEditor data={data} document={document} value={body.value} state={body.state} editorKey={`${document.id}:${document.collaborationId ?? ''}:${editorVersion}`} className="document-editor" presence={presence} onPresence={setPresence} showPresence={false}
               readOnly={!canEdit} editorRef={setLiveEditor}
               onUploadFile={async file => (await uploadDocumentAttachment(document.id, file)).url}
-              selectionActions={documentSelectionActions({ data, document, t, onAskAgent: askAgent, onComment: canComment ? startComment : undefined })}
+              selectionActions={documentSelectionActions({ data, document, t, onAskAgent: askAgent, onMoveToNewDocument: canEdit ? moveSelectionToNewDocument : undefined, onComment: canComment ? startComment : undefined })}
               onChange={snapshot => { setBody({ value: snapshot.markdown, state: snapshot.documentJSON }); schedule({ content: snapshot.markdown, contentData: snapshot.document as Record<string, unknown> }) }}
               onPersist={async (snapshot, sync) => { const saved = await updateDocument(document.id, { content: snapshot.markdown, contentState: snapshot.contentState, contentData: snapshot.document as Record<string, unknown>, ...sync }); await onReload(); return saved }}/>}
         </DocumentContentProvider>
