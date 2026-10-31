@@ -1,7 +1,7 @@
 import { AppLink } from '@/components/ui/app-link'
 import { nowISO } from '@/lib/clock'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
-import { Archive, ChevronDown, ChevronRight, Merge, MoreHorizontal, RotateCcw, Search, Star, Trash2, X } from 'lucide-react'
+import { Archive, ChevronDown, ChevronRight, Merge, RotateCcw, Star, Trash2, X } from 'lucide-react'
 import * as Popover from '@radix-ui/react-popover'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useResetOnChange } from '@/hooks/use-reset-on-change'
@@ -37,6 +37,14 @@ export { ProjectStatusesSettings } from './project-statuses-settings'
 
 type Entry = { kind: 'label'; label: IssueLabel } | { kind: 'group'; group: LabelGroup; labels: IssueLabel[] }
 interface LabelSection { id: string; label?: string; entries: Entry[] }
+
+function SearchGlyph() {
+  return <svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M7 2C9.76142 2 12 4.23858 12 7C12 8.11012 11.6375 9.13519 11.0254 9.96484L13.7803 12.7197L13.832 12.7764C14.0723 13.0709 14.0549 13.5057 13.7803 13.7803C13.5057 14.0549 13.0709 14.0723 12.7764 13.832L12.7197 13.7803L9.96484 11.0254C9.13519 11.6375 8.11012 12 7 12C4.23858 12 2 9.76142 2 7C2 4.23858 4.23858 2 7 2ZM7 3.5C5.067 3.5 3.5 5.067 3.5 7C3.5 8.933 5.067 10.5 7 10.5C8.933 10.5 10.5 8.933 10.5 7C10.5 5.067 8.933 3.5 7 3.5Z"/></svg>
+}
+
+function MenuDotsGlyph() {
+  return <svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><path d="M3 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/></svg>
+}
 
 /** What a row needs to render the reference app's value columns. */
 interface RowContext {
@@ -272,7 +280,7 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
       </div>
     </header>
     <div className="domain-labels-toolbar label-settings-toolbar">
-      <div className="settings-list-toolbar domain-labels-search"><Search size={14}/><input aria-label={t('Filter by name…')} placeholder={t('Filter by name…')} value={query} onChange={event => setQuery(event.target.value)}/></div>
+      <div className="settings-list-toolbar domain-labels-search"><SearchGlyph/><input aria-label={t('Filter by name…')} placeholder={t('Filter by name…')} value={query} onChange={event => setQuery(event.target.value)}/></div>
       <span/>
       <LabelFilterMenu teams={canScopeTeams ? activeTeams : []} filters={filters} onChange={setFilters}/>
       <LabelDisplayOptions
@@ -317,7 +325,7 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
 function LabelSortHeader({ column, label, active, descending, onSort }: { column: LabelColumn; label: string; active: boolean; descending: boolean; onSort: () => void }) {
   const { locale } = useI18n()
   const state = active ? (locale === 'zh-CN' ? (descending ? '，降序' : '，升序') : `, sorted ${descending ? 'descending' : 'ascending'}`) : ''
-  return <button style={{ gridColumn: column }} aria-label={locale === 'zh-CN' ? `按${label}排序${state}` : `Order by ${label}${state}`} className={active ? 'active' : ''} onClick={onSort}>{label}{active && <SortArrow className={descending ? 'descending' : 'ascending'}/>}</button>
+  return <button style={{ gridColumn: column }} aria-label={locale === 'zh-CN' ? `按${label}排序${state}` : `Order by ${label}${state}`} className={active ? 'active' : ''} onClick={onSort}><span>{label}</span>{active && <SortArrow className={descending ? 'descending' : 'ascending'}/>}</button>
 }
 
 function SortArrow({ className }: { className: string }) {
@@ -457,7 +465,7 @@ function LabelRow({ context, label, grouped, treeLast = false, selected, groups,
     await onArchive()
     toast.success(t('Label archived'), { description: t('"{name}" has been archived').replace('{name}', label.name) })
   }
-  return <><div className={`domain-labels-row${grouped ? ' is-nested' : ''}${label.archivedAt ? ' is-archived' : ''}${selected ? ' is-selected' : ''}`}>
+  return <><div data-testid="domain-label-row" className={`domain-labels-row${grouped ? ' is-nested' : ''}${label.archivedAt ? ' is-archived' : ''}${selected ? ' is-selected' : ''}`}>
     <SelectionCell kind="label" selected={selected} onToggle={onToggleSelected}/>
     <div className="domain-label-name">{grouped && <GroupTreeBranch last={treeLast}/>}<LabelColorPicker color={label.color} disabled={Boolean(label.archivedAt)} kind="label" label={colorLabel} onChange={color => onSave({ color })}/><LabelEditableText value={label.name} field={t('Name')} editing={editing === 'name'} archived={Boolean(label.archivedAt)} onEdit={() => setEditing('name')} onCancel={() => setEditing(null)} onSave={async value => { await onSave({ name: value }); setEditing(null) }}/></div>
     {context.columns.includes('description') && <EditableDescription value={label.description ?? ''} editing={editing === 'description'} archived={Boolean(label.archivedAt)} onEdit={() => setEditing('description')} onCancel={() => setEditing(null)} onSave={async value => { await onSave({ description: value }); setEditing(null) }}/>}
@@ -493,7 +501,8 @@ function LabelEditableText({ value, field, editing, archived, onEdit, onCancel, 
   const inputRef=useRef<HTMLInputElement>(null)
   useResetOnChange([value], () => setDraft(value))
   useEffect(()=>{if(editing){inputRef.current?.focus();inputRef.current?.select()}},[editing])
-  return <input ref={inputRef} className={`domain-label-inline-input domain-label-name-input${editing?' is-editing':''}`} aria-label={editing?`Edit ${field}`:value} readOnly={!editing||archived} value={editing?draft:value} onFocus={()=>{if(!archived&&!editing)onEdit()}} onClick={()=>{if(!archived&&!editing)onEdit()}} onChange={event=>setDraft(event.target.value)} onBlur={()=>{if(!editing)return;const next=draft.trim();if(next&&next!==value)void onSave(next);else onCancel()}} onKeyDown={event=>{if(!editing)return;if(event.key==='Enter')event.currentTarget.blur();if(event.key==='Escape'){event.preventDefault();setDraft(value);onCancel();requestAnimationFrame(()=>inputRef.current?.blur())}}}/>
+  if (!editing) return <div className="domain-label-inline-input domain-label-name-input"><input aria-label={value} readOnly value={value} disabled={archived} onFocus={()=>{if(!archived)onEdit()}} onClick={()=>{if(!archived)onEdit()}}/><span data-testid="domain-label-name">{value}</span></div>
+  return <input ref={inputRef} className="domain-label-inline-input domain-label-name-input is-editing" aria-label={`Edit ${field}`} value={draft} onChange={event=>setDraft(event.target.value)} onBlur={()=>{const next=draft.trim();if(next&&next!==value)void onSave(next);else onCancel()}} onKeyDown={event=>{if(event.key==='Enter')event.currentTarget.blur();if(event.key==='Escape'){event.preventDefault();setDraft(value);onCancel();requestAnimationFrame(()=>inputRef.current?.blur())}}}/>
 }
 
 function EditableDescription({ value, editing, archived, onEdit, onCancel, onSave }: { value: string; editing: boolean; archived: boolean; onEdit: () => void; onCancel: () => void; onSave: (value: string) => Promise<void> }) {
@@ -508,7 +517,7 @@ function EditableDescription({ value, editing, archived, onEdit, onCancel, onSav
 
 function MenuShell({ label, kind, children }: { label: string; kind: 'group'|'label'|'bulk'; children: ReactNode }) {
   const { locale } = useI18n()
-  return <DropdownMenu><DropdownMenuTrigger asChild><button className="domain-label-menu-button" aria-label={locale === 'zh-CN' ? `打开 ${label} 菜单` : `Open ${label} menu`}><MoreHorizontal size={15}/></button></DropdownMenuTrigger><DropdownMenuContent data-i18n-ignore className={`domain-label-row-menu is-${kind}-menu`} align="end" sideOffset={4}>{children}</DropdownMenuContent></DropdownMenu>
+  return <DropdownMenu><DropdownMenuTrigger asChild><button className="domain-label-menu-button" aria-label={locale === 'zh-CN' ? `打开 ${label} 菜单` : `Open ${label} menu`}><MenuDotsGlyph/></button></DropdownMenuTrigger><DropdownMenuContent data-i18n-ignore className={`domain-label-row-menu is-${kind}-menu`} align="end" sideOffset={4}>{children}</DropdownMenuContent></DropdownMenu>
 }
 
 function GroupRowMenu({ group, canConvert, onEdit, onCreateLabel, onArchive, onConvert, onDelete }: { group: LabelGroup; canConvert: boolean; onEdit: () => void; onCreateLabel?: () => void; onArchive: () => Promise<void>; onConvert: () => void; onDelete: () => Promise<void> }) {
