@@ -114,6 +114,26 @@
 }
 
 @media (max-width: 767px) {
+  html:root body .assigneeMenu:not(#_) { --property-option-count: 0; --property-option-index: 0; box-shadow: var(--pk-card-shadow); }
+  .assigneeMenu :global(.phone-menu-context) { padding-block: 2px; font-weight: 400; line-height: 18px; letter-spacing: normal; }
+  html:root body .assigneeMenu:not(#_) :global(.property-command-search) { width: calc(100% - 10px); height: 40px; margin: 6px 6px 0; padding: 0; border-radius: 12px; font: 400 13px/19.5px var(--font); letter-spacing: normal; grid-template-columns: minmax(0, 1fr); }
+  html:root body .assigneeMenu:not(#_) :global(.property-command-search input) { border-radius: 12px; letter-spacing: normal; }
+  html:root body .assigneeMenu:not(#_) :global(.property-command-search input::placeholder) { color: var(--pk-faint); }
+  html:root body .assigneeMenu:not(#_) :global(.property-command-icon:not(:has(.core-person-picker-avatar))) { color: var(--phone-menu-icon-fg); }
+  html:root body .assigneeMenu:not(#_) :global(.property-command-options:not(.virtual-property-options)) { width: calc(100% + 2px); padding-bottom: 4px; transform: translate(-.5px, -.5px); }
+  .assigneeMenu :global(.property-command-section) { position: relative; height: calc(var(--property-option-count) * 46px); }
+  .assigneeMenu :global(.property-command-section:has(.property-command-group)) { height: calc(30px + var(--property-option-count) * 46px); padding-top: 30px; }
+  html:root body .assigneeMenu:not(#_) :global(.property-command-group) { position: absolute; inset: 0 0 auto; padding: 8px 12px; font: 500 12px/normal var(--font); letter-spacing: normal; }
+  html:root body .assigneeMenu:not(#_) :global(.property-command-options [role="option"]) { position: absolute; top: calc(var(--property-option-index) * 46px); grid-template-columns: auto minmax(0, 1fr) 16px; gap: 8px; padding: 0 12px; font: 450 13px/15.6px var(--font); letter-spacing: normal; }
+  html:root body .assigneeMenu:not(#_) :global(.property-command-section:has(.property-command-group) [role="option"]) { top: calc(30px + var(--property-option-index) * 46px); }
+  html:root body .assigneeMenu:not(#_) :global(.virtual-property-options [role="option"]) { position: relative; top: auto; height: 46px !important; min-height: 46px; max-height: 46px; }
+  html:root body .assigneeMenu:not(#_) :global(.virtual-property-options .property-command-group) { position: relative; }
+  .assigneeMenu :global(.property-command-label) { font: 450 13px/15.6px var(--font); letter-spacing: normal; }
+  html:root body .assigneeMenu:not(#_) :global(.property-command-option-background) { inset: 2px 0; }
+  html:root body .assigneeMenu:not(#_) :global(.property-command-icon:has(.core-person-picker-avatar)),
+  html:root body .assigneeMenu:not(#_) :global(.property-command-icon > span[aria-hidden]:has(.core-person-picker-avatar)),
+  html:root body .assigneeMenu:not(#_) :global(.core-person-picker-avatar) { width: 18px; height: 18px; flex-basis: 18px; }
+  html:root body .assigneeMenu:not(#_) :global(.core-person-picker-avatar) { color: var(--phone-menu-fg-strong); font-weight: 400; line-height: 0; }
   html:root body .labelsMenu { height: 260px !important; box-shadow: var(--pk-card-shadow) !important; }
   html:root body .dialog:has([data-property="labels"][aria-expanded="true"]) .header h2 { font-weight: 450; }
   html:root body .dialog:has([data-property="labels"][aria-expanded="true"]) .properties :global(.mini-property-trigger[data-property="labels"]) { color: var(--theme-text-secondary) !important; }
