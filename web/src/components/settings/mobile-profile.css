@@ -1,0 +1,71 @@
+@media (max-width: 767px) {
+  html:root .settings-app .settings-main[data-settings-page="profile"] {
+    .settings-content {
+      min-height: max(669.5px, calc(100dvh - 91.5px));
+      padding-bottom: 0;
+    }
+    .personal-page-header h1 { letter-spacing: -.16px; }
+    .personal-section { margin-bottom: 24px; }
+    .personal-section:last-of-type { margin-bottom: 0; }
+    .settings-card { color: var(--set-text); font: 400 16px/24px var(--font); }
+    .personal-section:first-of-type > .settings-card > .settings-row {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      min-height: 0;
+      height: auto;
+      gap: 8px;
+      padding: 16px 10.6667px;
+    }
+    .personal-section:first-of-type .settings-row-copy { flex: none; gap: 3px; }
+    .personal-section:first-of-type .settings-row-copy > strong { font: 500 13px/normal var(--font); }
+    .personal-section:first-of-type > .settings-card > .settings-row .settings-row-copy > span {
+      height: auto;
+      font: 450 12px/normal var(--font);
+    }
+    .personal-section:first-of-type > .settings-card > .settings-row:first-child { height: 89.5px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(2) { height: 83.5px; border-radius: 0; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(3) { height: 91.5px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(4),
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(5) { height: 109px; }
+    .settings-control { width: 100%; justify-content: flex-start; gap: 12px; }
+    .personal-avatar {
+      width: 32px;
+      height: 32px;
+      margin: 1px;
+      outline: 1px solid var(--agent-quote-bar);
+      background: var(--issue-activity-avatar-bg) !important;
+      color: var(--issue-activity-avatar-fg) !important;
+      font: 400 14px/0 var(--font);
+      font-size: 14px !important;
+    }
+    .personal-static { color: var(--set-text) !important; font: 450 13px/normal var(--font); }
+    .personal-icon-action {
+      width: 28px;
+      height: 28px;
+      padding: 0 2px;
+      border: .5px solid transparent;
+      background: var(--set-control);
+      color: var(--set-control-text);
+      font: 500 12px/normal var(--font);
+    }
+    .personal-icon-action > svg { opacity: .65; }
+    .personal-input {
+      width: 100%;
+      max-width: none;
+      height: 36px;
+      padding: 6px 12px;
+      border: .5px solid var(--set-input-border);
+      background: var(--set-card);
+      color: var(--set-text);
+      font: 400 13px/normal var(--font);
+    }
+    .personal-section:last-of-type > h3 { font: 500 15px/23px var(--font); margin: 0 16px 16px; }
+    .personal-section:last-of-type > .settings-card > .settings-row { height: 68px; }
+    .personal-section:last-of-type .settings-control { width: auto; flex: none; }
+    .personal-section:last-of-type .settings-row-copy > strong { font: 500 13px/normal var(--font); color: var(--set-text); }
+    .personal-section:last-of-type .personal-action { margin-right: -6px; color: var(--set-control-text); font: 500 13px/normal var(--font); }
+    .settings-mobile-menu > svg { color: var(--set-desc); transform: translateX(.1px); }
+    .settings-mobile-settings-link > svg { color: var(--theme-text-tertiary); }
+  }
+}

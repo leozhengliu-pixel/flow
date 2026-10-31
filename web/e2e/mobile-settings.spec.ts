@@ -1,7 +1,42 @@
 import { expect, test } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
+import { test as workspaceTest } from './workspace-fixture'
 
 const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`${viewport.width}px account profile`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Account profile' })
+
+    workspaceTest('stacks profile fields and preserves editing and workspace access', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const bootstrap = await request.get('/api/bootstrap', { headers })
+      const { viewer } = await bootstrap.json() as { viewer: { id: string } }
+      expect((await request.patch('/api/account/profile', { headers, data: { displayName: '[mobile] Profile User', username: 'mobile-profile', jobTitle: '' } })).ok()).toBe(true)
+      expect((await request.patch(`/api/workspaces/${workspaceKey}/members/${viewer.id}`, { headers, data: { displayName: '[mobile] Profile User', email: 'mobile-profile@example.test' } })).ok()).toBe(true)
+
+      await page.goto(`/${workspaceKey}/settings/account/profile`)
+      const card = page.locator('.personal-section:first-of-type > .settings-card')
+      await expect(page.locator('.personal-avatar')).toBeVisible()
+      await expect(page.locator('.personal-static')).toHaveText('mobile-profile@example.test')
+      expect((await card.boundingBox())?.height).toBeCloseTo(482.5, 1)
+      expect((await page.getByRole('textbox', { name: 'Full name', exact: true }).boundingBox())?.width).toBeCloseTo(viewport.width - 65.3333, 1)
+      await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('')
+      expect((await page.getByRole('heading', { name: 'Workspace access' }).boundingBox())?.y).toBeCloseTo(622, 1)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/profile-${viewport.width}.png`, scale: 'css', animations: 'disabled' })
+
+      await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Engineer')
+      await page.getByRole('button', { name: 'Update', exact: true }).click()
+      await page.reload()
+      await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Engineer')
+      await page.getByRole('button', { name: 'Leave workspace', exact: true }).click()
+      await expect(page.getByRole('dialog')).toBeVisible()
+      await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await expect(page.getByRole('dialog')).toBeHidden()
+    })
+  })
+}
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   test.describe(`${viewport.width}px settings navigation drawer`, () => {
