@@ -476,6 +476,143 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
   html:root .settings-app .settings-main .feature-integration-cards { grid-template-columns: 1fr; }
 }
 
+/* Preferences uses the compact phone shell: a sticky settings breadcrumb and
+   the same 22px page inset used by the reference layout. Desktop keeps the
+   existing settings frame and language row unchanged. */
+.settings-mobile-header,
+.settings-mobile-content-gap { display: none; }
+@media (max-width: 760px) {
+  html:root .settings-app .settings-main {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    height: 100vh;
+    background: var(--set-panel-bg);
+  }
+  html:root .settings-app .settings-mobile-header {
+    position: sticky;
+    z-index: 30;
+    top: 0;
+    height: 43.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-sizing: border-box;
+    padding: 0 15px;
+    background: var(--set-panel-bg);
+  }
+  html:root .settings-app .settings-mobile-menu {
+    position: relative;
+    inset: auto;
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 32px;
+    padding: 0 2px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--set-button-text);
+    font: 500 12px/normal var(--font);
+  }
+  html:root .settings-app .settings-mobile-menu > svg { width: 14px; height: 14px; color: var(--set-desc); }
+  html:root .settings-app .settings-mobile-settings-link {
+    height: 23px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--set-text);
+    font: 600 15px/23px var(--font);
+  }
+  html:root .settings-app .settings-mobile-settings-link > svg {
+    width: 11px;
+    height: 12px;
+    flex: none;
+    margin-right: 9px;
+    color: var(--theme-text-tertiary);
+  }
+  html:root .settings-app .settings-mobile-content-gap {
+    display: block;
+    height: 16px;
+  }
+  html:root .settings-app .settings-content {
+    width: calc(100% - 44px);
+    max-width: none;
+    margin: 0 22px;
+    padding: 0 0 96px;
+  }
+  html:root .settings-app .settings-main .settings-page-header,
+  html:root .settings-app .settings-main .personal-page-header {
+    min-height: 32px;
+    margin: 0 16px 24px;
+  }
+  html:root .settings-app .settings-main .personal-section:first-of-type {
+    margin-bottom: 24px;
+  }
+  html:root .settings-app .settings-main .personal-section > .settings-card > .settings-row {
+    gap: 8px;
+    padding: 16px 10.6667px;
+    box-sizing: border-box;
+  }
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:first-child {
+    display: none;
+  }
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(2) {
+    border-radius: 10px 10px 0 0;
+  }
+  html:root .settings-app .settings-main .personal-select,
+  html:root .settings-app .settings-main .settings-select {
+    height: 36px;
+    padding: 6px 24px 6px 12px;
+    box-shadow: 0 0 0 .5px var(--cs-code-ring) inset;
+  }
+  html:root .settings-app .settings-main .personal-action {
+    height: 36px;
+  }
+  html:root .settings-app .settings-main .personal-action:not(.danger) {
+    height: 36px;
+    min-width: 85px;
+    width: 85px;
+    box-sizing: border-box;
+    padding: 0 12px;
+    background: transparent;
+    color: var(--set-control-text);
+    font: 500 13px/normal var(--font);
+    box-shadow: none;
+  }
+  html:root .settings-app .settings-main .settings-control:has(input[data-control="toggle"]) {
+    padding-right: 6px;
+  }
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(2) .settings-row-copy > span {
+    height: 43.5px;
+  }
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(5) .settings-row-copy > span {
+    height: 14.5px;
+  }
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(2) { height: 94px; }
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(3) { height: 79.5px; }
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(4) { height: 68px; }
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(5) { height: 65px; }
+  html:root .settings-app .settings-main .personal-section:first-of-type > .settings-card > .settings-row:nth-child(6) { height: 79.5px; }
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(1) { height: 79.5px; }
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(2) { height: 68px; }
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(3) { height: 79.5px; }
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(4) { height: 65px; }
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(5) { height: 79.5px; }
+  html:root .settings-app .settings-main .personal-section:first-of-type .settings-row:nth-child(2) .settings-select { width: 171px; }
+  html:root .settings-app .settings-main .personal-section:first-of-type .settings-row:nth-child(3) .settings-select { width: 100.5px; }
+  html:root .settings-app .settings-main .personal-section:first-of-type .settings-row:nth-child(4) .settings-select { width: 109.5px; }
+  html:root .settings-app .settings-main .personal-section:first-of-type .settings-row:nth-child(6) .settings-select { width: 91px; }
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) .settings-row:nth-child(2) .settings-select { width: 83px; }
+}
+
+@media (max-width: 380px) {
+  html:root .settings-app .settings-main .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(3) { height: 94px; }
+}
+
 /* Team page header: title with an optional description underneath */
 html:root .settings-app .settings-main .team-settings-header > div { display: flex; flex-direction: column; align-items: flex-start; }
 html:root .settings-app .settings-main .team-settings-header > div > p { margin: 4px 0 0; color: var(--set-desc); font-size: 13px; line-height: 22px; }

@@ -29,7 +29,6 @@ import {
   Upload,
   KeyboardOff,
   MonitorX,
-  ListFilter,
   MoreHorizontal,
   Plus,
   Search,
@@ -124,6 +123,25 @@ import "./settings.css";
 import "./workflow-settings.css";
 import "./advanced-settings.css";
 import "./settings-parity.css";
+
+function SettingsMobileMenuGlyph() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+      <g>
+        <path d="M4.25 2C2.45508 2 1 3.45508 1 5.25V10.75C1 12.5449 2.45508 14 4.25 14H11.75C13.5449 14 15 12.5449 15 10.75V5.25C15 3.45508 13.5449 2 11.75 2H4.25ZM2.5 5.5C2.5 4.39543 3.39543 3.5 4.5 3.5H11.5C12.6046 3.5 13.5 4.39543 13.5 5.5V10.5C13.5 11.6046 12.6046 12.5 11.5 12.5H4.5C3.39543 12.5 2.5 11.6046 2.5 10.5V5.5Z" />
+        <rect x="4" y="5" width="1.5" height="6" rx="0.75" />
+      </g>
+    </svg>
+  );
+}
+
+function SettingsMobileBackGlyph() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 11 18" width="11" height="12" fill="currentColor">
+      <path d="M3.68293 8.63202L3.30966 8.99195L3.68293 9.35188L10.1643 15.6015C10.6051 16.0265 10.6028 16.7325 10.162 17.1712C9.70399 17.6104 8.96011 17.6096 8.5031 17.1689L0.83567 9.77564C0.388109 9.34408 0.388109 8.65592 0.83567 8.22436L8.5031 0.83107C8.96089 0.389643 9.70653 0.389643 10.1643 0.83107C10.6119 1.26263 10.6119 1.95079 10.1643 2.38235L3.68293 8.63202Z" />
+    </svg>
+  );
+}
 import { WebhookEditPage } from "./webhook-edit-page";
 import {
   webhookResourceLabel,
@@ -807,13 +825,24 @@ export function SettingsPage(props: SettingsPageProps) {
           onClick={() => setMobileNav(false)}
         />
         <main ref={mainRef} className="settings-main" data-settings-page={props.page} data-team-section={props.teamSection}>
-          <button
-            className="settings-mobile-menu"
-            aria-label={t("Settings navigation")}
-            onClick={() => setMobileNav(true)}
-          >
-            <ListFilter size={15} />
-          </button>
+          <header className="settings-mobile-header">
+            <button
+              className="settings-mobile-menu"
+              aria-label={t("Settings navigation")}
+              onClick={() => setMobileNav(true)}
+            >
+              <SettingsMobileMenuGlyph />
+            </button>
+            <button
+              type="button"
+              className="settings-mobile-settings-link"
+              onClick={props.onBack}
+            >
+              <SettingsMobileBackGlyph />
+              <span>{t("Settings")}</span>
+            </button>
+          </header>
+          <div className="settings-mobile-content-gap" aria-hidden="true" />
           <div className="settings-content">
             <Suspense fallback={<SettingsPageFallback />}>
               <SettingsBody
