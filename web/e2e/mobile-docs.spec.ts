@@ -69,6 +69,10 @@ test.describe('mobile document view', () => {
       await expect(page.getByRole('textbox', { name: 'Document content', exact: true })).toContainText('123123123')
       await expect(page.getByRole('link', { name: '[mobile] Compare Test' })).toBeVisible()
       await expect(page.locator('.document-edited__label--phone')).toBeVisible()
+      await expect(page.locator('.document-header')).toHaveCSS('padding', '0px')
+      await expect(page.locator('.document-header')).toHaveCSS('gap', '12px')
+      await expect(page.locator('.document-header-row')).toHaveCSS('padding', '0px 8px')
+      await expect(page.locator('.document-title-actions')).toHaveCSS('gap', '6px')
       expect((await page.locator('.document-title').boundingBox())?.y).toBe(150)
       expect((await page.locator('.document-editor .flow-prosemirror').boundingBox())?.x).toBe(-2)
       for (const selector of ['.document-mobile-menu', '.document-title-actions button[role="switch"]', '.document-title-actions button[aria-label="Document options"]', '.document-edited', '.document-header-actions button[aria-label="Copy document URL"]', '.document-header-actions button[aria-label="Change document subscribers"]']) {
