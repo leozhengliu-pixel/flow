@@ -75,7 +75,7 @@
   color:var(--theme-text-primary);
   font-size:13px;
   font-weight:500;
-  line-height:16px;
+  line-height:normal;
   text-decoration:none;
   white-space:nowrap;
 }
@@ -97,6 +97,18 @@
   width:14px;
   height:14px;
 }
+@media(min-width:801px){
+  .breadcrumbIcon{
+    width:16px;
+    height:16px;
+    flex:0 0 16px;
+  }
+  .breadcrumbIcon > :global(svg),
+  .breadcrumbIcon > *{
+    width:16px;
+    height:16px;
+  }
+}
 .chevron{
   flex:0 0 auto;
   margin:0 7px;
@@ -104,6 +116,7 @@
   display:grid;
   place-items:center;
 }
+.breadcrumbChevron{margin:0 4px}
 .chevron :global(svg){width:13px;height:13px}
 
 .titleRow{

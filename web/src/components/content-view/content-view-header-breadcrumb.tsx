@@ -23,7 +23,7 @@ export interface ContentViewHeaderBreadcrumbProps {
 /** LS-0136 */
 export function ContentViewHeaderBreadcrumbChevron({ className }: { className?: string }) {
   return (
-    <span className={cn(styles.chevron, className)} aria-hidden>
+    <span className={cn(styles.chevron, styles.breadcrumbChevron, className)} aria-hidden>
       <ChevronRight size={13} strokeWidth={2} />
     </span>
   )

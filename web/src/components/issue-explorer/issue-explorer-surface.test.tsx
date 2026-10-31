@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { IssueExplorerSurface } from './issue-explorer-surface'
 import styles from './issue-explorer.module.css'
 
@@ -50,4 +51,15 @@ it('keeps project milestone off the team issue filter menu', async () => {
   expect(screen.getByRole('option', { name: 'Project' })).toBeInTheDocument()
   expect(screen.getByRole('option', { name: 'Customers' })).toBeInTheDocument()
   expect(screen.queryByRole('option', { name: 'Project milestone' })).not.toBeInTheDocument()
+})
+
+it('renders the team header favorite, notifications, and New issue action', async () => {
+  const user = userEvent.setup(), onCreateIssue = vi.fn(), onToggleTeamFavorite = vi.fn()
+  render(<I18nProvider><TooltipProvider><IssueExplorerSurface scopeName="Verify" scopeTeam={{ id: 'team-1', key: 'VER', name: 'Verify', color: '#fff', icon: 'Team' } as never} activeView="all" viewHref={() => '#'} filters={[]} displayOptions={display} detailsOpen={false} favorite={false} teamFavorite={false} onToggleTeamFavorite={onToggleTeamFavorite} teamNotificationsHref="/verify/settings/team/VER/notifications" onToggleFavorite={vi.fn()} onFilterToggle={vi.fn()} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()} filterOptions={() => []} onCreateIssue={onCreateIssue}>Content</IssueExplorerSurface></TooltipProvider></I18nProvider>)
+  await user.click(screen.getByRole('switch', { name: 'Add to favorites' }))
+  expect(onToggleTeamFavorite).toHaveBeenCalledOnce()
+  expect(screen.getByRole('link', { name: 'Setup team notifications' })).toHaveAttribute('href', '/verify/settings/team/VER/notifications')
+  const newIssue = screen.getAllByRole('button', { name: 'New issue' }).at(-1)!
+  await user.click(newIssue)
+  expect(onCreateIssue).toHaveBeenCalledOnce()
 })

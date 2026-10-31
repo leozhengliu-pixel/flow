@@ -14,7 +14,7 @@ import type { SavedView, Team } from '@/types/flow'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import styles from './issue-explorer.module.css'
 import { useIssueSurfaceControls } from '@/components/my-issues/use-issue-surface-controls'
-import { AddViewIcon, InsightsIcon } from '@/components/ui/view-action-icons'
+import { AddViewIcon, InsightsIcon, PlusIcon } from '@/components/ui/view-action-icons'
 import {
   ContentViewContainer,
   ContentViewHeader,
@@ -175,6 +175,7 @@ export function IssueExplorerSurface({
         </>
       )}
       {scopeTeam && !savedView && teamNotificationsHref ? <a className={styles.phoneTeamNotifications} href={teamNotificationsHref} aria-label={t('Setup team notifications')}><FlowBellIcon /></a> : null}
+      {mode === 'view' && onCreateIssue ? <button className={styles.headerNewIssue} type="button" onClick={onCreateIssue}><PlusIcon width={14} height={14} /><span>{t('New issue')}</span></button> : null}
     </ContentViewHeader>
   )
 
@@ -226,7 +227,7 @@ export function IssueExplorerSurface({
         <ToolbarButtonsNavigation className={styles.actions}>
           {filterMenu(<ToolbarButton label={t(filterActive ? 'Add another filter' : 'Add filter')} pressed={filterActive || undefined} data-filter-active={filterActive || undefined}><FilterIcon /></ToolbarButton>)}
           {displayMenu}
-          <ToolbarButton label={`${insightsOpen ? 'Close' : 'Open'} ${insightsLabel}`} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}>
+          <ToolbarButton className={styles.insightsButton} label={`${insightsOpen ? 'Close' : 'Open'} ${insightsLabel}`} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}>
             <InsightsIcon />
           </ToolbarButton>
           {mode === 'view' && (detailsShortcutTooltip ? (
