@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Archive, ArchiveRestore, ArrowDown, ArrowUp, MoreHorizontal, RotateCcw, Search, Settings, SquareStack, Trash2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDesktopSettings } from '@/hooks/use-desktop-settings';
+import { usePhoneLayout } from '@/hooks/use-phone-layout';
 import { toast } from "@/lib/toast";
 
 import {
@@ -20,6 +21,9 @@ import { teamContentAccessible } from "@/lib/team-access";
 import { DELETE_TEAM_DESCRIPTION } from "@/lib/team-deletion";
 import type { BootstrapData, DeletedTeam, Team } from "@/types/flow";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
+import { SettingsSearchGlyph } from './settings-nav-glyphs';
+import { MobileTeamsTable } from './mobile-teams-table';
+import './mobile-teams.css';
 
 type Visibility = "Active" | "Retired" | "Recently deleted";
 type TeamSort = 'name' | 'description' | 'visibility' | 'members' | 'issues' | 'created';
@@ -42,6 +46,7 @@ export function WorkspaceTeamsSettings({
   const [query, setQuery] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("Active");
   const desktop = useDesktopSettings();
+  const phone = usePhoneLayout();
   const [sort, setSort] = useState<TeamSort>('name');
   const [descending, setDescending] = useState(false);
   const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
@@ -135,7 +140,7 @@ export function WorkspaceTeamsSettings({
       <SettingsPageTitle>{t("Teams")}</SettingsPageTitle>
       <div className="settings-members-toolbar">
         <label>
-          <Search size={14} />
+          {phone ? <SettingsSearchGlyph /> : <Search size={14} />}
           <input
             aria-label={t("Filter by name…")}
             placeholder={t("Filter by name…")}
@@ -150,7 +155,7 @@ export function WorkspaceTeamsSettings({
           onChange={(value) => setVisibility(visibilities.find((item) => t(item) === value) ?? "Active")}
         />
         <span />
-        {admin && visibility !== "Recently deleted" && data.teams.length > 0 && (
+        {!phone && admin && visibility !== "Recently deleted" && data.teams.length > 0 && (
           <button className="settings-action" type="button" onClick={exportCsv}>
             {t("Export CSV")}
           </button>
@@ -171,6 +176,8 @@ export function WorkspaceTeamsSettings({
             }, "Team restored")
           }
         />
+      ) : phone ? (
+        <MobileTeamsTable data={data} teams={teams} visibility={visibility} memberCounts={memberCounts} issueCounts={issueCounts} sort={sort} descending={descending} filtered={Boolean(normalized)} onSort={(key) => { if (sort === key) setDescending(value => !value); else { setSort(key); setDescending(key === 'members' || key === 'issues'); } }} onOpen={onOpen} />
       ) : (
       <div className="settings-members-directory">
         <div className="settings-members-columns">
