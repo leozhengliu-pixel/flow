@@ -50,6 +50,12 @@
 }
 .flow-triage-list__favorite { width: 28px; height: 28px; border-radius: 9999px; }
 .flow-triage-list__actions { display: flex; align-items: center; gap: 2px; }
+.flow-triage-list__sidebar,
+.flow-triage-list__phone-star { display: none; }
+.flow-triage-row__avatar-slot { display: contents; }
+@media (min-width: 768px) {
+  .app .flow-triage-list__sidebar[data-sidebar-trigger] { display: none !important; }
+}
 
 .flow-triage-icon-button {
   position: relative;
@@ -160,6 +166,39 @@
   .flow-triage-row__title { color: var(--bright); line-height: normal; }
   .flow-triage-row__id { color: var(--issue-muted); line-height: normal; }
   .flow-triage-row__creator,.flow-triage-row__date { color: var(--issue-muted); line-height: normal; }
+}
+
+@media (max-width: 767px) {
+  .app .flow-triage-host { height: 100%; margin-bottom: 0; }
+  .flow-triage-page:not([data-triage-selected='true']) [data-split-view='triage'] > [data-split-view-list] { display: flex; }
+  .flow-triage-page:not([data-triage-selected='true']) [data-split-view='triage'] > [data-split-view-detail] { display: none; }
+  html:root[data-sidebar-mode] body .app .flow-triage-list__header:has(> .flow-triage-list__sidebar) { gap: 12px; padding: 0; border: 0; background: var(--bg-panel); }
+  .flow-triage-list__header::after { content: ''; position: absolute; top: 43.5px; left: 0; right: 0; height: .5px; background: var(--border); }
+  html:root[data-sidebar-mode] body .app .flow-triage-list__header .flow-triage-list__sidebar { display: grid !important; margin-left: 8px; margin-right: 0; }
+  .flow-triage-list__header .flow-triage-list__sidebar::before,
+  .flow-triage-list__header .flow-triage-list__sidebar::after { display: none; }
+  .flow-triage-list__header .flow-triage-list__sidebar > svg { display: block; }
+  .flow-triage-list__title { flex: 1; gap: 6px; }
+  .flow-triage-list__team { display: grid; width: 16px; height: 16px; flex: none; }
+  .flow-triage-list__team svg { width: 16px; height: 16px; }
+  .flow-triage-list__title h2 { padding: 0; color: var(--text); line-height: normal; }
+  html:root body .app .flow-triage-list__header :is(.flow-triage-icon-button, .flow-triage-list__favorite) { width: 32px; height: 32px; flex: none; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; box-shadow: none; color: var(--text); font: 500 12px / normal var(--font); transform: translateY(-.25px); }
+  .flow-triage-list__header :is(.flow-triage-icon-button, .flow-triage-list__favorite) svg { width: 14px; height: 14px; color: var(--issue-muted); }
+  .flow-triage-list__phone-star { display: flex; }
+  .flow-triage-list__desktop-star { display: none; }
+  .flow-triage-list__actions { gap: 4px; margin-right: 8px; }
+  .flow-triage-list__actions .is-small { display: none; }
+  .flow-triage-row { margin: 0; padding: 0; gap: 0; justify-content: flex-start; z-index: 0; }
+  .flow-triage-row::before { inset-inline: 8px; }
+  .flow-triage-row__line { margin: 10.25px 22px 0; line-height: normal; }
+  .flow-triage-row__line.is-meta { margin-top: 4.75px; height: 18px; }
+  .flow-triage-row__title { color: var(--bright); line-height: normal; }
+  .flow-triage-row__id { color: var(--issue-muted); }
+  .flow-triage-row__id > span { letter-spacing: -.26px; }
+  .flow-triage-row__creator,
+  .flow-triage-row__date { color: var(--issue-muted); line-height: normal; }
+  .flow-triage-row__avatar-slot { display: block; width: 18px; height: 18px; flex: none; color: var(--bright); font: 400 16px / 0 var(--font); }
+  .flow-triage-row__avatar { width: 18px; height: 18px; }
 }
 
 .flow-triage-skeleton { display: flex; flex-direction: column; }

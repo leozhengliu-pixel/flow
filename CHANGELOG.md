@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match the phone team triage header and two-line issue rows, with working navigation and list-to-detail transitions.
+
 - Match phone Projects toolbar sidebar glyphs and use viewport-width filter and display panels without changing desktop layout.
 
 - Match phone Views directory controls, workspace group headers, and saved-view row spacing without changing desktop layout.
