@@ -91,6 +91,7 @@
 .coding-agent-panel{flex:0 0 clamp(360px,45%,640px);width:clamp(360px,45%,640px);max-width:100%;min-height:0;display:flex;flex-direction:column;margin:12px 8px 8px 4px;border:.5px solid var(--cs-panel-border);border-radius:8px;background:var(--cs-bg-base);overflow:hidden}
 .coding-agent-panel[hidden]{display:none}
 .coding-agent-panel-header{flex:none;display:flex;align-items:center;gap:8px;min-width:0;height:48px;box-sizing:border-box;padding:8px 6px 8px 15px}
+.coding-agent-panel-header-inner{display:contents}
 .coding-agent-panel-header h3{flex:1;min-width:0;margin:0;overflow:hidden;color:var(--cs-label-base);font:500 13px/16px var(--font);text-overflow:ellipsis;white-space:nowrap}
 .coding-agent-panel-header .coding-session-icon-button{width:28px;height:28px;flex-basis:28px;border:.5px solid transparent;border-radius:9999px;color:var(--cs-icon-fg);transition:background-color .15s,color .15s}
 .coding-agent-panel-header .coding-session-icon-button:hover:not(:disabled),.coding-agent-panel-header .coding-session-icon-button[data-state=open]{background:var(--cs-icon-hover-bg);color:var(--cs-icon-hover-fg)}
@@ -204,6 +205,23 @@
 @container (max-width:720px){.coding-session-panel{flex-direction:column}.coding-agent-panel{flex-basis:auto;width:auto;margin:8px}}
 .coding-session-card .coding-session-panel,.coding-session-dialog .coding-session-panel{container-type:inline-size}
 @media (max-width:760px){.coding-session-panel{flex-direction:column}.coding-agent-panel{flex-basis:auto;width:auto;margin:8px}}
+
+/* Review panels replace the diff on phones. Keep the floating frame flush with the merged review chrome. */
+@media (max-width:767px){
+  html:root body .reviews-workspace .review-agent-panel{flex:1;width:auto;margin:0 8px 8px 4px;background:var(--theme-background);box-shadow:var(--cs-card-shadow)}
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-panel-header{gap:0;padding:8px 6px 8px 10px;position:relative;left:-.5px;top:-.5px;width:calc(100% + 1px)}
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-panel-header-inner{min-width:0;flex:1;display:flex;align-items:center;gap:8px;height:32px;padding-left:6px;box-sizing:border-box}
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-panel-header-inner .coding-agent-archived{display:none}
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-panel-header h3{line-height:normal}
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-menu-trigger,
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-close{width:32px;flex-basis:32px;height:32px}
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-close{margin-left:0}
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-stream{position:relative;left:-.5px;top:-.5px;width:calc(100% + 1px);font:400 16px/24px var(--font)}
+  html:root body .reviews-workspace .review-agent-panel:has(.cs-archived-divider) .cs-composer-area{display:none}
+  html:root body .reviews-workspace .review-agent-panel .cs-group-children{padding-left:10px;padding-right:10px}
+  html:root body .reviews-workspace .review-agent-panel .cs-group-header:hover,
+  html:root body .reviews-workspace .review-agent-panel .cs-action-header:hover{color:var(--cs-label-muted)}
+}
 /* Beats the light theme's dialog field and surface rules (light-parity.css, tokens.css). */
 html:root body .coding-session-dialog .coding-session-panel .coding-session-composer textarea{border:0;border-radius:0;background:transparent;box-shadow:none}
 html:root .dialog-content.coding-session-dialog{top:50%;transform:translate(-50%,-50%);border-radius:12px;background:var(--theme-background)}
