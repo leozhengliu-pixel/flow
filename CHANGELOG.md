@@ -10,6 +10,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Fixed
 
 - Desktop workspace-welcome documents use the compact Flow mark, quieter body type and a bounded video placeholder so Resources stays in view, with working Flow documentation and support links. Pulse empty states retain left-aligned content and correctly styled desktop actions. Inbox preview Copy URL actions retain the workspace route, and review links no longer silently do nothing.
+- Phone document header menus use a searchable, scrollable command panel with touch-sized rows and matching action order; desktop menus are unchanged.
 - Desktop Inbox row actions show the complete Delete label and a small snooze chevron. Keyboard snooze now includes the same dated options, Custom icon and editable time as the pointer menu, at the matching desktop width.
 - Phone document pages retain the project breadcrumb and edited date beside touch-sized actions, align the title and writing column, and use the matching navigation glyph without changing desktop layouts.
 - Phone project descriptions keep paragraphs, headings and all list levels unclipped with aligned markers; resource-add controls and the first-update card use the matching spacing, hairline and compose glyph size without changing desktop layouts.

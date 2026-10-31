@@ -18,6 +18,8 @@ const api = vi.hoisted(() => ({
   restoreTrashEntry: vi.fn(),
 }))
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
+const layout = vi.hoisted(() => ({ phone: false }))
+vi.mock('@/hooks/use-phone-layout', () => ({ usePhoneLayout: () => layout.phone }))
 vi.mock('@/lib/toast', () => ({ toast: toasts }))
 vi.mock('@/lib/resource-preferences', () => ({ refreshResourcePreferences: api.refreshResourcePreferences }))
 
@@ -70,6 +72,7 @@ const menuRows = () => within(screen.getByRole('menu')).getAllByRole('menuitem')
 
 describe('DocumentPage header', () => {
   beforeEach(() => {
+    layout.phone = false
     localStorage.clear()
     Object.values(api).forEach(mock => mock.mockReset())
     api.refreshResourcePreferences.mockResolvedValue(undefined)
@@ -224,6 +227,26 @@ describe('DocumentPage header', () => {
     await user.click(screen.getByRole('button', { name: 'Document options' }))
     expect(menuRows()).not.toContain('People with access')
     expect(menuRows()).not.toContain('Delete')
+  })
+
+  it('filters phone commands and resets the filter when the menu closes', async () => {
+    layout.phone = true
+    const user = userEvent.setup()
+    renderPage()
+    const trigger = screen.getByRole('button', { name: 'Document options' })
+    await user.click(trigger)
+    expect(menuRows()).toEqual(['Move to', 'Pin to team', 'Duplicate', 'Rename…', 'New template from document', 'Favorite', 'Copy', 'Download', 'Remind me', 'Show document history', 'Delete'])
+    const search = screen.getByRole('textbox', { name: 'Command menu' })
+    await user.type(search, 'history')
+    expect(menuRows()).toEqual(['Show document history'])
+    await user.clear(search)
+    await user.type(search, 'not a command')
+    expect(screen.getByText('No results')).toBeVisible()
+    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(trigger)
+    expect(screen.getByRole('textbox', { name: 'Command menu' })).toHaveValue('')
+    expect(menuRows()).toHaveLength(11)
   })
 
   it('opens the access dialog from the menu, stages a role and applies it on Save', async () => {

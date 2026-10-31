@@ -10,7 +10,7 @@
  *   ─ Delete
  */
 import { Building2 } from 'lucide-react'
-import { useRef, type MouseEvent, type ReactElement, type ReactNode } from 'react'
+import { Children, isValidElement, useRef, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { TeamIcon } from '@/components/issue/issue-icons'
@@ -52,9 +52,12 @@ export interface DocumentMenuItemsProps {
   canDelete?: boolean
   /** Runs after the document is deleted (the page navigates away). */
   onDeleted?: () => void
+  /** Phone command menu: filter translated labels without changing the available actions. */
+  query?: string
+  phone?: boolean
 }
 
-export function DocumentMenuItems({ ctx, document, variant, team, showAuthorNames, onToggleAuthorNames, onOpenAccess, onUiAction, canDelete = true, onDeleted }: DocumentMenuItemsProps) {
+export function DocumentMenuItems({ ctx, document, variant, team, showAuthorNames, onToggleAuthorNames, onOpenAccess, onUiAction, canDelete = true, onDeleted, query = '', phone = false }: DocumentMenuItemsProps) {
   const { t } = useI18n()
   const { data } = ctx
   const favorited = data.favorites.some(item => item.userId === data.viewer.id && item.resourceType === 'document' && item.resourceId === document.id) || document.favorite
@@ -75,7 +78,8 @@ export function DocumentMenuItems({ ctx, document, variant, team, showAuthorName
   const rowPinned = pinnedTeam ? Boolean(documentPinnedResource(data, pinnedTeam.id, document.id)) : false
   const pinSelected = new Set(teams.filter(item => documentPinnedResource(data, item.id, document.id)).map(item => item.id))
   const pinnedLabel = variant === 'overview' ? 'Unpin from overview' : 'Remove from overview'
-  return <>
+  const rename = <FlowMenuItem icon={<IssueActionGlyph label="Rename…" fallback={null}/>} label="Rename…" shortcut="⇧ R" onSelect={() => void renameDocument(ctx, document)}/>
+  const items = <>
     {variant !== 'overview' && <FlowSubmenu icon={<IssueActionGlyph label="Move to" fallback={null}/>} label="Move to" shortcut="⇧ P" search>
       {({ close }) => <FlowMenuOptions options={moveOptions} selected={moveSelected} keepOpen={false} placeholder="Move to…" emptyLabel="No results" onChoose={id => {
         const [type, ...rest] = id.split(':')
@@ -89,6 +93,7 @@ export function DocumentMenuItems({ ctx, document, variant, team, showAuthorName
         <FlowMenuOptions options={teams.map(item => ({ id: item.id, label: item.name, translate: false, icon: <TeamIcon team={item} size={14}/> }))} selected={pinSelected} multiple emptyLabel="No teams" onChoose={id => { const target = teams.find(item => item.id === id); if (target) void toggleDocumentPinnedToTeam(ctx, document, target) }}/>
       </FlowSubmenu>}
     <FlowMenuItem icon={<IssueActionGlyph label="Duplicate" fallback={null}/>} label="Duplicate" onSelect={() => void duplicateDocument(ctx, document).then(created => { if (created && variant === 'page') ctx.navigate(documentPath(data.workspace.urlKey, created)) })}/>
+    {phone && rename}
     <FlowSubmenu icon={<IssueActionGlyph label="New template from document" fallback={null}/>} label="New template from document">
       <FlowMenuItem icon={<Building2 size={14}/>} label="Workspace" onSelect={() => void createTemplateFromDocument(ctx, document, '')}/>
       {teams.length > 0 && <FlowMenuSeparator/>}
@@ -101,7 +106,7 @@ export function DocumentMenuItems({ ctx, document, variant, team, showAuthorName
         if (template) void applyTemplateToDocument(ctx, document, template)
       }}/>}
     </FlowSubmenu>}
-    <FlowMenuItem icon={<IssueActionGlyph label="Rename…" fallback={null}/>} label="Rename…" shortcut="⇧ R" onSelect={() => void renameDocument(ctx, document)}/>
+    {!phone && rename}
     <FlowMenuSeparator/>
     <FlowMenuItem icon={<FlowGlyph name="favorite"/>} label={favorited ? 'Remove from favorites' : 'Favorite'} shortcut="⌥ F" onSelect={() => void toggleDocumentFavorite(ctx, document)}/>
     <FlowSubmenu icon={<IssueActionGlyph label="Copy" fallback={null}/>} label="Copy">
@@ -118,12 +123,16 @@ export function DocumentMenuItems({ ctx, document, variant, team, showAuthorName
       {({ close }) => <FlowReminderOptions onChoose={date => { close(); void remindAboutDocument(ctx, document, date.toISOString()) }} onCustom={() => void remindAboutDocumentCustom(ctx, document)}/>}
     </FlowSubmenu>
     <FlowMenuSeparator/>
-    {variant === 'page' && onToggleAuthorNames && <FlowMenuItem icon={<FlowGlyph name="creator"/>} label={showAuthorNames ? 'Hide author names' : 'Show author names'} shortcut="⇧ A" onSelect={onToggleAuthorNames}/>}
+    {variant === 'page' && !phone && onToggleAuthorNames && <FlowMenuItem icon={<FlowGlyph name="creator"/>} label={showAuthorNames ? 'Hide author names' : 'Show author names'} shortcut="⇧ A" onSelect={onToggleAuthorNames}/>}
     <FlowMenuItem icon={<IssueActionGlyph label="Show document history" fallback={null}/>} label="Show document history" onSelect={() => ui('history')}/>
-    {variant === 'page' && onOpenAccess && <FlowMenuItem icon={<FlowGlyph name="members"/>} label="People with access" onSelect={onOpenAccess}/>}
-    <FlowMenuSeparator/>
+    {variant === 'page' && !phone && onOpenAccess && <FlowMenuItem icon={<FlowGlyph name="members"/>} label="People with access" onSelect={onOpenAccess}/>}
+    {!phone && <FlowMenuSeparator/>}
     {canDelete && <FlowMenuItem icon={<FlowGlyph name="delete"/>} label="Delete" onSelect={() => void deleteDocumentWithConfirm(ctx, document, onDeleted)}/>}
   </>
+  if (!query.trim()) return items
+  const needle = query.trim().toLocaleLowerCase()
+  const matches = Children.toArray(items.props.children).filter(item => isValidElement<{ label?: string }>(item) && item.props.label && t(item.props.label).toLocaleLowerCase().includes(needle))
+  return matches.length ? <>{matches}</> : <div className="flow-menu__empty">{t('No results')}</div>
 }
 
 /** Right-click menu for a document row; the row element is the trigger (its child). */

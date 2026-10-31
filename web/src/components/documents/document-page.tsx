@@ -7,6 +7,7 @@ import { IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
 import { SelectionIssueProvider } from '@/components/editor/selection-issue-provider'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useResetOnChange } from '@/hooks/use-reset-on-change'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
 import { toast } from '@/lib/toast'
 
@@ -81,6 +82,8 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [historyOpen, setHistoryOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const phone = usePhoneLayout()
+  const [menuQuery, setMenuQuery] = useState('')
   const [editedOpen, setEditedOpen] = useState(false)
   const [ownerOpen, setOwnerOpen] = useState(false)
   const [subscribersOpen, setSubscribersOpen] = useState(false)
@@ -250,13 +253,27 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
         {!deleted && <ScopedFlowTooltip label={t(favorite ? 'Unfavorite document' : 'Favorite document')} shortcut={DOCUMENT_PAGE_SHORTCUTS.favorite}>
           <button aria-checked={favorite} aria-label={t(favorite ? 'Remove from favorites' : 'Add to favorites')} className="document-icon-button" onClick={() => void toggleDocumentFavorite(ctx, document)} role="switch" type="button">{favorite ? <FlowFavoriteFilledIcon className="document-favorite-filled"/> : <FlowFavoriteIcon/>}</button>
         </ScopedFlowTooltip>}
-        <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenu.Root open={menuOpen} onOpenChange={open => { setMenuOpen(open); if (!open) setMenuQuery('') }}>
           <DropdownMenu.Trigger asChild><button aria-label={t('Document options')} className="document-icon-button" type="button"><FlowOptionsIcon/></button></DropdownMenu.Trigger>
           <DropdownMenu.Portal>
-            <FlowDropdownMenuContent label={t('Document actions')}>
-              {deleted && deletedEntry
-                ? <DeletedDocumentMenuItems ctx={ctx} document={document} entry={deletedEntry}/>
-                : <DocumentMenuItems ctx={ctx} document={document} variant="page" showAuthorNames={authorNamesOpen} onToggleAuthorNames={toggleAuthorNames} onOpenAccess={canManageAccess ? () => void openAccess() : undefined} onUiAction={runUiAction} canDelete={canManageAccess || viewerOwnsDocument}/>}
+            <FlowDropdownMenuContent label={t('Document actions')} className={phone && !deleted ? 'document-page-options' : ''}>
+              {phone && !deleted && <div className="document-page-options-search">
+                <input aria-label={t('Command menu')} placeholder={t('Filter...')} value={menuQuery} onChange={event => setMenuQuery(event.target.value)} onKeyDown={event => {
+                  if (event.key === 'Escape') return
+                  event.stopPropagation()
+                  if (!['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return
+                  event.preventDefault()
+                  const rows = event.currentTarget.closest('[role=menu]')?.querySelectorAll<HTMLElement>('.document-page-options-list > [role=menuitem]:not([data-disabled])')
+                  const row = event.key === 'ArrowUp' ? rows?.[rows.length - 1] : rows?.[0]
+                  if (event.key === 'Enter') row?.click()
+                  else row?.focus()
+                }}/>
+              </div>}
+              <div className={phone && !deleted ? 'document-page-options-list' : undefined} style={phone && !deleted ? undefined : { display: 'contents' }}>
+                {deleted && deletedEntry
+                  ? <DeletedDocumentMenuItems ctx={ctx} document={document} entry={deletedEntry}/>
+                  : <DocumentMenuItems ctx={ctx} document={document} variant="page" phone={phone} query={phone ? menuQuery : ''} showAuthorNames={authorNamesOpen} onToggleAuthorNames={toggleAuthorNames} onOpenAccess={canManageAccess ? () => void openAccess() : undefined} onUiAction={runUiAction} canDelete={canManageAccess || viewerOwnsDocument}/>}
+              </div>
             </FlowDropdownMenuContent>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
