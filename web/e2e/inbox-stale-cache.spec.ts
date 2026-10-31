@@ -1,15 +1,12 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
-
-const apiBase = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
+import { expect, type APIRequestContext, type Page } from '@playwright/test'
+import { test } from './workspace-fixture'
 
 type Issue = { id: string; identifier: string }
 type Notification = { id: string; issueId?: string; recipientId?: string }
 
-async function createWorkspace(request: APIRequestContext, key: string) {
-  const response = await request.post(`${apiBase}/api/workspaces`, {
-    data: { name: 'Inbox stale cache', urlKey: key, region: 'us', tutorial: false },
-  })
-  expect(response.status()).toBe(201)
+async function workspaceTeam(request: APIRequestContext, key: string) {
+  const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': key } })
+  expect(response.status()).toBe(200)
   const workspace = await response.json() as { teams?: Array<{ id: string }> }
   const teamId = workspace.teams?.[0]?.id
   expect(teamId).toBeTruthy()
@@ -17,7 +14,7 @@ async function createWorkspace(request: APIRequestContext, key: string) {
 }
 
 async function createIssue(request: APIRequestContext, headers: Record<string, string>, teamId: string, title: string, stateId: string): Promise<Issue> {
-  const response = await request.post(`${apiBase}/api/issues`, {
+  const response = await request.post(`/api/issues`, {
     headers,
     data: { title, description: 'Inbox stale cache', teamId, stateId },
   })
@@ -26,7 +23,7 @@ async function createIssue(request: APIRequestContext, headers: Record<string, s
 }
 
 async function remind(request: APIRequestContext, headers: Record<string, string>, issueId: string) {
-  const response = await request.post(`${apiBase}/api/issues/${issueId}/reminders`, {
+  const response = await request.post(`/api/issues/${issueId}/reminders`, {
     headers,
     data: { remindAt: new Date(Date.now() + 300).toISOString() },
   })
@@ -34,7 +31,7 @@ async function remind(request: APIRequestContext, headers: Record<string, string
 }
 
 async function notifications(request: APIRequestContext, headers: Record<string, string>) {
-  const response = await request.get(`${apiBase}/api/notifications?limit=50`, { headers })
+  const response = await request.get(`/api/notifications?limit=50`, { headers })
   expect(response.status()).toBe(200)
   return response.json() as Promise<{ notifications: Notification[]; unreadCount: number }>
 }
@@ -50,7 +47,7 @@ async function seedInbox(request: APIRequestContext, headers: Record<string, str
 
 async function renameNewInbox(request: APIRequestContext, headers: Record<string, string>, teamId: string, old: Notification[]) {
   for (const item of old) {
-    const response = await request.patch(`${apiBase}/api/notifications/${item.id}`, { headers, data: { deleted: true } })
+    const response = await request.patch(`/api/notifications/${item.id}`, { headers, data: { deleted: true } })
     expect(response.status()).toBe(200)
   }
   const first = await createIssue(request, headers, teamId, 'Fresh inbox first', 'state_progress')
@@ -70,6 +67,8 @@ async function expectFreshInbox(page: Page, request: APIRequestContext, headers:
   await expect.poll(async () => identifiers.allTextContents()).toEqual(expected)
   await expect(page).toHaveTitle(/Inbox \(2\)/)
 
+  // Rendering the fresh inbox precedes its idle cache write.
+  await expect.poll(async () => page.evaluate(key => Boolean(localStorage.getItem(key)), cacheKey)).toBe(true)
   const cached = await page.evaluate(key => {
     const raw = localStorage.getItem(key)
     return raw ? JSON.parse(raw) as { data: { notifications: unknown[] } } : null
@@ -81,13 +80,12 @@ async function expectFreshInbox(page: Page, request: APIRequestContext, headers:
 test.describe('inbox stale navigation cache', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
-  test('reloads the server rows after the cached notifications are deleted', async ({ page, request }, testInfo) => {
-    const workspaceKey = `inbox-stale-${testInfo.project.name}-${testInfo.workerIndex}-${Date.now()}`
-    const teamId = await createWorkspace(request, workspaceKey)
+  test('reloads the server rows after the cached notifications are deleted', async ({ page, request, workspaceKey }, testInfo) => {
+    const teamId = await workspaceTeam(request, workspaceKey)
     const headers = { 'X-Workspace-Key': workspaceKey }
     const oldIssues = await seedInbox(request, headers, teamId)
 
-    const boot = await (await request.get(`${apiBase}/api/bootstrap?workspace=${workspaceKey}`, { headers })).json() as { viewer: { id: string } }
+    const boot = await (await request.get(`/api/bootstrap?workspace=${workspaceKey}`, { headers })).json() as { viewer: { id: string } }
     const cacheKey = `flow:navigation:${boot.viewer.id}:${workspaceKey}`
     await page.goto(`/${workspaceKey}/inbox`)
     await expect(page.locator('.flow-inbox-notification-list > [role="listitem"]')).toHaveCount(2)
@@ -99,17 +97,16 @@ test.describe('inbox stale navigation cache', () => {
     await page.reload()
 
     await expectFreshInbox(page, request, headers, [fresh.first, fresh.second], cacheKey, old)
-    await page.screenshot({ path: '/tmp/codex-oc-inbox-stale/shots/inbox-after-delete-reload.png', fullPage: true, animations: 'disabled' })
+    if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/inbox-after-delete-reload-${testInfo.project.name}.png`, fullPage: true, animations: 'disabled' })
     expect(oldIssues).toHaveLength(2)
   })
 
-  test('recovers when the bootstrap stream is cut off before notifications', async ({ page, request }, testInfo) => {
-    const workspaceKey = `inbox-cut-${testInfo.project.name}-${testInfo.workerIndex}-${Date.now()}`
-    const teamId = await createWorkspace(request, workspaceKey)
+  test('recovers when the bootstrap stream is cut off before notifications', async ({ page, request, workspaceKey }, testInfo) => {
+    const teamId = await workspaceTeam(request, workspaceKey)
     const headers = { 'X-Workspace-Key': workspaceKey }
     await seedInbox(request, headers, teamId)
 
-    const boot = await (await request.get(`${apiBase}/api/bootstrap?workspace=${workspaceKey}`, { headers })).json() as { viewer: { id: string } }
+    const boot = await (await request.get(`/api/bootstrap?workspace=${workspaceKey}`, { headers })).json() as { viewer: { id: string } }
     const cacheKey = `flow:navigation:${boot.viewer.id}:${workspaceKey}`
     await page.goto(`/${workspaceKey}/inbox`)
     await expect(page.locator('.flow-inbox-notification-list > [role="listitem"]')).toHaveCount(2)
@@ -119,7 +116,7 @@ test.describe('inbox stale navigation cache', () => {
 
     // Cut the stream where the legacy bootstrap starts notifications: the
     // browser receives a partial body, just as a cancelled stream would.
-    const bootstrap = await (await request.get(`${apiBase}/api/bootstrap?workspace=${workspaceKey}`, { headers })).text()
+    const bootstrap = await (await request.get(`/api/bootstrap?workspace=${workspaceKey}`, { headers })).text()
     const cut = bootstrap.indexOf('"notifications"')
     expect(cut).toBeGreaterThan(0)
     let served = 0
@@ -131,6 +128,6 @@ test.describe('inbox stale navigation cache', () => {
     await page.reload()
 
     await expectFreshInbox(page, request, headers, [fresh.first, fresh.second], cacheKey, old)
-    await page.screenshot({ path: '/tmp/codex-oc-inbox-stale/shots/inbox-after-cut-stream.png', fullPage: true, animations: 'disabled' })
+    if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/inbox-after-cut-stream-${testInfo.project.name}.png`, fullPage: true, animations: 'disabled' })
   })
 })
