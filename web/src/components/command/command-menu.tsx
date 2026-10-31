@@ -9,9 +9,11 @@ import {
   Inbox,
   Layers3,
   Lightbulb,
+  Maximize2,
   Plus,
   Search,
   SquareDot,
+  Tag,
   UserRound,
 } from 'lucide-react'
 
@@ -61,7 +63,9 @@ export function CommandMenu({
   open,
   onOpenChange,
   onCreateIssue,
+  onCreateIssueFullscreen,
   onCreateIssueTemplate,
+  onCreateLabel,
   onCreateProject,
   onCreateView,
   onCreateInitiative,
@@ -96,7 +100,11 @@ export function CommandMenu({
   open: boolean
   onOpenChange: (value: boolean) => void
   onCreateIssue: () => void
+  /** "Create issue in fullscreen…" (V): the same composer opened expanded. */
+  onCreateIssueFullscreen?: () => void
   onCreateIssueTemplate: () => void
+  /** "Create new label…": opens the issue label settings with the create row focused. */
+  onCreateLabel?: () => void
   onCreateProject: () => void
   onCreateView: () => void
   onCreateInitiative: () => void
@@ -181,9 +189,11 @@ export function CommandMenu({
     else closeAnd(onNavigateAgent)()
   }
   const actions: CommandAction[] = [
-    { id: 'create-issue', group: 'Issues', label: 'Create new issue...', icon: <Plus/>, shortcut: ['C'], keywords: 'new ticket task', run: closeAnd(onCreateIssue) },
-    { id: 'create-project', group: 'Projects', label: 'Create new project...', icon: <FolderKanban/>, shortcut: ['N', 'then', 'P'], run: closeAnd(onCreateProject) },
-    { id: 'create-view', group: 'Views', label: 'Create view...', icon: <Layers3/>, run: closeAnd(onCreateView) },
+    { id: 'create-issue', group: 'Issues', label: 'Create new issue…', icon: <Plus/>, shortcut: ['C'], keywords: 'new ticket task', run: closeAnd(onCreateIssue) },
+    ...(onCreateIssueFullscreen ? [{ id: 'create-issue-fullscreen', group: 'Issues', label: 'Create issue in fullscreen…', icon: <Maximize2/>, shortcut: ['V'], keywords: 'new ticket task expanded', run: closeAnd(onCreateIssueFullscreen) }] : []),
+    ...(onCreateLabel ? [{ id: 'create-label', group: 'Issues', label: 'Create new label…', icon: <Tag/>, keywords: 'new tag label', run: closeAnd(onCreateLabel) }] : []),
+    { id: 'create-project', group: 'Projects', label: 'Create new project…', icon: <FolderKanban/>, shortcut: ['N', 'then', 'P'], run: closeAnd(onCreateProject) },
+    { id: 'create-view', group: 'Views', label: 'Create view…', icon: <Layers3/>, run: closeAnd(onCreateView) },
     { id: 'create-initiative', group: 'Initiatives', label: 'Create new initiative', icon: <Lightbulb/>, shortcut: ['N', 'then', 'I'], run: closeAnd(onCreateInitiative) },
     ...(onGoToCustomers ? [{ id: 'create-customer', group: 'Customers', label: 'Create new customer…', icon: <CustomerCommandIcon/>, keywords: 'add create', run: closeAnd(onNavigateCustomers) }] : []),
     ...documents.global.map(action => ({ id: action.id, group: 'Documents', label: action.label, icon: action.icon, shortcut: action.shortcut, keywords: action.keywords, run: () => { if (action.page) openPage(action.page); else void action.run?.() } })),
@@ -267,7 +277,7 @@ export function CommandMenu({
     else groups.push({ heading: option.group, options: [option] })
     return groups
   }, [])
-  const searchResults = !loading && query && results.length > 0 && <Command.Group heading="Search results">
+  const searchResults = !loading && query && results.length > 0 && <Command.Group heading={t('Quick results for "{query}"').replace('{query}', query)}>
     {results.map(result => <Command.Item key={`${result.type}-${result.id}`} value={`${result.identifier ?? ''} ${result.title} ${result.subtitle ?? ''}`} onSelect={closeAnd(() => onOpenResult(result))}>
       <ResourceIcon result={result}/>
       <span className="command-result-copy">{result.identifier && <small>{result.identifier}</small>}<span>{result.title}</span></span>
@@ -331,7 +341,6 @@ export function CommandMenu({
               {action.checked && <span className="command-option-current" aria-label={t('Current')}><Check size={14}/></span>}
             </Command.Item>)}
           </Command.Group>}
-          {searchResults}
           {groups.map(group => <Command.Group key={group} heading={group}>
             {actions.filter(action => action.group === group).map(action => <Command.Item key={action.id} value={`${action.label} ${action.keywords ?? ''}`} keywords={translatedKeywords(action.path ?? [action.label], t)} onSelect={() => void registry.execute(action.id, { source: 'command-menu' })}>
               <span className="command-item-icon">{action.icon}</span>
@@ -339,6 +348,7 @@ export function CommandMenu({
               {action.shortcut && <span className="command-shortcut">{action.shortcut.map((part, index) => part === 'then' ? <small key={index}>then</small> : <kbd key={index}>{part}</kbd>)}</span>}
             </Command.Item>)}
           </Command.Group>)}
+          {searchResults}
           <Command.Empty>{loading ? 'Searching...' : 'No results found.'}</Command.Empty>
         </Command.List>}
       </Command>

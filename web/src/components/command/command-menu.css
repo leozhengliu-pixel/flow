@@ -133,3 +133,29 @@ html:root body .command-dialog .command-item-icon .estimate-icon {
 html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
   color: var(--pk-text-strong);
 }
+
+/* Desktop command menu: command groups first, entity quick results last, and the
+   reference app's 13px/15.6px rows and 12px group headers. The Ask Flow hint sits
+   over the query row's right edge instead of shrinking the input. */
+@media (min-width: 1024px) {
+  html:root body .command-dialog .command-input {
+    position: relative;
+    padding: 6px 5px 0 6px;
+  }
+  html:root body .command-dialog .command-input > button {
+    position: absolute;
+    top: 50%;
+    right: 18px;
+    transform: translateY(-50%);
+  }
+  html:root body .command-dialog [cmdk-item] {
+    line-height: 15.6px;
+  }
+  html:root body .command-dialog [cmdk-group-heading] {
+    height: 30px;
+    align-items: flex-start;
+    padding: 8px 12px 0;
+    font-size: 12px;
+    line-height: 15.6px;
+  }
+}
