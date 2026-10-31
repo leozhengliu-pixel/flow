@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Keep selected documents' Ask agent action in the phone Actions menu rather than widening the bulk toolbar.
+
 - Let the phone document version selector fit its text and align the history header, preview border and restore action with their content insets.
 
 - Anchor phone document metadata at the viewport edge when needed, with content-sized owner and history controls.
