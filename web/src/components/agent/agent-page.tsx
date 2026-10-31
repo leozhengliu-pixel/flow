@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import { AlertCircle, Plus } from "lucide-react";
+import { AlertCircle, Box, Plus, Search, Workflow, X, type LucideIcon } from "lucide-react";
 import { useLatestRef } from "@/hooks/use-latest-ref";
 import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import {
@@ -93,6 +93,9 @@ export function AgentPage({
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string>(),
     [historyOpen, setHistoryOpen] = useState(false),
+    [examplesDismissed, setExamplesDismissed] = useState(() => {
+      try { return window.localStorage.getItem("flow:agent-examples-dismissed") === "1"; } catch { return false; }
+    }),
     [mentions, setMentions] = useState<AgentMention[]>([]),
     [selectedSkills, setSelectedSkills] = useState<string[]>([]),
     [renameOpen, setRenameOpen] = useState(false),
@@ -786,14 +789,24 @@ export function AgentPage({
           onOpen={(session) => onNavigate(agentPath(data.workspace.urlKey, session.slugId))}
           onOpenInToolbar={(session) => void updateAgentSession(session.id, { location: "toolbar" }).then(saveSession)}
         />}
-        {!shown && !sessions.length && status?.enabled && <section className={styles.examples} aria-label={t("Get started with some examples")}>
+        {!shown && !sessions.length && status?.enabled && !examplesDismissed && <section className={styles.examples} aria-label={t("Get started with some examples")}>
           <p>{t("Get started with some examples")}</p>
+          <button
+            aria-label={t("Dismiss examples")}
+            className={styles.examplesDismiss}
+            onClick={() => {
+              setExamplesDismissed(true);
+              try { window.localStorage.setItem("flow:agent-examples-dismissed", "1"); } catch { /* storage unavailable */ }
+            }}
+            type="button"
+          ><X size={14} /></button>
           <div className={styles.exampleGrid}>
-            {[
-              ["Summarize the latest project updates", "Pull together a concise update from recent project activity."],
-              ["Research a topic for my team", "Find useful context and turn it into clear next steps."],
-              ["Build a workflow for recurring work", "Describe a repetitive process and shape it into a Loop."],
-            ].map(([title, description]) => <button className={styles.exampleCard} key={title} type="button" onClick={() => writeInput(t(title))}>
+            {([
+              { Icon: Box, title: "Summarize the latest project updates", description: "Pull together a concise update from recent project activity." },
+              { Icon: Search, title: "Research a topic for my team", description: "Find useful context and turn it into clear next steps." },
+              { Icon: Workflow, title: "Build a workflow for recurring work", description: "Describe a repetitive process and shape it into a Loop." },
+            ] satisfies { Icon: LucideIcon; title: string; description: string }[]).map(({ Icon, title, description }) => <button className={styles.exampleCard} key={title} type="button" onClick={() => writeInput(t(title))}>
+              <Icon className={styles.exampleIcon} aria-hidden="true" size={14} />
               <strong>{t(title)}</strong>
               <span>{t(description)}</span>
             </button>)}
