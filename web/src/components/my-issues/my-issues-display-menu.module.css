@@ -160,8 +160,8 @@
   .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button[aria-selected="true"]::after {
     content: "";
     position: absolute;
-    inset: 0;
-    border: .5px solid var(--pk-control-ring-selected);
+    inset: -1px;
+    box-shadow: var(--pk-control-ring-selected);
     border-radius: 9999px;
     pointer-events: none;
   }
