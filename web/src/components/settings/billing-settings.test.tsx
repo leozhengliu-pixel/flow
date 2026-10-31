@@ -1,6 +1,6 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
 import { fetchAICredits } from '@/lib/ai-credits-api'
@@ -11,6 +11,8 @@ import { BillingSettings } from './billing-settings'
 vi.mock('@/lib/ai-credits-api', () => ({ fetchAICredits: vi.fn().mockResolvedValue({ includedMicros: 5_000_000, spentMicros: 1_250_000, remainingMicros: 3_750_000 }) }))
 const desktopSettings = vi.hoisted(() => ({ value: true }))
 vi.mock('@/hooks/use-desktop-settings', () => ({ useDesktopSettings: () => desktopSettings.value }))
+vi.mock('@/hooks/use-phone-layout', () => ({ usePhoneLayout: () => !desktopSettings.value }))
+afterEach(() => { desktopSettings.value = true })
 
 const members = [{ user: viewer, role: 'owner', status: 'active', joinedAt: '2026-01-01T00:00:00Z' }] as unknown as WorkspaceMember[]
 
@@ -57,10 +59,29 @@ it('opens Usage & limits from the usage row', async () => {
   expect(onOpenUsage).toHaveBeenCalledTimes(1)
 })
 
-it('shows the real empty invoice state on phones when there are no invoices', () => {
+it('shows the real empty invoice state on phones when there are no invoices', async () => {
   desktopSettings.value = false
   renderBilling()
   expect(screen.getByRole('region', { name: 'Recent invoices' })).toHaveTextContent('No invoices yet')
   expect(screen.queryByText('Credits purchase')).not.toBeInTheDocument()
-  desktopSettings.value = true
+  expect(document.querySelector('.billing-mobile-invoice')).toBeNull()
+  expect(screen.queryByRole('button', { name: /plan|upgrade/i })).not.toBeInTheDocument()
+  expect(await screen.findByText('$3.75 remaining')).toBeVisible()
+  expect(document.querySelector('.billing-mobile-usage i')).toBeNull()
+})
+
+it('opens real usage details on phones', async () => {
+  desktopSettings.value = false
+  const onOpenUsage = renderBilling()
+  await userEvent.click(screen.getByRole('button', { name: /Usage/ }))
+  expect(onOpenUsage).toHaveBeenCalledTimes(1)
+})
+
+it('does not invent a phone balance when the credit API fails', async () => {
+  desktopSettings.value = false
+  vi.mocked(fetchAICredits).mockRejectedValueOnce(new Error('offline'))
+  await act(async () => { renderBilling() })
+  expect(screen.getByRole('button', { name: 'Usage' })).toBeVisible()
+  expect(screen.queryByText(/remaining/)).not.toBeInTheDocument()
+  expect(document.querySelector('.billing-mobile-usage i')).toBeNull()
 })
