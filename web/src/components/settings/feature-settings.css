@@ -201,7 +201,7 @@ body .feature-select-menu{z-index:500;box-sizing:border-box;min-width:93px;width
   html:root .settings-app .mobile-integration-card-enabled .mobile-integration-row:last-child > button,
   html:root .settings-app .mobile-integration-card-essentials .mobile-integration-row:nth-last-child(2) > button { border-radius: 0 0 10px 10px; }
   html:root .settings-app .mobile-integration-row-main { min-width: 0; display: flex; align-items: center; gap: 8px; margin-left: 10.6667px; }
-  html:root .settings-app .mobile-integration-icon { position: relative; box-sizing: border-box; width: 36px; height: 36px; flex: 0 0 36px; border: 0; border-radius: 6px; }
+  html:root .settings-app .mobile-integration-icon { position: relative; box-sizing: border-box; width: 36px; height: 36px; display: grid; place-items: center; flex: 0 0 36px; border: 0; border-radius: 6px; }
   html:root .settings-app .mobile-integration-icon::before { content: ""; position: absolute; inset: 0; border: .5px solid var(--set-sep); border-radius: 6px; }
   html:root .settings-app .mobile-integration-row-copy { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
   html:root .settings-app .mobile-integration-row-copy > span { overflow: hidden; color: var(--set-text); font: 500 13px/normal var(--font); text-overflow: ellipsis; white-space: nowrap; }
