@@ -5,6 +5,29 @@ import { test as workspaceTest } from './workspace-fixture'
 const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`${viewport.width}px integrations`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Integrations' })
+
+    workspaceTest('renders enabled integrations and the collapsed essentials list', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      for (const provider of ['github', 'slack']) {
+        const response = await request.put(`/api/integrations/${provider}`, {
+          headers,
+          data: { name: `[mobile] ${provider}`, config: { organization: '[mobile] workspace', signingSecret: '[mobile] secret' } },
+        })
+        expect(response.ok()).toBe(true)
+      }
+      await page.goto(`/${workspaceKey}/settings/integrations`)
+      await expect(page.locator('.mobile-integrations .feature-header h1')).toHaveText('Integrations')
+      await expect(page.locator('.mobile-integration-card-enabled .mobile-integration-row')).toHaveCount(2)
+      await expect(page.locator('.mobile-integration-card-essentials .mobile-integration-row')).toHaveCount(3)
+      await expect(page.getByRole('button', { name: /View 5 more/ })).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  })
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   workspaceTest.describe(`${viewport.width}px team settings overview`, () => {
     workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Team general' })
 

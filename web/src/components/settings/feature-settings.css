@@ -117,6 +117,109 @@ body .feature-select-menu{z-index:500;box-sizing:border-box;min-width:93px;width
 :root[data-theme="light"] .feature-integration-fallback{background:var(--theme-surface-2,#ececed)}
 .feature-status { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border: 0.5px solid var(--theme-border); border-radius: 9999px; color: var(--theme-text-secondary); font-size: 12px; white-space: nowrap; }
 .feature-status.is-on { color: var(--semantic-success); }
+
+/* Phone catalog: compact rows replace the desktop card grid without affecting
+   the desktop integration experience. */
+@media (max-width: 760px) {
+  html:root .settings-app .mobile-integrations > .feature-settings { width: 100%; margin: 0; }
+  html:root .settings-app .mobile-integrations .feature-header { margin: 0 16px 24px; }
+  html:root .settings-app .mobile-integrations .feature-header h1 { font-size: 24px; line-height: 32px; letter-spacing: -.16px; }
+  html:root .settings-app .mobile-integrations .feature-header p { margin-top: 4px; line-height: 18px; }
+  html:root .settings-app .mobile-integrations .feature-integration-toolbar {
+    box-sizing: border-box;
+    height: 56px;
+    display: block;
+    margin: 24px 0 48px;
+    padding-top: 12px;
+  }
+  html:root .settings-app .mobile-integrations .feature-integration-search {
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    height: 44px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--set-search-border);
+    border-radius: 8px;
+    background: transparent;
+  }
+  html:root .settings-app .mobile-integrations .feature-integration-search > svg { position: absolute; left: 16px; color: var(--set-desc); pointer-events: none; }
+  html:root .settings-app .mobile-integrations .feature-integration-search input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 42px;
+    padding: 12px 12px 12px 40px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--set-text);
+    font: 400 15px/normal var(--font);
+  }
+  html:root .settings-app .mobile-integrations .feature-integration-search input::placeholder { color: var(--set-desc); opacity: 1; }
+  html:root .settings-app .mobile-integrations-section { margin: 0 0 48px; }
+  html:root .settings-app .mobile-integrations-section > h3 {
+    height: 13px;
+    margin: 0 0 16px 16px;
+    color: var(--set-group-desc);
+    font: 500 11px/normal var(--font);
+    text-transform: uppercase;
+  }
+  html:root .settings-app .mobile-integration-card-list {
+    overflow: hidden;
+    border-radius: 10px;
+    background: var(--set-card);
+    box-shadow: var(--set-card-shadow);
+  }
+  html:root .settings-app .mobile-integration-card-list ul { margin: 0; padding: 0; list-style: none; }
+  html:root .settings-app .mobile-integration-row { position: relative; height: 68px; }
+  html:root .settings-app .mobile-integration-row:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    right: 16px;
+    bottom: 0;
+    left: 16px;
+    border-bottom: .5px solid var(--set-sep);
+  }
+  html:root .settings-app .mobile-integration-row > button {
+    box-sizing: border-box;
+    width: 100%;
+    height: 68px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: absolute;
+    inset: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--set-text);
+    font: 400 16px/24px var(--font);
+    text-align: left;
+  }
+  html:root .settings-app .mobile-integration-row:first-child > button { border-radius: 10px 10px 0 0; }
+  html:root .settings-app .mobile-integration-card-enabled .mobile-integration-row:last-child > button,
+  html:root .settings-app .mobile-integration-card-essentials .mobile-integration-row:nth-last-child(2) > button { border-radius: 0 0 10px 10px; }
+  html:root .settings-app .mobile-integration-row-main { min-width: 0; display: flex; align-items: center; gap: 8px; margin-left: 10.6667px; }
+  html:root .settings-app .mobile-integration-icon { position: relative; box-sizing: border-box; width: 36px; height: 36px; flex: 0 0 36px; border: 0; border-radius: 6px; }
+  html:root .settings-app .mobile-integration-icon::before { content: ""; position: absolute; inset: 0; border: .5px solid var(--set-sep); border-radius: 6px; }
+  html:root .settings-app .mobile-integration-row-copy { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  html:root .settings-app .mobile-integration-row-copy > span { overflow: hidden; color: var(--set-text); font: 500 13px/normal var(--font); text-overflow: ellipsis; white-space: nowrap; }
+  html:root .settings-app .mobile-integration-row-copy > small { overflow: hidden; color: var(--set-desc); font: 450 12px/normal var(--font); text-overflow: ellipsis; white-space: nowrap; }
+  html:root .settings-app .mobile-integration-chevron { flex: 0 0 16px; margin-right: 10.6667px; color: var(--theme-text-tertiary); }
+  html:root .settings-app .mobile-integration-more { height: 60px; }
+  html:root .settings-app .mobile-integration-more > button {
+    box-sizing: border-box;
+    width: 100%;
+    height: 60px;
+    border: 0;
+    border-radius: 0 0 10px 10px;
+    background: transparent;
+    color: var(--set-desc);
+    font: 450 13px/normal var(--font);
+  }
+  html:root .settings-app .mobile-integration-more > button:hover { background: var(--bg-hover); }
+}
 /* A feature row that opens a sub-page (AI & agents → Coding sessions)'s navigation rows. */
 .feature-row-link{width:100%;border:0;border-bottom:1px solid var(--theme-border);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .feature-row-link:hover,.feature-row-link:focus-visible{outline:0;background:var(--theme-surface-hover)}

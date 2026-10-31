@@ -30,11 +30,13 @@ it('lists only working integrations as cards grouped by category and opens them'
   expect(screen.queryByText('Coming soon')).not.toBeInTheDocument()
   expect(screen.queryByText('Not supported')).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /Figma/ })).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: /Enabled/ })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Enabled' })).toBeInTheDocument()
+
+  await user.click(screen.getByRole('button', { name: /View 5 more/ }))
 
   await user.click(screen.getByRole('button', { name: /GitHub/ }))
   expect(open).toHaveBeenLastCalledWith('github')
-  await user.click(screen.getByRole('button', { name: /Jira/ }))
+  await user.click(screen.getByRole('button', { name: /^Jira$/ }))
   expect(open).toHaveBeenLastCalledWith('jira')
   await user.click(screen.getByRole('button', { name: /Feishu/ }))
   expect(open).toHaveBeenLastCalledWith('feishu')
