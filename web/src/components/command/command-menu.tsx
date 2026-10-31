@@ -352,13 +352,21 @@ export function CommandMenu({
         return `${value} ${keywords ?? ''}`.toLocaleLowerCase().includes(needle) ? 1 : 0
       }}>
         {(chip || page) && <div className="command-context" aria-label={t('Command context')}>
-          {chip && (chip.type
+          {chip && (phone && context?.kind === 'issues' && context.issues.length === 1
+            ? <span className="command-context-chip is-issue" title={chip.label}>
+              <span className="command-context-chip__issue-id" data-i18n-ignore>{context.issues[0].identifier}</span>
+              <span className="command-context-chip__separator" aria-hidden="true"> ⋅ </span>
+              <span className="command-context-chip__issue-title" data-i18n-ignore>{context.issues[0].title}</span>
+            </span>
+            : chip.type
             ? <span className="command-context-chip is-typed" title={`${chip.type} ⋅ ${chip.label}`}><span className="command-context-chip__type">{chip.type} ⋅</span> <span data-i18n-ignore={chip.entity || undefined}>{chip.label}</span></span>
             : <span className="command-context-chip" data-i18n-ignore={chip.entity || undefined} title={chip.label}>{chip.label}</span>)}
           {pages.map((item, index) => <span key={`${item.id}-${index}`} className="command-context-page"><ChevronRight aria-hidden="true" size={12}/><span>{t(item.label)}</span></span>)}
         </div>}
         <div className="command-input">
-          <Command.Input aria-label="Command menu" placeholder={pastChats ? t('Open past agent chat…') : customerPicker ? t('Open customer…') : page ? t(page.label) : t('Type a command or search...')} autoFocus value={query} onValueChange={setQuery} onKeyDown={onInputKeyDown}/>
+          <div className="command-input-field">
+            <Command.Input aria-label="Command menu" placeholder={pastChats ? t('Open past agent chat…') : customerPicker ? t('Open customer…') : page ? t(page.label) : t('Type a command or search...')} autoFocus value={query} onValueChange={setQuery} onKeyDown={onInputKeyDown}/>
+          </div>
           {!page && !customerPicker && !pastChats && <button type="button" onClick={askFlow}><span>Ask Flow</span><kbd>Tab</kbd></button>}
         </div>
         {pastChats ? <Command.List>

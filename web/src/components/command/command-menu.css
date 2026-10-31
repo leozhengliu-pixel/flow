@@ -40,6 +40,17 @@ html:root body .command-dialog .command-context-chip__type {
   font-weight: 500;
   opacity: .5;
 }
+html:root body .command-dialog .command-context-chip__issue-id,
+html:root body .command-dialog .command-context-chip__separator {
+  flex: none;
+  opacity: .5;
+}
+html:root body .command-dialog .command-context-chip__issue-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 html:root body .command-dialog .command-context-page {
   display: inline-flex;
   min-width: 0;
@@ -122,6 +133,15 @@ html:root body .command-dialog .command-option-shortcut {
 html:root body .command-dialog .command-option-current + .command-option-shortcut {
   margin-left: 8px;
 }
+html:root body .command-dialog .command-input-field {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  font-weight: 400;
+}
+html:root body .command-dialog .command-input-field input {
+  width: 100%;
+}
 html:root body .command-dialog .command-invite-icon {
   color: var(--pk-muted);
 }
@@ -167,6 +187,9 @@ html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
    keeps its context chip and input on their own 46px rhythm, then virtualizes
    the action rows inside the scrolling list. */
 @media (max-width: 767px) {
+  html:root body .command-overlay {
+    background: transparent;
+  }
   html:root body .command-dialog:has(.command-context-chip) .command-context {
     height: 33.5px;
     box-sizing: border-box;
@@ -181,12 +204,26 @@ html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
     font-weight: 400;
     line-height: 18px;
   }
+  html:root body .command-dialog:has(.command-context-chip) .command-context-chip.is-issue {
+    display: flex;
+    max-width: calc(100% - 28px);
+  }
   html:root body .command-dialog:has(.command-context-chip) .command-input {
     padding: 6px 4.5px 0 5.5px;
   }
+  html:root body .command-dialog:has(.command-context-chip) .command-input-field {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    border-radius: 12px;
+  }
   html:root body .command-dialog:has(.command-context-chip) .command-input input {
     box-sizing: border-box;
-    padding: 0 !important;
+    width: 100%;
+    padding: 11px 12px !important;
     border-radius: 12px !important;
     line-height: 19.5px !important;
   }
