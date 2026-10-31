@@ -101,8 +101,6 @@
   html:root body .issue-view .detail-sub-unassigned:not(#_) { color: var(--bright); opacity: .3; }
   .issue-view .detail-sub-properties { min-width: 0; max-width: 100px; overflow: hidden; justify-content: flex-end; }
   .issue-view .detail-sub-badge { display: none; }
-  .issue-view .detail-sub-checkbox { opacity: 1; }
-  .issue-view .detail-sub-checkbox:focus-visible,.issue-view .detail-sub-checkbox[aria-checked=true] { opacity: 1; }
   .issue-view .activity-heading { height: 36px; margin: 18.5px 0 0; }
   .issue-view .activity-heading > span { color: var(--bright); font-size: 15px; font-weight: 600; line-height: 23px; }
   .issue-view .activity-heading .issue-subscribe-toggle { height: 36px; padding: 0 11.5px; border: .5px solid transparent; line-height: normal; }
@@ -140,6 +138,12 @@
   .issue-view .comment-card__actions button { width: 32px; height: 32px; }
   .issue-view .issue-activity-timeline .comment-thread .comment-card > header { height: auto; min-height: 22px; flex-wrap: wrap; }
   .issue-view .issue-activity-timeline .comment-thread .comment-card { padding: 12px; }
+}
+
+@media (max-width: 767px) and (hover: none) and (pointer: coarse) {
+  /* Match the main list: keep the selection hit target without painting a checkbox. */
+  .issue-view .detail-sub-checkbox { opacity: 0; }
+  .issue-view .detail-sub-checkbox:focus-visible { opacity: 1; }
 }
 
 @media (max-width: 389px) {
