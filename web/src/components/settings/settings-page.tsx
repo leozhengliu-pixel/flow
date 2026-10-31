@@ -124,6 +124,7 @@ import "./settings.css";
 import "./workflow-settings.css";
 import "./advanced-settings.css";
 import "./settings-parity.css";
+import "./mobile-workspace.css";
 function SettingsMobileMenuGlyph() {
   return (
     <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
@@ -1573,7 +1574,8 @@ function WorkspacePage(
   },
 ) {
   const { t } = useI18n();
-  const desktop = useDesktopSettings();
+  const phone = usePhoneLayout();
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const [name, setName] = useState(props.data.workspace.name);
   const [urlKey, setUrlKey] = useState(props.data.workspace.urlKey);
   const [confirm, setConfirm] = useState(false);
@@ -1619,6 +1621,7 @@ function WorkspacePage(
           />
         </Row>
         <Row title="URL">
+          <div className="workspace-url-control">
           <div className="settings-url">
             <span data-i18n-ignore>flow.app/</span>
             <input
@@ -1628,6 +1631,8 @@ function WorkspacePage(
               onBlur={() => void save({ urlKey })}
             />
           </div>
+          {phone && <button className="workspace-url-edit" type="button" aria-label={t("Edit URL")} onClick={(event) => event.currentTarget.parentElement?.querySelector('input')?.focus()}><WorkspaceEditGlyph /></button>}
+          </div>
         </Row>
       </Section>
       <Section title="Time & region">
@@ -1635,29 +1640,18 @@ function WorkspacePage(
           title="First month of the fiscal year"
           description="Used when grouping projects and issues quarterly, half-yearly, and yearly"
         >
-          <Select
+          {phone ? <select className="settings-select" aria-label={t("First month of the fiscal year")} value={props.data.workspaceSettings.fiscalMonth} onChange={(event) => void savePreferences({ fiscalMonth: event.target.value })}>
+            {months.map(month => <option key={month} value={month}>{t(month)}</option>)}
+          </select> : <Select
             label="First month of the fiscal year"
             value={props.data.workspaceSettings.fiscalMonth}
-            options={[
-              "January",
-              "February",
-              "March",
-              "April",
-              "May",
-              "June",
-              "July",
-              "August",
-              "September",
-              "October",
-              "November",
-              "December",
-            ]}
+            options={months}
             onChange={(value) => void savePreferences({ fiscalMonth: value })}
-          />
+          />}
         </Row>
         <Row
           title="Region"
-          description={<>{t('Set when a workspace is created and cannot be changed.')} <SettingsDocsLink file="configuration.md" label="Read more"/></>}
+          description={<>{t('Set when a workspace is created and cannot be changed.')} {phone ? <a className="workspace-region-docs" href="https://github.com/leozhengliu-pixel/flow/blob/main/docs/configuration.md" target="_blank" rel="noreferrer">{t('Read more')} ↗</a> : <SettingsDocsLink file="configuration.md" label="Read more"/>}</>}
         >
           <span className="settings-static">
             {workspaceRegionLabel(props.data.workspace.region)}
@@ -1681,7 +1675,7 @@ function WorkspacePage(
             <ChevronRight size={14} />
           </span>
         </Row>
-        {desktop && <WorkspaceAnnouncements data={props.data} onReload={props.onReload}/>}
+        <WorkspaceAnnouncements data={props.data} onReload={props.onReload}/>
         <Row title="Default home view">
           <Select
             label="Default home view"
@@ -1748,6 +1742,14 @@ function WorkspacePage(
   );
 }
 
+function WorkspaceEditGlyph() {
+  return <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+    <path d="M10.1805 3.34195L4.14166 9.416C5.32948 9.77021 6.29238 10.6629 6.74008 11.8184L12.6877 5.8425C11.6642 5.22123 10.8043 4.36352 10.1805 3.34195Z" />
+    <path d="M13.7391 4.71631C14.1575 4.02948 14.0727 3.11738 13.4846 2.5219C12.8908 1.92072 11.9784 1.83892 11.298 2.27649C11.8547 3.31132 12.7037 4.15999 13.7391 4.71631Z" />
+    <path d="M3.03104 10.7502C4.30296 10.7658 5.36645 11.7423 5.49783 13.0114C4.83268 13.426 3.40197 13.7922 2.53114 13.9886C2.2001 14.0632 1.92026 13.7602 2.02075 13.4373C2.25326 12.6902 2.64592 11.5136 3.03104 10.7502Z" />
+  </svg>;
+}
+
 function WorkspaceLogoControl({
   data,
   onReload,
@@ -1756,6 +1758,7 @@ function WorkspaceLogoControl({
   onReload: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  const phone = usePhoneLayout();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const upload = async (file?: File) => {
@@ -1792,7 +1795,7 @@ function WorkspaceLogoControl({
     }
   };
   return (
-    <div className="workspace-logo-control">
+    <div className="workspace-logo-control" style={{ '--workspace-logo-color': data.workspace.color } as CSSProperties}>
       <button
         aria-busy={busy}
         aria-label={t("Logo")}
@@ -1803,9 +1806,9 @@ function WorkspaceLogoControl({
         {data.workspace.logoUrl ? (
           <img alt={t("Workspace logo")} src={data.workspace.logoUrl} />
         ) : (
-          <span data-i18n-ignore>{initials(data.workspace.name)}</span>
+          <span className="workspace-logo-initials" data-i18n-ignore>{initials(data.workspace.name)}</span>
         )}
-        <Upload />
+        {phone ? <WorkspaceEditGlyph /> : <Upload />}
       </button>
       <input
         ref={inputRef}
