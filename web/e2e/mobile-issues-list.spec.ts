@@ -22,6 +22,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect((await header.boundingBox())?.height).toBe(44)
       const rows = page.locator('a[data-triage-row]')
       await expect(rows).toHaveCount(3)
+      await expect(rows.first()).toBeVisible()
       expect(await rows.first().boundingBox()).toMatchObject({ x: 0, y: 52, width: viewport.width, height: 59 })
       await expect(rows.first().locator('.flow-triage-row__title')).toHaveCSS('font-size', '13px')
       await expect(rows.first().locator('.flow-triage-row__creator')).toHaveCSS('font-size', '12px')

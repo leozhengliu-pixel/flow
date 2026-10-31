@@ -441,6 +441,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Keep the saved-view browser scenarios on the shared fixture binding after concurrent test additions.
 - Translate the phone integrations list's remaining-item count into Chinese.
+- Keep the team issue header favorite button at its saved-reference position and wait for visible triage rows before checking their geometry.
 - Wait for the inbox navigation snapshot's idle persistence before asserting its stored contents in browser tests, while keeping server-row and stale-ID checks strict.
 - MCP issue saves retain inherited team workflows; issue counts use the team
   counter only for team and archive arguments, leaving all other filters on
