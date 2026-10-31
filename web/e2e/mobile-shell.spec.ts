@@ -234,7 +234,12 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       const composer = page.getByRole('dialog', { name: 'New issue', exact: true })
       await composer.locator('[data-property="labels"]').click()
       const picker = page.locator('.phone-menu-surface:has([role=listbox][aria-label=Labels])')
-      await geometry(picker, { x: 16, y: Math.min(110, viewport.height * .1304), width: viewport.width - 32, height: 260 })
+      await geometry(picker, { x: 16, y: Math.min(110, viewport.height * .1304), width: viewport.width - 32 })
+      // Intrinsic outer height includes platform-rounded hairlines; pin the content geometry.
+      await geometry(picker.locator('.phone-menu-heading'), { height: 40 })
+      await geometry(picker.locator('.property-command-search'), { height: 40 })
+      await geometry(picker.locator('.property-command-options'), { height: 180 })
+      expect(await picker.evaluate(element => element.scrollHeight <= element.clientHeight)).toBe(true)
       await expect(picker.locator('.phone-menu-context')).toHaveText('New issue')
       await expect(picker.locator('.property-command-search input')).toHaveValue('')
       await expect(picker.locator('.property-command-search kbd')).toBeHidden()

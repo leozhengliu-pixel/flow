@@ -841,6 +841,7 @@
 
 /* Phone inbox list: the reference app's 44px bar, 55px rows and 13/12px text. */
 @media (max-width: 767px) {
+  .flow-inbox-page-composition { isolation: isolate; }
   html:root body .app .flow-inbox__header {
     gap: 12px;
     padding: 0;
