@@ -616,14 +616,14 @@ function TeamOverview({
   );
   return (
     <div className="team-overview-page">
-      {group(undefined, desktop ? ["general", "members", "notifications", "security"] : ["general", "members", "notifications"])}
+      {group(undefined, ["general", "members", "notifications", "security"])}
       {group(t("Issues, projects, and documents"), [
         "issue-labels",
         "project-labels",
         "templates",
         "recurring-issues",
       ])}
-      {group(t("Workflow"), ["statuses", ...(desktop ? ['project-statuses' as const] : []), "workflow", "triage", "cycles"])}
+      {group(t("Workflow"), ["statuses", "project-statuses", "workflow", "triage", "cycles"])}
       <TeamSection title={t("AI & agents")}>
         <div className="team-overview-list">
           {["agents", "agent-connectors", "agent-skills"].map((id) => {

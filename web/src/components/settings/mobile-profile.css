@@ -23,11 +23,6 @@
       height: auto;
       font: 450 12px/normal var(--font);
     }
-    .personal-section:first-of-type > .settings-card > .settings-row:first-child { height: 89.5px; }
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(2) { height: 83.5px; border-radius: 0; }
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(3) { height: 91.5px; }
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(4),
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(5) { height: 109px; }
     .settings-control { width: 100%; justify-content: flex-start; gap: 12px; }
     .personal-avatar {
       width: 32px;

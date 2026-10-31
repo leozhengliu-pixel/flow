@@ -32,6 +32,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Match initiative overview spacing, property pills, header controls and latest update cards on phones without changing desktop layout.
 
 ### Fixed
+- Restore phone language, team security, project-status navigation and CSV exports; let personal settings grow with their copy instead of row-number dimensions.
 - Remove the invisible duplicate composer assignee and three-label positioning; allow phone issue titles and property chips to grow without colliding with the footer.
 - Restore phone issue work tools, insights, summary dimensions and display settings; remove activity offsets, position-specific board padding and fixed tab-count widths.
 - Let document breadcrumbs, metadata, history actions and inline comment composers size from their content instead of reference-specific widths and offsets.
