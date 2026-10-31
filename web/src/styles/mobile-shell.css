@@ -1,5 +1,8 @@
 .phone-create-issue { display: none; }
 @media (max-width: 767px) {
+  /* Keep variable-font advances fractional on Linux, as on the accepted phone layouts. */
+  .pulse-page, .reviews-workspace, .project-detail-page { text-rendering: geometricPrecision; }
+  :is(.pulse-page, .reviews-workspace, .project-detail-page) :is(button, input, textarea, select) { text-rendering: inherit; }
   /* The reference phone shell has no fixed Agent/history footer bar. */
   html:root body .app .bottom-agent { display: none; }
   .phone-create-issue { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; margin-left: auto; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--issue-muted); }
