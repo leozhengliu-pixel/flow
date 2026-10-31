@@ -546,7 +546,7 @@ button.document-icon.is-empty:hover,
   .document-subscribers > .document-subscribers__document,
   .document-subscribers > .document-subscribers__search,
   .document-subscribers > .document-subscribers__list {
-    width: calc(100% + 1px);
+    width: 100%;
     margin-left: 0;
   }
   .document-subscribers__document > span {

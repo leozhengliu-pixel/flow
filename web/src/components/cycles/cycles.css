@@ -28,7 +28,7 @@
   .flow-cycle-detail [data-content-view-favorite],
   .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{font-size:12px !important;font-weight:500 !important;line-height:normal !important}
   .flow-cycle-detail [data-content-view-favorite]{margin-left:0}
-  .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{margin-left:1px}
+  .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{margin-left:0}
   .flow-cycle-detail .cycle-switcher{box-sizing:border-box;min-width:0;height:28px;gap:8px;padding:0}
   .flow-cycle-detail .cycle-switcher strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .flow-cycle-detail .cycle-switcher-play{flex:none;width:16px;height:16px;display:grid;place-items:center;color:var(--theme-text-secondary);transform:translateY(2px)}

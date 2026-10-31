@@ -561,8 +561,10 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialExpand
           <footer className={styles.footer}>
             <button type="button" className={styles.attachButton} aria-label={t('Attach images, files, or videos')} onClick={() => fileRef.current?.click()}><Paperclip className={styles.compactGlyph}/><FlowGlyph name="attach" className={styles.desktopGlyph}/></button>
             <input ref={fileRef} type="file" hidden multiple onChange={addFiles}/>
-            <label className={styles.createMore}><Toggle checked={createMore} label="Create more" onChange={setCreateMore}/><span>Create more</span></label>
-            <button className={styles.submit} type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create issue'}</button>
+            <div className={styles.footerActions}>
+              <label className={styles.createMore}><Toggle checked={createMore} label="Create more" onChange={setCreateMore}/><span>Create more</span></label>
+              <button className={styles.submit} type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create issue'}</button>
+            </div>
           </footer>
         </form>
       </Dialog.Content>
