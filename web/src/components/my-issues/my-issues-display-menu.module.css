@@ -137,13 +137,13 @@
     color: var(--bright) !important;
   }
   .popover[data-issue-display-menu="true"] {
-    max-height: 550px;
+    max-height: min(550px, calc(100dvh - 102px));
     margin-top: 1px;
     padding-top: 0;
     border-radius: 12px;
   }
   .popover[data-my-issues-display-menu="true"] {
-    max-height: 478px;
+    max-height: min(478px, calc(100dvh - 102px));
     margin-top: 1px;
     padding-top: 0;
     border-radius: 12px;
