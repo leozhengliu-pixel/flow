@@ -1030,7 +1030,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :root[data-theme="light"]{--select-menu-bg:var(--pk-surface);--select-menu-ring:var(--pk-border)}
 :root{--description-math-border:lch(18.48% 1.48 272)}
 :root[data-theme="light"]{--description-math-border:var(--theme-border)}
-:root{--create-issue-control-bg:lch(17.574% 1.589 272);--create-issue-fg:lch(91.201% 1.65 272);--create-issue-icon-fg:lch(64.805% 1.65 272);--create-issue-shadow:0 18px 48px #000b,0 2px 8px #0007}
+:root{--create-issue-control-bg:lch(17.574% 1.589 272);--create-issue-fg:lch(91.201% 1.65 272);--create-issue-icon-fg:lch(64.805% 1.65 272);--create-issue-toggle-off:lch(48.296% 1.13 271.996);--create-issue-shadow:0 18px 48px #000b,0 2px 8px #0007}
 :root[data-theme="light"]{--create-issue-control-bg:var(--theme-surface-hover);--create-issue-fg:var(--theme-text-primary);--create-issue-icon-fg:var(--theme-text-secondary);--create-issue-shadow:var(--shadow-dialog)}
 
 /* Phone list controls and group headers: the reference app's static dark metrics (the generated theme's surfaces are a shade darker). */
