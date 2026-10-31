@@ -591,7 +591,7 @@ function TeamOverview({
     }
   };
   const desktopIcons: Partial<Record<TeamSettingsSection, typeof Settings>> = { general: Settings, security: LockKeyhole, members: Users, notifications: MessageSquare, 'issue-labels': Tag, 'project-labels': Tag, templates: FileText, 'recurring-issues': Repeat, statuses: CircleDot, 'project-statuses': FolderKanban, workflow: Layers, triage: Layers, cycles: Repeat };
-  const mobileIcons: Partial<Record<TeamSettingsSection, ComponentType<{ size?: number }>>> = { general: () => <TeamSettingsIcon />, security: LockKeyhole, members: MembersIcon, notifications: SlackIcon, 'issue-labels': LabelIcon, 'project-labels': LabelIcon, templates: FileText, 'recurring-issues': Repeat, statuses: CircleDot, 'project-statuses': FolderKanban, workflow: Layers, triage: Layers, cycles: Repeat };
+  const mobileIcons: Partial<Record<TeamSettingsSection, ComponentType<{ size?: number }>>> = { general: () => <TeamSettingsIcon />, security: LockKeyhole, members: MembersIcon, notifications: SlackIcon, 'issue-labels': LabelIcon, 'project-labels': LabelIcon, templates: MobileTemplatesIcon, 'recurring-issues': MobileRecurringIcon, statuses: CircleDot, 'project-statuses': FolderKanban, workflow: Layers, triage: Layers, cycles: Repeat };
   const group = (title: string | undefined, ids: TeamSettingsSection[]) => (
     <TeamSection title={title}>
       <div className="team-overview-list" data-team-overview-group={ids.join("-")}>
@@ -599,19 +599,16 @@ function TeamOverview({
           const item = SECTIONS.find((value) => value.id === id)!;
           const notifications = item.id === "notifications";
           const Icon = (desktop ? desktopIcons[id] : mobileIcons[id]) ?? Settings;
-          const unavailable = id === "project-labels" && !desktop;
           const showSummary = desktop || ["members", "notifications", "issue-labels", "project-labels", "templates", "recurring-issues"].includes(id);
           const rowSummary = showSummary ? summary(id) : undefined;
           const content = <>
             <span className="team-overview-icon"><Icon size={16}/></span>
             <span className="team-overview-copy"><strong>{notifications ? chat.format(t(chatCopy.label)) : t(item.label)}</strong><small>{notifications ? chat.format(t(chatCopy.description)) : t(item.description)}</small></span>
-            {rowSummary !== undefined && <span className={`team-overview-summary${unavailable ? " is-plan" : ""}`}>{unavailable ? t("Available on Business") : rowSummary}</span>}
-            <>{!unavailable && <ChevronRight size={15}/>}</>
+            {rowSummary !== undefined && <span className="team-overview-summary">{rowSummary}</span>}
+            <ChevronRight size={15}/>
           </>;
           if (desktop) return <a key={id} data-team-overview-row={id} href={settingsPath(data.workspace.urlKey, 'team', team.key, id)}>{content}</a>;
-          const row = unavailable
-            ? <div data-team-overview-row={id} className="team-overview-unavailable">{content}</div>
-            : <button data-team-overview-row={id} onClick={() => onNavigate(item.id)}>{content}</button>;
+          const row = <button data-team-overview-row={id} onClick={() => onNavigate(item.id)}>{content}</button>;
           return <div key={item.id} className="team-overview-row-shell">{row}</div>;
         })}
       </div>
@@ -719,6 +716,14 @@ function TeamOverview({
       />
     </div>
   );
+}
+
+function MobileTemplatesIcon({ size = 16 }: { size?: number }) {
+  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 16 16" fill="currentColor"><path d="M11.25 1A3.75 3.75 0 0 1 15 4.75v4.855c0 .466-.186.912-.516 1.24l-3.665 3.646A1.75 1.75 0 0 1 9.585 15H4.75A3.75 3.75 0 0 1 1 11.25v-6.5A3.75 3.75 0 0 1 4.75 1h6.5Zm0 1.5h-6.5A2.25 2.25 0 0 0 2.5 4.75v6.5a2.25 2.25 0 0 0 2.25 2.25h3.249L8 10.75a2.75 2.75 0 0 1 2.582-2.745L10.75 8h2.75V4.75a2.25 2.25 0 0 0-2.25-2.25Zm2.25 7h-2.75c-.69 0-1.25.56-1.25 1.25l-.001 2.75h.086a.25.25 0 0 0 .176-.073l3.665-3.645a.25.25 0 0 0 .074-.177V9.5Z" /></svg>;
+}
+
+function MobileRecurringIcon({ size = 16 }: { size?: number }) {
+  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 16 16" fill="currentColor"><path d="M15 5C15 2.79086 13.2091 1 11 1H5C2.79086 1 1 2.79086 1 5V11C1 13.2091 2.79086 15 5 15H6.25C6.66421 15 7 14.6642 7 14.25C7 13.8358 6.66421 13.5 6.25 13.5H5C3.61929 13.5 2.5 12.3807 2.5 11V6H13.5V6.25C13.5 6.66421 13.8358 7 14.25 7C14.6642 7 15 6.66421 15 6.25V5ZM11 7.25C10.5858 7.25 10.25 7.58579 10.25 8C10.25 8.41421 10.5858 8.75 11 8.75C12.2426 8.75 13.25 9.75736 13.25 11H12.6403C12.2622 11 12.0952 11.4761 12.3904 11.7123L13.7501 12.8001C13.8962 12.917 14.1038 12.917 14.2499 12.8001L15.6095 11.7123C15.9048 11.4761 15.7378 11 15.3597 11H14.75C14.75 8.92893 13.071 7.25 11 7.25ZM6.64029 11H7.24998C7.24998 13.0711 8.92891 14.75 11 14.75C11.4142 14.75 11.75 14.4142 11.75 14C11.75 13.5858 11.4142 13.25 11 13.25C9.75734 13.25 8.74998 12.2426 8.74998 11H9.35967C9.73778 11 9.9048 10.5239 9.60955 10.2877L8.24986 9.1999C8.10377 9.08303 7.89619 9.08303 7.7501 9.1999L6.39041 10.2877C6.09516 10.5239 6.26218 11 6.64029 11Z" /></svg>;
 }
 
 function GeneralSettings({
