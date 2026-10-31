@@ -7,7 +7,7 @@ import { assigneeShortcut } from '@/lib/agent-members'
 import { openMemberInvite, viewerCanInvite } from '@/lib/invite-navigation'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Command } from 'cmdk'
-import { ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Command as CommandIcon, X } from 'lucide-react'
 import type { MyIssuesRowData } from './my-issues-list'
 import { AgentChatPanel } from '@/components/agent/agent-chat-panel'
 import { AgentPointerIcon } from '@/components/agent/agent-icons'
@@ -75,7 +75,7 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
   return <>
     <div className={styles.bar} role="toolbar" aria-label={`${count} selected issues`} data-error={Boolean(error)}>
       <span className={styles.count}>{loading ? 'Updating...' : `${count}\u00a0selected`}</span>
-      <button className={styles.actionsButton} aria-label="Open command menu" aria-expanded={open} disabled={loading} onClick={() => setOpen(true)}>Actions<ChevronRight size={12}/></button>
+      <button className={styles.actionsButton} aria-label={t('Open command menu')} aria-expanded={open} disabled={loading} onClick={() => setOpen(true)}>{t('Actions')}<span className={styles.desktopShortcut} aria-hidden="true"><CommandIcon size={12}/></span><ChevronRight className={styles.phoneChevron} size={12}/></button>
       <button className={styles.iconButton} aria-label="Ask Flow" tabIndex={-1} disabled={loading} onClick={() => { setAgentIssues([...selectedIssues]); setAgentOpen(true); onAskFlow?.(selectedIssues) }}><AgentPointerIcon/></button>
       <button className={styles.clearButton} aria-label="Clear selected" disabled={loading} onClick={onClear}><X size={15}/></button>
       {error && <span className={styles.error} role="alert">{error}</span>}

@@ -76,6 +76,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
   const queryRef = useRef(query)
   const totalRef = useRef(onTotalChange)
   const recordsRef = useRef(onLoadedIssuesChange)
+  const groupSelection = useRef({ signature, records: new Map<string, Issue>() })
   const stateOrderRef = useRef(data.states)
   const dataRef = useRef(data)
   const groupsRef = useRef(groups)
@@ -84,7 +85,14 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
   useInsertionEffect(() => {
     queryRef.current = query
     totalRef.current = onTotalChange
-    recordsRef.current = onLoadedIssuesChange
+    if (groupSelection.current.signature !== signature) groupSelection.current = { signature, records: new Map() }
+    recordsRef.current = records => {
+      const retained = groupSelection.current.records
+      for (const id of retained.keys()) if (!rowProps.selectedIds?.has(id)) retained.delete(id)
+      records.forEach(issue => { if (retained.has(issue.id)) retained.set(issue.id, issue) })
+      // Selecting an entire group may exceed the viewport cache's capacity.
+      onLoadedIssuesChange?.([...new Map([...retained.values(), ...records].map(issue => [issue.id, issue])).values()])
+    }
     stateOrderRef.current = data.states
     dataRef.current = data
     groupsRef.current = groups
@@ -272,7 +280,31 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
     const label = state?.name ?? (field === 'none' ? 'All issues' : field === 'priority' ? ['No priority', 'Urgent', 'High', 'Medium', 'Low'][Number(group.value)] : field === 'assignee' || field === 'creator' ? data.users.find(user => user.id === group.value)?.displayName : field === 'project' ? data.projects.find(project => project.id === group.value)?.name : field === 'team' ? data.teams.find(team => team.id === group.value)?.name : field === 'cycle' ? data.cycles.find(cycle => cycle.id === group.value)?.name : field === 'label' ? data.labels.find(label => label.id === group.value)?.name : field === 'milestone' ? data.projects.flatMap(project => project.milestones ?? []).find(milestone => milestone.id === group.value)?.name : field === 'customer' ? (group.value === UNKNOWN_CUSTOMER_GROUP ? 'Unknown customer' : group.value ? data.customers?.find(customer => customer.id === group.value)?.name ?? 'Unknown customer' : 'No customer') : undefined) ?? (group.value || `No ${field}`)
     return { id: group.value, label, state, stateType: state?.type, issues: [], totalCount: group.count, createContext: state ? { stateId: state.id } : field === 'priority' ? { priority: Number(group.value) as 0|1|2|3|4 } : field === 'project' ? { projectId: group.value } : field === 'assignee' ? { assigneeId: group.value } : field === 'team' ? { teamId: group.value } : field === 'cycle' ? { cycleId: group.value } : field === 'label' ? { labelIds: group.value ? [group.value] : [] } : undefined }
   }, [data.states, data.users, data.projects, data.teams, data.cycles, data.labels, data.customers, query.groupBy])
-  const counts = groups.map(group => collapsedGroupIds?.has(group.value) ? 0 : group.loaded + (group.hasMore ? 1 : 0))
+  const counts = groups.map(group => collapsedGroupIds?.has(group.value) || hiddenGroupIds.includes(group.value) ? 0 : group.loaded + (group.hasMore ? 1 : 0))
+  const selectGroup = async (group: Group) => {
+    const request = active.current
+    if (!request || !rowProps.onSelectIssue) return
+    const ids = new Set<string>()
+    const pages: { page: Awaited<ReturnType<typeof fetchIssuePage>>; cursor?: string }[] = []
+    let cursor: string | undefined
+    try {
+      do {
+        const page = await fetchIssuePage({ ...pagedGroupQuery(query, group.value, data), limit: PAGE_SIZE, includeTotal: false, cursor }, request.abort.signal)
+        pages.push({ page, cursor })
+        page.items.forEach(issue => ids.add(issue.id))
+        cursor = page.hasMore ? page.nextCursor : undefined
+      } while (cursor)
+      if (!request.abort.signal.aborted) {
+        pages.forEach(({ page, cursor }, index) => cache.put(group.value, index, page, cursor))
+        pages.forEach(({ page }) => page.items.forEach(issue => groupSelection.current.records.set(issue.id, issue)))
+        onLoadedIssuesChange?.([...new Map([...cache.records(), ...groupSelection.current.records.values()].map(issue => [issue.id, issue])).values()])
+        updateGroups(current => current.map(item => item.value === group.value ? { ...item, loaded: ids.size, hasMore: false } : item))
+        ids.forEach(id => rowProps.onSelectIssue?.(id, true, false))
+      }
+    } catch (error) {
+      if (!request.abort.signal.aborted) setError(String(error instanceof Error ? error.message : error))
+    }
+  }
   // The identifier column fits the longest identifier loaded for this query (like the full list), and only grows
   // while pages load so rows do not shift as the list scrolls.
   const [identifierWidth, setIdentifierWidth] = useState({ signature, length: 6 })
@@ -319,7 +351,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
       </div>
     }
     return <GroupedVirtuoso className={styles.virtualList} role="list" aria-label="Issues" style={listStyle} groupCounts={counts} context={revision} defaultItemHeight={44} increaseViewportBy={{ top: 176, bottom: 264 }}
-      groupContent={index => hideGroupHeaders ? null : <MyIssuesGroupHeader group={descriptor(groups[index])} collapsed={Boolean(collapsedGroupIds?.has(groups[index].value))} createIssueLabel="Create new issue" onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>}
+      groupContent={index => hideGroupHeaders || hiddenGroupIds.includes(groups[index].value) ? null : <MyIssuesGroupHeader group={descriptor(groups[index])} collapsed={Boolean(collapsedGroupIds?.has(groups[index].value))} createIssueLabel="Create new issue" onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} onCollapseAll={onGroupCollapsedChange ? () => groups.forEach(group => onGroupCollapsedChange(group.value, true)) : undefined} onSelectAll={rowProps.onSelectIssue ? () => void selectGroup(groups[index]) : undefined} onHideGroup={onHideGroup ? () => onHideGroup(groups[index].value) : undefined}/>}
       itemContent={(index, groupIndex) => {
         const group = groups[groupIndex], localIndex = index - offsets[groupIndex]
         const pageIndex = cache.pageAt(group.value, localIndex), page = cache.get(group.value, pageIndex)

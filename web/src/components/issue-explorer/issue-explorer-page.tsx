@@ -318,15 +318,16 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const listGroups = groups.filter(group => !display.hiddenGroupIds.includes(group.id) && !display.hiddenGroupIds.includes(group.parentGroupId ?? ''))
   const displayMenuProps = {
     phoneIssueMenu: true,
+    desktopIssueMenu: desktop,
     groups: menuGroups,
     labelGroupOptions: labelGroups(data.labels),
     availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
     availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
-    toggles: displayToggles(scope.kind === 'team' ? scope.team.id : undefined, data),
+    toggles: displayToggles(scope.kind === 'team' ? scope.team.id : undefined, data, desktop),
     onReset: resetDisplay,
-    resetLabel: savedView ? 'Reset to view default' : teamDefault ? 'Reset to team default' : 'Reset to default',
+    resetLabel: desktop ? 'Reset' : savedView ? 'Reset to view default' : teamDefault ? 'Reset to team default' : 'Reset to default',
     onSaveDefault: saveDisplayAsViewDefault,
-    saveDefaultLabel: savedView ? 'Save as default for view' : 'Save as team default',
+    saveDefaultLabel: desktop && scope.kind === 'team' && !savedView ? 'Set default for everyone' : savedView ? 'Save as default for view' : 'Save as team default',
   }
   // ⌘K: the reference app's customer display commands (Grouping › Customer, View ordering › By customer count…).
   useRegisterDisplayCommands(data.workspaceSettings.featureFlags['customer-requests'] !== false ? () => [
@@ -666,6 +667,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         onContextAction={(row, action) => { void contextAction(row, action) }}
       /> : display.layout !== 'board' || (desktop && filteredEmptyState && visibleCount === 0) ? <MyIssuesList
         groups={listGroups}
+        onHideGroup={groupId => changeDisplay({ ...display, hiddenGroupIds: [...new Set([...display.hiddenGroupIds, groupId])] })}
         selectedIds={selection.selectedIds}
         activeIssueId={split ? previewIssueId : undefined}
         collapsedGroupIds={collapsedGroups}
@@ -862,11 +864,11 @@ function withTeamDefault(display: MyIssuesDisplayOptions, teamDefault?: Record<s
 function displaySnapshot(display: MyIssuesDisplayOptions): Record<string, unknown> { return { ...display, properties: [...display.properties] } }
 
 /** Display toggles the reference offers: triage when a team in scope uses triage, sub-teams when the team has any. */
-function displayToggles(teamId: string | undefined, data: BootstrapData): ('triage' | 'subTeam')[] {
+function displayToggles(teamId: string | undefined, data: BootstrapData, desktop = false): ('triage' | 'subTeam')[] {
   const settings = data.teamSettings ?? {}
   const teamIds = teamId ? [teamId] : data.teams.map(team => team.id)
   const toggles: ('triage' | 'subTeam')[] = []
   if (teamIds.some(id => settings[id]?.triageEnabled)) toggles.push('triage')
-  if (teamId && Object.values(settings).some(item => item?.parentTeamId === teamId)) toggles.push('subTeam')
+  if (teamId && (desktop || Object.values(settings).some(item => item?.parentTeamId === teamId))) toggles.push('subTeam')
   return toggles
 }

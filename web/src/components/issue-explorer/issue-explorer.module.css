@@ -55,6 +55,12 @@
 
 /* Phone parity for the team issues list: the reference header breadcrumb and
    toolbar metrics, plus the estimate-only group header. */
+@media(min-width:1024px){
+  [data-issue-explorer]:has(section[data-mode="create"]) [data-content-view-breadcrumb] [data-current],.draftPlaceholder{color:var(--text)}
+  .resourceTab{--ui-pill-bg:var(--my-issues-details-tab-bg);--ui-pill-active-bg:var(--my-issues-details-tab-active-bg);--ui-pill-fg:var(--issue-muted);--ui-pill-active-fg:var(--text);padding-inline:16px;font-family:inherit;font-size:12px;font-weight:500;line-height:normal}
+  .resourceTab::after{box-shadow:none!important}
+  .cardDisplay{--ui-pill-bg:var(--my-issues-details-tab-bg)}
+}
 .phoneTeamFavorite,.phoneTeamNotifications{width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--muted);font-size:12px;font-weight:500;line-height:normal;cursor:pointer}
 .phoneTeamFavorite{margin-left:8px}
 .phoneTeamNotifications{margin-left:auto}
