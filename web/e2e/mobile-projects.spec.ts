@@ -290,3 +290,62 @@ test.describe('mobile project update composer', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/project-updates-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 })
+
+test.describe('mobile project issues empty state', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('phone issues tab shows the centred empty state, shortcut keycaps and the display dot', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-projects-issues-${testInfo.project.name}-${testInfo.retry}`
+    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+      data: { name: 'Mobile project issues parity', urlKey: workspaceKey, region: 'us', tutorial: false },
+    })
+    expect(response.status()).toBe(201)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const created = await request.post('http://127.0.0.1:4180/api/projects', {
+      headers,
+      data: { name: 'Compare Test' },
+    })
+    expect(created.status()).toBe(201)
+    const project = await created.json() as { id: string; slugId: string }
+
+    await page.goto(`/${workspaceKey}/project/${project.slugId}/issues`)
+    await page.locator('.project-detail-page__toolbar-actions button[aria-label="Close project details"]').click()
+    await page.locator('button[aria-label="Display options"]').click()
+    await page.locator('button[role="tab"]:has-text("Board")').click()
+    await page.keyboard.press('Escape')
+
+    const near = (actual: number | undefined, expected: number) => actual !== undefined && Math.abs(actual - expected) <= 1
+    expect((await page.locator('.project-detail-page__top').boundingBox())?.height).toBe(87.5)
+    expect((await page.locator('.project-detail-page__header').boundingBox())?.height).toBe(44)
+    expect(near((await page.locator('.project-detail-page__tab[href$="issues"] > div').boundingBox())?.x, 166.55)).toBe(true)
+
+    expect(near((await page.locator('button[aria-label="Add filter"]').boundingBox())?.x, 274)).toBe(true)
+    expect(near((await page.locator('button[aria-label="Display options"]').boundingBox())?.x, 312)).toBe(true)
+    expect((await page.locator('button[aria-label="Display options"]').boundingBox())?.width).toBe(32)
+    expect(near((await page.locator('.project-detail-page__toolbar-actions button[aria-label*="project details"]').boundingBox())?.x, 350)).toBe(true)
+    const dot = page.locator('.project-detail-page__toolbar-actions > button[aria-label="Display options"] span')
+    expect((await dot.boundingBox())?.width).toBe(7)
+    expect((await dot.boundingBox())?.height).toBe(7)
+
+    const mark = page.locator('.project-issues__intro-mark-phone')
+    expect((await mark.boundingBox())?.x).toBe(25)
+    expect(near((await mark.boundingBox())?.y, 344.95)).toBe(true)
+    expect((await mark.boundingBox())?.width).toBeCloseTo(64.86, 1)
+    expect((await mark.boundingBox())?.height).toBe(60)
+    expect(near((await page.locator('.project-issues__intro > strong').boundingBox())?.y, 428.95)).toBe(true)
+    expect(near((await page.locator('.project-issues__intro > p').first().boundingBox())?.y, 459.95)).toBe(true)
+    expect(near((await page.locator('.project-issues__intro > p').nth(1).boundingBox())?.y, 494.15)).toBe(true)
+    const keycaps = page.locator('.project-issues__intro-hint kbd')
+    expect(near((await keycaps.first().boundingBox())?.x, 226.48)).toBe(true)
+    expect(near((await keycaps.nth(1).boundingBox())?.x, 247.48)).toBe(true)
+    expect((await keycaps.first().boundingBox())?.width).toBe(18)
+    expect((await keycaps.first().boundingBox())?.height).toBeCloseTo(17.1, 1)
+
+    const create = page.locator('.project-issues__intro button')
+    expect(near((await create.boundingBox())?.y, 554.54)).toBe(true)
+    expect((await create.boundingBox())?.height).toBe(32)
+    expect(near((await create.locator('kbd').boundingBox())?.x, 140.33)).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/project-issues-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
+})

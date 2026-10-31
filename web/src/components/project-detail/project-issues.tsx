@@ -714,9 +714,10 @@ function ProjectIssuesEmptyState({ onCreateIssue }: { onCreateIssue: () => void 
   return (
     <div className="project-issues__intro">
       <ProjectIssuesEmptyMark />
+      <ProjectIssuesEmptyMarkPhone />
       <strong>Add issues to the project</strong>
       <p>Start building your project by creating an issue.</p>
-      <p>You can also add teams, team members, and project dates in the project sidebar.</p>
+      <p><span className="project-issues__intro-note">You can also add teams, team members, and project dates in the project sidebar.</span><span className="project-issues__intro-hint">You can also add teams, team members, and project dates in the project sidebar with <kbd>⌘</kbd><kbd>I</kbd> .</span></p>
       <div>
         <button onClick={onCreateIssue} type="button">
           Create new issue
@@ -735,6 +736,39 @@ function ProjectIssuesEmptyMark() {
       <circle className="project-issues__intro-line" cx="29" cy="26" r="3.25" />
       <path className="project-issues__intro-line" d="M37 26h20M29 38h28M29 47h22M29 56h14" />
       <circle className="project-issues__intro-orbit" cx="43" cy="40" r="39" />
+    </svg>
+  );
+}
+
+function ProjectIssuesEmptyMarkPhone() {
+  return (
+    <svg className="project-issues__intro-mark-phone" viewBox="0 0 80 74" fill="none" aria-hidden="true">
+      <g className="project-issues__intro-phone-body">
+        <path d="M18 33.5c-9.39 0-17-5.96-17-13.3V15h34v5.2c0 7.34-7.61 13.3-17 13.3Z" />
+        <path d="M62 33.5c-9.39 0-17-5.96-17-13.3V15h34v5.2c0 7.34-7.61 13.3-17 13.3Z" />
+        <path d="M18 73C8.61 73 1 67.04 1 59.7v-5.2h34v5.2C35 67.03 27.39 73 18 73Z" />
+        <path d="M62 73c-9.39 0-17-5.96-17-13.3v-5.2h34v5.2C79 67.03 71.39 73 62 73Z" />
+      </g>
+      <g className="project-issues__intro-phone-opening">
+        <ellipse cx="18" cy="13.8" rx="16.2" ry="11.6" />
+        <ellipse cx="62" cy="13.8" rx="16.2" ry="11.6" />
+        <ellipse cx="18" cy="53.3" rx="16.2" ry="11.6" />
+        <ellipse cx="62" cy="53.3" rx="16.2" ry="11.6" />
+      </g>
+      <g className="project-issues__intro-phone-rim">
+        <ellipse cx="18" cy="13.8" rx="17.4" ry="13" />
+        <ellipse cx="62" cy="13.8" rx="17.4" ry="13" />
+        <ellipse cx="18" cy="53.3" rx="17.4" ry="13" />
+        <ellipse cx="62" cy="53.3" rx="17.4" ry="13" />
+      </g>
+      <path className="project-issues__intro-phone-half" d="M28 53.5c0 3.31-4.48 6-10 6v-12c5.52 0 10 2.69 10 6Z" />
+      <g className="project-issues__intro-phone-ring">
+        <ellipse cx="18" cy="14" rx="13.5" ry="9.4" strokeDasharray="0.5 3.8" strokeLinecap="round" />
+        <ellipse cx="62" cy="14" rx="13.5" ry="9.4" />
+        <ellipse cx="18" cy="53.5" rx="13.5" ry="9.4" />
+      </g>
+      <ellipse className="project-issues__intro-phone-done" cx="62" cy="53.5" rx="13.5" ry="9.4" />
+      <path className="project-issues__intro-phone-check" d="m55.5 53.64 3.05 2.39a1 1 0 0 0 1.22.01l8.73-6.54" />
     </svg>
   );
 }
