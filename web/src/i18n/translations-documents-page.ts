@@ -3,6 +3,7 @@
  * Terms: initiative=目标, project=项目, document=文档, team=团队.
  */
 export const documentsPageZhCN: Record<string, string> = {
+  'Document ⋅': '文档 ⋅',
   'Change subscribers…': '更改订阅者…',
   'History for': '历史版本',
   'Move selection to new document': '将所选内容移至新文档',

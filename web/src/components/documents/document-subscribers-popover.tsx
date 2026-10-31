@@ -64,6 +64,9 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
     </ScopedFlowTooltip>
     <Popover.Portal>
       <Popover.Content align="end" className="document-subscribers" collisionPadding={10} data-flow-motion="floating" onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
+        <div className="document-subscribers__document">
+          <span className="document-subscribers__chip" data-testid="document-subscriber-chip"><span data-testid="document-subscriber-chip-text">{t('Document ⋅')}</span>{document.title}</span>
+        </div>
         <div className="document-subscribers__search">
           <input aria-label={t('Change subscribers…')} autoComplete="off" className="document-subscribers__filter" onChange={event => setQuery(event.target.value)} placeholder={t('Change subscribers…')} spellCheck={false} value={query}/>
           <kbd aria-hidden="true">{DOCUMENT_PAGE_SHORTCUTS.subscribers}</kbd>
@@ -74,9 +77,10 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
           {group.map(user => {
             const checked = isSubscribed(user)
             const name = user.displayName || user.name
-            return <button aria-checked={checked} aria-label={name} className="document-subscribers__row" data-subscribed={checked} disabled={busy || Boolean(pending)} key={user.id} onClick={() => void toggle(user, checked)} role="checkbox" type="button">
+            const kind = user.builtinAgent ? 'agent' : user.app ? 'oauth' : 'member'
+            return <button aria-checked={checked} aria-label={name} className="document-subscribers__row" data-subscribed={checked} data-subscriber-kind={kind} disabled={busy || Boolean(pending)} key={user.id} onClick={() => void toggle(user, checked)} role="checkbox" type="button">
               <span className="document-subscribers__check" data-checked={checked}>{checked && <CheckboxMark/>}</span>
-              <UserAvatar avatarUrl={user.avatarUrl} className="document-meta-avatar" name={name}/>
+              <span className="document-subscribers__avatar-wrap"><UserAvatar avatarUrl={user.avatarUrl} className="document-meta-avatar" name={name}/>{kind !== 'agent' && <span aria-hidden="true" className="document-subscribers__avatar-label">{name}</span>}</span>
               <span className="document-subscribers__name" data-i18n-ignore>{name}</span>
               {user.app && <span className="document-subscribers__badge">{t('Agent')}</span>}
             </button>

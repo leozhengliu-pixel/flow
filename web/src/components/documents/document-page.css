@@ -285,6 +285,7 @@
   color: var(--theme-text-primary);
   font: 450 13px/normal var(--font);
 }
+.document-subscribers__document { display: none; }
 .document-subscribers__search {
   box-sizing: border-box;
   height: 36px;
@@ -511,6 +512,130 @@ button.document-icon.is-empty:hover,
 .document-comment-reply { margin-left: 28px; background: transparent; }
 
 /* ---------- mobile ---------- */
+@media (max-width: 767px) {
+  [data-radix-popper-content-wrapper]:has(> .document-subscribers) {
+    position: fixed !important;
+    inset: 13vh 16px auto !important;
+    width: auto !important;
+    transform: none !important;
+  }
+  .document-subscribers {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    height: 306px;
+    overflow: hidden;
+    border-color: var(--icon-picker-page-border);
+    background: var(--document-popover-bg);
+    box-shadow: var(--pk-card-shadow);
+    font: 400 15px/22.5px var(--font);
+  }
+  .document-subscribers__document {
+    box-sizing: border-box;
+    height: 34px;
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    padding: 0 14px;
+    color: var(--theme-text-primary);
+  }
+  .document-subscribers > .document-subscribers__document,
+  .document-subscribers > .document-subscribers__search,
+  .document-subscribers > .document-subscribers__list {
+    width: calc(100% + 2px);
+    margin-left: -.5px;
+  }
+  .document-subscribers__document > span {
+    box-sizing: border-box;
+    display: inline-block;
+    height: 22px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: var(--theme-surface-active);
+    color: var(--action-menu-text);
+    font: 400 12px/18px var(--font);
+    white-space: nowrap;
+    min-width: 104.98px;
+  }
+  .document-subscribers__document > span > span { display: inline; color: inherit; font: 500 12px/18px var(--font); }
+  .document-subscribers__document > span::after { content: ""; }
+  .document-subscribers__document { font: 400 12px/18px var(--font); }
+  .document-subscribers__search {
+    box-sizing: border-box;
+    height: 46px;
+    padding: 6px 6px 0;
+    border: 0;
+  }
+  .document-subscribers__filter {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+    flex: 1 1 auto;
+    padding: 11px 12px;
+    border: 0;
+    border-radius: 12px;
+    color: var(--action-menu-text);
+    font: 400 13px/normal var(--font);
+  }
+  .document-subscribers__search kbd { display: none; }
+  .document-subscribers__list {
+    box-sizing: border-box;
+    height: 226px;
+    max-height: none;
+    overflow: hidden auto;
+    padding: 6px 6px 6px;
+    scrollbar-width: none;
+  }
+  .document-subscribers__group {
+    position: absolute;
+    top: 52px;
+    left: 6px;
+    right: 6px;
+    width: auto;
+    height: 30px;
+    padding: 8px 12px;
+    color: var(--inbox-filter-muted);
+    font: 500 12px/normal var(--font);
+  }
+  .document-subscribers__group + .document-subscribers__row { margin-top: 30px; }
+  .document-subscribers__row {
+    box-sizing: border-box;
+    height: 46px;
+    min-height: 46px;
+    gap: 8px;
+    padding: 0 12px;
+    border-radius: 0;
+    font: 450 13px/15.6px var(--font);
+  }
+  .document-subscribers__row .document-meta-avatar { width: 18px; height: 18px; flex-basis: 18px; }
+  .document-subscribers__avatar-wrap { position: relative; width: 18px; height: 18px; flex: 0 0 18px; }
+  .document-subscribers__avatar-label { position: absolute; inset: 0; overflow: hidden; opacity: 0; pointer-events: none; font: 400 9px/normal var(--font); white-space: nowrap; }
+  .document-subscribers__row[data-subscriber-kind="oauth"] .document-subscribers__avatar-label { font-size: 5px; }
+  .document-subscribers__check { width: 14px; height: 14px; flex-basis: 14px; margin-right: 5px; padding: 2px; border-color: var(--inbox-filter-checkbox-border); }
+  .document-subscribers__check[data-checked="true"] { border-color: var(--description-selected-outline); background: var(--description-selected-outline); }
+  .document-subscribers__badge {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    margin-left: 1px;
+    padding: 2px 6px;
+    border: .5px solid var(--settings-invite-textarea-border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--inbox-filter-muted);
+    gap: 2px;
+    height: 16px;
+    font: 500 11px/16px var(--font);
+  }
+  .document-subscribers__name { min-width: 0; color: var(--action-menu-text); }
+}
+
+@media (min-width: 768px) {
+  .document-subscribers__document { display: none; }
+}
+
 @media (max-width: 767px) {
   [data-radix-popper-content-wrapper]:has(> .document-page-options) {
     position: fixed !important;

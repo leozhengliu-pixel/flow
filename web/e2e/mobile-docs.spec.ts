@@ -108,6 +108,35 @@ test.describe('mobile document view', () => {
   }
 })
 
+test.describe('mobile document subscribers', () => {
+  test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+    test(`subscriber sheet fills the phone surface at ${viewport.width}px`, async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const response = await request.post('/api/documents', { headers, data: { title: '[mobile] Subscribers', content: '[mobile] Body', subscriberIds: ['usr_local'] } })
+      expect(response.status()).toBe(201)
+      const document = await response.json() as { slugId: string }
+      await page.setViewportSize(viewport)
+      await page.goto(`/${workspaceKey}/document/${document.slugId}`)
+
+      await page.getByRole('button', { name: 'Change document subscribers', exact: true }).click()
+      const popover = page.locator('.document-subscribers')
+      await expect(popover).toBeVisible()
+      await page.waitForTimeout(400)
+      const box = await popover.boundingBox()
+      expect(box?.x).toBe(16)
+      expect(box?.width).toBe(viewport.width - 32)
+      expect(box?.height).toBe(306)
+      expect(Math.abs((box?.y ?? 0) - viewport.height * .13)).toBeLessThanOrEqual(1)
+      await expect(page.getByTestId('document-subscriber-chip')).toContainText('Document')
+      await expect(page.locator('.document-subscribers__filter')).toBeVisible()
+      await expect(page.locator('.document-subscribers__row[data-subscribed="true"]')).toHaveCount(1)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  }
+})
+
 function advancedFilterParam() {
   const filters = [{ id: 'advanced_ref', field: 'advanced', fieldLabel: 'Advanced filter', operator: 'is', value: '', valueLabel: '', values: [], tree: { id: 'advanced_ref-root', conjunction: 'and', items: [] } }]
   return Buffer.from(JSON.stringify(filters), 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
