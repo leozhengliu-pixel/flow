@@ -28,7 +28,7 @@ import { createRef, useCallback, useEffect, useMemo, useRef, useState, type Reac
 import { toast } from '@/lib/toast'
 
 import { DueDateCommand } from '@/components/issue/due-date-picker'
-import { FlowFavoriteFilledIcon, FlowFavoriteIcon, FlowOptionsIcon } from '@/components/issue/flow-header-icons'
+import { FlowFavoriteFilledIcon, FlowFavoriteIcon, FlowOptionsIcon, FlowWorkIcon } from '@/components/issue/flow-header-icons'
 import { CalendarIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 import { confirmAction } from '@/components/ui/action-dialog-service'
@@ -90,10 +90,13 @@ interface IssueOptionsMenuProps {
   onFavoriteChange?: () => void
   onRemind?: () => void
   onShowDescriptionHistory?: () => void
+  phoneWorkOptions?: (close: () => void) => ReactNode
 }
 
-type Submenu = 'team' | 'release' | 'create' | 'mark' | 'remove' | 'copy' | 'convert' | 'remind'
+type Submenu = 'team' | 'release' | 'create' | 'mark' | 'remove' | 'copy' | 'convert' | 'remind' | 'work'
 type DialogName = 'link' | 'review' | 'related' | 'reminder' | 'loop' | 'history' | 'recurrence' | null
+
+export { Option as IssueMenuOption }
 
 export function IssueOptionsMenu({
   issue,
@@ -110,6 +113,7 @@ export function IssueOptionsMenu({
   onFavoriteChange,
   onRemind,
   onShowDescriptionHistory,
+  phoneWorkOptions,
 }: IssueOptionsMenuProps) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
@@ -128,7 +132,7 @@ export function IssueOptionsMenu({
   const [busy, setBusy] = useState(false)
   const parentFilterRef = useRef<HTMLInputElement>(null)
   const parentMenuRef = useRef<HTMLDivElement>(null)
-  const anchors = useMemo(() => Object.fromEntries(['team','due','release','create','mark','remove','copy','convert','remind'].map(key => [key, createRef<HTMLDivElement>()])) as Record<Submenu | 'due', RefObject<HTMLDivElement | null>>, [])
+  const anchors = useMemo(() => Object.fromEntries(['team','due','release','create','mark','remove','copy','convert','remind','work'].map(key => [key, createRef<HTMLDivElement>()])) as Record<Submenu | 'due', RefObject<HTMLDivElement | null>>, [])
   const [focusNested, setFocusNested] = useState(false)
   const [highlight, setHighlight] = useState(false)
   const [rootQuery, setRootQuery] = useState('')
@@ -387,6 +391,7 @@ export function IssueOptionsMenu({
                   }
                 }}/>
                 <Option danger icon={<Trash2/>} label="Delete" shortcut="Command Backspace" onSelect={() => { closeMenu(); confirmDelete() }}/>
+                {mobile && phoneWorkOptions && <Option icon={<FlowWorkIcon/>} label="Work on issue" nested="work" anchor={anchors.work} expanded={submenu === 'work'} onHover={() => openNested('work')} onSelect={() => openNested('work', true)}/>}
               </Command.List>
             </div>
           </Command>
@@ -440,6 +445,7 @@ export function IssueOptionsMenu({
               openDialog('reminder')
             }}/>
           </SubmenuSurface>}
+          {submenu === 'work' && phoneWorkOptions && <SubmenuSurface label="Work on issue" anchor={anchors.work} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>{phoneWorkOptions(closeMenu)}</SubmenuSurface>}
           {datePickerOpen && <SubmenuSurface label="Due date" anchor={anchors.due} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu} bare searchable>
             <DueDateCommand autoFocus={false} extraOptions={cycleDates} value={issue.dueDate} allowRemove={!issue.recurrence} onSelect={async dueDate => {
               await onUpdate({ dueDate })
