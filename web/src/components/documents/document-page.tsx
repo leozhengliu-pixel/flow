@@ -93,6 +93,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const [resolvedOpen, setResolvedOpen] = useState(false)
   const [commentGutter, setCommentGutter] = useState(false)
   const [liveEditor, setLiveEditor] = useState<Editor | null>(null)
+  const persistEditorRef = useRef<(() => Promise<void>) | undefined>(undefined)
   const [authorNamesOpen, setAuthorNamesOpen] = useState(() => readDocumentViewOption(document.id, 'authors', false))
   const [presence, setPresenceState] = useState<User[]>([])
   // Awareness changes on every cursor move; re-render only when the set of
@@ -333,12 +334,13 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
             ? <IssueDescriptionEditor ariaLabel={t('Document content')} className="document-editor" key={`deleted:${document.id}`} placeholder="" readOnly state={editorState} users={data.users} value={document.content}/>
             : <CollaborativeEditor data={data} document={document} value={body.value} state={body.state} editorKey={`${document.id}:${document.collaborationId ?? ''}:${editorVersion}`} className="document-editor" presence={presence} onPresence={setPresence} showPresence={false}
               readOnly={!canEdit} editorRef={setLiveEditor}
+              onPersistReady={persist => { persistEditorRef.current = persist }}
               onUploadFile={async file => (await uploadDocumentAttachment(document.id, file)).url}
               selectionActions={documentSelectionActions({ data, document, t, onAskAgent: askAgent, onMoveToNewDocument: canEdit ? moveSelectionToNewDocument : undefined, onComment: canComment ? startComment : undefined })}
               onChange={snapshot => { setBody({ value: snapshot.markdown, state: snapshot.documentJSON }); schedule({ content: snapshot.markdown, contentData: snapshot.document as Record<string, unknown> }) }}
               onPersist={async (snapshot, sync) => { const saved = await updateDocument(document.id, { content: snapshot.markdown, contentState: snapshot.contentState, contentData: snapshot.document as Record<string, unknown>, ...sync }); await onReload(); return saved }}/>}
         </DocumentContentProvider>
-        {!deleted && <DocumentInlineComments data={data} document={document} comments={comments} editor={liveEditor} shell={shell} draft={commentDraft} onDraftChange={setCommentDraft} canComment={canComment} canEdit={canEdit} visible onReload={onReload} onGutterChange={setCommentGutter}/>}
+        {!deleted && <DocumentInlineComments data={data} document={document} comments={comments} editor={liveEditor} shell={shell} draft={commentDraft} onDraftChange={setCommentDraft} canComment={canComment} canEdit={canEdit} visible onReload={onReload} onGutterChange={setCommentGutter} onPersist={() => persistEditorRef.current?.() ?? Promise.resolve()}/>}
       </div>
     </article>
     {resolvedOpen && !deleted && <ResolvedCommentsPanel data={data} document={document} comments={comments} editor={liveEditor} canComment={canComment} canEdit={canEdit} onReload={onReload} onClose={closeResolved}/>}

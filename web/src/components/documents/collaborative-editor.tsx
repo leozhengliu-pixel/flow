@@ -35,6 +35,7 @@ export interface CollaborativeEditorProps {
   showPresence?: boolean
   /** Uploads a pasted/dropped/picked file for this document and returns its served URL (no blob: URL is ever persisted). */
   onUploadFile?: (file: File) => Promise<string>
+  onPersistReady?: (persist?: () => Promise<void>) => void
   /** Toolbar actions for the selection (create issue, ask agent, comment); buttons without a handler are hidden. */
   selectionActions?: DescriptionSelectionActions
   /** Viewers and commenters read the document; the server rejects their edits on the socket too. */
@@ -59,6 +60,7 @@ export function CollaborativeEditor({
   contentContext,
   showPresence = true,
   onUploadFile,
+  onPersistReady,
   selectionActions,
   readOnly = false,
   editorRef,
@@ -134,6 +136,7 @@ export function CollaborativeEditor({
         readOnly={readOnly}
         onChange={onChange}
         onInsertImage={onUploadFile}
+        onPersistReady={onPersistReady}
         outline
         placeholder={placeholder}
         selectionActions={selectionActions}

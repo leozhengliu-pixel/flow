@@ -113,9 +113,11 @@ export interface InlineCommentGutterProps {
   renderAgentThread?: RenderAgentThread
   createThread: (input: NewInlineThread) => Promise<Comment>
   onReload: () => Promise<void>
+  /** Flushes the collaborative editor after adding an anchor mark. */
+  onPersist?: () => Promise<void>
 }
 
-export function InlineCommentGutter({ comments, viewer, users, editor, shell, draft, onDraftChange, canComment, writesMarks, canModerate, visible = true, onGutterChange, railOpen = false, inlineDraft = false, actions, muted, renderAgentThread, createThread, onReload }: InlineCommentGutterProps) {
+export function InlineCommentGutter({ comments, viewer, users, editor, shell, draft, onDraftChange, canComment, writesMarks, canModerate, visible = true, onGutterChange, railOpen = false, inlineDraft = false, actions, muted, renderAgentThread, createThread, onReload, onPersist }: InlineCommentGutterProps) {
   const { t } = useI18n()
   const { open } = useInlineThreads(comments)
   const [active, setActive] = useState<string>()
@@ -339,6 +341,7 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
         materialized.current.add(anchorId)
         editor.view.dispatch(editor.state.tr.addMark(pending.from, pending.to, type.create({ commentId: anchorId })).setMeta(inlineCommentsPluginKey, { pending: null }).setMeta('addToHistory', false))
       }
+      if (editor && writesMarks) await onPersist?.()
       onDraftChange(undefined)
       setActive(created.id)
       await onReload()
