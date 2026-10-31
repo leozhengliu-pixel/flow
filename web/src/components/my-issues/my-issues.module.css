@@ -56,7 +56,7 @@
   .tabsOverflow{box-sizing:border-box;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:.5px solid transparent;border-radius:9999px;white-space:nowrap}
   .tabsOverflowCount{width:74.96px;justify-content:center}
   .tabsOverflowActive{width:auto}
-  .tabsOverflow>svg:not(#_){width:8px;height:9px;flex:0 0 8px}
+  .tabsOverflow>svg:not(#_){width:8px;height:9px;flex:0 0 8px;transform:translateY(1px)}
   .tabsMenu{z-index:1100;box-sizing:border-box;width:201px;padding:0;border:.5px solid var(--phone-menu-border);border-radius:8px;background:var(--phone-menu-bg);box-shadow:var(--shadow-control);color:var(--phone-menu-fg);outline:0}
   .tabsMenuInner{padding:6px 0;border-radius:6px}
   .tabsOverflow[data-state=open]:not([data-active=true]),.tabsOverflow[data-state=open]:not([data-active=true]):hover{background:var(--ui-pill-hover-bg)!important;color:var(--ui-pill-hover-fg)!important}

@@ -35,6 +35,8 @@ export interface MyIssuesDisplayMenuProps {
   /** The issue explorer uses the compact phone parity sheet. */
   phoneIssueMenu?: boolean
   desktopIssueMenu?: boolean
+  /** My issues has a shorter phone sheet than team issue explorer. */
+  myIssuesPhoneMenu?: boolean
 }
 
 type DisplayPatch = Partial<MyIssuesDisplayOptions>
@@ -79,7 +81,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'pullRequests', label: 'Pull requests' },
 ]
 
-export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false, desktopIssueMenu = false }: MyIssuesDisplayMenuProps) {
+export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false, desktopIssueMenu = false, myIssuesPhoneMenu = false }: MyIssuesDisplayMenuProps) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
@@ -105,7 +107,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
       </button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content data-flow-motion="floating" data-phone-popover data-issue-display-menu={phoneIssueMenu ? 'true' : undefined} data-layout={phoneIssueMenu ? options.layout : undefined} className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
+      <Popover.Content data-flow-motion="floating" data-phone-popover data-issue-display-menu={phoneIssueMenu ? 'true' : undefined} data-my-issues-display-menu={myIssuesPhoneMenu ? 'true' : undefined} data-layout={phoneIssueMenu ? options.layout : undefined} className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
         <div className={styles.layoutTabs} role="tablist" aria-label="Layout">
           <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><span className={styles.desktopModeIcon}><List size={14} /></span><PhoneModeIcon kind="list" />{t('List')}</button>
           <button type="button" role="tab" aria-selected={options.layout === 'board'} disabled={options.grouping === 'focus'} onClick={() => change({ layout: 'board' })}><span className={styles.desktopModeIcon}><LayoutGrid size={13} /></span><PhoneModeIcon kind="board" />{t('Board')}</button>
@@ -140,6 +142,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
                 title={t('Direction')}
                 data-order={direction}
                 onClick={() => change({ orderDirection: direction === 'asc' ? 'desc' : 'asc' })}
+                data-ordering={options.ordering}
               ><span className={styles.desktopSortIcon}><ArrowDownUp size={14} /></span><PhoneSortIcon kind="ordering" /></button>
               <SelectControl ariaLabel="Ordering" disabled={options.grouping === 'focus'} value={options.ordering} options={visibleOrderingOptions} onChange={ordering => change({ ordering, orderDirection: undefined })} />
             </div>
