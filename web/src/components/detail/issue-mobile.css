@@ -4,7 +4,7 @@
   html:root body .app .issue-view .issue-header > [data-sidebar-trigger]::before,
   html:root body .app .issue-view .issue-header > [data-sidebar-trigger]::after { background: var(--phone-icon-fg); }
   .issue-view .issue-header-context { width: auto; flex: 0 1 auto; padding: 0; gap: 6px; }
-  .issue-view .issue-breadcrumb { max-width: 179.09px; flex: 0 1 auto; padding: 0 4px 0 10px; }
+  .issue-view .issue-breadcrumb { min-width: 0; max-width: 100%; flex: 0 1 auto; padding: 0 4px 0 10px; }
   .issue-view .issue-breadcrumb-current { max-width: 100%; }
   .issue-view .issue-breadcrumb-label { display: flex; align-items: center; min-width: 0; flex: 1 1 auto; }
   .issue-view .issue-header-icon { width: 32px; height: 32px; flex-basis: 32px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--issue-header-fg); font-size: 12px; font-weight: 500; line-height: normal; }
@@ -17,7 +17,7 @@
   .issue-view .issue-command-buttons { height: 32px; }
   .issue-view .issue-command-button { width: 32px; height: 32px; flex-basis: 32px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: var(--issue-command-bg); color: var(--issue-header-fg); font-size: 12px; font-weight: 500; line-height: normal; }
   .issue-view .issue-command-button > svg { width: 14px; height: 14px; }
-  .issue-view .issue-work-control { display: none; }
+  .issue-view .issue-work-control { width: auto; height: 32px; }
   .issue-view .issue-document { padding: 22.25px 14px 60px; }
   .issue-view .issue-title-field { margin: 18px 0 18px; }
   .issue-view .issue-properties-rail { display: none; }
@@ -100,7 +100,7 @@
   html:root body .issue-view .detail-sub-unassigned:not(#_) { color: var(--bright); opacity: .3; }
   .issue-view .detail-sub-properties { min-width: 0; max-width: 100px; overflow: hidden; justify-content: flex-end; }
   .issue-view .detail-sub-badge { display: none; }
-  .issue-view .detail-sub-checkbox { opacity: 0; }
+  .issue-view .detail-sub-checkbox { opacity: 1; }
   .issue-view .detail-sub-checkbox:focus-visible,.issue-view .detail-sub-checkbox[aria-checked=true] { opacity: 1; }
   .issue-view .activity-heading { height: 36px; margin: 18.5px 0 0; }
   .issue-view .activity-heading > span { color: var(--bright); font-size: 15px; font-weight: 600; line-height: 23px; }
@@ -112,7 +112,7 @@
   .issue-view .detail-pane__activity .issue-activity-timeline { padding-bottom: 8px; }
   .issue-view .detail-pane__activity .timeline-item.event { min-height: 31px; padding: 0 0 4px; }
   .issue-view .detail-pane__activity .timeline-item.event > div:last-child { padding: 0; }
-  .issue-view .detail-pane__activity .activity-row { position: relative; top: -2px; left: -4.5px; width: calc(100% + 8.5px); padding: 4px; font-size: 12px; line-height: 16.8px; }
+  .issue-view .detail-pane__activity .activity-row { padding: 4px 0; font-size: 12px; line-height: 16.8px; }
   .issue-view .detail-pane__activity .activity-event-icon { position: relative; left: -.5px; padding-top: 3px; }
   .issue-view .activity-event-icon .avatar { width: 17px; height: 17px; flex-basis: 17px; }
   .issue-view .activity-actor-avatar { width: 17px; height: 17px; font-size: 16px; font-weight: 400; line-height: 24px; color: var(--bright); }

@@ -386,7 +386,6 @@
   .columnHeader strong{line-height:normal}
   .countValue{line-height:normal}
   .cardBody{padding-bottom:12.25px}
-  .card:not(:first-of-type) .cardBody{padding-bottom:11.25px}
   .board{--board-card-background:var(--board-card-surface);--board-card-border:var(--board-card-outline)}
   .cardTop{letter-spacing:-.24px;line-height:normal;color:var(--board-card-muted)}
   .title{color:var(--theme-text-primary)}

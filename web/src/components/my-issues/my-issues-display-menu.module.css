@@ -130,23 +130,20 @@
   .triggerDot{position:absolute;z-index:1;top:2.8px;right:2.9px;width:7px;height:7px;padding:2px;display:block;border-radius:50%;background:var(--display-modified-dot)}
 }
 
-/* The issue explorer's phone menu is a compact, fixed-height sheet. Keep this
-   override below the shared picker rules so the desktop menu remains intact. */
+/* Phone display options scroll when the available controls exceed the viewport. */
 @media (max-width: 767px) {
   [data-issue-display-trigger="true"][aria-pressed="true"] {
     background: var(--inbox-toolbar-open-bg) !important;
     color: var(--bright) !important;
   }
   .popover[data-issue-display-menu="true"] {
-    height: 550px;
-    max-height: 550px;
+    max-height: calc(100dvh - 32px);
     margin-top: 1px;
     padding-top: 0;
     border-radius: 12px;
   }
   .popover[data-my-issues-display-menu="true"] {
-    height: 478px;
-    max-height: 478px;
+    max-height: calc(100dvh - 32px);
     margin-top: 1px;
     padding-top: 0;
     border-radius: 12px;
@@ -165,10 +162,9 @@
     padding: 6px 8px;
     line-height: normal;
     box-shadow: none;
-    flex: 0 0 137px;
+    flex: 1 1 0;
   }
   .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button + button { margin-left: 4px; }
-  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button { transform: translateX(2px); }
   .popover[data-issue-display-menu="true"] .section {
     padding: 8px 16px;
   }
@@ -176,7 +172,7 @@
   .popover[data-issue-display-menu="true"] .selectField,
   .popover[data-issue-display-menu="true"] .nestedSelectRow {
     height: 36px;
-    align-items: flex-start;
+    align-items: center;
   }
   .popover[data-issue-display-menu="true"] .rowLabel,
   .popover[data-issue-display-menu="true"] .selectField > span,
@@ -184,7 +180,6 @@
     display: flex;
     align-items: center;
     height: 14.5px;
-    margin-top: 6.75px;
     line-height: normal;
   }
   .popover[data-issue-display-menu="true"] .groupingActions {
@@ -205,9 +200,6 @@
     background: var(--pk-control-phone);
     box-shadow: var(--pk-control-inset-ring-phone);
     font: 400 12px/normal var(--font);
-  }
-  .popover[data-issue-display-menu="true"] .selectTrigger:not(#_) > span:last-child {
-    transform: translateX(20px);
   }
   .popover[data-issue-display-menu="true"] .selectTrigger:not(#_) > span:last-child svg {
     width: 12px;
@@ -297,46 +289,10 @@
     color: var(--pk-muted);
     box-shadow: none;
   }
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="id"],
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="cycle"],
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="dueDate"],
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="milestone"],
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="sla"],
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="estimate"],
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="release"],
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="labels"],
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="links"],
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="customers"],
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="customerRevenue"],
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="myActivity"],
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="created"],
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="updated"] {
-    display: none;
-  }
-  .popover[data-issue-display-menu="true"][data-layout="list"] section[aria-label="Group ordering"],
-  .popover[data-issue-display-menu="true"] > .footer {
-    display: none;
-  }
   .popover[data-issue-display-menu="true"] section[aria-label="Visible issues"],
   .popover[data-issue-display-menu="true"] section[aria-label="List options"] {
     position: relative;
     border-top: 0 !important;
-  }
-  .popover[data-my-issues-display-menu="true"] > section[aria-label="Grouping options"] > .switchRow {
-    display: none;
-  }
-  .popover[data-my-issues-display-menu="true"] > section[aria-label="Visible issues"] {
-    display: flex;
-    flex-direction: column;
-  }
-  .popover[data-my-issues-display-menu="true"] > section[aria-label="Visible issues"] > .switchRow:nth-child(2) {
-    order: 3;
-  }
-  .popover[data-my-issues-display-menu="true"] > section[aria-label="Visible issues"] > .switchRow:nth-child(3) {
-    order: 2;
-  }
-  .popover[data-my-issues-display-menu="true"] > section[aria-label="List options"] > .switchRow:has(input[aria-label="Show empty groups"]) {
-    display: none;
   }
   .popover[data-issue-display-menu="true"] section[aria-label="Visible issues"]::before,
   .popover[data-issue-display-menu="true"] section[aria-label="List options"]::before {

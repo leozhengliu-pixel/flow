@@ -11,7 +11,7 @@
   .issue-view .activity-heading { margin-top: 34.5px; }
   .issue-view .issue-empty-sub-issue-row + .activity-heading { margin-top: 44.5px; }
   .issue-view .activity-heading > span { color: var(--bright); }
-  .issue-view .issue-activity-timeline .activity-row { position: relative; left: -4.5px; top: -1px; width: calc(100% - 1.5px); padding: 4px 0; }
+  .issue-view .issue-activity-timeline .activity-row { padding: 4px 0; }
   .issue-view .issue-activity-timeline .timeline-item.event > div:last-child { padding: 0; }
   .issue-view .issue-activity-timeline .timeline-item.event { min-height: 28.8px; padding: 1px 0; }
   .issue-view .detail-pane__activity { padding-top: 6px; }

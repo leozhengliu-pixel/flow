@@ -40,10 +40,7 @@
 :global(:root[data-theme="light"]) .filterPopover,:global(:root[data-theme="light"]) .displayPopover{border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-control);border-radius:12px}
 @keyframes popoverIn{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:none}}
 @media(max-width:800px){.surface{width:100%;height:calc(100% - 36px);margin:0 0 36px;border:0;border-radius:0;box-shadow:none}.header{padding:0 8px}.header h2{padding-left:10px}.mobileSidebarButton{display:flex;flex-direction:column;justify-content:center}.toolbar{overflow:visible}.tabs{gap:8px;min-width:0;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain;padding-right:2px}.tabs::-webkit-scrollbar{display:none}.actions{gap:6px;margin-left:8px}.filterPopover{max-height:calc(100vh - 92px)}.displayPopover{max-height:calc(100vh - 92px)}}
-/* On a phone the list itself is the primary workflow. Insights stays available
-   from its route, but does not consume a compact toolbar slot beside the tabs. */
 @media(max-width:767px){
-  .actions>:nth-child(3){display:none}
   .toolbar{gap:4px}
   .tabs{flex:1}
   .actions{flex:0 0 auto;margin-left:0}
@@ -54,7 +51,7 @@
   .actions button:is([aria-pressed=true],[aria-expanded=true],[data-state=open],.active,.is-active) > svg{color:var(--bright)}
   :global(:root[data-theme="dark"]) .actions button{background:var(--phone-control-bg);color:var(--phone-control-fg)}
   .tabsOverflow{box-sizing:border-box;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:.5px solid transparent;border-radius:9999px;white-space:nowrap}
-  .tabsOverflowCount{width:74.96px;justify-content:center}
+  .tabsOverflowCount{justify-content:center}
   .tabsOverflowActive{width:auto}
   .tabsOverflow>svg:not(#_){width:8px;height:9px;flex:0 0 8px;transform:translateY(1px)}
   .tabsMenu{z-index:1100;box-sizing:border-box;width:201px;padding:0;border:.5px solid var(--phone-menu-border);border-radius:8px;background:var(--phone-menu-bg);box-shadow:var(--shadow-control);color:var(--phone-menu-fg);outline:0}
