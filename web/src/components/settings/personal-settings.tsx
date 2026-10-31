@@ -1,5 +1,6 @@
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import {
   useCallback,
   useEffect,
@@ -731,7 +732,8 @@ function Preferences({
   p,
   onCustomizeSidebar,
 }: PersonalProps) {
-  const { locale, setLocale } = useI18n();
+  const { locale, setLocale, t } = useI18n();
+  const desktop = useDesktopSettings();
   const emoticonDescription = p("Strings like :) will be converted to 🙂");
   return (
     <>
@@ -830,7 +832,7 @@ function Preferences({
             "Customize sidebar item visibility, ordering, and badge style",
           )}
         >
-          <Action onClick={onCustomizeSidebar}>{p("Customize")}</Action>
+          <Action onClick={onCustomizeSidebar}>{desktop ? t('Customize sidebar') : p("Customize")}</Action>
         </PersonalRow>
         <PersonalRow
           title={p("Font size")}
@@ -1032,6 +1034,8 @@ function Preferences({
 }
 
 function Profile({ data, onReload, onBack, p }: PersonalProps) {
+  const { t } = useI18n();
+  const desktop = useDesktopSettings();
   const current = data.userSettings[data.viewer.id];
   const viewerUsername = data.viewer.username || current?.username || data.viewer.name;
   const [displayName, setDisplayName] = useState(data.viewer.displayName);
@@ -1089,7 +1093,7 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
         </PersonalRow>
         <PersonalRow title={p("Email")}>
           <span className="personal-static" data-i18n-ignore>
-            {data.viewer.email}
+            {data.viewer.email || (desktop ? t("No email address") : '')}
           </span>
           <button
             type="button"
@@ -1292,6 +1296,8 @@ function Notifications({ data, values, setValue, onReload, onNavigate, p, notifi
       >
         <NotificationChannel
           icon={<Monitor />}
+          href={`${settingsPath(data.workspace.urlKey, 'notifications')}/desktop`}
+          enabled={preferences.desktop.enabled}
           title={p("Desktop")}
           status={p(preferences.desktop.enabled ? "Enabled" : "Disabled")}
           onClick={() => openChannel("desktop")}
@@ -1304,6 +1310,8 @@ function Notifications({ data, values, setValue, onReload, onNavigate, p, notifi
         />
         <NotificationChannel
           icon={<Mail />}
+          href={`${settingsPath(data.workspace.urlKey, 'notifications')}/email`}
+          enabled={preferences.email.enabled}
           title={p("Email")}
           status={p(
             preferences.email.enabled
@@ -1314,6 +1322,8 @@ function Notifications({ data, values, setValue, onReload, onNavigate, p, notifi
         />
         {chat.provider ? <NotificationChannel
           icon={<IntegrationBrandIcon provider={chat.provider} size={16} />}
+          href={`${settingsPath(data.workspace.urlKey, 'notifications')}/chat`}
+          enabled={chatState === 'ready' && chatChannelPreferences(preferences).enabled}
           title={chat.name}
           status={chatState === "ready" ? p(chatChannelPreferences(preferences).enabled ? "Enabled" : "Disabled") : chat.format(p(CHAT_PERSONAL_STATE_COPY[chatState]))}
           entityName
@@ -1419,6 +1429,8 @@ function NotificationChannel({
   onClick,
   disabled,
   entityName,
+  href,
+  enabled,
 }: {
   icon: ReactNode;
   title: string;
@@ -1426,15 +1438,15 @@ function NotificationChannel({
   onClick?: () => void;
   disabled?: boolean;
   entityName?: boolean;
+  href?: string;
+  enabled?: boolean;
 }) {
+  const desktop = useDesktopSettings();
+  const content = <><span className="personal-channel-icon">{icon}</span><span><strong data-i18n-ignore={entityName || undefined}>{title}</strong><small>{desktop && enabled !== undefined && <i className={`personal-channel-status${enabled ? ' is-enabled' : ''}`} aria-hidden="true"/>}{status}</small></span><ChevronDown size={14}/></>;
+  if (desktop && href && !disabled) return <NavLink className="personal-channel" to={href} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && onClick) { event.preventDefault(); onClick(); } }}>{content}</NavLink>;
   return (
     <button className="personal-channel" disabled={disabled} onClick={onClick}>
-      <span className="personal-channel-icon">{icon}</span>
-      <span>
-        <strong data-i18n-ignore={entityName || undefined}>{title}</strong>
-        <small>{status}</small>
-      </span>
-      <ChevronDown size={14} />
+      {content}
     </button>
   );
 }

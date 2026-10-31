@@ -54,6 +54,23 @@ function props(page: SettingsPageId) {
 }
 
 describe('personal settings workflows', () => {
+  it('shows session geography only when supplied and refreshes the actual session list', async () => {
+    const session = { id: 'audit', current: true, name: 'Audit browser', createdAt: '2026-01-01', lastSeenAt: '2026-01-01', expiresAt: '2027-01-01' }
+    api.fetchAccountSessions.mockResolvedValueOnce([{ ...session, location: 'Test city', countryCodes: ['US', 'JP'] }]).mockResolvedValue([session])
+    render(<MemoryRouter><I18nProvider><PersonalSettings {...props('account-security')}/></I18nProvider></MemoryRouter>)
+    expect(await screen.findByText(/Test city/)).toHaveTextContent('(US, JP)')
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(screen.queryByText(/Test city/)).not.toBeInTheDocument())
+    expect(api.fetchAccountSessions).toHaveBeenCalledTimes(2)
+  })
+  it('shows the account email and a truthful empty state when the account has no email', () => {
+    const input = props('profile')
+    const wrap = (data: typeof input.data) => <MemoryRouter><I18nProvider><PersonalSettings {...input} data={data}/></I18nProvider></MemoryRouter>
+    const { rerender } = render(wrap({ ...input.data, viewer: { ...input.data.viewer, email: 'audit@example.test' } }))
+    expect(screen.getByText('audit@example.test')).toBeVisible()
+    rerender(wrap({ ...input.data, viewer: { ...input.data.viewer, email: '' } }))
+    expect(screen.queryByText('audit@example.test')).not.toBeInTheDocument()
+  })
   const credentialsDescriptor = Object.getOwnPropertyDescriptor(navigator, 'credentials')
   afterEach(() => {
     vi.unstubAllGlobals()

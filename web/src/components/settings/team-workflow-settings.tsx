@@ -15,6 +15,16 @@ import { ScopedFlowTooltip } from '@/components/ui/tooltip';
 import * as Popover from "@radix-ui/react-popover";
 import {
   ArrowUpRight,
+  CircleDot,
+  FileText,
+  FolderKanban,
+  Layers,
+  LockKeyhole,
+  MessageSquare,
+  Repeat,
+  Settings,
+  Tag,
+  Users,
   ChevronRight,
   Copy,
   GitBranch,
@@ -72,7 +82,9 @@ import type {
   WorkflowState,
   WorkflowStateType,
 } from "@/types/flow";
-import { loopsPath, settingsPath, type SettingsPageId, type TeamSettingsSection } from "@/lib/app-routes";
+import { loopsPath, settingsPath, teamHomePath, type SettingsPageId, type TeamSettingsSection } from "@/lib/app-routes";
+import { useDesktopSettings } from '@/hooks/use-desktop-settings';
+import './desktop-settings.css';
 import { useNavigate } from "react-router-dom";
 import {
   confirmAllowSubTeamsMembership,
@@ -276,6 +288,7 @@ export function TeamWorkflowSettings({
   const { t } = useI18n();
   const chat = useChatPlatform(data);
   const chatCopy = chatTeamNotificationsCopy(chat.platform);
+  const desktop = useDesktopSettings();
   if (section === "statuses")
     return (
       <StatusesSettings
@@ -351,8 +364,9 @@ export function TeamWorkflowSettings({
               t(TEAM_SECTION_TITLES[section] ?? SECTIONS.find((item) => item.id === section)?.label ?? "")
             )}
           </h1>
-          {section === "templates" ? <TeamTemplatesDescription workspaceSlug={data.workspace.urlKey} /> : section === "notifications" ? <p>{chat.format(t(chatCopy.page))}</p> : TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
+          {section === "overview" && desktop ? <p>{t(team.private || data.teamSettings?.[team.id]?.access === 'private' ? 'Only accessible to team members' : 'Accessible to all workspace members')}</p> : section === "templates" ? <TeamTemplatesDescription workspaceSlug={data.workspace.urlKey} /> : section === "notifications" ? <p>{chat.format(t(chatCopy.page))}</p> : TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
         </div>
+        {section === 'overview' && desktop && <a className="team-overview-shortcut" href={teamHomePath(data.workspace.urlKey, team.key)}>{t('Team overview')}<ChevronRight size={14}/></a>}
       </header>
       {section === "overview" && (
         <TeamOverview
@@ -471,6 +485,7 @@ function TeamOverview({
   const chat = useChatPlatform(data);
   const chatCopy = chatTeamNotificationsCopy(chat.platform);
   const { settings, save } = useTeamSettings(data, team, onReload);
+  const desktop = useDesktopSettings();
   // The reference app "dangerousOperations": hierarchy, retire and delete are team-owner only.
   const owner = viewerOwnsTeam(data, team.id);
   // The reference app's reasons on the disabled danger-zone actions.
@@ -556,12 +571,39 @@ function TeamOverview({
       toast.error(message(error));
     }
   };
+  const summary = (id: TeamSettingsSection) => {
+    const count = (value: number, singular: string, plural: string) => value
+      ? t(value === 1 ? singular : plural).replace('{count}', String(value))
+      : t('None');
+    switch (id) {
+      case 'members': { const size = data.teamMembers.filter(item => item.teamId === team.id).length; return count(size, '{count} member', '{count} members'); }
+      case 'notifications': return t(Object.values(settings.slackNotifications ?? {}).some(Boolean) ? 'On' : 'Off');
+      case 'issue-labels': return count(data.labels.filter(item => item.scope === team.id && !item.archivedAt && (!item.resourceType || item.resourceType === 'issue')).length, '{count} label', '{count} labels');
+      case 'project-labels': return count(data.labels.filter(item => item.scope === team.id && !item.archivedAt && item.resourceType === 'project').length, '{count} label', '{count} labels');
+      case 'templates': return count(teamOwnedIssueTemplates(data.issueTemplates, new Set([team.id])).length + (data.projectTemplates ?? []).filter(item => item.visibility === 'teams' && projectTemplateTeam(item) === team.id).length + (data.documentTemplates ?? []).filter(item => item.teamId === team.id).length, '{count} template', '{count} templates');
+      case 'recurring-issues': return count(data.issues.filter(item => item.team.id === team.id && item.recurrence && !item.archivedAt).length, '{count} issue', '{count} issues');
+      case 'statuses': return count(teamWorkflowStates(data, team.id).length, '{count} status', '{count} statuses');
+      case 'project-statuses': return count(data.projectStatuses.length, '{count} status', '{count} statuses');
+      case 'triage': return t(settings.triageEnabled ? 'On' : 'Off');
+      case 'cycles': return t(data.cycleSettings[team.id]?.enabled ? 'On' : 'Off');
+      default: return undefined;
+    }
+  };
+  const icons: Partial<Record<TeamSettingsSection, typeof Settings>> = { general: Settings, security: LockKeyhole, members: Users, notifications: MessageSquare, 'issue-labels': Tag, 'project-labels': Tag, templates: FileText, 'recurring-issues': Repeat, statuses: CircleDot, 'project-statuses': FolderKanban, workflow: Layers, triage: Layers, cycles: Repeat };
   const group = (title: string | undefined, ids: TeamSettingsSection[]) => (
     <TeamSection title={title}>
       <div className="team-overview-list">
         {ids.map((id) => {
           const item = SECTIONS.find((value) => value.id === id)!;
           const notifications = item.id === "notifications";
+          const Icon = icons[id] ?? Settings;
+          const content = <>
+            {desktop && <span className="team-overview-icon"><Icon size={16}/></span>}
+            <span className="team-overview-copy"><strong>{notifications ? chat.format(t(chatCopy.label)) : t(item.label)}</strong><small>{notifications ? chat.format(t(chatCopy.description)) : t(item.description)}</small></span>
+            {desktop && summary(id) !== undefined && <span className="team-overview-summary">{summary(id)}</span>}
+            <ChevronRight size={15}/>
+          </>;
+          if (desktop) return <a key={id} href={settingsPath(data.workspace.urlKey, 'team', team.key, id)}>{content}</a>;
           return (
             <button key={item.id} onClick={() => onNavigate(item.id)}>
               <span>
@@ -577,13 +619,14 @@ function TeamOverview({
   );
   return (
     <>
-      {group(undefined, ["general", "security", "members", "notifications"])}
-      {group(t("Issues, projects, and docs"), [
+      {group(undefined, desktop ? ["general", "members", "notifications", "security"] : ["general", "security", "members", "notifications"])}
+      {group(t(desktop ? "Issues, projects, and documents" : "Issues, projects, and docs"), [
         "issue-labels",
+        ...(desktop ? ['project-labels' as const] : []),
         "templates",
         "recurring-issues",
       ])}
-      {group(t("Workflow"), ["statuses", "workflow", "triage", "cycles"])}
+      {group(t("Workflow"), ["statuses", ...(desktop ? ['project-statuses' as const] : []), "workflow", "triage", "cycles"])}
       <TeamSection title={t("AI & agents")}>
         <div className="team-overview-list">
           {["agents", "agent-connectors", "agent-skills"].map((id) => {
