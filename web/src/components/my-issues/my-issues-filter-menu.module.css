@@ -127,7 +127,7 @@
   .valueRowSlot .checkbox{margin-left:1px;}
   .valueRowSlot .optionSlot{width:14px;flex-basis:14px;margin-left:6px;margin-right:1px;}
   .valueRowSlot .valueLabel{font-size:13px;font-weight:450;line-height:15.6px;}
-  .valueMenu .valueList{margin:0 4.5px 0 5.5px;padding:6px 0 4px;}
+  .valueMenu .valueList{margin:0 4.5px 0 5.5px;padding:6px 0 5px;}
   .valueMenu .checkbox{padding:2px;border-color:var(--label-picker-checkbox-border);}
   .valueMenu .optionSlot>svg{color:var(--pk-text);}
   .valueMenu .count{padding-left:0;line-height:normal;}
