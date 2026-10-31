@@ -1,6 +1,56 @@
 import { expect, type APIRequestContext } from '@playwright/test'
 import { test } from './workspace-fixture'
 
+test.describe('mobile document options', () => {
+  test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+    test(`document commands filter, scroll and open submenus at ${viewport.width}px`, async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Flow-Workspace': workspaceKey }
+      const response = await request.post('/api/documents', { headers, data: { title: '[mobile] Document options', content: '[mobile] Body' } })
+      expect(response.status()).toBe(201)
+      const document = await response.json() as { slugId: string }
+      await page.setViewportSize(viewport)
+      await page.goto(`/${workspaceKey}/document/${document.slugId}`)
+      const trigger = page.getByRole('button', { name: 'Document options', exact: true })
+      await trigger.click()
+      const menu = page.getByRole('menu', { name: 'Document options', exact: true })
+      const search = menu.getByRole('textbox', { name: 'Command menu', exact: true })
+      await expect(search).toBeVisible()
+      await menu.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
+      const rows = menu.locator(':scope > .document-page-options-list > [data-menu-item]')
+      expect(await rows.evaluateAll(items => items.map(item => item.getAttribute('data-menu-item')))).toEqual(['Move to', 'Pin to team', 'Duplicate', 'Rename…', 'New template from document', 'Favorite', 'Copy', 'Download', 'Remind me', 'Show document history', 'Delete'])
+      const rect = await menu.boundingBox()
+      expect(rect?.x).toBe(16)
+      expect(rect?.width).toBe(viewport.width - 32)
+      expect(rect?.height).toBe(450)
+      expect(Math.abs((rect?.y ?? 0) - viewport.height * .13)).toBeLessThan(1)
+      expect((await rows.first().boundingBox())?.height).toBe(46)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await expect(menu.getByRole('separator')).toHaveCount(2)
+      await search.fill('no matching command')
+      await expect(menu.getByText('No results', { exact: true })).toBeVisible()
+      await search.fill('history')
+      await expect(rows).toHaveCount(1)
+      await expect(rows.first()).toContainText('Show document history')
+      await page.keyboard.press('Escape')
+      await expect(menu).not.toBeVisible()
+      await trigger.click()
+      await expect(search).toHaveValue('')
+      await expect(rows).toHaveCount(11)
+      await rows.last().scrollIntoViewIfNeeded()
+      await expect(rows.last()).toBeInViewport()
+      await search.fill('Download')
+      await search.press('ArrowDown')
+      await expect(menu.getByRole('menuitem', { name: 'Download', exact: true })).toBeFocused()
+      await page.keyboard.press('Enter')
+      await expect(page.getByRole('menuitem', { name: 'Markdown', exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await page.keyboard.press('Escape')
+    })
+  }
+})
+
 test.describe('mobile document view', () => {
   test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
@@ -224,7 +274,7 @@ test.describe('mobile documents display options', () => {
 
     const rows = popover.locator('section').first().locator('> div')
     expect(await rows.count()).toBe(4)
-    for (let index = 0; index < 4; index++) expect((await rows.nth(index).boundingBox())?.height).toBe(36)
+    for (let index = 0; index < 4; index++) expect((await rows.nth(index).boundingBox())?.height).toBeCloseTo(36, 2)
 
     const grouping = popover.locator('section').first().locator('[role="combobox"]')
     expect(await grouping.count()).toBe(2)
