@@ -101,8 +101,8 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
     <Popover.Portal>
       <Popover.Content data-flow-motion="floating" data-issue-display-menu={phoneIssueMenu ? 'true' : undefined} className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
         <div className={styles.layoutTabs} role="tablist" aria-label="Layout">
-          <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><List size={14} />{t('List')}</button>
-          <button type="button" role="tab" aria-selected={options.layout === 'board'} disabled={options.grouping === 'focus'} onClick={() => change({ layout: 'board' })}><LayoutGrid size={13} />{t('Board')}</button>
+          <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><span className={styles.desktopModeIcon}><List size={14} /></span><PhoneModeIcon kind="list" />{t('List')}</button>
+          <button type="button" role="tab" aria-selected={options.layout === 'board'} disabled={options.grouping === 'focus'} onClick={() => change({ layout: 'board' })}><span className={styles.desktopModeIcon}><LayoutGrid size={13} /></span><PhoneModeIcon kind="board" />{t('Board')}</button>
           {!hideSplit && options.layout === 'split' && <button type="button" role="tab" aria-selected={options.layout === 'split'} onClick={() => change({ layout: 'split' })}><Columns2 size={13} />{t('Split')}</button>}
         </div>
 
@@ -117,7 +117,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
                 title="Group ordering"
                 data-order={options.groupOrder}
                 onClick={() => change({ groupOrder: options.groupOrder === 'asc' ? 'desc' : 'asc' })}
-              ><ArrowDownUp size={14} /></button>
+              ><span className={styles.desktopSortIcon}><ArrowDownUp size={14} /></span><PhoneSortIcon kind="group" /></button>
               <SelectControl ariaLabel="Grouping" value={options.grouping} options={visibleGroupingOptions} onChange={grouping => change({ grouping, layout: grouping === 'focus' ? 'list' : options.layout, ...(grouping === 'labelGroup' && !options.labelGroupId ? { labelGroupId: labelGroupOptions[0]?.id } : {}) })} />
             </div>
           </div>
@@ -134,7 +134,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
                 title={t('Direction')}
                 data-order={direction}
                 onClick={() => change({ orderDirection: direction === 'asc' ? 'desc' : 'asc' })}
-              ><ArrowDownUp size={14} /></button>
+              ><span className={styles.desktopSortIcon}><ArrowDownUp size={14} /></span><PhoneSortIcon kind="ordering" /></button>
               <SelectControl ariaLabel="Ordering" disabled={options.grouping === 'focus'} value={options.ordering} options={visibleOrderingOptions} onChange={ordering => change({ ordering, orderDirection: undefined })} />
             </div>
           </div>
@@ -194,6 +194,18 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>
+}
+
+function PhoneModeIcon({ kind }: { kind: 'list' | 'board' }) {
+  return <svg className={styles.phoneModeIcon} aria-hidden="true" viewBox="0 0 16 16">
+    {kind === 'list' ? <path d="M1 1.8c0-.28 0-.42.054-.527a.5.5 0 0 1 .219-.218C1.38 1 1.52 1 1.8 1h12.4c.28 0 .42 0 .527.054a.5.5 0 0 1 .218.219C15 1.38 15 1.52 15 1.8v.4c0 .28 0 .42-.055.527a.5.5 0 0 1-.218.219C14.62 3 14.48 3 14.2 3H1.8c-.28 0-.42 0-.527-.054a.5.5 0 0 1-.218-.219C1 2.62 1 2.48 1 2.2v-.4ZM1 13.8c0-.28 0-.42.054-.527a.5.5 0 0 1 .219-.218C1.38 13 1.52 13 1.8 13h12.4c.28 0 .42 0 .527.055a.5.5 0 0 1 .218.218c.055.107.055.247.055.527v.4c0 .28 0 .42-.055.527a.5.5 0 0 1-.218.218C14.62 15 14.48 15 14.2 15H1.8c-.28 0-.42 0-.527-.055a.5.5 0 0 1-.218-.218C1 14.62 1 14.48 1 14.2v-.4ZM1 9.8c0-.28 0-.42.054-.527a.5.5 0 0 1 .219-.218C1.38 9 1.52 9 1.8 9h12.4c.28 0 .42 0 .527.055a.5.5 0 0 1 .218.218C15 9.38 15 9.52 15 9.8v.4c0 .28 0 .42-.055.527a.5.5 0 0 1-.218.218C14.62 11 14.48 11 14.2 11H1.8c-.28 0-.42 0-.527-.055a.5.5 0 0 1-.218-.218C1 10.62 1 10.48 1 10.2v-.4ZM1 5.8c0-.28 0-.42.054-.527a.5.5 0 0 1 .219-.218C1.38 5 1.52 5 1.8 5h12.4c.28 0 .42 0 .527.054a.5.5 0 0 1 .218.219C15 5.38 15 5.52 15 5.8v.4c0 .28 0 .42-.055.527a.5.5 0 0 1-.218.218C14.62 7 14.48 7 14.2 7H1.8c-.28 0-.42 0-.527-.054a.5.5 0 0 1-.218-.219C1 6.62 1 6.48 1 6.2v-.4Z" /> : <path d="M1 2.6c0-.56 0-.84.109-1.054a1 1 0 0 1 .437-.437C1.76 1 2.04 1 2.6 1h2.8c.56 0 .84 0 1.054.109a1 1 0 0 1 .437.437C7 1.76 7 2.04 7 2.6v.8c0 .56 0 .84-.109 1.054a1 1 0 0 1-.437.437C6.24 5 5.96 5 5.4 5H2.6c-.56 0-.84 0-1.054-.109a1 1 0 0 1-.437-.437C1 4.24 1 3.96 1 3.4v-.8ZM9 2.6c0-.56 0-.84.109-1.054a1 1 0 0 1 .437-.437C9.76 1 10.04 1 10.6 1h2.8c.56 0 .84 0 1.054.109a1 1 0 0 1 .437.437C15 1.76 15 2.04 15 2.6v.8c0 .56 0 .84-.109 1.054a1 1 0 0 1-.437.437C14.24 5 13.96 5 13.4 5h-2.8c-.56 0-.84-.109-1.054-.437C9 4.24 9 3.96 9 3.4v-.8ZM1 7.6c0-.56 0-.84.109-1.054a1 1 0 0 1 .437-.437C1.76 6 2.04 6 2.6 6h2.8c.56 0 .84 0 1.054.109a1 1 0 0 1 .437.437C7 6.76 7 7.04 7 7.6v.8c0 .56 0 .84-.109 1.054a1 1 0 0 1-.437.437C6.24 10 5.96 10 5.4 10H2.6c-.56 0-.84-.109-1.054-.437C1 9.24 1 8.96 1 8.4v-.8ZM9 7.6c0-.56 0-.84.109-1.054a1 1 0 0 1 .437-.437C9.76 6 10.04 6 10.6 6h2.8c.56 0 .84 0 1.054.109a1 1 0 0 1 .437.437C15 6.76 15 7.04 15 7.6v.8c0 .56 0 .84-.109 1.054a1 1 0 0 1-.437.437C14.24 10 13.96 10 13.4 10h-2.8c-.56 0-.84-.109-1.054-.437C9 9.24 9 8.96 9 8.4v-.8ZM1 12.6c0-.56 0-.84.109-1.054a1 1 0 0 1 .437-.437C1.76 11 2.04 11 2.6 11h2.8c.56 0 .84 0 1.054.109a1 1 0 0 1 .437.437C7 11.76 7 12.04 7 12.6v.8c0 .56 0 .84-.109 1.054a1 1 0 0 1-.437.437C6.24 15 5.96 15 5.4 15H2.6c-.56 0-.84-.109-1.054-.437C1 14.24 1 13.96 1 13.4v-.8ZM9 12.6c0-.56 0-.84.109-1.054a1 1 0 0 1 .437-.437C9.76 11 10.04 11 10.6 11h2.8c.56 0 .84 0 1.054.109a1 1 0 0 1 .437.437C15 11.76 15 12.04 15 12.6v.8c0 .56 0 .84-.109 1.054a1 1 0 0 1-.437.437C14.24 15 13.96 15 13.4 15h-2.8c-.56 0-.84-.109-1.054-.437C9 14.24 9 13.96 9 13.4v-.8Z" />}
+  </svg>
+}
+
+function PhoneSortIcon({ kind }: { kind: 'group' | 'ordering' }) {
+  return <svg className={styles.phoneSortIcon} aria-hidden="true" viewBox="0 0 16 16">
+    {kind === 'group' ? <><path d="M8.16958 11.524C7.90741 11.8445 7.95488 12.3163 8.27505 12.5787L11.025 14.8287C11.3013 15.0547 11.698 15.0547 11.9743 14.8287L14.7243 12.5787C15.0449 12.3164 15.092 11.8446 14.8297 11.524C14.5674 11.2039 14.0955 11.1564 13.775 11.4186L12.2506 12.6666V4.74961C12.2506 4.33554 11.9147 3.99984 11.5006 3.99961C11.0864 3.99961 10.7506 4.3354 10.7506 4.74961V12.6676L9.22427 11.4186C8.90371 11.1567 8.43176 11.2036 8.16958 11.524Z"/><path d="M1.27603 3.41953C0.955449 3.68183 0.908263 4.15364 1.17056 4.47422C1.43291 4.79449 1.90477 4.84188 2.22524 4.57969L3.75063 3.33164L3.75063 11.2496C3.75088 11.6636 4.08657 11.9996 4.50063 11.9996C4.91451 11.9994 5.25039 11.6635 5.25063 11.2496L5.25063 3.33164L6.77603 4.57969C7.09658 4.84166 7.5685 4.79462 7.83071 4.47422C8.09292 4.15375 8.04553 3.68188 7.72524 3.41953L4.97524 1.16953C4.69897 0.943489 4.3023 0.943489 4.02603 1.16953L1.27603 3.41953Z"/></> : <><path d="M8.23 3.674a.75.75 0 0 1-.961 1.152l-1.77-1.475V14.25a.75.75 0 0 1-1.5 0V3.351L2.23 4.826a.75.75 0 1 1-.96-1.152l3-2.5a.75.75 0 0 1 .96 0z"/><path d="M6.999 7.25a.75.75 0 0 1 .75-.75h6.5a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1-.75-.75M6.999 10.25a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75M6.999 13.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75"/></>}
+  </svg>
 }
 
 function SelectField<T extends string>({ disabled = false, label, onChange, options, value }: {
