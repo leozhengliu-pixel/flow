@@ -71,7 +71,8 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
   const [filters, setFilters] = useState<LabelFilters>(EMPTY_LABEL_FILTERS)
   const [storedDisplay, setStoredDisplay] = useStoredState<LabelDisplayState>(`flow:label-settings:${resourceType}:${team?.id ?? 'workspace'}`, DEFAULT_LABEL_DISPLAY, 'local')
   const display: LabelDisplayState = { ...DEFAULT_LABEL_DISPLAY, ...storedDisplay }
-  const [creating, setCreating] = useState<{ kind: 'label'|'group'; groupId?: string }|null>(null)
+  // "Create new label…" in the command menu lands here with ?create=1 and opens the inline row.
+  const [creating, setCreating] = useState<{ kind: 'label'|'group'; groupId?: string }|null>(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('create') === '1' ? { kind: 'label' } : null)
   const [selected, setSelected] = useState<string[]>([])
   const [toggledScopes, setToggledScopes] = useState<string[]>([])
   const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set())

@@ -27,6 +27,7 @@ import type { MyIssuesCreateContext } from '@/components/my-issues/my-issues-lis
 import { RecurrenceDialog } from '@/components/issue/recurrence-picker'
 import { useRecurrenceSummary } from '@/components/issue/use-recurrence-summary'
 import { useI18n } from '@/i18n/i18n'
+import { useUserPreferences } from '@/lib/runtime-preferences'
 import { defaultRecurrenceFirstDue, recurrenceDate, recurrencePresetOptions, toDateInput } from '@/lib/recurrence'
 import { AiBurstGlyph } from '@/components/ui/agent-glyph'
 import { teamContentAccessible } from '@/lib/team-access'
@@ -59,6 +60,8 @@ export interface CreateIssueInput {
 
 export interface CreateIssueDialogProps {
   open: boolean
+  /** Opened by "Create issue in fullscreen…" (V): start in the expanded composer. */
+  initialExpanded?: boolean
   data: BootstrapData
   initialStateId?: string
   initialProjectId?: string
@@ -108,8 +111,14 @@ interface StoredIssueDraft {
 type StatusRequest = { candidates: (string | undefined)[]; picked: boolean }
 function statusRequest(...candidates: (string | undefined)[]): StatusRequest { return { candidates, picked: false } }
 
-export function CreateIssueDialog({ data, draftId, initialContext, initialProjectId, initialProjectMilestoneId, initialTeamId, initialStateId, initialTemplateId, onCreate, onCreateLabel, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
+export function CreateIssueDialog({ data, draftId, initialContext, initialExpanded = false, initialProjectId, initialProjectMilestoneId, initialTeamId, initialStateId, initialTemplateId, onCreate, onCreateLabel, onDraftDeleted, onDraftSaved, onOpenChange, onUpload, open }: CreateIssueDialogProps) {
   const { t } = useI18n()
+  // "Auto-assign to self" (Settings › Preferences) is off by default, so a new issue starts unassigned.
+  const { autoAssign } = useUserPreferences()
+  // Read through a ref inside the open/reset effects so a preference load never re-runs them over the user's draft.
+  const autoAssignRef = useRef(autoAssign)
+  autoAssignRef.current = autoAssign
+  const defaultAssigneeId = initialContext?.assigneeId ?? (autoAssignRef.current ? data.viewer.id : '')
   const requestedTeamId = initialContext?.teamId ?? initialTeamId
   const requestedStateId = initialContext?.stateId ?? initialStateId
   // A status preset without a team (a status group's "+") opens in a team whose workflow has that status.
@@ -127,7 +136,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const pickStatus = (id: string) => { statusRequestRef.current = { candidates: [], picked: true }; setStateId(id) }
   const [priority, setPriority] = useState<number>(initialContext?.priority ?? 0)
   const [estimate, setEstimate] = useState(NO_ESTIMATE)
-  const [assigneeId, setAssigneeId] = useState(initialContext?.assigneeId ?? data.viewer.id)
+  const [assigneeId, setAssigneeId] = useState(defaultAssigneeId)
   const [projectId, setProjectId] = useState(initialContext?.projectId ?? '')
   const [projectMilestoneId, setProjectMilestoneId] = useState(initialContext?.projectMilestoneId ?? '')
   const [cycleId, setCycleId] = useState(initialContext?.cycleId ?? '')
@@ -141,7 +150,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const [recurrence, setRecurrence] = useState('')
   const [serverDraftId, setServerDraftId] = useState('')
   const [createMore, setCreateMore] = useState(false)
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(initialExpanded)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>()
   const [files, setFiles] = useState<File[]>([])
@@ -156,7 +165,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const initializationKey = [open, draftId ?? '', initialProjectId ?? '', initialProjectMilestoneId ?? '', requestedStateId ?? '', requestedTeamId ?? '', JSON.stringify(initialContext ?? {})].join('\u001f')
   const initializedKeyRef = useRef('')
   const draftKey = `${draftStoragePrefix}${teamId || data.teams[0]?.key || 'default'}`
-  useEffect(()=>{if(!open||!initialTemplateId)return;const template=data.issueTemplates.find(item=>item.id===initialTemplateId);if(!template)return;setTemplateId(template.id);setTitle(current=>current||template.title||template.name);statusRequestRef.current=statusRequest(template.stateId);setStateId(template.stateId||defaultState?.id||'');setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);const templateBody=template.body;if(templateBody)requestAnimationFrame(()=>descriptionEditorRef.current?.commands.setContent(templateBody,{contentType:'markdown'}))},[data.issueTemplates,data.viewer.id,defaultState?.id,initialTemplateId,open])
+  useEffect(()=>{if(!open||!initialTemplateId)return;const template=data.issueTemplates.find(item=>item.id===initialTemplateId);if(!template)return;setTemplateId(template.id);setTitle(current=>current||template.title||template.name);statusRequestRef.current=statusRequest(template.stateId);setStateId(template.stateId||defaultState?.id||'');setPriority(template.priority);setAssigneeId(template.assigneeId ?? (autoAssignRef.current ? data.viewer.id : ''));setProjectId(template.projectId??'');setLabelIds(template.labelIds);const templateBody=template.body;if(templateBody)requestAnimationFrame(()=>descriptionEditorRef.current?.commands.setContent(templateBody,{contentType:'markdown'}))},[data.issueTemplates,data.viewer.id,defaultState?.id,initialTemplateId,open])
   const hasDraftContent = Boolean(title.trim() || description?.markdown.trim() || files.length)
 
   useEffect(() => {
@@ -195,7 +204,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       setStateId(teamStateIdFor(workflow, restoredTeamId, restored.stateId, requestedStateId))
       setPriority(restored.priority ?? initialContext?.priority ?? 0)
       setEstimate(restored.estimate ?? NO_ESTIMATE)
-      setAssigneeId(restored.assigneeId ?? initialContext?.assigneeId ?? data.viewer.id)
+      setAssigneeId(restored.assigneeId ?? initialContext?.assigneeId ?? (autoAssignRef.current ? data.viewer.id : ''))
       setProjectId(restored.projectId ?? initialContext?.projectId ?? '')
       setProjectMilestoneId(restored.projectMilestoneId ?? initialContext?.projectMilestoneId ?? '')
       setCycleId(restored.cycleId ?? initialContext?.cycleId ?? '')
@@ -207,7 +216,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     } else {
       setTitle(initialContext?.title ?? ''); setDescription(initialContext?.description ? {markdown:initialContext.description,document:{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]},documentJSON:JSON.stringify({type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]}),contentState:''} : null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(requestedTeamId || fallbackTeamId)
       statusRequestRef.current = statusRequest(requestedStateId)
-      setStateId(teamStateIdFor(workflow, requestedTeamId || fallbackTeamId, requestedStateId)); setPriority(initialContext?.priority ?? 0); setEstimate(initialContext?.estimate ?? NO_ESTIMATE); setAssigneeId(initialContext?.assigneeId ?? data.viewer.id); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(initialContext?.dueDate ?? ''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(initialContext?.templateId ?? ''); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
+      setStateId(teamStateIdFor(workflow, requestedTeamId || fallbackTeamId, requestedStateId)); setPriority(initialContext?.priority ?? 0); setEstimate(initialContext?.estimate ?? NO_ESTIMATE); setAssigneeId(initialContext?.assigneeId ?? (autoAssignRef.current ? data.viewer.id : '')); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(initialContext?.dueDate ?? ''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(initialContext?.templateId ?? ''); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(initialExpanded)
       const textDocument = (text: string) => ({type:'doc',content:[{type:'paragraph',...(text ? {content:[{type:'text',text}]} : {})}]})
       titleEditorRef.current?.commands.setContent(textDocument(initialContext?.title ?? '')); descriptionEditorRef.current?.commands.setContent(textDocument(initialContext?.description ?? ''))
     }
@@ -217,7 +226,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     }
     const frame = requestAnimationFrame(() => requestAnimationFrame(() => titleEditorRef.current?.commands.focus('end')))
     return () => cancelAnimationFrame(frame)
-  }, [data.drafts, data.projects, data.states, data.teamSettings, data.teams, data.viewer.id, draftId, draftKey, fallbackTeamId, initialContext, initialProjectId, initialProjectMilestoneId, initializationKey, open, requestedStateId, requestedTeamId, teamId])
+  }, [data.drafts, data.projects, data.states, data.teamSettings, data.teams, data.viewer.id, draftId, draftKey, fallbackTeamId, initialContext, initialExpanded, initialProjectId, initialProjectMilestoneId, initializationKey, open, requestedStateId, requestedTeamId, teamId])
 
   // Every status change (team switch, template, draft, data refresh) settles on a status of
   // the team's workflow: a status it still has is kept, any other becomes the team default.
@@ -300,7 +309,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     statusRequestRef.current = statusRequest(template.stateId)
     setStateId(teamStateIdFor(data, nextTeamId, template.stateId))
     setPriority(template.priority)
-    setAssigneeId(template.assigneeId ?? data.viewer.id)
+    setAssigneeId(template.assigneeId ?? (autoAssignRef.current ? data.viewer.id : ''))
     setProjectId(template.projectId ?? '')
     setLabelIds(template.labelIds)
     const body = template.body ?? ''
@@ -360,7 +369,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     setStateId(defaultState?.id ?? '')
     setPriority(0)
     setEstimate(NO_ESTIMATE)
-    setAssigneeId(data.viewer.id)
+    setAssigneeId(autoAssignRef.current ? data.viewer.id : '')
     setProjectId('')
     setProjectMilestoneId('')
     setCycleId('')
@@ -505,12 +514,12 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
           <div className={styles.properties}>
             <MiniProperty label="Status" value={inTriage ? TRIAGE_STATUS.name : state?.name ?? 'Status'} selectedId={stateId} icon={inTriage || state ? <StatusIcon state={inTriage || !state ? TRIAGE_STATUS : state}/> : <CircleDashed aria-hidden="true"/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={pickStatus}/>
             <MiniProperty label="Priority" value={priority ? priorityNames[priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={[0,1,2,3,4].map(item => ({ id:String(item),label:priorityNames[item],icon:<PriorityIcon priority={item}/>,shortcut:String(item) }))} onChange={value => setPriority(Number(value))}/>
-            {estimateType!=='notUsed'&&<MiniProperty {...estimateMenuProps(estimate, estimateSettings)} value={estimate >= 0 ? estimateShortLabel(estimate, estimateType) : 'Estimate'} ariaLabel={estimate >= 0 ? `Change estimate. Current estimate is ${estimateLabel(estimate, estimateType)}` : 'Set estimate'} icon={<EstimateIcon/>} onChange={value=>setEstimate(Number(value))}/>}
             <MiniProperty label="Assignee" value={assignee?.displayName ?? 'Assignee'} selectedId={assigneeId} icon={assignee ? <Avatar name={assignee.displayName}/> : <NoAssigneeIcon/>} options={assigneeMenuOptions(data.users.filter(user => user.active), { teamId, allowAgents: agentsAvailable(data) })} searchPlaceholder="Assign to…" onChange={setAssigneeId}/>
             <MiniProperty label="Project" value={project?.name ?? 'Project'} valueIsEntityName={Boolean(project)} selectedId={projectId} icon={project ? <ProjectGlyph project={project}/> : <ProjectIcon/>} options={[{id:'',label:'No project',icon:<NoProjectIcon/>},...data.projects.map(item => ({id:item.id,label:item.name,color:item.color,icon:<ProjectGlyph project={item}/>,i18nIgnore:true }))]} onChange={value => { setProjectId(value); setProjectMilestoneId('') }}/>
             {project && project.milestones.length > 0 && <MiniProperty label="Milestone" value={projectMilestone?.name ?? 'Milestone'} valueIsEntityName={Boolean(projectMilestone)} selectedId={projectMilestoneId} icon={<Diamond size={14}/>} options={[{id:'',label:'No milestone',icon:<Diamond size={14}/>},...project.milestones.map(item => ({id:item.id,label:item.name,icon:<Diamond size={14}/>,i18nIgnore:true}))]} onChange={setProjectMilestoneId}/>}
+            {estimateType!=='notUsed'&&<MiniProperty {...estimateMenuProps(estimate, estimateSettings)} value={estimate >= 0 ? estimateShortLabel(estimate, estimateType) : 'Estimate'} ariaLabel={estimate >= 0 ? `Change estimate. Current estimate is ${estimateLabel(estimate, estimateType)}` : 'Set estimate'} icon={<EstimateIcon/>} onChange={value=>setEstimate(Number(value))}/>}
             <MiniProperty multiple label="Labels" value={selectedLabels.length ? selectedLabels.map(label => label.name).join(', ') : 'Labels'} selectedIds={labelIds} icon={<LabelIcon/>} options={availableLabels.map(item => ({ id: item.id, label: item.name, color: item.color, description: item.description, issueCount: item.issueCount, scope: item.scope, resourceType: item.resourceType, groupId: item.groupId, groupLabel: item.groupId ? labelGroupNames.get(item.groupId) : undefined, groupColor: item.groupId ? labelGroupColors.get(item.groupId) : undefined }))} onChange={toggleLabel} emptyLabel="Start typing to create a new label" onCreate={onCreateLabel ? async (name, groupId) => { const label = await onCreateLabel(name, groupId); setLabelIds(current => toggleGroupedLabelIds(current, label.id, [...availableLabels, label])) } : undefined}/>
-            {data.cycleSettings[teamId]?.enabled === true && <MiniProperty label="Cycle" value={cycle?.name ?? 'Cycle'} valueIsEntityName={Boolean(cycle)} selectedId={cycleId} icon={<CycleIcon cycle={cycle} nextUpcomingId={nextUpcomingCycleId} progress={cycle?cycleIssueProgress(data.issues,cycle.id):0}/>} options={[{id:'',label:'No cycle',icon:<CycleIcon noCycle/>},...cycles.map(item=>({id:item.id,label:item.name,icon:<CycleIcon cycle={item} nextUpcomingId={nextUpcomingCycleId} progress={cycleIssueProgress(data.issues,item.id)}/>,i18nIgnore:true}))]} onChange={setCycleId} ariaLabel="Add to cycle"/>}
+            <MiniProperty label="Cycle" value={cycle?.name ?? 'Cycle'} valueIsEntityName={Boolean(cycle)} selectedId={cycleId} trigger={cycle ? <><CycleIcon cycle={cycle} nextUpcomingId={nextUpcomingCycleId} progress={cycleIssueProgress(data.issues,cycle.id)}/><span data-i18n-ignore>{cycle.name}</span></> : <CycleIcon cycle={cycle} nextUpcomingId={nextUpcomingCycleId} progress={0}/>} triggerClassName={cycle ? undefined : `mini-property-trigger ${styles.cycleChip}`} options={[{id:'',label:'No cycle',icon:<CycleIcon noCycle/>},...cycles.map(item=>({id:item.id,label:item.name,icon:<CycleIcon cycle={item} nextUpcomingId={nextUpcomingCycleId} progress={cycleIssueProgress(data.issues,item.id)}/>,i18nIgnore:true}))]} onChange={setCycleId} ariaLabel="Add to cycle"/>
             <MoreActions active={open && !linkOpen} dueDate={dueDate} recurrence={recurrence} onDueDateChange={setDueDate} onRecurrenceChange={(value, firstDue) => { setRecurrence(value); if (value && firstDue) setDueDate(firstDue) }} onInsertLink={() => setLinkOpen(true)}/>
           </div>
 
