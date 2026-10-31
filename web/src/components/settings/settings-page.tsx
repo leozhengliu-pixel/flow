@@ -126,6 +126,8 @@ import "./workflow-settings.css";
 import "./advanced-settings.css";
 import "./settings-parity.css";
 import "./mobile-workspace.css";
+import './mobile-api.css';
+import { ApiDocsLink } from './mobile-api';
 function SettingsMobileMenuGlyph() {
   return (
     <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
@@ -2568,6 +2570,7 @@ function ApiPage({
   useResetOnChange([data.workspaceSettings], () => setSettings(data.workspaceSettings))
   const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
   const apiPath = settingsPath(data.workspace.urlKey, "api");
+  const phone = usePhoneLayout();
   const desktop = useDesktopSettings();
   const issuedKeys = (data.apiKeys ?? []).filter((item) => !item.revokedAt && !item.oauthClientId);
   if (webhookId) {
@@ -2602,11 +2605,11 @@ function ApiPage({
   };
   return (
     <>
-      <PageTitle description={<>{t('Flow’s API provides a programmable interface to your data. Use it to build public or private apps, workflows, and integrations for Flow.')} <SettingsDocsLink file="api.md"/></>}>
+      <PageTitle description={<>{t('Flow’s API provides a programmable interface to your data. Use it to build public or private apps, workflows, and integrations for Flow.')} {phone && <><a className="api-community-link" href="https://github.com/leozhengliu-pixel/flow/issues" target="_blank" rel="noreferrer">{t('Join our developer community')}</a> {t('for help and questions.')} </>}<ApiDocsLink file="api.md"/></>}>
         API
       </PageTitle>
       <OAuthApplicationsSection data={data} />
-      <Section title="Webhooks" description={<>{t('Webhooks allow you to receive HTTP requests when an entity is created, updated, or deleted.')} <SettingsDocsLink file="webhooks.md"/></>}>
+      <Section className="api-webhooks-section" title="Webhooks" description={<>{t('Webhooks allow you to receive HTTP requests when an entity is created, updated, or deleted.')} <ApiDocsLink file="webhooks.md"/></>}>
         {data.webhooks.map((item) => (
           <Row
             key={item.id}
@@ -2636,12 +2639,13 @@ function ApiPage({
         ))}
         <Row title={data.webhooks.length ? "" : "No webhooks"} className="settings-row--action">
           <ActionButton onClick={() => navigate(webhookSettingsPath(data.workspace.urlKey, "new"))}>
-            <Plus size={14} />
-            New webhook
+            {phone ? <FlowGlyph name="plus" size={16} /> : <Plus size={14} />}
+            {phone ? t('New') : t('New webhook')}
           </ActionButton>
         </Row>
       </Section>
       <Section
+        className="api-keys-section"
         title="API keys"
         description={
           <>

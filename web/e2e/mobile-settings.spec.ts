@@ -5,6 +5,40 @@ import { test as workspaceTest } from './workspace-fixture'
 const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`${viewport.width}px API settings`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] API' })
+
+    workspaceTest('keeps applications, documentation and key policy usable on phones', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Flow-Workspace': workspaceKey, 'X-Workspace-Key': workspaceKey }
+      const response = await request.post('/api/oauth-applications', { headers, data: { name: '[mobile] API application', scopes: ['read'] } })
+      expect(response.status()).toBe(201)
+      const app = await response.json()
+      const route = `/${workspaceKey}/settings/api`
+      await page.goto(route)
+      const root = page.locator('.settings-main[data-settings-page=api]')
+      await expect(root.getByRole('heading', { name: 'API', exact: true })).toBeVisible()
+      await expect(root.locator('.api-mobile-docs')).toHaveCount(3)
+      await expect(root.locator('.oauth-app-list-header')).toContainText('1 OAuth application')
+      await expect(root.locator('.api-webhooks-section')).toContainText('No webhooks')
+      const policy = root.getByRole('combobox', { name: 'API key creation' })
+      await expect(policy).toHaveText('All members')
+      expect((await policy.boundingBox())!.width).toBeCloseTo(viewport.width - 65.3334, 1)
+      await policy.scrollIntoViewIfNeeded()
+      await policy.click()
+      await expect(page.getByRole('option', { name: 'All members', exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await root.locator('.oauth-app-list-menu').click()
+      await page.getByRole('option', { name: 'Edit application', exact: true }).click()
+      await expect(page).toHaveURL(new RegExp(`/applications/${app.id}/edit$`))
+      await page.goto(route)
+      await root.locator('.api-webhooks-section').getByRole('button', { name: 'New', exact: true }).click()
+      await expect(page).toHaveURL(/\/webhooks\/new$/)
+    })
+  })
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   workspaceTest.describe(`${viewport.width}px project statuses`, () => {
     workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Project statuses' })
 

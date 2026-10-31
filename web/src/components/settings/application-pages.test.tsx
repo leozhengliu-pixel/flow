@@ -11,6 +11,9 @@ import * as api from '@/lib/api'
 import { ApplicationCreatePage, ApplicationDetailsPage, ApplicationEditPage } from './application-pages'
 import { OAuthApplicationsSection } from './oauth-applications-section'
 
+const layout = vi.hoisted(() => ({ phone: false }))
+vi.mock('@/hooks/use-phone-layout', () => ({ usePhoneLayout: () => layout.phone }))
+
 vi.mock('@/lib/api', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   createOAuthApplicationFromManifest: vi.fn(),
@@ -50,6 +53,8 @@ function renderAt(path: string, element: React.ReactNode) {
 }
 
 beforeEach(() => {
+  layout.phone = false
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   vi.clearAllMocks()
   localStorage.setItem('flow:locale', 'en-US')
   vi.mocked(api.fetchOAuthApplicationFailures).mockResolvedValue([])
@@ -57,6 +62,18 @@ beforeEach(() => {
 })
 
 describe('OAuthApplicationsSection (Settings › API)', () => {
+  it('shows phone documentation, a compact date and an actionable application menu', async () => {
+    layout.phone = true
+    const user = userEvent.setup()
+    renderAt('/workspace/settings/api', <OAuthApplicationsSection data={data} />)
+    expect(screen.getByRole('link', { name: /Docs/ })).toHaveAttribute('href', expect.stringContaining('oauth.md'))
+    expect(screen.getByText('Updated Oct 13')).toBeVisible()
+    expect(screen.queryByText('Updated Oct 13, 2026')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+    await user.click(screen.getByRole('option', { name: 'Edit application' }))
+    expect(screen.getByTestId('where')).toHaveTextContent('/workspace/settings/api/applications/app-1/edit')
+  })
+
   it('lists applications with the reference app\'s count header and opens an application\'s page', async () => {
     const user = userEvent.setup()
     renderAt('/workspace/settings/api', <OAuthApplicationsSection data={data} />)

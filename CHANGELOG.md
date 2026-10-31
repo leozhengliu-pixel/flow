@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match phone API settings documentation links, OAuth application actions, card spacing and full-width key policy controls without changing desktop layouts.
+
 - Match workspace project status category spacing and action sizes on phones without changing desktop layouts.
 
 - Match the phone team triage header and two-line issue rows, with working navigation and list-to-detail transitions.
