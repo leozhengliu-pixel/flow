@@ -26,6 +26,13 @@ describe('inbox list states', () => {
     expect(container.querySelector('svg')).not.toBeInTheDocument()
   })
 
+  it('uses the unread-empty copy and ghost action', () => {
+    render(<I18nProvider><InboxListEmpty title="No unreads" onShowAll={vi.fn()} /></I18nProvider>)
+    expect(screen.getByText('No unreads')).toBeVisible()
+    expect(screen.queryByText('No notifications to show.')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show all notifications' })).toHaveClass('flow-inbox-list-state__ghost-action')
+  })
+
   it('keeps the distinct filtered-empty illustration', () => {
     const { container } = render(<I18nProvider><InboxListFilteredEmpty hiddenCount={3} onClear={vi.fn()} /></I18nProvider>)
 

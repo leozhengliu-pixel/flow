@@ -9,6 +9,7 @@ import { PhoneMenu } from '@/components/ui/phone-menu'
 import { CheckIcon, DisplayIcon, FilterIcon, SidebarIcon } from '@/components/ui/view-action-icons'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { useI18n } from '@/i18n/i18n'
 import {
   SPLIT_VIEW_DEFAULT_LIST_WIDTH,
   SPLIT_VIEW_MIN_DETAIL_WIDTH,
@@ -50,6 +51,7 @@ export interface InboxPageShellProps {
   activeTab?: InboxTab
   onTabChange?: (tab: InboxTab) => void
   tabCounts?: Partial<Record<InboxTab, number>>
+  unreadCount?: number
 }
 
 const DEFAULT_LIST_WIDTH = SPLIT_VIEW_DEFAULT_LIST_WIDTH.inbox
@@ -76,6 +78,7 @@ export function InboxPageShell({
   activeTab = 'all',
   onTabChange,
   tabCounts,
+  unreadCount = 0,
 }: InboxPageShellProps) {
   const shellRef = useRef<HTMLElement>(null)
   const dragRef = useRef({ active: false, pointerId: -1 })
@@ -189,7 +192,7 @@ export function InboxPageShell({
         onPointerCancel={stopResize}
       />
       <section className="flow-inbox__detail" aria-label="Notification preview">
-        {detail ?? <InboxNoSelection />}
+        {detail ?? <InboxNoSelection unreadCount={unreadCount} />}
       </section>
     </main>
   )
@@ -223,6 +226,8 @@ export function InboxHeader({
   onOpenSettings,
   onOpenSidebar,
 }: InboxHeaderProps) {
+  const { t } = useI18n()
+  const showRead = displayOptions.showRead
   return (
     <header className="flow-inbox__header">
       {onOpenSidebar ? (
@@ -249,10 +254,10 @@ export function InboxHeader({
       <div className="flow-inbox__header-spacer" />
       <div className="flow-inbox__header-toolbar-group">
         <div className="flow-inbox__header-controls">
-          <FlowTooltip label="Show unreads only">
+          <FlowTooltip label={t(showRead ? 'Show unreads only' : 'Show read')}>
             <button
-              aria-label="Show unreads only"
-              aria-pressed={!displayOptions.showRead}
+              aria-label={t(showRead ? 'Show unreads only' : 'Show read')}
+              aria-pressed={!showRead}
               className="flow-inbox__icon-button"
               data-active={!displayOptions.showRead || undefined}
               onClick={() => onDisplayOptionsChange({ ...displayOptions, showRead: !displayOptions.showRead })}
@@ -627,11 +632,12 @@ const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconB
   return tooltip ? <FlowTooltip label={tooltip} shortcut={shortcut}>{button}</FlowTooltip> : button
 })
 
-export function InboxNoSelection() {
+export function InboxNoSelection({ unreadCount = 0 }: { unreadCount?: number }) {
+  const { t } = useI18n()
   return (
     <div className="flow-inbox__no-selection">
       <InboxTrayIllustration />
-      <span>No notification selected</span>
+      <span>{unreadCount > 0 ? t(unreadCount === 1 ? '1 unread notification' : '{count} unread notifications').replace('{count}', String(unreadCount)) : t('No notification selected')}</span>
     </div>
   )
 }

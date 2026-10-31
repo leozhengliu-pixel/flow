@@ -74,6 +74,7 @@
 .conditionOperator,.conditionValue{padding-inline:8px}
 .removeCondition{width:30px}
 .propertyMenu{width:var(--filter-root-width)}
+.propertyMenu{width:202px}
 .propertyMenu,.valueMenu,.operatorMenu,.conditionValueMenu,.commandMenu{border-color:var(--popover-border);border-radius:var(--filter-popover-radius);box-shadow:var(--shadow-control)}
 
 @media(max-width:800px){.appliedBar{padding-inline:8px}}

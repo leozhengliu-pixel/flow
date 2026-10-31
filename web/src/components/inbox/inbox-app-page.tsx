@@ -37,6 +37,7 @@ import { EmbeddedReview } from '@/components/reviews/embedded-review'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { DocumentInboxView } from './hosts/document-inbox-view'
 import { ProjectAgentReplyInboxView } from './hosts/project-agent-reply-inbox-view'
+import { WorkspaceWelcomeInboxView } from './hosts/workspace-welcome-inbox-view'
 import { documentNotificationKind, documentNotificationLine, isDocumentNotification, notificationDocument } from './hosts/document-inbox-model'
 
 const initialDisplayOptions: InboxDisplayOptions = {
@@ -73,6 +74,7 @@ interface InboxProjection extends InboxNotificationRowData {
   /** A finished coding session with a pull request opens that review beside the session's agent panel. */
   sessionId?: string
   sessionReviewId?: string
+  welcomeMessage?: string
 }
 
 export interface InboxAppPageProps {
@@ -378,6 +380,13 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
         if (raw) return { content: <DocumentInboxView key={raw.id} data={data} notification={raw}/> }
       }
 
+      if (projection?.welcomeMessage !== undefined) {
+        return {
+          content: <WorkspaceWelcomeInboxView title={projection.title} message={projection.welcomeMessage} />,
+          minimalHeader: true,
+        }
+      }
+
       if (projection?.agentReplyProjectId && project) {
         const raw = inboxData.notifications.find(item => item.id === projection.id)
         if (raw) return { content: <ProjectAgentReplyInboxView key={raw.id} workspaceKey={data.workspace.urlKey} project={project} notification={raw}/> }
@@ -520,7 +529,7 @@ function readInboxFilters(): InboxFilterCondition[] {
   if (!raw) return []
   try {
     const decoded = decodeInboxFilters(raw)
-    const allowed = new Set<InboxFilterCondition['property']>(['notificationType', 'from', 'project', 'initiative', 'issuePriority', 'issueStatusType', 'reviewStatus'])
+    const allowed = new Set<InboxFilterCondition['property']>(['notificationType', 'from', 'team', 'project', 'initiative', 'issuePriority', 'issueStatusType', 'reviewStatus'])
     const values = Array.isArray(decoded) ? decoded.filter(item => item && allowed.has(item.property) && Array.isArray(item.values)) : []
     return normalizeInboxFilters(values)
   } catch {
@@ -578,9 +587,10 @@ function projectInbox(data: BootstrapData, t: (source: string) => string): Inbox
         actor: notification.actor.displayName,
         actorAvatarUrl: notification.actor.avatarUrl,
         kind: 'generic' as const,
-        identifier: 'Welcome',
+        identifier: '',
         title: data.workspaceSettings.welcomeMessageTitle?.trim() || `Welcome to ${data.workspace.name}`,
         body: markdownPlainText(content.split('\n').find(line => line.trim()) ?? ''),
+        welcomeMessage: content,
         timeLabel: relativeTime(notification.updatedAt),
         timestamp: notification.updatedAt,
         read: Boolean(notification.readAt),
@@ -960,7 +970,7 @@ function buildInboxFilterOptions(notifications: InboxProjection[], display: Inbo
   return {
     notificationType: INBOX_NOTIFICATION_TYPE_OPTIONS.map(option => ({ ...option, count: count('notificationType', option.id) })),
     from: inboxActorOptions(candidates, data.users),
-    team: data.teams.filter(team => candidates.some(notification => notification.teamIds?.includes(team.id))).map(team => ({ id: team.id, label: team.name, color: team.color, icon: <TeamGlyph />, count: count('team', team.id), i18nIgnore: true })),
+    team: data.teams.map(team => ({ id: team.id, label: team.name, color: team.color, icon: <TeamGlyph />, count: count('team', team.id), i18nIgnore: true })),
     project: [
       { id: '__none__', label: 'No project', keywords: 'none empty', icon: <NoProjectIcon size={15} />, count: count('project', '__none__') },
       ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, icon: <ProjectGlyph project={project} size={15} />, count: count('project', project.id), i18nIgnore: true })),
@@ -993,6 +1003,7 @@ function resolveSnoozedUntil(preset: InboxSnoozePreset): string {
   if (typeof preset === 'object') return preset.snoozedUntil
   const now = new Date()
   if (preset === 'hour') return new Date(now.getTime() + 60 * 60 * 1000).toISOString()
+  if (preset === 'threeHours') return new Date(now.getTime() + 3 * 60 * 60 * 1000).toISOString()
 
   const next = new Date(now)
   next.setSeconds(0, 0)

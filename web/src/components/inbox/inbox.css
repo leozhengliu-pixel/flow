@@ -795,6 +795,28 @@
 /* Keyboard-opened menus highlight the row, without a focus box. */
 .flow-inbox-menu__check-item:focus-visible { outline: none; }
 
+/* Inbox desktop parity overrides. */
+.flow-inbox-row-menu { width: 190px; padding: 6px 0; }
+.flow-inbox-row-menu__separator { margin: 0; }
+.flow-inbox-snooze-menu { width: 318px; padding-top: 0; }
+.flow-inbox-snooze-input-wrap { padding: 0 14px; }
+.flow-inbox-snooze-input-wrap input { width: 100%; height: 36px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--theme-text-primary); font: 13px/normal inherit; }
+.flow-inbox-snooze-input-wrap input::placeholder { color: var(--theme-text-secondary); }
+.flow-inbox-snooze-menu .snoozeOption { gap: 8px; padding-right: 12px; }
+.flow-inbox-snooze-menu .snoozeOption time { margin-left: auto; color: var(--theme-text-secondary); font-size: 13px; font-weight: 450; white-space: nowrap; }
+.flow-inbox-list-state--message .flow-inbox-list-state__ghost-action { height: 32px; margin-top: 12px; padding: 0 12px; color: var(--text); background: transparent; border: 0; border-radius: 9999px; font-size: 13px; }
+.flow-inbox-menu--actions { width: 180px; min-width: 0; }
+.flow-inbox-menu--actions .flow-inbox-menu__separator { height: 10px; background: linear-gradient(transparent 4.5px,var(--theme-border) 4.5px,var(--theme-border) 5px,transparent 5px); }
+.flow-inbox-menu--actions .flow-inbox-menu__item { line-height: normal; }
+.flow-inbox-menu{background:var(--pk-surface);color:var(--pk-text)}
+.flow-inbox-row-menu { width: 190px; height: 108px; box-sizing: border-box; }
+.flow-inbox-row-menu .flow-inbox-menu__item { line-height: normal; }
+.flow-inbox-snooze-menu { width: 324px; height: 241.5px; box-sizing: border-box; padding-bottom: 7px; }
+.flow-inbox-snooze-menu .flow-inbox-menu__item { line-height: normal; }
+@media (min-width:801px){.flow-inbox__header h2{color:var(--text)}.flow-inbox__icon-button{color:var(--text)}.flow-inbox__icon-button:hover,.flow-inbox__icon-button[data-state="open"],.flow-inbox__icon-button[aria-expanded="true"],.flow-inbox__icon-button[data-active="true"],.flow-inbox__icon-button[aria-pressed="true"]{color:var(--bright)}}
+.flow-inbox-detail__header--minimal .flow-inbox-detail__actions{margin-left:auto}
+@media (min-width:801px){.flow-inbox-detail__header .flow-inbox-detail__icon-button{color:var(--text)}.flow-inbox-detail__header .flow-inbox-detail__icon-button:hover,.flow-inbox-detail__header .flow-inbox-detail__icon-button[data-state="open"],.flow-inbox-detail__header .flow-inbox-detail__icon-button[aria-pressed="true"]{color:var(--bright)}}
+
 /* Phone inbox list: the reference app's 44px bar, 55px rows and 13/12px text. */
 @media (max-width: 767px) {
   html:root body .app .flow-inbox__header {

@@ -27,6 +27,7 @@ export interface InboxDetailPreviewProps {
   children: ReactNode
   fullBleed?: boolean
   chromeless?: boolean
+  minimalHeader?: boolean
   subscribed?: boolean
   pending?: boolean
   onBack: () => void
@@ -80,15 +81,15 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
 
   return (
     <article className="flow-inbox-detail" aria-label={identifier ? `${identifier} ${title}` : title} aria-busy={props.pending || undefined}>
-      {props.chromeless ? null : <header className="flow-inbox-detail__header">
-        <button className="flow-inbox-detail__icon-button flow-inbox-detail__menu" type="button" aria-label="Open sidebar" onClick={() => window.dispatchEvent(new Event('flow:open-sidebar'))}>
+      {props.chromeless ? null : <header className={`flow-inbox-detail__header${props.minimalHeader ? ' flow-inbox-detail__header--minimal' : ''}`}>
+        {!props.minimalHeader && <button className="flow-inbox-detail__icon-button flow-inbox-detail__menu" type="button" aria-label="Open sidebar" onClick={() => window.dispatchEvent(new Event('flow:open-sidebar'))}>
           <SidebarNavigationIcon />
-        </button>
-        <button className="flow-inbox-detail__back" type="button" aria-label="Back to Inbox" onClick={props.onBack}>
+        </button>}
+        {!props.minimalHeader && <button className="flow-inbox-detail__back" type="button" aria-label="Back to Inbox" onClick={props.onBack}>
           <BackIcon />
           <span>Inbox</span><i>›</i>
-        </button>
-        {pulse ? (
+        </button>}
+        {!props.minimalHeader && (pulse ? (
           <span className="flow-inbox-detail__source flow-inbox-detail__source--pulse" title={title}>
             <PulseIcon size={14} /><span>{title}</span>
           </span>
@@ -96,15 +97,15 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
           <button className="flow-inbox-detail__source" type="button" aria-label={`Open ${identifier}: ${title}`} onClick={() => props.onOpenIssue(notification)} title={title}>
             <b>{identifier}</b><span>{title}</span>
           </button>
-        )}
+        ))}
         <div className="flow-inbox-detail__actions">
-          <DetailIconButton data-detail-action="favorite" disabled={props.pending} label={notification.favorite ? 'Remove from favorites' : 'Add to favorites'} pressed={notification.favorite} onClick={() => props.onFavoriteChange(notification, !notification.favorite)}>{phone ? (notification.favorite ? <FlowFavoriteFilledIcon /> : <FlowFavoriteIcon />) : <StarIcon />}</DetailIconButton>
-          {issueOptions}
-          {props.onSubscribeChange && !pulse ? <DetailIconButton data-detail-action="subscription" disabled={props.pending} label={props.subscribed ? 'Unsubscribe from issue' : 'Subscribe to issue'} pressed={props.subscribed} onClick={() => props.onSubscribeChange?.(notification, !props.subscribed)}>{phone ? <span className="flow-inbox-detail__bell"><span className="flow-inbox-detail__bell-plain"><FlowBellIcon /></span><span className="flow-inbox-detail__bell-check"><FlowBellCheckIcon /></span></span> : <BellIcon />}</DetailIconButton> : null}
+          {!props.minimalHeader && <DetailIconButton data-detail-action="favorite" disabled={props.pending} label={notification.favorite ? 'Remove from favorites' : 'Add to favorites'} pressed={notification.favorite} onClick={() => props.onFavoriteChange(notification, !notification.favorite)}>{phone ? (notification.favorite ? <FlowFavoriteFilledIcon /> : <FlowFavoriteIcon />) : <StarIcon />}</DetailIconButton>}
+          {!props.minimalHeader && issueOptions}
+          {!props.minimalHeader && props.onSubscribeChange && !pulse ? <DetailIconButton data-detail-action="subscription" disabled={props.pending} label={props.subscribed ? 'Unsubscribe from issue' : 'Subscribe to issue'} pressed={props.subscribed} onClick={() => props.onSubscribeChange?.(notification, !props.subscribed)}>{phone ? <span className="flow-inbox-detail__bell"><span className="flow-inbox-detail__bell-plain"><FlowBellIcon /></span><span className="flow-inbox-detail__bell-check"><FlowBellCheckIcon /></span></span> : <BellIcon />}</DetailIconButton> : null}
           <DetailSnoozeMenu notification={notification} onSnooze={props.onSnooze} pending={props.pending} open={snoozeOpen} onOpenChange={setSnoozeOpen} phone={phone} />
           <DetailIconButton data-detail-action="delete" disabled={props.pending} label="Delete notification" onClick={() => props.onDelete(notification)}>{phone ? <DeleteInboxIcon /> : <DeleteDetailIcon />}</DetailIconButton>
         </div>
-        {props.issue ? <IssueDetailCopyStrip issue={props.issue} /> : null}
+        {props.issue && !props.minimalHeader ? <IssueDetailCopyStrip issue={props.issue} /> : null}
       </header>}
       <div className={`flow-inbox-detail__body ${props.fullBleed ? 'flow-inbox-detail__body--full-bleed' : ''}`}>
         {props.fullBleed ? props.children : <div className="flow-inbox-detail__scroll">{props.children}</div>}
@@ -139,7 +140,7 @@ function DetailOptionsFallback(props: InboxDetailPreviewProps) {
 
 function DetailSnoozeMenu({ notification, onSnooze, pending, open, onOpenChange, phone }: Pick<InboxDetailPreviewProps, 'notification' | 'onSnooze' | 'pending'> & { open: boolean; onOpenChange: (open: boolean) => void; phone: boolean }) {
   const [custom, setCustom] = useState(false)
-  const items: Array<[Exclude<InboxSnoozePreset, { kind: 'custom' }>, string]> = [['hour','An hour from now'],['tomorrow','Tomorrow'],['nextWeek','Next week'],['month','A month from now']]
+  const items: Array<[Exclude<InboxSnoozePreset, { kind: 'custom' }>, string]> = [['hour','An hour from now'],['threeHours','In 3 hours'],['tomorrow','Tomorrow'],['nextWeek','Next week'],['month','A month from now']]
   const close = () => {
     onOpenChange(false)
     setCustom(false)
