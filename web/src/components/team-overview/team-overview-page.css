@@ -1225,7 +1225,7 @@
     height: 43.5px;
     flex: 0 0 43.5px;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     padding: 0 8px;
     border: 0;
     background: transparent;
@@ -1272,14 +1272,13 @@
     height: 43.5px;
     flex: 0 1 auto;
     max-width: calc(100% - 114px);
-    gap: 6px;
+    gap: 8px;
     padding: 0;
     border: 0;
     background: transparent;
     overflow: hidden;
   }
   .team-home-tabs a { height: 32px; gap: 6px; padding: 0 9.5px; border: .5px solid transparent; }
-  .team-home-tabs a:first-child { margin-right: 3.5px; }
   .team-home-tab-label { display: block; line-height: normal; border: 0; }
   .team-home-tab-caret { width: 8px; height: 9px; flex: 0 0 8px; }
   .team-home-tabs-overflow-pill {

@@ -43,6 +43,7 @@
 .attachments > span > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .error { min-height: 28px; display: flex; align-items: center; margin: 0 12px 4px; padding: 0 8px; border-radius: 5px; background: #f1717814; color: #f17178; font-size: 11px; }
 .footer { height: 51.5px; flex: 0 0 51.5px; display: flex; align-items: center; gap: 8px; padding: 0 11px 0 12px; border-top: .5px solid lch(14% 1.2 272); }
+.footerActions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .attachButton { width: 28px; height: 28px; flex-basis: 28px; }
 .createMore { height: 28px; display: flex; align-items: center; gap: 7px; margin-left: auto; color: lch(64.805% 1.65 272); font-size: 12px; }
 .submit { height: 28px; padding: 0 10px; border: .5px solid transparent; border-radius: 9999px; background: lch(47.918% 59.303 288.421); box-shadow: 0 .5px 1px 1px #0005; color: lch(100% 5 288.421); font-size: 12px; font-weight: 500; }
@@ -226,7 +227,7 @@
   .footer { height: 44px; flex-basis: 44px; padding: 0 12px 12px; border-top: 0; gap: 18px; }
   .attachButton { width: 32px; height: 32px; flex: 0 0 32px; padding: 0 2px; font-size: 12px; font-weight: 500; line-height: normal; }
   .submit { box-sizing: border-box; min-width: 0; width: 92.63px; height: 32px; flex: 0 0 92.63px; padding: 0 10px; box-shadow: var(--set-search-shadow); line-height: normal; white-space: nowrap; }
-  .createMore { min-width: 0; gap: 6px; margin-right: -6px; font-weight: 400; white-space: nowrap; }
+  .createMore { min-width: 0; gap: 6px; font-weight: 400; white-space: nowrap; }
   .createMore :global([data-control="toggle"]) { background: var(--create-issue-toggle-off); }
   .confirmActions { height: auto; min-height: 40px; display: flex; flex-wrap: wrap; justify-content: flex-end; }
   .confirmActions > span { display: none; }
