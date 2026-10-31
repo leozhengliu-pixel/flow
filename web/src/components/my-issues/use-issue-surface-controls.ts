@@ -8,5 +8,14 @@ export function useIssueSurfaceControls(filterOpenSignal: number, detailsOpen: b
   const [seenFilterOpenSignal,setSeenFilterOpenSignal]=useState<number>()
   if(seenFilterOpenSignal!==filterOpenSignal){setSeenFilterOpenSignal(filterOpenSignal);if(filterOpenSignal>0){setDisplayOpen(false);setFilterOpen(true)}}
   useEffect(()=>{const toggle=(event:KeyboardEvent)=>{if(!(event.metaKey||event.ctrlKey)||event.key.toLowerCase()!=='i'||(event.target as HTMLElement|null)?.closest('input,textarea,[contenteditable="true"],[role="textbox"]'))return;event.preventDefault();onDetailsOpenChange?.(!detailsOpen)};addEventListener('keydown',toggle);return()=>removeEventListener('keydown',toggle)},[detailsOpen,onDetailsOpenChange])
+  useEffect(() => {
+    if (!onDetailsOpenChange) return
+    const toggle = (event: Event) => {
+      if (event.defaultPrevented) return
+      onDetailsOpenChange(!detailsOpen)
+    }
+    window.addEventListener('flow:toggle-right-sidebar', toggle)
+    return () => window.removeEventListener('flow:toggle-right-sidebar', toggle)
+  }, [detailsOpen, onDetailsOpenChange])
   return {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}
 }

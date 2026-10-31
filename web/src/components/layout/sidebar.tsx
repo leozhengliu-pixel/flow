@@ -270,7 +270,8 @@ export function Sidebar({
   );
   useEffect(() => {
     const openShortcuts = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === "/") {
+      const target = event.target instanceof HTMLElement ? event.target : undefined;
+      if ((event.metaKey || event.ctrlKey) && event.key === "/" && !target?.closest('input,textarea,select,[contenteditable="true"],[role="textbox"],[role="searchbox"]')) {
         event.preventDefault();
         setShortcutsOpen(true);
       }
@@ -2347,6 +2348,11 @@ export function HelpMenu({
   const phone = usePhoneLayout();
   const [open, setOpen] = useState(false);
   const { t } = useI18n();
+  useEffect(() => {
+    const openHelp = () => setOpen(true);
+    window.addEventListener('flow:open-help-menu', openHelp);
+    return () => window.removeEventListener('flow:open-help-menu', openHelp);
+  }, []);
   if (phone) {
     const docs = 'https://github.com/leozhengliu-pixel/flow/tree/main/docs';
     const entries = [
@@ -2365,7 +2371,7 @@ export function HelpMenu({
     </>;
   }
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root open={open} onOpenChange={setOpen}>
       <DropdownMenu.Trigger asChild>
         <button
           className="sidebar-help"

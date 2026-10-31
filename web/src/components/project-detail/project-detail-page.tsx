@@ -374,6 +374,16 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
     window.addEventListener("keydown", toggle);
     return () => window.removeEventListener("keydown", toggle);
   });
+  useEffect(() => {
+    const toggle = (event: Event) => {
+      if (event.defaultPrevented) return;
+      setInsightsOpen(false);
+      setResolvedCommentsOpen(false);
+      setDetailsOpen(value => !value);
+    };
+    window.addEventListener('flow:toggle-right-sidebar', toggle);
+    return () => window.removeEventListener('flow:toggle-right-sidebar', toggle);
+  }, [setDetailsOpen]);
 
   const [routedSavedViewId, setRoutedSavedViewId] = useState(savedView?.id);
   useResetOnChange([issueLabels, project.id, savedView], () => {

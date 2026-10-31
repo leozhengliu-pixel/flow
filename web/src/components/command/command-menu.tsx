@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Command } from 'cmdk'
 import {
   Clipboard,
+  ArrowRight,
+  Box,
   FileText,
   FolderKanban,
   GitPullRequest,
@@ -203,7 +205,7 @@ export function CommandMenu({
     { id: 'create-issue', group: 'Issues', label: 'Create new issue…', icon: <Plus/>, shortcut: ['C'], keywords: 'new ticket task', run: closeAnd(onCreateIssue) },
     ...(onCreateIssueFullscreen ? [{ id: 'create-issue-fullscreen', group: 'Issues', label: 'Create issue in fullscreen…', icon: <Maximize2/>, shortcut: ['V'], keywords: 'new ticket task expanded', run: closeAnd(onCreateIssueFullscreen) }] : []),
     ...(onCreateLabel ? [{ id: 'create-label', group: 'Issues', label: 'Create new label…', icon: <Tag/>, keywords: 'new tag label', run: closeAnd(onCreateLabel) }] : []),
-    { id: 'create-project', group: 'Projects', label: 'Create new project…', icon: <FolderKanban/>, shortcut: ['N', 'then', 'P'], run: closeAnd(onCreateProject) },
+    { id: 'create-project', group: 'Projects', label: 'Create new project…', icon: <Box/>, shortcut: ['N', 'then', 'P'], run: closeAnd(onCreateProject) },
     ...(onCreateProjectTemplate ? [{ id: 'create-project-template', group: 'Projects', label: 'Create new project template…', icon: <FileText/>, run: closeAnd(onCreateProjectTemplate) }] : []),
     { id: 'create-view', group: 'Views', label: 'Create view…', icon: <Layers3/>, run: closeAnd(onCreateView) },
     { id: 'create-initiative', group: 'Initiatives', label: 'Create new initiative', icon: <Lightbulb/>, shortcut: ['N', 'then', 'I'], run: closeAnd(onCreateInitiative) },
@@ -217,8 +219,8 @@ export function CommandMenu({
     ...(data && data.viewerRole !== 'guest' ? [{ id: 'view-admins', group: 'Navigation', label: 'View workspace admins', icon: <UserRound/>, keywords: 'admin owner members', run: closeAnd(onNavigateMembers) }] : []),
     { id: 'go-inbox', group: 'Navigation', label: 'Go to Inbox', icon: <Inbox/>, shortcut: ['G', 'then', 'I'], run: closeAnd(onNavigateInbox) },
     { id: 'go-my-issues', group: 'Navigation', label: 'Go to My issues', icon: <SquareDot/>, shortcut: ['G', 'then', 'M'], run: closeAnd(onNavigateMyIssues) },
-    { id: 'go-projects', group: 'Navigation', label: 'Go to projects', icon: <FolderKanban/>, run: closeAnd(onNavigateProjects) },
-    { id: 'open-project', group: 'Navigation', label: 'Open project…', icon: <FolderKanban/>, shortcut: ['O', 'then', 'P'], keywords: 'project picker', run: closeAnd(onNavigateProjects) },
+    { id: 'open-project', group: 'Navigation', label: 'Open project…', icon: <Box/>, shortcut: ['O', 'then', 'P'], keywords: 'project picker', run: closeAnd(onNavigateProjects) },
+    { id: 'go-projects', group: 'Navigation', label: 'Go to projects', icon: <ArrowRight/>, shortcut: ['G', 'then', 'P'], run: closeAnd(onNavigateProjects) },
     ...(onNavigateRecentlyDeletedProjects ? [{ id: 'go-deleted-projects', group: 'Navigation', label: 'Go to recently deleted projects', icon: <Trash2/>, keywords: 'trash restore removed', run: closeAnd(onNavigateRecentlyDeletedProjects) }] : []),
     { id: 'go-initiatives', group: 'Navigation', label: 'Go to Initiatives', icon: <Lightbulb/>, run: closeAnd(onNavigateInitiatives) },
     { id: 'go-views', group: 'Navigation', label: 'Go to Views', icon: <Layers3/>, run: closeAnd(onNavigateViews) },
