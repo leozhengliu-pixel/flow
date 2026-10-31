@@ -854,7 +854,8 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
   }
   html:root .settings-app .settings-sidebar nav {
     margin: 0;
-    padding: 29px 12px 4px;
+    padding: 26px 12px 4px;
+    background: var(--set-drawer-list-bg);
     scrollbar-gutter: auto;
   }
   html:root .settings-app .settings-sidebar nav h2 {
@@ -863,6 +864,35 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
     padding: 0 10px;
     line-height: 15.5px;
     color: var(--set-drawer-muted);
+  }
+  /* The pinned footer floats over the list; keep the last section clear of it
+     so the final rows are never hidden behind the help and plan pills. */
+  html:root .settings-app .settings-sidebar nav section:last-child { margin-bottom: 74px; }
+  /* Nested teams: a short stub under a parent's glyph and an elbow into each
+     child row, like the reference drawer's team tree. */
+  html:root .settings-app .settings-sidebar nav button[data-depth]:not([data-depth="0"]),
+  html:root .settings-app .settings-sidebar nav button[data-has-children] { position: relative; }
+  html:root .settings-app .settings-sidebar nav button[data-depth]:not([data-depth="0"])::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: calc(var(--team-depth, 1) * 18px - 2px);
+    width: 9px;
+    height: 16px;
+    border-left: 1px solid var(--set-drawer-connector);
+    border-bottom: 1px solid var(--set-drawer-connector);
+    border-bottom-left-radius: 6px;
+    pointer-events: none;
+  }
+  html:root .settings-app .settings-sidebar nav button[data-has-children]::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: calc((var(--team-depth, 0) + 1) * 18px - 2px);
+    width: 1px;
+    height: 6px;
+    background: var(--set-drawer-connector);
+    pointer-events: none;
   }
   html:root .settings-app .settings-sidebar nav h2 > span { border-style: none; line-height: normal; }
   html:root .settings-app .settings-sidebar nav button {
