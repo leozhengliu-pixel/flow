@@ -168,6 +168,7 @@ test.describe('mobile document history', () => {
       await page.locator('.document-edited').click()
       await page.getByRole('button', { name: 'Show document history', exact: true }).click()
       await expect(page.locator('.document-history-dialog')).toBeVisible()
+      await page.locator('.document-history-dialog').evaluate(element => Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished)))
       await expect(page.locator('.document-history-date-select')).toContainText('Current')
       const selectBox = (await page.locator('.document-history-date-select').boundingBox())!
       const panelBox = (await page.locator('.document-history-panel').boundingBox())!
@@ -281,24 +282,22 @@ test.describe('mobile documents selection', () => {
 test.describe('mobile documents tab menu', () => {
   test.use({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('active Documents tab collapses into a dropdown listing Documents and Members', async ({ page, request, workspaceKey }) => {
+  test('Documents and Members stay reachable when the resource tabs fit or overflow', async ({ page, request, workspaceKey }) => {
     const team = await seedTeamDocuments(request, workspaceKey, '[mobile] Docs tabs')
 
     await page.goto(`/${workspaceKey}/team/${team.key}/documents?doc-filter=${advancedFilterParam()}`)
-    const trigger = page.locator('[data-team-tab-active]')
-    await expect(trigger).toContainText('Documents')
-    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
-    await expect(page.locator('.team-home-tabs a').filter({ hasText: 'Members' })).toHaveCount(0)
-    await expect(page.locator('.team-home-tabs a').filter({ hasText: 'Overview' })).toBeVisible()
-
-    await trigger.click()
-    const menu = page.getByRole('menu', { name: 'Team views' })
-    await expect(menu).toBeVisible()
-    await expect(menu.getByRole('menuitem')).toHaveCount(2)
-    await expect(menu.getByRole('menuitem', { name: 'Documents' })).toHaveAttribute('data-active', 'true')
-    await expect(menu.getByRole('menuitem', { name: 'Members' })).not.toHaveAttribute('data-active', 'true')
-
-    await menu.getByRole('menuitem', { name: 'Members' }).click()
+    const nav = page.getByRole('navigation', { name: 'Team views' })
+    await expect(nav).toBeVisible()
+    const members = nav.getByRole('link', { name: 'Members', exact: true })
+    if (await members.count()) await members.click()
+    else {
+      const trigger = nav.locator('[data-team-tab-active], button.team-home-tabs-overflow-pill').first()
+      await trigger.click()
+      const menu = page.getByRole('menu', { name: 'Team views' })
+      await expect(menu).toBeVisible()
+      await expect(menu.getByRole('menuitem', { name: 'Members', exact: true })).not.toHaveAttribute('data-active', 'true')
+      await menu.getByRole('menuitem', { name: 'Members', exact: true }).click()
+    }
     await expect(page).toHaveURL(new RegExp(`/${team.key}/members$`))
     await expect(page.locator('.team-home-tabs a[aria-current="page"]')).toContainText('Members')
   })

@@ -472,6 +472,7 @@ export function AgentPage({
   return (
     <main className={`${styles.page}${shown ? "" : ` ${styles.emptyPage}`}`}>
       <header>
+        <div className={styles.headerRow}>
         <button
           className={styles.mobileMenu}
           aria-label={t("Open navigation")}
@@ -611,6 +612,7 @@ export function AgentPage({
         >
           <AgentToolbarGlyph size={14} />
         </button>}
+        </div>
       </header>
       <section className={`${styles.body}${shown ? ` ${styles.hasConversation}` : ""}`}>
         {shown ? (

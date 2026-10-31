@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Group the phone Agent header inside its page header, restore activity hit-area padding without changing row pitch, and make document layout checks wait for settled dialogs and real tab overflow.
+
 - Keep phone review Guide after Overview and Diff, move initiative selection and row actions into the existing context menu, and remove duplicate chat-menu padding.
 
 - Move the phone conversation's toolbar action into Chat options and keep feedback after the reference chat commands.

@@ -173,6 +173,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
     await expect(form.locator('.composer-send svg')).toHaveAttribute('viewBox', '0 0 16 16')
     await expect(form.locator('.composer-tools svg')).toHaveAttribute('viewBox', '0 0 16 16')
     await expect(events.first().locator('.activity-row')).toHaveCSS('line-height', '16.8px')
+    await expect(events.first().locator('.activity-row')).toHaveCSS('padding', '4px')
+    await expect(events.first().locator('.activity-row')).toHaveCSS('margin', '-3px -4px')
     const initialsOffset = await events.first().locator('.activity-event-icon .avatar').evaluate(avatar => {
       const circle = avatar.getBoundingClientRect()
       const range = document.createRange()
