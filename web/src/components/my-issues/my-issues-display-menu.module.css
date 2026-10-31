@@ -151,7 +151,7 @@
   .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button[aria-selected="false"]::after {
     content: "";
     position: absolute;
-    inset: 0;
+    inset: -1px;
     border-radius: inherit;
     box-shadow: var(--pk-control-ring);
     pointer-events: none;
