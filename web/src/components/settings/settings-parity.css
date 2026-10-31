@@ -654,6 +654,44 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
   html:root .settings-app .settings-main .personal-section > .settings-card > .settings-row:first-child { border-radius: 10px 10px 0 0; }
 }
 
+@media (max-width: 767px) {
+  html:root .settings-app .settings-main[data-settings-page="preferences"] {
+    .personal-section:first-of-type > .settings-card > .settings-row:first-child { display: none; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(2) { border-radius: 10px 10px 0 0; height: 94px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(3) { height: 79.5px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(4) { height: 68px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(5) { height: 65px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(6) { height: 79.5px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(2) .settings-row-copy > span { height: 43.5px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(3) .settings-row-copy > span,
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(6) .settings-row-copy > span { height: 29px; }
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(4) .settings-row-copy > span,
+    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(5) .settings-row-copy > span { height: 14.5px; }
+    .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(1),
+    .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(3),
+    .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(5) { height: 79.5px; }
+    .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(2) { height: 68px; }
+    .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(4) { height: 65px; }
+    .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(1) .settings-row-copy > span,
+    .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(3) .settings-row-copy > span,
+    .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(5) .settings-row-copy > span { height: 29px; }
+    .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(2) .settings-row-copy > span,
+    .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(4) .settings-row-copy > span { height: 14.5px; }
+    .personal-section:first-of-type .settings-row:nth-child(2) .settings-select { width: 171px; }
+    .personal-section:first-of-type .settings-row:nth-child(3) .settings-select { width: 100.5px; }
+    .personal-section:first-of-type .settings-row:nth-child(4) .settings-select { width: 109.5px; }
+    .personal-section:first-of-type .settings-row:nth-child(6) .settings-select { width: 91px; }
+    .personal-section:nth-of-type(2) .settings-row:nth-child(2) .settings-select { width: 83px; }
+  }
+}
+@media (max-width: 380px) {
+  html:root .settings-app .settings-main[data-settings-page="preferences"] {
+    .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(3) { height: 94px; }
+    .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(3) .settings-row-copy > span,
+    .personal-section:nth-of-type(2) > .settings-card > .settings-row:nth-child(5) .settings-row-copy > span { height: 43.5px; }
+  }
+}
+
 /* Team page header: title with an optional description underneath */
 html:root .settings-app .settings-main .team-settings-header > div { display: flex; flex-direction: column; align-items: flex-start; }
 html:root .settings-app .settings-main .team-settings-header > div > p { margin: 4px 0 0; color: var(--set-desc); font-size: 13px; line-height: 22px; }
@@ -933,9 +971,9 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
     margin: 0 0 12px;
   }
   html:root .settings-app .settings-main .settings-members-page.settings-workspace-members > .settings-members-toolbar {
-    height: auto;
-    grid-template-rows: auto;
-    grid-template-columns: minmax(0, 1fr) 150px auto;
+    height: 36px;
+    grid-template-rows: 36px;
+    grid-template-columns: minmax(0, 1fr) 132px auto;
     row-gap: 8px;
     column-gap: 6px;
     margin: 0 0 22px;
@@ -981,13 +1019,13 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-filter { display: none; }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .phone-native-select-wrap:has(> .settings-members-phone-filter) {
     display: block;
-    width: 150px;
+    width: 132px;
     height: 36px;
   }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-phone-filter {
     display: block;
     box-sizing: border-box;
-    width: 150px;
+    width: 132px;
     height: 36px;
     margin-left: 0;
     padding: 6px 24px 6px 12px;
@@ -1003,9 +1041,9 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-action:not(.primary) { justify-self: start; }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-action.primary {
     height: 36px;
-    margin-left: 0;
+    margin-left: 18px;
     padding: 0 12px;
-    width: auto;
+    width: 58.84px;
     font: 500 13px/normal var(--font);
   }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns,

@@ -1369,6 +1369,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   }
   .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__add-view svg { width: 14px; height: 14px; color: var(--phone-icon-dim); }
   .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-actions { gap: 6px; }
+  .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-actions > button[aria-label*="project insights"] { display: none; }
   .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-button {
     width: 32px;
     height: 32px;
@@ -1564,12 +1565,12 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-overview__milestone > header .project-overview__milestone-menu-trigger { opacity: 1 !important; }
   .project-overview__milestone-date-icon { display: block; width: 16px; height: 16px; color: var(--phone-icon-fg); }
   .project-overview__milestone-date-placeholder { display: none; }
-  .project-overview__milestone-issues { box-sizing: border-box; height: 32px; justify-content: center; line-height: normal; white-space: nowrap; opacity: .845; transform: translateY(.5px); }
+  .project-overview__milestone-issues { box-sizing: border-box; width: 101.22px; height: 32px; justify-content: center; line-height: normal; white-space: nowrap; opacity: .845; transform: translateY(.5px); }
   .project-overview__milestone-menu-trigger { width: 32px; height: 32px; padding: 0 4px; color: var(--text); font-size: 12px; font-weight: 500; line-height: normal; }
   .project-overview__milestone-menu-trigger svg { opacity: .36; }
-  .project-overview__milestone-description { min-height: 50px; margin-top: 5px; padding: 10px 14px 16px 26px; border-radius: 0; color: var(--text); font-size: 15px; line-height: 24px; }
+  .project-overview__milestone-description { height: 50px; min-height: 50px; margin-top: 5px; padding: 10px 14px 16px 26px; border-radius: 0; color: var(--text); font-size: 15px; line-height: 24px; }
   .project-overview__milestone-description.mention-text-field .issue-description-root .description-editor { font-size: 15px; line-height: 24px; }
-  .project-overview__milestone-link { margin-top: 12px; border: 0; }
+  .project-overview__milestone-link { width: 94.66px; margin-top: 12px; border: 0; }
   .project-overview__milestone-link > span { font-size: 13px; font-weight: 500; line-height: normal; }
   .project-customers-row .project-overview__row-content { margin-top: 0; }
   .project-customers-row__add { color: rgb(255,255,255); font: 400 13.3333px/normal var(--font); }
@@ -1680,6 +1681,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-activity__composer[data-mode=update] > .project-activity__editor { flex: 0 1 auto; min-height: 70px; }
   .project-activity__composer[data-mode=update] > footer { position: absolute; right: 0; bottom: 0; left: 0; justify-content: flex-end; }
   .project-activity__composer > footer { flex-wrap: wrap; gap: 8px; }
+  .project-activity__composer > footer > button.project-activity__agent { display: none; }
   .project-activity__composer > footer > div { flex-wrap: wrap; margin-left: auto; }
   .project-activity__composer .project-activity__health {
     position: relative;

@@ -107,6 +107,8 @@ test.describe('mobile document view', () => {
       await expect(page.locator('.document-history-action button')).toContainText('Show document history')
       const box = (await popover.boundingBox())!
       expect(box.x).toBeGreaterThanOrEqual(0)
+      expect(box.x).toBeCloseTo(0, 0)
+      expect(box.width).toBeCloseTo(360.19, 0)
       expect(box.x + box.width).toBeLessThanOrEqual(viewport.width)
       const owner = (await page.locator('.document-owner-row .document-person--button').boundingBox())!
       expect(owner.width).toBeLessThan(box.width / 2)
