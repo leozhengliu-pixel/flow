@@ -7,7 +7,7 @@
 .headerAction{width:28px;height:28px;display:grid;place-items:center;padding:0;border:0;border-radius:9999px;background:transparent;color:var(--muted);cursor:pointer}.header h2+.headerAction{margin-left:8px}.headerAction:hover{background:var(--theme-surface-hover);color:var(--text)}
 .copyUrl{margin-left:auto!important;background:var(--bg-subtle)}
 .mobileSidebarButton{display:none;width:32px;height:32px;padding:8px;border:0;border-radius:6px;background:transparent}.mobileSidebarButton span{display:block;width:14px;height:1px;margin:3px 0;background:var(--issue-muted)}
-.toolbar{height:43px;flex:0 0 43px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;border-bottom:0}.tabs,.actions{display:flex;align-items:center}.tabs{min-width:0;flex:1;gap:8px;overflow:hidden}.actions{flex:none;gap:6px}.savedTabs{height:32px;min-width:0;flex:1;overflow:hidden}.savedTabs .savedTab{margin-right:8px}
+.toolbar{height:43px;flex:0 0 43px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;border-bottom:0}.tabs,.actions{display:flex;align-items:center}.tabs{min-width:0;flex:1;gap:4px;overflow:hidden}.actions{flex:none;gap:6px}.savedTabs{height:32px;min-width:0;flex:1;overflow:hidden}.savedTabs .savedTab{margin-right:8px}
 .viewCount{padding-left:10px;color:var(--muted);font-size:12px;font-weight:450}
 :global(:root[data-theme="light"]) .header{border-bottom-color:var(--border);border-bottom-width:.5px}
 :global(:root[data-theme="light"]) .header h2,:global(:root[data-theme="light"]) .scope{color:var(--theme-text-primary)}
@@ -18,7 +18,7 @@
 :global(:root[data-theme="light"]) .addView,:global(:root[data-theme="light"]) .headerAction{color:var(--theme-text-primary)}
 :global(:root[data-theme="light"]) .iconButton:hover,:global(:root[data-theme="light"]) .iconButton[aria-pressed=true],:global(:root[data-theme="light"]) .addView:hover,:global(:root[data-theme="light"]) .headerAction:hover,:global(:root[data-theme="light"]) .copyUrl:hover{background:var(--ui-pill-hover-bg);color:var(--ui-pill-active-fg)}
 .tab,.savedTab{height:28px;display:inline-flex;align-items:center;padding:0 10px;border:1px solid transparent;border-radius:9999px;background:var(--theme-surface-1);color:var(--muted);font-family:inherit;font-size:12px;font-weight:500;text-decoration:none;white-space:nowrap}.savedTab{gap:6px}.savedTab>svg{width:15px;height:15px}.tab[data-active=true],.savedTab[data-active=true]{background:var(--bg-active);color:var(--text)}.tab:hover:not([data-active=true]),.savedTab:hover:not([data-active=true]){background:var(--theme-surface-hover);color:var(--text)}
-.addView,.iconButton{width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;padding:0;border:1px solid transparent;border-radius:9999px;background:transparent;color:var(--muted);cursor:pointer}.iconButton{background:var(--theme-surface-1)}.addView:hover,.iconButton:hover,.iconButton[aria-pressed=true]{background:var(--theme-surface-hover);color:var(--text)}.addView svg,.iconButton svg{width:14px;height:14px}.body{min-height:0;flex:1;display:flex;overflow:hidden}.body>:first-child{min-width:0;flex:1;overflow:auto;scrollbar-color:var(--theme-border-strong) transparent}.body:has([data-split-view])>:first-child:not([data-split-view]){overflow:hidden;display:flex;flex-direction:column}.body>[data-split-view]{flex:1;min-height:0}
+.addView,.iconButton{width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;padding:0;border:1px solid transparent;border-radius:9999px;background:transparent;color:var(--muted);font-size:12px;font-weight:500;line-height:normal;cursor:pointer}.iconButton{background:var(--theme-surface-1)}.addView:hover,.iconButton:hover,.iconButton[aria-pressed=true]{background:var(--theme-surface-hover);color:var(--text)}.addView svg,.iconButton svg{width:14px;height:14px}.body{min-height:0;flex:1;display:flex;overflow:hidden}.body>:first-child{min-width:0;flex:1;overflow:auto;scrollbar-color:var(--theme-border-strong) transparent}.body:has([data-split-view])>:first-child:not([data-split-view]){overflow:hidden;display:flex;flex-direction:column}.body>[data-split-view]{flex:1;min-height:0}
 .body[data-saved-panel-open=true]>:first-child:not([data-aside-layout]){margin-right:400px}
 .body[data-insights-open=true]>:first-child{margin-right:440px}
 @media(max-width:800px){.body[data-insights-open=true]>:first-child{margin-right:0}}
@@ -46,8 +46,25 @@
 
 /* Phone parity for the team issues list: the reference header breadcrumb and
    toolbar metrics, plus the estimate-only group header. */
-.phoneTeamFavorite,.phoneTeamNotifications{display:none}
+.phoneTeamFavorite,.phoneTeamNotifications{width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--muted);font-size:12px;font-weight:500;line-height:normal;cursor:pointer}
+.phoneTeamFavorite{margin-left:8px}
+.phoneTeamNotifications{margin-left:auto}
+.phoneTeamFavorite:hover,.phoneTeamNotifications:hover{background:var(--theme-surface-hover);color:var(--text)}
+.phoneTeamFavorite:focus-visible,.phoneTeamNotifications:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.phoneTeamFavorite svg,.phoneTeamNotifications svg{width:14px;height:14px}
+.phoneTeamNotifications + .headerNewIssue{margin-left:4px}
+.headerNewIssue{height:28px;display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 10px 0 8px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--muted);font-family:inherit;font-size:12px;font-weight:500;line-height:normal;cursor:pointer}
+.headerNewIssue:hover{background:var(--theme-surface-hover);color:var(--text)}
+.headerNewIssue:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.headerNewIssue svg{width:14px;height:14px}
+[data-toolbar-buttons-navigation].actions{gap:6px}
+@media(min-width:801px){
+  [data-issue-explorer] [data-content-view-header][data-compact]{padding-left:18px}
+  .tab,.savedTab{line-height:normal}
+  .insightsButton{order:-1}
+}
 @media(max-width:767px){
+  .headerNewIssue{display:none}
   html:root body :global(.app) [data-issue-explorer] [data-content-view-header] [data-sidebar-trigger]{margin-right:8px}
   html:root body :global(.app) [data-issue-explorer] [data-content-view-header] [data-sidebar-trigger]>svg{display:block}
   html:root body :global(.app) [data-issue-explorer] [data-content-view-header] [data-sidebar-trigger]::before,html:root body :global(.app) [data-issue-explorer] [data-content-view-header] [data-sidebar-trigger]::after{display:none}
