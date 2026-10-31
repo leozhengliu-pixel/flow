@@ -204,9 +204,9 @@ describe('context-aware command menu', () => {
 
   it('keeps the search group registered while replacing results and clearing the query', async () => {
     const result = { id: 'issue-9', type: 'issue', identifier: 'TST-9', title: 'Copy editing pass' }
-    api.searchWorkspace.mockResolvedValueOnce({ results: [result] })
     let resolveSearch!: (value: { results: typeof result[] }) => void
-    api.searchWorkspace.mockImplementationOnce(() => new Promise(resolve => { resolveSearch = resolve }))
+    const pendingSearch = new Promise<{ results: typeof result[] }>(resolve => { resolveSearch = resolve })
+    api.searchWorkspace.mockImplementation((query: string) => query === 'copy edit' ? pendingSearch : Promise.resolve({ results: [result] }))
     const { user, onOpenChange } = setup({ kind: 'issues', source: 'detail', issues: [first] })
     await user.type(input(), 'copy')
     const firstResult = await screen.findByRole('option', { name: /Copy editing pass/ })
