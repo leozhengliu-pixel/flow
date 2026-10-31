@@ -25,6 +25,7 @@ import { NestingLine } from '@/components/ui/nesting-line'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import './issue-project-picker.css'
 import { projectTemplateChoices } from '@/lib/project-template-choice'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 
 export function IssueProjectPicker({ data, issue, grouped = false, presence = [], onUpdate, onCreateProject, onCreateMilestone, emptyTriggerLabel = 'Add to project' }: {
   data: BootstrapData
@@ -37,6 +38,7 @@ export function IssueProjectPicker({ data, issue, grouped = false, presence = []
   onCreateMilestone?: (projectId: string, input: { name: string }) => Promise<ProjectMilestone>
 }) {
   const { t, formatDate } = useI18n()
+  const phone = usePhoneLayout()
   const onlineUserIds = new Set([data.viewer.id, ...presence.map(item => item.user.id)])
   const peopleChoices = projectPeopleChoices(data.users, data.invitations, onlineUserIds)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -87,6 +89,8 @@ export function IssueProjectPicker({ data, issue, grouped = false, presence = []
     teamName={issue.team.name}
     searchPlaceholder={project ? t('Move to project…') : t('Add to project…')}
     searchShortcut="Shift P"
+    hideSearch={!phone && projects.length <= 8}
+    surfaceClassName={`issue-project-menu${projects.length <= 8 ? ' issue-project-menu--compact' : ''}`}
     ariaLabel={project ? `${t('Change project')}. ${project.name}` : t('Add to project')}
     triggerClassName="label-project-trigger issue-project-trigger"
     trigger={<><ProjectIcon size={16} style={{ color: project?.color }}/><span data-i18n-ignore={project ? true : undefined}>{project?.name ?? t(emptyTriggerLabel)}</span></>}

@@ -24,6 +24,49 @@ describe('issue action menu', () => {
   beforeEach(() => { localStorage.clear(); vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }) })
   afterEach(() => vi.unstubAllGlobals())
 
+  it('offers desktop team moves, marks the current team, and omits retired targets', async () => {
+    const user = userEvent.setup()
+    const issue = makeIssue()
+    const target = { ...issue.team, id: 'target', key: 'NEXT', name: 'Next team' }
+    const retired = { ...target, id: 'retired', name: 'Retired team', retiredAt: '2026-01-01' }
+    const onUpdate = vi.fn().mockResolvedValue(undefined)
+    render(<I18nProvider><IssueOptionsMenu issue={issue} data={makeBootstrap({teams:[issue.team,target,retired],reviews:[]})} onRelation={vi.fn()} onUpdate={onUpdate} onDelete={vi.fn()}/></I18nProvider>)
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    await user.hover(screen.getByRole('option',{name:/^Team/}))
+    const menu = await screen.findByRole('dialog',{name:'Team'})
+    expect(within(menu).queryByText('Retired team')).not.toBeInTheDocument()
+    expect(within(menu).getByRole('option',{name:issue.team.name}).querySelector('.issue-options-detail svg')).toBeInTheDocument()
+    await user.click(within(menu).getByRole('option',{name:'Next team'}))
+    await waitFor(()=>expect(onUpdate).toHaveBeenCalledWith({teamId:target.id}))
+  })
+
+  it('loads a relation target missing from the paged directory before offering removal', async () => {
+    const user = userEvent.setup()
+    const target = makeIssue({id:'target',identifier:'TST-2',title:'Other issue'})
+    const issue = makeIssue({relations:[{id:'relation',issueId:'issue-1',relatedIssueId:target.id,type:'blocks'}]})
+    const fetch = vi.spyOn(api,'fetchIssueRecord').mockResolvedValue(target)
+    const remove = vi.spyOn(api,'deleteRelation').mockResolvedValue(undefined)
+    render(<I18nProvider><IssueOptionsMenu issue={issue} data={makeBootstrap({issues:[issue],reviews:[]})} onRelation={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()}/></I18nProvider>)
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    await user.hover(await screen.findByRole('option',{name:'Remove'}))
+    await user.click(within(await screen.findByRole('dialog',{name:'Remove'})).getByRole('option',{name:/Blocked issue TST-2.*Other issue/}))
+    expect(fetch).toHaveBeenCalledWith(target.id,expect.any(AbortSignal),'workspace')
+    expect(remove).toHaveBeenCalledWith(issue.id,'relation')
+    fetch.mockRestore(); remove.mockRestore()
+  })
+
+  it('uses the detail refresh callback when removing an owned relation', async () => {
+    const user = userEvent.setup()
+    const target = makeIssue({id:'target',identifier:'TST-2',title:'Other issue'})
+    const issue = makeIssue({relations:[{id:'relation',issueId:'issue-1',relatedIssueId:target.id,type:'blocks'}]})
+    const onDeleteRelation = vi.fn().mockResolvedValue(undefined)
+    render(<I18nProvider><IssueOptionsMenu issue={issue} data={makeBootstrap({issues:[issue,target],reviews:[]})} onRelation={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()} onDeleteRelation={onDeleteRelation}/></I18nProvider>)
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    await user.hover(screen.getByRole('option',{name:'Remove'}))
+    await user.click(within(await screen.findByRole('dialog',{name:'Remove'})).getByRole('option',{name:/Blocked issue TST-2.*Other issue/}))
+    expect(onDeleteRelation).toHaveBeenCalledWith('relation')
+  })
+
   it('opens a portal submenu on hover and preserves the parent search focus', async () => {
     const user = userEvent.setup()
     const {onRelation} = setup()

@@ -3295,6 +3295,8 @@ export const zhCN: Record<string, string> = {
   "Change project status": "更改项目状态",
   "Change project priority": "更改项目优先级",
   "Change team": "更改团队",
+  "Open team overview": "打开团队概览",
+  "Team changed": "已更改团队",
   "Change priority": "更改优先级",
   "Change assignee": "更改负责人",
   "Change project": "更改项目",

@@ -12,3 +12,9 @@
 .issue-project-row:hover .issue-project-open-hit,.issue-project-open:focus-visible .issue-project-open-hit{opacity:1;background:color-mix(in srgb,var(--issue-project-row-hover) 50%,transparent)}
 .issue-project-open:hover .issue-project-open-hit,.issue-project-open:focus-visible .issue-project-open-hit{background:var(--issue-project-row-hover);color:var(--issue-fg)}
 .issue-milestone-trigger.is-empty>span,:root[data-theme="light"] .issue-milestone-trigger.is-empty>span{color:var(--issue-muted)}
+@media(min-width:1024px){
+  .property-command-project.issue-project-menu--compact{width:186px;max-height:min(490px,calc(100vh - 20px))}
+  .property-command-project.issue-project-menu--compact .property-command-options{max-height:454px}
+  .property-command-project.issue-project-menu--compact .property-command-create span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .property-command-project.issue-project-menu--compact:has(.property-command-search:not(.is-visually-hidden)){width:339px}
+}

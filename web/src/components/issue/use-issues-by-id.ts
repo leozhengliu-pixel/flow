@@ -3,7 +3,7 @@ import { fetchIssueRecord } from '@/lib/api'
 import type { BootstrapData, Issue } from '@/types/flow'
 
 /** Issues by id, fetching the ones the (paged) workspace data has not loaded. */
-export function useIssuesById(ids: (string | undefined)[], data: BootstrapData) {
+export function useIssuesById(ids: (string | undefined)[], data: { issues: Issue[]; workspace: Pick<BootstrapData['workspace'], 'urlKey'> }) {
   const [fetched, setFetched] = useState<Map<string, Issue>>(() => new Map())
   const idsKey = [...new Set(ids.filter(Boolean))].join(',')
   const missing = idsKey ? idsKey.split(',').filter(id => !data.issues.some(item => item.id === id) && !fetched.has(id)).join(',') : ''
