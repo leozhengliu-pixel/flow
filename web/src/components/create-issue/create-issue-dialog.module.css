@@ -96,8 +96,8 @@
   /* Desktop keeps the compact composer on the reference's 56px header rhythm. */
   .header { height: 55px; flex-basis: 55px; align-items: flex-start; padding: 11px 11px 0; }
   .header h2, .breadcrumb { margin-top: 4.25px; }
-  .team { gap: 4px; padding-left: 5px; }
-  .team > span { font-weight: 450; }
+  .team { gap: 4px; padding-left: 5px; line-height: 12px; }
+  .team > span { font-weight: 450; line-height: normal; }
   .team > svg { width: 16px !important; height: 16px !important; flex: 0 0 16px; margin-right: -2px; transform: translateX(-.5px) scale(.875); transform-origin: left center; }
   .document { padding-inline: 17px; }
   .titleField { padding-top: 2px; }
