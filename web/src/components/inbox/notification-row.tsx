@@ -1,6 +1,6 @@
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { GitPullRequest } from 'lucide-react'
+import { ChevronRight, GitPullRequest } from 'lucide-react'
 import { useCurrentTime } from '@/hooks/use-current-time'
 import { useCallback, useRef, useState, type CSSProperties, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 
@@ -67,6 +67,7 @@ export interface InboxNotificationRowProps {
 
 export function InboxNotificationRow(props: InboxNotificationRowProps) {
   const { notification, active = false, selected = false, disabled = false, pending = false } = props
+  const t = useOptionalTranslate()
   const rowRef = useRef<HTMLDivElement>(null)
   const [keyboardSnoozeOpen, setKeyboardSnoozeOpen] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -214,7 +215,7 @@ export function InboxNotificationRow(props: InboxNotificationRowProps) {
       <Popover.Portal>
         <Popover.Content data-flow-motion="floating"
           className="flow-inbox-menu flow-inbox-snooze-menu"
-          aria-label="Snooze notification"
+          aria-label={t('Snooze notification')}
           side="right"
           align="start"
           sideOffset={8}
@@ -259,6 +260,7 @@ function InboxRowHoverActions({
   onSnooze: () => void
 }) {
   const idle = disabled || pending
+  const t = useOptionalTranslate()
   return (
     <div
       className="flow-inbox-row__actions"
@@ -266,7 +268,7 @@ function InboxRowHoverActions({
       onPointerDown={stopRowAction}
       onKeyDown={(event) => event.stopPropagation()}
     >
-      <button type="button" aria-label="Snooze notification" disabled={idle} onClick={onSnooze}>
+      <button type="button" aria-label={t('Snooze notification')} disabled={idle} onClick={onSnooze}>
         <SnoozeIcon />
       </button>
     </div>
@@ -305,7 +307,7 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
   const pulse = notification.kind === 'pulse'
   return (
     <ContextMenu.Portal>
-      <ContextMenu.Content data-flow-motion="floating" className="flow-inbox-menu flow-inbox-row-menu" aria-label="Notification actions" onEscapeKeyDown={(event) => event.stopPropagation()}>
+      <ContextMenu.Content data-flow-motion="floating" className="flow-inbox-menu flow-inbox-row-menu" aria-label={t('Notification actions')} onEscapeKeyDown={(event) => event.stopPropagation()}>
         <RowMenuItem
           shortcut="U"
           icon={<UnreadIcon />}
@@ -322,7 +324,7 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
             <span className="flow-inbox-menu__item-icon"><SnoozeIcon /></span>
             <span className="flow-inbox-menu__item-label">{t('Snooze')}</span>
             <kbd className="flow-inbox-menu__shortcut">H</kbd>
-            <span className="flow-inbox-menu__trailing">▶</span>
+            <span className="flow-inbox-menu__trailing"><ChevronRight size={14} strokeWidth={1.5} /></span>
           </ContextMenu.SubTrigger>
           <ContextMenu.Portal>
             <ContextMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-snooze-menu" sideOffset={4} alignOffset={-37}>
@@ -366,8 +368,8 @@ function RowSnoozeMenu({ notification, disabled, onSnooze }: { notification: Inb
   ]
   const optionDate = (preset: Exclude<InboxSnoozePreset, { kind: 'custom' }>) => new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(resolveSnoozeDate(now, preset))
   const submitQuery = () => {
-    const parsed = parseDate(query, new Date(now))
-    if (!parsed) return
+    const parsed = parseDate(query, new Date(now), { forwardDate: true })
+    if (!parsed || parsed <= now || disabled) return
     onSnooze(notification, { kind: 'custom', snoozedUntil: parsed.toISOString() })
   }
   if (custom) {
@@ -390,7 +392,7 @@ function RowSnoozeMenu({ notification, disabled, onSnooze }: { notification: Inb
         setCustom(true)
       }}
     >
-      <span className="flow-inbox-menu__item-label">{t('Custom…')}</span>
+      <span className="flow-inbox-menu__item-icon"><SnoozeIcon /></span><span className="flow-inbox-menu__item-label">{t('Custom…')}</span>
     </ContextMenu.Item>
   </>
 }
@@ -407,7 +409,9 @@ function KeyboardSnoozeMenu({ notification, disabled, onSnooze }: {
   onSnooze: (preset: InboxSnoozePreset) => void
 }) {
   const [custom, setCustom] = useState(false)
+  const [query, setQuery] = useState('')
   const t = useOptionalTranslate()
+  const now = useCurrentTime()
   const presets: Array<[Exclude<InboxSnoozePreset, { kind: 'custom' }>, string]> = [
     ['hour', 'An hour from now'],
     ['threeHours', 'In 3 hours'],
@@ -424,33 +428,39 @@ function KeyboardSnoozeMenu({ notification, disabled, onSnooze }: {
     />
   }
 
-  return <div role="menu" aria-label="Snooze notification" onKeyDown={moveSnoozeFocus}>
-    <div className="flow-inbox-menu__search-wrap flow-inbox-menu__search-wrap--passive">
-      <span>{t('Try: 4 pm, 2 days, in 5 weeks…')}</span>
+  const submitQuery = () => {
+    const parsed = parseDate(query, new Date(now), { forwardDate: true })
+    if (!parsed || parsed <= now || disabled) return
+    onSnooze({ kind: 'custom', snoozedUntil: parsed.toISOString() })
+  }
+  return <div role="menu" aria-label={t('Snooze notification')} onKeyDown={moveSnoozeFocus}>
+    <div className="flow-inbox-menu__search-wrap flow-inbox-snooze-input-wrap">
+      <input aria-label={t('Snooze time')} placeholder={t('Try: 4 pm, 2 days, in 5 weeks…')} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submitQuery() } }}/>
     </div>
-    <div className="flow-inbox-menu__separator" />
     {presets.map(([preset, label]) => (
       <button
         key={preset}
         type="button"
         role="menuitem"
+        aria-label={t(label)}
         className={`flow-inbox-menu__item ${styles.snoozeOption}`}
         data-snooze-option={notification.id}
         disabled={disabled}
         onClick={() => onSnooze(preset)}
       >
-      <span className="flow-inbox-menu__item-label">{t(label)}</span>
+      <span className="flow-inbox-menu__item-icon"><SnoozeIcon /></span><span className="flow-inbox-menu__item-label">{t(label)}</span><time>{new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(resolveSnoozeDate(now, preset))}</time>
       </button>
     ))}
     <button
       type="button"
       role="menuitem"
+      aria-label={t('Custom…')}
       className={`flow-inbox-menu__item ${styles.snoozeOption}`}
       data-snooze-option={notification.id}
       disabled={disabled}
       onClick={() => setCustom(true)}
     >
-      <span className="flow-inbox-menu__item-label">{t('Custom…')}</span>
+      <span className="flow-inbox-menu__item-icon"><SnoozeIcon /></span><span className="flow-inbox-menu__item-label">{t('Custom…')}</span>
     </button>
   </div>
 }
@@ -479,6 +489,7 @@ function resolveSnoozeDate(now: Date, preset: Exclude<InboxSnoozePreset, { kind:
 }
 
 export function InboxCustomSnoozeForm({ disabled = false, onCancel, onConfirm }: { disabled?: boolean; onCancel: () => void; onConfirm: (preset: Extract<InboxSnoozePreset, { kind: 'custom' }>) => void }) {
+  const t = useOptionalTranslate()
   const [value, setValue] = useState(() => localDateTimeValue(defaultCustomSnoozeDate()))
   const [invalid, setInvalid] = useState(false)
   const now = useCurrentTime(10_000)
@@ -486,22 +497,22 @@ export function InboxCustomSnoozeForm({ disabled = false, onCancel, onConfirm }:
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const selected = new Date(value)
-    if (!value || Number.isNaN(selected.getTime())) {
+    if (!value || Number.isNaN(selected.getTime()) || selected <= now || disabled) {
       setInvalid(true)
       return
     }
     onConfirm({ kind: 'custom', snoozedUntil: selected.toISOString() })
   }
 
-  return <form className="flow-inbox-snooze-custom" aria-label="Custom snooze date and time" onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); onCancel() } }} onSubmit={submit}>
+  return <form className="flow-inbox-snooze-custom" aria-label={t('Custom snooze date and time')} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); onCancel() } }} onSubmit={submit}>
     <label className="flow-inbox-snooze-custom__field">
-      <span>Date and time</span>
-      <DateTimeControl label="Snooze until" min={localDateTimeValue(now)} mode="datetime" value={value} onChange={next => { setValue(next); setInvalid(false) }}/>
+      <span>{t('Date and time')}</span>
+      <DateTimeControl label={t('Snooze until')} min={localDateTimeValue(now)} mode="datetime" value={value} onChange={next => { setValue(next); setInvalid(false) }}/>
     </label>
-    {invalid ? <p className="flow-inbox-snooze-custom__error" role="alert">Choose a valid date and time.</p> : null}
+    {invalid ? <p className="flow-inbox-snooze-custom__error" role="alert">{t('Choose a valid date and time.')}</p> : null}
     <div className="flow-inbox-snooze-custom__actions">
-      <button type="button" disabled={disabled} onClick={onCancel}>Back</button>
-      <button type="submit" disabled={disabled || !value}>Snooze</button>
+      <button type="button" disabled={disabled} onClick={onCancel}>{t('Back')}</button>
+      <button type="submit" disabled={disabled || !value}>{t('Snooze')}</button>
     </div>
   </form>
 }
