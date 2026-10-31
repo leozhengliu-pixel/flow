@@ -68,7 +68,7 @@ workspaceTest.describe('mobile cycle detail', () => {
       }
       const parent = await create('Estimate test A', { estimate: 3, sortOrder: 1 })
       const second = await create('Estimate test B', { estimate: 5, sortOrder: 0 })
-      await create('Nested child one', { estimate: 1, parentId: parent.id, sortOrder: 0 })
+      await create('Nested child one', { parentId: parent.id, sortOrder: 0 })
       expect((await request.patch(`/api/issues/${second.id}`, { headers, data: { sortOrder: 0 } })).ok()).toBe(true)
       await page.setViewportSize({ width, height: width === 390 ? 844 : 667 })
       await page.goto(`/${workspaceKey}/team/${team.key}/cycle/1`)
