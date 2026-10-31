@@ -383,13 +383,14 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
     : essentialItems;
   const renderRow = (item: typeof essentialItems[number], connection?: BootstrapData["integrationConnections"][number]) => {
     const provider = item.connectProvider;
+    const brandProvider = provider ?? (item.parentSlug ? catalog.find(entry => entry.slug === item.parentSlug)?.connectProvider : undefined);
     const target = provider ?? item.slug;
     const name = integrationDisplayName(item, t);
     const date = connection?.createdAt ? formatDate(connection.createdAt, { month: "short", day: "numeric" }) : "";
     return <li key={`${item.slug}-${connection?.id ?? "catalog"}`} className="mobile-integration-row" data-provider={provider ?? item.slug}>
       <button type="button" onClick={() => onOpen(target)} aria-label={name}>
         <span className="mobile-integration-row-main">
-          <span className="mobile-integration-icon" aria-hidden="true">{provider && <IntegrationBrandIcon provider={provider} size={32} />}</span>
+          <span className="mobile-integration-icon" aria-hidden="true">{brandProvider && <IntegrationBrandIcon provider={brandProvider} size={32} />}</span>
           <span className="mobile-integration-row-copy"><span>{name}</span>{connection && <small>{t("Enabled by")} {data.viewer.displayName}{date ? ` ${t("on")} ${date}` : ""}</small>}</span>
         </span>
         <MobileIntegrationChevron />
@@ -400,7 +401,7 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
     const shown = limit ? items.slice(0, limit) : items;
     const rest = Math.max(0, items.length - shown.length);
     const showConnections = className.includes("enabled");
-    return <div className={`mobile-integration-card-list ${className}`}><ul>{shown.map(item => renderRow(item, item.connectProvider && (showConnections || item.connectProvider === "github") ? data.integrationConnections.find(connection => connection.provider === item.connectProvider) : undefined))}{rest > 0 && <li className="mobile-integration-more"><button type="button" onClick={() => setShowAllEssentials(true)}><span>{t("View {count} more").replace("{count}", String(rest))}</span></button></li>}</ul></div>;
+    return <div className={`mobile-integration-card-list ${className}`}><ul>{shown.map(item => renderRow(item, item.connectProvider && (showConnections || item.connectProvider === "github" || item.connectProvider === "slack") ? data.integrationConnections.find(connection => connection.provider === item.connectProvider) : undefined))}{rest > 0 && <li className="mobile-integration-more"><button type="button" onClick={() => setShowAllEssentials(true)}><span>{t("View {count} more").replace("{count}", String(rest))}</span></button></li>}</ul></div>;
   };
   return <div className="feature-integrations mobile-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with a wide variety of add-ons and integrations">
     <div className="feature-integration-toolbar mobile-integrations-search"><div className="feature-integration-search"><FlowGlyph name="search" size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div></div>
