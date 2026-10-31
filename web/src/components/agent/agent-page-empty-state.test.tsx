@@ -57,6 +57,15 @@ describe('agent page empty state', () => {
     expect(await screen.findByText('Get started with some examples')).toBeVisible()
   })
 
+  it('remembers dismissing starter examples', async () => {
+    localStorage.removeItem('flow:agent-examples-dismissed')
+    renderPage([])
+    await screen.findByText('Get started with some examples')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Dismiss examples' }))
+    expect(screen.queryByText('Get started with some examples')).not.toBeInTheDocument()
+    expect(localStorage.getItem('flow:agent-examples-dismissed')).toBe('1')
+  })
+
   it('lists recent chats newest first with an unread dot only on unread ones', () => {
     renderPage([
       chat('old', 'Write Compare Test project update', 10 * DAY, 'read'),

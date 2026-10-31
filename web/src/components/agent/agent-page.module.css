@@ -149,36 +149,56 @@
   transform: none;
 }
 .examples {
+  position: relative;
   grid-row: 4;
   align-self: start;
-  margin-top: 24px;
+  margin-top: 16px;
 }
 .examples > p {
-  margin: 0 0 12px 16px;
+  margin: 0 0 17px 16px;
   color: var(--theme-text-secondary);
   font-size: 12px;
   font-weight: 450;
   line-height: normal;
 }
+.examplesDismiss {
+  position: absolute;
+  top: -2px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+}
+.examplesDismiss:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 .exampleGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .exampleCard {
-  min-height: 134px;
+  box-sizing: border-box;
+  height: 134.5px;
+  min-height: 134.5px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
+  gap: 0;
   padding: 16px 16px 12px;
-  border: 0;
+  border: 0.5px solid var(--border);
   border-radius: 8px;
-  background: var(--theme-surface-2);
+  background: transparent;
   color: var(--theme-text-primary);
   text-align: left;
   font-family: var(--font);
   cursor: pointer;
 }
 .exampleCard:hover { background: var(--theme-surface-hover); }
-.exampleCard strong { font-size: 13px; font-weight: 500; line-height: normal; }
-.exampleCard span { color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; line-height: 18px; }
+.exampleIcon { flex: none; margin-bottom: 32px; color: var(--theme-text-primary); }
+.exampleCard strong { font-size: 13px; font-weight: 500; line-height: 15.5px; }
+.exampleCard span { margin-top: 6px; color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; line-height: 18px; }
 /* The mark sits 208px above the composer and is fully faded 205.5px down (the reference app's mask runs over its 342.5px box),
    so it dissolves right where the composer starts. */
 .emptyLogo {
@@ -194,6 +214,12 @@
   transform: translate(-50%, -40px);
   pointer-events: none;
   mask-image: linear-gradient(black, transparent 61.2%);
+}
+@media (min-width: 801px) {
+  .emptyColumn:has(.examples) { position: relative; display: block; }
+  .emptyColumn:has(.examples) .emptyComposerSlot { position: absolute; top: 236px; right: 0; left: 0; }
+  .emptyColumn:has(.examples) .examples { position: absolute; top: 342px; right: 0; left: 0; }
+  .emptyLogo { top: -166px; }
 }
 .history {
   grid-row: 3;

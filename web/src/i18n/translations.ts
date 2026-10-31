@@ -2070,6 +2070,7 @@ export const zhCN: Record<string, string> = {
   "Move to toolbar": "移至工具栏",
   "Delete chat": "删除对话",
   "Get started with some examples": "从示例开始",
+  "Dismiss examples": "关闭示例",
   "Create a new project": "创建新项目",
   "Turn an idea into a well-scoped project": "将想法整理为范围清晰的项目",
   "Research a topic": "研究一个主题",
