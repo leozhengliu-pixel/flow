@@ -15,6 +15,9 @@
 @media(min-width:1024px){
   .property-command-project.issue-project-menu--compact{width:186px;max-height:min(490px,calc(100vh - 20px))}
   .property-command-project.issue-project-menu--compact .property-command-options{max-height:454px}
-  .property-command-project.issue-project-menu--compact .property-command-create span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  html:root body .property-command-project.issue-project-menu--compact .property-command-options [role=option]{grid-template-columns:16px minmax(0,1fr);gap:8px;padding:0 14px;border-radius:0}
+  html:root body .property-command-project.issue-project-menu--compact .property-command-options [role=option]:has(.property-command-check){grid-template-columns:16px minmax(0,1fr) 16px auto}
+  html:root body .property-command-project.issue-project-menu--compact .property-command-create span{min-width:0;white-space:nowrap}
+  html:root body .property-command-project.issue-project-menu--compact .property-command-options .property-command-create{grid-template-columns:16px minmax(0,1fr)!important}
   .property-command-project.issue-project-menu--compact:has(.property-command-search:not(.is-visually-hidden)){width:339px}
 }

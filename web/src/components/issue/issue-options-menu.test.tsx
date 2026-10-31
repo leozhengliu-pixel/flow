@@ -24,6 +24,19 @@ describe('issue action menu', () => {
   beforeEach(() => { localStorage.clear(); vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }) })
   afterEach(() => vi.unstubAllGlobals())
 
+  it('offers a desktop three-hour reminder and sends the chosen timestamp', async () => {
+    const media = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: query === '(min-width: 1024px)', addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as MediaQueryList)
+    try {
+      const user = userEvent.setup()
+      const { actions } = setup()
+      await user.click(screen.getByRole('button', { name: 'Issue options' }))
+      await user.hover(screen.getByRole('option', { name: /^Remind me/ }))
+      await user.click(within(await screen.findByRole('dialog', { name: 'Remind me' })).getByRole('option', { name: /In 3 hours/ }))
+      const date = new Date(vi.mocked(actions.remind).mock.calls[0][0])
+      expect(Math.abs(date.getTime() - Date.now() - 3 * 60 * 60 * 1000)).toBeLessThan(5000)
+    } finally { media.mockRestore() }
+  })
+
   it('offers desktop team moves, marks the current team, and omits retired targets', async () => {
     const user = userEvent.setup()
     const issue = makeIssue()

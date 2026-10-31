@@ -1,12 +1,12 @@
 import { format, formatDistanceToNow } from 'date-fns'
-import { Archive, Bell, BellOff, CheckCircle2, Copy, Edit3, Ellipsis, Link2, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
+import { Archive, Bell, BellOff, CheckCircle2, ChevronRight, Copy, Edit3, Ellipsis, Link2, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
 import type { ActivityEvent, Comment, ThreadSubscription, ThreadSubscriptionState, WorkflowState } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { AttributedAction, ViaApp } from '@/components/ui/via-app'
 import { activityActor, attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
 import { Composer } from '@/components/editor/composer'
-import { useRef, useState, type ReactNode } from 'react'
+import { Fragment, useRef, useState, type ReactNode } from 'react'
 import { hasAgentThread, useAgentCommentThreadIds, useStandaloneAgentSessions, type AgentThreadControls } from '@/components/agent/issue-agent-task-context'
 import { toast } from '@/lib/toast'
 import { useActivityHighlight, useActivityHighlightTarget, type ActivityHighlightTarget } from './activity-highlight'
@@ -19,12 +19,15 @@ import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n/i18n'
 import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { useDesktopLayout } from '@/hooks/use-desktop-layout'
+import { useIssuesById } from '@/components/issue/use-issues-by-id'
 import { CalendarIcon, CycleIcon, LabelIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { issuePath } from '@/lib/app-routes'
 import { activityTimeLabel, coalesceIssueEvents, describeIssueActivityParts, withoutSessionDelegations, issueEventFieldCount, type ActivityContext, type ActivityPart } from './issue-activity-model'
 import { MentionReference } from '@/components/editor/mentions/mention-reference'
 import { IntegrationBrandIcon } from '@/components/settings/integration-brand-icon'
 import { inlineCommentsState } from '@/lib/inline-comments-state'
+import { issueEventGroups } from './issue-event-groups'
 import './activity-timeline.css'
 
 export function ActivityTimeline({
@@ -69,7 +72,8 @@ export function ActivityTimeline({
   /** Renders an agent session that has no source comment (a delegation); it sits at its chronological position. */
   renderAgentSession?: (taskId: string) => ReactNode
 }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  const desktop = useDesktopLayout()
   const now = useCurrentTimeMs()
   const agentCommentIds = useAgentCommentThreadIds()
   const standaloneSessions = useStandaloneAgentSessions()
@@ -104,6 +108,7 @@ export function ActivityTimeline({
   const [deleting, setDeleting] = useState<Comment | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const { target, highlightAnchor } = useActivityHighlightTarget(highlightTarget)
   const timelineRef = useRef<HTMLDivElement>(null)
   const commentIds = new Set(comments.map((comment) => comment.id))
@@ -119,13 +124,24 @@ export function ActivityTimeline({
   // Like the reference app, a thread reads oldest to newest with the reply box at the bottom, whatever order the page arrived in.
   for (const thread of replies.values()) thread.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   const topLevel = comments.filter((comment) => !comment.parentId || !commentIds.has(comment.parentId))
+  const replyUser = context?.users.find(user => user.id === viewerId)
   // Consecutive field changes by one actor read as one row ("Flow set priority to Urgent and set the estimate to 3
   // on behalf of Dev User"), unless a comment was posted between them.
   const commentTimes = topLevel.map((comment) => new Date(comment.createdAt).getTime())
+  const shownEvents = withoutSessionDelegations([...events], renderAgentSession ? standaloneSessions : [])
+    .filter(event => !(desktop && parentType === 'issue' && event.type === 'issue.relation_added' && event.metadata?.type === 'parent_of'))
+    .filter(event => !desktop || describeIssueActivityParts(event, context, t))
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+  const rawGroups = issueEventGroups([
+    ...shownEvents.map(event => ({ ...event, kind: 'event' })),
+    ...topLevel.map(comment => ({ ...comment, kind: 'comment' })),
+    ...(renderAgentSession ? standaloneSessions.map(session => ({ ...session, kind: 'agentSession' })) : []),
+  ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()))
+  const groupedEventIds = new Set(desktop && parentType === 'issue' ? [...rawGroups.values()].flatMap(group => group.map(item => item.id)) : [])
   // A delegation's row gives way to the card of the session it started.
   const coalesced = coalesceIssueEvents(
-    withoutSessionDelegations([...events], renderAgentSession ? standaloneSessions : []).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
-    (previous, next) => !commentTimes.some((time) => time > new Date(previous.createdAt).getTime() && time < new Date(next.createdAt).getTime()),
+    shownEvents,
+    (previous, next) => !groupedEventIds.has(previous.id) && !groupedEventIds.has(next.id) && !commentTimes.some((time) => time > new Date(previous.createdAt).getTime() && time < new Date(next.createdAt).getTime()),
   )
   const eventItems = coalesced.flatMap((event) => {
     const description = describeIssueActivityParts(event, context, t)
@@ -144,6 +160,9 @@ export function ActivityTimeline({
   )
   const start = expanded ? 0 : Math.min(Math.max(0, items.length - 8), targetIndex < 0 ? items.length : targetIndex)
   const visible = items.slice(start)
+  const groups = desktop && parentType === 'issue' ? issueEventGroups(visible) : new Map<string, typeof visible>()
+  const groupOwners = new Map<string, typeof visible>()
+  for (const group of groups.values()) for (const item of group) groupOwners.set(item.id, group)
   const hidden = start
   const contentKey = target?.kind === 'comment' ? targetComment?.id : targetIndex >= 0 ? target?.id : undefined
   useActivityHighlight(timelineRef, target, contentKey)
@@ -170,10 +189,16 @@ export function ActivityTimeline({
       >
         {hidden > 0 && (
           <button type="button" className="show-older-activity" onClick={() => setExpanded(true)}>
-            Show {hidden} older activities
+            {t('Show {count} older activities').replace('{count}', String(hidden))}
           </button>
         )}
-        {visible.map((item) => item.kind === 'agentSession' ? (
+        {visible.map((item) => {
+          const group = groups.get(item.id)
+          const owner = groupOwners.get(item.id)
+          const groupKey = `${owner?.[0].id}:${target?.key ?? ''}`
+          const groupOpen = owner && (expandedGroups[groupKey] ?? owner.some(entry => entry.id === target?.id))
+          const toggle = group ? <EventGroupToggle events={group.filter(entry => entry.kind === 'event')} open={Boolean(groupOpen)} onToggle={() => setExpandedGroups(current => ({ ...current, [groupKey]: !groupOpen }))}/> : null
+          return <Fragment key={`${item.kind}-${item.id}`}>{toggle}{owner && !groupOpen ? null : item.kind === 'agentSession' ? (
           <div className="timeline-item agent-session" data-activity-anchor={`comment-${item.id}`} key={`agent-session-${item.id}`}>{renderAgentSession?.(item.id)}</div>
         ) : (
           <div
@@ -213,7 +238,7 @@ export function ActivityTimeline({
                       <Avatar name={attributedActorName(item.user, item.botActor)} avatarUrl={attributedActorAvatar(item.user, item.botActor)} />
                       <strong data-i18n-ignore>{attributedActorName(item.user, item.botActor)}</strong><ViaApp user={item.user} botActor={item.botActor} />
                       <a href={`#comment-${item.id}`} title={format(new Date(item.createdAt), 'PPpp')}>
-                        {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
+                        {desktop ? activityTimeLabel(item.createdAt, now, locale) : formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
                       </a>
                       {item.editedAt && <span>{t('(edited)')}</span>}
                       <div className="comment-card__actions">
@@ -279,7 +304,7 @@ export function ActivityTimeline({
                         <Avatar name={attributedActorName(reply.user, reply.botActor)} avatarUrl={attributedActorAvatar(reply.user, reply.botActor)} />
                         <strong data-i18n-ignore>{attributedActorName(reply.user, reply.botActor)}</strong><ViaApp user={reply.user} botActor={reply.botActor} />
                         <a href={`#comment-${reply.id}`} title={format(new Date(reply.createdAt), 'PPpp')}>
-                          {formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true })}
+                          {desktop ? activityTimeLabel(reply.createdAt, now, locale) : formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true })}
                         </a>
                         {reply.editedAt && <span>{t('(edited)')}</span>}
                         <div className="comment-card__actions">
@@ -333,7 +358,8 @@ export function ActivityTimeline({
                       />
                     </div>
                   ) : (
-                    <button type="button" className="comment-thread__reply" aria-label="Reply" onClick={() => setReplying(item.id)}>
+                    <button type="button" className="comment-thread__reply" aria-label={t('Reply')} onClick={() => setReplying(item.id)}>
+                      {desktop && replyUser && <Avatar name={replyUser.displayName} avatarUrl={replyUser.avatarUrl}/>}
                       <span>{t('Leave a reply…')}</span>
                     </button>
                   )}
@@ -341,7 +367,8 @@ export function ActivityTimeline({
               </ResolvedComment>
             )}
           </div>
-        ))}
+        )}</Fragment>
+        })}
       </div>
       <DeleteCommentDialog
         open={Boolean(deleting)}
@@ -362,6 +389,7 @@ const ACTORLESS_ACTIVITY = new Set(['issue.coding_session_archived'])
 function ActivityRow({ event, description, context, now }: { event: ActivityEvent; description: ActivityPart[]; context?: ActivityContext; now: number }) {
   const { locale } = useI18n()
   const phone = usePhoneLayout()
+  const desktop = useDesktopLayout()
   const inlineRelation = phone && event.type === 'issue.relation_added'
   const sentence = description.map((part, index) => typeof part === 'string' ? part : inlineRelation && part.type === 'issue' && context?.workspace
     ? (() => {
@@ -371,7 +399,9 @@ function ActivityRow({ event, description, context, now }: { event: ActivityEven
       const link = <a key={key} className="activity-relation-link" href={issuePath(context.workspace.urlKey, target)}><b>{target.identifier}</b> {target.title}</a>
       return event.metadata?.type === 'blocks' ? <span key={key} className="activity-blocking-target">{link}</span> : link
     })()
-    : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)
+    : desktop && part.type === 'issue' && context?.workspace
+      ? <ActivityIssueLink key={`${index}-${part.id}`} id={part.id} label={part.label} context={context}/>
+      : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)
   return (
     <p className="activity-row" data-i18n-ignore>
       {ACTORLESS_ACTIVITY.has(event.type) && !event.metadata?.archivedBy ? sentence : <AttributedAction actor={activityActor(event.actor, event.botActor, context?.users)}>{sentence}</AttributedAction>}
@@ -385,8 +415,23 @@ function ActivityRow({ event, description, context, now }: { event: ActivityEven
   )
 }
 
+function EventGroupToggle({ events, open, onToggle }: { events: ActivityEvent[]; open: boolean; onToggle: () => void }) {
+  const { t, locale } = useI18n()
+  const names: Record<string, string> = { delegate: 'agent', assignee: 'assignee', state: 'status', priority: 'priority', estimate: 'estimate', labels: 'labels', project: 'project', title: 'title', dueDate: 'due date' }
+  const fields = [...new Set(events.flatMap(event => Object.keys(event.metadata ?? {}).flatMap(key => names[key] ? [t(names[key])] : [])))]
+  const summary = fields.length ? t(': changed {fields}…').replace('{fields}', new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(fields)) : ''
+  return <button type="button" className="activity-event-group" aria-expanded={open} onClick={onToggle}><ChevronRight size={12}/><span><span>{t('Show {count} events').replace('{count}', String(events.length))}{summary}</span></span></button>
+}
+
+function ActivityIssueLink({ id, label, context }: { id: string; label: string; context: ActivityContext }) {
+  const targets = useIssuesById([id], context)
+  const issue = targets.get(id)
+  return <a className="activity-relation-link" href={issuePath(context.workspace.urlKey, issue ?? { identifier: label, title: '' })}>{issue?.title ?? label}</a>
+}
+
 function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?: ActivityContext }) {
   const phone = usePhoneLayout()
+  const desktop = useDesktopLayout()
   const m = event.metadata ?? {}
   // Like the reference app, a row that changed several fields shows who did it rather than one field's icon.
   if (event.type === 'issue.updated' && issueEventFieldCount(event) < 2) {
@@ -417,8 +462,8 @@ function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?:
   if (event.type.startsWith('attachment.')) return <Paperclip size={14} />
   if (event.type.includes('relation')) {
     const type = event.metadata?.type
-    if (phone && type === 'blocks') return <span className="activity-blocking-icon"><IssueActionGlyph label="Blocking…" fallback={null}/></span>
-    return phone && (!type || type === 'related') ? <IssueActionGlyph label="Related to…" fallback={null} /> : <Link2 size={14} />
+    if ((phone || desktop) && type === 'blocks') return <span className="activity-blocking-icon"><IssueActionGlyph label="Blocking…" fallback={null}/></span>
+    return (phone || desktop) && (!type || type === 'related') ? <IssueActionGlyph label="Related to…" fallback={null} /> : <Link2 size={14} />
   }
   if (event.type.includes('review')) return <Link2 size={14} />
   const actor = activityActor(event.actor, event.botActor, context?.users)

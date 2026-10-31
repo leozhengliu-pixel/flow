@@ -68,6 +68,14 @@ import { createIssueZhCN } from './translations-create-issue';
 import { chatIntegrationsZhCN } from './translations-chat-integrations';
 
 export const zhCN: Record<string, string> = {
+  "Show {count} events": "显示 {count} 个事件",
+  ": changed {fields}…": "：更改了{fields}…",
+  "estimate": "估算",
+  "title": "标题",
+  "due date": "截止日期",
+  "Could not update due date.": "无法更新截止日期。",
+  "Try: 24h, 7 days, Feb 9": "试试：24 小时、7 天、2 月 9 日",
+  "Show {count} older activities": "显示 {count} 条更早的动态",
   'No email address': '未设置邮箱',
   'No enabled integrations': '暂无已启用的集成',
   'Discover integrations': '发现集成',

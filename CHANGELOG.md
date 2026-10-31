@@ -25,6 +25,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Restore desktop project milestone chips, honor ungrouped rows and display properties, align list columns and compact date controls, and correct overview property spacing without changing phone layouts.
 
+- Desktop issue activity uses plain issue-title links, omits redundant parent history, and expands consecutive event groups. Compact project rows reclaim unused columns, comment actions and replies use the measured sizes, and date/reminder menus include end-of-week and three-hour presets without changing phone layouts.
 - Phone history and display popovers paint a true half-pixel edge, chat switcher times align to the right inset and compact older weeks without changing sub-day units, and inactive display layout pills retain their ring. Desktop layouts and timestamps are unchanged.
 - Desktop issue display options expose every property without fixed-height clipping, retain collapsible group controls, and use the shared sub-team filter with compact Reset and team-default actions. Group context menus collapse, select complete groups and hide them; bulk Actions show the command glyph, and new-view fields use the brighter title and full-width description. Phone sheets are unchanged.
 - Phone navigation drawers retain a visible compose fill, the team header and child spacing, indented cycle labels, and a dismissible Import issues entry without changing the desktop sidebar.
