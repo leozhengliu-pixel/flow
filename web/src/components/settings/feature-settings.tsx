@@ -391,7 +391,7 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
           <span className="mobile-integration-icon" aria-hidden="true" />
           <span className="mobile-integration-row-copy"><span>{name}</span>{connection && <small>{t("Enabled by")} {data.viewer.displayName}{date ? ` ${t("on")} ${date}` : ""}</small>}</span>
         </span>
-        <ChevronRight className="mobile-integration-chevron" size={16} aria-hidden="true" />
+        <MobileIntegrationChevron />
       </button>
     </li>;
   };
@@ -402,11 +402,15 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
     return <div className={`mobile-integration-card-list ${className}`}><ul>{shown.map(item => renderRow(item, item.connectProvider && (showConnections || item.connectProvider === "github") ? data.integrationConnections.find(connection => connection.provider === item.connectProvider) : undefined))}{rest > 0 && <li className="mobile-integration-more"><button type="button" onClick={() => setShowAllEssentials(true)}><span>{t("View {count} more").replace("{count}", String(rest))}</span></button></li>}</ul></div>;
   };
   return <div className="feature-integrations mobile-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with a wide variety of add-ons and integrations">
-    <div className="feature-integration-toolbar mobile-integrations-search"><div className="feature-integration-search"><Search size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div></div>
+    <div className="feature-integration-toolbar mobile-integrations-search"><div className="feature-integration-search"><FlowGlyph name="search" size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div></div>
     {!normalized && <section className="mobile-integrations-section mobile-integrations-section-enabled"><h3>{t("Enabled")}</h3>{renderCard(enabled.map(value => value.item), "mobile-integration-card-enabled")}</section>}
     <section className="mobile-integrations-section mobile-integrations-section-essentials"><h3>{t("Essentials")}</h3>{renderCard(visibleEssentials, "mobile-integration-card-essentials", normalized || showAllEssentials ? undefined : 3)}</section>
     {normalized && !visibleEssentials.length && <FeatureEmpty icon={Search} title="No integrations found"/>}
   </FeatureShell></div>;
+}
+
+function MobileIntegrationChevron() {
+  return <svg className="mobile-integration-chevron" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.46967 11.4697C5.17678 11.7626 5.17678 12.2374 5.46967 12.5303C5.76256 12.8232 6.23744 12.8232 6.53033 12.5303L10.5303 8.53033C10.8207 8.23999 10.8236 7.77014 10.5368 7.47624L6.63419 3.47624C6.34492 3.17976 5.87009 3.17391 5.57361 3.46318C5.27713 3.75244 5.27128 4.22728 5.56054 4.52376L8.94583 7.99351L5.46967 11.4697Z" /></svg>;
 }
 
 function FeatureEmpty({icon:Icon,title,action}:{icon:LucideIcon;title:string;action?:ReactNode}) {const {t}=useI18n();return <div className="feature-empty"><Icon size={24}/><h3>{t(title)}</h3>{action}</div>}
