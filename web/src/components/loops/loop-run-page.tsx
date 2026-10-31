@@ -17,7 +17,7 @@ import { AgentAttachIcon, AgentStopIcon } from "@/components/agent/agent-icons";
 import { AgentSkillsPicker } from "@/components/agent/agent-skills-picker";
 import { AttachmentRemoveButton } from "@/components/ui/attachment-remove-button";
 import { toast } from "@/lib/toast";
-import { cancelLoopRun, getLoopRun, getLoopVersion, listLoopRuns, rateLoopRun, replyToLoopRun } from "@/lib/api";
+import { cancelLoopRun, getLoopRun, getLoopVersion, listLoopRuns, rateLoopRun, replyToLoopRun, runLoopNow } from "@/lib/api";
 import { LOOP_RUN_ACTIVITY_EVENT, type LoopRunActivity } from "@/lib/loop-run-activity";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { editLoopPath, loopPath, loopRunPath, loopsPath } from "@/lib/app-routes";
@@ -154,6 +154,7 @@ export function LoopRunPage({
   const [cancelling, setCancelling] = useState(false);
   const [triggerFilters, setTriggerFilters] = useState<LoopRun["trigger"][]>([]);
   const [showDuration, setShowDuration] = useState(true);
+  const [runBusy, setRunBusy] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   // Consecutive failed list loads (an API restart answers 502): retried with backoff until one succeeds.
   const [listFailures, setListFailures] = useState(0);
@@ -344,6 +345,18 @@ export function LoopRunPage({
   const started = selected ? new Date(selected.startedAt) : undefined;
   // "Ran version N" opens the published versions with that version selected.
   const versionsHref = `${loopPath(workspace, loop ?? loopId)}?versions=1${selected?.versionId ? `&version=${encodeURIComponent(selected.versionId)}` : ""}`;
+  const runNow = async () => {
+    if (!loop || !loop.enabled || runBusy) return;
+    setRunBusy(true);
+    try {
+      const run = await runLoopNow(loop.id);
+      onNavigate(loopRunPath(workspace, loop, run.id));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not start the loop"));
+    } finally {
+      setRunBusy(false);
+    }
+  };
   return (
     <main className="main-panel loops-run-page" aria-label={t("Run history")}>
       <header className="loops-editor-topbar">
@@ -367,6 +380,12 @@ export function LoopRunPage({
           </div>
         )}
       </header>
+      <nav className="loops-run-tabs" aria-label={t("Loop views")}>
+        <button type="button" onClick={() => onNavigate(loopPath(workspace, loop ?? loopId))}>{t("Overview")}</button>
+        <button type="button" className="is-active" aria-current="page">{t("Run history")}</button>
+        <span />
+        <button className="loops-primary-button loops-run-now" type="button" disabled={!loop?.enabled || runBusy} onClick={() => void runNow()}>{loop?.enabled ? t("Run now") : t("This Loop is disabled")}</button>
+      </nav>
       <div className="loops-run-layout">
         <aside className="loops-run-list" aria-label={t("Runs")}>
           <div className="loops-run-list-toolbar">

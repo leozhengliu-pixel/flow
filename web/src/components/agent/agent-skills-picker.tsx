@@ -53,6 +53,7 @@ export function AgentSkillsPicker({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content data-flow-motion="floating" align="start" className={styles.skillsMenu} side="bottom" sideOffset={4} onKeyDown={onKeyDown}>
+          <div className={styles.skillsMenuHeader}>{t("Select skill")}</div>
           <div className={styles.menuSearch}>
             <Search />
             <input

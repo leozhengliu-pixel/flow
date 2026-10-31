@@ -41,15 +41,13 @@ describe('agent page composer', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Submit comment' })).toBeDisabled())
   })
 
-  it('keeps Agent empty state free of example cards', async () => {
+  it('shows Flow example cards in an empty Agent state', async () => {
     api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
     render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     expect(await screen.findByRole('textbox', { name: 'Send a message to Flow AI' })).toHaveAttribute('data-placeholder', 'Ask Flow…')
     expect(screen.getByRole('button', { name: 'Skills' })).toBeVisible()
-    expect(screen.queryByText('Get started with some examples')).not.toBeInTheDocument()
-    expect(screen.queryByText('Create a new project')).not.toBeInTheDocument()
-    expect(screen.queryByText('Research a topic')).not.toBeInTheDocument()
-    expect(screen.queryByText('Set up new team')).not.toBeInTheDocument()
+    expect(screen.getByText('Get started with some examples')).toBeVisible()
+    expect(screen.getByText('Summarize the latest project updates')).toBeVisible()
     expect(document.querySelector('svg.emptyGraphic, [class*="emptyGraphic"]')).toBeNull()
   })
 
@@ -109,10 +107,10 @@ describe('agent page composer', () => {
     await user.click(screen.getByRole('button', { name: 'Stop responding' }))
   })
 
-  it('keeps the quiet send button for an empty composer', async () => {
+  it('keeps the accent send button for an empty composer', async () => {
     api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
     render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit comment' })).toHaveAttribute('data-state', 'empty'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit comment' })).toHaveAttribute('data-state', 'ready'))
   })
 
   it('shows a thinking state before the provider sends its first delta', async () => {
