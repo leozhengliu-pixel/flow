@@ -917,6 +917,7 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
 }
 
 .settings-members-phone-search, .settings-members-phone-sort, .settings-members-phone-filter, .settings-members-phone-more { display: none; }
+.settings-members-toolbar > .phone-native-select-wrap:has(> .settings-members-phone-filter) { display: none; }
 .settings-members-desktop-sort { display: contents; }
 
 /* Members on phones become a compact two-column directory. Keep the desktop
@@ -972,6 +973,11 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-phone-sort.is-descending { transform: rotate(180deg); }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label input::placeholder { color: var(--theme-text-secondary); }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-filter { display: none; }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .phone-native-select-wrap:has(> .settings-members-phone-filter) {
+    display: block;
+    width: 132px;
+    height: 36px;
+  }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-phone-filter {
     display: block;
     box-sizing: border-box;

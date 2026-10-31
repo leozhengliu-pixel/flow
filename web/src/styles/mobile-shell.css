@@ -1,5 +1,26 @@
 .phone-create-issue { display: none; }
 @media (max-width: 767px) {
+  /* Native phone selects share the same light-weight chevron and compact inset as settings controls. */
+  .phone-native-select-wrap { position: relative; display: inline-flex; min-width: 0; }
+  .phone-native-select-wrap > .phone-native-select {
+    min-width: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 24px;
+    padding-left: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .phone-native-select-chevron {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    width: 14px;
+    height: 14px;
+    color: var(--theme-text-secondary);
+    pointer-events: none;
+    transform: translateY(-50%);
+  }
   /* Keep variable-font advances fractional on Linux, as on the accepted phone layouts. */
   .pulse-page, .reviews-workspace, .project-detail-page { text-rendering: geometricPrecision; }
   :is(.pulse-page, .reviews-workspace, .project-detail-page) :is(button, input, textarea, select) { text-rendering: inherit; }

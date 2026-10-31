@@ -222,7 +222,8 @@
   .document-history-dialog > .dialog-close { top: 19.16px; right: 28.5px; width: 32px; height: 32px; box-sizing: border-box; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; color: var(--phone-project-panel-text); font: 500 12px/normal var(--font); }
   .document-history-dialog > .dialog-close svg { color: var(--theme-text-secondary); }
   .document-history-dialog > .dialog-close svg path { fill: currentColor; }
-  .document-history-panel { display: block; flex: 1; grid-template-columns: minmax(0, 1fr); min-height: 0; margin: 0 16px 16px; overflow: hidden; border: 0; border-radius: 0; background: var(--dialog-bg); }
+  .document-history-panel { position: relative; display: block; flex: 1; grid-template-columns: minmax(0, 1fr); min-height: 0; margin: 0 16px 16px; overflow: hidden; border: 0; border-radius: 0; background: var(--dialog-bg); }
+  .document-history-panel::before { position: absolute; z-index: 1; inset: 0; border: .5px solid var(--theme-border); border-radius: 12px; content: ''; pointer-events: none; }
   .document-history-main { width: 100%; height: 100%; }
   .document-history-versions { display: none; }
   .document-history-scroll { padding: 8px 24px 96px; }
@@ -232,17 +233,18 @@
     width: 240.5px;
     height: 36px;
     box-sizing: border-box;
-    margin-left: -16px;
+    margin-left: 0;
     padding: 6px 24px 6px 12px;
     border: .5px solid transparent;
     border-radius: 8px;
     background: var(--dialog-control-bg);
     box-shadow: 0 0 0 .5px var(--set-input-border) inset;
     color: var(--theme-text-primary);
-    font: 15px/24px var(--font);
+    font: 400 13px/normal var(--font);
     text-align: left;
     white-space: nowrap;
   }
+  .document-history-scroll > .phone-native-select-wrap { margin-left: -16px; }
   .document-history-doc { margin: 24px 0 0; }
   .document-history-doc p { color: var(--phone-project-panel-text); letter-spacing: -.1px; }
   .document-history-pill { right: auto; bottom: 20px; left: 50%; width: 124.3px; height: 40px; max-width: none; box-sizing: border-box; transform: translateX(-50%); border-radius: 9999px; }
