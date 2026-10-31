@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-const api = 'http://127.0.0.1:4180'
+const api = process.env.FLOW_MOBILE_API ?? 'http://127.0.0.1:4180'
 
 type Chat = { id: string; title: string }
 
@@ -14,6 +14,68 @@ const titles = [
   '[mobile] Show Flow-App Team Resources',
   '[mobile] List Flow-app Team Issues and Resources',
 ]
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  test.describe(`mobile agent chat switcher ${viewport.width}px`, () => {
+    test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+    test('history has calendar groups, filters, scrolls and opens a chat', async ({ page, request }, testInfo) => {
+      const created = await request.post(`${api}/api/workspaces`, {
+        data: { name: 'mobile-agent-chat-switcher', urlKey: `mobile-switcher-${viewport.width}-${testInfo.retry}-${Date.now()}`, region: 'us', tutorial: false },
+      })
+      expect(created.status()).toBe(201)
+      const { workspace: { urlKey: workspaceKey } } = await created.json() as { workspace: { urlKey: string } }
+      const now = new Date('2026-10-30T12:00:00')
+      await page.clock.setFixedTime(now)
+      const sessions = [1, 3, 10, 17, 17.1, 24, 24.1, 90].map((days, index) => ({
+        id: `switcher-${index}`, slugId: `switcher-${index}`, userId: 'usr_local', title: titles[index], favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [],
+        createdAt: new Date(+now - days * 86400000).toISOString(), updatedAt: new Date(+now - days * 86400000).toISOString(),
+      }))
+      await page.route('**/api/**', async route => {
+        if (route.request().method() !== 'GET' || route.request().headers().accept?.includes('text/event-stream')) return route.continue()
+        const response = await route.fetch()
+        if (!response.headers()['content-type']?.includes('application/json')) return route.fulfill({ response })
+        const body = await response.json()
+        if (body && !Array.isArray(body) && 'agentSessions' in body) body.agentSessions = sessions
+        if (new URL(route.request().url()).pathname === '/api/agent/sessions') return route.fulfill({ response, json: sessions })
+        if (new URL(route.request().url()).pathname === '/api/agent/sessions/switcher-3') return route.fulfill({ response, status: 200, json: sessions[3] })
+        await route.fulfill({ response, json: body })
+      })
+      await page.goto(`/${workspaceKey}/agent`)
+      const trigger = page.getByRole('button', { name: 'Switch agent chat' })
+      await trigger.click()
+      const popover = page.getByTestId('agent-chat-switcher-popover')
+      await expect.poll(async () => (await popover.boundingBox())?.width).toBe(viewport.width - 32)
+      const box = await popover.boundingBox()
+      expect(box?.x).toBe(16)
+      expect(box?.width).toBe(viewport.width - 32)
+      expect(box?.height).toBe(450)
+      expect(Math.abs((box?.y ?? 0) - (viewport.width === 390 ? 110 : 87))).toBeLessThanOrEqual(1)
+      for (const name of ['Yesterday', 'This week', 'Last week', '2 weeks ago', '3 weeks ago', 'Older']) await expect(popover.getByRole('group', { name, exact: true })).toBeAttached()
+      expect((await popover.getByRole('option').first().boundingBox())?.height).toBe(46)
+      await expect(popover.getByRole('option').first()).toHaveAttribute('aria-selected', 'false')
+      expect(await popover.getByRole('listbox').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true)
+      expect(await popover.getByTestId('agent-chat-switcher-divider').count()).toBe(5)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/chat-switcher-${viewport.width}.png`, scale: 'css', animations: 'disabled' })
+      const input = popover.getByPlaceholder('Chat history')
+      await input.fill('QA Pill')
+      await expect(popover.getByRole('option')).toHaveCount(1)
+      await input.fill('no matching chat')
+      await expect(popover.getByText('No history')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(popover).toBeHidden()
+      await trigger.click()
+      await expect(popover.getByPlaceholder('Chat history')).toHaveValue('')
+      await page.mouse.click(viewport.width - 8, 64)
+      await expect(popover).toBeHidden()
+      await trigger.click()
+      await popover.getByPlaceholder('Chat history').fill('QA Pill')
+      await page.keyboard.press('Enter')
+      await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/agent/switcher-3$`))
+    })
+  })
+}
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   test.describe(`mobile agent home ${viewport.width}px`, () => {

@@ -312,6 +312,35 @@ describe('agent page composer', () => {
     expect(navigate).toHaveBeenCalledWith('/workspace/agent')
   })
 
+  it('shows phone history with calendar-week groups and a searchable chat list', async () => {
+    vi.setSystemTime(new Date('2026-10-30T12:00:00'))
+    const media = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+      matches: query === '(max-width: 767px)', media: query, onchange: null,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: () => false,
+    }))
+    try {
+      const sessions: AgentSession[] = [1, 3, 10, 17, 90].map((days, index) => ({
+        id: `phone-${index}`, slugId: `phone-${index}`, userId: 'user-1', title: `[mobile] Chat ${index}`, favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [],
+        createdAt: new Date(Date.now() - days * 86400000).toISOString(), updatedAt: new Date(Date.now() - days * 86400000).toISOString(),
+      }))
+      const navigate = vi.fn()
+      const user = userEvent.setup()
+      render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: sessions, agentSkills: [] })} onNavigate={navigate} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+      await user.click(screen.getByRole('button', { name: 'Switch agent chat' }))
+      for (const name of ['Yesterday', 'This week', 'Last week', '2 weeks ago', 'Older']) expect(screen.getByRole('group', { name })).toBeVisible()
+      expect(screen.queryByRole('option', { name: 'New chat' })).not.toBeInTheDocument()
+      expect(screen.getAllByRole('option').every(option => option.getAttribute('aria-selected') === 'false')).toBe(true)
+      await user.type(screen.getByPlaceholderText('Chat history'), 'Chat 3')
+      expect(screen.getAllByRole('option')).toHaveLength(1)
+      expect(screen.queryByRole('group', { name: '2 weeks ago' })).not.toBeInTheDocument()
+      await user.keyboard('{Enter}')
+      expect(navigate).toHaveBeenCalledWith('/workspace/agent/phone-3')
+    } finally {
+      media.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
   it('renders assistant markdown as rich content', async () => {
     const session: AgentSession = {
       id: 'session-markdown', slugId: 'markdown', userId: 'user-1', title: 'Markdown', favorite: false, location: 'page', issueIds: [], skillIds: [],
