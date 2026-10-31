@@ -133,6 +133,27 @@ export function IssueOptionsMenu({
     media.addEventListener('change', update)
     return () => media.removeEventListener('change', update)
   }, [])
+  // The phone panel lays its rows out top-down (the reference virtualises the list, so every row is
+  // absolutely positioned); keep the offsets in sync as filtering removes and restores rows.
+  useEffect(() => {
+    if (!mobile || !open) return
+    const layout = () => {
+      const root = parentMenuRef.current ?? document.querySelector<HTMLElement>('.issue-options-popover')
+      const sizer = root?.querySelector<HTMLElement>('[cmdk-list-sizer]')
+      if (!sizer) return
+      let top = 6
+      for (const row of Array.from(sizer.children) as HTMLElement[]) {
+        row.style.position = 'absolute'
+        row.style.top = `${top}px`
+        top += row.classList.contains('issue-options-separator') ? 12 : row.classList.contains('issue-options-empty') ? 42 : 45
+      }
+      sizer.style.height = `${top + 6}px`
+    }
+    const raf = requestAnimationFrame(layout)
+    const observer = new MutationObserver(layout)
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => { cancelAnimationFrame(raf); observer.disconnect() }
+  }, [mobile, open, rootQuery])
   const openNested = (name: Submenu | 'due', focus = false) => {
     if (mobile && !focus) return
     setFocusNested(focus)
@@ -298,55 +319,57 @@ export function IssueOptionsMenu({
         }}>
           <Command loop defaultValue="__no_selection__">
             <Command.Input ref={parentFilterRef} className={rootQuery ? 'issue-options-submenu-search' : 'issue-options-filter'} aria-label={t('Filter…')} placeholder={t('Filter…')} value={rootQuery} onValueChange={value => { setRootQuery(value); setHighlight(true); setSubmenu(null); setDatePickerOpen(false) }}/>
-            <Command.List>
-              <Command.Empty className="issue-options-empty">{t('No results')}</Command.Empty>
-              {mobile && <Option icon={<FlowGlyph name="leadTeam" size={16}/>} label="Team" nested="team" anchor={anchors.team} expanded={submenu === 'team'} onHover={() => openNested('team')} onSelect={() => openNested('team', true)}/>}
-              <Option icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested="due" anchor={anchors.due} expanded={datePickerOpen} onHover={() => openNested('due')} onSelect={() => openNested('due', true)}/>
-              {data?.workspaceSettings.featureFlags.releases !== false && (!mobile || hasReleaseSurface) && <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
-              <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
-              {data?.workspaceSettings.featureFlags['customer-requests'] !== false && <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut={isMacPlatform() ? 'Ctrl R' : 'Ctrl Option R'} onSelect={() => {
-                // The issue page shows "Select customer…" and its inline composer; elsewhere the composer opens in a dialog.
-                closeMenu()
-                if (!requestIssueCustomerRequest(issue.id)) setCustomerDialogOpen(true)
-              }}/>}
-              {Boolean(data?.reviews.length) && <Option icon={<GitPullRequest/>} label="Add pull request..." onSelect={() => { setReviewQuery(''); openDialog('review') }}/>}
-              <Option icon={<FilePlus2/>} label="Add document..." onSelect={() => actions && void perform(actions.addDocument, 'Document created')}/>
-              <Separator/>
-              <Option icon={<Repeat2/>} label="Create related" nested="create" anchor={anchors.create} expanded={submenu === 'create'} onHover={() => openNested('create')} onSelect={() => openNested('create', true)}/>
-              <Option icon={<Link2/>} label="Mark as" nested="mark" anchor={anchors.mark} expanded={submenu === 'mark'} onHover={() => openNested('mark')} onSelect={() => openNested('mark', true)}/>
-              {removable.length > 0 && <Option icon={<X/>} label="Remove" nested="remove" anchor={anchors.remove} expanded={submenu === 'remove'} onHover={() => openNested('remove')} onSelect={() => openNested('remove', true)}/>}
-              <Separator/>
-              <Option icon={<Copy/>} label="Copy" nested="copy" anchor={anchors.copy} expanded={submenu === 'copy'} onHover={() => openNested('copy')} onSelect={() => openNested('copy', true)}/>
-              <Option icon={<RefreshCw/>} label="Convert to" nested="convert" anchor={anchors.convert} expanded={submenu === 'convert'} onHover={() => openNested('convert')} onSelect={() => openNested('convert', true)}/>
-              {actions && <Option icon={<Copy/>} label="Make a copy…" onSelect={() => actions.makeCopy ? void perform(actions.makeCopy) : beginRelated('copy')}/>}
-              <Separator/>
-              <Option icon={<Star/>} glyph={favorited ? <FlowFavoriteFilledIcon/> : <FlowFavoriteIcon/>} label={favorited ? 'Remove from favorites' : 'Favorite'} shortcut="Option F" onSelect={() => {
-                if (actions) void perform(actions.toggleFavorite)
-                else {
+            <div className="issue-options-list-surface">
+              <Command.List>
+                <Command.Empty className="issue-options-empty">{t('No results')}</Command.Empty>
+                {mobile && <Option icon={<FlowGlyph name="leadTeam" size={16}/>} label="Team" nested="team" anchor={anchors.team} expanded={submenu === 'team'} onHover={() => openNested('team')} onSelect={() => openNested('team', true)}/>}
+                <Option icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested="due" anchor={anchors.due} expanded={datePickerOpen} onHover={() => openNested('due')} onSelect={() => openNested('due', true)}/>
+                {data?.workspaceSettings.featureFlags.releases !== false && (!mobile || hasReleaseSurface) && <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
+                <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
+                {data?.workspaceSettings.featureFlags['customer-requests'] !== false && <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut={isMacPlatform() ? 'Ctrl R' : 'Ctrl Option R'} onSelect={() => {
+                  // The issue page shows "Select customer…" and its inline composer; elsewhere the composer opens in a dialog.
                   closeMenu()
-                  onFavoriteChange?.()
-                }
-              }}/>
-              <Option icon={<Bell/>} label="Remind me" shortcut="Shift H" nested="remind" anchor={anchors.remind} expanded={submenu === 'remind'} onHover={() => { if (actions) openNested('remind') }} onSelect={() => actions ? openNested('remind', true) : (closeMenu(), onRemind?.())}/>
-              {data?.viewer.id && <Option icon={<Bell/>} label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="Shift S" onSelect={toggleSubscription}/>}
-              <Separator/>
-              {data?.workspaceSettings.featureFlags['triage-intelligence'] && <Option icon={<Search/>} label="Find suggestions" onSelect={findSuggestions}/>}
-              {data?.workspaceSettings.featureFlags.loops !== false && <Option icon={<Repeat2/>} label="Run loop…" onSelect={() => {
-                setLoopPrompt(issue.description)
-                openDialog('loop')
-              }}/>}
-              <Separator/>
-              <Option icon={<History/>} label="Show description history" onSelect={() => {
-                if (onShowDescriptionHistory && !actions) {
-                  closeMenu()
-                  onShowDescriptionHistory()
-                } else {
-                  setSelectedHistoryId('current')
-                  openDialog('history')
-                }
-              }}/>
-              <Option danger icon={<Trash2/>} label="Delete" shortcut="Command Backspace" onSelect={() => { closeMenu(); confirmDelete() }}/>
-            </Command.List>
+                  if (!requestIssueCustomerRequest(issue.id)) setCustomerDialogOpen(true)
+                }}/>}
+                {Boolean(data?.reviews.length) && <Option icon={<GitPullRequest/>} label="Add pull request..." onSelect={() => { setReviewQuery(''); openDialog('review') }}/>}
+                <Option icon={<FilePlus2/>} label="Add document..." onSelect={() => actions && void perform(actions.addDocument, 'Document created')}/>
+                <Separator/>
+                <Option icon={<Repeat2/>} label="Create related" nested="create" anchor={anchors.create} expanded={submenu === 'create'} onHover={() => openNested('create')} onSelect={() => openNested('create', true)}/>
+                <Option icon={<Link2/>} label="Mark as" nested="mark" anchor={anchors.mark} expanded={submenu === 'mark'} onHover={() => openNested('mark')} onSelect={() => openNested('mark', true)}/>
+                {removable.length > 0 && <Option icon={<X/>} label="Remove" nested="remove" anchor={anchors.remove} expanded={submenu === 'remove'} onHover={() => openNested('remove')} onSelect={() => openNested('remove', true)}/>}
+                <Separator/>
+                <Option icon={<Copy/>} label="Copy" nested="copy" anchor={anchors.copy} expanded={submenu === 'copy'} onHover={() => openNested('copy')} onSelect={() => openNested('copy', true)}/>
+                <Option icon={<RefreshCw/>} label="Convert to" nested="convert" anchor={anchors.convert} expanded={submenu === 'convert'} onHover={() => openNested('convert')} onSelect={() => openNested('convert', true)}/>
+                {actions && <Option icon={<Copy/>} label="Make a copy…" onSelect={() => actions.makeCopy ? void perform(actions.makeCopy) : beginRelated('copy')}/>}
+                <Separator/>
+                <Option icon={<Star/>} glyph={favorited ? <FlowFavoriteFilledIcon/> : <FlowFavoriteIcon/>} label={favorited ? 'Remove from favorites' : 'Favorite'} shortcut="Option F" onSelect={() => {
+                  if (actions) void perform(actions.toggleFavorite)
+                  else {
+                    closeMenu()
+                    onFavoriteChange?.()
+                  }
+                }}/>
+                <Option icon={<Bell/>} label="Remind me" shortcut="Shift H" nested="remind" anchor={anchors.remind} expanded={submenu === 'remind'} onHover={() => { if (actions) openNested('remind') }} onSelect={() => actions ? openNested('remind', true) : (closeMenu(), onRemind?.())}/>
+                {data?.viewer.id && <Option icon={<Bell/>} label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="Shift S" onSelect={toggleSubscription}/>}
+                <Separator/>
+                {data?.workspaceSettings.featureFlags['triage-intelligence'] && <Option icon={<Search/>} label="Find suggestions" onSelect={findSuggestions}/>}
+                {data?.workspaceSettings.featureFlags.loops !== false && <Option icon={<Repeat2/>} label="Run loop…" onSelect={() => {
+                  setLoopPrompt(issue.description)
+                  openDialog('loop')
+                }}/>}
+                <Separator/>
+                <Option icon={<History/>} label="Show description history" onSelect={() => {
+                  if (onShowDescriptionHistory && !actions) {
+                    closeMenu()
+                    onShowDescriptionHistory()
+                  } else {
+                    setSelectedHistoryId('current')
+                    openDialog('history')
+                  }
+                }}/>
+                <Option danger icon={<Trash2/>} label="Delete" shortcut="Command Backspace" onSelect={() => { closeMenu(); confirmDelete() }}/>
+              </Command.List>
+            </div>
           </Command>
 
           {submenu === 'team' && <SubmenuSurface label="Team" anchor={anchors.team} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
@@ -505,7 +528,7 @@ function IssueOptionsShortcut({ value }: { value: string }) {
 }
 
 function Separator() {
-  return <div className="issue-options-separator" role="separator"/>
+  return <div className="issue-options-separator" role="separator"><span className="issue-options-separator-line"/></div>
 }
 
 /** "Remove ▸" row: "<Relation> <ID>" then the linked issue's title, muted. */
