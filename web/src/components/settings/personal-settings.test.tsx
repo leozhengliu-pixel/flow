@@ -240,6 +240,24 @@ describe('personal settings workflows', () => {
     expect(screen.getByRole('option', { name: '标题和 URL' })).toBeInTheDocument()
   })
 
+  it('uses full-row phone channel links while keeping unavailable channels disabled', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 767px)', addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    const user = userEvent.setup()
+    const input = props('notifications')
+    render(<MemoryRouter><I18nProvider><PersonalSettings {...input}/></I18nProvider></MemoryRouter>)
+    expect(await screen.findByRole('checkbox', { name: 'Priority inbox' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Mobile' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Slack' })).toBeDisabled()
+    const desktop = screen.getByRole('link', { name: 'Desktop' })
+    expect(desktop).toHaveClass('personal-channel-action')
+    expect(desktop.closest('.personal-channel')?.querySelector('.personal-channel-status')).toBeInTheDocument()
+    await user.click(desktop)
+    expect(await screen.findByRole('checkbox', { name: 'Enable desktop notifications' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Notifications' }))
+    await user.click(screen.getByRole('link', { name: 'Email' }))
+    expect(await screen.findByRole('checkbox', { name: 'Enable email notifications' })).toBeVisible()
+  })
+
   it.each(['desktop', 'email'] as const)('offers Pulse summaries on the %s channel, on by default and user-toggleable', async channel => {
     const user = userEvent.setup()
     const base = props('notifications')

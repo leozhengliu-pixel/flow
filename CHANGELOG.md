@@ -19,6 +19,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Restore the Open issue command picker, its O then I shortcut, and its searchable shortcut-help entry.
 - Restore the desktop document comment send button and tinted avatar, dim issue comment placeholders, update expanded event labels, and use small menu chevrons and the inbox tray-delete icon without changing phone layouts.
+- Restore the priority inbox control on phones and refine account notification rows, status dots, spacing and navigation glyphs without changing desktop settings.
 - Skip leading punctuation in shared profile and user-avatar initials, and translate the team overview and message settings labels into Chinese.
 - Restore the phone profile avatar and stacked fields, compact email action, and workspace access spacing without changing desktop settings.
 - Restore visible desktop profile field borders and settings search text, use the shared Create team wording, and align remaining settings controls and section spacing without changing phone layouts.
