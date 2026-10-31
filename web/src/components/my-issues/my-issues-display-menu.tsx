@@ -4,6 +4,7 @@ import { ArrowDownUp, Check, ChevronDown, Columns2, Eye, EyeOff, LayoutGrid, Lis
 import { DisplayIcon } from './my-issues-icons'
 import { useI18n } from '@/i18n/i18n'
 import { Toggle } from '@/components/ui/toggle'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesOrdering, MyIssuesProperty } from './my-issues-surface'
 import { GROUPING_LABELS, ORDERING_LABELS, defaultOrderDirection } from '@/components/issue-explorer/issue-grouping'
 import styles from './my-issues-display-menu.module.css'
@@ -79,6 +80,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
 
 export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false }: MyIssuesDisplayMenuProps) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
   const toggleProperty = (property: MyIssuesProperty) => {
     const properties = new Set(options.properties)
@@ -86,7 +88,9 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
     else properties.add(property)
     change({ properties })
   }
-  const visibleGroupingOptions = (availableGroupings ? groupingOptions.filter(option => availableGroupings.includes(option.value)) : groupingOptions).filter(option => option.value !== 'labelGroup' || labelGroupOptions.length > 0)
+  const visibleGroupingOptions = (availableGroupings ? groupingOptions.filter(option => availableGroupings.includes(option.value)) : groupingOptions)
+    .filter(option => option.value !== 'labelGroup' || labelGroupOptions.length > 0)
+    .map(option => phone && phoneIssueMenu && option.value === 'activityDate' ? { ...option, label: t('My activity') } : option)
   const visibleSubGroupingOptions = (availableGroupings ? subGroupingOptions.filter(option => availableGroupings.includes(option.value)) : subGroupingOptions).filter(option => option.value === 'none' || option.value !== options.grouping)
   const visibleOrderingOptions = availableOrderings ? orderingOptions.filter(option => availableOrderings.includes(option.value)) : orderingOptions
   const direction = options.orderDirection ?? defaultOrderDirection(options.ordering)

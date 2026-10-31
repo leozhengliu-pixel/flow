@@ -193,6 +193,7 @@ export const zhCN: Record<string, string> = {
   "{count}y ago": "{count} 年前",
   "Show sub-team issues": "显示子团队事项",
   "Reset to default": "恢复默认",
+  "My activity": "我的活动",
   "My activity date": "我的活动日期",
   "Link count": "链接数",
   "Parent issue": "父事项",
