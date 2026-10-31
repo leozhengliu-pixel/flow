@@ -963,13 +963,14 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
   }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns,
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row {
-    grid-template-columns: minmax(0, 1fr) 154px;
+    grid-template-columns: subgrid;
     column-gap: 0;
   }
-  html:root .settings-app .settings-main .settings-workspace-members .settings-members-directory { width: 100vw; margin-left: -22px; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-directory { width: 100vw; margin-left: -22px; display: grid; grid-template-columns: 44px minmax(0, 1fr) max-content 44px; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-directory > * { grid-column: 1 / -1; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns {
     height: 28px;
-    padding: 0 52px 0 69.5px;
+    padding: 0;
   }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns > button:nth-child(2),
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns > :nth-child(n + 4) { display: none; }
@@ -982,8 +983,8 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
     font: 500 12px/normal var(--font);
     gap: 2px;
   }
-  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns > button[data-sort=name] { margin-left: 0; }
-  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns > button[data-sort=status] { margin-left: 0; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns > button[data-sort=name] { grid-column: 2; margin-left: 28px; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns > button[data-sort=status] { grid-column: 3; margin-left: 0; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-column-label {
     color: var(--theme-text-secondary);
     font: 450 12px/normal var(--font);
@@ -1000,7 +1001,7 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row {
     height: 50px;
     padding: 0 !important;
-    grid-template-columns: 76px minmax(0, 1fr) 154px 52px;
+    grid-template-columns: subgrid;
   }
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:first-child { grid-column: 2; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:nth-child(3) { display: block !important; grid-column: 3; }
@@ -1042,11 +1043,12 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
     opacity: 1;
   }
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:last-child {
-    display: block;
-    position: absolute;
-    right: 24px;
+    display: flex;
+    grid-column: 4;
+    justify-self: center;
     overflow: visible;
   }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row .settings-member-more { opacity: 1; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-desktop-more { display: none; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-phone-more { display: block; }
 }
