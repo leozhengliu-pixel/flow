@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './workspace-fixture'
-import type { BootstrapData, Project } from '../src/types/flow'
+import type { BootstrapData, Initiative, Project } from '../src/types/flow'
 
 test.skip(({ isMobile }) => isMobile, 'Desktop project geometry')
 test.use({ viewport: { width: 1440, height: 900 } })
@@ -41,4 +41,35 @@ test('honors row properties, opens an icon-only date picker and keeps the overvi
   const overview = await page.locator('.project-overview').boundingBox()
   expect(Math.abs(overview!.x - 292.5)).toBeLessThanOrEqual(1)
   expect(Math.abs(overview!.width - 691)).toBeLessThanOrEqual(1)
+})
+
+test('shows persisted initiative updates with a docked, collapsible properties and activity rail', async ({ page, request, workspaceKey }) => {
+  const headers = { 'X-Workspace-Key': workspaceKey }
+  const created = await request.post('/api/initiatives', { headers, data: { name: '[audit] Desktop initiative', status: 'active' } })
+  expect(created.ok()).toBeTruthy()
+  const initiative = await created.json() as Initiative
+  const posted = await request.post(`/api/initiatives/${initiative.id}/updates`, { headers, data: { body: 'Delivery remains on schedule.', health: 'onTrack' } })
+  expect(posted.ok()).toBeTruthy()
+  await page.goto(`/${workspaceKey}/initiative/${initiative.slugId}/overview`)
+  const rail = page.locator('.li-detail-sidebar')
+  await expect(rail).toBeVisible()
+  await expect.poll(() => page.title()).toContain(`${initiative.name} › Overview`)
+  const title = await page.locator('.li-title-input').boundingBox()
+  expect(Math.abs(title!.x - 292.5)).toBeLessThanOrEqual(1)
+  expect(Math.abs(title!.width - 691)).toBeLessThanOrEqual(1)
+  const latest = page.getByTestId('initiative-latest-update')
+  await expect(latest).toBeVisible()
+  await expect(latest).toContainText('Delivery remains on schedule.')
+  await expect(latest).toContainText('On track')
+  await expect(page.locator('.li-first-update')).toBeHidden()
+  await rail.getByRole('button', { name: 'Properties', exact: true }).click()
+  await expect(rail.locator('section').first().locator('dl')).toBeHidden()
+  await rail.getByRole('button', { name: 'Properties', exact: true }).click()
+  await expect(rail.locator('section').first().locator('dl')).toBeVisible()
+  await latest.getByRole('button', { name: 'Write initiative update', exact: true }).click()
+  await expect(page).toHaveURL(/\/activity$/)
+  await expect(page.getByText('Delivery remains on schedule.', { exact: true })).toBeVisible()
+  await page.goto(`/${workspaceKey}/initiatives`)
+  await expect(page.locator('.li-project-count__ring')).toBeVisible()
+  await expect(page.locator('.li-project-count')).toHaveText('0 / 0')
 })

@@ -20,6 +20,11 @@ const data = {
 } as unknown as BootstrapData;
 
 describe("routeInfo", () => {
+  it("uses the initiative name and translated tab in browser chrome", () => {
+    const route = { kind: "initiative", workspaceSlug: "acme", initiativeSlugId: "delivery", tab: "overview" } as const;
+    expect(routeInfo(route, { ...data, initiatives: [{ id: "initiative-1", slugId: "delivery", name: "Delivery" }] as BootstrapData['initiatives'] }).title).toBe("Delivery › Overview");
+    expect(routeInfo(route, null, source => source === "Overview" ? "概览" : source).title).toBe("Initiative › 概览");
+  });
   it("resolves inbox, my-issues, issue, project, settings", () => {
     expect(routeInfo({ kind: "inbox", workspaceSlug: "acme" }, data)).toEqual(
       expect.objectContaining({ title: "Inbox (1)", pinnedTitle: "Inbox" }),

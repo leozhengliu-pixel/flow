@@ -18,5 +18,7 @@ describe('InitiativeLatestUpdate', () => {
     expect(screen.getByRole('button', { name: 'Comments' }).querySelector('[data-toolbar-glyph="comment"]')).not.toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Comments' }))
     expect(onOpen).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByText('Update', { exact: true }))
+    expect(onOpen).toHaveBeenCalledTimes(2)
   })
 })

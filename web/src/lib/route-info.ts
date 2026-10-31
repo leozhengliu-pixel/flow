@@ -25,7 +25,7 @@ const BILLING_SETTINGS = new Set<string>([
 export type RouteInfoData = Pick<
   BootstrapData,
   "workspace" | "issues" | "projects" | "teams" | "notifications"
-> & Partial<Pick<BootstrapData, "savedViews" | "customers" | "documents" | "trash" | "releasePipelines" | "releases" | "oauthApplications" | "loops">> & {
+> & Partial<Pick<BootstrapData, "initiatives" | "savedViews" | "customers" | "documents" | "trash" | "releasePipelines" | "releases" | "oauthApplications" | "loops">> & {
   issue?: Issue;
   project?: Project;
 };
@@ -41,6 +41,12 @@ export function routeInfo(
   t: (source: string) => string = (source) => source,
 ): RouteInfo {
   const workspaceName = data?.workspace?.name || data?.workspace?.urlKey || "Flow";
+
+  if (route.kind === "initiative") {
+    const initiative = findBySlugRef(data?.initiatives, route.initiativeSlugId);
+    const name = initiative?.name || t("Initiative");
+    return { title: `${name} › ${t(capitalize(route.tab))}`, pinnedTitle: name, icon: "initiatives" };
+  }
 
   if (route.kind === "inbox") {
     const unread = data?.notifications?.filter((item) => !item.readAt && !item.deletedAt && !item.archivedAt).length ?? 0;

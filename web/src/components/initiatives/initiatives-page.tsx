@@ -31,6 +31,8 @@ import './initiative-controls.css'
 import './initiative-mention-fields.css'
 import './initiative-hierarchy.css'
 import './initiatives-mobile.css'
+import './initiative-desktop-parity.css'
+import { ProjectStatusGlyph } from '@/components/projects-page/project-property-picker'
 import { initiativeGraph, initiativeTreeRows, initiativesForTeam } from './initiative-hierarchy'
 import { InitiativesEmptyStateIcon } from './initiatives-empty-state-icon'
 import { InitiativeListTitle } from './initiative-list-title'
@@ -133,7 +135,7 @@ export function InitiativesPage(props: Props) {
   const visibleIds = useMemo(() => new Set(visible.map(item => item.id)), [visible])
   const columns = TABLE_PROPERTY_ORDER.filter(property => properties.has(property))
   const showDetails = detailsOpen && view !== 'planned'
-  const columnGrid = `8px 20px minmax(280px,1fr) ${columns.map(property => columnWidth(property, showDetails)).join(' ')} 12px`
+  const columnGrid = `8px var(--li-select-width, 20px) minmax(280px,1fr) ${columns.map(property => `var(--li-column-${property}, ${columnWidth(property, showDetails)})`).join(' ')} 12px`
   const workspaceSlug = location.pathname.split('/').filter(Boolean)[0] ?? ''
   const grouped = useMemo(() => {
     const items = new Map(visible.map(item => [item.id, item]))
@@ -262,6 +264,7 @@ export function InitiativeRow({ contextOnly, depth, childCount, collapsed, onTog
   onCreateLabel: (name: string) => Promise<IssueLabel>; onCreateReminder: (remindAt: string) => Promise<unknown>; onDelete: (id: string) => Promise<void>; onOpen: (initiative: Initiative, tab?: InitiativeRouteTab) => void; onOpenUpdates: () => void; onSelect?: () => void; onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
 }) {
   const linked = projects.filter(project => projectIds.has(project.id))
+  const { t } = useI18n()
   const completed = linked.filter(project => project.status.type === 'completed').length
   const needingUpdate = linked.filter(project => !['completed', 'canceled'].includes(project.status.type) && !projectHasUpdates(project, projectUpdates)).length
   const selectedLabels = labels.filter(label => initiative.labelIds.includes(label.id))
@@ -278,7 +281,7 @@ export function InitiativeRow({ contextOnly, depth, childCount, collapsed, onTog
     if (property === 'leadTeam') return <InitiativeProperties compact only="leadTeam" initiative={initiative} teams={teams} users={users} onUpdate={onUpdate}/>
     if (property === 'target') return <InitiativeProperties compact only="target" initiative={initiative} teams={teams} users={users} onUpdate={onUpdate}/>
     if (property === 'status') return <InitiativeProperties compact only="status" initiative={initiative} teams={teams} users={users} onUpdate={onUpdate}/>
-    if (property === 'projects') return <button aria-label={`${completed} of ${linked.length} project completed. Click to view projects.`} className="li-project-count" onClick={() => onOpen(initiative, 'projects')} type="button"><span>{completed} /</span> {linked.length}</button>
+    if (property === 'projects') return <button aria-label={t('{completed} of {total} projects completed. Click to view projects.').replace('{completed}', String(completed)).replace('{total}', String(linked.length))} className="li-project-count" onClick={() => onOpen(initiative, 'projects')} type="button"><span className="li-project-count__ring" aria-hidden="true"><ProjectStatusGlyph name="" progress={linked.length ? completed / linked.length : 0} type="started"/></span><span>{completed} /</span> {linked.length}</button>
     if (property === 'health') { const hasUpdates = initiativeUpdates.length > 0 || initiative.health !== 'noUpdate'; return <button aria-label={hasUpdates ? healthLabel(initiative.health) : 'There are no updates for this initiative'} className={`li-health is-${initiative.health}`} onClick={onOpenUpdates} type="button"><i/><HealthGlyph health={initiative.health} className="li-phone-health"/><span>{hasUpdates ? healthLabel(initiative.health) : 'No updates'}</span></button> }
     if (property === 'activeProjects') return <button aria-label={`${needingUpdate} project${needingUpdate === 1 ? '' : 's'} need an update. Click to open updates.`} className="li-active-projects" onClick={onOpenUpdates} type="button"><i/>{needingUpdate}</button>
     if (property === 'labels') return <InitiativeLabelsPicker compact initiative={initiative} labels={labels} onCreateLabel={onCreateLabel} onUpdate={onUpdate}/>

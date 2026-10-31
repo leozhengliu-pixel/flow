@@ -15,6 +15,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Restore desktop initiative detail columns, the latest saved update card and actions, browser titles, and project-count progress rings while retaining phone layouts and team controls.
+
 - Restore desktop project milestone chips, honor ungrouped rows and display properties, align list columns and compact date controls, and correct overview property spacing without changing phone layouts.
 
 - Phone history and display popovers paint a true half-pixel edge, chat switcher times align to the right inset and compact older weeks without changing sub-day units, and inactive display layout pills retain their ring. Desktop layouts and timestamps are unchanged.
