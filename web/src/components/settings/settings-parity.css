@@ -966,6 +966,16 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
     transition: none;
     overflow: hidden;
   }
+  html:root .settings-app:has(.settings-sidebar.open)::after {
+    position: absolute;
+    z-index: 96;
+    inset: 0 auto 0 0;
+    width: 330px;
+    border-radius: 0 12px 12px 0;
+    box-shadow: 0 0 0 .5px var(--set-search-border);
+    content: "";
+    pointer-events: none;
+  }
   html:root .settings-app .settings-sidebar.open { transform: translateX(0); }
   html:root .settings-app .settings-back {
     height: 32px;

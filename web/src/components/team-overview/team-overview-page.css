@@ -1279,6 +1279,11 @@
     overflow: hidden;
   }
   .team-home-tabs a { height: 32px; gap: 6px; padding: 0 9.5px; border: .5px solid transparent; background-clip: padding-box !important; }
+  .team-home-tabs a:not([aria-current="page"]) { background-clip: border-box !important; }
+  .team-home-tabs a:not([aria-current="page"])::after {
+    inset: -1px;
+    box-shadow: inset 0 0 0 .5px var(--phone-pill-ring), var(--ui-pill-shadow);
+  }
   .team-home-tab-label { display: block; line-height: normal; border: 0; }
   .team-home-tab-caret { width: 8px; height: 9px; flex: 0 0 8px; }
   .team-home-tabs-overflow-pill {
