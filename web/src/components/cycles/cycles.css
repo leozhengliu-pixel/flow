@@ -31,8 +31,10 @@
   .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{margin-left:2px}
   .flow-cycle-detail .cycle-switcher{box-sizing:border-box;min-width:0;height:28px;gap:8px;padding:0}
   .flow-cycle-detail .cycle-switcher strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .flow-cycle-detail .cycle-switcher-play{flex:none;width:16px;height:16px;display:grid;place-items:center;color:var(--bright)}
+  .flow-cycle-detail .cycle-switcher-play{flex:none;width:16px;height:16px;display:grid;place-items:center;color:var(--theme-text-secondary);transform:translateY(2px)}
   .flow-cycle-detail .cycle-switcher-play svg{width:16px;height:16px;fill:none;overflow:visible}
+  .flow-cycle-detail .cycle-switcher-play svg circle:first-child{stroke:var(--theme-text-secondary)!important}
+  .flow-cycle-detail .cycle-switcher-play svg circle:nth-child(2){stroke:var(--sub-issue-progress-value)!important;stroke-opacity:.68}
   .flow-cycle-detail .cycle-switcher-play svg path{fill:currentColor}
   .flow-cycle-detail .cycle-switcher-chevron{flex:none;width:8px;height:9px;display:grid;place-items:center;color:var(--text)}
   .flow-cycle-detail .cycle-switcher-chevron svg{width:8px;height:9px;fill:currentColor}
