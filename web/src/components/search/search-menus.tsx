@@ -26,15 +26,15 @@ export function SearchMenus({state,onChange,users}:{state:SearchPageState;onChan
     setFilterOpen(false)
   }
   return <>
-    <DropdownMenu phoneSheet={false} open={filterOpen} onOpenChange={setFilterOpen}>
+    <DropdownMenu open={filterOpen} onOpenChange={setFilterOpen}>
       <DropdownMenuTrigger asChild><button className="workspace-search-tool" type="button" aria-label={t('Add filter')} title={t('Add filter')}><FilterIcon/></button></DropdownMenuTrigger>
       <DropdownMenuContent className="workspace-search-menu" align="end" aria-label={t('Search filters')}>
-        <DropdownMenuItem onSelect={()=>{setAdvanced(state);setAdvancedOpen(true)}}><SlidersHorizontal size={15}/>{t('Advanced filter')}</DropdownMenuItem>
+        <DropdownMenuItem className="workspace-search-advanced-option" onSelect={()=>{setAdvanced(state);setAdvancedOpen(true)}}><SlidersHorizontal size={15}/>{t('Advanced filter')}</DropdownMenuItem>
         <DropdownMenuSeparator/>
         {searchFields.map(field=><DropdownMenuSub key={field.id}>
           <DropdownMenuSubTrigger>{field.id.endsWith('At')?<Calendar size={15}/>:field.id==='statusType'?<Filter size={15}/>:<UserRound size={15}/>}<span>{t(field.label)}</span></DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="workspace-search-value-menu" onKeyDown={event=>event.stopPropagation()}>
-            <SearchFilterValue users={users} field={field.id} value="" onChange={(value,operator)=>add(field.id,value,operator)}/>
+            <div className="workspace-search-filter-values"><SearchFilterValue users={users} field={field.id} value="" onChange={(value,operator)=>add(field.id,value,operator)}/></div>
           </DropdownMenuSubContent>
         </DropdownMenuSub>)}
       </DropdownMenuContent>

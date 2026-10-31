@@ -1,7 +1,10 @@
 import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Building2, ChevronDown, Menu, Search, UserRound, X } from 'lucide-react'
+import { Building2, Search, UserRound, X } from 'lucide-react'
+import { SidebarLeftIcon } from '@/components/ui/view-action-icons'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
+import { TabsOverflowIcon } from '@/components/my-issues/my-issues-icons'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
@@ -113,9 +116,11 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
   }
 
   return <main className="main-panel workspace-search-page">
+    <div className="workspace-search-topbar" data-testid="search-topbar">
     <header className="workspace-search-header">
-      <button className="workspace-search-mobile-menu" type="button" aria-label={t('Open sidebar')} data-sidebar-trigger onClick={onOpenSidebar}><Menu size={15}/></button>
-      <Search size={15}/>
+      <button className="workspace-search-mobile-menu" type="button" aria-label={t('Open sidebar')} data-sidebar-trigger onClick={onOpenSidebar}><SidebarLeftIcon/></button>
+      <div className="workspace-search-field" data-testid="search-field">
+      {phone ? <FlowGlyph name="search" size={14}/> : <Search size={15}/>}
       <input
         autoFocus
         aria-label={t('Search issues, projects, and documents…')}
@@ -136,15 +141,17 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
         }}
       />
       {draft && <button className="workspace-search-clear" type="button" aria-label={t('Clear search')} onClick={() => runSearch('')}><X size={14}/></button>}
+      </div>
     </header>
     <div className="workspace-search-toolbar">
       <nav aria-label={t('Search resource type')}>
         {(phone ? tabs.slice(0, 3) : tabs).map(item => <button key={item.id} type="button" aria-pressed={item.id===tab} className={`ui-pill ${item.id === tab ? 'active' : ''}`} onClick={() => updateState({...state,tab:item.id})}>{t(item.label)}</button>)}
         {phone && <DropdownMenu><DropdownMenuTrigger className={`ui-pill workspace-search-more-tabs ${tabs.slice(3).some(item => item.id === tab) ? 'active' : ''}`}>
-          {tabs.slice(3).find(item => item.id === tab) ? t(tabs.find(item => item.id === tab)!.label) : t('{count} more').replace('{count}', String(tabs.length - 3))}<ChevronDown size={12}/>
+          <span>{tabs.slice(3).find(item => item.id === tab) ? t(tabs.find(item => item.id === tab)!.label) : t('{count} more').replace('{count}', String(tabs.length - 3))}</span><TabsOverflowIcon/>
         </DropdownMenuTrigger><DropdownMenuContent>{tabs.slice(3).map(item => <DropdownMenuItem key={item.id} onSelect={() => updateState({...state,tab:item.id})}>{t(item.label)}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>}
       </nav>
       <div className="workspace-search-tools"><SearchMenus state={state} users={users} onChange={updateState}/></div>
+    </div>
     </div>
     <section className="workspace-search-content" aria-live="polite">
       {state.filters.length>0&&<SearchFilterChips state={state} users={users} onChange={updateState}/>}

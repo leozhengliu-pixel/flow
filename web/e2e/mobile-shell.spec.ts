@@ -27,6 +27,48 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   test.describe(`${viewport.width}px shell`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent, colorScheme: 'dark' })
 
+    test('search phone header, empty state and filter panels match', async ({ page, workspaceKey }) => {
+      await page.goto(`${base}/${workspaceKey}/search`)
+      const input = page.getByRole('textbox', { name: 'Search issues, projects, and documents…' })
+      await expect(input).toBeFocused()
+      await expect(input).toHaveValue('')
+      await geometry(page.getByTestId('search-topbar'), { x: 0, y: 0, width: viewport.width, height: 87.5 })
+      await geometry(page.getByTestId('search-field'), { x: 42, y: 10.75, width: viewport.width - 50, height: 22 })
+      await geometry(input, { x: 66, y: 10.75, height: 22 })
+      await geometry(page.locator('.workspace-search-header [data-sidebar-trigger]'), { x: 8, y: 5.75, width: 32, height: 32 })
+      const tabs = page.getByRole('navigation', { name: 'Search resource type' })
+      await expect(tabs.getByRole('button', { name: 'All', exact: true })).toHaveAttribute('aria-pressed', 'true')
+      for (const [name, x] of [['All', 8], ['Issues', 51.55], ['Projects', 117.49], ['2 more', 193.29]] as const) {
+        await geometry(tabs.getByRole('button', { name, exact: true }), { x, y: 49.75, height: 32 })
+      }
+      await expect(page.locator('.workspace-search-empty')).toBeVisible()
+      await expect(page.locator('.workspace-search-results')).toHaveCount(0)
+      await expect(page.locator('.bottom-agent')).toBeHidden()
+      await expect(page.locator('.workspace-search-header [data-sidebar-trigger] path')).toHaveAttribute('d', /^M4.25 2C2.45508/)
+      await expect(page.locator('.workspace-search-field svg path')).toHaveAttribute('d', /^M7 2C9.76142/)
+      await expect(tabs.locator('.workspace-search-more-tabs path')).toHaveAttribute('d', /^M10.1611 0.314094/)
+      await geometry(tabs.locator('.workspace-search-more-tabs svg'), { width: 8, height: 9 })
+      await noOverflow(page)
+      if (shots) await page.screenshot({ path: `${shots}/search-${viewport.width}.png` })
+
+      await page.getByRole('button', { name: 'Add filter', exact: true }).tap()
+      const filters = page.getByRole('dialog', { name: 'Search filters', exact: true })
+      await geometry(filters, { x: 16, width: viewport.width - 32 })
+      await filters.getByRole('option', { name: 'Status type', exact: true }).tap()
+      const statusPanel = page.locator('.phone-menu-surface').last()
+      await geometry(statusPanel, { x: 16, width: viewport.width - 32 })
+      await expect(filters).not.toBeVisible()
+      await expect(statusPanel.locator('input:visible')).toHaveCount(1)
+      await statusPanel.locator('input:visible').fill('Completed')
+      await expect(statusPanel.getByRole('option')).toHaveCount(1)
+      await statusPanel.getByRole('option', { name: 'Completed', exact: true }).tap()
+      await expect(page.locator('.workspace-search-filter-chips')).toContainText('Completed')
+      await expect(filters).not.toBeVisible()
+      await page.getByRole('button', { name: 'Display options', exact: true }).tap()
+      await geometry(page.getByRole('dialog', { name: 'Search display options', exact: true }), { x: 16, width: viewport.width - 32 })
+      await page.keyboard.press('Escape')
+    })
+
     test('workspace panel keeps compact labels, both dividers and a working filter', async ({ page, workspaceKey }) => {
       await page.goto(`${base}/${workspaceKey}/my-issues/assigned`)
       await page.locator('[data-sidebar-trigger]').tap()
