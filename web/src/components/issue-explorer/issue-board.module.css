@@ -367,6 +367,7 @@
 
 /* Phone board: a fixed 298px column leaves the next column peeking in from the right. */
 @media(max-width:767px){
+  .hiddenStatus b{text-rendering:geometricPrecision}
   .board{padding:0;background:transparent}
   .column{width:298px;min-width:298px}
   .cards{padding:9px 16px 8px}

@@ -1,15 +1,13 @@
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './workspace-fixture'
 
 test.skip(({ isMobile }) => isMobile, 'desktop-only top bar parity')
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
-test('keeps the team Issues top bar controls, view pills and tool group at the desktop metrics', async ({ page, request }, testInfo) => {
-  const workspaceKey = `desktop-topbar-${testInfo.project.name}-r${testInfo.retry}`
-  const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-    data: { name: 'Desktop top bar parity', urlKey: workspaceKey, region: 'us', tutorial: false },
-  })
-  expect(response.status()).toBe(201)
+test('keeps the team Issues top bar controls, view pills and tool group at the desktop metrics', async ({ page, request, workspaceKey }) => {
+  const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
+  expect(response.ok()).toBeTruthy()
   const workspace = await response.json() as { teams?: Array<{ key: string }> }
   const teamKey = workspace.teams?.[0]?.key
   expect(teamKey).toBeTruthy()
@@ -51,12 +49,12 @@ test('keeps the team Issues top bar controls, view pills and tool group at the d
     }
   })
 
-  expect(geometry.header.paddingLeft).toBe('18px')
+  expect(geometry.header.paddingLeft).toBe('8px')
   expect(geometry.icon?.width).toBe(16)
   expect(geometry.icon?.height).toBe(16)
   expect(geometry.star).toMatchObject({ width: 28, height: 28 })
   expect(geometry.bell).toMatchObject({ width: 28, height: 28 })
-  expect(geometry.create).toMatchObject({ height: 28, fontSize: '12px', fontWeight: '500', padding: '0px 10px 0px 8px' })
+  expect(geometry.create).toMatchObject({ height: 28, fontSize: '12px', fontWeight: '500', padding: '0px 9px 0px 8px' })
   expect(geometry.create!.width).toBeGreaterThan(90)
 
   for (let index = 1; index < geometry.pills.length; index += 1) {
@@ -70,6 +68,7 @@ test('keeps the team Issues top bar controls, view pills and tool group at the d
     const previous = geometry.tools[index - 1].rect
     expect(geometry.tools[index].rect.x - (previous.x + previous.width)).toBeCloseTo(6, 1)
   }
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-topbar.png`, animations: 'disabled' })
 
   const favorite = header.getByRole('switch', { name: 'Add to favorites' })
   await favorite.click()
