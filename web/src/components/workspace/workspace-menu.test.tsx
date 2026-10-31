@@ -29,6 +29,10 @@ describe("workspace menu", () => {
     render(<WorkspaceMenu account={account} data={data} onSettings={vi.fn()} onSwitch={vi.fn()} onCreate={vi.fn()} onLogout={vi.fn().mockResolvedValue(undefined)}/>);
     await user.click(screen.getByRole('button', { name: /Workspace Menu/ }));
     expect(screen.getAllByRole('option')).toHaveLength(5);
+    expect(screen.getByRole('option', { name: 'Settings' })).toHaveAttribute('data-selected', 'true');
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('option', { name: 'Invite and manage members' })).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByRole('option', { name: 'Settings' })).toHaveAttribute('data-selected', 'false');
     await user.type(screen.getByRole('combobox'), 'Switch');
     expect(screen.getAllByRole('option')).toHaveLength(1);
     await user.click(screen.getByRole('option', { name: 'Switch workspace' }));

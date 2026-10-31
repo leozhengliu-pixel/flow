@@ -21,6 +21,7 @@
 .workspace-primary-menu .menu-item{white-space:nowrap}
 
 @media (max-width: 767px) {
+  html:root .sidebar .workspace-row > button.workspace-menu-trigger[data-state="open"] { background: var(--phone-workspace-trigger-open-bg); }
   .workspace-phone-menu > [cmdk-root] { width: calc(100vw - 32px); margin-bottom: -2px; }
   .workspace-phone-menu-input { height: 40px; border-radius: 12px; color: var(--pk-text); font-size: 13px; font-weight: 400; line-height: 19.5px; }
   .workspace-phone-menu .phone-menu-search input {
@@ -39,6 +40,15 @@
     color: var(--pk-text);
   }
   .workspace-phone-menu-row [cmdk-item][data-selected="true"] > span { color: var(--pk-text-strong); }
+  .workspace-phone-menu-row [cmdk-item] { isolation: isolate; }
+  .workspace-phone-menu-row [cmdk-item][data-selected="true"]::before {
+    content: '';
+    position: absolute;
+    inset: 2px 0;
+    z-index: -1;
+    border-radius: 8px;
+    background: var(--pk-hover);
+  }
   .workspace-phone-menu [cmdk-separator]::after { display: none; }
   .workspace-phone-menu [cmdk-separator] > span {
     position: absolute;
