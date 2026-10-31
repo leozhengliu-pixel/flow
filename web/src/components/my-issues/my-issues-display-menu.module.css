@@ -131,6 +131,15 @@
     padding-top: 0;
     border-radius: 12px;
   }
+  .popover[data-issue-display-menu="true"]::before {
+    content: "";
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    border: .5px solid var(--pk-divider);
+    border-radius: 12px;
+    pointer-events: none;
+  }
   .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) {
     height: 32px;
     margin: 14px 7.5px 10px;
@@ -146,6 +155,15 @@
     line-height: normal;
     box-shadow: none;
     flex: 0 0 137px;
+  }
+  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button[aria-selected="true"] { position: relative; }
+  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button[aria-selected="true"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: .5px solid var(--pk-control-ring-selected);
+    border-radius: 9999px;
+    pointer-events: none;
   }
   .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button + button { margin-left: 4px; }
   .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button { transform: translateX(2px); }
@@ -190,10 +208,15 @@
     transform: translateX(20px);
   }
   .popover[data-issue-display-menu="true"] .selectTrigger:not(#_) > span:last-child svg {
-    width: 14px;
-    height: 14px;
-    stroke-width: 2.75;
-    color: var(--pk-text);
+    width: 12px;
+    height: 12px;
+    stroke-width: 2;
+    color: var(--pk-muted);
+    transform: translateY(-1px);
+  }
+  .popover[data-issue-display-menu="true"] .selectTrigger:not(#_) > span:first-child {
+    min-width: 0;
+    white-space: nowrap;
   }
   .popover[data-issue-display-menu="true"] button[aria-label="Ordering"]:not(#_) { color: var(--pk-text-strong); }
   .popover[data-issue-display-menu="true"] .desktopModeIcon,
@@ -245,7 +268,8 @@
     gap: 0;
   }
   .popover[data-issue-display-menu="true"] section[aria-label="List options"] {
-    padding-top: 2.5px;
+    top: 1px;
+    padding-top: 3.5px;
   }
   .popover[data-issue-display-menu="true"] section[aria-label="List options"] > .sectionLabel:first-child:not(#_) {
     margin-bottom: 6px;
@@ -286,8 +310,23 @@
   .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-property="updated"] {
     display: none;
   }
-  .popover[data-issue-display-menu="true"] section[aria-label="Group ordering"],
+  .popover[data-issue-display-menu="true"][data-layout="list"] section[aria-label="Group ordering"],
   .popover[data-issue-display-menu="true"] > .footer {
     display: none;
+  }
+  .popover[data-issue-display-menu="true"] section[aria-label="Visible issues"],
+  .popover[data-issue-display-menu="true"] section[aria-label="List options"] {
+    position: relative;
+    border-top: 0 !important;
+  }
+  .popover[data-issue-display-menu="true"] section[aria-label="Visible issues"]::before,
+  .popover[data-issue-display-menu="true"] section[aria-label="List options"]::before {
+    content: "";
+    position: absolute;
+    top: -5px;
+    left: 0;
+    right: 0;
+    height: .5px;
+    background: var(--pk-divider);
   }
 }
