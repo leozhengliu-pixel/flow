@@ -1,0 +1,106 @@
+.flow-cycles-page .cycle-desktop-glyph { display: contents; }
+.flow-cycles-page .cycle-phone-glyph,
+.flow-cycles-page .cycle-timeline-card,
+.flow-cycles-page .cycle-cooldown-icon,
+.flow-cycles-page .flow-cycle-cooldown > .cycle-timeline-date { display: none; }
+
+@media (max-width: 767px) {
+  .flow-cycles-page .cycle-desktop-glyph { display: none; }
+  .flow-cycles-page .cycle-phone-glyph { display: block; }
+  html:root[data-sidebar-mode] body .app .flow-cycles-page .flow-cycles-header {
+    height: 44px;
+    padding: 0;
+    gap: 12px;
+    border: 0;
+    box-shadow: none;
+  }
+  .flow-cycles-page .flow-cycles-header h1 { color: var(--text); font: 500 13px/normal var(--font); transform: none; }
+  .flow-cycles-page .flow-cycles-header :is(.cycles-mobile-menu, .cycle-top-icon) {
+    width: 32px;
+    height: 32px;
+    flex: none;
+    padding: 0 2px;
+    margin: -.5px 0 0;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    color: var(--text);
+    font: 500 12px/normal var(--font);
+    box-shadow: none;
+    place-items: center;
+  }
+  html:root[data-sidebar-mode] body .app .flow-cycles-page .flow-cycles-header [data-sidebar-trigger] {
+    width: 32px; height: 32px; min-width: 32px; padding: 0 2px; margin: -.5px 0 0 8px; border: .5px solid transparent; border-radius: 9999px; color: var(--text); font: 500 12px/normal var(--font);
+  }
+  html:root body .app .flow-cycles-page [data-sidebar-trigger]::before,
+  html:root body .app .flow-cycles-page [data-sidebar-trigger]::after { display: none; }
+  .flow-cycles-page .flow-cycles-header::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: .5px; background: var(--border); }
+  html:root body .app .flow-cycles-page [data-sidebar-trigger] > .cycle-phone-glyph { display: block; }
+  .flow-cycles-page .flow-cycles-header .cycle-top-icon { margin-left: -6px; transform: none; }
+  .flow-cycles-page .flow-cycles-header button svg { width: 14px; height: 14px; color: var(--issue-muted); }
+  .flow-cycles-page .flow-cycle-list { padding: 0 0 24px; }
+  .flow-cycles-page .flow-cycle-row { height: 419px; }
+  .flow-cycles-page .flow-cycle-row[data-status="upcoming"] { height: 70px; }
+  .flow-cycles-page .flow-cycle-row > :is(.flow-cycle-row-link, .cycle-row-menu, .flow-cycle-current-summary) { display: none; }
+  .flow-cycles-page .cycle-timeline-card {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 419px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--bright);
+    text-align: left;
+    font: 450 13px/normal var(--font);
+  }
+  .flow-cycles-page .cycle-timeline-card.is-upcoming { height: 70px; }
+  .flow-cycles-page .cycle-timeline-card::before,
+  .flow-cycles-page .flow-cycle-cooldown::before { display: block; content: ""; position: absolute; left: 51.5px; top: 0; width: 1px; height: 100%; background: var(--accent-primary); }
+  .flow-cycles-page .cycle-timeline-card.is-upcoming::before,
+  .flow-cycles-page .flow-cycle-cooldown::before { background: var(--border); }
+  .flow-cycles-page .cycle-timeline-card::after,
+  .flow-cycles-page .flow-cycle-cooldown::after { content: ""; position: absolute; left: 82px; right: 0; bottom: 0; height: .5px; background: var(--theme-border); }
+  .flow-cycles-page .cycle-timeline-date {
+    position: absolute;
+    left: 0;
+    bottom: -16px;
+    height: 29px;
+    width: 44.2px;
+    padding: 0 6px 0 0;
+    text-align: right;
+    color: var(--issue-dim);
+    font: 450 12px/normal var(--font);
+  }
+  .flow-cycles-page .cycle-timeline-date::after { content: ""; position: absolute; left: 47.5px; top: 8.5px; width: 9px; height: 9px; border: 1px solid var(--issue-dim); border-radius: 50%; background: var(--theme-background); }
+  .flow-cycles-page .cycle-timeline-card:not(.is-upcoming) .cycle-timeline-date::after { background: var(--accent-primary); border-color: var(--accent-primary); }
+  .flow-cycles-page .cycle-timeline-heading { position: absolute; top: 27px; left: 80px; right: 32px; display: flex; align-items: center; gap: 16px; }
+  .flow-cycles-page .cycle-timeline-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; display: flex; gap: 4px; font: 500 13px/normal var(--font); }
+  .flow-cycles-page .is-upcoming .cycle-timeline-title { color: var(--text); }
+  .flow-cycles-page .cycle-timeline-icon { width: 16px; height: 16px; flex: none; }
+  .flow-cycles-page .cycle-timeline-icon__track { stroke: var(--issue-dim); }
+  .flow-cycles-page .cycle-timeline-icon__value { stroke: var(--sub-issue-progress-value); }
+  .flow-cycles-page .is-upcoming .cycle-timeline-icon { color: var(--issue-dim); }
+  .flow-cycles-page .flow-cycle-cooldown { height: 48px; margin-bottom: 2px; padding: 0; border-radius: 8px; font: 450 13px/normal var(--font); color: var(--issue-dim); }
+  .flow-cycles-page .flow-cycle-cooldown::after { left: 128px; }
+  .flow-cycles-page .flow-cycle-cooldown > span:first-of-type { margin-left: 96px; }
+  .flow-cycles-page .flow-cycle-cooldown > .cycle-timeline-date { display: block; bottom: -16.5px; }
+  .flow-cycles-page .cycle-cooldown-icon { position: absolute; display: block; left: 64px; width: 16px; height: 16px; color: var(--issue-dim); }
+  .flow-cycles-page .cycle-timeline-chart { position: absolute; left: 80px; top: 57.25px; width: calc(100% - 112px); height: 210px; }
+  .flow-cycles-page .cycle-timeline-axis { position: absolute; top: 239.25px; left: 80px; right: 36px; height: 24px; color: var(--issue-muted); font: 450 12px/24px var(--font); }
+  .flow-cycles-page .cycle-timeline-axis > span { position: absolute; }
+  .flow-cycles-page .cycle-timeline-axis > span:nth-child(2) { left: calc(60% + 8px); transform: translateX(-50%); }
+  .flow-cycles-page .cycle-timeline-axis > span:last-child { right: 0; }
+  .flow-cycles-page .cycle-timeline-metrics { position: absolute; top: 267.25px; left: 80px; right: 32px; }
+  .flow-cycles-page .cycle-timeline-metric { height: 44.5px; display: flex; align-items: center; gap: 14px; border-bottom: .5px solid var(--theme-border); }
+  .flow-cycles-page .cycle-timeline-metric:last-child { border: 0; }
+  .flow-cycles-page .cycle-timeline-metric > i { width: 6px; height: 6px; flex: none; border-radius: 1px; background: var(--issue-dim); }
+  .flow-cycles-page .cycle-timeline-metric.is-started > i { background: var(--priority-medium); }
+  .flow-cycles-page .cycle-timeline-metric.is-completed > i { background: var(--accent-primary); }
+  .flow-cycles-page .cycle-timeline-metric-label { color: var(--issue-muted); font: 450 13px/normal var(--font); }
+  .flow-cycles-page .cycle-timeline-metric-value { display: flex; align-items: center; gap: 4px; margin-left: auto; font: 500 12px/normal var(--font); }
+  .flow-cycles-page .cycle-timeline-metric-value svg { color: var(--issue-muted); }
+  .flow-cycles-page .cycle-timeline-metric-value strong { font: inherit; }
+  .flow-cycles-page .cycle-timeline-percent { color: var(--issue-muted); font-weight: 450; white-space: pre; }
+}

@@ -25,6 +25,19 @@ function page(estimateSettings?: TeamSettings) {
 }
 
 describe('cycle capacity and scope', () => {
+  it('keeps completed cycle phone charts, metrics and navigation data-driven', async () => {
+    const onOpen = vi.fn(), completed = { ...cycle1, status: 'completed' as const }
+    render(<I18nProvider><CyclesPage cycles={[completed, cycle2]} issues={issues} team={team} estimateSettings={fibonacci} settings={{ enabled: true, durationWeeks: 2, cooldownWeeks: 2, upcomingCount: 1 }} onOpen={onOpen} onUpdateCycle={vi.fn()} onStartCycle={vi.fn()} onUpdateSettings={vi.fn()} onReload={vi.fn()} onOpenSidebar={vi.fn()}/></I18nProvider>)
+    const card = screen.getByTestId('cycle-timeline-1')
+    expect(card.querySelector('.cycle-timeline-date')).toHaveTextContent('Nov2')
+    expect(card.querySelector('.cycle-timeline-axis')).toHaveTextContent('Nov 16')
+    expect(card.querySelector('.is-scope strong')).toHaveTextContent('8')
+    expect(card.querySelectorAll('.estimate-icon')).toHaveLength(3)
+    expect(within(card).getByRole('img', { name: 'Cycle progress: 0%' })).toBeInTheDocument()
+    await userEvent.setup().click(card)
+    expect(onOpen).toHaveBeenCalledWith(completed)
+  })
+
   it('lists "26% of capacity" and "△ 8 scope" for 8 of 30 points, "0%" for an empty cycle, and the cooldown between cycles', () => {
     const { container } = page(fibonacci)
     const rows = [...container.querySelectorAll('.flow-cycle-row')] as HTMLElement[]
