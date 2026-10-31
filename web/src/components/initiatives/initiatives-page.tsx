@@ -19,7 +19,8 @@ import { InitiativeLabelsPicker, InitiativeLabelsPill, InitiativeProperties, Ini
 import { InitiativeRowMenu } from './initiative-row-menu'
 import { INITIATIVE_ROW_SHORTCUTS } from './initiative-row-shortcuts'
 import { useFlowRowShortcuts } from '@/components/ui/menu-shortcuts'
-import { DisplayIcon, FilterIcon as Filter, PlusIcon, SidebarIcon } from '@/components/ui/view-action-icons'
+import { DisplayIcon, FilterIcon as Filter, PlusIcon, SidebarIcon, SidebarLeftIcon, SidebarRightIcon } from '@/components/ui/view-action-icons'
+import { HealthGlyph } from '@/components/project-detail/health-glyph'
 import { SelectControl } from '@/components/ui/select-control'
 import { titleCase } from './initiative-model'
 import './initiatives.css'
@@ -29,6 +30,7 @@ import { MentionTextField } from '@/components/editor/mention-text-field'
 import './initiative-controls.css'
 import './initiative-mention-fields.css'
 import './initiative-hierarchy.css'
+import './initiatives-mobile.css'
 import { initiativeGraph, initiativeTreeRows, initiativesForTeam } from './initiative-hierarchy'
 import { InitiativesEmptyStateIcon } from './initiatives-empty-state-icon'
 import { InitiativeListTitle } from './initiative-list-title'
@@ -192,19 +194,21 @@ export function InitiativesPage(props: Props) {
 
   const tableHeader = visible.length > 0 && <div className="li-columns" style={{ gridTemplateColumns: columnGrid }}><span aria-hidden="true"/><span aria-hidden="true"/><button aria-label="Order by Name" onClick={() => setSort('name')} style={{ gridColumn: 3 }} type="button">Name<InitiativeSortIcon/></button>{columns.map((property, index) => <ColumnHeader gridColumn={index + 4} key={property} property={property} onSort={setSort}/>)}</div>
   return <main className="main-panel li-page">
+    <div className="li-list-header" data-testid="initiatives-header">
     <header className="li-page-header">
-      <button aria-label="Open sidebar" className="li-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button">☰</button>
+      <button aria-label={t('Open sidebar')} className="li-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button"><SidebarLeftIcon/></button>
       <InitiativeListTitle team={props.teamContext} title={t('Initiatives')} />
       <button aria-label={t('New initiative')} className="li-new-initiative" onClick={() => setCreating(true)} type="button"><PlusIcon/><span>{t('New initiative')}</span></button>
     </header>
     <div className="li-toolbar">
-      <nav aria-label={t('Initiatives views')}>{(['active', 'planned', 'all'] as InitiativesRouteView[]).map(item => <a className="ui-pill" aria-current={view === item ? 'page' : undefined} href={props.teamContext ? teamInitiativesPath(workspaceSlug, props.teamContext.key, item) : initiativesPath(workspaceSlug, item)} key={item} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onViewChange(item) }}>{item === 'all' ? t('All initiatives') : t(titleCase(item))}</a>)}</nav>
+      <nav aria-label={t('Initiatives views')}>{(['active', 'planned', 'all'] as InitiativesRouteView[]).map(item => <a className="ui-pill" aria-current={view === item ? 'page' : undefined} href={props.teamContext ? teamInitiativesPath(workspaceSlug, props.teamContext.key, item) : initiativesPath(workspaceSlug, item)} key={item} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onViewChange(item) }}><span>{item === 'all' ? t('All initiatives') : t(titleCase(item))}</span></a>)}</nav>
       <div className="li-toolbar-actions">
         {props.teamContext && <label className="li-contributing-toggle"><input type="checkbox" checked={showContributing} onChange={event => setShowContributing(event.target.checked)}/>{t('Show contributing initiatives')}</label>}
         <InitiativeFilterMenu filters={filters} initiatives={initiatives} labels={labels} onAdvanced={() => { setAdvancedFilterEnabled(true); setAdvancedFilterOpen(true) }} onChange={setFilters} onCreateLabel={onCreateLabel} teams={teams} users={users}/>
         <InitiativeDisplayMenu hideTeamToggle={Boolean(props.teamContext)} showNested={showNested} showParents={showParents} onShowNested={setShowNested} onShowParents={setShowParents} dirty={displayDirty} grouping={grouping} properties={properties} showTeamInitiatives={showTeamInitiatives} sort={sort} onGrouping={setGrouping} onProperty={toggleProperty} onReset={resetDisplay} onSetDefault={() => onSetDefault({ grouping, ordering: sort, properties: [...properties], showTeamInitiatives, showNestedInitiatives: showNested, showParentInitiatives: showParents })} onShowTeamInitiatives={setShowTeamInitiatives} onSort={setSort}/>
-        {view !== 'planned' && <button aria-expanded={detailsOpen} aria-label={t(detailsOpen ? 'Close sidebar' : 'Open sidebar')} className="li-icon-button ui-pill" onClick={toggleDetails} type="button"><SidebarIcon/></button>}
+        {view !== 'planned' && <button aria-expanded={detailsOpen} aria-label={t(detailsOpen ? 'Close sidebar' : 'Open sidebar')} className="li-icon-button ui-pill" onClick={toggleDetails} type="button"><SidebarIcon className="li-sidebar-desktop"/><SidebarRightIcon className="li-sidebar-phone"/></button>}
       </div>
+    </div>
     </div>
     {advancedFilterEnabled ? <AdvancedFilterBar filters={filters} initiatives={initiatives} labels={labels} mode={filterMode} open={advancedFilterOpen} teams={teams} users={users} onChange={setFilters} onCreateLabel={onCreateLabel} onMode={setFilterMode} onOpenChange={setAdvancedFilterOpen} onRemove={() => { setFilters({}); setAdvancedFilterEnabled(false); setAdvancedFilterOpen(false) }}/> : Object.keys(filters).length > 0 && <div className="li-filter-chips">{Object.entries(filters).map(([key, value]) => <button key={key} onClick={() => setFilters(current => { const next = { ...current }; delete next[key as keyof FilterState]; return next })} type="button"><span>{filterLabel(key, value, users, teams, labels)}</span><X size={11}/></button>)}<button onClick={() => setFilters({})} type="button">Clear all</button></div>}
     <div className={`li-list-body${showDetails ? ' has-details' : ''}`}>
@@ -275,7 +279,7 @@ export function InitiativeRow({ contextOnly, depth, childCount, collapsed, onTog
     if (property === 'target') return <InitiativeProperties compact only="target" initiative={initiative} teams={teams} users={users} onUpdate={onUpdate}/>
     if (property === 'status') return <InitiativeProperties compact only="status" initiative={initiative} teams={teams} users={users} onUpdate={onUpdate}/>
     if (property === 'projects') return <button aria-label={`${completed} of ${linked.length} project completed. Click to view projects.`} className="li-project-count" onClick={() => onOpen(initiative, 'projects')} type="button"><span>{completed} /</span> {linked.length}</button>
-    if (property === 'health') { const hasUpdates = initiativeUpdates.length > 0 || initiative.health !== 'noUpdate'; return <button aria-label={hasUpdates ? healthLabel(initiative.health) : 'There are no updates for this initiative'} className={`li-health is-${initiative.health}`} onClick={onOpenUpdates} type="button"><i/><span>{hasUpdates ? healthLabel(initiative.health) : 'No updates'}</span></button> }
+    if (property === 'health') { const hasUpdates = initiativeUpdates.length > 0 || initiative.health !== 'noUpdate'; return <button aria-label={hasUpdates ? healthLabel(initiative.health) : 'There are no updates for this initiative'} className={`li-health is-${initiative.health}`} onClick={onOpenUpdates} type="button"><i/><HealthGlyph health={initiative.health} className="li-phone-health"/><span>{hasUpdates ? healthLabel(initiative.health) : 'No updates'}</span></button> }
     if (property === 'activeProjects') return <button aria-label={`${needingUpdate} project${needingUpdate === 1 ? '' : 's'} need an update. Click to open updates.`} className="li-active-projects" onClick={onOpenUpdates} type="button"><i/>{needingUpdate}</button>
     if (property === 'labels') return <InitiativeLabelsPicker compact initiative={initiative} labels={labels} onCreateLabel={onCreateLabel} onUpdate={onUpdate}/>
     if (property === 'created' || property === 'updated') return <time>{new Date(property === 'created' ? initiative.createdAt : initiative.updatedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</time>

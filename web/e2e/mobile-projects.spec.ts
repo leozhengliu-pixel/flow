@@ -1,4 +1,44 @@
 import { expect, test } from '@playwright/test'
+import { test as workspaceTest } from './workspace-fixture'
+
+workspaceTest.describe('mobile initiatives list', () => {
+  workspaceTest.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  for (const width of [390, 375]) {
+    workspaceTest(`All initiatives keeps its phone header and on-track row at ${width}px`, async ({ page, request, workspaceKey }) => {
+      const created = await request.post('/api/initiatives', {
+        headers: { 'X-Flow-Workspace': workspaceKey, 'X-Workspace-Key': workspaceKey },
+        data: { name: '[mobile] Initiative parity', status: 'active', health: 'onTrack' },
+      })
+      expect(created.status()).toBe(201)
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 667 })
+      await page.goto(`/${workspaceKey}/initiatives`)
+      await expect(page.locator('.li-toolbar nav a[aria-current=page]')).toHaveText('All initiatives')
+      const header = page.getByTestId('initiatives-header')
+      expect((await header.boundingBox())?.height).toBe(87.5)
+      const row = page.locator('a.li-row')
+      await expect(row).toContainText('[mobile] Initiative parity')
+      expect((await row.boundingBox())?.y).toBe(87.5)
+      expect((await row.boundingBox())?.height).toBe(56)
+      expect((await row.boundingBox())?.width).toBe(width)
+      expect((await row.locator('.li-initiative-icon').boundingBox())?.x).toBe(14)
+      expect((await row.locator('.li-name strong').boundingBox())?.x).toBe(48)
+      expect((await row.getByRole('button', { name: 'On track', exact: true }).boundingBox())?.x).toBe(width - 50)
+      await expect(page.locator('.li-columns')).toBeHidden()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+
+      await page.getByRole('button', { name: 'Display options', exact: true }).click()
+      await expect(page.getByText('Display properties', { exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await page.locator('.li-toolbar-actions button[aria-label="Open sidebar"]').click()
+      await expect(page.locator('.li-list-sidebar')).toBeVisible()
+      await page.locator('.li-toolbar-actions button[aria-label="Close sidebar"]').click()
+      await expect(page.locator('.li-list-sidebar')).toHaveCount(0)
+      await page.getByRole('button', { name: 'New initiative', exact: true }).click()
+      await expect(page.getByRole('textbox', { name: 'Initiative name', exact: true })).toBeVisible()
+    })
+  }
+})
 
 test.describe('mobile projects list', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
