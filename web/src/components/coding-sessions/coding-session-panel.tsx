@@ -114,13 +114,15 @@ export function CodingAgentPanel({ session, data, onChange, onDismiss, onOpenCha
   const shownError = error || hostError
   return <aside className={`coding-agent-panel${className ? ` ${className}` : ''}`} aria-label={t('Agent')} hidden={hidden}>
       <header className="coding-agent-panel-header">
-        <CodingAgentAvatar state={session.state} stalled={codingSessionStalled(session)}/>
-        <h3 data-i18n-ignore>{title}</h3>
-        {session.archivedAt && <span className="coding-agent-archived">{t('Archived')}</span>}
-        <CodingSessionMenu session={session} data={data} busy={busy} onChange={onChange} items={can.stop || can.restartWithDefaultModel ? <>
+        <div className="coding-agent-panel-header-inner">
+          <CodingAgentAvatar state={session.state} stalled={codingSessionStalled(session)}/>
+          <h3 data-i18n-ignore>{title}</h3>
+          {session.archivedAt && <span className="coding-agent-archived">{t('Archived')}</span>}
+          <CodingSessionMenu session={session} data={data} busy={busy} onChange={onChange} items={can.stop || can.restartWithDefaultModel ? <>
           {can.stop && <DropdownMenuItem disabled={busy || session.stopRequested} onSelect={() => void run(() => stopCodingSession(session.id))}>{t('Send stop request')}</DropdownMenuItem>}
           {can.restartWithDefaultModel && <DropdownMenuItem disabled={busy} onSelect={() => void run(() => restartCodingSession(session.id, { useDefaultModel: true }), 'Restarted with the default model')}><RotateCcw size={14} aria-hidden="true"/>{t('Start over with {model}').replace('{model}', 'Auto')}</DropdownMenuItem>}
-        </> : undefined} onStartOver={can.startOver ? model => void run(() => restartCodingSession(session.id, { model }), 'Started over') : undefined} onArchive={can.dismiss ? onDismiss : undefined}/>
+          </> : undefined} onStartOver={can.startOver ? model => void run(() => restartCodingSession(session.id, { model }), 'Started over') : undefined} onArchive={can.dismiss ? onDismiss : undefined}/>
+        </div>
         {onClose && <ScopedFlowTooltip label={t('Close')} shortcut="Esc" align="end"><button type="button" className="coding-session-icon-button coding-agent-close" aria-label={t('Close chat')} onClick={onClose}><FlowGlyph name="closeChat" size={14}/></button></ScopedFlowTooltip>}
       </header>
       <CodingSessionConversation session={session} data={data} onChange={onChange} onOpenChanges={onOpenChanges}/>

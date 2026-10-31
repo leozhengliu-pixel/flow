@@ -132,7 +132,7 @@ export function CodingThinking() {
 export function CodingTimeMarker({ at }: { at: string }) {
   const { t, locale } = useI18n()
   const label = streamTimeLabel(at, locale, t)
-  return label ? <time className="cs-time-marker" dateTime={at}>{label}</time> : null
+  return label ? <time className="cs-time-marker" dateTime={at}><span>{label}</span></time> : null
 }
 
 /** The pill of an access error: icon, purple label and an optional action. */
