@@ -53,7 +53,7 @@ export function AgentChatMenu({ align = 'start', className, unsaved = false, onC
           <FlowGlyph name="edit" size={16}/><span>{t('Rename…')}</span>
         </Command.Item>
         <Command.Item className="menu-item" onSelect={onCopy} value={t('Copy as markdown')}>
-          <FlowGlyph name="copyMarkdown" size={16}/><span>{t('Copy as markdown')}</span>
+          <FlowGlyph name="copy" size={16}/><span>{t('Copy as markdown')}</span>
         </Command.Item>
         <Command.Separator><span aria-hidden="true" className="agent-chat-options-divider" /></Command.Separator>
         <Command.Item className="menu-item" disabled={unsaved} onSelect={onDelete} value={t('Delete')}>
