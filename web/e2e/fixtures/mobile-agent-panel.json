@@ -7,7 +7,7 @@
     "number": 8,
     "title": "[mobile] Add exported whisper2 function",
     "description": "[mobile] review fixture",
-    "status": "open",
+    "status": "closed",
     "repositoryOwner": "PocklyApp",
     "repositoryName": "qa-coding-session",
     "url": "https://github.com/PocklyApp/qa-coding-session/pull/8",
@@ -25,7 +25,7 @@
     "files": [],
     "events": [],
     "favorite": false,
-    "draft": true,
+    "draft": false,
     "quickToReview": false,
     "createdAt": "2026-10-22T09:35:00.000Z",
     "updatedAt": "2026-10-22T09:35:50.000Z"
@@ -66,7 +66,6 @@
     "updatedAt": "2026-10-22T09:38:10.000Z"
   },
   "activities": [
-    { "id": "mobile-prompt", "sessionId": "mobile-agent-agent-panel-task", "actorId": "usr_local", "type": "prompt", "body": "[mobile] Work on FLO-66", "createdAt": "2026-10-22T09:35:50.000Z" },
     { "id": "mobile-thought-1", "sessionId": "mobile-agent-agent-panel-task", "actorId": "usr_local", "type": "thought", "body": "Setting up `PocklyApp/qa-coding-session`", "createdAt": "2026-10-22T09:36:00.000Z" },
     { "id": "mobile-thought-2", "sessionId": "mobile-agent-agent-panel-task", "actorId": "usr_local", "type": "thought", "body": "Setting up Codex…", "createdAt": "2026-10-22T09:36:10.000Z" },
     { "id": "mobile-thought-3", "sessionId": "mobile-agent-agent-panel-task", "actorId": "usr_local", "type": "thought", "body": "I’ll run the two requested waits, add `whisper2(name)`, then push the change and open a draft PR as instructed. I won’t run tests.", "createdAt": "2026-10-22T09:36:20.000Z" },

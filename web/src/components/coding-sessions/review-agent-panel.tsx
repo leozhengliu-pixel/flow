@@ -1,5 +1,5 @@
 /* oxlint-disable react/only-export-components -- the panel, its toggle and the hook that finds the review's session belong together. */
-import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
+import { AgentCursorFilledGlyph, AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, CodeReview } from '@/types/flow'
 import { CodingSessionErrorBoundary } from './coding-session-error-boundary'
@@ -47,5 +47,5 @@ export function useReviewCodingSessionId(review: Pick<CodeReview, 'id' | 'issueI
 export function ReviewAgentToggle({ shown, onToggle }: { shown: boolean; onToggle: () => void }) {
   const { t } = useI18n()
   const label = t(shown ? 'Hide agent' : 'Show agent')
-  return <button type="button" className="coding-session-agent-toggle review-agent-toggle" aria-pressed={shown} aria-label={label} title={label} onClick={onToggle}><AgentCursorGlyph size={14}/></button>
+  return <button type="button" className="coding-session-agent-toggle review-agent-toggle" aria-pressed={shown} aria-label={label} title={label} onClick={onToggle}><AgentCursorGlyph className="review-agent-toggle-outline" size={14}/><AgentCursorFilledGlyph className="review-agent-toggle-filled" size={14}/></button>
 }

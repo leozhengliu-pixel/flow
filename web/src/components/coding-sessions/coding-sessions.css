@@ -90,6 +90,7 @@
 .coding-session-empty span{margin-top:12px;color:var(--theme-text-secondary);font:450 13px/normal var(--font)}
 .coding-agent-panel{flex:0 0 clamp(360px,45%,640px);width:clamp(360px,45%,640px);max-width:100%;min-height:0;display:flex;flex-direction:column;margin:12px 8px 8px 4px;border:.5px solid var(--cs-panel-border);border-radius:8px;background:var(--cs-bg-base);overflow:hidden}
 .coding-agent-panel[hidden]{display:none}
+.coding-agent-panel-surface{display:contents}
 .coding-agent-panel-header{flex:none;display:flex;align-items:center;gap:8px;min-width:0;height:48px;box-sizing:border-box;padding:8px 6px 8px 15px}
 .coding-agent-panel-header-inner{display:contents}
 .coding-agent-panel-header h3{flex:1;min-width:0;margin:0;overflow:hidden;color:var(--cs-label-base);font:500 13px/16px var(--font);text-overflow:ellipsis;white-space:nowrap}
@@ -209,6 +210,7 @@
 /* Review panels replace the diff on phones. Keep the floating frame flush with the merged review chrome. */
 @media (max-width:767px){
   html:root body .reviews-workspace .review-agent-panel{flex:1;width:auto;margin:0 8px 8px 4px;background:var(--theme-background);box-shadow:var(--cs-card-shadow)}
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-panel-surface{display:flex;flex:1;min-height:0;flex-direction:column;background:var(--cs-bg-base)}
   html:root body .reviews-workspace .review-agent-panel .coding-agent-panel-header{gap:0;padding:8px 6px 8px 10px;background:var(--cs-bg-base);z-index:1;position:relative;left:-.5px;top:-.5px;width:calc(100% + 1px)}
   html:root body .reviews-workspace .review-agent-panel .coding-agent-panel-header-inner{min-width:0;flex:1;display:flex;align-items:center;gap:8px;height:32px;padding-left:6px;box-sizing:border-box}
   html:root body .reviews-workspace .review-agent-panel .coding-agent-panel-header-inner .coding-agent-archived{display:none}
@@ -233,9 +235,11 @@
   html:root body .reviews-workspace .review-agent-panel .cs-reasoning code{font:450 11.25px/14.625px var(--cs-terminal-font)}
   html:root body .reviews-workspace .review-agent-panel .cs-reasoning code{position:relative;top:-2px}
   html:root body .reviews-workspace .review-agent-panel .cs-action{gap:16px}
-  html:root body .reviews-workspace .review-agent-panel .cs-action-header{gap:16px}
+  html:root body .reviews-workspace .review-agent-panel .cs-action-header{gap:6px}
+  html:root body .reviews-workspace .review-agent-panel .cs-action-label{line-height:normal}
   html:root body .reviews-workspace .review-agent-panel .cs-action-detail{font-family:var(--font);line-height:normal;border-radius:2.4px}
   html:root body .reviews-workspace .review-agent-panel .cs-action-header.is-disclosure{gap:3px;padding:0 8px;margin:0 -8px;border-radius:4px}
+  html:root body .reviews-workspace .review-agent-panel .cs-action-header.is-disclosure .cs-action-detail{margin-left:3px}
   html:root body .reviews-workspace .review-agent-panel:has(.cs-archived-divider) .cs-composer-area{display:none}
   html:root body .reviews-workspace .review-agent-panel .cs-latest{display:none}
   html:root body .reviews-workspace .review-agent-panel .cs-group-children{padding-left:10px;padding-right:10px}

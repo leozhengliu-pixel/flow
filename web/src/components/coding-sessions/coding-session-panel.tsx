@@ -113,6 +113,7 @@ export function CodingAgentPanel({ session, data, onChange, onDismiss, onOpenCha
   const title = session.displayTitle || data.issues.find(issue => issue.id === session.issueId)?.title || session.repository || t('Coding session')
   const shownError = error || hostError
   return <aside className={`coding-agent-panel${className ? ` ${className}` : ''}`} aria-label={t('Agent')} hidden={hidden}>
+    <div className="coding-agent-panel-surface">
       <header className="coding-agent-panel-header">
         <div className="coding-agent-panel-header-inner">
           <CodingAgentAvatar state={session.state} stalled={codingSessionStalled(session)}/>
@@ -127,6 +128,7 @@ export function CodingAgentPanel({ session, data, onChange, onDismiss, onOpenCha
       </header>
       <CodingSessionConversation session={session} data={data} onChange={onChange} onOpenChanges={onOpenChanges}/>
       {shownError && <p className="coding-session-error-text" role="alert">{shownError}</p>}
+    </div>
     </aside>
 }
 
