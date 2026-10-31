@@ -47,6 +47,7 @@ import { nestedLinesByIssue } from '@/components/issue-explorer/issue-grouping'
 import { CODING_STATE_LABELS } from '@/components/coding-sessions/coding-session-model'
 import { useOptionalTranslate } from '@/i18n/i18n'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { IssueGroupContextMenu, type IssueGroupMenuActions } from './issue-group-context-menu'
 
 export type MyIssuesStateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
 export type MyIssuesContextAction = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'cycle' | 'moreProperties' | 'createRelated' | 'markAs' | 'copy' | 'copyUrl' | 'copyId' | 'copyTitle' | 'convertTo' | 'move' | 'openIn' | 'runLoop' | 'favorite' | 'remind' | 'delete'
@@ -209,6 +210,7 @@ export interface MyIssuesListProps {
   onContextAction?: (issue: MyIssuesRowData, action: MyIssuesContextAction) => void
   onCreateIssue?: (group: MyIssuesGroupData) => void
   onGroupCollapsedChange?: (groupId: string, collapsed: boolean) => void
+  onHideGroup?: (groupId: string) => void
   onOpenIssue?: (issue: MyIssuesRowData) => void
   onPropertyChange?: (issue: MyIssuesRowData, property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>
   onRetryMutation?: (issue: MyIssuesRowData) => void
@@ -235,7 +237,7 @@ function MyIssuesVirtualFooter({ context }: { context: MyIssuesListContext }) {
   return context.loadingMore ? <LoadingListFooter label="Loading issues"/> : null
 }
 
-export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached, emptyState, hideGroupHeaders = false }: MyIssuesListProps) {
+export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onHideGroup, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached, emptyState, hideGroupHeaders = false }: MyIssuesListProps) {
   const entries = useMemo<MyIssuesListEntry[]>(() => groups.flatMap((group, index) => {
     const collapsed = collapsedGroupIds.has(group.id)
     const header: MyIssuesListEntry = { key: `group:${group.id}`, kind: 'group', group, collapsed }
@@ -248,13 +250,18 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
   useSelectHoveredRowWithX(entries, selectedIds, onSelectIssue)
   const estimateSettingsFor = useTeamEstimateSettings()
   const groupEstimate = (group: MyIssuesGroupData) => displayProperties.has('estimate') ? sumEstimatePoints(group.issues, estimateSettingsFor) : undefined
+  const groupMenuActions = (group: MyIssuesGroupData): IssueGroupMenuActions => ({
+    onCollapseAll: onGroupCollapsedChange ? () => groups.forEach(item => onGroupCollapsedChange(item.id, true)) : undefined,
+    onSelectAll: onSelectIssue ? () => group.issues.forEach(issue => onSelectIssue(issue.id, true, false)) : undefined,
+    onHideGroup: onHideGroup ? () => onHideGroup(group.id) : undefined,
+  })
   if (loading) return <LoadingContainer loading label="Loading issues"/>
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
   if (!groups.some(group => group.issues.length)) return emptyState ?? <MyIssuesListEmpty/>
   const renderEntry = (entry: MyIssuesListEntry) => entry.kind === 'parent'
     ? <MyIssuesParentGroupHeader label={entry.label} count={entry.count}/>
     : entry.kind === 'group'
-    ? <div style={{ paddingBottom: !entry.collapsed && !entry.group.issues.length ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/></div>
+    ? <div style={{ paddingBottom: !entry.collapsed && !entry.group.issues.length ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(entry.group)}/></div>
     : <div style={{ paddingBottom: entry.groupEnd ? 2 : 0 }}><MyIssuesRow issue={entry.issue} active={activeIssueId === entry.issue.id} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/></div>
   if (entries.length > VIRTUALIZATION_THRESHOLD) return <Virtuoso
     className={styles.virtualList}
@@ -276,7 +283,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
       const parentHeader = group.parentGroupId && groups[index - 1]?.parentGroupId !== group.parentGroupId
       return <section className={styles.group} key={group.id} aria-labelledby={hideGroupHeaders ? undefined : `my-issues-group-${group.id}`} data-subgroup={group.parentGroupId ? true : undefined}>
         {parentHeader && <MyIssuesParentGroupHeader label={group.parentLabel ?? ''} count={groups.filter(item => item.parentGroupId === group.parentGroupId).reduce((total, item) => total + item.issues.length, 0)}/>}
-        {!hideGroupHeaders && <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} estimateSum={groupEstimate(group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>}
+        {!hideGroupHeaders && <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} estimateSum={groupEstimate(group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(group)}/>}
         {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} active={activeIssueId === issue.id} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
       </section>
     })}
@@ -289,15 +296,15 @@ function MyIssuesParentGroupHeader({ label, count }: { label: string; count: num
 }
 
 /** `estimateSum`: the group's estimate total ("Todo 2 △ 8"), shown when the issues' team uses estimates. */
-export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, estimateSum, onCreateIssue, onGroupCollapsedChange }: { collapsed: boolean; createIssueLabel: string; group: MyIssuesGroupData; estimateSum?: number; onCreateIssue?: (group: MyIssuesGroupData) => void; onGroupCollapsedChange?: (groupId: string, collapsed: boolean) => void }) {
+export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, estimateSum, onCreateIssue, onGroupCollapsedChange, ...menuActions }: IssueGroupMenuActions & { collapsed: boolean; createIssueLabel: string; group: MyIssuesGroupData; estimateSum?: number; onCreateIssue?: (group: MyIssuesGroupData) => void; onGroupCollapsedChange?: (groupId: string, collapsed: boolean) => void }) {
   const translate = useOptionalTranslate()
   const label = group.translatableLabel ? translate(group.label) : group.label
-  return <header className={styles.groupHeader} data-subgroup={group.parentGroupId ? true : undefined} data-my-issues-group-header>
+  return <IssueGroupContextMenu collapsed={collapsed} onCollapse={onGroupCollapsedChange ? () => onGroupCollapsedChange(group.id, !collapsed) : undefined} {...menuActions}><header className={styles.groupHeader} data-subgroup={group.parentGroupId ? true : undefined} data-my-issues-group-header>
     <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={() => onGroupCollapsedChange?.(group.id, !collapsed)}><ChevronDown className={styles.groupChevron} size={12}/><svg className={styles.groupCaret} width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z" fill="currentColor"/></svg></button>
     <GroupStateIcon state={group.state ?? group.issues[0]?.state} type={group.stateType}/><span data-i18n-ignore={group.translatableLabel ? undefined : true} id={`my-issues-group-${group.id}`} className={styles.groupName} data-my-issues-group-title>{label}</span><span className={styles.groupCount}>{group.totalCount ?? group.issues.length}</span>
     {estimateSum !== undefined && <span className={`estimate-chip ${styles.groupEstimate}`} aria-label={`${estimateSum} estimate points`}><EstimateIcon size={14}/><span className="estimate-chip__value">{formatEstimatePoints(estimateSum)}</span></span>}
     {onCreateIssue && (group.createContext || group.stateType) && <button className={styles.createButton} aria-label={createIssueLabel} data-my-issues-group-add onClick={() => onCreateIssue(group)}><PlusIcon width={14} height={14}/></button>}
-  </header>
+  </header></IssueGroupContextMenu>
 }
 
 /** The reference app's X: toggle selection of the row under the pointer (or the focused row); Shift+X extends a range. */

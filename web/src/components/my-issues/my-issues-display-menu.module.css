@@ -72,6 +72,14 @@
 .layoutTabs:not(#_){padding:0 2px}
 .propertyGrid:not(#_){gap:5px}
 
+@media (min-width: 1024px) {
+  .popover { max-height: calc(100dvh - 103px); }
+  .footerButton { font-family: inherit; font-size: 12px; font-weight: 500; line-height: normal; }
+  .footerButton:not(.footerPrimary) { color: var(--text); }
+  .footerPrimary { color: var(--issue-display-default-link); }
+  details.section > summary { display: list-item; cursor: pointer; }
+}
+
 @media (max-width: 767px) {
   .popover { position: relative; }
   .trigger.trigger.trigger:focus-visible { outline: 0; }

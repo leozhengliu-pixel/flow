@@ -2677,6 +2677,8 @@ export const zhCN: Record<string, string> = {
   "Select all in row": "选择该行全部",
   "Expand all rows": "展开所有行",
   "Collapse all rows": "折叠所有行",
+  "Collapse all": "全部折叠",
+  "Select all in group": "选择组内所有事项",
   "Subscribe to thread": "订阅此讨论串",
   "Unsubscribe from thread": "取消订阅此讨论串",
   "Mute thread": "静音此讨论串",

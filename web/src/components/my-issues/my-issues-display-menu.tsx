@@ -34,6 +34,7 @@ export interface MyIssuesDisplayMenuProps {
   saveDefaultLabel?: string
   /** The issue explorer uses the compact phone parity sheet. */
   phoneIssueMenu?: boolean
+  desktopIssueMenu?: boolean
 }
 
 type DisplayPatch = Partial<MyIssuesDisplayOptions>
@@ -78,7 +79,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'pullRequests', label: 'Pull requests' },
 ]
 
-export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false }: MyIssuesDisplayMenuProps) {
+export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false, desktopIssueMenu = false }: MyIssuesDisplayMenuProps) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
@@ -94,6 +95,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
   const visibleSubGroupingOptions = (availableGroupings ? subGroupingOptions.filter(option => availableGroupings.includes(option.value)) : subGroupingOptions).filter(option => option.value === 'none' || option.value !== options.grouping)
   const visibleOrderingOptions = availableOrderings ? orderingOptions.filter(option => availableOrderings.includes(option.value)) : orderingOptions
   const direction = options.orderDirection ?? defaultOrderDirection(options.ordering)
+  const GroupsSection = desktopIssueMenu ? 'details' : 'section'
 
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>
@@ -179,8 +181,8 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
             })}
           </div>
         </section>
-        {groups.length > 1 && options.grouping !== 'none' && <section className={styles.section} aria-label={t('Group ordering')}>
-          <span className={styles.sectionLabel}>{t('Groups')}</span>
+        {groups.length > 1 && options.grouping !== 'none' && <GroupsSection className={styles.section} aria-label={t('Group ordering')}>
+          {desktopIssueMenu ? <summary className={styles.sectionLabel}>{t('Groups')}</summary> : <span className={styles.sectionLabel}>{t('Groups')}</span>}
           <div className={styles.groupList}>
             {groups.map(group => {
               const hidden = options.hiddenGroupIds.includes(group.id)
@@ -190,7 +192,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
             })}
           </div>
           {!options.showEmptyGroups && <p className={styles.groupHint}>{t('Empty groups are hidden')}</p>}
-        </section>}
+        </GroupsSection>}
         {(onReset || onSaveDefault) && <footer className={styles.footer}>
           {onReset && <button type="button" className={styles.footerButton} onClick={onReset}>{t(resetLabel)}</button>}
           {onSaveDefault && <button type="button" className={`${styles.footerButton} ${styles.footerPrimary}`} onClick={onSaveDefault}>{t(saveDefaultLabel)}</button>}

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -31,6 +31,18 @@ afterEach(() => clearPagedIssueListCache())
 
 describe('server-backed issue groups', () => {
   beforeEach(() => vi.clearAllMocks())
+  it('selects all cursor pages in a group, not just the loaded viewport', async () => {
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 101 }] })
+    vi.mocked(listIssueRecords).mockImplementation(async query => ({ items: Array.from({ length: query?.cursor ? 1 : 100 }, (_, index) => makeIssue({ id: `issue-${query?.cursor ? 100 : index}`, title: `Issue ${query?.cursor ? 100 : index}` })), hasMore: !query?.cursor, nextCursor: query?.cursor ? undefined : 'last-page', total: -1 }))
+    const select = vi.fn(), records = vi.fn(), data = makeBootstrap({ issues: [], favorites: [], issueCollectionPaged: true })
+    render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} onGroupCollapsedChange={vi.fn()} onSelectIssue={select} onLoadedIssuesChange={records} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    const header = (await screen.findByText('Backlog')).closest('header')!
+    fireEvent.contextMenu(header)
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Select all in group' }))
+    await waitFor(() => expect(select).toHaveBeenCalledTimes(101))
+    expect(select).toHaveBeenCalledWith('issue-100', true, false)
+    expect(records).toHaveBeenLastCalledWith(expect.arrayContaining([expect.objectContaining({ id: 'issue-100' })]))
+  })
   it('uses the shared hidden-column controls and complete counts on paged boards', async () => {
     vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 240 }] })
     vi.mocked(listIssueRecords).mockResolvedValue({ items: [], hasMore: false, total: 240 })
