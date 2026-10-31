@@ -3,6 +3,7 @@ import * as Select from '@radix-ui/react-select'
 import { ArrowDownUp, Check, ChevronDown, Columns2, Eye, EyeOff, LayoutGrid, List } from 'lucide-react'
 import { DisplayIcon, TabsOverflowIcon } from './my-issues-icons'
 import { useI18n } from '@/i18n/i18n'
+import type { ReactNode } from 'react'
 import { Toggle } from '@/components/ui/toggle'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesOrdering, MyIssuesProperty } from './my-issues-surface'
@@ -37,6 +38,7 @@ export interface MyIssuesDisplayMenuProps {
   desktopIssueMenu?: boolean
   /** My issues has a shorter phone sheet than team issue explorer. */
   myIssuesPhoneMenu?: boolean
+  extraActions?: ReactNode
 }
 
 type DisplayPatch = Partial<MyIssuesDisplayOptions>
@@ -81,7 +83,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'pullRequests', label: 'Pull requests' },
 ]
 
-export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false, desktopIssueMenu = false, myIssuesPhoneMenu = false }: MyIssuesDisplayMenuProps) {
+export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false, desktopIssueMenu = false, myIssuesPhoneMenu = false, extraActions }: MyIssuesDisplayMenuProps) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
@@ -149,6 +151,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
           </div>
           <SwitchRow label="Order completed by recency" checked={options.orderCompletedByRecency} onChange={orderCompletedByRecency => change({ orderCompletedByRecency })} />
         </section>
+        {extraActions && <section className={styles.section} aria-label={t('Additional options')}>{extraActions}</section>}
 
         <section className={styles.section} aria-label={t('Visible issues')}>
           <SelectField label="Completed issues" value={options.completedWindow} options={completedOptions} onChange={completedWindow => change({ completedWindow })} />

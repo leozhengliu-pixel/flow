@@ -58,6 +58,11 @@
   .flow-cycle-issues [data-my-issues-group-header] .estimate-chip__value{transform:translateX(-1px)}
   .flow-cycle-count{padding-left:10px}
 }
+.cycle-display-filter{height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:8px;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-text);font:500 12px/normal inherit;text-align:left}
+.cycle-display-filter svg{width:14px;height:14px}
+.cycle-display-insights{height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:8px;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-text);font:500 12px/normal inherit;text-align:left}
+.cycle-display-insights svg{width:14px;height:14px}
+@media(max-width:767px){.flow-cycle-toolbar>button[aria-label*="insights"]{display:none}}
 .cycle-education .cycle-empty-mark{width:91.11px}
 .cycle-details-card{border-radius:10px}
 .cycle-details-card dl{gap:2px;padding:0 2px}

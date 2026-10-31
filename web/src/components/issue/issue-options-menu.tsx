@@ -319,7 +319,7 @@ export function IssueOptionsMenu({
       }
     }}>
       <Popover.Trigger asChild>
-        {trigger ?? <button className="issue-header-icon" type="button" aria-label="Issue options"><FlowOptionsIcon/></button>}
+        {trigger ?? <button className="issue-header-icon" type="button" aria-label="Issue options" aria-expanded={open}><FlowOptionsIcon/></button>}
       </Popover.Trigger>
       {mobile&&open&&createPortal(<div className="issue-options-mobile-overlay" onPointerDown={closeMenu}/>,document.body)}
       <Popover.Portal>
