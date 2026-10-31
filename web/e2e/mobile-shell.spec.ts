@@ -736,11 +736,23 @@ test.describe('team issues phone toolbar', () => {
     }
     const defaults = { grouping: 'status', groupOrder: 'desc', ordering: 'importance', layout: 'list', properties: ['id', 'status', 'assignee', 'priority', 'project', 'estimate', 'labels', 'created'], completedWindow: 'all', showTriageIssues: false, showSubIssues: true, nestedSubIssues: false, showEmptyGroups: false }
     expect((await request.patch(`${api}/api/teams/${team.id}/settings`, { headers, data: { issueViewDefaults: { all: defaults } } })).ok()).toBe(true)
+    expect((await request.patch(`${api}/api/workspaces/${workspaceKey}/teams/${team.id}`, { headers, data: { name: '[mobile] This is a deliberately long team name' } })).ok()).toBe(true)
 
     await page.goto(`${base}/${workspaceKey}/team/${team.key}/all`)
     await geometry(page.locator('[data-issue-explorer] [data-content-view-header]'), { x: 0, y: 0, width: 390, height: 44 })
     await geometry(page.locator('[data-issue-explorer] [data-content-view-subheader]'), { x: 0, y: 44, width: 390, height: 43.5 })
     await expect(page.locator('[data-content-view-breadcrumb] [data-current]')).toHaveText('Issues')
+    const breadcrumb = page.locator('[data-content-view-breadcrumb]')
+    const favorite = page.locator('[data-content-view-header] button[role="switch"]')
+    await expect.poll(async () => {
+      const breadcrumbBox = await breadcrumb.boundingBox()
+      const favoriteBox = await favorite.boundingBox()
+      return breadcrumbBox && favoriteBox ? favoriteBox.x - (breadcrumbBox.x + breadcrumbBox.width) : -1
+    }).toBeGreaterThanOrEqual(0)
+    await expect.poll(async () => {
+      const breadcrumbBox = await breadcrumb.boundingBox()
+      return breadcrumbBox ? breadcrumbBox.width : 0
+    }).toBeLessThan(250)
     await expect(page.locator('[data-content-view-subheader] nav a[aria-current="page"]')).toHaveText('All issues')
     await geometry(page.locator('[data-my-issues-group-header]').first(), { x: 8, y: 87.5, width: 374, height: 36 })
     await expect(page.locator('[data-my-issues-group-title]').first()).toHaveText('In Progress')
