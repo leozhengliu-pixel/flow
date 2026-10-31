@@ -53,7 +53,7 @@
   .issue-view .issue-mobile-properties :is(.core-property-trigger,.label-project-trigger) > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 450; line-height: normal; }
   .issue-view .issue-mobile-properties > .core-property-picker:first-child .core-property-trigger > span { color: var(--ui-pill-hover-fg); }
   .issue-view .issue-mobile-properties .issue-project-property { display: flex; flex-wrap: wrap; gap: 6px; }
-  .issue-view .issue-mobile-properties :is(.issue-project-row,.issue-milestone-row) { margin: 0; padding: 0; min-height: 0; }
+  .issue-view .issue-mobile-properties :is(.issue-project-row,.issue-milestone-row) { flex: 0 1 auto; max-width: 100%; margin: 0; padding: 0; min-height: 0; }
   .issue-view .issue-mobile-properties .issue-project-open { display: none; }
   .issue-view .issue-empty-sub-issue-action { color: var(--text); }
   .issue-view .issue-empty-sub-issue-action > span { color: var(--issue-muted); }
