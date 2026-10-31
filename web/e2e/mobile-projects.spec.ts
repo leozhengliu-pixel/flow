@@ -1,11 +1,11 @@
-import { expect, test } from '@playwright/test'
-import { test as workspaceTest } from './workspace-fixture'
+import { expect } from '@playwright/test'
+import { test } from './workspace-fixture'
 
-workspaceTest.describe('mobile cycles timeline', () => {
-  workspaceTest.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+test.describe('mobile cycles timeline', () => {
+  test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
   for (const width of [390, 375]) {
-    workspaceTest(`cycle cards, cooldown, chart and navigation at ${width}px`, async ({ page, request, workspaceKey }) => {
+    test(`cycle cards, cooldown, chart and navigation at ${width}px`, async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Flow-Workspace': workspaceKey, 'X-Workspace-Key': workspaceKey }
       const bootstrap = await (await request.get('/api/bootstrap', { headers })).json()
       const team = bootstrap.teams[0] as { id: string; key: string }
@@ -49,11 +49,11 @@ workspaceTest.describe('mobile cycles timeline', () => {
   }
 })
 
-workspaceTest.describe('mobile cycle detail', () => {
-  workspaceTest.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+test.describe('mobile cycle detail', () => {
+  test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
   for (const width of [390, 375]) {
-    workspaceTest(`grouped estimate rows match the phone chrome at ${width}px`, async ({ page, request, workspaceKey }) => {
+    test(`grouped estimate rows match the phone chrome at ${width}px`, async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Flow-Workspace': workspaceKey, 'X-Workspace-Key': workspaceKey }
       const bootstrap = await (await request.get('/api/bootstrap', { headers })).json()
       const team = bootstrap.teams[0] as { id: string; key: string }
@@ -87,11 +87,11 @@ workspaceTest.describe('mobile cycle detail', () => {
   }
 })
 
-workspaceTest.describe('mobile initiative overview', () => {
-  workspaceTest.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+test.describe('mobile initiative overview', () => {
+  test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
   for (const width of [390, 375]) {
-    workspaceTest(`closed details preserve the overview and latest update at ${width}px`, async ({ page, request, workspaceKey }) => {
+    test(`closed details preserve the overview and latest update at ${width}px`, async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Flow-Workspace': workspaceKey, 'X-Workspace-Key': workspaceKey }
       const created = await request.post('/api/initiatives', { headers, data: { name: '[mobile] Overview', status: 'active', color: '#e9b0a7' } })
       expect(created.status()).toBe(201)
@@ -124,11 +124,11 @@ workspaceTest.describe('mobile initiative overview', () => {
   }
 })
 
-workspaceTest.describe('mobile initiatives list', () => {
-  workspaceTest.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+test.describe('mobile initiatives list', () => {
+  test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
   for (const width of [390, 375]) {
-    workspaceTest(`All initiatives keeps its phone header and on-track row at ${width}px`, async ({ page, request, workspaceKey }) => {
+    test(`All initiatives keeps its phone header and on-track row at ${width}px`, async ({ page, request, workspaceKey }) => {
       const created = await request.post('/api/initiatives', {
         headers: { 'X-Flow-Workspace': workspaceKey, 'X-Workspace-Key': workspaceKey },
         data: { name: '[mobile] Initiative parity', status: 'active', health: 'onTrack' },
@@ -174,23 +174,18 @@ workspaceTest.describe('mobile initiatives list', () => {
 test.describe('mobile projects list', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('phone All projects rows show the icon, name, milestone, health and progress', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-projects-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: 'Mobile projects parity', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  test('phone All projects rows show the icon, name, milestone, health and progress', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const created = await request.post('http://127.0.0.1:4180/api/projects', {
+    const created = await request.post('/api/projects', {
       data: { name: '[mobile] Delta', summary: 'Refresh the marketing site' },
       headers,
     })
     expect(created.status()).toBe(201)
     const project = await created.json() as { id: string }
-    expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/milestones`, { data: { name: 'Alpha' }, headers })).status()).toBe(201)
-    expect((await request.patch(`http://127.0.0.1:4180/api/projects/${project.id}`, { data: { statusId: 'ps_progress' }, headers })).ok()).toBe(true)
+    expect((await request.post(`/api/projects/${project.id}/milestones`, { data: { name: 'Alpha' }, headers })).status()).toBe(201)
+    expect((await request.patch(`/api/projects/${project.id}`, { data: { statusId: 'ps_progress' }, headers })).ok()).toBe(true)
 
-    const display = await request.put('http://127.0.0.1:4180/api/workspace/project-display-default', {
+    const display = await request.put('/api/workspace/project-display-default', {
       headers,
       data: {
         display: {
@@ -233,14 +228,9 @@ test.describe('mobile projects list', () => {
 test.describe('mobile project overview', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('phone project overview shows the header tabs, property pills and sections', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-projects-overview-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: 'Mobile project overview parity', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  test('phone project overview shows the header tabs, property pills and sections', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const created = await request.post('http://127.0.0.1:4180/api/projects', {
+    const created = await request.post('/api/projects', {
       headers,
       data: {
         name: '[mobile] Delta',
@@ -254,15 +244,15 @@ test.describe('mobile project overview', () => {
     })
     expect(created.status()).toBe(201)
     const project = await created.json() as { id: string; slugId: string }
-    const initiative = await request.post('http://127.0.0.1:4180/api/initiatives', {
+    const initiative = await request.post('/api/initiatives', {
       headers,
       data: { name: '[mobile] test123', summary: 'Mobile parity initiative', status: 'active' },
     })
     expect(initiative.status()).toBe(201)
     const initiativeId = (await initiative.json() as { id: string }).id
-    expect((await request.patch(`http://127.0.0.1:4180/api/projects/${project.id}`, { headers, data: { initiatives: [initiativeId] } })).ok()).toBe(true)
+    expect((await request.patch(`/api/projects/${project.id}`, { headers, data: { initiatives: [initiativeId] } })).ok()).toBe(true)
     for (const [title, url] of [['Example', 'https://example.com'], ['GitHub', 'https://github.com/flow'], ['Docs', 'https://flow.example.com/docs']]) {
-      expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/resources`, { headers, data: { type: 'link', title, url } })).status()).toBe(201)
+      expect((await request.post(`/api/projects/${project.id}/resources`, { headers, data: { type: 'link', title, url } })).status()).toBe(201)
     }
 
     await page.goto(`/${workspaceKey}/project/${project.slugId}/overview`)
@@ -296,14 +286,9 @@ test.describe('mobile project overview', () => {
 test.describe('mobile project properties panel', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('phone project details panel sits at the right edge over the overview with split date rows', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-projects-properties-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: 'Mobile project properties parity', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  test('phone project details panel sits at the right edge over the overview with split date rows', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const created = await request.post('http://127.0.0.1:4180/api/projects', {
+    const created = await request.post('/api/projects', {
       headers,
       data: {
         name: '[mobile] Compare Test',
@@ -316,15 +301,15 @@ test.describe('mobile project properties panel', () => {
     })
     expect(created.status()).toBe(201)
     const project = await created.json() as { id: string; slugId: string }
-    const initiative = await request.post('http://127.0.0.1:4180/api/initiatives', {
+    const initiative = await request.post('/api/initiatives', {
       headers,
       data: { name: '[mobile] test123', summary: 'Properties panel initiative', status: 'active' },
     })
     expect(initiative.status()).toBe(201)
     const initiativeId = (await initiative.json() as { id: string }).id
-    expect((await request.patch(`http://127.0.0.1:4180/api/projects/${project.id}`, { headers, data: { initiatives: [initiativeId] } })).ok()).toBe(true)
-    expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/milestones`, { headers, data: { name: 'Alpha' } })).status()).toBe(201)
-    expect((await request.post('http://127.0.0.1:4180/api/projects', { headers, data: { name: '[mobile] Companion' } })).status()).toBe(201)
+    expect((await request.patch(`/api/projects/${project.id}`, { headers, data: { initiatives: [initiativeId] } })).ok()).toBe(true)
+    expect((await request.post(`/api/projects/${project.id}/milestones`, { headers, data: { name: 'Alpha' } })).status()).toBe(201)
+    expect((await request.post('/api/projects', { headers, data: { name: '[mobile] Companion' } })).status()).toBe(201)
 
     await page.goto(`/${workspaceKey}/project/${project.slugId}/overview`)
 
@@ -354,29 +339,24 @@ test.describe('mobile project properties panel', () => {
 test.describe('mobile project activity', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('phone project activity shows the comment composer, a month heading and the framed comment card', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-projects-activity-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: 'Mobile project activity parity', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  test('phone project activity shows the comment composer, a month heading and the framed comment card', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const created = await request.post('http://127.0.0.1:4180/api/projects', {
+    const created = await request.post('/api/projects', {
       headers,
       data: { name: 'Compare Test', summary: 'Activity parity fixture', statusId: 'ps_progress' },
     })
     expect(created.status()).toBe(201)
     const project = await created.json() as { id: string; slugId: string }
-    const initiative = await request.post('http://127.0.0.1:4180/api/initiatives', {
+    const initiative = await request.post('/api/initiatives', {
       headers,
       data: { name: '[mobile] test123', summary: 'Activity parity initiative', status: 'active' },
     })
     expect(initiative.status()).toBe(201)
     const initiativeId = (await initiative.json() as { id: string }).id
-    expect((await request.patch(`http://127.0.0.1:4180/api/projects/${project.id}`, { headers, data: { initiatives: [initiativeId] } })).ok()).toBe(true)
-    expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/comments`, { headers, data: { body: 'Comparison comment for layout checks.' } })).status()).toBe(201)
-    expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/milestones`, { headers, data: { name: '[mobile] Alpha' } })).status()).toBe(201)
-    expect((await request.put(`http://127.0.0.1:4180/api/subscriptions/project/${project.id}`, { headers, data: { events: ['projectChanges'] } })).ok()).toBe(true)
+    expect((await request.patch(`/api/projects/${project.id}`, { headers, data: { initiatives: [initiativeId] } })).ok()).toBe(true)
+    expect((await request.post(`/api/projects/${project.id}/comments`, { headers, data: { body: 'Comparison comment for layout checks.' } })).status()).toBe(201)
+    expect((await request.post(`/api/projects/${project.id}/milestones`, { headers, data: { name: '[mobile] Alpha' } })).status()).toBe(201)
+    expect((await request.put(`/api/subscriptions/project/${project.id}`, { headers, data: { events: ['projectChanges'] } })).ok()).toBe(true)
 
     await page.goto(`/${workspaceKey}/project/${project.slugId}/activity`)
     await page.locator('.project-detail-page__toolbar-actions button[aria-label="Close project details"]').click()
@@ -416,22 +396,17 @@ test.describe('mobile project activity', () => {
 test.describe('mobile project update composer', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('phone project updates show the changed properties and post-update footer', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-projects-updates-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: 'Mobile project updates parity', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  test('phone project updates show the changed properties and post-update footer', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const created = await request.post('http://127.0.0.1:4180/api/projects', {
+    const created = await request.post('/api/projects', {
       headers,
       data: { name: 'Compare Test', summary: 'Update composer parity fixture' },
     })
     expect(created.status()).toBe(201)
     const project = await created.json() as { id: string; slugId: string }
-    expect((await request.patch(`http://127.0.0.1:4180/api/projects/${project.id}`, { headers, data: { priority: 2 } })).ok()).toBe(true)
-    expect((await request.patch(`http://127.0.0.1:4180/api/projects/${project.id}`, { headers, data: { startDate: '2026-09-28' } })).ok()).toBe(true)
-    expect((await request.post(`http://127.0.0.1:4180/api/projects/${project.id}/comments`, { headers, data: { body: 'Comparison comment for layout checks.' } })).status()).toBe(201)
+    expect((await request.patch(`/api/projects/${project.id}`, { headers, data: { priority: 2 } })).ok()).toBe(true)
+    expect((await request.patch(`/api/projects/${project.id}`, { headers, data: { startDate: '2026-09-28' } })).ok()).toBe(true)
+    expect((await request.post(`/api/projects/${project.id}/comments`, { headers, data: { body: 'Comparison comment for layout checks.' } })).status()).toBe(201)
 
     await page.goto(`/${workspaceKey}/project/${project.slugId}/activity`)
     await page.locator('.project-detail-page__toolbar-actions button[aria-label="Close project details"]').click()
@@ -465,14 +440,9 @@ test.describe('mobile project update composer', () => {
 test.describe('mobile project issues empty state', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('phone issues tab shows the centred empty state, shortcut keycaps and the display dot', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-projects-issues-${testInfo.project.name}-${testInfo.retry}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: 'Mobile project issues parity', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  test('phone issues tab shows the centred empty state, shortcut keycaps and the display dot', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const created = await request.post('http://127.0.0.1:4180/api/projects', {
+    const created = await request.post('/api/projects', {
       headers,
       data: { name: 'Compare Test' },
     })
@@ -523,17 +493,10 @@ test.describe('mobile project issues empty state', () => {
 
 test.describe('mobile project milestones section', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
-  const apiBase = process.env.FLOW_MOBILE_API_BASE ?? 'http://127.0.0.1:4180'
 
-  test('phone overview scrolls to the description goals and milestone card', async ({ page, request }, testInfo) => {
-    const requestedKey = `mobile-projects-milestones-${testInfo.project.name}-${Date.now()}`
-    const response = await request.post(`${apiBase}/api/workspaces`, {
-      data: { name: 'Mobile project milestones parity', urlKey: requestedKey, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
-    const { workspace: { urlKey: workspaceKey } } = await response.json() as { workspace: { urlKey: string } }
+  test('phone overview scrolls to the description goals and milestone card', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const created = await request.post(`${apiBase}/api/projects`, {
+    const created = await request.post(`/api/projects`, {
       headers,
       data: {
         name: 'Compare Test',
@@ -548,9 +511,9 @@ test.describe('mobile project milestones section', () => {
     expect(created.status()).toBe(201)
     const project = await created.json() as { id: string; slugId: string }
     for (const [title, url] of [['123', 'https://example.com/123'], ['New document', 'https://example.com/new'], ['GitHub', 'https://github.com/flow'], ['Example', 'https://example.com']]) {
-      expect((await request.post(`${apiBase}/api/projects/${project.id}/resources`, { headers, data: { type: 'link', title, url } })).status()).toBe(201)
+      expect((await request.post(`/api/projects/${project.id}/resources`, { headers, data: { type: 'link', title, url } })).status()).toBe(201)
     }
-    expect((await request.post(`${apiBase}/api/projects/${project.id}/milestones`, { headers, data: { name: 'Alpha' } })).status()).toBe(201)
+    expect((await request.post(`/api/projects/${project.id}/milestones`, { headers, data: { name: 'Alpha' } })).status()).toBe(201)
 
     await page.goto(`/${workspaceKey}/project/${project.slugId}/overview`)
     await page.locator('.project-detail-page__toolbar-actions button[aria-label="Close project details"]').click()
@@ -576,15 +539,9 @@ test.describe('mobile project milestones section', () => {
   })
 
   for (const width of [390, 375]) {
-    test(`phone descriptions keep wrapped, ordered and nested list text unclipped at ${width}px`, async ({ page, request }, testInfo) => {
-      const requestedKey = `mobile-projects-description-${width}-${testInfo.project.name}-${Date.now()}`
-      const response = await request.post(`${apiBase}/api/workspaces`, {
-        data: { name: '[mobile] Description lists', urlKey: requestedKey, region: 'us', tutorial: false },
-      })
-      expect(response.status()).toBe(201)
-      const { workspace: { urlKey: workspaceKey } } = await response.json() as { workspace: { urlKey: string } }
+    test(`phone descriptions keep wrapped, ordered and nested list text unclipped at ${width}px`, async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Workspace-Key': workspaceKey }
-      const created = await request.post(`${apiBase}/api/projects`, {
+      const created = await request.post(`/api/projects`, {
         headers,
         data: {
           name: '[mobile] Description lists',
