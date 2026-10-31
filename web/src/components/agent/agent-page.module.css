@@ -839,6 +839,7 @@
     transform: none !important;
   }
   .historyMenu {
+    position: relative;
     box-sizing: border-box;
     width: calc(100vw - 32px);
     height: min(450px, 80vh);
@@ -894,7 +895,7 @@
     position: absolute;
     box-sizing: border-box;
     left: 6px;
-    width: calc(100% - 11px);
+    width: calc(100% - 12px);
     padding: 0 12px;
     border-radius: 0;
     line-height: normal;
@@ -910,8 +911,11 @@
   }
   .historyMenu [role="option"] {
     height: 46px;
-    grid-template-columns: 16px minmax(0, 1fr) auto auto;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
     gap: 8px;
+  }
+  .historyMenu [role="option"]:has(> span:not(:empty)) {
+    grid-template-columns: 16px minmax(0, 1fr) auto auto;
   }
   .historyMenu strong,
   .historyMenu time {

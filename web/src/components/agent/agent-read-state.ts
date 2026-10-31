@@ -10,9 +10,14 @@ export function agentSessionUnread(session: Pick<AgentSession, "updatedAt" | "la
 }
 
 /** The reference app's short history time ("now", "3h", "8d", "1w") through the translation templates ("{count}d"). */
-export function formatAgentHistoryTime(value: string, t: (source: string) => string, now = Date.now()) {
+export function formatAgentHistoryTime(value: string, t: (source: string) => string, now = Date.now(), compactWeeks = false) {
   if (!Number.isFinite(Date.parse(value))) return "";
-  const short = shortRelativeTime(value, now);
+  const age = Math.max(0, now - Date.parse(value));
+  const days = Math.round(age / 86_400_000);
+  // Phone history compacts the third and fourth weeks, but keeps the near-month "30d" label.
+  const short = compactWeeks && age < 30 * 86_400_000 && days >= 21 && days < 30
+    ? `${Math.floor(days / 7)}w`
+    : shortRelativeTime(value, now);
   const match = /^(\d+)(\D+)$/.exec(short);
   return match ? t(`{count}${match[2]}`).replace("{count}", match[1]) : t(short);
 }

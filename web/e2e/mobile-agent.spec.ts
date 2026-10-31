@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './workspace-fixture'
 
 const api = process.env.FLOW_MOBILE_API ?? 'http://127.0.0.1:4180'
 
@@ -19,12 +20,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   test.describe(`mobile agent chat switcher ${viewport.width}px`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-    test('history has calendar groups, filters, scrolls and opens a chat', async ({ page, request }, testInfo) => {
-      const created = await request.post(`${api}/api/workspaces`, {
-        data: { name: 'mobile-agent-chat-switcher', urlKey: `mobile-switcher-${viewport.width}-${testInfo.retry}-${Date.now()}`, region: 'us', tutorial: false },
-      })
-      expect(created.status()).toBe(201)
-      const { workspace: { urlKey: workspaceKey } } = await created.json() as { workspace: { urlKey: string } }
+    test('history has calendar groups, filters, scrolls and opens a chat', async ({ page, workspaceKey }) => {
       const now = new Date('2026-10-30T12:00:00')
       await page.clock.setFixedTime(now)
       const sessions = [1, 3, 10, 17, 17.1, 24, 24.1, 90].map((days, index) => ({
@@ -53,6 +49,11 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect(Math.abs((box?.y ?? 0) - (viewport.width === 390 ? 110 : 87))).toBeLessThanOrEqual(1)
       for (const name of ['Yesterday', 'This week', 'Last week', '2 weeks ago', '3 weeks ago', 'Older']) await expect(popover.getByRole('group', { name, exact: true })).toBeAttached()
       expect((await popover.getByRole('option').first().boundingBox())?.height).toBe(46)
+      const time = popover.getByRole('option').first().locator('time')
+      expect(Math.abs(((await time.boundingBox())?.x ?? 0) + ((await time.boundingBox())?.width ?? 0) - (viewport.width - 33.5))).toBeLessThanOrEqual(1)
+      await expect(popover.locator('[data-history-section="weeks-3"]').first().locator('time')).toHaveText('3w')
+      await expect(popover).toHaveAttribute('data-phone-popover')
+      expect(await popover.evaluate(node => getComputedStyle(node, '::after').boxShadow)).toBe('lch(25.68 1.93 272) 0px 0px 0px 0.5px inset')
       await expect(popover.getByRole('option').first()).toHaveAttribute('aria-selected', 'false')
       expect(await popover.getByRole('listbox').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true)
       expect(await popover.getByTestId('agent-chat-switcher-divider').count()).toBe(5)
@@ -74,6 +75,19 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await page.keyboard.press('Enter')
       await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/agent/switcher-3$`))
     })
+
+    test('phone display options retain both layout pill rings', async ({ page, request, workspaceKey }) => {
+      const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
+      const { teams } = await response.json() as { teams: { key: string }[] }
+      await page.goto(`/${workspaceKey}/team/${teams[0].key}/all`)
+      await page.getByRole('button', { name: 'Display options', exact: true }).click()
+      const dialog = page.getByRole('dialog', { name: 'Display options' })
+      await expect(dialog).toHaveAttribute('data-phone-popover')
+      for (const name of ['List', 'Board']) {
+        const tab = dialog.getByRole('tab', { name, exact: true })
+        expect(await tab.evaluate(node => getComputedStyle(node, '::after').boxShadow)).not.toBe('none')
+      }
+    })
   })
 }
 
@@ -81,11 +95,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   test.describe(`mobile agent home ${viewport.width}px`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-    test('phone Agent home shows the new-chat header, composer and recent chats', async ({ page, request }, testInfo) => {
-      const workspaceKey = `mobile-agent-home-${viewport.width}-${testInfo.project.name}-${testInfo.retry}`
-      expect((await request.post(`${api}/api/workspaces`, {
-        data: { name: 'Mobile agent home parity', urlKey: workspaceKey, region: 'us', tutorial: false },
-      })).status()).toBe(201)
+    test('phone Agent home shows the new-chat header, composer and recent chats', async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Workspace-Key': workspaceKey }
 
       const chats: Chat[] = []
@@ -133,7 +143,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect((await attach.boundingBox())?.width).toBe(28)
       const send = page.locator('main [data-agent-composer] [data-agent-send]')
       expect((await send.boundingBox())?.width).toBe(24)
-      expect(await send.evaluate(node => getComputedStyle(node).backgroundColor)).toBe('lch(47.918 59.303 288.421)')
+      await expect.poll(() => send.evaluate(node => getComputedStyle(node).backgroundColor)).toBe('lch(47.918 59.303 288.421)')
 
       const list = page.locator('main nav')
       expect((await list.boundingBox())?.y).toBe(408)
@@ -162,11 +172,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   test.describe(`mobile agent conversation ${viewport.width}px`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-    test('phone conversation shows the prompt, expanded steps, linked team card and reply composer', async ({ page, request }, testInfo) => {
-      const workspaceKey = `mobile-agent-conversation-${viewport.width}-${testInfo.project.name}-${testInfo.retry}`
-      expect((await request.post(`${api}/api/workspaces`, {
-        data: { name: 'Mobile agent conversation parity', urlKey: workspaceKey, region: 'us', tutorial: false },
-      })).status()).toBe(201)
+    test('phone conversation shows the prompt, expanded steps, linked team card and reply composer', async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Workspace-Key': workspaceKey }
       const prompt = 'Create a team called Invite Test and add 3 people to it: qa-invite-1@example.com, qa-invite-2@example.com, qa-invite-3@example.com (they are not members of this workspace yet).'
       const created = await request.post(`${api}/api/agent/sessions`, { headers, data: { message: prompt } })

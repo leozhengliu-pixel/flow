@@ -16,7 +16,7 @@ export function PhoneMenu({ open, onOpenChange, label, children, className = '',
   return <Dialog.Root open={open} onOpenChange={onOpenChange}>
     <Dialog.Portal>
       <Dialog.Overlay data-flow-motion="backdrop" className="phone-menu-overlay"/>
-      <Dialog.Content data-flow-motion="dialog" data-dialog-placement="window" className={`phone-menu-surface ${className}`} aria-describedby={undefined}
+      <Dialog.Content data-flow-motion="dialog" data-dialog-placement="window" data-phone-popover className={`phone-menu-surface ${className}`} aria-describedby={undefined}
         onOpenAutoFocus={() => { previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null }}
         onCloseAutoFocus={event => {
           onCloseAutoFocus?.(event)

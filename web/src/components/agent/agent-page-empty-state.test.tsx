@@ -227,6 +227,9 @@ describe('agent history helpers', () => {
     expect(formatAgentHistoryTime(ago(20_000), t, now)).toBe('now')
     expect(formatAgentHistoryTime(ago(5 * 60_000), t, now)).toBe('5min')
     expect(formatAgentHistoryTime(ago(3 * HOUR), t, now)).toBe('3h')
+    expect(formatAgentHistoryTime(ago(15 * HOUR), t, now, true)).toBe('15h')
+    expect(formatAgentHistoryTime(ago(DAY - 1), t, now, true)).toBe('24h')
+    expect(formatAgentHistoryTime(ago(DAY), t, now, true)).toBe('1d')
     expect(formatAgentHistoryTime(ago(2 * DAY), t, now)).toBe('2d')
     // Measured on the reference app's agent history: 7d 7h → "1w", 8d 3h → "8d", 8d 17h → "9d", 9d 22h → "10d".
     expect(formatAgentHistoryTime(ago(7 * DAY + 7 * HOUR), t, now)).toBe('1w')
@@ -234,8 +237,17 @@ describe('agent history helpers', () => {
     expect(formatAgentHistoryTime(ago(8 * DAY + 17 * HOUR), t, now)).toBe('9d')
     expect(formatAgentHistoryTime(ago(9 * DAY + 22 * HOUR), t, now)).toBe('10d')
     expect(formatAgentHistoryTime(ago(14 * DAY), t, now)).toBe('2w')
+    expect(formatAgentHistoryTime(ago(17 * DAY), t, now, true)).toBe('17d')
+    expect(formatAgentHistoryTime(ago(20.5 * DAY - 1), t, now, true)).toBe('20d')
+    expect(formatAgentHistoryTime(ago(20.5 * DAY), t, now, true)).toBe('3w')
+    expect(formatAgentHistoryTime(ago(21 * DAY), t, now, true)).toBe('3w')
+    expect(formatAgentHistoryTime(ago(24 * DAY), t, now, true)).toBe('3w')
+    expect(formatAgentHistoryTime(ago(28 * DAY), t, now, true)).toBe('4w')
+    expect(formatAgentHistoryTime(ago(29.5 * DAY), t, now, true)).toBe('30d')
+    expect(formatAgentHistoryTime(ago(24 * DAY), t, now)).toBe('24d')
     expect(formatAgentHistoryTime('not a date', t, now)).toBe('')
     expect(formatAgentHistoryTime(ago(8 * DAY), translateToChinese, now)).toBe('8 天')
+    expect(formatAgentHistoryTime(ago(24 * DAY), translateToChinese, now, true)).toBe('3 周')
   })
 
   it('treats a chat as unread only when it changed after it was last read', () => {

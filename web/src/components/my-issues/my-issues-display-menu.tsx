@@ -99,7 +99,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
       </button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content data-flow-motion="floating" data-issue-display-menu={phoneIssueMenu ? 'true' : undefined} data-layout={phoneIssueMenu ? options.layout : undefined} className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
+      <Popover.Content data-flow-motion="floating" data-phone-popover data-issue-display-menu={phoneIssueMenu ? 'true' : undefined} data-layout={phoneIssueMenu ? options.layout : undefined} className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
         <div className={styles.layoutTabs} role="tablist" aria-label="Layout">
           <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><span className={styles.desktopModeIcon}><List size={14} /></span><PhoneModeIcon kind="list" />{t('List')}</button>
           <button type="button" role="tab" aria-selected={options.layout === 'board'} disabled={options.grouping === 'focus'} onClick={() => change({ layout: 'board' })}><span className={styles.desktopModeIcon}><LayoutGrid size={13} /></span><PhoneModeIcon kind="board" />{t('Board')}</button>
@@ -280,7 +280,7 @@ export function ListDisplayMenu<G extends string, O extends string, P extends st
       </button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content data-flow-motion="floating" className={styles.popover} data-list-display="" side="bottom" align="end" sideOffset={3} collisionPadding={8} aria-label={t('Display options')}>
+      <Popover.Content data-flow-motion="floating" data-phone-popover className={styles.popover} data-list-display="" side="bottom" align="end" sideOffset={3} collisionPadding={8} aria-label={t('Display options')}>
         <section className={styles.section} aria-label={t('Grouping options')}>
           <div className={styles.groupingControl}>
             <span className={styles.rowLabel}>{t('Grouping')}</span>

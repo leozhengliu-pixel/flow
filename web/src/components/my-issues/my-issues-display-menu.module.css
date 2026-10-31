@@ -73,6 +73,7 @@
 .propertyGrid:not(#_){gap:5px}
 
 @media (max-width: 767px) {
+  .popover { position: relative; }
   .trigger.trigger.trigger:focus-visible { outline: 0; }
 
   /* Phone: the compact list popover drops in 36px rows, 28px controls and an 8px corner. */
@@ -131,15 +132,6 @@
     padding-top: 0;
     border-radius: 12px;
   }
-  .popover[data-issue-display-menu="true"]::before {
-    content: "";
-    position: absolute;
-    z-index: 1;
-    inset: 0;
-    border: .5px solid var(--pk-divider);
-    border-radius: 12px;
-    pointer-events: none;
-  }
   .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) {
     height: 32px;
     margin: 14px 7.5px 10px;
@@ -155,6 +147,14 @@
     line-height: normal;
     box-shadow: none;
     flex: 0 0 137px;
+  }
+  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button[aria-selected="false"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: var(--pk-control-ring);
+    pointer-events: none;
   }
   .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button[aria-selected="true"] { position: relative; }
   .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button[aria-selected="true"]::after {

@@ -11,6 +11,7 @@ describe('display options: nested sub-issues', () => {
     const onChange = vi.fn()
     const options = createIssueDisplayOptions({ showSubIssues: false })
     render(<I18nProvider><MyIssuesDisplayMenu open onOpenChange={vi.fn()} options={options} onChange={onChange} availableGroupings={PAGED_GROUPINGS} availableOrderings={PAGED_ORDERINGS}/></I18nProvider>)
+    expect(screen.getByRole('dialog', { name: 'Display options' })).toHaveAttribute('data-phone-popover')
     const toggle = screen.getByRole('checkbox', { name: 'Nested sub-issues' })
     expect(toggle).not.toBeChecked()
     await userEvent.click(toggle)
