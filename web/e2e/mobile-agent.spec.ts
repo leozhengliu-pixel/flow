@@ -130,8 +130,13 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect((await bubble.boundingBox())?.width).toBe(263)
       expect((await bubble.boundingBox())?.height).toBe(160)
       expect((await page.locator('main article:first-of-type [role="document"]').boundingBox())?.height).toBe(144)
+      expect(await page.locator('main article:first-of-type a').count()).toBe(0)
 
       await page.locator('main details > summary').click()
+      await page.waitForTimeout(300)
+      const scrollTop = await scroll.evaluate(node => node.scrollTop)
+      if (viewport.width === 390) expect(scrollTop).toBe(0)
+      else expect(scrollTop).toBeGreaterThan(0)
       const toggle = page.locator('main details > summary')
       expect((await toggle.boundingBox())?.x).toBe(14)
       expect((await toggle.boundingBox())?.height).toBe(16)
