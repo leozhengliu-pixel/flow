@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -23,5 +23,19 @@ describe("workspace menu", () => {
 
   it("lets admins invite and manage members", async () => {
     expect(await openMenu("admin")).toContain("Invite and manage members");
+  });
+
+  it("opens the switcher with O then W and logs out with ⌥⇧Q", async () => {
+    const onLogout = vi.fn().mockResolvedValue(undefined);
+    const data = makeBootstrap({ viewerRole: "member" });
+    const account = { viewer, workspaces: [{ workspace: data.workspace, role: "Member", joinedAt: "" }] } as unknown as AccountBootstrap;
+    render(<WorkspaceMenu account={account} data={data} onSettings={vi.fn()} onSwitch={vi.fn()} onCreate={vi.fn()} onLogout={onLogout} />);
+
+    fireEvent.keyDown(window, { key: "o" });
+    fireEvent.keyDown(window, { key: "w" });
+    expect(await screen.findByText("Settings", { exact: true })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "q", altKey: true, shiftKey: true });
+    expect(onLogout).toHaveBeenCalledTimes(1);
   });
 });

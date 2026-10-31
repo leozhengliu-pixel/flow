@@ -3,51 +3,63 @@ import { matchesSearch } from '@/lib/search-match'
 import { Search } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { useI18n } from '@/i18n/i18n'
+import { useUserPreferences } from '@/lib/runtime-preferences'
 
 type Shortcut = { label: string; keys: string[] }
 
-const groups: { title: string; shortcuts: Shortcut[] }[] = [
-  { title: 'General', shortcuts: [
-    { label: 'Open command menu', keys: ['⌘', 'K'] },
-    { label: 'Open search', keys: ['/'] },
-    { label: 'View keyboard shortcuts', keys: ['⌘', '/'] },
-    { label: 'Ask Flow', keys: ['⌘', 'J'] },
-  ] },
-  { title: 'Navigation', shortcuts: [
-    { label: 'Toggle left sidebar', keys: ['['] },
-    { label: 'Go to inbox', keys: ['G', 'then', 'I'] },
-    { label: 'Go to Agent', keys: ['G', 'then', 'J'] },
-    { label: 'Go to my issues', keys: ['G', 'then', 'M'] },
-    { label: 'Go to reviews', keys: ['G', 'then', 'R'] },
-    { label: 'Go to settings', keys: ['G', 'then', 'S'] },
-    { label: 'Go to triage', keys: ['G', 'then', 'T'] },
-  ] },
-  { title: 'Issues', shortcuts: [
-    { label: 'New issue', keys: ['C'] },
-  ] },
-  { title: 'Triage', shortcuts: [
-    { label: 'Accept issue', keys: ['1'] },
-    { label: 'Decline issue', keys: ['2'] },
-    { label: 'Mark issue as duplicate of', keys: ['3'] },
-    { label: 'Snooze issue until', keys: ['H'] },
-    { label: 'Next issue', keys: ['J'] },
-    { label: 'Previous issue', keys: ['K'] },
-    { label: 'Back to triage', keys: ['Esc'] },
-  ] },
-  { title: 'Projects', shortcuts: [
-    { label: 'New project', keys: ['N', 'then', 'P'] },
-  ] },
-  { title: 'Initiatives', shortcuts: [
-    { label: 'New initiative', keys: ['N', 'then', 'I'] },
-  ] },
-]
+function shortcutGroups(sendCommentKeys: string[]): { title: string; shortcuts: Shortcut[] }[] {
+  return [
+    { title: 'General', shortcuts: [
+      { label: 'Open command menu', keys: ['⌘', 'K'] },
+      { label: 'Save or submit', keys: ['⌘', 'Enter'] },
+      { label: 'Send comment', keys: sendCommentKeys },
+      { label: 'Open search', keys: ['/'] },
+      { label: 'View keyboard shortcuts', keys: ['⌘', '/'] },
+      { label: 'Switch workspace', keys: ['O', 'then', 'W'] },
+      { label: 'Log out', keys: ['⌥', '⇧', 'Q'] },
+      { label: 'Ask Flow', keys: ['⌘', 'J'] },
+    ] },
+    { title: 'Navigation', shortcuts: [
+      { label: 'Toggle left sidebar', keys: ['['] },
+      { label: 'Go to inbox', keys: ['G', 'then', 'I'] },
+      { label: 'Go to Agent', keys: ['G', 'then', 'J'] },
+      { label: 'Go to my issues', keys: ['G', 'then', 'M'] },
+      { label: 'Go to reviews', keys: ['G', 'then', 'R'] },
+      { label: 'Go to settings', keys: ['G', 'then', 'S'] },
+      { label: 'Go to triage', keys: ['G', 'then', 'T'] },
+      { label: 'Go to pulse', keys: ['G', 'then', 'F'] },
+      { label: 'Go to customers', keys: ['G', 'then', 'Q'] },
+      { label: 'Open customer…', keys: ['O', 'then', 'Q'] },
+      { label: 'Open document…', keys: ['O', 'then', 'D'] },
+    ] },
+    { title: 'Issues', shortcuts: [
+      { label: 'New issue', keys: ['C'] },
+    ] },
+    { title: 'Triage', shortcuts: [
+      { label: 'Accept issue', keys: ['1'] },
+      { label: 'Decline issue', keys: ['2'] },
+      { label: 'Mark issue as duplicate of', keys: ['3'] },
+      { label: 'Snooze issue until', keys: ['H'] },
+      { label: 'Next issue', keys: ['J'] },
+      { label: 'Previous issue', keys: ['K'] },
+      { label: 'Back to triage', keys: ['Esc'] },
+    ] },
+    { title: 'Projects', shortcuts: [
+      { label: 'New project', keys: ['N', 'then', 'P'] },
+    ] },
+    { title: 'Initiatives', shortcuts: [
+      { label: 'New initiative', keys: ['N', 'then', 'I'] },
+    ] },
+  ]
+}
 
 export function KeyboardShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t } = useI18n()
+  const { sendComments } = useUserPreferences()
   const [query, setQuery] = useState('')
-  const filtered = useMemo(() => groups.map(group => ({ ...group, shortcuts: group.shortcuts.filter(shortcut =>
+  const filtered = useMemo(() => shortcutGroups(sendComments === '⌘ Enter' ? ['⌘', 'Enter'] : ['Enter']).map(group => ({ ...group, shortcuts: group.shortcuts.filter(shortcut =>
     matchesSearch(query, [shortcut.label, shortcut.keys.join(' ')], t),
-  ) })).filter(group => group.shortcuts.length), [query, t])
+  ) })).filter(group => group.shortcuts.length), [query, sendComments, t])
 
   return <Dialog open={open} onOpenChange={next => { onOpenChange(next); if (!next) setQuery('') }}>
     <DialogContent aria-describedby={undefined} className="sidebar-shortcuts-dialog" closeLabel={t('Close dialog')}>
