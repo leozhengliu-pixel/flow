@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match phone Projects toolbar sidebar glyphs and use viewport-width filter and display panels without changing desktop layout.
+
 - Match phone Views directory controls, workspace group headers, and saved-view row spacing without changing desktop layout.
 
 - Match phone Search header spacing, tab pills and glyphs, and use the shared phone panel for search filters.
