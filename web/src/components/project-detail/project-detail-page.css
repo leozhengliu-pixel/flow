@@ -69,6 +69,9 @@
 .project-detail-page__header-action svg { width: 14px; height: 14px; }
 .project-detail-page__add-view { width: 28px; height: 28px; display: grid; place-items: center; position: relative; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--text); }
 .project-detail-page__add-view svg { width: 14px; height: 14px; }
+@media (min-width: 1024px) {
+  .project-detail-page__add-view svg { fill: var(--issue-dim); }
+}
 .project-detail-page__header-action:hover { background: var(--theme-control); color: var(--theme-text-primary); }
 .project-detail-page__header-action[data-active=true] { background: var(--theme-control); color: var(--theme-text-primary); }
 .project-detail-page__add-view:hover { background: var(--theme-control); color: var(--theme-text-primary); }

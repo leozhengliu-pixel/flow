@@ -16,6 +16,7 @@
   .li-detail-toolbar nav { gap: 4px; }
   .li-detail-toolbar nav > a { box-sizing: border-box; height: 28px; padding: 0 10px; border-radius: 9999px; font: 500 12px var(--font); line-height: normal; }
   .li-detail-toolbar nav > button[aria-label="Add new view"] { color: var(--theme-text-primary); background: transparent; }
+  .li-detail-toolbar nav > button[aria-label="Add new view"] .li-detail-desktop-icon { fill: var(--issue-dim); }
   .li-detail-toolbar > div > button[aria-label*="initiative updates"] { display: none; }
   .li-detail-body.has-details .li-detail-main { max-width: calc(100% - 400px); }
   .li-detail .li-overview { width: min(805px, calc(100% - 96px)); margin: 0 auto; padding: 64px 0 90px; }
@@ -63,6 +64,7 @@
   .li-detail .li-description { margin: 0; }
   .li-description h3 { width: auto; height: 27.5px; line-height: 27.5px; }
   .li-description .mention-text-field { box-sizing: border-box; min-height: 110px; }
+  .li-description .mention-text-field .issue-description-root .description-editor { padding-top: 15px; }
   .li-overview-lists { margin-top: 80px; }
   .li-overview-list > header { min-height: 40px; }
   .li-detail-sidebar { position: static; display: flex; flex-direction: column; width: 400px; flex: 0 0 400px; min-height: 0; padding: 0 8px 8px 4px; border: 0; background: transparent; box-shadow: none; }
