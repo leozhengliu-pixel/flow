@@ -56,7 +56,7 @@ export function AppliedFilterBar<TFilter extends AppliedFilterItem<TOption, stri
   if (!filters.length && !showEmpty) return null
   return <div className={`${styles.bar} ${compact ? styles.compact : ''} ${className ?? ''}`} aria-label={ariaLabel}>
     <AppliedFilterChips wrap={wrap} compact={compact} countLabel={countLabel} fieldVisual={fieldVisual} filters={filters} onAdd={onAdd} onOperatorChange={onOperatorChange} onRemove={onRemove} onValuesChange={onValuesChange} optionsFor={optionsFor} renderFilter={renderFilter} translate={translate}/>
-    {commands ?? <div className={styles.commands}><button aria-label="Clear all filters" onClick={onClear} type="button">{clearLabel}</button>{onSave && <button aria-label="Create new view" data-state={saveState} disabled={saveState === 'saving'} onClick={onSave} type="button">{saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Retry save' : saveLabel}</button>}</div>}
+    {commands ?? <div className={styles.commands} data-applied-filter-commands><button aria-label="Clear all filters" onClick={onClear} type="button">{clearLabel}</button>{onSave && <button aria-label="Create new view" data-state={saveState} disabled={saveState === 'saving'} onClick={onSave} type="button">{saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Retry save' : saveLabel}</button>}</div>}
   </div>
 }
 

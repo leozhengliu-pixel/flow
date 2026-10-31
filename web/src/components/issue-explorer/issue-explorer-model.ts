@@ -23,6 +23,7 @@ import { CUSTOMER_NUMBER_PREFIXES, isCustomerNumberComparison, matchesCustomerNu
 import { countTriageSuggestions, emptyTriageCounts, matchesTriageIntelligence, triageIntelligenceFilterOptions } from './triage-intelligence-filter'
 
 export const ISSUE_FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = {
+  team: 'Team',
   ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',owner:'Owner',priority:'Priority',labels:'Labels',relations:'Relations',triageIntelligence:'Triage Intelligence',suggestedLabel:'Suggested label',dates:'Dates',projectMilestone:'Project milestone',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',customers:'Customers',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template',
 }
 

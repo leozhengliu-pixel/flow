@@ -11,7 +11,7 @@ import { isComparableDateValue, isReleasedDateValue } from './my-issues-filter-t
 export type { MyIssuesAppliedFilter, MyIssuesFilterOperator } from './my-issues-filter-types'
 
 
-const FIELD_LABELS: Partial<Record<MyIssuesFilterKey, string>> = { status: 'Status', assignee: 'Assignee', agent: 'Agent', creator: 'Creator', priority: 'Priority', labels: 'Labels', project: 'Project', cycle: 'Cycle', subscribers: 'Subscribers', dates: 'Dates', relations: 'Relations', links: 'Links', initiative: 'Initiative' }
+const FIELD_LABELS: Partial<Record<MyIssuesFilterKey, string>> = { team: 'Team', status: 'Status', assignee: 'Assignee', agent: 'Agent', creator: 'Creator', priority: 'Priority', labels: 'Labels', project: 'Project', cycle: 'Cycle', subscribers: 'Subscribers', dates: 'Dates', relations: 'Relations', links: 'Links', initiative: 'Initiative' }
 
 export function FilterFieldGlyph({ field }: { field: MyIssuesFilterKey }) {
   return <FilterGlyph label={FIELD_LABELS[field] ?? field} fallback={<FilterFieldIcon field={field}/>}/>

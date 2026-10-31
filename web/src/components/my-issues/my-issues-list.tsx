@@ -358,7 +358,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
     if ((event.target as Element).closest('button,input,[role="checkbox"]')) { event.preventDefault(); return }
     if (onOpen && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); open() }
   }
-  const columns = ['8px', 'var(--row-lead-column)', displayProperties.has('priority') && '16px', displayProperties.has('id') && 'var(--issue-identifier-width, 52px)', displayProperties.has('status') && '22px', 'minmax(80px,1fr)', displayProperties.has('created') && '60px', displayProperties.has('updated') && '60px', displayProperties.has('myActivity') && '60px', displayProperties.has('timeInStatus') && '72px', displayProperties.has('links') && '52px', '18px'].filter(Boolean).join(' ')
+  const columns = ['8px', 'var(--row-lead-column)', displayProperties.has('priority') && '16px', displayProperties.has('id') && 'var(--issue-identifier-width, 52px)', displayProperties.has('status') && 'var(--row-status-column,22px)', 'minmax(80px,1fr)', displayProperties.has('created') && '60px', displayProperties.has('updated') && '60px', displayProperties.has('myActivity') && '60px', displayProperties.has('timeInStatus') && '72px', displayProperties.has('links') && '52px', '18px'].filter(Boolean).join(' ')
   const change = (property: MyIssuesEditableProperty, value: string | string[]) => onPropertyChange?.(issue, property, value)
   const statusOptions = useTeamStatusOptions(propertyOptions.status, issue.teamId)
   return <ContextMenu.Root>

@@ -161,7 +161,7 @@
 }
 
 @media(min-width:768px){
-  .row{--row-columns:8px var(--row-lead-column) 16px var(--issue-identifier-width,max-content) 16px minmax(80px,1fr) 60px 18px}
+  .row{--row-status-column:16px}
   .priorityTrigger,.statusTrigger{width:16px;height:36px;min-width:16px;min-height:36px;padding:0;border-radius:0;background:transparent}
   .priorityTrigger{margin-left:0}
   .priorityTrigger>.priority{width:16px;height:16px}
@@ -179,4 +179,13 @@
   .groupState svg{width:14px;height:14px}
   .groupName{line-height:normal}
   .groupCount{font-size:13px;line-height:normal}
+}
+
+@media(min-width:1024px){
+  .rowDate{justify-content:flex-end}
+  .titleProperties:has(+.rowDate){margin-right:-5px}
+  .collapseButton{opacity:1}
+  .groupCaret{color:var(--issue-dim)}
+  .groupHeader:has(.groupEstimate) .groupCount{display:none}
+  .groupEstimate{margin-left:3px}
 }

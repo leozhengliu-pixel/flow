@@ -44,6 +44,7 @@ export interface IssueQueryAstNode {
 }
 
 const QUERY_FIELDS: Partial<Record<MyIssuesFilterKey, string>> = {
+  team: 'teamId',
   assignee: 'assigneeId', creator: 'creatorId', labels: 'labelId', project: 'projectId',
   projectMilestone: 'projectMilestoneId',
   projectProperties: 'project', status: 'status', priority: 'priority', cycle: 'cycleId',
