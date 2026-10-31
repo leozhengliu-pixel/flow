@@ -34,24 +34,22 @@ test.describe('phone menus with custom content', () => {
     expect(errors).toEqual([])
   })
 
-  test('workspace member filter uses its radio group without crashing', async ({ page, request, workspaceKey }) => {
+  test('workspace member filter uses its native phone select without crashing', async ({ page, request, workspaceKey }) => {
     const errors = trackPageErrors(page)
     const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
     expect(response.ok()).toBeTruthy()
     const data = await response.json() as BootstrapData
     const hasApplications = data.members.some(member => member.status !== 'departed' && (member.user.app || member.role === 'app'))
     await page.goto(`${base}/${workspaceKey}/settings/members`)
-    await page.locator('.settings-members-filter').click()
-    const menu = page.locator('.settings-members-filter-menu')
-    await expect(menu).toBeVisible()
+    const filter = page.getByRole('combobox', { name: 'Member filter', exact: true })
+    await expect(filter).toBeVisible()
     await expect(page.locator('.phone-menu-surface')).toHaveCount(0)
-    await expect(menu.getByRole('menuitemradio')).toHaveText([
+    await expect(filter.getByRole('option')).toHaveText([
       'All', 'Admins', 'Members', 'Guests', ...(hasApplications ? ['Applications'] : []), 'Pending invites', 'Suspended', 'Left workspace',
     ])
 
-    await menu.getByRole('menuitemradio', { name: 'Suspended', exact: true }).click()
-    await expect(page.locator('.settings-members-filter')).toHaveText(/Suspended/)
-    await expect(menu).not.toBeVisible()
+    await filter.selectOption('Suspended')
+    await expect(filter).toHaveValue('Suspended')
     expect(errors).toEqual([])
   })
 
