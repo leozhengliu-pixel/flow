@@ -189,6 +189,13 @@ describe('personal settings workflows', () => {
     expect(api.deletePasskey).toHaveBeenCalledWith('passkey-one')
   })
 
+  it('skips leading punctuation in profile initials', () => {
+    const input = props('profile')
+    input.data.viewer = { ...input.data.viewer, displayName: '[mobile] Skyler Anderson' }
+    render(<I18nProvider><PersonalSettings {...input}/></I18nProvider>)
+    expect(screen.getByText('MS')).toHaveClass('personal-avatar')
+  })
+
   it('validates and persists profile edits and workspace departure', async () => {
     const user = userEvent.setup()
     const input = props('profile')
