@@ -5,7 +5,7 @@ import { Link2 } from 'lucide-react'
 import { FlowBellIcon, FlowFavoriteIcon } from '@/components/issue/flow-header-icons'
 import { useI18n } from '@/i18n/i18n'
 import { DetailsIcon, FilterIcon } from '@/components/my-issues/my-issues-icons'
-import { MyIssuesDisplayMenu, type MyIssuesDisplayMenuProps } from '@/components/my-issues/my-issues-display-menu'
+import { DisplayMenuActionRow, MyIssuesDisplayMenu, type MyIssuesDisplayMenuProps } from '@/components/my-issues/my-issues-display-menu'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
 import type { MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
 import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption } from '@/components/my-issues/my-issues-surface'
@@ -14,6 +14,7 @@ import type { SavedView, Team } from '@/types/flow'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import styles from './issue-explorer.module.css'
 import { useIssueSurfaceControls } from '@/components/my-issues/use-issue-surface-controls'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { AddViewIcon, InsightsIcon, PlusIcon } from '@/components/ui/view-action-icons'
 import {
   ContentViewContainer,
@@ -96,6 +97,7 @@ export function IssueExplorerSurface({
   detailsShortcutTooltip?: boolean
 }) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
   const mode: 'view' | 'create' | 'edit' = viewEditor && viewEditorMode === 'edit' && savedView ? 'edit' : creatingView || (viewEditor && viewEditorMode !== 'edit') ? 'create' : 'view'
   // The reference app: F opens the filter menu, ⇧V the display options.
@@ -112,7 +114,7 @@ export function IssueExplorerSurface({
     return () => removeEventListener('keydown', onKey)
   })
   const filterMenu = (trigger: ReactElement, align: 'center' | 'end' = 'center') => <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={onFilterToggle} onAdvanced={onAdvancedFilter} align={align} trigger={trigger} />
-  const displayMenu = <MyIssuesDisplayMenu {...displayMenuProps} open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange} />
+  const displayMenu = <MyIssuesDisplayMenu {...displayMenuProps} phoneExtraActions={<DisplayMenuActionRow label="Insights" checked={Boolean(insightsOpen)} onChange={value => onInsightsOpenChange?.(value)}/>} open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange} />
   const editorControls: ViewEditorControls = {
     filterButton: <ScopedFlowTooltip label={t('Add Filter')} shortcut="F" disabled={filterOpen}><span className={styles.cardDisplay}>{filterMenu(<ToolbarButton label={t('Add filter')} className={styles.cardButton}><FilterIcon /></ToolbarButton>, 'end')}</span></ScopedFlowTooltip>,
     displayButton: <ScopedFlowTooltip label={t('Show display options')} shortcut="⇧ V" disabled={displayOpen}><span className={styles.cardDisplay}>{displayMenu}</span></ScopedFlowTooltip>,
@@ -227,9 +229,9 @@ export function IssueExplorerSurface({
         <ToolbarButtonsNavigation className={styles.actions}>
           {filterMenu(<ToolbarButton label={t(filterActive ? 'Add another filter' : 'Add filter')} pressed={filterActive || undefined} data-filter-active={filterActive || undefined}><FilterIcon /></ToolbarButton>)}
           {displayMenu}
-          <ToolbarButton className={styles.insightsButton} label={`${insightsOpen ? 'Close' : 'Open'} ${insightsLabel}`} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}>
+          {!phone && <ToolbarButton className={styles.insightsButton} label={`${insightsOpen ? 'Close' : 'Open'} ${insightsLabel}`} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}>
             <InsightsIcon />
-          </ToolbarButton>
+          </ToolbarButton>}
           {mode === 'view' && (detailsShortcutTooltip ? (
             <FlowTooltip label={detailsOpen ? 'Close details' : 'Open details'} shortcut={isMacPlatform() ? '⌘ I' : 'Ctrl I'}>
               <ToolbarButton label={detailsOpen ? 'Close details' : 'Open details'} pressed={detailsOpen} onClick={() => onDetailsOpenChange(!detailsOpen)}>

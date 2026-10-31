@@ -44,7 +44,7 @@
   .toolbar{gap:4px}
   .tabs{flex:1}
   .actions{flex:0 0 auto;margin-left:0}
-  .tab{height:32px;padding:0 9.5px}
+  .tab{height:32px;padding:0 10px}
   .iconButton{width:32px;height:32px;flex:0 0 32px}
   .actions button{width:32px;height:32px;flex:0 0 32px;font-size:12px;font-weight:500;line-height:normal}
   .actions button > svg{color:var(--phone-icon-fg)}
@@ -65,3 +65,4 @@
 }
 
 @media(max-width:767px){.viewsSubheader.viewsSubheader{gap:6px;border-style:none}}
+@media(max-width:767px){.insightsButton{display:none}}

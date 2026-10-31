@@ -3,7 +3,7 @@ import * as Select from '@radix-ui/react-select'
 import { ArrowDownUp, Check, ChevronDown, Columns2, Eye, EyeOff, LayoutGrid, List } from 'lucide-react'
 import { DisplayIcon, TabsOverflowIcon } from './my-issues-icons'
 import { useI18n } from '@/i18n/i18n'
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { Toggle } from '@/components/ui/toggle'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesOrdering, MyIssuesProperty } from './my-issues-surface'
@@ -38,6 +38,8 @@ export interface MyIssuesDisplayMenuProps {
   desktopIssueMenu?: boolean
   /** My issues has a shorter phone sheet than team issue explorer. */
   myIssuesPhoneMenu?: boolean
+  /** Flow-only actions that live at the bottom of the phone sheet. */
+  phoneExtraActions?: ReactNode
   extraActions?: ReactNode
 }
 
@@ -83,15 +85,17 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'pullRequests', label: 'Pull requests' },
 ]
 
-export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false, desktopIssueMenu = false, myIssuesPhoneMenu = false, extraActions }: MyIssuesDisplayMenuProps) {
+export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false, desktopIssueMenu = false, myIssuesPhoneMenu = false, phoneExtraActions, extraActions }: MyIssuesDisplayMenuProps) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
+  const popoverRef = useRef<HTMLDivElement>(null)
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
   const toggleProperty = (property: MyIssuesProperty) => {
     const properties = new Set(options.properties)
     if (properties.has(property)) properties.delete(property)
     else properties.add(property)
     change({ properties })
+    if (phone) requestAnimationFrame(() => { if (popoverRef.current) popoverRef.current.scrollTop = 0 })
   }
   const visibleGroupingOptions = (availableGroupings ? groupingOptions.filter(option => availableGroupings.includes(option.value)) : groupingOptions)
     .filter(option => option.value !== 'labelGroup' || labelGroupOptions.length > 0)
@@ -109,7 +113,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
       </button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content data-flow-motion="floating" data-phone-popover data-issue-display-menu={phoneIssueMenu ? 'true' : undefined} data-my-issues-display-menu={myIssuesPhoneMenu ? 'true' : undefined} data-layout={phoneIssueMenu ? options.layout : undefined} className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
+      <Popover.Content ref={popoverRef} data-flow-motion="floating" data-phone-popover data-issue-display-menu={phoneIssueMenu ? 'true' : undefined} data-my-issues-display-menu={myIssuesPhoneMenu ? 'true' : undefined} data-layout={phoneIssueMenu ? options.layout : undefined} className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} avoidCollisions={phone ? false : undefined} aria-label={t('Display options')}>
         <div className={styles.layoutTabs} role="tablist" aria-label="Layout">
           <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><span className={styles.desktopModeIcon}><List size={14} /></span><PhoneModeIcon kind="list" />{t('List')}</button>
           <button type="button" role="tab" aria-selected={options.layout === 'board'} disabled={options.grouping === 'focus'} onClick={() => change({ layout: 'board' })}><span className={styles.desktopModeIcon}><LayoutGrid size={13} /></span><PhoneModeIcon kind="board" />{t('Board')}</button>
@@ -149,16 +153,17 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
               <SelectControl ariaLabel="Ordering" disabled={options.grouping === 'focus'} value={options.ordering} options={visibleOrderingOptions} onChange={ordering => change({ ordering, orderDirection: undefined })} />
             </div>
           </div>
-          <SwitchRow label="Order completed by recency" checked={options.orderCompletedByRecency} onChange={orderCompletedByRecency => change({ orderCompletedByRecency })} />
+          {(!phone || !myIssuesPhoneMenu) && <SwitchRow className={styles.recencyRow} label="Order completed by recency" checked={options.orderCompletedByRecency} onChange={orderCompletedByRecency => change({ orderCompletedByRecency })} />}
         </section>
         {extraActions && <section className={styles.section} aria-label={t('Additional options')}>{extraActions}</section>}
 
         <section className={styles.section} aria-label={t('Visible issues')}>
           <SelectField label="Completed issues" value={options.completedWindow} options={completedOptions} onChange={completedWindow => change({ completedWindow })} />
+          {toggles.includes('triage') && <SwitchRow label="Show sub-issues" checked={options.showSubIssues} onChange={showSubIssues => change({ showSubIssues, nestedSubIssues: showSubIssues ? options.nestedSubIssues : false })} />}
           {toggles.includes('triage') && <SwitchRow label="Show triage issues" checked={options.showTriageIssues !== false} onChange={showTriageIssues => change({ showTriageIssues })} />}
           {toggles.includes('archived') && <SwitchRow label="Show archived issues" checked={Boolean(options.showArchived)} onChange={showArchived => change({ showArchived })} />}
-          {toggles.includes('subTeam') && <SwitchRow label="Show sub-team issues" checked={options.showSubTeamIssues !== false} onChange={showSubTeamIssues => change({ showSubTeamIssues })} />}
-          <SwitchRow label="Show sub-issues" checked={options.showSubIssues} onChange={showSubIssues => change({ showSubIssues, nestedSubIssues: showSubIssues ? options.nestedSubIssues : false })} />
+          {toggles.includes('subTeam') && <SwitchRow className={styles.subTeamRow} label="Show sub-team issues" checked={options.showSubTeamIssues !== false} onChange={showSubTeamIssues => change({ showSubTeamIssues })} />}
+          {!toggles.includes('triage') && <SwitchRow label="Show sub-issues" checked={options.showSubIssues} onChange={showSubIssues => change({ showSubIssues, nestedSubIssues: showSubIssues ? options.nestedSubIssues : false })} />}
         </section>
 
         <section className={styles.section} aria-label={t(options.layout === 'board' ? 'Board options' : 'List options')}>
@@ -176,12 +181,16 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
               />
             </div>
           </>}
-          {options.layout === 'list' && <SwitchRow label="Show empty groups" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
+          {options.layout === 'list' && (!phone || !myIssuesPhoneMenu) && <SwitchRow label="Show empty groups" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
           <span className={styles.sectionLabel}>{t('Display properties')}</span>
           <div className={styles.propertyGrid}>
-            {propertyOptions.filter(property => !hiddenProperties.includes(property.value)).map(property => {
+            {[...propertyOptions.filter(property => !hiddenProperties.includes(property.value))].sort((left, right) => {
+              if (!phone || !phoneIssueMenu) return 0
+              const phoneOrder: MyIssuesProperty[] = ['status', 'assignee', 'creator', 'priority', 'project', 'timeInStatus', 'cycle', 'dueDate', 'milestone', 'sla', 'estimate', 'release', 'labels', 'links', 'customers', 'customerRevenue', 'myActivity', 'created', 'updated', 'id', 'pullRequests']
+              return phoneOrder.indexOf(left.value) - phoneOrder.indexOf(right.value)
+            }).map(property => {
               const active = options.properties.has(property.value)
-              return <button key={property.value} type="button" data-property={property.value} data-active={active} aria-pressed={active} onClick={() => toggleProperty(property.value)}>
+              return <button key={property.value} type="button" data-property={property.value} data-active={active} aria-pressed={active} onMouseDown={event => event.preventDefault()} onClick={() => toggleProperty(property.value)}>
                 <span>{t(property.label)}</span>
               </button>
             })}
@@ -199,6 +208,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
           </div>
           {!options.showEmptyGroups && <p className={styles.groupHint}>{t('Empty groups are hidden')}</p>}
         </GroupsSection>}
+        {phone && phoneExtraActions && <section className={styles.section} aria-label={t('Additional options')}>{phoneExtraActions}</section>}
         {(onReset || onSaveDefault) && <footer className={styles.footer}>
           {onReset && <button type="button" className={styles.footerButton} onClick={onReset}>{t(resetLabel)}</button>}
           {onSaveDefault && <button type="button" className={`${styles.footerButton} ${styles.footerPrimary}`} onClick={onSaveDefault}>{t(saveDefaultLabel)}</button>}
@@ -259,12 +269,16 @@ function SelectControl<T extends string>({ ariaLabel, disabled = false, onChange
   </Select.Root>
 }
 
-function SwitchRow({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) {
+function SwitchRow({ checked, label, onChange, className }: { checked: boolean; label: string; onChange: (checked: boolean) => void; className?: string }) {
   const { t } = useI18n()
-  return <div className={styles.switchRow}>
+  return <div className={`${styles.switchRow} ${className ?? ''}`}>
     <span>{t(label)}</span>
     <Toggle checked={checked} label={t(label)} onChange={onChange}/>
   </div>
+}
+
+export function DisplayMenuActionRow({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) {
+  return <SwitchRow checked={checked} label={label} onChange={onChange} />
 }
 
 export interface ListDisplayMenuOption<T extends string = string> { value: T; label: string }

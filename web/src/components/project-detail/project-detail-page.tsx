@@ -53,6 +53,7 @@ import "./project-detail-desktop.css";
 import "@/components/editor/rich-text-body.css";
 import { ProjectSlackDialog } from './project-slack-dialog';
 import { FlowTooltip } from "@/components/ui/tooltip";
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import { useI18n } from "@/i18n/i18n";
 import { useRegisterCommandContext } from "@/components/command/command-context";
 import {
@@ -95,6 +96,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
     true,
   );
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const phone = usePhoneLayout();
   // "Show resolved comments" (while the description has resolved inline threads) takes the details panel's place.
   const resolvedThreadCount = useResolvedInlineThreadCount(project.comments);
   const [resolvedCommentsOpen, setResolvedCommentsOpen] = useState(false);
@@ -675,6 +677,14 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
                 issueData={props.issueData}
                 issues={projectIssues}
                 filters={issueFilters}
+                insightsOpen={insightsOpen}
+                onInsightsOpenChange={(open) => {
+                  setInsightsOpen(open);
+                  if (open) {
+                    setDetailsOpen(false);
+                    setResolvedCommentsOpen(false);
+                  }
+                }}
               />
             </>
           )}
@@ -691,7 +701,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               }}
             />
           )}
-          <FlowTooltip label={t(insightsOpen ? "Close project insights" : "Open project insights")}>
+          {!phone && <FlowTooltip label={t(insightsOpen ? "Close project insights" : "Open project insights")}>
             <button
               aria-label={t(insightsOpen ? "Close project insights" : "Open project insights")}
               aria-pressed={insightsOpen}
@@ -706,7 +716,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
             >
               <InsightsIcon height={14} width={14} />
             </button>
-          </FlowTooltip>
+          </FlowTooltip>}
           <FlowTooltip
             label={t(detailsOpen ? "Close project details" : "Open project details")}
             shortcut={shortcutLabels.toggleDetails}

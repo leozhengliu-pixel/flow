@@ -25,6 +25,7 @@
 .tab:focus-visible,.addView:focus-visible,.iconButton:focus-visible,.headerAction:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
 @media(max-width:800px){.surface{width:100%;height:calc(100% - 36px);margin:0 0 36px;border:0;border-radius:0;box-shadow:none}.mobileSidebarButton{display:flex;flex-direction:column;justify-content:center}.header{padding:0 8px}.toolbar{overflow:visible}.tabs{min-width:0;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain;padding-right:2px}.tabs::-webkit-scrollbar{display:none}.actions{margin-left:8px}.headerAction:last-child{display:none}.body[data-saved-panel-open=true]>:first-child{margin-right:0}}
 @media(max-width:767px){.toolbar{gap:4px}.tabs{flex:1}.actions{flex:0 0 auto}}
+@media(max-width:767px){.insightsButton{display:none}}
 /* View card (new / edit): the reference app places it under the count row with its own filter + display buttons. */
 .createPanel{height:auto;flex:none;margin:0 8px 8px;overflow:visible;border:0;border-radius:0;background:transparent;box-shadow:none}
 .createPanel[data-mode=create]{margin-top:8px}
@@ -123,7 +124,7 @@
   [data-issue-explorer] [data-content-view-breadcrumb]>span:last-child>[data-current] span{border-style:none}
   [data-issue-explorer] [data-content-view-subheader]{gap:6px;border-style:none}
   [data-issue-explorer] [data-content-view-subheader] [class*="tabs"]{gap:4px}
-  [data-issue-explorer] [data-content-view-subheader] nav a[class*="tab"]{height:32px;border:.5px solid transparent;padding:0 9.5px}
+  [data-issue-explorer] [data-content-view-subheader] nav a[class*="tab"]{height:32px;border:.5px solid transparent;padding:0 10px}
   [data-issue-explorer] [data-content-view-subheader] [class*="addView"]{width:32px;height:32px;flex:0 0 32px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--phone-control-fg);font-size:12px;font-weight:500;line-height:normal}
   [data-issue-explorer] [data-content-view-subheader] [class*="actions"]{flex:0 0 auto;gap:6px;margin-left:0}
   [data-issue-explorer] [data-content-view-subheader] [class*="actions"] button{width:32px;height:32px;flex:0 0 32px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;font-size:12px;font-weight:500;line-height:normal}

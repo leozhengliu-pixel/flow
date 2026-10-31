@@ -5,7 +5,7 @@ import { Plus, Trash2, X } from "lucide-react";
 import { MilestoneProgressIcon } from "@/components/issue/milestone-progress-icon";
 import { isMilestoneDateOverdue, milestoneIssueProgress } from "@/components/issue/milestone-progress";
 import { toast } from "@/lib/toast";
-import { MyIssuesDisplayMenu } from "@/components/my-issues/my-issues-display-menu";
+import { DisplayMenuActionRow, MyIssuesDisplayMenu } from "@/components/my-issues/my-issues-display-menu";
 import { MyIssuesFilterMenu } from "@/components/my-issues/my-issues-filter-menu";
 import { FilterIcon as Filter } from "@/components/ui/view-action-icons";
 import { MyIssuesFilterBar } from "@/components/my-issues/my-issues-filter-bar";
@@ -116,12 +116,16 @@ export function ProjectIssueDisplayMenu({
   issueData,
   issues = [],
   filters = [],
+  insightsOpen = false,
+  onInsightsOpenChange,
 }: {
   display: MyIssuesDisplayOptions;
   onChange: (display: MyIssuesDisplayOptions) => void;
   issueData?: ProjectDetailProps["issueData"];
   issues?: Issue[];
   filters?: MyIssuesAppliedFilter[];
+  insightsOpen?: boolean;
+  onInsightsOpenChange?: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   // The triage toggle appears when a team in the project uses triage.
@@ -140,6 +144,8 @@ export function ProjectIssueDisplayMenu({
       groups={groups}
       labelGroupOptions={issueData ? labelGroups(issueData.labels) : []}
       onReset={() => onChange(DEFAULT_PROJECT_ISSUE_DISPLAY)}
+      phoneIssueMenu
+      phoneExtraActions={<DisplayMenuActionRow label="Insights" checked={insightsOpen} onChange={value => onInsightsOpenChange?.(value)} />}
       resetLabel="Reset to default"
       onChange={onChange}
       onOpenChange={setOpen}
