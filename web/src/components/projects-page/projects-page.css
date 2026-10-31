@@ -1775,6 +1775,8 @@
 }
 
 @media (max-width: 767px) {
+  .lp-projects { text-rendering: geometricPrecision; }
+  .lp-projects :is(button, input, select) { text-rendering: inherit; }
   .lp-projects { --phone-menu-top: min(110px, 13.04dvh); --lp-bg: var(--bg-panel); }
   .lp-projects__top { background: var(--theme-surface-0); border: 0; border-radius: 0; box-shadow: none; display: block; gap: 12px; padding: 0; }
   .lp-projects__top > .lp-projects__header { flex: none; gap: 0; height: 44px; padding: 0 8px; }

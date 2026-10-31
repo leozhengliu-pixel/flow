@@ -1,15 +1,13 @@
-import { expect, test as base } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test as base } from './workspace-fixture'
 
 const test = base.extend<{ issueRoute: string }>({
-  issueRoute: async ({ request }, provide, testInfo) => {
-    const key = `audit-shell-polish-${testInfo.project.name || 'desktop'}-${testInfo.workerIndex}-${Date.now()}`
-    const response = await request.post('/api/workspaces', {
-      data: { name: '[audit] Desktop shell polish', urlKey: key, region: 'us', tutorial: false },
-    })
-    expect(response.status()).toBe(201)
+  issueRoute: async ({ request, workspaceKey }, provide) => {
+    const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
+    expect(response.status()).toBe(200)
     const workspace = await response.json() as { teams: Array<{ key: string }> }
     expect(workspace.teams[0]?.key).toBeTruthy()
-    await provide(`/${key}/team/${workspace.teams[0].key}/all`)
+    await provide(`/${workspaceKey}/team/${workspace.teams[0].key}/all`)
   },
 })
 
@@ -74,7 +72,7 @@ test('preserves the compact composer glyphs below the desktop breakpoint', async
     await page.keyboard.press('c')
     const composer = page.locator('[data-flow-motion="create"]')
     await expect(composer).toBeVisible()
-    await expect(composer.getByRole('combobox', { name: 'Set team' })).toHaveCSS('color', 'lch(64.805 1.65 272)')
+    await expect(composer.getByRole('combobox', { name: 'Set team' })).toHaveCSS('color', width < 768 ? 'lch(91.201 1.65 272)' : 'lch(64.805 1.65 272)')
     for (const label of ['Close', 'Attach images, files, or videos']) {
       const button = composer.getByRole('button', { name: label, exact: true })
       await expect(button.locator('.lucide')).toBeVisible()

@@ -450,6 +450,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Preserve fractional Projects tab text metrics on Linux, and check label editing and compact composer states against their saved-reference styling.
+- Keep the phone Inbox header inside its page stacking context so it cannot intercept workspace drawer controls, and verify label-picker content independently of rounded hairlines.
+- Align phone composer label rows with the search field at the measured viewport-relative width.
 - Keep the saved-view browser scenarios on the shared fixture binding after concurrent test additions.
 - Translate the phone integrations list's remaining-item count into Chinese.
 - Keep the team issue header favorite button at its saved-reference position and wait for visible triage rows before checking their geometry.

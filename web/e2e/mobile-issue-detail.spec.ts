@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from './workspace-fixture'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
 const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
@@ -9,10 +10,8 @@ let parent: { id: string; identifier: string }
 let child: { id: string; identifier: string }
 let related: { id: string; identifier: string }
 
-test.beforeAll(async ({ request }) => {
-  workspaceKey = `mobile-issue-detail-${Date.now()}`
-  const workspace = await request.post('/api/workspaces', { data: { name: '[mobile] Issue detail', urlKey: workspaceKey, region: 'us' } })
-  expect(workspace.status()).toBe(201)
+test.beforeEach(async ({ request, workspaceKey: key }) => {
+  workspaceKey = key
   const headers = { 'X-Workspace-Key': workspaceKey }
   const bootstrap = await request.get('/api/bootstrap', { headers })
   const data = await bootstrap.json()
@@ -193,7 +192,7 @@ test('issue actions are touch-sized and nested actions can return', async ({ pag
   expect(box?.width).toBe(358)
   expect(box?.height).toBe(450)
   const rows = menu.locator('[cmdk-item]')
-  expect((await rows.first().boundingBox())?.height).toBe(45)
+  await expect(rows.first()).toHaveCSS('height', '46px')
   await expect(rows.first()).toContainText('Team')
   await expect(rows.nth(1)).toContainText('Due date')
   await expect(rows.nth(2)).toContainText('Add link…')
@@ -208,13 +207,14 @@ test('issue actions are touch-sized and nested actions can return', async ({ pag
   await expect(filter).toHaveCSS('padding', '11px 12px')
   await expect(filter).toHaveCSS('border-radius', '12px')
   const filterBox = (await filter.boundingBox())!
-  expect(filterBox.x).toBeCloseTo(25.95, 0)
-  expect(filterBox.y).toBeCloseTo(120.87, 0)
-  expect(filterBox.width).toBeCloseTo(339.08, 0)
-  expect(filterBox.height).toBeCloseTo(39.2, 0)
+  // The captured inner content was at .98 entry scale; check the settled panel.
+  expect(filterBox.x).toBeCloseTo(23, 0)
+  expect(filterBox.y).toBeCloseTo(117, 0)
+  expect(filterBox.width).toBeCloseTo(346, 0)
+  expect(filterBox.height).toBeCloseTo(40, 0)
   await expect(menu.locator('.issue-options-list-surface')).toBeVisible()
   const separator = menu.locator('.issue-options-separator-line').first()
-  expect((await separator.boundingBox())?.width).toBeCloseTo(350.84, 0)
+  expect((await separator.boundingBox())?.width).toBeCloseTo(358, 0)
   await expect(separator).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   if (shots) await page.screenshot({ path: `${shots}/flow-options-390.png`, scale: 'css' })
   await menu.getByRole('option', { name: 'Create related', exact: true }).click()
