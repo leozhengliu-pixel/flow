@@ -73,6 +73,42 @@
 
 @media (max-width: 767px) {
   .trigger.trigger.trigger:focus-visible { outline: 0; }
+
+  /* Phone: the compact list popover drops in 36px rows, 28px controls and an 8px corner. */
+  .popover.popover[data-list-display] { margin-top: 1px; border-radius: 8px; }
+  .popover[data-list-display]:not(#_) .groupingControl,
+  .popover[data-list-display]:not(#_) .switchRow { height: 36px; }
+  .popover[data-list-display]:not(#_) .section { display: flex; flex-direction: column; }
+  .popover[data-list-display]:not(#_) .groupingControl { align-items: stretch; }
+  .popover[data-list-display]:not(#_) .rowLabel { display: flex; align-items: center; line-height: normal; }
+  .popover[data-list-display]:not(#_) .groupingActions { gap: 0; }
+  .popover[data-list-display]:not(#_) .orderButton {
+    width: 28px;
+    height: 28px;
+    color: var(--pk-text);
+    font: 500 12px/normal var(--font);
+  }
+  .popover[data-list-display]:not(#_) .orderButton svg { width: 14px; height: 14px; }
+  .popover[data-list-display]:not(#_) .selectTrigger {
+    width: 102px;
+    height: 28px;
+    padding: 3px 24px 3px 12px;
+    border-radius: 8px;
+    background: var(--pk-control-phone);
+    box-shadow: var(--pk-control-inset-ring-phone);
+    font: 400 12px/normal var(--font);
+  }
+  .popover[data-list-display]:not(#_) .switchRow { align-items: stretch; }
+  .popover[data-list-display]:not(#_) .switchRow > span { display: flex; align-items: center; line-height: normal; }
+  .popover[data-list-display]:not(#_) .switchRow input { align-self: center; background: var(--pk-toggle-off-phone); }
+  .popover[data-list-display]:not(#_) .sectionLabel { height: auto; margin: 8px 0 4px; padding: 0; line-height: normal; }
+  .popover[data-list-display]:not(#_) .propertyGrid { margin-top: 7px; gap: 0; padding-bottom: 0; }
+  .popover[data-list-display]:not(#_) .propertyGrid button {
+    height: 28px;
+    margin: 0 4px 4px 0;
+    box-shadow: none;
+    font: 500 12px/normal var(--font);
+  }
 }
 
 /* Phone: the reference marks a display that is not the default list with a small accent dot. */

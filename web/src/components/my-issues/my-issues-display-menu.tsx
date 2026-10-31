@@ -254,7 +254,7 @@ export function ListDisplayMenu<G extends string, O extends string, P extends st
       </button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content data-flow-motion="floating" className={styles.popover} data-list-display="" side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
+      <Popover.Content data-flow-motion="floating" className={styles.popover} data-list-display="" side="bottom" align="end" sideOffset={3} collisionPadding={8} aria-label={t('Display options')}>
         <section className={styles.section} aria-label={t('Grouping options')}>
           <div className={styles.groupingControl}>
             <span className={styles.rowLabel}>{t('Grouping')}</span>
