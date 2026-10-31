@@ -42,7 +42,7 @@
 .attachments > span > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .error { min-height: 28px; display: flex; align-items: center; margin: 0 12px 4px; padding: 0 8px; border-radius: 5px; background: #f1717814; color: #f17178; font-size: 11px; }
 .footer { height: 51.5px; flex: 0 0 51.5px; display: flex; align-items: center; gap: 8px; padding: 0 11px 0 12px; border-top: .5px solid lch(14% 1.2 272); }
-.attachButton { width: 28px; height: 28px; }
+.attachButton { width: 28px; height: 28px; flex-basis: 28px; }
 .createMore { height: 28px; display: flex; align-items: center; gap: 7px; margin-left: auto; color: lch(64.805% 1.65 272); font-size: 12px; }
 .submit { height: 28px; padding: 0 10px; border: .5px solid transparent; border-radius: 9999px; background: lch(47.918% 59.303 288.421); box-shadow: 0 .5px 1px 1px #0005; color: lch(100% 5 288.421); font-size: 12px; font-weight: 500; }
 .submit:disabled { opacity: .55; box-shadow: none; }
@@ -92,6 +92,26 @@
   .properties { height: auto; min-height: 38px; flex: 0 0 auto; flex-wrap: wrap; row-gap: 6px; padding-bottom: 8px; overflow: visible; }
 }
 
+@media (min-width: 768px) {
+  /* Desktop keeps the compact composer on the reference's 56px header rhythm. */
+  .header { height: 55px; flex-basis: 55px; align-items: flex-start; padding: 11px 11px 0; }
+  .header h2, .breadcrumb { margin-top: 4.25px; }
+  .team { gap: 4px; padding-left: 5px; }
+  .team > span { font-weight: 450; }
+  .team > svg { width: 16px !important; height: 16px !important; flex: 0 0 16px; margin-right: -2px; transform: translateX(-.5px) scale(.875); transform-origin: left center; }
+  .document { padding-inline: 17px; }
+  .titleField { padding-top: 2px; }
+  .titleField :global(.title-editor) { min-height: 27px; padding: 3px 0 0; letter-spacing: -0.1px; }
+  .titleField :global(.title-editor p) { line-height: 24px; letter-spacing: -0.1px; }
+  .descriptionField { margin-top: 6px; }
+  .descriptionField :global(.description-editor) { min-height: 76px; line-height: 22.5px; }
+  .descriptionField :global(.description-editor p) { letter-spacing: -0.1px; }
+  .properties { padding-top: 2.5px; }
+  .footer { gap: 12px; padding-top: 1.5px; padding-left: 11px; }
+  .createMore { gap: 6px; font-weight: 400; }
+  .submit { letter-spacing: -0.08px; }
+}
+
 @media (max-width: 767px) {
   .dialog { top: min(110px, 13.04dvh); width: calc(100vw - 24px); max-height: calc(100dvh - min(110px, 13.04dvh) - 12px); overflow-y: auto; padding: .5px; border: 0; border-radius: 21px; background: var(--sub-editor-bg); box-shadow: inset 0 0 0 .5px var(--theme-border-strong), var(--create-issue-shadow); }
   .header { height: 60px; flex-basis: 60px; padding: 12px; align-items: flex-start; }
@@ -104,6 +124,7 @@
   .document { min-height: 111px; padding-inline: 18px; }
   .titleField { padding: 2px 0 0; }
   .titleField :global(.title-editor) { min-height: 27px; padding: 3px 0 0; }
+  .titleField :global(.title-editor), .titleField :global(.title-editor p), .descriptionField :global(.description-editor p) { letter-spacing: normal; }
   .descriptionField { margin-top: 6px; }
   .descriptionField :global(.description-editor) { min-height: 76px; padding-top: 6px; line-height: 22.5px; }
   .properties { gap: 6px; padding: 6px 12px 12px; min-height: 80px; }
