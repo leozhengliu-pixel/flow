@@ -1,0 +1,53 @@
+.li-list-header { display: contents; }
+.li-sidebar-phone, .li-phone-health { display: none; }
+
+@media (max-width: 767px) {
+  .li-page { height: 100%; margin: 0; border-radius: 0; text-rendering: geometricPrecision; }
+  .li-page :is(button, input) { text-rendering: inherit; }
+  .li-page .li-list-header { display: block; flex: 0 0 87.5px; padding: 0; gap: 12px; background: var(--bg-panel); }
+  .li-page .li-page-header { height: 44px; padding: 0 8px; border: 0; position: relative; }
+  .li-page .li-page-header::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: .5px; background: var(--project-toolbar-bg); }
+  .li-page .li-page-header h2 { color: var(--text); line-height: normal; transform: translateY(-.25px); }
+  .li-page .li-page-header h2 > span { line-height: normal; }
+  html:root body .app .li-page .li-mobile-menu,
+  html:root body .app .li-page .li-new-initiative,
+  .li-page .li-toolbar-actions .li-icon-button {
+    box-sizing: border-box; display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px;
+    padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; color: var(--text);
+    font: 500 12px var(--font); line-height: normal; letter-spacing: normal; transform: translateY(-.25px);
+  }
+  html:root body .app .li-page .li-mobile-menu { background: transparent; }
+  html:root body .app .li-page .li-mobile-menu::before,
+  html:root body .app .li-page .li-mobile-menu::after { display: none; }
+  html:root body .app .li-page .li-mobile-menu > svg { display: block; }
+  html:root body .app .li-page .li-new-initiative { color: var(--issue-muted); }
+  .li-page .li-page-header button svg,
+  .li-page .li-toolbar-actions button svg { width: 14px; height: 14px; color: var(--issue-muted); transform: translateX(.1px); }
+  .li-page .li-toolbar { height: 43.5px; padding: 0 8px; gap: 6px; border: 0; overflow: visible; }
+  .li-page .li-toolbar nav { min-width: 0; gap: 6px; }
+  /* Reserve the half-pixel edge in padding to avoid whole-pixel border rounding. */
+  .li-page .li-toolbar nav a { height: 32px; padding-inline: 10.5px; border-width: 0 !important; color: var(--issue-muted); line-height: normal; letter-spacing: normal; background: var(--project-toolbar-bg); }
+  .li-page .li-toolbar nav a[aria-current=page] { color: var(--bright); }
+  .li-page .li-toolbar nav a > span { line-height: normal; }
+  .li-page .li-toolbar-actions { gap: 6px; flex: 0 0 auto; margin-left: auto; }
+  .li-page .li-toolbar-actions .li-icon-button { background: var(--project-toolbar-bg); transform: none; }
+  .li-page .li-toolbar-actions .li-icon-button[aria-label="Close sidebar"] { display: grid; }
+  .li-page .li-sidebar-desktop { display: none; }
+  .li-page .li-sidebar-phone { display: block; }
+  .li-page .li-columns { display: none; }
+  .li-page .li-row { min-width: 0; height: 56px; min-height: 56px; padding: 0; grid-template-columns: 14px minmax(0, 1fr) 32px 12px !important; gap: normal 6px; }
+  .li-page .li-row > .li-select, .li-page .li-row > .li-row-more { display: none; }
+  .li-page .li-row > .li-name { grid-column: 2 !important; height: 56px; margin-left: -6px; gap: 6px; }
+  .li-page .li-name-copy { flex: 1; }
+  .li-page .li-name strong { color: var(--text); font-size: 13px; font-weight: 500; line-height: normal; letter-spacing: normal; }
+  .li-page .li-name small:empty { display: none; }
+  .li-page .li-row .li-initiative-icon { color: white !important; font: 400 13.3333px var(--font); line-height: normal; letter-spacing: normal; }
+  .li-page .li-cell { display: none; }
+  .li-page .li-cell--health { display: flex; grid-column: 3 !important; height: 56px; margin-right: -6px; }
+  .li-page .li-row .li-health { box-sizing: border-box; display: grid; place-items: center; width: 32px; height: 32px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; color: var(--text); font: 500 12px var(--font); line-height: normal; letter-spacing: normal; }
+  .li-page .li-row .li-health > i { display: none; }
+  .li-page .li-phone-health { display: block; width: 14px; height: 14px; }
+  .li-page .li-health.is-onTrack .li-phone-health { color: var(--project-health-on-track); }
+  .li-page .li-health.is-atRisk .li-phone-health { color: var(--project-health-at-risk); }
+  .li-page .li-health.is-offTrack .li-phone-health { color: var(--project-health-off-track); }
+}
