@@ -9,6 +9,18 @@
   text-align: left;
 }
 
+.snoozeOption time {
+  margin-left: auto;
+  color: var(--theme-text-secondary);
+  font-size: 13px;
+  font-weight: 450;
+  white-space: nowrap;
+}
+
+.snoozeOption :global(.flow-inbox-menu__item-label) {
+  flex: 0 0 auto;
+}
+
 .snoozeOption:hover::before {
   background: var(--theme-surface-active);
 }

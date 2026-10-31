@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Desktop Inbox row actions show the complete Delete label and a small snooze chevron. Keyboard snooze now includes the same dated options, Custom icon and editable time as the pointer menu, at the matching desktop width.
 - Phone project descriptions keep paragraphs, headings and all list levels unclipped with aligned markers; resource-add controls and the first-update card use the matching spacing, hairline and compose glyph size without changing desktop layouts.
 - Command-menu search keeps its result group registered while queries change, avoiding a deferred sorting crash. Desktop issue tabs, the sidebar plan control, and phone hidden-board counts retain fractional font metrics on Linux. Browser fixtures select their own workspace with the supported header, phone navigation checks run as separate workflows instead of exhausting a shared deadline, and service-worker retirement checks avoid racing app registration.
 - Phone Agent chat switching shows a visible history filter, calendar-week groups, taller rows and full-width hairline separators in a viewport-sized popover; desktop history menus are unchanged.
