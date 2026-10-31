@@ -304,6 +304,7 @@
 .project-overview__milestone-date { box-sizing: border-box; height: 28px; flex: none; display: inline-flex; align-items: center; border: .5px solid transparent; border-radius: 9999px; background: transparent; transition: border 150ms,background-color 150ms,color 150ms,opacity 150ms; padding: 0 6px; color: var(--pd-copy); font: 450 13px/normal inherit; }
 .project-overview__milestone .project-overview__milestone-date { color: var(--pd-copy); }
 .project-overview__milestone-date-placeholder { color: var(--pd-faint); }
+.project-overview__milestone-date-icon { display: none; }
 .project-overview__milestone-dot { margin: 0 2px; color: var(--pd-faint); }
 /* The reference app only reveals "Set target date" on an undated milestone while its row is hovered or focused. */
 .project-overview__milestone > header:not(:hover):not(:focus-within):not(:has([data-state=open])) .project-overview__milestone-date.is-unset,
@@ -1471,7 +1472,10 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
     line-height: 12.1px;
   }
 
-  .project-overview { width: calc(100% - 80px); padding: 64px 0 72px; }
+  .project-overview { width: calc(100% - 80px); padding: 64px 0 55.5px; }
+  @media (max-height: 700px) {
+    .project-overview { padding-bottom: 44.5px; }
+  }
   .project-overview h3 { min-height: 0; height: 27.5px; padding: 6px 0; border: 0 none; line-height: normal; }
   .project-overview__icon {
     padding: 0 8px;
@@ -1536,6 +1540,34 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-overview__latest.is-empty { min-height: 69px; padding: 16px; }
   .project-overview__first-update { min-height: 36px; gap: 6px; padding: 0 12px 0 10px; }
   .project-overview__description { margin-top: 4px; padding-top: 10px; }
+  .project-overview__description-editor .ProseMirror > p:first-child { height: 42px; margin-bottom: 6px; overflow: hidden; }
+  .project-overview__description-editor .ProseMirror > h2 { height: 23px; margin-top: 37.5px !important; margin-bottom: 21.5px !important; overflow: hidden; }
+  .project-overview__description-editor .ProseMirror > ul > li > p { height: 18px; margin-bottom: 6px !important; overflow: hidden; }
+  .project-overview__description-editor .ProseMirror > p:last-child { margin-top: 13px !important; }
+  .project-overview__milestones { margin-top: 12.5px; }
+  /* Milestone cards use a compact, always-open editing row on phones. */
+  .project-overview__milestone { min-height: 106px; padding: 4px 0 2px; }
+  .project-overview__milestone[data-expanded=true] { min-height: 106px; }
+  .project-overview__milestone { margin-top: 4px; }
+  .project-overview__milestone > header { height: 31px; padding-right: 2px; }
+  .project-overview__milestone-mark { height: 16px; }
+  .project-overview__milestone-mark { font-size: 16px; font-weight: 400; line-height: 0; padding-right: 1px; }
+  .project-overview__milestone-title { height: 23px; margin-left: 4px; padding: 0; line-height: 23px; }
+  .project-overview__milestone-title { color: var(--text); letter-spacing: -0.1px !important; border-radius: 0; }
+  .project-overview__description-editor .ProseMirror > ul > li:nth-child(2) > p { transform: translateY(6px); }
+  .project-overview__milestone-collapse { display: none; }
+  .project-overview__milestone-date.is-unset { box-sizing: border-box; width: 28px; height: 28px; justify-content: center; padding: 3px 6px; color: var(--bright); font-size: 16px; font-weight: 400; border: 0; }
+  .project-overview__milestone > header .project-overview__milestone-date.is-unset,
+  .project-overview__milestone > header .project-overview__milestone-menu-trigger { opacity: 1 !important; }
+  .project-overview__milestone-date-icon { display: block; width: 16px; height: 16px; color: var(--phone-icon-fg); }
+  .project-overview__milestone-date-placeholder { display: none; }
+  .project-overview__milestone-issues { box-sizing: border-box; width: 101.22px; height: 32px; justify-content: center; line-height: normal; white-space: nowrap; opacity: .845; transform: translateY(.5px); }
+  .project-overview__milestone-menu-trigger { width: 32px; height: 32px; padding: 0 4px; color: var(--text); font-size: 12px; font-weight: 500; line-height: normal; }
+  .project-overview__milestone-menu-trigger svg { opacity: .36; }
+  .project-overview__milestone-description { height: 50px; min-height: 50px; margin-top: 5px; padding: 10px 14px 16px 26px; border-radius: 0; color: var(--text); font-size: 15px; line-height: 24px; }
+  .project-overview__milestone-description.mention-text-field .issue-description-root .description-editor { font-size: 15px; line-height: 24px; }
+  .project-overview__milestone-link { width: 94.66px; margin-top: 12px; border: 0; }
+  .project-overview__milestone-link > span { font-size: 13px; font-weight: 500; line-height: normal; }
   .project-customers-row .project-overview__row-content { margin-top: 0; }
   .project-customers-row__add { color: rgb(255,255,255); font: 400 13.3333px/normal var(--font); }
   .project-customers-row__add > span { font-size: 13px; font-weight: 500; }

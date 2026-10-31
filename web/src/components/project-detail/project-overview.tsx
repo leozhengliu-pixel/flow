@@ -54,6 +54,14 @@ function ProjectPlus({ size = 16 }: { size?: number }) {
   return <><Plus className="project-overview__desktop-icon" size={size}/><PlusIcon className="project-overview__mobile-icon" height={size} width={size}/></>
 }
 
+function MilestoneDateIcon() {
+  return <svg aria-hidden="true" className="project-overview__milestone-date-icon" fill="currentColor" focusable="false" height="16" viewBox="0 0 16 16" width="16"><path d="M15 5C15 2.79086 13.2091 1 11 1H5C2.79086 1 1 2.79086 1 5V11C1 13.2091 2.79086 15 5 15H6.25C6.66421 15 7 14.6642 7 14.25C7 13.8358 6.66421 13.5 6.25 13.5H5C3.61929 13.5 2.5 12.3807 2.5 11V6H13.5V6.25C13.5 6.66421 13.8358 7 14.25 7C14.6642 7 15 6.66421 15 6.25V5ZM11.5001 8C11.9143 8 12.2501 8.33579 12.2501 8.75V10.75L14.2501 10.75C14.6643 10.75 15.0001 11.0858 15.0001 11.5C15.0001 11.9142 14.6643 12.25 14.2501 12.25L12.2501 12.25V14.25C12.2501 14.6642 11.9143 15 11.5001 15C11.0859 15 10.7501 14.6642 10.7501 14.25V12.25H8.75C8.33579 12.25 8 11.9142 8 11.5C8 11.0858 8.33579 10.75 8.75 10.75L10.7501 10.75V8.75C10.7501 8.33579 11.0859 8 11.5001 8Z"/></svg>
+}
+
+function MilestoneMenuIcon() {
+  return <><MoreHorizontal className="project-overview__desktop-icon" size={12}/><svg aria-hidden="true" className="project-overview__mobile-icon" fill="currentColor" focusable="false" height="16" viewBox="0 0 16 16" width="16"><path d="M3 6.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm5 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/></svg></>
+}
+
 export function ProjectOverview({ issueData, issueSummary, project, projects, projectRelations, integrationConnections, viewer, onUpdate, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateLabel, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onMoveMilestone, onConvertMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange, pickerRequest, onPickerRequestHandled, onOpenDocumentHistory, onReloadWorkspace, sidePanelOpen = false, resolvedCommentsOpen = false, onResolvedCommentsClose }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void; pickerRequest?: ProjectPickerRequest; onPickerRequestHandled?: () => void; /** The details or insights panel takes the room right of the column (inline threads open as popovers). */ sidePanelOpen?: boolean; resolvedCommentsOpen?: boolean; onResolvedCommentsClose?: () => void }) {
   const statuses = useMemo(() => uniqueById(projectStatuses.length ? projectStatuses : projects.map(item => item.status)), [projectStatuses, projects])
   const members = users.filter(user => (project.memberIds ?? []).includes(user.id))
@@ -125,7 +133,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
         onCancel={() => setCreatingMilestone(false)}
         onCreate={async input => { await onCreateMilestone(project.id, input); setCreatingMilestone(false) }}
       />}
-      {!creatingMilestone && <button className="project-overview__milestone-link" type="button" onClick={() => setCreatingMilestone(true)}><ProjectPlus/>Milestone</button>}
+      {!creatingMilestone && <button className="project-overview__milestone-link" type="button" onClick={() => setCreatingMilestone(true)}><ProjectPlus/><span>Milestone</span></button>}
     </section>
     {issueData && <EntityInlineComments state={inlineComments} entity={commentEntity} data={issueData} railOpen={sidePanelOpen || resolvedCommentsOpen} onReload={reloadComments}/>}
     {issueData && resolvedCommentsOpen && <EntityResolvedCommentsPanel state={inlineComments} entity={commentEntity} data={issueData} onReload={reloadComments} onClose={() => onResolvedCommentsClose?.()}/>}
@@ -133,8 +141,10 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
 }
 
 function OverviewMilestone({ totals, issues, milestone, onConvert, onDelete, onMove, onOpenIssues, onUpdate, projects }: { totals?: { total: number; completed: number }; issues: Issue[]; milestone: Props['project']['milestones'][number]; onConvert: () => Promise<void>; onDelete: () => Promise<void>; onMove: (targetProjectId: string) => Promise<void>; onOpenIssues: () => void; onUpdate: (input: { name?: string; description?: string; targetDate?: string }) => Promise<unknown>; projects: Project[] }) {
-  const { formatDate, locale } = useI18n()
-  const [expanded, setExpanded] = useState(false)
+  const { formatDate, locale, t } = useI18n()
+  // Phone overview rows keep the empty description area visible, matching the compact
+  // milestone card used for quick editing. Desktop keeps the existing collapsed state.
+  const [expanded, setExpanded] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches)
   const [editingName, setEditingName] = useState(false)
   const count = totals?.total ?? issues.length
   const completed = totals?.completed ?? issues.filter(issue => issue.state.type === 'completed').length
@@ -149,16 +159,16 @@ function OverviewMilestone({ totals, issues, milestone, onConvert, onDelete, onM
         : <button aria-label={`Rename ${milestone.name}`} className="project-overview__milestone-title" data-i18n-ignore onClick={() => setEditingName(true)} type="button">{milestone.name}</button>}
       <button aria-expanded={expanded} aria-label={expanded ? 'Collapse' : 'Expand'} className="project-overview__milestone-collapse" onClick={() => setExpanded(value => !value)} type="button"><DisclosureTriangle open={expanded}/></button>
       <span className="project-overview__milestone-spacer"/>
-      <ProjectDatePicker buttonClassName={milestone.targetDate ? 'project-overview__milestone-date' : 'project-overview__milestone-date is-unset'} label="Target date" onChange={targetDate => void onUpdate({ targetDate })} value={milestone.targetDate}><span>{milestone.targetDate ? locale === 'en-US' ? format(new Date(`${milestone.targetDate}T00:00:00`), 'MMM d') : formatDate(`${milestone.targetDate}T00:00:00`, { month: 'short', day: 'numeric' }) : <span className="project-overview__milestone-date-placeholder">Set target date</span>}</span></ProjectDatePicker>
+      <ProjectDatePicker buttonClassName={milestone.targetDate ? 'project-overview__milestone-date' : 'project-overview__milestone-date is-unset'} label="Target date" onChange={targetDate => void onUpdate({ targetDate })} value={milestone.targetDate}><span>{milestone.targetDate ? locale === 'en-US' ? format(new Date(`${milestone.targetDate}T00:00:00`), 'MMM d') : formatDate(`${milestone.targetDate}T00:00:00`, { month: 'short', day: 'numeric' }) : <><MilestoneDateIcon/><span className="project-overview__milestone-date-placeholder">Set target date</span></>}</span></ProjectDatePicker>
       {milestone.targetDate && <span aria-hidden="true" className="project-overview__milestone-dot">·</span>}
       <a aria-label="Open issues" className="project-overview__milestone-issues" href={link} onClick={event => { event.preventDefault(); onOpenIssues() }}>{count} {count === 1 ? 'issue' : 'issues'}<span>·</span>{progress}%</a>
-      <ProjectMilestoneMenu count={count} milestone={milestone} onConvert={onConvert} onDelete={onDelete} onEdit={() => { setExpanded(true); requestAnimationFrame(() => setEditingName(true)) }} onMove={onMove} onShowHistory={() => setHistoryOpen(true)} projects={projects} trigger={<button aria-label="Open menu" className="project-overview__milestone-menu-trigger" type="button"><MoreHorizontal size={12}/></button>} variant="overview"/>
+      <ProjectMilestoneMenu count={count} milestone={milestone} onConvert={onConvert} onDelete={onDelete} onEdit={() => { setExpanded(true); requestAnimationFrame(() => setEditingName(true)) }} onMove={onMove} onShowHistory={() => setHistoryOpen(true)} projects={projects} trigger={<button aria-label="Open menu" className="project-overview__milestone-menu-trigger" type="button"><MilestoneMenuIcon/></button>} variant="overview"/>
     </header>
     {expanded && <ProjectEditableText
       ariaLabel="Milestone description"
       className="project-overview__milestone-description"
       multiline
-      placeholder="Add milestone description…"
+      placeholder={t('Add a description…')}
       value={milestone.description ?? ''}
       onCommit={description => onUpdate({ description }).then(() => undefined)}
     />}
@@ -169,7 +179,7 @@ function OverviewMilestone({ totals, issues, milestone, onConvert, onDelete, onM
 
 
 function OverviewMilestoneCreator({ onCancel, onCreate }: { onCancel: () => void; onCreate: (input: { name: string; description?: string; targetDate?: string }) => Promise<void> }) {
-  const { formatDate, locale } = useI18n()
+  const { formatDate, locale, t } = useI18n()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [targetDate, setTargetDate] = useState('')
@@ -177,7 +187,7 @@ function OverviewMilestoneCreator({ onCancel, onCreate }: { onCancel: () => void
   const submit = () => { if (!name.trim() || saving) return; setSaving(true); void onCreate({ name: name.trim(), description: description.trim(), targetDate }).finally(() => setSaving(false)) }
   return <form className="project-overview__milestone project-overview__milestone-creator" onSubmit={event => { event.preventDefault(); submit() }}>
     <header><span className="project-overview__milestone-mark"><MilestoneProgressIcon className="project-overview__milestone-progress" empty/></span><input autoFocus aria-label="Milestone name" className="project-overview__milestone-name" disabled={saving} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') onCancel() }} placeholder="Milestone name" value={name}/><span className="project-overview__milestone-spacer"/><ProjectDatePicker buttonClassName="project-overview__milestone-date" label="Target date" onChange={setTargetDate} value={targetDate}><span>{targetDate ? locale === 'en-US' ? format(new Date(`${targetDate}T00:00:00`), 'MMM d') : formatDate(`${targetDate}T00:00:00`, { month: 'short', day: 'numeric' }) : <span className="project-overview__milestone-date-placeholder">Set target date</span>}</span></ProjectDatePicker><button aria-label="Cancel" className="project-overview__milestone-menu-trigger" onClick={onCancel} type="button"><X size={12}/></button></header>
-    <MentionTextField ariaLabel="Milestone description" className="project-overview__milestone-description" onChange={setDescription} onSubmit={submit} placeholder="Add milestone description…" value={description}/>
+    <MentionTextField ariaLabel="Milestone description" className="project-overview__milestone-description" onChange={setDescription} onSubmit={submit} placeholder={t('Add a description…')} value={description}/>
   </form>
 }
 
