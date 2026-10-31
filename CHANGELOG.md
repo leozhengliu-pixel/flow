@@ -22,6 +22,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Fixed
 - Match the phone composer's status picker typography, selection highlight, and workflow glyphs without changing desktop pickers.
 
+- Isolate the phone agent-panel seed behind an explicit development flag, link its real issue, and match the panel surface, pressed agent toggle and tool-row spacing without changing desktop layout.
 - Keep the Chinese Agent label consistent across filters, settings and OAuth applications with one shared translation.
 - Stop background delivery writes before checking no-op API requests, and align browser assertions with the saved control and shortcut references.
 - Preserve fractional compact project-picker text metrics and avoid an unused desktop Members scrollbar gutter on Linux.

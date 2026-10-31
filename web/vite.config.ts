@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
@@ -15,51 +15,6 @@ function inlineIconSprites() {
       const publicDir = path.resolve(import.meta.dirname, 'public')
       const sprites = ['flow-core-icons.svg', 'flow-property-icons.svg', 'flow-milestone-icons.svg'].map(file => readFileSync(path.join(publicDir, file), 'utf8').replace(/^<svg\b([^>]*)>/, (_match, attributes: string) => `<svg aria-hidden="true" focusable="false" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden"${attributes.replace(/\s(?:width|height)="[^"]*"/g, '')}>`)).join('')
       return html.replace('<body>', `<body>${sprites}`)
-    },
-  }
-}
-
-function mobileAgentPanelDevSeed(): Plugin {
-  const fixture = JSON.parse(readFileSync(path.resolve(import.meta.dirname, 'e2e/fixtures/mobile-agent-panel.json'), 'utf8')) as {
-    review: Record<string, unknown>; session: Record<string, unknown>; task: Record<string, unknown>; activities: unknown[]
-  }
-  const workspace = 'mobile-agent-agent-panel'
-  const sessionId = 'mobile-agent-agent-panel'
-  return {
-    name: 'flow-mobile-agent-panel-dev-seed',
-    apply: 'serve',
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        if (req.headers['x-workspace-key'] !== workspace || !req.url?.startsWith('/api/')) return next()
-        const url = new URL(req.url, 'http://flow.local')
-        if (url.pathname === '/api/coding/status') {
-          res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify({ enabled: true, provider: 'fake', regions: [], sizes: {} }))
-          return
-        }
-        if (url.pathname === `/api/coding/sessions/${sessionId}`) {
-          res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify(fixture.session))
-          return
-        }
-        if (url.pathname === `/api/agent-tasks/${fixture.task.id}`) {
-          res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify({ session: fixture.task, activities: fixture.activities }))
-          return
-        }
-        if (url.pathname === '/api/bootstrap') {
-          const upstream = await fetch(`${apiProxyTarget}${url.pathname}${url.search}`, { headers: { 'X-Workspace-Key': workspace } })
-          const bootstrap = await upstream.json() as { reviews?: unknown[]; workspaceSettings?: { featureFlags?: Record<string, boolean> } }
-          bootstrap.reviews = [fixture.review]
-          bootstrap.workspaceSettings ??= {}
-          bootstrap.workspaceSettings.featureFlags ??= {}
-          bootstrap.workspaceSettings.featureFlags['coding-sessions'] = true
-          res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify(bootstrap))
-          return
-        }
-        next()
-      })
     },
   }
 }
@@ -84,14 +39,18 @@ function chunkSizeBudget() {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(async ({ command }) => ({
   // tourMedia: docs/media/*.gif → /tour/ (dev server and build output) for the Getting started issues.
   // releaseManifest: dist/asset-manifest.json, which lets other releases' servers find this build's assets.
-  plugins: [react(), tailwindcss(), inlineIconSprites(), mobileAgentPanelDevSeed(), chunkSizeBudget(), tourMedia(), releaseManifest()],
+  plugins: [react(), tailwindcss(), inlineIconSprites(),
+    command === 'serve' && process.env.FLOW_E2E_AGENT_PANEL_SEED === '1'
+      ? (await import('./e2e/agent-panel-seed-plugin.ts')).agentPanelSeedPlugin(apiProxyTarget)
+      : undefined,
+    chunkSizeBudget(), tourMedia(), releaseManifest()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   build: {
     // Small KaTeX fonts must stay same-origin files under font-src 'self', not data URLs.
-    assetsInlineLimit: file => /\.(?:woff2?|ttf|otf|eot)$/i.test(file) ? false : undefined,
+    assetsInlineLimit: (file: string) => /\.(?:woff2?|ttf|otf|eot)$/i.test(file) ? false : undefined,
     chunkSizeWarningLimit: 1500,
     rolldownOptions: {
       output: {
@@ -115,4 +74,4 @@ export default defineConfig({
     port: 5173,
     proxy: { '/api': { target: apiProxyTarget, ws: true }, '/uploads': apiProxyTarget, '/scim': apiProxyTarget },
   },
-})
+}))

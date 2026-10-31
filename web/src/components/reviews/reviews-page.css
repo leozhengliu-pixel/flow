@@ -474,6 +474,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
 .review-agent-layout>.review-agent-panel{margin:8px 8px 8px 4px}
 .review-detail-tab-actions>.review-agent-toggle{width:28px;height:28px;padding:0;border:0;background:var(--theme-control);color:var(--text-strong)}
 .review-detail-tab-actions>.review-agent-toggle[aria-pressed=false]{background:transparent;color:var(--theme-text-secondary)}
+.review-agent-toggle-filled{display:none}
 @media (max-width:760px){.review-agent-layout:not(.is-agent-hidden)>.review-agent-layout-main{display:none}.review-agent-layout>.review-agent-panel{flex:1;width:auto;margin:8px}}
 
 /* Code host sync state of a comment (write-back pending or failed) and outdated threads. */
@@ -681,6 +682,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-detail-top .review-menu-button svg.review-menu-glyph--phone,html:root body .app .review-actions-glyph--phone{display:block}
   html:root body .app .review-breadcrumb{min-width:0;flex:1;display:flex;align-items:center;margin-left:-1px;overflow:visible}
   html:root body .app .review-breadcrumb-issue{box-sizing:border-box;height:24px;flex:none;display:flex;align-items:center;margin:0 -5px;padding:0 5px;border-radius:8px;background:transparent;color:var(--bright);font:400 16px/24px var(--font);text-decoration:none;overflow:visible}
+  html:root body .app .reviews-workspace.has-agent-panel button.review-breadcrumb-issue{font:500 13px/normal var(--font);color:var(--issue-muted)}
   html:root body .app .review-breadcrumb-issue-label{display:none}
   html:root body .app .review-breadcrumb-issue-icon{display:grid;place-items:center;width:14px;height:14px;flex:none}
   html:root body .app .review-breadcrumb-issue-icon svg{width:14px;height:14px;border-style:none}
@@ -688,7 +690,10 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-breadcrumb-state{width:16px;height:16px;flex:none}
   html:root body .app .review-breadcrumb-state--desktop{display:none}
   html:root body .app .review-breadcrumb-state--phone{display:block;width:16px;height:16px;color:var(--bright)}
+  html:root body .app .reviews-workspace.has-agent-panel .review-breadcrumb-state--phone[data-review-state=closed]{color:var(--review-state-closed)}
+  html:root body .app .reviews-workspace.has-agent-panel .review-breadcrumb-state--phone[data-review-state=merged]{color:var(--review-state-merged)}
   html:root body .app .review-breadcrumb-state--phone path{fill:var(--issue-muted)}
+  html:root body .app .reviews-workspace.has-agent-panel .review-breadcrumb-state--phone:is([data-review-state=closed],[data-review-state=merged]) path{fill:none}
   html:root body .app .review-breadcrumb-title{min-width:0;flex:1 1 auto;margin-left:2px;padding:2px 4px;border-radius:6px;color:var(--text);text-decoration:none}
   html:root body .app .review-breadcrumb-title h2{font:500 13px/normal var(--font);color:var(--text)}
   html:root body .app .review-diff-stat,html:root body .app .review-favorite-button,html:root body .app .review-detail-top-actions{display:none}
@@ -708,6 +713,10 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-ready-label--phone{display:inline;margin-right:-1px}
   html:root body .app .review-phone-agent{display:grid;place-items:center;box-sizing:border-box;width:32px;height:32px;flex:0 0 32px;padding:0 2px;border:.5px solid transparent;border-radius:50%;background:var(--review-phone-agent-bg);color:var(--issue-muted);font:500 12px/normal var(--font)}
   html:root body .app .review-phone-agent svg{width:14px;height:14px}
+  html:root body .app .review-detail-tab-actions>.review-agent-toggle{box-sizing:border-box;width:32px;height:32px;flex-basis:32px}
+  html:root body .app .review-detail-tab-actions>.review-agent-toggle[aria-pressed=true]{background:var(--cs-agent-toggle-on-bg);color:var(--cs-agent-toggle-on-fg);border:.5px solid var(--cs-panel-border)}
+  html:root body .app .review-agent-toggle[aria-pressed=true] .review-agent-toggle-outline{display:none}
+  html:root body .app .review-agent-toggle[aria-pressed=true] .review-agent-toggle-filled{display:block}
 
   /* The document: 16px gutters, 10px above the title, the properties folded in label/value rows. */
   html:root body .app .review-overview{display:block;box-sizing:border-box;padding:10px 16px 64px;overflow-y:auto}

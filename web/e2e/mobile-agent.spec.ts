@@ -1,9 +1,54 @@
 import { expect } from '@playwright/test'
 import { test } from './workspace-fixture'
+import { createServer } from 'vite'
+import { agentPanelSeedPlugin } from './agent-panel-seed-plugin'
 
 const api = process.env.FLOW_MOBILE_API ?? 'http://127.0.0.1:4180'
 
 type Chat = { id: string; title: string }
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  test.describe(`mobile review agent panel ${viewport.width}px`, () => {
+    test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+    test('linked issue, pressed toggle, uniform surface and consistent tool gaps', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const bootstrap = await (await request.get(`${api}/api/bootstrap`, { headers })).json()
+      const created = await request.post(`${api}/api/issues`, { headers, data: { title: '[mobile] Agent panel fixture issue', teamId: bootstrap.teams[0].id, stateId: 'state_progress' } })
+      expect(created.status()).toBe(201)
+      const issue = await created.json() as { id: string; identifier: string }
+      const server = await createServer({ plugins: [agentPanelSeedPlugin(api, workspaceKey)], server: { host: '127.0.0.1', port: 0, proxy: { '/api': { target: api, ws: true } } }, logLevel: 'silent' })
+      try {
+        await server.listen()
+        const address = server.httpServer!.address() as { port: number }
+        await page.goto(`http://127.0.0.1:${address.port}/${workspaceKey}/review/add-exported-whisper2-function/changes?showAgent=true&agentSessionId=mobile-agent-agent-panel`)
+        const panel = page.locator('.review-agent-panel')
+        await expect(panel).toBeVisible()
+        const toggle = page.getByRole('button', { name: 'Hide agent', exact: true })
+        await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+        await expect(toggle.locator('.review-agent-toggle-filled')).toBeVisible()
+        expect((await toggle.boundingBox())?.width).toBe(32)
+        expect(await toggle.evaluate(node => getComputedStyle(node).backgroundColor)).toBe('lch(18.634 1.075 272)')
+        const link = panel.locator('.coding-session-prompt a')
+        await expect(link).toHaveText(issue.identifier)
+        await expect(link).toHaveAttribute('href', new RegExp(`/issue/${issue.identifier}/`))
+        expect(await panel.locator('.coding-agent-panel-surface').evaluate(node => getComputedStyle(node).backgroundColor)).toBe(await panel.locator('.coding-agent-panel-header').evaluate(node => getComputedStyle(node).backgroundColor))
+        await panel.locator('.cs-group-header').first().click()
+        const gaps = await panel.locator('.cs-action-header').evaluateAll(rows => rows.map(row => {
+          const label = row.querySelector('.cs-action-label')!.getBoundingClientRect()
+          return row.querySelector('.cs-action-detail')!.getBoundingClientRect().left - label.right
+        }))
+        for (const gap of gaps) expect(Math.abs(gap - 6)).toBeLessThan(.1)
+        expect(await panel.locator('.cs-action-label').first().evaluate(node => getComputedStyle(node).fontFamily)).toContain('Inter Variable')
+        expect(await panel.locator('.cs-action-detail code').first().evaluate(node => getComputedStyle(node).fontFamily)).toContain('ui-monospace')
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+        await toggle.click()
+        await expect(panel).toBeHidden()
+        await expect(page.getByRole('button', { name: 'Show agent', exact: true })).toHaveAttribute('aria-pressed', 'false')
+      } finally { await server.close() }
+    })
+  })
+}
 
 const titles = [
   '[mobile] Picker Test 事项状态与点数',
