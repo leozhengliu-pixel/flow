@@ -11,6 +11,8 @@
   html:root .settings-app .settings-sidebar { padding: 0; }
   html:root .settings-app .settings-back { gap: 5px; margin: 16.5px 0 12px 16px; text-decoration: none; }
   html:root .settings-app .settings-search { margin: 0 12px; }
+  html:root .settings-app .settings-search input { color: var(--set-text); }
+  html:root .settings-app .settings-search input::placeholder { color: var(--set-nav); opacity: 1; }
   html:root .settings-app .settings-sidebar nav { margin: 0; padding-top: 29px; }
   html:root .settings-app .settings-sidebar nav h2 { height: 15.5px; line-height: 15.5px; }
   html:root .settings-app .settings-nav-link { box-sizing: border-box; width: 100%; height: 28px; display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 6px; margin-bottom: 1px; padding: 0 10px; border-radius: 8px; color: var(--set-nav); font: 500 13px var(--font); text-decoration: none; }
@@ -23,6 +25,12 @@
   html:root .settings-app .settings-main .personal-static { font: 450 13px/normal var(--font); }
   html:root .settings-app .settings-main .personal-avatar { width: 32px; height: 32px; font: 400 14px/normal var(--font); font-size: 14px !important; }
   html:root .settings-app .settings-main .personal-input { background: var(--set-card); }
+  html:root .settings-app .settings-main[data-settings-page=profile] .personal-input { border: .5px solid var(--set-input-border); color: var(--set-text); font: 400 13px/normal var(--font); }
+  html:root .settings-app .settings-main[data-settings-page=profile] .personal-input:focus { border-color: var(--focus-ring); }
+  html:root .settings-app .settings-main[data-settings-page=profile] .personal-action.danger { color: var(--set-danger); }
+  html:root .settings-app .settings-main[data-settings-page=profile] .settings-row:has(.personal-input) { min-height: 64px; }
+  html:root .settings-app .settings-main[data-settings-page=profile] .settings-row:has(.personal-input) .settings-row-copy > strong { line-height: 15.5px; }
+  html:root .settings-app .settings-main[data-settings-page=profile] .settings-row:has(.personal-input) .settings-row-copy > span { line-height: 14.5px; }
   html:root .settings-app .settings-main .personal-icon-action { background: var(--set-control); color: var(--set-control-text); }
   html:root .settings-app .settings-main .settings-row:has(.personal-avatar) { min-height: 66px; }
   html:root .settings-app .settings-main input[data-control=toggle] { margin-right: 6px; }
@@ -37,6 +45,11 @@
   html:root .settings-app .settings-main .settings-card > .personal-security-device-row { grid-template-columns: 32px minmax(0, 1fr) auto; column-gap: 16px; min-height: 65px; }
   html:root .settings-app .settings-main .personal-security-section > header p { line-height: 22px; }
   html:root .settings-app .settings-main .settings-select { font-size: 13px; line-height: normal; }
+  html:root .settings-app .settings-main .settings-select > span:first-child,
+  html:root .settings-app .settings-main .settings-select .settings-select-value,
+  html:root .settings-app .settings-main .settings-select .settings-select-value > span { font: inherit; color: inherit; }
+  html:root .settings-app .settings-main .settings-select > span:last-child { width: 10px; height: 29px; align-items: center; }
+  html:root .settings-app .settings-main .settings-select > span:last-child svg { width: 10px; height: 5.56px; }
   html:root .settings-app .settings-main .personal-row-link-meta { line-height: normal; }
   html:root .settings-app .settings-main .settings-crumb ~ .team-settings-header { position: relative; margin-bottom: 23px; }
   html:root .settings-app .team-overview-shortcut { position: absolute; right: -6px; top: 36px; height: 24px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border-radius: 9999px; color: var(--set-text); text-decoration: none; font: 500 12px var(--font); }
@@ -58,11 +71,33 @@
   html:root .settings-app .settings-team-count { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 5px; color: inherit; text-decoration: none; }
   html:root .settings-app .settings-team-count:hover { background: var(--bg-hover); }
   html:root .settings-app .settings-teams-row .settings-member-more { width: 32px; height: 32px; padding: 0; }
-  html:root .settings-app .settings-main[data-settings-page=workspace] .settings-section > h3 { font: 500 13px/15.5px var(--font); }
+  html:root .settings-app .settings-main[data-settings-page=workspace] .settings-section > h3 { min-height: 15.5px; height: 15.5px; margin-bottom: 12px; font: 500 13px/15.5px var(--font); }
   html:root .settings-app .settings-main[data-settings-page=workspace] .settings-input,
   html:root .settings-app .settings-main[data-settings-page=workspace] .settings-url { height: 32px; }
+  html:root .settings-app .settings-main[data-settings-page=workspace] .settings-input { padding: 6px 12px; font: 400 13px/normal var(--font); }
+  html:root .settings-app .settings-main[data-settings-page=workspace] .settings-url > span { font: 400 13px/normal var(--font); }
+  html:root .settings-app .settings-main[data-settings-page=workspace] .settings-section:has(> h3) .settings-row { min-height: 65px; height: 65px; padding-block: 14.5px; }
+  html:root .settings-app .settings-main[data-settings-page=workspace] .settings-section:nth-of-type(3) .settings-row { min-height: 64px; height: 64px; }
   html:root .settings-app .settings-main[data-settings-page=workspace] .workspace-logo-control > button { width: 32px; height: 32px; font-size: 11px; font-weight: 400; }
   html:root .settings-app .settings-main .settings-action.danger { height: 32px; border-radius: 9999px; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns,
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row { grid-template-columns: minmax(0, 408.6fr) minmax(0, 266.4fr) 146px 82px 82px 82px 32px; padding: 0 19.5px 0 51.5px; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=name] { margin-left: -6px; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=role] { margin-left: 0; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-more { width: 32px; height: 32px; }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label { position: relative; padding: 0; }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label > svg { position: absolute; left: 11px; pointer-events: none; }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label > input { box-sizing: border-box; width: 100%; height: 32px; padding: 6px 25px 6px 32px; border-radius: 8px; }
+  html:root .settings-app .settings-main[data-settings-page=api] > .settings-content > .settings-page-header { margin-bottom: 59px; }
+  html:root .settings-app .settings-main[data-settings-page=api] a.settings-inline-link { display: inline-block; line-height: normal; text-decoration: none; }
+  html:root .settings-app .settings-main .billing-link { padding: 1px 4px; border-radius: 8px; }
+  html:root .settings-app .settings-main .billing-ghost-button { border-width: .5px; }
+  html:root .settings-app .settings-main .billing-all-plans { padding-left: 8px; }
+  html:root .settings-app .settings-main .billing-current-plan { height: 74.5px; }
+  html:root .settings-app .settings-main .billing-usage-row { height: 65px; text-decoration: none; }
+  html:root .settings-app .settings-main .pst-actions { position: absolute; right: 16px; }
+  html:root .settings-app .settings-main .pst-copy { padding-right: 44px; }
+  html:root .settings-app .settings-main .domain-label-name > input.domain-label-name-input:not([type=color]) { height: 28.5px; border-radius: 7px; }
   html:root .settings-app .desktop-integrations .feature-header { margin-bottom: 45px; }
   .desktop-integration-search { position: relative; box-sizing: border-box; height: 44px; display: flex; align-items: center; border: 1px solid var(--set-search-border); border-radius: 8px; color: var(--set-desc); }
   .desktop-integration-search > svg { position: absolute; left: 16px; pointer-events: none; }

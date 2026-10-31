@@ -15,11 +15,21 @@ vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib
 beforeEach(() => { localStorage.clear(); localStorage.setItem('flow:locale', 'en-US'); api.updateWorkspaceSettings.mockReset() })
 const wrap = (content: React.ReactNode) => <MemoryRouter><I18nProvider>{content}</I18nProvider></MemoryRouter>
 
+it('uses the existing Chinese create-team action and keeps its callback', async () => {
+  localStorage.setItem('flow:locale', 'zh-CN')
+  const create = vi.fn()
+  render(wrap(<WorkspaceTeamsSettings data={makeBootstrap({ teamMembers: [] })} onCreate={create} onOpen={vi.fn()} onReload={vi.fn()}/>))
+  await userEvent.click(screen.getByRole('button', { name: '创建团队' }))
+  expect(create).toHaveBeenCalledOnce()
+})
+
 it('sorts every team column in both directions using the displayed data', async () => {
   const a = { id: 'a', name: 'Alpha', key: 'ALP', color: 'currentColor', createdAt: '2026-01-01' }
   const z = { id: 'z', name: 'Zulu', key: 'ZUL', color: 'currentColor', private: true, createdAt: '2026-02-01' }
   const data = makeBootstrap({ teams: [z, a], viewerRole: 'admin', teamSettings: { a: { description: 'Zebra' }, z: { description: 'Apple' } } as never, teamMembers: [{ teamId: 'a', userId: viewer.id }] as never, issues: [{ team: z }] as never })
   const { container } = render(wrap(<WorkspaceTeamsSettings data={data} onCreate={vi.fn()} onOpen={vi.fn()} onReload={vi.fn()}/>))
+  expect(screen.getByRole('button', { name: /^Create team$/ })).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Create new team' })).not.toBeInTheDocument()
   const first = () => container.querySelector('.settings-teams-row strong')?.textContent
   expect(first()).toBe('Alpha')
   for (const [column, expected] of [['Description', 'Zulu'], ['Visibility', 'Zulu'], ['Members', 'Alpha'], ['Issues', 'Zulu'], ['Created', 'Alpha'], ['Name', 'Alpha']]) {

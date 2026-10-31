@@ -93,7 +93,7 @@ import {
   webhookSettingsPath,
 } from "@/lib/app-routes";
 import { agentSkillsSettingsBackLink } from "@/lib/agent-skills-settings-back-link";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type {
   APIKey,
   BootstrapData,
@@ -2566,6 +2566,7 @@ function ApiPage({
   useResetOnChange([data.workspaceSettings], () => setSettings(data.workspaceSettings))
   const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
   const apiPath = settingsPath(data.workspace.urlKey, "api");
+  const desktop = useDesktopSettings();
   const issuedKeys = (data.apiKeys ?? []).filter((item) => !item.revokedAt && !item.oauthClientId);
   if (webhookId) {
     const webhook = webhookId === "new" ? null : data.webhooks.find((item) => item.id === webhookId);
@@ -2643,9 +2644,9 @@ function ApiPage({
         description={
           <>
             Control whether workspace members can create personal API keys. View your own keys in{" "}
-            <button type="button" className="settings-inline-link" onClick={() => onNavigate("account-security")}>
+            {desktop ? <Link className="settings-inline-link" to={settingsPath(data.workspace.urlKey, 'account-security')}>{t('Security & access')}</Link> : <button type="button" className="settings-inline-link" onClick={() => onNavigate("account-security")}>
               Security &amp; access
-            </button>{" "}
+            </button>}{" "}
             settings.
           </>
         }

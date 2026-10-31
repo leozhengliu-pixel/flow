@@ -1,8 +1,33 @@
 import { test } from './workspace-fixture'
 import { expect } from '@playwright/test'
 
-test.use({ viewport: { width: 1440, height: 900 } })
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
 test.beforeEach(({ isMobile }) => { test.skip(isMobile, 'Desktop-only settings geometry') })
+
+test('desktop settings keep measured select text, workspace sections, empty headers, and full-width status content', async ({ page, request, workspaceKey }) => {
+  await page.goto(`/${workspaceKey}/settings/account/preferences`)
+  await expect(page.locator('.settings-select-value > span').first()).toHaveCSS('font-size', '13px')
+  await page.goto(`/${workspaceKey}/settings/workspace`)
+  const heading = page.getByRole('heading', { name: 'Member onboarding' })
+  expect((await heading.boundingBox())?.height).toBe(15.5)
+  expect(Math.abs((await heading.boundingBox())!.y - 584)).toBeLessThanOrEqual(1)
+  await page.goto(`/${workspaceKey}/settings/project-labels`)
+  await expect(page.locator('.domain-labels-table-header')).toBeVisible()
+  await page.goto(`/${workspaceKey}/settings/project-statuses`)
+  expect((await page.locator('.pst-row-main').first().boundingBox())?.width).toBe(608)
+  await page.goto(`/${workspaceKey}/settings/members`)
+  const role = page.getByRole('button', { name: 'Order by Role', exact: true })
+  expect(Math.abs((await role.boundingBox())!.x - 978.99)).toBeLessThanOrEqual(1)
+  const response = await request.post('/api/labels', { headers: { 'X-Workspace-Key': workspaceKey }, data: { name: '[audit] Geometry', resourceType: 'issue' } })
+  expect(response.status()).toBe(201)
+  await page.goto(`/${workspaceKey}/settings/issue-labels`)
+  const label = page.getByRole('textbox', { name: '[audit] Geometry', exact: true })
+  expect((await label.boundingBox())?.height).toBe(28.5)
+  await expect(label).toHaveCSS('border-radius', '7px')
+  await page.goto(`/${workspaceKey}/settings/billing`)
+  await page.getByRole('main').getByRole('link', { name: /^Usage/ }).click()
+  await expect(page).toHaveURL(new RegExp('/settings/usage$'))
+})
 
 test('desktop integrations separate installed services, discover, search, and retain both chat providers', async ({ page, workspaceKey }) => {
   await page.route('**/api/bootstrap', async route => {
@@ -39,6 +64,7 @@ test('teams sort by every column, expose member links, and show live overview va
   const response = await request.post(`/api/workspaces/${workspaceKey}/teams`, { data: { name: '[audit] Zulu', key: 'ZUL' } })
   expect(response.status()).toBe(201)
   await page.goto(`/${workspaceKey}/settings/teams`)
+  await expect(page.getByRole('button', { name: 'Create team', exact: true })).toBeVisible()
   for (const column of ['Description', 'Visibility', 'Members', 'Issues', 'Created', 'Name']) {
     const button = page.getByRole('button', { name: `Order by ${column}`, exact: true })
     await button.click()
@@ -67,6 +93,17 @@ test('profile renders the actual email and settings footer controls navigate', a
   })
   await page.goto(`/${workspaceKey}/settings/account/profile`)
   await expect(page.getByText('audit@example.test')).toBeVisible()
+  const name = page.getByRole('textbox', { name: 'Full name', exact: true })
+  expect((await name.boundingBox())?.height).toBe(32)
+  await expect(name).toHaveCSS('border-top-color', 'lch(30.833 1.93 272)')
+  await expect(name).toHaveCSS('background-color', 'lch(9.232 0.85 272)')
+  await expect(name).toHaveCSS('font-weight', '400')
+  await expect(page.getByRole('textbox', { name: 'Username', exact: true })).toHaveCSS('border-top-color', 'lch(30.833 1.93 272)')
+  const search = page.getByRole('textbox', { name: 'Search settings' })
+  expect(await search.evaluate(element => getComputedStyle(element, '::placeholder').color)).toBe('lch(60.621 1.2 272)')
+  await name.fill('[audit] Updated name')
+  await expect(page.getByRole('button', { name: 'Update', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   const footer = page.locator('.settings-sidebar-footer')
   await expect(footer).toBeVisible()
   await footer.getByRole('button', { name: 'Open Help menu' }).click()
@@ -95,4 +132,10 @@ test('workspace announcements save in the throwaway workspace and reopen after r
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await page.goto(`/${workspaceKey}/settings/api`)
   await expect(page.getByRole('link', { name: 'Docs' })).toHaveCount(3)
+  for (const [label, y] of [['OAuth applications', 206.5], ['Webhooks', 381.5], ['API keys', 578.5]] as const) {
+    const rect = await page.getByRole('heading', { name: label, exact: true }).boundingBox()
+    expect(Math.abs(rect!.y - y)).toBeLessThanOrEqual(1)
+  }
+  await page.getByRole('main').getByRole('link', { name: 'Security & access', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp('/settings/account/security$'))
 })
