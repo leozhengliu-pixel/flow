@@ -7,6 +7,18 @@ import { I18nProvider } from '@/i18n/i18n'
 import { InboxFilterBuilder } from './inbox-filter-builder'
 
 describe('InboxFilterBuilder', () => {
+  it('offers working team and initiative properties', async () => {
+    const user = userEvent.setup()
+    const onFiltersChange = vi.fn()
+    render(<I18nProvider><InboxFilterBuilder filters={[]} options={{ team: [{ id: 'team-1', label: 'Platform' }], initiative: [{ id: 'initiative-1', label: 'Launch' }] }} onFiltersChange={onFiltersChange}/></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Add filter' }))
+    expect(screen.getByRole('option', { name: 'Team' })).toBeVisible()
+    expect(screen.getByRole('option', { name: 'Initiative' })).toBeVisible()
+    await user.click(screen.getByRole('option', { name: 'Team' }))
+    await user.click(screen.getByRole('option', { name: 'Platform' }))
+    expect(onFiltersChange).toHaveBeenCalledWith([expect.objectContaining({ property: 'team', values: [expect.objectContaining({ value: 'team-1' })] })])
+  })
+
   it('shows the shortcut on the initial toolbar menu and opens a separate command dialog with F', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<I18nProvider><InboxFilterBuilder trigger={<button type="button">Filter</button>} filters={[]} onFiltersChange={vi.fn()} /></I18nProvider>)
@@ -15,7 +27,7 @@ describe('InboxFilterBuilder', () => {
     const pointerMenu = screen.getByRole('dialog', { name: 'Add filter' })
     expect(pointerMenu).toHaveAttribute('data-additional', 'false')
     expect(within(pointerMenu).getByText('F')).toBeInTheDocument()
-    expect(within(pointerMenu).getByRole('option', { name: 'Notification type' })).toHaveAttribute('aria-selected', 'false')
+    expect(within(pointerMenu).getByRole('option', { name: 'Notification type' })).toHaveAttribute('aria-selected', 'true')
 
     unmount()
     render(<I18nProvider><InboxFilterBuilder filters={[]} onFiltersChange={vi.fn()} /></I18nProvider>)
@@ -91,13 +103,13 @@ describe('InboxFilterBuilder', () => {
     expect(screen.getByRole('option',{name:'Issue priority'})).toHaveAttribute('aria-expanded','true')
   })
 
-  it('opens submenus on hover without preselecting the first property', async () => {
+  it('opens submenus on hover with the first property highlighted', async () => {
     const user = userEvent.setup()
     render(<I18nProvider><InboxFilterBuilder open filters={[]} onFiltersChange={vi.fn()} /></I18nProvider>)
     const notificationType = screen.getByRole('option', { name: 'Notification type' })
     const priority = screen.getByRole('option', { name: 'Issue priority' })
 
-    expect(notificationType).toHaveAttribute('aria-selected', 'false')
+    expect(notificationType).toHaveAttribute('aria-selected', 'true')
     await waitFor(() => expect(screen.getByRole('searchbox', {name:'Add Filter'})).toHaveFocus(), { timeout: 3000 })
     await user.hover(priority)
 

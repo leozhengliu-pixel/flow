@@ -16,9 +16,11 @@ import styles from './notification-row.module.css'
 import './inbox-date-control.css'
 import { GridLoader } from '@/components/ui/grid-loader'
 import { AvatarImage } from '@/components/ui/user-avatar'
+import { useOptionalTranslate } from '@/i18n/i18n'
+import { parseDate } from 'chrono-node'
 
 export type InboxNotificationKind = 'comment' | 'finished' | 'assignment' | 'mention' | 'status' | 'project' | 'review' | 'pulse' | 'generic'
-export type InboxSnoozePreset = 'hour' | 'tomorrow' | 'nextWeek' | 'month' | {
+export type InboxSnoozePreset = 'hour' | 'threeHours' | 'tomorrow' | 'nextWeek' | 'month' | {
   kind: 'custom'
   snoozedUntil: string
 }
@@ -299,10 +301,8 @@ function ActorVisual({ notification }: { notification: InboxNotificationRowData 
 
 function NotificationContextMenu(props: InboxNotificationRowProps) {
   const { notification, disabled = false } = props
+  const t = useOptionalTranslate()
   const pulse = notification.kind === 'pulse'
-  // Pulse summaries have no issue to link to or identify.
-  const onCopyLink = pulse ? undefined : props.onCopyLink
-  const onCopyIdentifier = pulse ? undefined : props.onCopyIdentifier
   return (
     <ContextMenu.Portal>
       <ContextMenu.Content data-flow-motion="floating" className="flow-inbox-menu flow-inbox-row-menu" aria-label="Notification actions" onEscapeKeyDown={(event) => event.stopPropagation()}>
@@ -312,56 +312,30 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
           disabled={disabled}
           onSelect={() => props.onReadChange(notification, !notification.read)}
         >
-          {notification.read ? 'Mark as unread' : 'Mark as read'}
+          {t(notification.read ? 'Mark as unread' : 'Mark as read')}
         </RowMenuItem>
         <RowMenuItem shortcut="⌫" icon={<DeleteIcon />} disabled={disabled} onSelect={() => props.onDelete(notification)}>
-          Delete notification
+          {t('Delete notification')}
         </RowMenuItem>
         <ContextMenu.Sub>
           <ContextMenu.SubTrigger className="flow-inbox-menu__item" disabled={disabled}>
             <span className="flow-inbox-menu__item-icon"><SnoozeIcon /></span>
-            <span className="flow-inbox-menu__item-label">Snooze</span>
+            <span className="flow-inbox-menu__item-label">{t('Snooze')}</span>
             <kbd className="flow-inbox-menu__shortcut">H</kbd>
             <span className="flow-inbox-menu__trailing">▶</span>
           </ContextMenu.SubTrigger>
           <ContextMenu.Portal>
-            <ContextMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-snooze-menu" sideOffset={4}>
+            <ContextMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-snooze-menu" sideOffset={4} alignOffset={-37}>
               <RowSnoozeMenu notification={notification} disabled={disabled} onSnooze={props.onSnooze} />
             </ContextMenu.SubContent>
           </ContextMenu.Portal>
         </ContextMenu.Sub>
-        <ContextMenu.Separator className="flow-inbox-menu__separator flow-inbox-row-menu__separator" />
-        {props.onFavoriteChange ? (
-          <RowMenuItem
-            shortcut="⌥F"
-            icon={<FavoriteIcon />}
-            disabled={disabled}
-            onSelect={() => props.onFavoriteChange?.(notification, !notification.favorite)}
-          >
-            {notification.favorite ? 'Unfavorite' : 'Favorite'}
-          </RowMenuItem>
-        ) : null}
         {pulse && props.onPulseFrequencyChange ? (
           <PulseFrequencyContextSubmenu
             value={props.pulseFrequency ?? 'daily'}
             disabled={disabled}
             onChange={frequency => props.onPulseFrequencyChange?.(notification, frequency)}
           />
-        ) : null}
-        {onCopyLink || onCopyIdentifier ? (
-          <ContextMenu.Sub>
-            <ContextMenu.SubTrigger className="flow-inbox-menu__item" disabled={disabled}>
-              <span className="flow-inbox-menu__item-icon"><CopyIcon /></span>
-              <span className="flow-inbox-menu__item-label">Copy</span>
-              <span className="flow-inbox-menu__trailing">▶</span>
-            </ContextMenu.SubTrigger>
-            <ContextMenu.Portal>
-              <ContextMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-copy-menu" sideOffset={4}>
-                {onCopyLink ? <RowMenuItem disabled={disabled} onSelect={() => onCopyLink(notification)}>Copy link</RowMenuItem> : null}
-                {onCopyIdentifier ? <RowMenuItem disabled={disabled} onSelect={() => onCopyIdentifier(notification)}>Copy issue ID</RowMenuItem> : null}
-              </ContextMenu.SubContent>
-            </ContextMenu.Portal>
-          </ContextMenu.Sub>
         ) : null}
       </ContextMenu.Content>
     </ContextMenu.Portal>
@@ -380,6 +354,22 @@ function RowMenuItem({ children, icon, shortcut, disabled = false, onSelect }: {
 
 function RowSnoozeMenu({ notification, disabled, onSnooze }: { notification: InboxNotificationRowData; disabled: boolean; onSnooze: InboxNotificationRowProps['onSnooze'] }) {
   const [custom, setCustom] = useState(false)
+  const [query, setQuery] = useState('')
+  const t = useOptionalTranslate()
+  const now = useCurrentTime()
+  const items: Array<[Exclude<InboxSnoozePreset, { kind: 'custom' }>, string]> = [
+    ['hour', 'An hour from now'],
+    ['threeHours', 'In 3 hours'],
+    ['tomorrow', 'Tomorrow'],
+    ['nextWeek', 'Next week'],
+    ['month', 'A month from now'],
+  ]
+  const optionDate = (preset: Exclude<InboxSnoozePreset, { kind: 'custom' }>) => new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(resolveSnoozeDate(now, preset))
+  const submitQuery = () => {
+    const parsed = parseDate(query, new Date(now))
+    if (!parsed) return
+    onSnooze(notification, { kind: 'custom', snoozedUntil: parsed.toISOString() })
+  }
   if (custom) {
     return <InboxCustomSnoozeForm
       disabled={disabled}
@@ -388,14 +378,10 @@ function RowSnoozeMenu({ notification, disabled, onSnooze }: { notification: Inb
     />
   }
   return <>
-    <div className="flow-inbox-menu__search-wrap flow-inbox-menu__search-wrap--passive">
-      <span>Try: 4 pm, 2 days, in 5 weeks…</span>
+    <div className="flow-inbox-menu__search-wrap flow-inbox-snooze-input-wrap">
+      <input aria-label={t('Snooze time')} placeholder={t('Try: 4 pm, 2 days, in 5 weeks…')} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submitQuery() } }}/>
     </div>
-    <div className="flow-inbox-menu__separator" />
-    <SnoozeItem label="An hour from now" preset="hour" disabled={disabled} onSelect={onSnooze} notification={notification} />
-    <SnoozeItem label="Tomorrow" preset="tomorrow" disabled={disabled} onSelect={onSnooze} notification={notification} />
-    <SnoozeItem label="Next week" preset="nextWeek" disabled={disabled} onSelect={onSnooze} notification={notification} />
-    <SnoozeItem label="A month from now" preset="month" disabled={disabled} onSelect={onSnooze} notification={notification} />
+    {items.map(([preset, label]) => <SnoozeItem key={preset} label={t(label)} date={optionDate(preset)} preset={preset} disabled={disabled} onSelect={onSnooze} notification={notification} />)}
     <ContextMenu.Item
       className="flow-inbox-menu__item"
       disabled={disabled}
@@ -404,13 +390,15 @@ function RowSnoozeMenu({ notification, disabled, onSnooze }: { notification: Inb
         setCustom(true)
       }}
     >
-      <span className="flow-inbox-menu__item-label">Custom…</span>
+      <span className="flow-inbox-menu__item-label">{t('Custom…')}</span>
     </ContextMenu.Item>
   </>
 }
 
-function SnoozeItem({ label, preset, notification, disabled, onSelect }: { label: string; preset: Exclude<InboxSnoozePreset, { kind: 'custom' }>; notification: InboxNotificationRowData; disabled: boolean; onSelect: InboxNotificationRowProps['onSnooze'] }) {
-  return <RowMenuItem disabled={disabled} onSelect={() => onSelect(notification, preset)}>{label}</RowMenuItem>
+function SnoozeItem({ label, date, preset, notification, disabled, onSelect }: { label: string; date?: string; preset: Exclude<InboxSnoozePreset, { kind: 'custom' }>; notification: InboxNotificationRowData; disabled: boolean; onSelect: InboxNotificationRowProps['onSnooze'] }) {
+  return <ContextMenu.Item className={`flow-inbox-menu__item ${styles.snoozeOption}`} disabled={disabled} onSelect={() => onSelect(notification, preset)}>
+    <span className="flow-inbox-menu__item-icon"><SnoozeIcon /></span><span className="flow-inbox-menu__item-label">{label}</span>{date ? <time>{date}</time> : null}
+  </ContextMenu.Item>
 }
 
 function KeyboardSnoozeMenu({ notification, disabled, onSnooze }: {
@@ -419,8 +407,10 @@ function KeyboardSnoozeMenu({ notification, disabled, onSnooze }: {
   onSnooze: (preset: InboxSnoozePreset) => void
 }) {
   const [custom, setCustom] = useState(false)
+  const t = useOptionalTranslate()
   const presets: Array<[Exclude<InboxSnoozePreset, { kind: 'custom' }>, string]> = [
     ['hour', 'An hour from now'],
+    ['threeHours', 'In 3 hours'],
     ['tomorrow', 'Tomorrow'],
     ['nextWeek', 'Next week'],
     ['month', 'A month from now'],
@@ -436,7 +426,7 @@ function KeyboardSnoozeMenu({ notification, disabled, onSnooze }: {
 
   return <div role="menu" aria-label="Snooze notification" onKeyDown={moveSnoozeFocus}>
     <div className="flow-inbox-menu__search-wrap flow-inbox-menu__search-wrap--passive">
-      <span>Try: 4 pm, 2 days, in 5 weeks…</span>
+      <span>{t('Try: 4 pm, 2 days, in 5 weeks…')}</span>
     </div>
     <div className="flow-inbox-menu__separator" />
     {presets.map(([preset, label]) => (
@@ -449,7 +439,7 @@ function KeyboardSnoozeMenu({ notification, disabled, onSnooze }: {
         disabled={disabled}
         onClick={() => onSnooze(preset)}
       >
-        <span className="flow-inbox-menu__item-label">{label}</span>
+      <span className="flow-inbox-menu__item-label">{t(label)}</span>
       </button>
     ))}
     <button
@@ -460,7 +450,7 @@ function KeyboardSnoozeMenu({ notification, disabled, onSnooze }: {
       disabled={disabled}
       onClick={() => setCustom(true)}
     >
-      <span className="flow-inbox-menu__item-label">Custom…</span>
+      <span className="flow-inbox-menu__item-label">{t('Custom…')}</span>
     </button>
   </div>
 }
@@ -474,6 +464,18 @@ function moveSnoozeFocus(event: KeyboardEvent<HTMLDivElement>) {
   event.preventDefault()
   const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length
   options[next]?.focus()
+}
+
+function resolveSnoozeDate(now: Date, preset: Exclude<InboxSnoozePreset, { kind: 'custom' }>) {
+  const next = new Date(now)
+  if (preset === 'hour') return new Date(next.getTime() + 60 * 60 * 1000)
+  if (preset === 'threeHours') return new Date(next.getTime() + 3 * 60 * 60 * 1000)
+  next.setSeconds(0, 0)
+  next.setHours(9, 0, 0, 0)
+  if (preset === 'tomorrow') next.setDate(next.getDate() + 1)
+  else if (preset === 'nextWeek') next.setDate(next.getDate() + ((8 - next.getDay()) % 7 || 7))
+  else if (preset === 'month') next.setMonth(next.getMonth() + 1)
+  return next
 }
 
 export function InboxCustomSnoozeForm({ disabled = false, onCancel, onConfirm }: { disabled?: boolean; onCancel: () => void; onConfirm: (preset: Extract<InboxSnoozePreset, { kind: 'custom' }>) => void }) {
@@ -551,8 +553,6 @@ function ReviewStatusIcon({ status }: { status: string }) {
   return <GitPullRequest aria-hidden="true" size={14} strokeWidth={1.7} style={{ color }} />
 }
 
-function UnreadIcon() { return <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.75" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg> }
-function DeleteIcon() { return <svg viewBox="0 0 16 16"><path d="M3 4.5h10M6 2.5h4m-6 2 .6 9h6.8l.6-9M6.5 7v4m3-4v4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg> }
+function UnreadIcon() { return <svg viewBox="0 0 16 16"><path d="M5 2.5h6v1h1.5v10H3.5v-10H5v-1Zm0 3.5 1.7 1.7L10.5 4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg> }
+function DeleteIcon() { return <svg viewBox="0 0 16 16"><path d="M5 2.5h6v1h1.5v10H3.5v-10H5v-1Zm2 4 2 2m0-2-2 2" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg> }
 function SnoozeIcon() { return <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M8 4.8v3.4l2.2 1.3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg> }
-function FavoriteIcon() { return <svg viewBox="0 0 16 16"><path d="m8 2 1.8 3.6 4 .6-2.9 2.8.7 4L8 11.1 4.4 13l.7-4-2.9-2.8 4-.6L8 2Z" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg> }
-function CopyIcon() { return <svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="7" height="7" rx="1" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" fill="none" stroke="currentColor" strokeWidth="1.3" /></svg> }

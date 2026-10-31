@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useI18n } from '@/i18n/i18n'
+import { useI18n, useOptionalTranslate } from '@/i18n/i18n'
 
 export function InboxListLoading({ count = 7 }: { count?: number }) {
   return (
@@ -9,12 +9,13 @@ export function InboxListLoading({ count = 7 }: { count?: number }) {
   )
 }
 
-export function InboxListEmpty({ title = 'All caught up', description = 'No notifications to show.', onShowAll }: { title?: string; description?: string; onShowAll?: () => void }) {
+export function InboxListEmpty({ title = 'All caught up', description, onShowAll }: { title?: string; description?: string; onShowAll?: () => void }) {
+  const t = useOptionalTranslate()
   return (
     <div className="flow-inbox-list-state flow-inbox-list-state--message" role="status" aria-live="polite">
-      <strong>{title}</strong>
-      <span>{description}</span>
-      {onShowAll && <button type="button" onClick={onShowAll}>Show all notifications</button>}
+      <strong>{t(title)}</strong>
+      {description ? <span>{t(description)}</span> : null}
+      {onShowAll && <button className="flow-inbox-list-state__ghost-action" type="button" onClick={onShowAll}>{t('Show all notifications')}</button>}
     </div>
   )
 }
@@ -55,10 +56,10 @@ export function InboxListError({ onRetry, title = 'Unable to load notifications'
   )
 }
 
-export function InboxListBoundary({ loading, error, empty, retry, onShowAll, children }: { loading: boolean; error?: boolean; empty?: boolean; retry: () => void; onShowAll?: () => void; children: ReactNode }) {
+export function InboxListBoundary({ loading, error, empty, retry, onShowAll, emptyTitle, emptyDescription, children }: { loading: boolean; error?: boolean; empty?: boolean; retry: () => void; onShowAll?: () => void; emptyTitle?: string; emptyDescription?: string; children: ReactNode }) {
   if (loading) return <InboxListLoading />
   if (error) return <InboxListError onRetry={retry} />
-  if (empty) return <InboxListEmpty onShowAll={onShowAll} />
+  if (empty) return <InboxListEmpty title={emptyTitle} description={emptyDescription} onShowAll={onShowAll} />
   return <>{children}</>
 }
 

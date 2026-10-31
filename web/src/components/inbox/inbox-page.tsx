@@ -21,6 +21,7 @@ export interface InboxPageAdapter extends InboxPersistenceAdapter {
 export interface InboxDetailRenderResult {
   content: ReactNode
   fullBleed?: boolean
+  minimalHeader?: boolean
   /** The content brings its own header (an embedded review page), so the inbox detail header is left out. */
   chromeless?: boolean
   loading?: boolean
@@ -112,6 +113,7 @@ export function InboxPage(props: InboxPageProps) {
       issues={detail.issues}
       fullBleed={detail.fullBleed}
       chromeless={detail.chromeless}
+      minimalHeader={detail.minimalHeader}
       subscribed={props.subscribed?.(selected)}
       onBack={closeDetail}
       onOpenIssue={props.onOpenIssue}
@@ -136,6 +138,7 @@ export function InboxPage(props: InboxPageProps) {
     <div className="flow-framed-workspace flow-inbox-page-composition" ref={compositionRef}>
       <InboxPageShell
         detail={preview}
+        unreadCount={props.notifications.filter(notification => !notification.read).length}
         displayOptions={props.displayOptions}
         filters={props.filters}
         filterOptions={props.filterOptions}
@@ -157,7 +160,7 @@ export function InboxPage(props: InboxPageProps) {
         {(props.filterHiddenCount ?? 0) > 0 && !props.notifications.length ? (
           <InboxListFilteredEmpty hiddenCount={props.filterHiddenCount ?? 0} onClear={() => props.onFiltersChange?.([])} />
         ) : (
-          <InboxListBoundary loading={Boolean(props.loading)} error={props.loadError} empty={!props.notifications.length} onShowAll={props.onShowAllNotifications} retry={props.onRetryLoad}>
+          <InboxListBoundary loading={Boolean(props.loading)} error={props.loadError} empty={!props.notifications.length} emptyTitle={props.displayOptions.showRead ? 'No notifications' : 'No unreads'} onShowAll={props.onShowAllNotifications} retry={props.onRetryLoad}>
             <InboxNotificationList
               notifications={props.notifications}
               filterHiddenCount={props.filterHiddenCount}

@@ -56,15 +56,14 @@ export interface InboxFilterBuilderProps {
 const properties: Array<{ id: InboxFilterProperty; label: string }> = [
   { id: 'notificationType', label: 'Notification type' },
   { id: 'from', label: 'From' },
+  { id: 'team', label: 'Team' },
   { id: 'project', label: 'Project' },
   { id: 'initiative', label: 'Initiative' },
   { id: 'issuePriority', label: 'Issue priority' },
   { id: 'issueStatusType', label: 'Issue status type' },
   { id: 'reviewStatus', label: 'Review status' },
 ]
-
-/** Team is only offered by the phone sheet; keep it out of the desktop picker but resolvable in applied chips. */
-const allProperties: Array<{ id: InboxFilterProperty; label: string }> = [...properties, { id: 'team', label: 'Team' }]
+const allProperties = properties
 
 // Initiative and review status only appear when there is something to filter on.
 const OPTIONAL_PROPERTIES = new Set<InboxFilterProperty>(['initiative', 'reviewStatus'])
@@ -387,7 +386,7 @@ function PropertyPicker({
 }) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
-  const [activeIndex, setActiveIndex] = useState(-1)
+  const [activeIndex, setActiveIndex] = useState(0)
   const [focusValuePicker, setFocusValuePicker] = useState(false)
   const hoverTimerRef = useRef<number | undefined>(undefined)
   const propertyRefs = useRef(new Map<string, HTMLButtonElement>())
