@@ -17,6 +17,7 @@ test('desktop settings keep measured select text, workspace sections, empty head
   expect((await page.locator('.pst-row-main').first().boundingBox())?.width).toBe(608)
   await page.goto(`/${workspaceKey}/settings/members`)
   const role = page.getByRole('button', { name: 'Order by Role', exact: true })
+  await expect(page.locator('.settings-main')).toHaveCSS('scrollbar-gutter', 'auto')
   expect(Math.abs((await role.boundingBox())!.x - 978.99)).toBeLessThanOrEqual(1)
   const response = await request.post('/api/labels', { headers: { 'X-Workspace-Key': workspaceKey }, data: { name: '[audit] Geometry', resourceType: 'issue' } })
   expect(response.status()).toBe(201)

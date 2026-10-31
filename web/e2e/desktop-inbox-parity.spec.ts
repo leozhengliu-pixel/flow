@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test'
 import { test } from './workspace-fixture'
 
-test.use({ viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false })
+test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, isMobile: false, hasTouch: false })
 
 test.beforeEach(async ({ request, workspaceKey }) => {
   const headers = { 'X-Workspace-Key': workspaceKey }
