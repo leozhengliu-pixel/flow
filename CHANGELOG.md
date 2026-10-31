@@ -17,6 +17,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Refine phone workspace fiscal controls, initials, description wrapping, and onboarding text tones.
 - Restore the phone workspace trigger's open pill and the keyboard-selected workspace-menu row highlight.
 - Stack workspace general fields on phones, refine time and region spacing, and keep announcement settings accessible without changing desktop layout.
 - Match desktop project and initiative add-view glyphs and empty initiative property labels, lower the initiative description placeholder, and verify sortable team settings rows without changing phone layouts.

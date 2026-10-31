@@ -13,6 +13,7 @@ import {
   type ReactNode,
 } from "react";
 import { persistUserSettings } from '@/lib/settings-persistence';
+import { avatarInitials } from '@/lib/avatar-initials';
 import { settingsSidebarTeams } from './settings-sidebar-teams';
 import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
@@ -1640,14 +1641,12 @@ function WorkspacePage(
           title="First month of the fiscal year"
           description="Used when grouping projects and issues quarterly, half-yearly, and yearly"
         >
-          {phone ? <select className="settings-select" aria-label={t("First month of the fiscal year")} value={props.data.workspaceSettings.fiscalMonth} onChange={(event) => void savePreferences({ fiscalMonth: event.target.value })}>
-            {months.map(month => <option key={month} value={month}>{t(month)}</option>)}
-          </select> : <Select
+          <Select
             label="First month of the fiscal year"
             value={props.data.workspaceSettings.fiscalMonth}
             options={months}
             onChange={(value) => void savePreferences({ fiscalMonth: value })}
-          />}
+          />
         </Row>
         <Row
           title="Region"
@@ -1806,7 +1805,7 @@ function WorkspaceLogoControl({
         {data.workspace.logoUrl ? (
           <img alt={t("Workspace logo")} src={data.workspace.logoUrl} />
         ) : (
-          <span className="workspace-logo-initials" data-i18n-ignore>{initials(data.workspace.name)}</span>
+          <span className="workspace-logo-initials" data-i18n-ignore>{phone ? avatarInitials(data.workspace.name) : initials(data.workspace.name)}</span>
         )}
         {phone ? <WorkspaceEditGlyph /> : <Upload />}
       </button>
