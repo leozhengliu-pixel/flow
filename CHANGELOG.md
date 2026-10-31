@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Use the measured solid border and border-box sizing for phone initiative update cards.
+
 - Refine initiative phone update-card strokes, comment controls and compact activity timestamps.
 
 - Match initiative overview spacing, property pills, header controls and latest update cards on phones without changing desktop layout.
