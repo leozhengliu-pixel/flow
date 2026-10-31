@@ -6,7 +6,7 @@ import type { Invitation, WorkspaceMember } from '@/types/flow'
  */
 export const MEMBER_FILTERS = ['All', 'Admins', 'Members', 'Guests', 'Applications', 'Pending invites', 'Suspended', 'Left workspace'] as const
 export type MemberFilter = (typeof MEMBER_FILTERS)[number]
-export type MemberSort = 'name' | 'email' | 'status' | 'joined' | 'lastSeen'
+export type MemberSort = 'name' | 'email' | 'status' | 'role' | 'joined' | 'lastSeen'
 export type MemberGroup = 'Active' | 'Invited' | 'Application' | 'Inactive'
 export const MEMBER_GROUPS: MemberGroup[] = ['Active', 'Invited', 'Application', 'Inactive']
 
@@ -114,6 +114,7 @@ function entryValue(entry: MemberEntry, context: MemberSortContext): string | nu
       case 'name':
       case 'email': return invitation.email.toLowerCase()
       case 'status': return STATUS_PRIORITY[title(invitation.role)] ?? 9
+      case 'role': return invitation.role
       case 'joined': return new Date(invitation.createdAt).getTime()
       default: return -1
     }
@@ -123,6 +124,7 @@ function entryValue(entry: MemberEntry, context: MemberSortContext): string | nu
     case 'name': return (member.user.displayName || member.user.name).toLowerCase()
     case 'email': return (member.user.email ?? '').toLowerCase()
     case 'status': return STATUS_PRIORITY[memberStatusLabel(member)] ?? 9
+    case 'role': return member.role
     case 'joined': return new Date(member.joinedAt).getTime()
     default: return context.isOnline(member) ? context.now : member.lastSeenAt ? new Date(member.lastSeenAt).getTime() : -1
   }

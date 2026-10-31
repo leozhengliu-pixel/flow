@@ -59,6 +59,7 @@ describe("workspace members", () => {
     const entries: MemberEntry[] = [suspendedGuest, person, admin].map((item) => ({ kind: "member", key: item.user.id, member: item }));
     const context = { descending: false, isOnline: (item: WorkspaceMember) => item === admin, now: Date.parse("2026-10-14T00:00:00.000Z") };
     expect(sortMemberEntries(entries, { ...context, sort: "status" }).map((entry) => entry.key)).toEqual(["admin", "person", "guest"]);
+    expect(sortMemberEntries(entries, { ...context, sort: "role" }).map((entry) => entry.key)).toEqual(["admin", "guest", "person"]);
     expect(sortMemberEntries(entries, { ...context, sort: "lastSeen" }).map((entry) => entry.key)).toEqual(["guest", "person", "admin"]);
     expect(sortMemberEntries(entries, { ...context, sort: "name", descending: true }).map((entry) => entry.key)).toEqual(["guest", "person", "admin"]);
   });

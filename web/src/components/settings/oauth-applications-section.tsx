@@ -8,6 +8,7 @@ import { AppLogo } from "@/components/ui/app-logo";
 
 import { SettingsRow as Row, SettingsSection as Section } from "./settings-primitives";
 import "./oauth-application-settings.css";
+import { SettingsDocsLink } from './settings-docs-link';
 
 /**
  * An application's icon: its uploaded/linked image, else the brand mark of a well-known client (Claude, Cursor, …, matched
@@ -24,7 +25,7 @@ export function OAuthApplicationsSection({ data }: { data: BootstrapData }) {
   const apps = data.oauthApplications;
   const createPath = applicationSettingsPath(data.workspace.urlKey, "new");
   return (
-    <Section className="oauth-app-section" title={t("OAuth applications")} description={t("Manage your organization's OAuth applications.")}>
+    <Section className="oauth-app-section" title={t("OAuth applications")} description={<>{t("Manage your organization's OAuth applications.")} <SettingsDocsLink file="oauth.md"/></>}>
       {apps.length ? (
         <>
           <div className="oauth-app-list-header">

@@ -260,7 +260,7 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
     return true
   }
   const startCreating = (kind: 'label'|'group') => { setCreating({ kind }); setSelected([]) }
-  const columnLabel = (column: LabelColumn) => t(({ title: 'Name', description: 'Description', team: 'Team', rules: 'Rules', usage: resourceType === 'issue' ? 'Issues' : resourceType === 'project' ? 'Projects' : 'Initiatives', lastAppliedAt: 'Last applied', createdAt: 'Created', archivedAt: 'Archived' } as Record<LabelColumn, string>)[column])
+  const columnLabel = (column: LabelColumn) => t(({ title: 'Name', description: 'Description', team: 'Team', rules: width >= 1024 ? 'Used in' : 'Rules', usage: resourceType === 'issue' ? 'Issues' : resourceType === 'project' ? 'Projects' : 'Initiatives', lastAppliedAt: 'Last applied', createdAt: 'Created', archivedAt: 'Archived' } as Record<LabelColumn, string>)[column])
   const sort = (column: LabelColumn) => setDisplay({ ...display, ordering: column, descending: column === ordering ? !display.descending : column === 'rules' || column === 'usage' || column === 'archivedAt' })
 
   return <TooltipProvider delayDuration={450} skipDelayDuration={400}><div className="domain-labels-page" data-i18n-ignore>
@@ -285,8 +285,8 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
       />
     </div>
     <LabelFilterBar teams={activeTeams} filters={filters} onChange={setFilters}/>
-    <section className="settings-section domain-labels-section"><div className="domain-labels-grid" style={{ gridTemplateColumns: labelGridTemplate(columns, resourceType) }}>
-      {(hasRows || creating || team) && <div className="domain-labels-table-header">
+    <section className="settings-section domain-labels-section"><div className="domain-labels-grid" style={{ gridTemplateColumns: labelGridTemplate(columns, resourceType, width >= 1024) }}>
+      {(hasRows || creating || team || (width >= 1024 && resourceType !== 'initiative')) && <div className="domain-labels-table-header">
         {columns.map(column => <LabelSortHeader key={column} column={column} label={columnLabel(column)} active={ordering === column} descending={display.descending} onSort={() => sort(column)}/>)}
       </div>}
       {creating?.kind === 'group' && (
@@ -616,7 +616,7 @@ function BulkLabelBar({ count, archived, canMerge, onFavorite, onArchive, onMerg
 }
 
 function shortDate(value: string, locale: 'en-US'|'zh-CN') { return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(new Date(value)) }
-function longDate(value: string, locale: 'en-US'|'zh-CN') { return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value)) }
+function longDate(value: string, locale: 'en-US'|'zh-CN') { return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(value)) }
 function relativeDate(value: string, locale: 'en-US'|'zh-CN') { const days = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 86400000)); if (locale === 'zh-CN') { if (days === 0) return '今天'; if (days < 30) return `${days} 天前` } else { if (days === 0) return 'Today'; if (days === 1) return '1 day ago'; if (days < 30) return `${days} days ago` } return shortDate(value, locale) }
 
 function message(error:unknown){return error instanceof Error?error.message:'Could not save setting'}

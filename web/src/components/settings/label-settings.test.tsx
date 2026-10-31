@@ -111,7 +111,7 @@ describe('label settings structure', () => {
       slaRules: [{ id: 'sla', name: 'Bugs', teamIds: [], filters: { label: 'b' }, targetMinutes: 60, pauseStatuses: [], businessHours: false, enabled: true }],
       triageRoutingRules: [{ id: 'tr', teamId: 'team-1', name: 'Route bugs', position: 0, enabled: true, conditions: { labelId: 'b' }, responsibilityId: 'x', labelIds: [] }],
     } as never)
-    expect(screen.getByRole('button', { name: 'Order by Rules' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Order by Used in' })).toBeVisible()
     expect(screen.getByText('2')).toBeVisible()
   })
 })

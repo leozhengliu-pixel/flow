@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useCurrentTimeMs } from "@/hooks/use-current-time";
+import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import { useNavigate } from "react-router-dom";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { ArrowDown, ArrowUp, Check, ChevronDown, Command, MoreHorizontal, Search, UserRound, X } from "lucide-react";
@@ -109,6 +110,7 @@ function installationIdOf(userId: string) {
  * active or of suspended people with bulk actions, and the reference app's empty states.
  */
 export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; onReload: () => Promise<void> }) {
+  const desktop = useDesktopSettings();
   const { t } = useI18n();
   const navigate = useNavigate();
   const workspace = data.workspace.urlKey;
@@ -548,7 +550,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
             <div className="settings-members-columns">
               {sortButton("name", "Name")}
               {sortButton("email", "Email")}
-              {sortButton("status", "Status")}
+              {sortButton(desktop ? "role" : "status", desktop ? "Role" : "Status")}
               <span>{t("Teams")}</span>
               {sortButton("joined", "Joined")}
               {sortButton("lastSeen", "Last seen")}

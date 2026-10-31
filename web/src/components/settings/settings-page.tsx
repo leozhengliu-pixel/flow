@@ -42,6 +42,7 @@ import { toast } from "@/lib/toast";
 import { useI18n } from "@/i18n/i18n";
 import { useChatPlatform } from "@/lib/chat-platform";
 import { usePhoneLayout } from "@/hooks/use-phone-layout";
+import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import { KeyboardShortcutsDialog } from "@/components/layout/keyboard-shortcuts-dialog";
 
 import {
@@ -123,7 +124,6 @@ import "./settings.css";
 import "./workflow-settings.css";
 import "./advanced-settings.css";
 import "./settings-parity.css";
-
 function SettingsMobileMenuGlyph() {
   return (
     <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
@@ -142,6 +142,9 @@ function SettingsMobileBackGlyph() {
     </svg>
   );
 }
+import './desktop-settings.css';
+import { SettingsDocsLink } from './settings-docs-link';
+import { WorkspaceAnnouncements } from './workspace-announcements';
 import { WebhookEditPage } from "./webhook-edit-page";
 import {
   webhookResourceLabel,
@@ -496,6 +499,7 @@ const DEFAULT_VALUES: StoredSettings["values"] = {
 export function SettingsPage(props: SettingsPageProps) {
   const { locale, t } = useI18n();
   const phoneLayout = usePhoneLayout();
+  const desktop = useDesktopSettings();
   const [query, setQuery] = useState("");
   const [mobileNav, setMobileNav] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -509,7 +513,7 @@ export function SettingsPage(props: SettingsPageProps) {
   // item (centered), like the reference sidebar; visible items stay put.
   useEffect(() => {
     const nav = sidebarRef.current?.querySelector<HTMLElement>("nav");
-    const active = nav?.querySelector<HTMLElement>("button.active");
+    const active = nav?.querySelector<HTMLElement>(".active");
     if (!nav || !active) return;
     const navBox = nav.getBoundingClientRect();
     const box = active.getBoundingClientRect();
@@ -532,7 +536,7 @@ export function SettingsPage(props: SettingsPageProps) {
           .filter((item) => workspaceSettingsAccess(props.data, item.id) !== "hidden")
           .map((item) => item.id === "integrations" && isWorkspaceAdmin(props.data) ? { ...item, label: "All integrations" } : item),
       })).filter((section) => section.items.length);
-      if (!phoneLayout) return sections;
+      if (!phoneLayout && !desktop) return sections;
       // On phones the drawer lists the workspace's MCP connector controls in
       // Administration, between Security and API, like the reference drawer.
       return sections.map((section) => section.title !== "Administration" ? section : {
@@ -542,7 +546,7 @@ export function SettingsPage(props: SettingsPageProps) {
           : [item]),
       });
     },
-    [props.data, phoneLayout],
+    [props.data, phoneLayout, desktop],
   );
   const accessiblePageIds = useMemo(
     () => new Set(visible.flatMap(section => section.items.map(item => item.id))),
@@ -670,10 +674,10 @@ export function SettingsPage(props: SettingsPageProps) {
     <>
       <div className="settings-app">
         <aside ref={sidebarRef} className={`settings-sidebar${mobileNav ? " open" : ""}`}>
-          <button className="settings-back" onClick={props.onBack}>
+          {desktop ? <a className="settings-back" href={`/${encodeURIComponent(props.data.workspace.urlKey)}`} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); props.onBack(); } }}><SettingsBackChevronGlyph size={14}/>{t('Back to app')}</a> : <button className="settings-back" onClick={props.onBack}>
             {phoneLayout ? <SettingsBackChevronGlyph size={14} /> : <ArrowLeft size={16} />}
             {t("Back to app")}
-          </button>
+          </button>}
           <label className="settings-search">
             {phoneLayout ? <SettingsSearchGlyph size={16} /> : <Search size={15} />}
             <input
@@ -749,6 +753,7 @@ export function SettingsPage(props: SettingsPageProps) {
                 ) : section.items.map((item) => (
                   <SettingsNavButton
                     key={item.id}
+                    href={desktop ? settingsPath(props.data.workspace.urlKey, item.id) : undefined}
                     item={item}
                     active={settingsNavPage(props.page) === item.id && item.label !== "MCP connectors"}
                     onClick={() => {
@@ -939,12 +944,15 @@ function SettingsNavButton({
   item,
   active,
   onClick,
+  href,
 }: {
   item: NavItem;
   active: boolean;
   onClick: () => void;
+  href?: string;
 }) {
   const { t } = useI18n();
+  if (href) return <a href={href} aria-current={active ? 'page' : undefined} className={`settings-nav-link${active ? ' active' : ''}`} onPointerEnter={() => { void preloadSettingsPage(item.id).catch(() => undefined); }} onFocus={() => { void preloadSettingsPage(item.id).catch(() => undefined); }} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); onClick(); } }}><SettingsNavGlyph name={item.glyph}/><span>{t(item.label)}</span></a>;
   return (
     <button aria-current={active ? "page" : undefined} className={active ? "active" : ""} onPointerEnter={() => { void preloadSettingsPage(item.id).catch(() => undefined); }} onFocus={() => { void preloadSettingsPage(item.id).catch(() => undefined); }} onClick={onClick}>
       <SettingsNavGlyph name={item.glyph} />
@@ -1564,6 +1572,8 @@ function WorkspacePage(
     setValue: (key: string, value: string | boolean) => void;
   },
 ) {
+  const { t } = useI18n();
+  const desktop = useDesktopSettings();
   const [name, setName] = useState(props.data.workspace.name);
   const [urlKey, setUrlKey] = useState(props.data.workspace.urlKey);
   const [confirm, setConfirm] = useState(false);
@@ -1647,7 +1657,7 @@ function WorkspacePage(
         </Row>
         <Row
           title="Region"
-          description="Set when a workspace is created and cannot be changed."
+          description={<>{t('Set when a workspace is created and cannot be changed.')} <SettingsDocsLink file="configuration.md" label="Read more"/></>}
         >
           <span className="settings-static">
             {workspaceRegionLabel(props.data.workspace.region)}
@@ -1671,6 +1681,7 @@ function WorkspacePage(
             <ChevronRight size={14} />
           </span>
         </Row>
+        {desktop && <WorkspaceAnnouncements data={props.data} onReload={props.onReload}/>}
         <Row title="Default home view">
           <Select
             label="Default home view"
@@ -2276,6 +2287,7 @@ function SecurityPage({
   onReload: () => Promise<void>;
   onNavigate: (page: SettingsPageId, teamKey?: string, teamSection?: TeamSettingsSection) => void;
 }) {
+  const { t } = useI18n();
   const [settings, setSettings] = useState(data.workspaceSettings);
   const [uploadPolicyOpen, setUploadPolicyOpen] = useState(false);
   const [privacyDialog, setPrivacyDialog] = useState<"support" | "health" | null>(null);
@@ -2335,7 +2347,7 @@ function SecurityPage({
           {toggle("Enable invite links", "inviteLinksEnabled")}
           <WorkspaceInviteLinkRow data={data} enabled={Boolean(settings.inviteLinksEnabled)} />
         </Group>
-        <Group title="Workspace login and restrictions" description="Anyone with an email address at these domains is allowed to sign up for this workspace.">
+        <Group title="Workspace login and restrictions" description={<>{t('Anyone with an email address at these domains is allowed to sign up for this workspace.')} <SettingsDocsLink file="auth-oidc-trust.md"/></>}>
           <ApprovedDomainRows
             domains={settings.allowedDomains ?? []}
             onChange={(allowedDomains) => void save({ ...settings, allowedDomains })}
@@ -2548,6 +2560,7 @@ function ApiPage({
   onNavigate: (page: SettingsPageId) => void;
   onReload: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [settings, setSettings] = useState(data.workspaceSettings);
   useResetOnChange([data.workspaceSettings], () => setSettings(data.workspaceSettings))
@@ -2586,11 +2599,11 @@ function ApiPage({
   };
   return (
     <>
-      <PageTitle description="Flow’s API provides a programmable interface to your data. Use it to build public or private apps, workflows, and integrations for Flow.">
+      <PageTitle description={<>{t('Flow’s API provides a programmable interface to your data. Use it to build public or private apps, workflows, and integrations for Flow.')} <SettingsDocsLink file="api.md"/></>}>
         API
       </PageTitle>
       <OAuthApplicationsSection data={data} />
-      <Section title="Webhooks" description="Webhooks allow you to receive HTTP requests when an entity is created, updated, or deleted.">
+      <Section title="Webhooks" description={<>{t('Webhooks allow you to receive HTTP requests when an entity is created, updated, or deleted.')} <SettingsDocsLink file="webhooks.md"/></>}>
         {data.webhooks.map((item) => (
           <Row
             key={item.id}

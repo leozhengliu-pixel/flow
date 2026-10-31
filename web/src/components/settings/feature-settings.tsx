@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { IntegrationBrandIcon } from './integration-brand-icon';
+import { DesktopIntegrations } from './desktop-integrations';
+import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import {
   integrationCategories,
   integrationDisplayName,
@@ -360,6 +362,7 @@ function EmojisPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<voi
 }
 
 function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:IntegrationProvider|string)=>void;onReload:()=>Promise<void>}) {
+  const desktop = useDesktopSettings();
   const {t}=useI18n();
   const [query,setQuery]=useState("");
   // Only integrations with a working backend are listed; placeholders are not.
@@ -369,6 +372,7 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
   const sections = integrationCategories(list).map(category => ({ category, items: list.filter(item => item.category === category) }));
   // Authorized applications are not integrations; Settings › Applications lists them.
   const enabledCount = data.integrationConnections.filter(isInstalledIntegrationConnection).length;
+  if (desktop) return <DesktopIntegrations data={data} onOpen={onOpen}/>;
   return <div className="feature-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with a wide variety of add-ons and integrations">
     <div className="feature-integration-toolbar">
       <div className="feature-integration-search"><Search size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div>

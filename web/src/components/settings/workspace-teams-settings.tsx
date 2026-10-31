@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Archive, ArchiveRestore, MoreHorizontal, RotateCcw, Search, Settings, SquareStack, Trash2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Archive, ArchiveRestore, ArrowDown, ArrowUp, MoreHorizontal, RotateCcw, Search, Settings, SquareStack, Trash2 } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import { toast } from "@/lib/toast";
 
 import {
@@ -14,13 +15,14 @@ import { confirmAction } from "@/components/ui/action-dialog-service";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { useI18n } from "@/i18n/i18n";
 import { deleteTeam, listDeletedTeams, restoreDeletedTeam, updateTeam } from "@/lib/api";
-import { teamIssuesPath } from "@/lib/app-routes";
+import { settingsPath, teamIssuesPath } from "@/lib/app-routes";
 import { teamContentAccessible } from "@/lib/team-access";
 import { DELETE_TEAM_DESCRIPTION } from "@/lib/team-deletion";
 import type { BootstrapData, DeletedTeam, Team } from "@/types/flow";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
 
 type Visibility = "Active" | "Retired" | "Recently deleted";
+type TeamSort = 'name' | 'description' | 'visibility' | 'members' | 'issues' | 'created';
 
 
 /** Workspace teams table: filter, visibility, members, issues, created. */
@@ -39,6 +41,9 @@ export function WorkspaceTeamsSettings({
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("Active");
+  const desktop = useDesktopSettings();
+  const [sort, setSort] = useState<TeamSort>('name');
+  const [descending, setDescending] = useState(false);
   const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
   const visibilities: Visibility[] = admin ? ["Active", "Retired", "Recently deleted"] : ["Active", "Retired"];
   const [deleted, setDeleted] = useState<DeletedTeam[]>();
@@ -68,13 +73,27 @@ export function WorkspaceTeamsSettings({
   const teams = data.teams
     .filter((team) => (visibility === "Retired" ? Boolean(team.retiredAt) : !team.retiredAt))
     .filter((team) => !normalized || `${team.name} ${team.key}`.toLowerCase().includes(normalized))
-    .sort((left, right) => left.name.localeCompare(right.name));
-  const visibilityLabel = (team: Team) => {
+    .sort((left, right) => {
+      const value = (team: Team): string | number => {
+        switch (sort) {
+          case 'description': return data.teamSettings?.[team.id]?.description ?? '';
+          case 'visibility': return visibility === 'Retired' ? team.retiredAt ?? '' : t(visibilityLabel(team));
+          case 'members': return memberCounts.get(team.id) ?? 0;
+          case 'issues': return issueCounts.get(team.id) ?? 0;
+          case 'created': return team.createdAt ?? '';
+          default: return team.name;
+        }
+      };
+      const a = value(left), b = value(right);
+      const compared = typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b));
+      return (descending ? -compared : compared) || left.name.localeCompare(right.name);
+    });
+  function visibilityLabel(team: Team) {
     const access = data.teamSettings?.[team.id]?.access;
     if (team.private || access === "private") return "Private";
     if (access === "restricted") return "Restricted";
     return "Workspace";
-  };
+  }
   const run = async (action: () => Promise<unknown>, success: string) => {
     try {
       await action();
@@ -110,6 +129,7 @@ export function WorkspaceTeamsSettings({
     URL.revokeObjectURL(url);
   };
   const count = (value: number) => (value ? value.toLocaleString() : "-");
+  const header = (key: TeamSort, label: string) => desktop ? <span role="columnheader" aria-sort={sort === key ? descending ? 'descending' : 'ascending' : 'none'}><button type="button" aria-label={`${t('Order by')} ${t(label)}`} onClick={() => { if (sort === key) setDescending(value => !value); else { setSort(key); setDescending(key === 'members' || key === 'issues'); } }}>{t(label)}{sort === key && (descending ? <ArrowDown size={12}/> : <ArrowUp size={12}/>)}</button></span> : <span>{t(label)}</span>;
   return (
     <div className="settings-members-page settings-teams-page" data-i18n-ignore>
       <SettingsPageTitle>{t("Teams")}</SettingsPageTitle>
@@ -136,7 +156,7 @@ export function WorkspaceTeamsSettings({
           </button>
         )}
         <button className="settings-action primary" type="button" onClick={onCreate}>
-          {t("Create team")}
+          {t(desktop ? "Create new team" : "Create team")}
         </button>
       </div>
       {visibility === "Recently deleted" ? (
@@ -154,12 +174,12 @@ export function WorkspaceTeamsSettings({
       ) : (
       <div className="settings-members-directory">
         <div className="settings-members-columns">
-          <span>{t("Name")}</span>
-          <span>{t("Description")}</span>
-          <span>{t(visibility === "Retired" ? "Retired" : "Visibility")}</span>
-          <span>{t("Members")}</span>
-          <span>{t("Issues")}</span>
-          <span>{t("Created")}</span>
+          {header('name', 'Name')}
+          {header('description', 'Description')}
+          {header('visibility', visibility === 'Retired' ? 'Retired' : 'Visibility')}
+          {header('members', 'Members')}
+          {header('issues', 'Issues')}
+          {header('created', 'Created')}
           <span />
         </div>
         {teams.length > 0 && (
@@ -188,9 +208,9 @@ export function WorkspaceTeamsSettings({
             </span>
             <span className="settings-teams-description">{data.teamSettings?.[team.id]?.description ?? ""}</span>
             <span>{t(visibility === "Retired" && team.retiredAt ? formatDate(team.retiredAt, { dateStyle: "medium" }) : visibilityLabel(team))}</span>
-            <span>{count(memberCounts.get(team.id) ?? 0)}</span>
-            <span>{count(issueCounts.get(team.id) ?? 0)}</span>
-            <span>{team.createdAt ? formatDate(team.createdAt, { month: "short", day: "numeric" }) : "-"}</span>
+            <span>{desktop ? <Link className="settings-team-count" to={settingsPath(data.workspace.urlKey, 'team', team.key, 'members')} onClick={event => event.stopPropagation()}>{count(memberCounts.get(team.id) ?? 0)}</Link> : count(memberCounts.get(team.id) ?? 0)}</span>
+            <span>{desktop && teamContentAccessible(data, team) ? <Link className="settings-team-count" to={teamIssuesPath(data.workspace.urlKey, team.key)} onClick={event => event.stopPropagation()}>{count(issueCounts.get(team.id) ?? 0)}</Link> : count(issueCounts.get(team.id) ?? 0)}</span>
+            <span title={team.createdAt ? `${t('Created')} ${formatDate(team.createdAt, { dateStyle: 'medium', timeStyle: 'medium' })}` : undefined}>{team.createdAt ? formatDate(team.createdAt, { month: "short", day: "numeric" }) : "-"}</span>
             <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
