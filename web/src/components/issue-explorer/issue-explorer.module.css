@@ -109,6 +109,7 @@
   [data-issue-explorer] [data-content-view-breadcrumb]{width:156px;max-width:156px;flex:0 0 156px;overflow:hidden}
   [data-issue-explorer] [data-content-view-breadcrumb]>span{min-width:0;overflow:hidden}
   [data-issue-explorer] [data-content-view-breadcrumb]>span:first-child{flex:1}
+  [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb]{width:auto;max-width:100%;flex:0 1 auto}
   [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb]>span:first-child{flex:0 1 auto}
   [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb]{width:156px;max-width:156px;flex:0 0 156px}
   [data-issue-explorer] [data-content-view-breadcrumb] a{min-width:0;max-width:100%;overflow:hidden}
