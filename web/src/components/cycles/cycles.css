@@ -21,14 +21,18 @@
   .flow-cycle-header [data-content-view-subheader]{border-bottom:0;margin-top:-12px;gap:6px}
   .flow-cycle-detail [data-content-view-breadcrumb] a,
   .flow-cycle-detail [data-content-view-breadcrumb] [data-current] strong{color:var(--text)}
-  .flow-cycle-detail [data-content-view-breadcrumb] > span:nth-child(2) a > span{display:block;width:42.21875px;height:16px;overflow:visible;font-size:16px !important;font-weight:400 !important;line-height:16px !important}
+  .flow-cycle-detail [data-content-view-breadcrumb] > span:nth-child(2) a > span{display:block;overflow:visible;font-size:13px !important;font-weight:500 !important;line-height:normal !important}
   .flow-cycle-detail [data-content-view-favorite],
   .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{box-sizing:border-box;width:32px !important;height:32px !important;flex:0 0 32px !important;padding:0 2px;border:.5px solid transparent;color:var(--text)}
   .flow-cycle-detail [data-content-view-favorite],
   .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{font-size:12px !important;font-weight:500 !important;line-height:normal !important}
   .flow-cycle-detail [data-content-view-favorite]{margin-left:2px}
   .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{margin-left:2px}
-  .flow-cycle-detail .cycle-switcher{box-sizing:border-box;width:81px;height:28px;padding:0 0 0 24px}
+  .flow-cycle-detail .cycle-switcher{position:relative;box-sizing:border-box;width:81px;height:28px;padding:0 0 0 24px}
+  .flow-cycle-detail .cycle-switcher-play{position:absolute;left:-8px;top:-2px;width:32px;height:32px;display:grid;place-items:center;border:.5px solid var(--theme-border-strong);border-radius:50%;color:var(--bright)}
+  .flow-cycle-detail .cycle-switcher-play svg{width:16px;height:16px;fill:currentColor}
+  .flow-cycle-detail .cycle-switcher-chevron{position:absolute;right:0;top:9.25px;width:8px;height:9px;display:grid;place-items:center;color:var(--text)}
+  .flow-cycle-detail .cycle-switcher-chevron svg{width:8px;height:9px;fill:currentColor}
   .flow-cycle-detail [data-content-view-breadcrumb] > span:first-child{display:none !important}
   .flow-cycle-detail [data-content-view-breadcrumb] > span:nth-child(2) > span:first-child{display:none}
   .flow-cycle-toolbar{gap:6px !important}
