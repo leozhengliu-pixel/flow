@@ -159,3 +159,24 @@
   .row .estimateChip :global(.estimate-icon){color:var(--phone-icon-fg)}
   .estimateChip :global(.estimate-chip__value){min-width:24px;border-style:none;font-size:12px;font-weight:450;line-height:normal;color:var(--issue-muted)}
 }
+
+@media(min-width:768px){
+  .row{--row-columns:8px var(--row-lead-column) 16px var(--issue-identifier-width,max-content) 16px minmax(80px,1fr) 60px 18px}
+  .priorityTrigger,.statusTrigger{width:16px;height:36px;min-width:16px;min-height:36px;padding:0;border-radius:0;background:transparent}
+  .priorityTrigger{margin-left:0}
+  .priorityTrigger>.priority{width:16px;height:16px}
+  .statusTrigger svg{width:14px;height:14px}
+  .identifier,.title,.rowDate{line-height:normal}
+  .estimateChip{height:36px;padding:0;border:0;border-radius:0;background:transparent;gap:2px}
+  .estimateChip :global(.estimate-chip__value){line-height:normal}
+  .groupHeader{background:var(--my-issues-details-bg);gap:4px;padding-left:4px}
+  .collapseButton{width:26px;height:28px;flex:0 0 26px;padding:4px;opacity:0}
+  .groupHeader:hover .collapseButton,.collapseButton:focus-visible{opacity:1}
+  .groupChevron{display:none}
+  .groupCaret{display:block;width:16px;height:16px;transform:rotate(90deg)}
+  .collapseButton[aria-expanded=false] .groupCaret{transform:none}
+  .groupState{width:16px;height:16px;margin-left:0;margin-right:3.5px}
+  .groupState svg{width:14px;height:14px}
+  .groupName{line-height:normal}
+  .groupCount{font-size:13px;line-height:normal}
+}

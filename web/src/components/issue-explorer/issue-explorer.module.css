@@ -44,6 +44,14 @@
 .createPanel .cardBar{min-height:28px;flex:none;align-items:flex-start;padding:0;border:0;background:transparent}
 .createPanel .cardBar>:first-child{min-height:28px;align-items:center}
 
+@media(min-width:801px){
+  .filterBar{min-height:45px;flex:0 0 45px;margin:0 8px 8px;padding:10px;border:.5px solid var(--theme-border);border-radius:8px;background:var(--inbox-applied-panel-bg)}
+  .filterBar :global([class*="_condition_"]){height:24px}
+  .filterBar :global([class*="_condition_"]>span),.filterBar :global([class*="_condition_"]>button){height:23px}
+  .filterBar :global([class*="_commands_"] button:first-child){border:.5px solid var(--theme-border);border-radius:9999px}
+  .filterBar :global([class*="_commands_"] button:last-child){border-radius:9999px;background:var(--theme-surface-1)}
+}
+
 /* Phone parity for the team issues list: the reference header breadcrumb and
    toolbar metrics, plus the estimate-only group header. */
 .phoneTeamFavorite,.phoneTeamNotifications{width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--muted);font-size:12px;font-weight:500;line-height:normal;cursor:pointer}
@@ -60,6 +68,10 @@
 [data-toolbar-buttons-navigation].actions{gap:6px}
 @media(min-width:801px){
   [data-issue-explorer] [data-content-view-header][data-compact]{padding-left:18px}
+  [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite){padding-left:8px;padding-right:7.5px}
+  [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb]>span:first-child>a{height:24px;margin-left:6px;padding:0 5px 0 4px;border-radius:8px;line-height:normal}
+  [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb]>span:first-child>a>span:first-child{width:16px;height:16px;flex:0 0 16px}
+  [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [class*="headerNewIssue"]{padding-right:9px}
   .tab,.savedTab{line-height:normal}
   .insightsButton{order:-1}
 }
