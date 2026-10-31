@@ -681,6 +681,56 @@ button.document-icon.is-empty:hover,
     min-height: 708px;
     padding: 0;
   }
+
+  /* The metadata sheet uses the compact phone surface rather than the desktop
+     anchored popover. Keep its geometry independent of the edited-date label. */
+  .document-edited-popover {
+    position: relative;
+    left: -10px;
+    width: 360.19px;
+    min-width: 360.19px;
+    max-width: 360.19px;
+    border: .5px solid var(--icon-picker-page-border);
+    background: var(--document-popover-bg);
+    box-shadow: var(--shadow-control);
+    color: var(--action-menu-text);
+  }
+  .document-view-options {
+    height: 48px;
+    color: var(--action-menu-muted);
+  }
+  .document-view-options > span,
+  .document-owner-row > span:first-child,
+  .document-last-edit-row > span:first-child,
+  .document-last-edit-row time {
+    color: var(--action-menu-muted);
+  }
+  .document-view-options input[data-control="toggle"] {
+    background: var(--toggle-compact-on);
+  }
+  .document-owner-row .document-person--button {
+    width: 141.04px;
+  }
+  .document-owner-row .document-person strong,
+  .document-last-edit-row .document-person strong {
+    color: var(--action-menu-text);
+  }
+  .document-last-edit-row time {
+    flex: 0 0 102.77px;
+  }
+  .document-history-action {
+    padding: 8px;
+  }
+  .document-history-action button {
+    width: calc(100% + 1px);
+    height: 32px;
+    padding-left: 8px;
+    border-color: transparent;
+    background: var(--project-display-select-bg);
+    color: var(--action-menu-text);
+    box-shadow: none;
+  }
+  .document-history-action svg { color: var(--action-menu-text); }
   .document-icon-row { margin: 64px 0 6px; }
   .document-icon.is-empty {
     width: 24px;
