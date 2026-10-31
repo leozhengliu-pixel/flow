@@ -148,7 +148,7 @@
   :global(:root[data-theme="dark"]) .groupHeader{background:var(--phone-group-bg)}
   :global(:root[data-theme="dark"]) .groupName{color:var(--phone-group-title)}
   :global(:root[data-theme="dark"] [data-team-issue-surface="true"]) .groupName{height:15.5px;font-size:20px;line-height:25px;color:var(--bright);overflow:visible}
-  :global([data-team-issue-surface="true"]) .groupText{display:inline-block;font-size:13px;font-weight:500;line-height:normal;color:var(--phone-group-title);transform:scaleX(.795);transform-origin:left center}
+  :global([data-team-issue-surface="true"]) .groupText{position:relative;top:-6px;display:inline-block;font-size:13px;font-weight:500;line-height:normal;color:var(--phone-group-title);transform:scaleX(.795);transform-origin:left center}
   :global([data-team-issue-surface="true"]) .groupHeader:has([id^="my-issues-group-state_progress"]) .groupCount{color:var(--phone-group-started-count)}
   :global(:root[data-theme="dark"]) .groupCount{color:var(--phone-group-count)}
   :global(:root[data-theme="dark"]) .createButton{color:var(--phone-group-title);background:transparent}

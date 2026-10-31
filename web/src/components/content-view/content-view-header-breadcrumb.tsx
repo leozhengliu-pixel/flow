@@ -50,7 +50,7 @@ export function ContentViewHeaderBreadcrumbLink({
   const classNames = cn(styles.breadcrumbItem, className)
   const body = (
     <>
-      {icon ? <span className={styles.breadcrumbIcon}>{icon}</span> : null}
+      {icon ? <span className={styles.breadcrumbIcon}><span className={styles.breadcrumbIconInner}>{icon}</span></span> : null}
       <span>{children}</span>
     </>
   )
