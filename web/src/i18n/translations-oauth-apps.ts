@@ -63,7 +63,6 @@ export const oauthAppsZhCN: Record<string, string> = {
   "Create releases": "创建发布",
   "Update release stages": "更新发布阶段",
   "Move releases between stages": "在阶段之间移动发布",
-  "Agent": "智能体",
   "Let people assign work to this application or mention it.": "允许成员把工作指派给此应用或提及它。",
   "Assignable": "可指派",
   "Can be assigned and delegated issues (app:assignable)": "可被指派和委派事项（app:assignable）",
