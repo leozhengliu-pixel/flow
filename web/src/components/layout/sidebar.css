@@ -331,6 +331,7 @@
   font-weight: 500;
 }
 .sidebar-plan-button {
+  text-rendering: geometricPrecision;
   height: 24px;
   display: flex;
   align-items: center;

@@ -202,6 +202,32 @@ describe('context-aware command menu', () => {
     expect(api.searchWorkspace).toHaveBeenCalledWith('copy', [], 12, expect.any(AbortSignal))
   })
 
+  it('keeps the search group registered while replacing results and clearing the query', async () => {
+    const result = { id: 'issue-9', type: 'issue', identifier: 'TST-9', title: 'Copy editing pass' }
+    api.searchWorkspace.mockResolvedValueOnce({ results: [result] })
+    let resolveSearch!: (value: { results: typeof result[] }) => void
+    api.searchWorkspace.mockImplementationOnce(() => new Promise(resolve => { resolveSearch = resolve }))
+    const { user, onOpenChange } = setup({ kind: 'issues', source: 'detail', issues: [first] })
+    await user.type(input(), 'copy')
+    const firstResult = await screen.findByRole('option', { name: /Copy editing pass/ })
+    const group = firstResult.closest('[cmdk-group]')!
+    await user.type(input(), ' edit')
+    await waitFor(() => expect(api.searchWorkspace).toHaveBeenLastCalledWith('copy edit', [], 12, expect.any(AbortSignal)))
+    expect(group).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Copy editing pass/ })).not.toBeInTheDocument()
+    resolveSearch({ results: [result] })
+    const updated = await screen.findByRole('option', { name: /Copy editing pass/ })
+    expect(updated.closest('[cmdk-group]')).toBe(group)
+    await user.clear(input())
+    expect(group).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Copy editing pass/ })).not.toBeInTheDocument()
+    api.searchWorkspace.mockResolvedValue({ results: [result] })
+    await user.type(input(), 'copy')
+    await screen.findByRole('option', { name: /Copy editing pass/ })
+    await user.keyboard('{End}{Enter}')
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
   it('prefers the list selection over an open issue', () => {
     setup({ kind: 'issues', source: 'detail', issues: [first] })
     render(<Register context={{ kind: 'issues', source: 'selection', issues: [first, second] }}/>)

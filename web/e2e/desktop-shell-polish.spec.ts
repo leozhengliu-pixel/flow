@@ -13,7 +13,7 @@ const test = base.extend<{ issueRoute: string }>({
   },
 })
 
-test.use({ viewport: { width: 1440, height: 900 } })
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
 test.skip(({ isMobile }) => isMobile, 'desktop shell styling')
 
 test('keeps issue view widths and the add-view glyph at the desktop metrics', async ({ page, issueRoute }) => {
@@ -34,6 +34,7 @@ test('keeps issue view widths and the add-view glyph at the desktop metrics', as
   const add = page.getByRole('button', { name: 'Add new view', exact: true })
   await expect(add.locator('svg')).toHaveCSS('fill', 'lch(36.975 1.2 272)')
   await expect(page.getByRole('button', { name: 'Open insights' })).toBeVisible()
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-shell.png`, animations: 'disabled' })
 })
 
 test('uses the desktop composer glyphs, bright team text and an undivided footer', async ({ page, issueRoute }) => {
@@ -60,6 +61,7 @@ test('uses the desktop composer glyphs, bright team text and an undivided footer
   const fileChooser = page.waitForEvent('filechooser')
   await composer.getByRole('button', { name: 'Attach images, files, or videos' }).click()
   await fileChooser
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-composer.png`, animations: 'disabled' })
   await composer.getByRole('button', { name: 'Close', exact: true }).click()
   await expect(composer).toHaveCount(0)
 })

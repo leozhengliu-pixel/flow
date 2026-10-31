@@ -6,7 +6,7 @@ test.use({ viewport: { width: 1440, height: 900 } })
 
 test('defaults the saved view details open, drills into unassigned issues, and remembers the toggle', async ({ page, request, workspaceKey, issueList }) => {
   const response = await request.post('/api/views', {
-    headers: { 'X-Flow-Workspace': workspaceKey },
+    headers: { 'X-Workspace-Key': workspaceKey },
     data: { name: '[audit] Saved queue', resource: 'issues', scope: 'personal', view: 'all', filters: [], display: { grouping: 'status' } },
   })
   expect(response.status()).toBe(201)
