@@ -1,4 +1,5 @@
 .li-list-header { display: contents; }
+.li-row-content { display: contents; }
 .li-sidebar-phone, .li-phone-health { display: none; }
 
 @media (max-width: 767px) {
@@ -39,12 +40,16 @@
   .li-page .li-row > .li-select { display: grid; grid-column: 1 !important; opacity: 1; }
   .li-page .li-row > .li-row-more { display: grid; grid-column: 4 !important; opacity: 1; }
   .li-page .li-row > .li-name { grid-column: 2 !important; height: 56px; gap: 6px; }
+  .li-page .li-table .li-row { display: block; padding: 0; row-gap: normal; }
+  .li-page .li-row-content { box-sizing: border-box; height: 56px; display: grid; grid-template-columns: minmax(0, 1fr) 32px; align-items: center; column-gap: 6px; padding: 12px 18px 12px 14px; }
+  .li-page .li-row-content > .li-name { min-width: 0; display: flex; align-items: center; overflow: hidden; grid-column: 1 !important; height: 32px; gap: 6px; }
   .li-page .li-name-copy { flex: 1; }
   .li-page .li-name strong { color: var(--text); font-size: 13px; font-weight: 500; line-height: normal; letter-spacing: normal; }
   .li-page .li-name small:empty { display: none; }
   .li-page .li-row .li-initiative-icon { color: white !important; font: 400 13.3333px var(--font); line-height: normal; letter-spacing: normal; }
   .li-page .li-cell { display: none; }
   .li-page .li-cell--health { display: flex; grid-column: 3 !important; height: 56px; }
+  .li-page .li-table .li-cell--health { grid-column: 2 !important; height: 32px; }
   .li-page .li-row .li-health { box-sizing: border-box; display: grid; place-items: center; width: 32px; height: 32px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; color: var(--text); font: 500 12px var(--font); line-height: normal; letter-spacing: normal; }
   .li-page .li-row .li-health > i { display: none; }
   .li-page .li-phone-health { display: block; width: 14px; height: 14px; }

@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto'
 import { expect, test } from '@playwright/test'
+import { test as workspaceTest } from './workspace-fixture'
 
 test.describe('mobile inbox list', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
@@ -528,12 +529,8 @@ test.describe('mobile inbox list', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/reviews-created-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 
-  test('shows the phone review page with folded properties and description', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-inbox-review-detail-${testInfo.project.name}-${testInfo.retry}`
-    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: '[mobile] Review detail', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(workspaceResponse.status()).toBe(201)
+  workspaceTest('shows the phone review page with folded properties and description', async ({ page, request, workspaceKey }, testInfo) => {
+    const workspaceResponse = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
     const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
     const teamId = workspace.teams?.[0]?.id
     expect(teamId).toBeTruthy()
@@ -579,7 +576,8 @@ test.describe('mobile inbox list', () => {
     const tabs = page.locator('.review-detail-tabs')
     await expect(tabs.locator('[data-review-tab="overview"]')).toBeVisible()
     await expect(tabs.locator('[data-review-tab="changes"]')).toBeVisible()
-    await expect(tabs.locator('[data-review-tab="review"]')).toBeHidden()
+    await expect(tabs.locator('nav a')).toHaveText(['Overview', 'Diff', 'Guide'])
+    await expect(tabs.locator('[data-review-tab="review"]')).toBeAttached()
     near((await tabs.locator('[data-review-tab="changes"]').boundingBox())?.x, 95.45)
     await expect(tabs.locator('[data-review-tab="overview"]')).toHaveCSS('background-color', 'lch(16.706 0.979 272)')
     const ready = page.locator('.review-detail-tab-actions .review-pill-button.is-primary')

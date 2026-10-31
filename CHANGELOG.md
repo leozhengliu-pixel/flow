@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Keep phone review Guide after Overview and Diff, move initiative selection and row actions into the existing context menu, and remove duplicate chat-menu padding.
+
 - Move the phone conversation's toolbar action into Chat options and keep feedback after the reference chat commands.
 
 - Move phone issue prompt and coding-tool actions into Work on issue in the existing issue options menu, keeping the three copy icons compact.

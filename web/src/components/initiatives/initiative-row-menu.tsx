@@ -1,5 +1,6 @@
 import { useRef, useState, type MouseEvent, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
+import { Check } from 'lucide-react'
 import { toast } from '@/lib/toast'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
@@ -42,6 +43,8 @@ export type InitiativeRowMenuProps = {
   onNewUpdate: () => void
   onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
   onUpdateInitiative: (id: string, input: InitiativeMutationInput) => void | Promise<unknown>
+  onSelect?: () => void
+  selected?: boolean
 }
 
 type DatePick = { kind: 'target' | 'reminder'; x: number; y: number }
@@ -82,7 +85,7 @@ export function InitiativeRowMenu({ children, ...props }: InitiativeRowMenuProps
   </>
 }
 
-function InitiativeRowMenuContent({ initiative, href, initiatives, canParent, users, teams, labels, onCreateLabel, onCreateReminder, onCreateSubInitiative, onDelete, onEdit, onNewComment, onNewUpdate, onUpdate, onUpdateInitiative, onPickDate, onCloseAutoFocus }: Omit<InitiativeRowMenuProps, 'children'> & { onPickDate: (kind: DatePick['kind']) => void; onCloseAutoFocus: (event: Event) => void }) {
+function InitiativeRowMenuContent({ initiative, href, initiatives, canParent, users, teams, labels, onCreateLabel, onCreateReminder, onCreateSubInitiative, onDelete, onEdit, onNewComment, onNewUpdate, onUpdate, onUpdateInitiative, onSelect, selected, onPickDate, onCloseAutoFocus }: Omit<InitiativeRowMenuProps, 'children'> & { onPickDate: (kind: DatePick['kind']) => void; onCloseAutoFocus: (event: Event) => void }) {
   const { t } = useI18n()
   const people: FlowMenuOption[] = [{ id: '', label: 'No owner', icon: <NoAssigneeIcon size={16}/> }, ...users.map(user => ({ id: user.id, label: user.displayName || user.name, translate: false, keywords: personSearchText(user), icon: <UserAvatar className="flow-menu__avatar" avatarUrl={user.avatarUrl} name={user.displayName || user.name}/> }))]
   const matchesPerson = (option: FlowMenuOption, query: string) => {
@@ -123,6 +126,7 @@ function InitiativeRowMenuContent({ initiative, href, initiatives, canParent, us
     <FlowMenuItem icon={<FlowGlyph name="newComment"/>} label="New comment…" shortcut="N then C" onSelect={onNewComment}/>
     <FlowMenuSeparator/>
     <FlowMenuItem icon={<FlowGlyph name="delete"/>} label="Delete" onSelect={onDelete}/>
+    {onSelect && <><FlowMenuSeparator/><FlowMenuItem icon={<Check size={16}/>} label={selected ? 'Deselect initiative' : 'Select initiative'} onSelect={onSelect}/></>}
   </FlowMenuContent>
 }
 

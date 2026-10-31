@@ -3,6 +3,7 @@
  * Sub-initiatives section and its menus). Merged into zhCN by translations.ts.
  */
 export const initiativeHierarchyZhCN: Record<string, string> = {
+  "Deselect initiative": "取消选择目标",
   "Contributes to": "隶属于",
   "Remove from parent": "从父目标移除",
   "Add parent initiative…": "添加父目标…",
