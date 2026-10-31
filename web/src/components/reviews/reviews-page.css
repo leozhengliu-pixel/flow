@@ -676,6 +676,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-detail-top .review-menu-button::before,html:root body .app .review-detail-top .review-menu-button::after{content:none}
   html:root body .app .review-detail-top .review-menu-button{display:grid!important;width:32px;height:32px;flex:0 0 32px;margin:0;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font:500 12px/normal var(--font)}
   html:root body .app .review-detail-top .review-menu-button svg{display:block;width:14px;height:14px;color:var(--issue-muted);opacity:1}
+  html:root body .app .review-detail-top .review-menu-button svg{color:var(--cs-label-base)}
   html:root body .app .review-detail-top .review-menu-button svg.review-menu-glyph--desktop,html:root body .app .review-actions-glyph--desktop{display:none}
   html:root body .app .review-detail-top .review-menu-button svg.review-menu-glyph--phone,html:root body .app .review-actions-glyph--phone{display:block}
   html:root body .app .review-breadcrumb{min-width:0;flex:1;display:flex;align-items:center;margin-left:-1px;overflow:visible}
@@ -699,6 +700,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-detail-tabs nav{display:flex;align-items:center;gap:6px;margin-right:auto}
   html:root body .app .review-detail-tabs nav a{box-sizing:border-box;height:32px;display:flex;align-items:center;padding:0 10px;border:.5px solid transparent;border-radius:9999px;font:500 12px/normal var(--font);text-decoration:none}
   html:root body .app .review-detail-tabs nav a[data-review-tab=review]{display:none}
+  html:root body .app .review-detail-tabs nav a[data-review-tab=changes]{color:var(--review-fg-muted)}
   html:root body .app .review-tab-label{margin-right:-1px}
   html:root body .app .review-detail-tab-actions{display:flex;align-items:center;gap:6px;margin-left:0}
   html:root body .app .review-detail-tab-actions>.review-pill-button{height:32px;padding:0 10px;border:.5px solid transparent}
