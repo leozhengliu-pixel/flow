@@ -1560,8 +1560,8 @@ export const zhCN: Record<string, string> = {
   "Slack connected": "Slack 已连接",
   "Update schedule saved": "更新频率已保存",
   username: "用户名",
-  "Change the cursor to a pointer when hovering over interactive elements":
-    "悬停在交互元素上时使用指针光标",
+  "Change the cursor to a pointer when hovering over any interactive elements":
+    "悬停在任何交互元素上时使用指针光标",
   "Disable animated images & emoji": "停用动画图片和 Emoji",
   "When enabled, GIFs and animated emojis remain static until hovered":
     "启用后，GIF 和动态 Emoji 在悬停前保持静止",
