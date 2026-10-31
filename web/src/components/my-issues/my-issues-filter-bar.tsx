@@ -17,7 +17,7 @@ export function FilterFieldGlyph({ field }: { field: MyIssuesFilterKey }) {
   return <FilterGlyph label={FIELD_LABELS[field] ?? field} fallback={<FilterFieldIcon field={field}/>}/>
 }
 
-export function MyIssuesFilterBar({ className, commands, compact, wrap, filters, filterOptions, renderFilter, saveState = 'idle', showEmpty, onAdd, onClear, onOperatorChange, onRemove, onSave, onValuesChange }: {
+export function MyIssuesFilterBar({ className, commands, compact, wrap, filters, filterOptions, renderFilter, saveLabel = 'Save', saveState = 'idle', showEmpty, onAdd, onClear, onOperatorChange, onRemove, onSave, onValuesChange }: {
   className?: string
   commands?: ReactNode
   compact?: boolean
@@ -26,6 +26,7 @@ export function MyIssuesFilterBar({ className, commands, compact, wrap, filters,
   filterOptions?: (filter: MyIssuesAppliedFilter) => MyIssuesFilterOption[] | undefined
   /** Custom chip (the advanced-filter chip); undefined renders the default chip. */
   renderFilter?: (filter: MyIssuesAppliedFilter) => ReactNode | undefined
+  saveLabel?: string
   saveState?: 'idle' | 'saving' | 'saved' | 'error'
   showEmpty?: boolean
   onAdd?: () => void
@@ -38,7 +39,7 @@ export function MyIssuesFilterBar({ className, commands, compact, wrap, filters,
   const { t } = useI18n()
   const original = (id: string) => filters.find(filter => filter.id === id)!
   const normalized: NormalizedFilter[] = filters.map(filter => filter.field === 'advanced' ? { id: filter.id, field: filter.field, fieldLabel: filter.fieldLabel, operator: filter.operator, values: [] } : translateDateValues(filterChipItem(filter, filterOptions?.(filter)), t))
-  return <AppliedFilterBar ariaLabel="Applied filters" className={className} commands={commands} compact={compact} wrap={wrap} countLabel={count => t(count === 1 ? 'issue' : 'issues')} fieldVisual={filter => <FilterFieldGlyph field={filter.field}/>} filters={normalized} onAdd={onAdd ?? (() => {})} onClear={onClear} onOperatorChange={(filter, operator) => onOperatorChange?.(filter.id, operator)} onRemove={filter => onRemove(filter.id)} onSave={onSave} onValuesChange={(filter, values) => onValuesChange?.(filter.id, values)} optionsFor={filter => chipValueOptions(filter.fieldLabel, filterOptions?.(original(filter.id))).map(option => ({ ...option, icon: <OptionMark field={filter.field} option={option}/> }))} renderFilter={renderFilter ? filter => renderFilter(original(filter.id)) : undefined} saveState={saveState} showEmpty={showEmpty} translate={t}/>
+  return <AppliedFilterBar ariaLabel="Applied filters" className={className} commands={commands} compact={compact} wrap={wrap} countLabel={count => t(count === 1 ? 'issue' : 'issues')} fieldVisual={filter => <FilterFieldGlyph field={filter.field}/>} filters={normalized} onAdd={onAdd ?? (() => {})} onClear={onClear} onOperatorChange={(filter, operator) => onOperatorChange?.(filter.id, operator)} onRemove={filter => onRemove(filter.id)} onSave={onSave} onValuesChange={(filter, values) => onValuesChange?.(filter.id, values)} optionsFor={filter => chipValueOptions(filter.fieldLabel, filterOptions?.(original(filter.id))).map(option => ({ ...option, icon: <OptionMark field={filter.field} option={option}/> }))} renderFilter={renderFilter ? filter => renderFilter(original(filter.id)) : undefined} saveLabel={saveLabel} saveState={saveState} showEmpty={showEmpty} translate={t}/>
 }
 
 /** Date presets are Flow's own copy ("1 week ago", "No released date"): chips show them translated. */

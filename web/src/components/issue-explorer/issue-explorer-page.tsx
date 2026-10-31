@@ -390,6 +390,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       onOperatorChange: (id: string, operator: MyIssuesAppliedFilter['operator']) => updateList(list, items => updateFilterOperator(items, id, operator)),
       onRemove: (id: string) => updateList(list, items => items.filter(filter => filter.id !== id)),
       onValuesChange: (id: string, options: MyIssuesFilterOption[]) => updateList(list, items => updateFilterValues(items, id, options)),
+      ...(list === 'base' ? { onSave: () => setViewEditor('create'), saveLabel: t('Create new view…') } : {}),
     }
   }
 
@@ -612,7 +613,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       onAdvancedFilter={addAdvancedFilter}
       filterBar={bandActive
         ? extraFilters.length > 0 && <MyIssuesFilterBar {...filterBarProps('extra')} className={bandStyles.band} compact wrap commands={<SavedViewBandCommands canUpdate={Boolean(onUpdateSavedView)} onClear={() => setExtraFilters([])} onCreate={createViewFromBand} onUpdate={saveBandToView}/>}/>
-        : !editorMode && <MyIssuesFilterBar {...filterBarProps('base')}/>}
+        : !editorMode && <MyIssuesFilterBar {...filterBarProps('base')} className={explorerStyles.filterBar}/>}
       footer={bandActive && hiddenByFilters > 0 && (!desktop || visibleCount > 0) && <HiddenByFiltersFooter hidden={hiddenByFilters} onClear={clearPersonalFilters}/>}
     >
       <IssuesSplitLayout
