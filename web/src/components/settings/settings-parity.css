@@ -858,6 +858,8 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
     background: var(--set-drawer-list-bg);
     scrollbar-gutter: auto;
   }
+  /* Keep the opening section's accepted inset without changing the scrolled viewport padding. */
+  html:root .settings-app .settings-sidebar nav section:first-child { padding-top: 3px; }
   html:root .settings-app .settings-sidebar nav h2 {
     height: 15.5px;
     margin: 0 0 6px;
@@ -954,7 +956,8 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
   html:root .settings-app .settings-sidebar-footer .sidebar-help > svg,
   html:root .settings-app .settings-plan-button > svg { position: relative; }
   html:root .settings-app .settings-sidebar-footer .sidebar-help > svg { width: 14px; height: 14px; }
-  html:root .settings-app .settings-sidebar-footer .sidebar-help > svg { color: var(--phone-icon-fg); }
+  /* The shared sprite glyph sets an inline colour; the settings drawer keeps its muted palette. */
+  html:root .settings-app .settings-sidebar-footer .sidebar-help > svg { color: var(--phone-icon-fg) !important; }
   html:root .settings-app .settings-plan-button {
     position: absolute;
     top: 10px;

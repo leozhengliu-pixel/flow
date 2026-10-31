@@ -10,6 +10,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Fixed
 
 - Phone issue activity aligns subscriber controls, event links and timeline spacing, and the empty comment composer uses the matching attachment and send glyphs without changing desktop layouts.
+- Phone settings navigation restores the opening section's vertical inset and muted help glyph without changing the scrolled drawer viewport or desktop layout.
 - Phone navigation labels, team glyphs, floating help control and backdrop now match the drawer styling; project customer-request labels and team document headers use their intended phone font weights without changing desktop layouts.
 - Desktop issue view pills no longer accumulate border-width drift; the add-view glyph and issue composer's team text, action glyphs, and undivided footer match the desktop shell styling without changing phone controls.
 - Phone Pulse, Reviews and project pages retain fractional font metrics on Linux instead of shifting tabs and actions; browser menu and shell checks create their own workspaces and use the API's normalized workspace keys.

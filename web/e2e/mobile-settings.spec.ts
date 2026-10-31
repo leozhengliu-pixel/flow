@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { randomUUID } from 'node:crypto'
 
 const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
 
@@ -6,12 +7,13 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   test.describe(`${viewport.width}px settings navigation drawer`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-    test('phone drawer shows the settings sections and the pinned footer', async ({ page, request }, testInfo) => {
-      const workspaceKey = `mobile-settings-nav-${testInfo.project.name}-${testInfo.retry}-${viewport.width}`
+    test('phone drawer shows the settings sections and the pinned footer', async ({ page, request }) => {
+      const requestedKey = `settings-${randomUUID()}`
       const created = await request.post(`${API}/api/workspaces`, {
-        data: { name: 'Mobile settings navigation', urlKey: workspaceKey, region: 'us', tutorial: false },
+        data: { name: 'Mobile settings navigation', urlKey: requestedKey, region: 'us', tutorial: false },
       })
       expect(created.status()).toBe(201)
+      const { workspace: { urlKey: workspaceKey } } = await created.json() as { workspace: { urlKey: string } }
 
       await page.goto(`/${workspaceKey}/settings/account/preferences`)
       await page.locator('.settings-mobile-menu').click()
@@ -33,6 +35,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(sections.nth(1)).toHaveText('Issues')
       await expect(sections.nth(2)).toHaveText('Projects')
       await expect(sections.nth(3)).toHaveText('Features')
+      expect((await sections.nth(0).boundingBox())?.y).toBeCloseTo(113.5, 1)
+      await expect(page.locator('.settings-sidebar nav')).toHaveCSS('padding-top', '26px')
       await expect(page.locator('.settings-sidebar nav button[aria-current="page"]')).toContainText('Preferences')
       expect((await page.locator('.settings-sidebar nav button[aria-current="page"]').boundingBox())?.width).toBe(306)
       expect((await page.locator('.settings-sidebar nav button[aria-current="page"]').boundingBox())?.height).toBe(28)
@@ -42,6 +46,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect(footerBox).toMatchObject({ x: 0, width: 330, height: 52 })
       expect(footerBox?.y).toBe(viewport.height - 52)
       expect((await page.locator('.settings-sidebar-footer .sidebar-help').boundingBox())?.width).toBe(32)
+      await expect(page.locator('.settings-sidebar-footer .sidebar-help > svg')).toHaveCSS('color', 'lch(61.803 1.2 272)')
       expect((await page.locator('.settings-plan-button').boundingBox())?.x).toBe(50)
       await expect(page.locator('.settings-plan-button')).toContainText('Free plan')
 
@@ -55,12 +60,13 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   test.describe(`${viewport.width}px settings navigation drawer scrolled to the end`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-    test('shows integrations, administration and the nested team tree', async ({ page, request }, testInfo) => {
-      const workspaceKey = `mobile-settings-nav-lower-${testInfo.project.name}-${testInfo.retry}-${viewport.width}`
+    test('shows integrations, administration and the nested team tree', async ({ page, request }) => {
+      const requestedKey = `settings-${randomUUID()}`
       const created = await request.post(`${API}/api/workspaces`, {
-        data: { name: 'Mobile settings navigation lower', urlKey: workspaceKey, region: 'us', tutorial: false },
+        data: { name: 'Mobile settings navigation lower', urlKey: requestedKey, region: 'us', tutorial: false },
       })
       expect(created.status()).toBe(201)
+      const { workspace: { urlKey: workspaceKey } } = await created.json() as { workspace: { urlKey: string } }
       const headers = { 'X-Workspace-Key': workspaceKey }
       const parent = await request.post(`${API}/api/workspaces/${workspaceKey}/teams`, {
         data: { name: '[mobile] Picker Test', key: 'PICK', color: '#F55DA8', icon: 'StarOutline' },
@@ -81,6 +87,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await page.locator('.settings-sidebar nav').evaluate(nav => { nav.scrollTop = nav.scrollHeight })
 
       const sections = page.locator('.settings-sidebar nav section h2 > span')
+      await expect(page.locator('.settings-sidebar nav')).toHaveCSS('padding-top', '26px')
       await expect(sections.filter({ hasText: 'Integrations' })).toHaveCount(1)
       await expect(sections.filter({ hasText: 'Administration' })).toHaveCount(1)
       await expect(sections.filter({ hasText: 'Your teams' })).toHaveCount(1)
