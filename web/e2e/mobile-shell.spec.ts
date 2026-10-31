@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test'
 import { test } from './workspace-fixture'
+import { createHmac } from 'node:crypto'
 
 const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
 const base = process.env.FLOW_MOBILE_BASE_URL ?? 'http://127.0.0.1:4173'
@@ -26,6 +27,60 @@ async function noOverflow(page: Page) {
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   test.describe(`${viewport.width}px shell`, () => {
     test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent, colorScheme: 'dark' })
+
+    test('issue actions menu matches phone geometry and filters its real actions', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const data = await (await request.get(`${api}/api/bootstrap`, { headers })).json() as { teams: Array<{ id: string }> }
+      const created = await request.post(`${api}/api/issues`, {
+        headers, data: { title: '[mobile] Issue actions', teamId: data.teams[0].id },
+      })
+      expect(created.status()).toBe(201)
+      const issue = await created.json() as { identifier: string }
+      const secret = `actions-${workspaceKey}`
+      expect((await request.put(`${api}/api/integrations/github`, {
+        headers, data: { name: '[mobile] GitHub', config: { organization: 'mobile-e2e', webhookSecret: secret, codeAccess: 'true' }, scopes: ['repo'] },
+      })).status()).toBe(200)
+      const body = JSON.stringify({ action: 'opened', number: 1, pull_request: { number: 1, id: 9101, title: '[mobile] Review', body: '', html_url: 'https://github.com/mobile-e2e/repo/pull/1', state: 'open', user: { login: 'flowuser' }, base: { ref: 'main' }, head: { ref: 'mobile/review', sha: 'abc' }, additions: 3, deletions: 1, commits: 1 }, repository: { full_name: 'mobile-e2e/repo' }, sender: { login: 'flowuser' } })
+      expect((await request.post(`${api}/api/integrations/github/webhook`, {
+        headers: { ...headers, 'Content-Type': 'application/json', 'X-GitHub-Event': 'pull_request', 'X-GitHub-Delivery': `actions-${workspaceKey}`, 'X-Hub-Signature-256': 'sha256=' + createHmac('sha256', secret).update(body).digest('hex') }, data: body,
+      })).status()).toBe(202)
+
+      await page.goto(`${base}/${workspaceKey}/issue/${issue.identifier}`)
+      await page.getByRole('button', { name: 'Issue options', exact: true }).tap()
+      const menu = page.getByRole('dialog', { name: 'Issue options', exact: true })
+      const top = Math.min(110, viewport.height * .1304)
+      await geometry(menu, { x: 16, y: top, width: viewport.width - 32, height: 450 })
+      await geometry(menu.locator('.issue-options-search'), { x: 22.5, y: top + 6.5, width: viewport.width - 44, height: 40 })
+      const names = ['Team', 'Due date', 'Add link…', 'Add customer request…', 'Add pull request…', 'Add document…', 'Create related', 'Mark as']
+      for (const [index, name] of names.entries()) {
+        const label = menu.locator('.issue-options-label').filter({ hasText: new RegExp(`^${name}$`) })
+        const row = menu.getByRole('option').filter({ has: page.locator(`.issue-options-label:text-is("${name}")`) })
+        await geometry(row, { x: 22.5, y: top + 52.5 + index * 46 + (index >= 6 ? 12 : 0), width: viewport.width - 44, height: 46 })
+        await expect(label).toHaveCSS('font-size', '13px')
+        await expect(label).toHaveCSS('font-weight', '450')
+        await expect(label).toHaveCSS('line-height', '15.6px')
+        await geometry(row.locator('.issue-options-icon svg'), { width: 16, height: 16 })
+      }
+      await geometry(menu.locator('.issue-options-separator-line').first(), { x: 16.5, y: top + 334.5, width: viewport.width - 32, height: .5 })
+      await expect(menu).toHaveCSS('background-color', 'lch(12.72 0.85 272)')
+      await expect(menu).toHaveCSS('border-radius', '12px')
+      await expect(page.locator('.bottom-agent')).toBeHidden()
+      await noOverflow(page)
+      if (shots) await page.screenshot({ path: `${shots}/actions-menu-${viewport.width}.png` })
+      const filter = menu.getByRole('combobox')
+      await filter.fill('Add link')
+      await expect(menu.getByRole('option')).toHaveCount(1)
+      await geometry(menu.getByRole('option'), { y: top + 52.5, height: 46 })
+      await filter.fill('')
+      await menu.getByRole('option', { name: 'Team', exact: true }).tap()
+      const team = page.getByRole('dialog', { name: 'Team', exact: true })
+      await geometry(team, { x: 16, y: top, width: viewport.width - 32 })
+      await expect(menu).toBeHidden()
+      await team.getByRole('button', { name: 'Back', exact: true }).tap()
+      await expect(menu).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(menu).toBeHidden()
+    })
 
     test('composer status picker matches phone rows and preserves the workspace workflow', async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Workspace-Key': workspaceKey }
@@ -424,7 +479,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       const picker = page.locator('.phone-menu-surface')
       await geometry(picker, { x: 16, y: Math.min(110, viewport.height * .1304), width: viewport.width - 32 })
       await geometry(picker.getByRole('option').first(), { height: 46 })
-      await expect(picker.getByRole('option').first()).toHaveCSS('font-size', '15px')
+      await expect(picker.getByRole('option').first()).toHaveCSS('font-size', '13px')
       if (shots) await page.screenshot({ path: `${shots}/flow-picker-${viewport.width}.png` })
       await picker.locator('input').fill('Urgent')
       await expect(picker.getByRole('option')).toHaveCount(1)

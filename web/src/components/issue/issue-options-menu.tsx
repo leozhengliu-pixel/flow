@@ -150,9 +150,10 @@ export function IssueOptionsMenu({
       if (!sizer) return
       let top = 6
       for (const row of Array.from(sizer.children) as HTMLElement[]) {
+        if (row.hidden || getComputedStyle(row).display === 'none') continue
         row.style.position = 'absolute'
         row.style.top = `${top}px`
-        top += row.classList.contains('issue-options-separator') ? 12 : row.classList.contains('issue-options-empty') ? 42 : 45
+        top += row.classList.contains('issue-options-separator') ? 12 : row.classList.contains('issue-options-empty') ? 42 : 46
       }
       sizer.style.height = `${top + 6}px`
     }
@@ -305,6 +306,7 @@ export function IssueOptionsMenu({
   const url = issueUrl ?? `${window.location.origin}/${data?.workspace.urlKey ?? ''}/issue/${issue.identifier}`
   const titleLink = `[${issue.title}](${url})`
   const issuePrompt = `# ${issue.identifier}: ${issue.title}\n\n${issue.description || 'No description provided.'}\n\nIssue URL: ${url}`
+  const rootFilter = <Command.Input ref={parentFilterRef} className={rootQuery ? 'issue-options-submenu-search' : 'issue-options-filter'} aria-label={t('Filter…')} placeholder={t('Filter…')} value={rootQuery} onValueChange={value => { setRootQuery(value); setHighlight(true); setSubmenu(null); setDatePickerOpen(false) }}/>
 
   return <>
     <Popover.Root modal={mobile} open={open} onOpenChange={value => {
@@ -321,7 +323,7 @@ export function IssueOptionsMenu({
       </Popover.Trigger>
       {mobile&&open&&createPortal(<div className="issue-options-mobile-overlay" onPointerDown={closeMenu}/>,document.body)}
       <Popover.Portal>
-        <Popover.Content ref={parentMenuRef} data-flow-motion="floating" className="issue-options-popover" data-nested={Boolean(submenu||datePickerOpen)} data-highlight={highlight} side="bottom" align="start" sideOffset={3.75} collisionPadding={16} role="dialog" aria-label={t('Issue options')} onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => parentFilterRef.current?.focus()) }} onEscapeKeyDown={closeMenu} onPointerMoveCapture={event => {
+        <Popover.Content ref={parentMenuRef} data-flow-motion="floating" className="issue-options-popover" data-filtered={Boolean(rootQuery.trim())} data-nested={Boolean(submenu||datePickerOpen)} data-highlight={highlight} side="bottom" align="start" sideOffset={3.75} collisionPadding={16} role="dialog" aria-label={t('Issue options')} onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => parentFilterRef.current?.focus()) }} onEscapeKeyDown={closeMenu} onPointerMoveCapture={event => {
           if (!event.currentTarget.contains(event.target as Node)) return
           setHighlight(true)
           const row = (event.target as Element).closest('[cmdk-item]')
@@ -335,7 +337,7 @@ export function IssueOptionsMenu({
           }
         }}>
           <Command loop defaultValue="__no_selection__">
-            <Command.Input ref={parentFilterRef} className={rootQuery ? 'issue-options-submenu-search' : 'issue-options-filter'} aria-label={t('Filter…')} placeholder={t('Filter…')} value={rootQuery} onValueChange={value => { setRootQuery(value); setHighlight(true); setSubmenu(null); setDatePickerOpen(false) }}/>
+            {mobile ? <div className="issue-options-search">{rootFilter}</div> : rootFilter}
             <div className="issue-options-list-surface">
               <Command.List>
                 <Command.Empty className="issue-options-empty">{t('No results')}</Command.Empty>
@@ -348,7 +350,7 @@ export function IssueOptionsMenu({
                   closeMenu()
                   if (!requestIssueCustomerRequest(issue.id)) setCustomerDialogOpen(true)
                 }}/>}
-                {Boolean(data?.reviews.length) && <Option icon={<GitPullRequest/>} label="Add pull request..." onSelect={() => { setReviewQuery(''); openDialog('review') }}/>}
+                {Boolean(data?.reviews.length) && <Option icon={<GitPullRequest/>} glyph={mobile ? <PhonePullRequestIcon/> : undefined} label="Add pull request..." onSelect={() => { setReviewQuery(''); openDialog('review') }}/>}
                 <Option icon={<FilePlus2/>} label="Add document..." onSelect={() => actions && void perform(actions.addDocument, 'Document created')}/>
                 <Separator/>
                 <Option icon={<Repeat2/>} label="Create related" nested="create" anchor={anchors.create} expanded={submenu === 'create'} onHover={() => openNested('create')} onSelect={() => openNested('create', true)}/>
@@ -522,6 +524,15 @@ function ActionDialog({ open, title, onOpenChange, children }: { open: boolean; 
 
 function IssueOptionsDialogFooter({ busy, disabled, action, onCancel, onSubmit }: { busy: boolean; disabled: boolean; action: string; onCancel: () => void; onSubmit: () => void }) {
   return <footer><button type="button" onClick={onCancel}>Cancel</button><button type="button" className="primary" disabled={disabled || busy} onClick={onSubmit}>{busy ? 'Working...' : action}</button></footer>
+}
+
+function PhonePullRequestIcon() {
+  return <svg width={16} height={16} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+    <path d="M12.5 10C13.8807 10 15 11.1193 15 12.5C15 13.8807 13.8807 15 12.5 15C11.1193 15 10 13.8807 10 12.5C10 11.1193 11.1193 10 12.5 10ZM12.5 11.5C11.9477 11.5 11.5 11.9477 11.5 12.5C11.5 13.0523 11.9477 13.5 12.5 13.5C13.0523 13.5 13.5 13.0523 13.5 12.5C13.5 11.9477 13.0523 11.5 12.5 11.5Z"/>
+    <path d="M3.5 4.5C3.91414 4.50009 4.25 4.83584 4.25 5.25V14.249C4.24982 14.663 3.91403 14.9989 3.5 14.999C3.0859 14.999 2.75018 14.6631 2.75 14.249V5.25C2.75 4.83579 3.08579 4.5 3.5 4.5Z"/>
+    <path d="M10 2.75C11.7949 2.75 13.25 4.20507 13.25 6V10.75C13.25 11.1642 12.9142 11.5 12.5 11.5C12.0858 11.5 11.75 11.1642 11.75 10.75V6C11.75 5.0335 10.9665 4.25 10 4.25H8C7.58579 4.25 7.25 3.91421 7.25 3.5C7.25 3.08579 7.58579 2.75 8 2.75H10Z"/>
+    <path d="M3.5 1C4.88071 1 6 2.11929 6 3.5C6 4.88071 4.88071 6 3.5 6C2.11929 6 1 4.88071 1 3.5C1 2.11929 2.11929 1 3.5 1ZM3.5 2.5C2.94772 2.5 2.5 2.94772 2.5 3.5C2.5 4.05228 2.94772 4.5 3.5 4.5C4.05228 4.5 4.5 4.05228 4.5 3.5C4.5 2.94772 4.05228 2.5 3.5 2.5Z"/>
+  </svg>
 }
 
 function Option({ icon, glyph, label, detail, shortcut, nested, anchor, expanded, danger, checked, onHover, onSelect }: { icon: ReactNode; /** Replaces the label's action glyph. */ glyph?: ReactNode; label: string; detail?: string; shortcut?: string; nested?: Submenu | 'due'; anchor?: RefObject<HTMLDivElement | null>; expanded?: boolean; danger?: boolean; checked?: boolean; onHover?: () => void; onSelect?: () => void }) {
