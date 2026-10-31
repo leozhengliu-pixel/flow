@@ -5,6 +5,7 @@ import { Command } from 'cmdk'
 import { useI18n } from '@/i18n/i18n'
 import { FlowDropdownMenuContent, FlowMenuItem, FlowMenuSeparator } from '@/components/ui/row-context-menu'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
+import { AgentToolbarGlyph } from '@/components/ui/agent-glyph'
 import { PhoneCommandMenu } from '@/components/ui/phone-menu'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { useUsageFeedbackEnabled } from '@/lib/usage-feedback'
@@ -13,7 +14,7 @@ import './agent-rename-palette.css'
 import './agent-chat-actions.css'
 
 /** The "…" chat menu shared by the Agent page and the floating chat. */
-export function AgentChatMenu({ align = 'start', className, unsaved = false, onCopy, onDelete, onFeedback, onRename }: {
+export function AgentChatMenu({ align = 'start', className, unsaved = false, onCopy, onDelete, onFeedback, onRename, onMoveToToolbar }: {
   align?: 'start' | 'end'
   className?: string
   /** A streaming chat the server does not know yet cannot be renamed or deleted. */
@@ -22,6 +23,7 @@ export function AgentChatMenu({ align = 'start', className, unsaved = false, onC
   onDelete: () => void
   onFeedback: () => void
   onRename: () => void
+  onMoveToToolbar?: () => void
 }) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
@@ -60,9 +62,6 @@ export function AgentChatMenu({ align = 'start', className, unsaved = false, onC
         <Command.Item className="menu-item" onSelect={() => choosePhone(onCopy)} value={t('Copy as markdown')}>
           <FlowGlyph name="copy" size={16}/><span>{t('Copy as markdown')}</span>
         </Command.Item>
-        {feedbackEnabled && <Command.Item className="menu-item" onSelect={() => choosePhone(onFeedback)} value={t('Leave feedback…')}>
-          <FlowGlyph name="thumbsDown" size={16}/><span>{t('Leave feedback…')}</span>
-        </Command.Item>}
         </Command.Group>
         <Command.Separator><span aria-hidden="true" className="agent-chat-options-divider" /></Command.Separator>
         <Command.Group>
@@ -70,6 +69,17 @@ export function AgentChatMenu({ align = 'start', className, unsaved = false, onC
           <FlowGlyph name="delete" size={16}/><span>{t('Delete')}</span>
         </Command.Item>
         </Command.Group>
+        {(feedbackEnabled || onMoveToToolbar) && <>
+          <Command.Separator/>
+          <Command.Group>
+            {feedbackEnabled && <Command.Item className="menu-item" onSelect={() => choosePhone(onFeedback)} value={t('Leave feedback…')}>
+              <FlowGlyph name="thumbsDown" size={16}/><span>{t('Leave feedback…')}</span>
+            </Command.Item>}
+            {onMoveToToolbar && <Command.Item className="menu-item" onSelect={() => choosePhone(onMoveToToolbar)} value={t('Move to toolbar')}>
+              <AgentToolbarGlyph size={16}/><span>{t('Move to toolbar')}</span>
+            </Command.Item>}
+          </Command.Group>
+        </>}
       </PhoneCommandMenu>
     </>
   }

@@ -591,11 +591,12 @@ export function AgentPage({
               onDelete={deleteCurrent}
               onFeedback={() => setSessionFeedbackOpen(true)}
               onRename={() => setRenameOpen(true)}
+              onMoveToToolbar={() => void updateAgentSession(current.id, { location: "toolbar" }).then(next => { saveSession(next); newChat(); })}
             />
           </>
         )}
-        <span className={styles.headerSpacer} />
-        {current && <button
+        {!phone && <span className={styles.headerSpacer} />}
+        {current && !phone && <button
           className={styles.headerIcon}
           aria-label={t("Move to toolbar")}
           onClick={() =>
