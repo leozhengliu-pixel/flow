@@ -16,6 +16,7 @@ import { ViewGlyph } from "@/components/views/view-icon-picker";
 import type { Team } from "@/types/flow";
 import { isPeopleProperty } from '@/lib/people'
 import { PropertyMenu } from '@/components/property/property-menu'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 
 export function SettingsPageTitle({
   action,
@@ -200,6 +201,7 @@ export function SettingsSelect({
   placeholder?: string;
   value: string;
 }) {
+  const phone = usePhoneLayout();
   const normalized = options.map((option) =>
     typeof option === "string"
       ? { value: option, label: option, entityName: entityName?.(option) }
@@ -208,14 +210,16 @@ export function SettingsSelect({
   const selected = normalized.find((option) => option.value === value);
   if (!disabled && isPeopleProperty(label)) return <PropertyMenu label={label} ariaLabel={label} value={selected?.label} selectedId={value} options={normalized.map(option => ({ id: option.value, label: option.label, icon: option.icon, disabled: option.disabled, i18nIgnore: option.entityName }))} onChange={onChange} triggerClassName={className || 'settings-select'} surfaceClassName={menuClassName} searchPlaceholder="Search people…" trigger={<span className="settings-select-value">{selected?.icon}{selected?.label ?? value}</span>}/>
   return (
-    <SelectPrimitive.Root
+    <>
+      <SelectPrimitive.Root
       disabled={disabled}
       onValueChange={onChange}
       value={value}
     >
       <SelectPrimitive.Trigger
         aria-label={label}
-        className={className || "settings-select"}
+        data-select-size={normalized.reduce((widest, option) => option.label.length > widest.length ? option.label : widest, "")}
+        className={`${className || "settings-select"} settings-select-radix`}
       >
         <SelectPrimitive.Value>
           <span className="settings-select-value">
@@ -264,7 +268,22 @@ export function SettingsSelect({
           </SelectPrimitive.Viewport>
         </SelectPrimitive.Content>
       </SelectPrimitive.Portal>
-    </SelectPrimitive.Root>
+      </SelectPrimitive.Root>
+      {phone && <span className="settings-select-native-wrap">
+        <select
+          aria-label={label}
+          className="settings-select settings-select-native"
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          value={value}
+        >
+          {normalized.map((option) => (
+            <option disabled={option.disabled} key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <span aria-hidden="true"><SettingsChevron /></span>
+      </span>}
+    </>
   );
 }
 

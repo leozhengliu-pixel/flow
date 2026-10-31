@@ -746,21 +746,6 @@ function Preferences({
       <PersonalPageTitle>{p("Preferences")}</PersonalPageTitle>
       <PersonalSection title={p("General")}>
         <PersonalRow
-          title={p("Language")}
-          description={p("Choose the language used throughout the application")}
-        >
-          <PersonalSelect
-            label={p("Language")}
-            value={locale === "zh-CN" ? "简体中文" : "English"}
-            options={localizedOptions(p, ["English", "简体中文"])}
-            onChange={(value) => {
-              const next = value === "简体中文" ? "zh-CN" : "en-US";
-              setLocale(next);
-              setValue("language", next);
-            }}
-          />
-        </PersonalRow>
-        <PersonalRow
           title={p("Default home view")}
           description={p("Select which view to display when launching Flow")}
         >
@@ -799,7 +784,7 @@ function Preferences({
           <PersonalSelect
             label={p("First day of the week")}
             value={resolveFirstDay(values.firstDay ? String(values.firstDay) : undefined, locale)}
-            options={localizedOptions(p, ["Monday", "Saturday", "Sunday"])}
+            options={localizedOptions(p, ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])}
             onChange={(v) => setValue("firstDay", v)}
           />
         </PersonalRow>
@@ -1032,6 +1017,23 @@ function Preferences({
             label={p("On move to started status, assign to yourself")}
             checked={Boolean(values.assignStarted)}
             onChange={(v) => setValue("assignStarted", v)}
+          />
+        </PersonalRow>
+      </PersonalSection>
+      <PersonalSection className="personal-language-section">
+        <PersonalRow
+          title={p("Language")}
+          description={p("Choose the language used throughout the application")}
+        >
+          <PersonalSelect
+            label={p("Language")}
+            value={locale === "zh-CN" ? "简体中文" : "English"}
+            options={localizedOptions(p, ["English", "简体中文"])}
+            onChange={(value) => {
+              const next = value === "简体中文" ? "zh-CN" : "en-US";
+              setLocale(next);
+              setValue("language", next);
+            }}
           />
         </PersonalRow>
       </PersonalSection>
