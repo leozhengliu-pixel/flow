@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext } from 'react'
 import type { BootstrapData, Issue, IssueUpdateInput, TeamSettings } from '@/types/flow'
+import type { IssueConversionKind } from '@/components/issue/issue-options-menu'
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import type { MyIssuesCreateContext } from './my-issues-list'
 
@@ -13,6 +14,8 @@ export interface IssueRowActionContextValue {
   onDeleteIssues?: (issueIds: string[]) => Promise<void>
   onOpenIssue?: (issue: Issue) => void
   onCreateIssue?: (context: MyIssuesCreateContext) => void
+  /** Uses the same conversion handler as the issue detail actions menu. */
+  onConvertIssue?: (issue: Issue, kind: IssueConversionKind) => Promise<void>
 }
 
 export const IssueRowActionContext = createContext<IssueRowActionContextValue | undefined>(undefined)

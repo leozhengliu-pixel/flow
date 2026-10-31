@@ -2232,21 +2232,21 @@ function App() {
     }
     await refreshActivity();
   };
-  const convertSelectedIssue = async (kind: IssueConversionKind) => {
-    if (!data || !selectedIssue) return;
+  const convertIssue = async (issue: Issue, kind: IssueConversionKind) => {
+    if (!data) return;
     if (kind === "template") {
       const template = await run(
         () =>
           createWorkspaceIssueTemplate({
-            name: selectedIssue.title,
-            description: `Created from ${selectedIssue.identifier}`,
-            body: selectedIssue.description,
-            teamId: selectedIssue.team.id,
-            stateId: selectedIssue.state.id,
-            priority: selectedIssue.priority,
-            assigneeId: selectedIssue.assignee?.id,
-            projectId: selectedIssue.project?.id,
-            labelIds: selectedIssue.labels.map((label) => label.id),
+            name: issue.title,
+            description: `Created from ${issue.identifier}`,
+            body: issue.description,
+            teamId: issue.team.id,
+            stateId: issue.state.id,
+            priority: issue.priority,
+            assigneeId: issue.assignee?.id,
+            projectId: issue.project?.id,
+            labelIds: issue.labels.map((label) => label.id),
           }),
         "Could not create issue template",
       );
@@ -2263,18 +2263,18 @@ function App() {
     const project = await run(
       () =>
         createProject({
-          name: selectedIssue.title,
-          summary: selectedIssue.description,
-          description: selectedIssue.description,
-          priority: selectedIssue.priority,
-          leadId: selectedIssue.assignee?.id,
-          teamIds: [selectedIssue.team.id],
-          labelIds: selectedIssue.labels.map((label) => label.id),
+          name: issue.title,
+          summary: issue.description,
+          description: issue.description,
+          priority: issue.priority,
+          leadId: issue.assignee?.id,
+          teamIds: [issue.team.id],
+          labelIds: issue.labels.map((label) => label.id),
         }),
       "Could not convert issue to project",
     );
     await run(
-      () => deleteIssue(selectedIssue.id, { keepSubIssues: true }),
+      () => deleteIssue(issue.id, { keepSubIssues: true }),
       "Project was created, but the original issue could not be removed",
     );
     setData((current) =>
@@ -2283,12 +2283,15 @@ function App() {
             ...current,
             projects: [project, ...current.projects],
             issues: current.issues.filter(
-              (item) => item.id !== selectedIssue.id,
+              (item) => item.id !== issue.id,
             ),
           }
         : current,
     );
     navigateTo(projectPath(data.workspace.urlKey, project), { replace: true });
+  };
+  const convertSelectedIssue = async (kind: IssueConversionKind) => {
+    if (selectedIssue) await convertIssue(selectedIssue, kind);
   };
   const toggleSelectedFavorite = async () => {
     if (!data || !selectedIssue) return;
@@ -5836,6 +5839,7 @@ function App() {
                 onUpdateIssue={updateIssueFromPage}
                 onUpdateIssues={updateIssuesFromPage}
                 onDeleteIssues={deleteIssuesFromPage}
+                onConvertIssue={convertIssue}
                 onCreateIssue={(context) => openCreateIssue(context)}
                 renderIssuePreview={renderIssuePreview}
                 onOpenSidebar={() => setMobileSidebarOpen(true)}
@@ -6158,6 +6162,7 @@ function App() {
             onUpdateIssue={updateIssueFromPage}
             onUpdateIssues={updateIssuesFromPage}
             onDeleteIssues={deleteIssuesFromPage}
+            onConvertIssue={convertIssue}
           />
         )}
         {page === "workspace-issues" && route.kind === "label" && route.resourceType === "issue" && (() => {
@@ -6189,6 +6194,7 @@ function App() {
               onUpdateIssue={updateIssueFromPage}
               onUpdateIssues={updateIssuesFromPage}
               onDeleteIssues={deleteIssuesFromPage}
+              onConvertIssue={convertIssue}
             />
           );
         })()}
@@ -6239,6 +6245,7 @@ function App() {
             onUpdateIssue={updateIssueFromPage}
             onUpdateIssues={updateIssuesFromPage}
             onDeleteIssues={deleteIssuesFromPage}
+            onConvertIssue={convertIssue}
           />
         )}
         {page === "team-issues" && (route.kind === "team-issues" || route.kind === "team-board") && (
@@ -6296,6 +6303,7 @@ function App() {
             onUpdateIssue={updateIssueFromPage}
             onUpdateIssues={updateIssuesFromPage}
             onDeleteIssues={deleteIssuesFromPage}
+            onConvertIssue={convertIssue}
           />
         )}
         {page === "workspace-issues" &&
@@ -6367,6 +6375,7 @@ function App() {
               onUpdateIssue={updateIssueFromPage}
               onUpdateIssues={updateIssuesFromPage}
               onDeleteIssues={deleteIssuesFromPage}
+              onConvertIssue={convertIssue}
             />
           )}
         {page === "team-issues" &&
@@ -6451,6 +6460,7 @@ function App() {
               onUpdateIssue={updateIssueFromPage}
               onUpdateIssues={updateIssuesFromPage}
               onDeleteIssues={deleteIssuesFromPage}
+              onConvertIssue={convertIssue}
             />
           )}
         {page === "views" &&
@@ -6623,6 +6633,7 @@ function App() {
               onUpdateIssue={updateIssueFromPage}
               onUpdateIssues={updateIssuesFromPage}
               onDeleteIssues={deleteIssuesFromPage}
+              onConvertIssue={convertIssue}
             />
           )}
         {page === "views" &&

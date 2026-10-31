@@ -6,6 +6,7 @@ import { boundedIssueSequence } from '@/lib/navigation-context'
 import { PagedIssueList } from '@/components/issue-explorer/paged-issue-list'
 import { issueFiltersToQueryAst } from './my-issues-filter-types'
 import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
+import type { IssueConversionKind } from '@/components/issue/issue-options-menu'
 import { MyIssuesBulkActionBar, type MyIssuesBulkAction, type MyIssuesBulkActionOption } from './my-issues-bulk-action-bar'
 import { MyIssuesDetailsPane, type MyIssuesSummaryItem, type MyIssuesSummaryTab } from './my-issues-details-pane'
 import { MyIssuesFilterBar, type MyIssuesAppliedFilter } from './my-issues-filter-bar'
@@ -46,11 +47,12 @@ export interface MyIssuesPageProps {
   onPersistFilters?: (view: MyIssuesView, filters: MyIssuesAppliedFilter[]) => Promise<void>
   onUpdateIssue: (issueId: string, input: IssueUpdateInput) => Promise<Issue>
   onUpdateIssues: (issueIds: string[], input: IssueUpdateInput) => Promise<Issue[]>
+  onConvertIssue?: (issue: Issue, kind: IssueConversionKind) => Promise<void>
 }
 
 const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = { ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',triageIntelligence:'Triage Intelligence',suggestedLabel:'Suggested label',dates:'Dates',projectMilestone:'Project milestone',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',customers:'Customers',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template' }
 
-export function MyIssuesPage({ data, initialView = 'assigned', loading = false, error, workspaceSlug = data.workspace.urlKey, onClearError, onCreateIssue, onDeleteIssues, onNavigateView, onOpenIssue, onOpenSidebar, renderIssuePreview, onPersistDisplay, onPersistFilters, onUpdateIssue, onUpdateIssues }: MyIssuesPageProps) {
+export function MyIssuesPage({ data, initialView = 'assigned', loading = false, error, workspaceSlug = data.workspace.urlKey, onClearError, onCreateIssue, onDeleteIssues, onNavigateView, onOpenIssue, onOpenSidebar, renderIssuePreview, onPersistDisplay, onPersistFilters, onUpdateIssue, onUpdateIssues, onConvertIssue }: MyIssuesPageProps) {
   const { t } = useI18n()
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [projectedView, setProjectedView] = useState(initialView)
@@ -207,7 +209,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     else void fetchIssueRecord(row.id, undefined, workspaceSlug).then(issue => onOpenIssue(issue, sequence)).catch(() => toast.error('Could not load issue'))
   }
 
-  return <IssueRowActionsProvider value={{ data, onUpdateIssue, onDeleteIssues, onOpenIssue: issue => onOpenIssue?.(issue), onCreateIssue }}>
+  return <IssueRowActionsProvider value={{ data, onUpdateIssue, onDeleteIssues, onOpenIssue: issue => onOpenIssue?.(issue), onCreateIssue, onConvertIssue }}>
     <MyIssuesSurface
       activeView={controller.view}
       detailsOpen={controller.detailsOpen}

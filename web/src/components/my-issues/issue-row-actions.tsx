@@ -2,7 +2,8 @@ import { useMemo, useState, type ReactNode } from 'react'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/lib/toast'
-import { createIssue, createIssueLink, createIssueReminder, createRelation, deleteRelation } from '@/lib/api'
+import { confirmAction } from '@/components/ui/action-dialog-service'
+import { createIssue, createIssueLink, createIssueReminder, createRelation, deleteRelation, fetchIssueRecord } from '@/lib/api'
 import { settingsPath } from '@/lib/app-routes'
 import { enabledCodingTools, renderCodingPrompt } from '@/lib/coding-tools'
 import { findFavorite, toggleFavoriteFor } from '@/lib/favorites'
@@ -120,6 +121,19 @@ function ActionGroups({ row, onDelete }: { row: MyIssuesRowData; onDelete?: () =
     return `${(outgoing ? RELATION_LABEL[relation.type] : INVERSE_LABEL[relation.type]) ?? 'Related to'} ${other?.identifier ?? ''}`.trim()
   }
   const remove = onDelete ?? (context.onDeleteIssues ? () => void context.onDeleteIssues!([row.id]).catch(() => toast.error('Could not delete issue')) : undefined)
+  const moveTeams = data.teams.filter(team => team.id !== row.teamId && !team.retiredAt && !team.archivedAt)
+  const onConvertIssue = context.onConvertIssue
+  const resolveIssue = () => issue ? Promise.resolve(issue) : fetchIssueRecord(row.id, undefined, data.workspace.urlKey)
+  const convert = onConvertIssue ? (kind: 'project' | 'template') => {
+    const runConvert = () => void resolveIssue().then(target => onConvertIssue(target, kind)).catch(error => toast.error(error instanceof Error ? error.message : 'Could not convert issue'))
+    if (kind === 'project') {
+      void confirmAction(`Convert ${row.identifier} to a project?`, { description: 'The original issue will be deleted.', confirmLabel: 'Convert' }).then(confirmed => {
+        if (confirmed) runConvert()
+      })
+      return
+    }
+    runConvert()
+  } : undefined
 
   return <>
     <Separator/>
@@ -145,7 +159,14 @@ function ActionGroups({ row, onDelete }: { row: MyIssuesRowData; onDelete?: () =
       <Item label="Copy git branch name" shortcut="⌘ ⇧ ." onSelect={() => copy(branch, 'Branch name copied')}/>
       <Item label="Copy as prompt" shortcut="⌘ ⌥ P" onSelect={() => copy(prompt(), 'Prompt copied')}/>
     </Sub>
+    {convert && <Sub label="Convert to">
+      <Item label="Project…" onSelect={() => convert('project')}/>
+      <Item label="Template…" onSelect={() => convert('template')}/>
+    </Sub>}
     <Item top label="Make a copy…" onSelect={() => makeCopy()}/>
+    {moveTeams.length > 0 && <Sub label="Move">
+      <Sub label="Team…">{moveTeams.map(team => <Item key={team.id} label={team.name} onSelect={() => void update({ teamId: team.id }, `Moved to ${team.name}`)}/>)}</Sub>
+    </Sub>}
     <Sub label="Open in">
       {tools.map(tool => <Item key={tool.id} label={tool.name} onSelect={() => { const link = tool.link(prompt(), settings ?? {}); if (link) window.open(link, '_blank', 'noopener'); else toast.error(`${tool.name} is not configured`) }}/>)}
       <ConfigureCodingToolsItem path={`${settingsPath(data.workspace.urlKey, 'code-and-reviews')}/coding-tools`}/>

@@ -69,6 +69,8 @@ const ICONS: Record<string, LucideIcon> = {
   "Set parent issue…": CornerLeftUp,
   Relations: Link2,
   "Move to team…": ArrowRightLeft,
+  "Move": ArrowRightLeft,
+  "Convert to": RefreshCw,
   Subscribe: Bell,
   Unsubscribe: BellOff,
   Favorite: Star,

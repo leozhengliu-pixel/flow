@@ -1,7 +1,7 @@
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
 import { ArrowDownUp, Check, ChevronDown, Columns2, Eye, EyeOff, LayoutGrid, List } from 'lucide-react'
-import { DisplayIcon } from './my-issues-icons'
+import { DisplayIcon, TabsOverflowIcon } from './my-issues-icons'
 import { useI18n } from '@/i18n/i18n'
 import { Toggle } from '@/components/ui/toggle'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
@@ -241,7 +241,7 @@ function SelectControl<T extends string>({ ariaLabel, disabled = false, onChange
   const { t } = useI18n()
   return <Select.Root disabled={disabled} value={value} onValueChange={onChange}>
     <Select.Trigger className={styles.selectTrigger} aria-label={t(ariaLabel)}>
-      <Select.Value /><Select.Icon><ChevronDown size={12} aria-hidden="true" /></Select.Icon>
+      <Select.Value /><Select.Icon><span className={styles.desktopSelectChevron}><TabsOverflowIcon aria-hidden="true" /></span><span className={styles.phoneSelectChevron}><ChevronDown size={12} aria-hidden="true" /></span></Select.Icon>
     </Select.Trigger>
     <Select.Portal>
       <Select.Content data-flow-motion="floating" className={styles.selectMenu} position="popper" side="bottom" align="end" sideOffset={5} collisionPadding={10}>
