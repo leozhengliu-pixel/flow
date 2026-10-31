@@ -32,6 +32,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Match initiative overview spacing, property pills, header controls and latest update cards on phones without changing desktop layout.
 
 ### Fixed
+- Keep initiative selection/actions and the document-selection Agent action reachable on phones.
+- Restore phone review Guide navigation and Latest, let loop names flex, and remove fake welcome-video controls and the unsupported desktop-app download link.
 - Share content-sized phone member-table columns so names retain available space and row menus remain visible without hover.
 - Keep project Agent writing and cycle/project insights reachable on phones, and size cycle names, milestone counts and team tab overflow from their content.
 - Restore phone language, team security, project-status navigation and CSV exports; let personal settings grow with their copy instead of row-number dimensions.

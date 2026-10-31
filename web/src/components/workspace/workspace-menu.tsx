@@ -102,7 +102,6 @@ export function WorkspaceMenu({
           </> : <>
             <WorkspacePhoneItem onSelect={() => choose(() => onSettings('workspace'))}>{t('Settings')}</WorkspacePhoneItem>
             {(data.viewerRole === 'admin' || data.viewerRole === 'owner') && <WorkspacePhoneItem onSelect={() => choose(() => onSettings('members'))}>{t('Invite and manage members')}</WorkspacePhoneItem>}
-            <WorkspacePhoneItem onSelect={() => choose(() => { window.open('https://flow.app/download', '_blank') })}>{t('Download desktop app')}</WorkspacePhoneItem>
             <Command.Separator><span/></Command.Separator>
             <WorkspacePhoneItem onSelect={() => setSwitching(true)}>{t('Switch workspace')}</WorkspacePhoneItem>
             <Command.Separator><span/></Command.Separator>
@@ -138,14 +137,6 @@ export function WorkspaceMenu({
                 Invite and manage members
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={() =>
-                window.open("https://flow.app/download", "_blank")
-              }
-            >
-              Download desktop app
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger data-workspace-switch-trigger>

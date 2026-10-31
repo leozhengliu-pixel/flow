@@ -35,19 +35,21 @@
   .li-page .li-sidebar-desktop { display: none; }
   .li-page .li-sidebar-phone { display: block; }
   .li-page .li-columns { display: none; }
-  .li-page .li-row { min-width: 0; height: 56px; min-height: 56px; padding: 0; grid-template-columns: 14px minmax(0, 1fr) 32px 12px !important; gap: normal 6px; }
-  .li-page .li-row > .li-select, .li-page .li-row > .li-row-more { display: none; }
-  .li-page .li-row > .li-name { grid-column: 2 !important; height: 56px; margin-left: -6px; gap: 6px; }
+  .li-page .li-row { min-width: 0; height: 56px; min-height: 56px; padding: 0 8px; grid-template-columns: 24px minmax(0, 1fr) 32px 32px !important; gap: 6px; }
+  .li-page .li-row > .li-select { display: grid; grid-column: 1 !important; opacity: 1; }
+  .li-page .li-row > .li-row-more { display: grid; grid-column: 4 !important; opacity: 1; }
+  .li-page .li-row > .li-name { grid-column: 2 !important; height: 56px; gap: 6px; }
   .li-page .li-name-copy { flex: 1; }
   .li-page .li-name strong { color: var(--text); font-size: 13px; font-weight: 500; line-height: normal; letter-spacing: normal; }
   .li-page .li-name small:empty { display: none; }
   .li-page .li-row .li-initiative-icon { color: white !important; font: 400 13.3333px var(--font); line-height: normal; letter-spacing: normal; }
   .li-page .li-cell { display: none; }
-  .li-page .li-cell--health { display: flex; grid-column: 3 !important; height: 56px; margin-right: -6px; }
+  .li-page .li-cell--health { display: flex; grid-column: 3 !important; height: 56px; }
   .li-page .li-row .li-health { box-sizing: border-box; display: grid; place-items: center; width: 32px; height: 32px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; color: var(--text); font: 500 12px var(--font); line-height: normal; letter-spacing: normal; }
   .li-page .li-row .li-health > i { display: none; }
   .li-page .li-phone-health { display: block; width: 14px; height: 14px; }
   .li-page .li-health.is-onTrack .li-phone-health { color: var(--project-health-on-track); }
   .li-page .li-health.is-atRisk .li-phone-health { color: var(--project-health-at-risk); }
   .li-page .li-health.is-offTrack .li-phone-health { color: var(--project-health-off-track); }
+  .li-page .li-bulk button { display: inline-flex; white-space: nowrap; }
 }

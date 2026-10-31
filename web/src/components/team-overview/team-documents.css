@@ -579,7 +579,6 @@
   }
   .team-docs-selection .team-docs-selection-actions span { color: var(--bright); }
   .team-docs-selection .team-docs-selection-actions svg { width: 14px; height: 14px; color: var(--phone-group-title); }
-  .team-docs-selection .team-docs-selection-agent { display: none; }
   .team-docs-selection .team-docs-selection-clear {
     width: 32px;
     height: 32px;
