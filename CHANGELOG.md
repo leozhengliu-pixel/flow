@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Phone settings search uses the measured placeholder tone and hairline edge, the shared Agent/history footer stays hidden on settings routes, and team overview tab fills no longer brighten their rings; desktop layouts are unchanged.
 - Phone issue activity centers avatar initials, dims and ends its connector at the last icon, matches the comment placeholder colour, and aligns compact timestamps; blocking events now say "marked this issue as blocking" in the shared desktop and phone history, with updated Chinese copy.
 - Phone issue activity aligns subscriber controls, event links and timeline spacing, and the empty comment composer uses the matching attachment and send glyphs without changing desktop layouts.
 - Phone settings navigation restores the opening section's vertical inset and muted help glyph without changing the scrolled drawer viewport or desktop layout.

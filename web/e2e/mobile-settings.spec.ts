@@ -16,6 +16,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       const { workspace: { urlKey: workspaceKey } } = await created.json() as { workspace: { urlKey: string } }
 
       await page.goto(`/${workspaceKey}/settings/account/preferences`)
+      await expect(page.locator('.bottom-agent')).toBeHidden()
       await page.locator('.settings-mobile-menu').click()
 
       const drawer = page.locator('.settings-sidebar.open')
@@ -29,6 +30,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect((await page.locator('.settings-back').boundingBox())?.height).toBe(32)
       expect((await page.locator('.settings-back').boundingBox())?.y).toBeCloseTo(14.25, 1)
       expect((await page.locator('.settings-search input').boundingBox())?.width).toBe(306)
+      expect(await page.locator('.settings-search input').evaluate(input => getComputedStyle(input, '::placeholder').color)).toBe('lch(61.803 1.2 272)')
+      expect(await page.locator('.settings-search').evaluate(search => getComputedStyle(search, '::after').boxShadow)).toBe('lch(22.193 1.93 272) 0px 0px 0px 0.5px inset')
+      await expect(page.locator('.bottom-agent')).toBeHidden()
 
       const sections = page.locator('.settings-sidebar nav section h2 > span')
       await expect(sections.nth(0)).toHaveText('Personal')
@@ -52,6 +56,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
 
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/settings-nav-${viewport.width}.png`, scale: 'css', animations: 'disabled' })
+      await page.locator('.settings-sidebar-scrim.open').click({ position: { x: viewport.width - 12, y: 100 } })
+      await expect(drawer).not.toBeVisible()
+      await expect(page.locator('.bottom-agent')).toBeHidden()
     })
   })
 }

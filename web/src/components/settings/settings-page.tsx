@@ -836,7 +836,7 @@ export function SettingsPage(props: SettingsPageProps) {
         </main>
       </div>
       {(props.onNavigateAgent || props.onOpenAgentHistory) && (
-        <div className="bottom-agent settings-bottom-agent">
+        <div className="bottom-agent">
           {props.onNavigateAgent && (
             <button type="button" aria-label="Agent" onClick={props.onNavigateAgent}>
               <AgentCursorGlyph size={14} />
