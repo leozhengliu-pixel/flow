@@ -159,6 +159,7 @@
   cursor: pointer;
 }
 .document-edited > svg { width: 14px; height: 14px; flex: 0 0 14px; margin-right: 6px; }
+.document-edited__label--phone { display: none; }
 .document-edited:hover,
 .document-edited[data-state="open"] { background: var(--issue-header-hover-bg); color: var(--issue-header-fg); }
 .document-edited-popover {
@@ -483,4 +484,141 @@ button.document-icon.is-empty:hover,
   .document-canvas { width: 100%; padding: 32px 20px 96px; }
   .document-icon-row { margin-bottom: 6px; }
   .document-author-name { display: none; }
+}
+
+/* The phone document view keeps the full header action strip visible and gives
+   the editor the same generous writing area as the native mobile page. */
+@media (max-width: 767px) {
+  .app:has(.document-page) { background: var(--bg-panel); }
+  .document-page { overflow: auto; }
+  .document-header {
+    gap: 12px;
+    background: var(--bg-panel);
+    padding: 0 !important;
+    border-bottom: 0 !important;
+  }
+  .document-header::after { content: ""; position: absolute; inset: auto 0 0; height: .5px; background: var(--border); }
+  .document-mobile-menu {
+    position: absolute !important;
+    top: 5.75px !important;
+    left: 8px !important;
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+    margin: 0 !important;
+    padding: 0 2px !important;
+    border: .5px solid transparent !important;
+    font: 500 12px/normal var(--font) !important;
+    color: var(--text) !important;
+    border-radius: 9999px !important;
+  }
+  .document-mobile-menu::before,
+  .document-mobile-menu::after { content: none !important; }
+  .document-mobile-menu svg { display: block !important; width: 14px !important; height: 14px !important; color: var(--phone-icon-fg) !important; }
+  .document-breadcrumbs {
+    position: absolute;
+    top: 4.75px;
+    left: 52px;
+    right: 239.36px;
+    width: auto;
+    height: 34px;
+    padding-left: 0;
+    overflow: hidden;
+  }
+  .document-breadcrumb-parent,
+  .document-breadcrumbs > .document-breadcrumb-separator { display: flex; }
+  .document-breadcrumb-parent { flex-shrink: 0; }
+  .document-breadcrumb-parent > span:not(.document-breadcrumb-glyph) {
+    width: calc(75vw - 261.8px);
+    max-width: calc(75vw - 261.8px);
+  }
+  .document-breadcrumbs > .document-breadcrumb-separator {
+    position: absolute;
+    left: calc(75vw - 231.8px);
+    margin-left: 0;
+  }
+  .document-breadcrumb-documents { display: none; }
+  .document-breadcrumb-current { flex: 0 1 auto; margin-left: 21.2px; padding: 0; }
+  .document-title-actions {
+    position: absolute;
+    top: 5.75px;
+    right: 163.36px;
+    width: 70px;
+    height: 32px;
+    gap: 6px;
+  }
+  .document-title-actions .document-icon-button,
+  .document-header-actions .document-icon-button {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+    font: 500 12px/normal var(--font) !important;
+    color: var(--text) !important;
+    border-radius: 9999px !important;
+    border: .5px solid transparent !important;
+  }
+  .document-header-actions {
+    position: absolute;
+    top: 5.75px;
+    right: 8px;
+    width: 149.36px;
+    height: 32px;
+    margin-left: 0;
+    gap: 4px;
+  }
+  .document-edited {
+    width: 77.36px;
+    height: 32px;
+    flex: 0 0 77.36px;
+    padding: 0 10px 0 8px;
+    justify-content: flex-start;
+  }
+  .document-edited > svg { margin-right: 6px; }
+  .document-edited__label--phone { display: inline; }
+  .document-edited__label--desktop { display: none; }
+  .document-canvas {
+    position: relative;
+    width: calc(100% - 52px);
+    margin: 0 40px 0 12px;
+    min-height: 708px;
+    padding: 0;
+  }
+  .document-icon-row { margin: 64px 0 6px; }
+  .document-icon.is-empty {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+    margin: 6px 0 0 4px;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--theme-text-primary);
+    overflow: visible;
+  }
+  .document-icon.is-empty::before { content: ""; position: absolute; inset: -6px -4px; border: .5px solid var(--border); border-radius: 5px 10px 5px 5px; background: var(--theme-surface-1); clip-path: polygon(0 0, 66% 0, 100% 30%, 100% 100%, 0 100%); pointer-events: none; }
+  .document-icon.is-empty::after { display: none; }
+  .document-icon.is-empty svg { position: relative; width: 18px; height: 18px; color: var(--phone-document-icon) !important; fill: var(--color-swatch-grey); }
+  .document-title-editor {
+    height: 32px;
+    margin-bottom: 16px;
+    color: var(--theme-text-primary);
+    font: 600 24px/38.4px var(--font);
+    letter-spacing: -0.1px;
+  }
+  .document-title {
+    height: 32px;
+    margin: 0;
+    line-height: 32px;
+    letter-spacing: -0.16px;
+    color: var(--theme-text-primary);
+    caret-color: var(--theme-text-primary);
+  }
+  .document-editor .flow-prosemirror {
+    width: calc(100% + 28px);
+    min-height: 458px;
+    margin-left: -14px;
+    padding: 10px 14px 384px;
+  }
+  .document-editor .flow-prosemirror > p:first-child {
+    display: inline;
+  }
 }
