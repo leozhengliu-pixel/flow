@@ -2,6 +2,7 @@ import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { ChevronRight, GitPullRequest } from 'lucide-react'
 import { useCurrentTime } from '@/hooks/use-current-time'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { useCallback, useRef, useState, type CSSProperties, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 
 import { StatusIcon } from '@/components/issue/issue-icons'
@@ -304,6 +305,7 @@ function ActorVisual({ notification }: { notification: InboxNotificationRowData 
 function NotificationContextMenu(props: InboxNotificationRowProps) {
   const { notification, disabled = false } = props
   const t = useOptionalTranslate()
+  const phone = usePhoneLayout()
   const pulse = notification.kind === 'pulse'
   return (
     <ContextMenu.Portal>
@@ -327,7 +329,7 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
             <span className="flow-inbox-menu__trailing"><ChevronRight size={14} strokeWidth={1.5} /></span>
           </ContextMenu.SubTrigger>
           <ContextMenu.Portal>
-            <ContextMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-snooze-menu" sideOffset={4} alignOffset={-37}>
+            <ContextMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-snooze-menu" sideOffset={phone ? 4 : -1.5} alignOffset={phone ? -37 : -43}>
               <RowSnoozeMenu notification={notification} disabled={disabled} onSnooze={props.onSnooze} />
             </ContextMenu.SubContent>
           </ContextMenu.Portal>

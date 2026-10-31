@@ -814,6 +814,9 @@
 .flow-inbox-snooze-menu { width: 324px; height: 241.5px; box-sizing: border-box; padding-bottom: 7px; }
 .flow-inbox-snooze-menu .flow-inbox-menu__item { line-height: normal; }
 @media (min-width: 1024px) {
+  .flow-inbox-list-state--message:has(> .flow-inbox-list-state__ghost-action) { padding-bottom: 11px; }
+  .flow-inbox-list-state--message:has(> .flow-inbox-list-state__ghost-action) > strong { line-height: normal; }
+  :root .flow-inbox-list-state--message button.flow-inbox-list-state__ghost-action { margin-top: 16px; background: transparent; font-weight: 500; line-height: normal; }
   .flow-inbox-menu--actions .flow-inbox-menu__item { color: var(--pk-text); }
   .flow-inbox-menu--actions .flow-inbox-menu__shortcut { flex: 0 0 auto; margin-left: -2.5px; padding-left: 0; }
   .flow-inbox-snooze-menu { width: 318px; height: auto; min-height: 241.5px; }
