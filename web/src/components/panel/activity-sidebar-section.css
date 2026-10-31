@@ -71,10 +71,16 @@
 
 .activity-sidebar-section__teaser li,
 .activity-sidebar-section__history li {
+  align-items: flex-start;
   color: var(--theme-text-secondary, #8a8f98);
+  display: flex;
   font-size: 12px;
+  gap: 8px;
   line-height: 1.35;
 }
+
+.activity-sidebar-section__icon { display: inline-flex; flex: 0 0 16px; height: 16px; width: 16px; }
+.activity-sidebar-section__icon svg { height: 16px; width: 16px; }
 
 .activity-sidebar-section__teaser strong,
 .activity-sidebar-section__group header strong {

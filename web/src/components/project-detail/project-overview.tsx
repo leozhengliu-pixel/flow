@@ -3,7 +3,7 @@ import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import type { Editor } from '@tiptap/react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { AlignLeft, ArrowRight, Diamond, FileText, Flag, Link2, MoreHorizontal, Plus, X, Send } from 'lucide-react'
+import { AlignLeft, ArrowRight, Diamond, FileText, Link2, MoreHorizontal, Plus, X, Send } from 'lucide-react'
 import { PlusIcon } from '@/components/ui/view-action-icons'
 import { ProjectFirstUpdateIcon, ProjectFlagIcon, ProjectStartArrowIcon } from './project-overview-icons'
 import { format, formatDistanceToNowStrict } from 'date-fns'
@@ -18,7 +18,7 @@ import { ProjectTeamsPicker } from '@/components/projects-page/project-teams-pic
 import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
 import { isMilestoneDateOverdue } from '@/components/issue/milestone-progress'
 import { projectStatusOptionColor } from '@/lib/project-status-color'
-import { ViewIconPicker } from '@/components/views/view-icon-picker'
+import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ProjectDatePicker } from '@/components/projects-page/project-target-date-picker'
 import { DocumentGlyph } from '@/components/documents/document-icon'
@@ -119,7 +119,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
     {customersEnabled && issueData && <ProjectCustomersRow data={issueData} project={project} issueIds={projectIssueIds}/>}
 
     <section className={`project-overview__latest${projectUpdates[0] ? '' : ' is-empty'}`}>
-      {projectUpdates[0] ? <div aria-label="Open latest project update" className="project-overview__latest-update" onClick={event => { if (!(event.target as HTMLElement).closest('a')) onTabChange('activity') }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onTabChange('activity') } }} role="button" tabIndex={0}><span className={`project-overview__health is-${projectUpdates[0].health}`}/><div><strong data-i18n-ignore>{projectUpdates[0].user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(projectUpdates[0].createdAt), { addSuffix: true })}</time><div className="project-overview__latest-update-body" data-i18n-ignore><RichComment body={projectUpdates[0].body} data={projectUpdates[0].bodyData}/></div></div></div> : <button className="project-overview__first-update" onClick={() => onTabChange('activity')} type="button"><FileText className="project-overview__desktop-icon" size={14}/><ProjectFirstUpdateIcon className="project-overview__mobile-icon"/>Write first project update</button>}
+      {projectUpdates[0] ? <div aria-label="Open latest project update" className="project-overview__latest-update" onClick={event => { if (!(event.target as HTMLElement).closest('a')) onTabChange('activity') }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onTabChange('activity') } }} role="button" tabIndex={0}><span className={`project-overview__health is-${projectUpdates[0].health}`}/><div><strong data-i18n-ignore>{projectUpdates[0].user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(projectUpdates[0].createdAt), { addSuffix: true })}</time><div className="project-overview__latest-update-body" data-i18n-ignore><RichComment body={projectUpdates[0].body} data={projectUpdates[0].bodyData}/></div></div></div> : <button className="project-overview__first-update" onClick={() => onTabChange('activity')} type="button"><ProjectFirstUpdateIcon className="project-overview__desktop-icon" height={14} width={14}/><ProjectFirstUpdateIcon className="project-overview__mobile-icon"/>Write first project update</button>}
     </section>
 
     <section className="project-overview__description" id="project-overview-description">
@@ -222,11 +222,11 @@ function ProjectResourceDialog({ onOpenChange, onSubmit, open, resource }: { onO
 
 
 function InitiativeSection({ initiatives, project, save }: { initiatives: Props['initiatives']; project: Props['project']; save: Props['save'] }) {
-  const options = initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, icon: <Flag size={13}/>, groupLabel: initiativeStatusLabel(initiative.status), i18nIgnore: true }))
+  const options = initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, icon: <ViewGlyph color={initiative.color} icon={initiative.icon || 'Initiative'}/>, groupLabel: initiativeStatusLabel(initiative.status), i18nIgnore: true }))
   const selected = initiatives.filter(initiative => (project.initiatives ?? []).includes(initiative.id))
   return <section className="project-overview__row-section"><h3>Initiatives</h3><div className="project-overview__row-content project-overview__initiatives">
-    {selected.map(initiative => <span className="project-overview__initiative" data-i18n-ignore key={initiative.id}><Flag className="project-overview__desktop-icon" size={13}/><ProjectFlagIcon className="project-overview__mobile-icon" style={{ color: initiative.color }}/><span>{initiative.name}</span></span>)}
-    <PropertyMenu compact multiple label="Initiatives" value="Add initiative…" emptyLabel="No matching initiatives" selectedIds={project.initiatives ?? []} options={options} icon={<Plus size={13}/>} searchPlaceholder="Change initiatives…" searchShortcut="P, then N" surfaceClassName="project-details-sidebar__property-menu is-members is-initiatives" onChange={id => void save({ initiatives: toggleString(project.initiatives ?? [], id) })}/>
+    {selected.map(initiative => <span className="project-overview__initiative" data-i18n-ignore key={initiative.id}><ViewGlyph className="project-overview__desktop-icon" color={initiative.color} icon={initiative.icon || 'Initiative'}/><ProjectFlagIcon className="project-overview__mobile-icon" style={{ color: initiative.color }}/><span>{initiative.name}</span></span>)}
+    <PropertyMenu compact multiple label="Initiatives" value="Add initiative…" emptyLabel="No matching initiatives" selectedIds={project.initiatives ?? []} options={options} trigger={<Plus size={13}/>} triggerClassName="mini-property-trigger project-overview__initiative-add" searchPlaceholder="Change initiatives…" searchShortcut="P, then N" surfaceClassName="project-details-sidebar__property-menu is-members is-initiatives" onChange={id => void save({ initiatives: toggleString(project.initiatives ?? [], id) })}/>
   </div></section>
 }
 

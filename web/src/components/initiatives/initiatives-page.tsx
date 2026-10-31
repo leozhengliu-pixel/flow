@@ -73,7 +73,9 @@ const PROPERTY_ORDER = ['description', 'owner', 'status', 'leadTeam', 'teams', '
 type Property = typeof PROPERTY_ORDER[number]
 export type InitiativeListProperty = Property
 const TABLE_PROPERTY_ORDER: Property[] = ['status', 'priority', 'owner', 'leadTeam', 'target', 'projects', 'health', 'activeProjects', 'labels', 'teams', 'created', 'updated', 'completed']
-const DEFAULT_PROPERTIES: Property[] = ['description', 'status', 'priority', 'owner', 'leadTeam', 'target', 'projects', 'health', 'activeProjects']
+// Lead team remains available in Display properties, but the directory's default
+// columns match the compact reference view and leave it off until selected.
+const DEFAULT_PROPERTIES: Property[] = ['status', 'priority', 'owner', 'target', 'projects', 'health', 'activeProjects']
 type Sort = 'manual' | 'name' | 'status' | 'priority' | 'target' | 'health' | 'created' | 'updated'
 type Grouping = 'none'|'contributingTeam'|'leadTeam'|'owner'|'health'|'status'|'priority'|'label'
 type FilterState = { status?: InitiativeStatus; priority?: number; ownerId?: string; creatorId?: string; leadTeamId?: string; teamId?: string; health?: Project['health']; labelId?: string; date?: 'created7'|'updated7'|'targetMonth'|'completed' }
