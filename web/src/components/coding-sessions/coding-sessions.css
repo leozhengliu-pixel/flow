@@ -209,15 +209,35 @@
 /* Review panels replace the diff on phones. Keep the floating frame flush with the merged review chrome. */
 @media (max-width:767px){
   html:root body .reviews-workspace .review-agent-panel{flex:1;width:auto;margin:0 8px 8px 4px;background:var(--theme-background);box-shadow:var(--cs-card-shadow)}
-  html:root body .reviews-workspace .review-agent-panel .coding-agent-panel-header{gap:0;padding:8px 6px 8px 10px;position:relative;left:-.5px;top:-.5px;width:calc(100% + 1px)}
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-panel-header{gap:0;padding:8px 6px 8px 10px;background:var(--cs-bg-base);z-index:1;position:relative;left:-.5px;top:-.5px;width:calc(100% + 1px)}
   html:root body .reviews-workspace .review-agent-panel .coding-agent-panel-header-inner{min-width:0;flex:1;display:flex;align-items:center;gap:8px;height:32px;padding-left:6px;box-sizing:border-box}
   html:root body .reviews-workspace .review-agent-panel .coding-agent-panel-header-inner .coding-agent-archived{display:none}
   html:root body .reviews-workspace .review-agent-panel .coding-agent-panel-header h3{line-height:normal}
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-avatar{font:400 16px/0 var(--font);color:var(--theme-text-primary)}
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-avatar .agent-avatar-mark{color:var(--cs-label-base)}
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-avatar .agent-avatar-mark__disc{fill:var(--cs-label-base)}
   html:root body .reviews-workspace .review-agent-panel .coding-agent-menu-trigger,
   html:root body .reviews-workspace .review-agent-panel .coding-agent-close{width:32px;flex-basis:32px;height:32px}
   html:root body .reviews-workspace .review-agent-panel .coding-agent-close{margin-left:0}
-  html:root body .reviews-workspace .review-agent-panel .coding-agent-stream{position:relative;left:-.5px;top:-.5px;width:calc(100% + 1px);font:400 16px/24px var(--font)}
+  html:root body .reviews-workspace .review-agent-panel :is(.coding-agent-menu-trigger,.coding-agent-close){padding:0 2px;font:500 12px/normal var(--font);color:var(--cs-label-base)}
+  html:root body .reviews-workspace .review-agent-panel :is(.coding-agent-menu-trigger,.coding-agent-close) svg{color:var(--cs-icon-fg)}
+  html:root body .reviews-workspace .review-agent-panel .coding-agent-stream{position:relative;left:-.5px;top:-.5px;width:calc(100% + 1px);padding:0;color:var(--theme-text-primary);font:400 16px/24px var(--font)}
+  html:root body .reviews-workspace .review-agent-panel .cs-turn{margin-inline:8px}
+  html:root body .reviews-workspace .review-agent-panel .cs-turn:first-child{padding-top:4px}
+  html:root body .reviews-workspace .review-agent-panel .coding-session-prompt header{height:19px;line-height:19px}
+  html:root body .reviews-workspace .review-agent-panel .coding-session-prompt header strong{line-height:normal}
+  html:root body .reviews-workspace .review-agent-panel .coding-session-prompt p{letter-spacing:-.0866667px}
+  html:root body .reviews-workspace .review-agent-panel .cs-group-header{gap:3px}
+  html:root body .reviews-workspace .review-agent-panel .cs-group-label{line-height:normal}
+  html:root body .reviews-workspace .review-agent-panel .cs-reasoning p{letter-spacing:-.08px}
+  html:root body .reviews-workspace .review-agent-panel .cs-reasoning code{font:450 11.25px/14.625px var(--cs-terminal-font)}
+  html:root body .reviews-workspace .review-agent-panel .cs-reasoning code{position:relative;top:-2px}
+  html:root body .reviews-workspace .review-agent-panel .cs-action{gap:16px}
+  html:root body .reviews-workspace .review-agent-panel .cs-action-header{gap:16px}
+  html:root body .reviews-workspace .review-agent-panel .cs-action-detail{font-family:var(--font);line-height:normal;border-radius:2.4px}
+  html:root body .reviews-workspace .review-agent-panel .cs-action-header.is-disclosure{gap:3px;padding:0 8px;margin:0 -8px;border-radius:4px}
   html:root body .reviews-workspace .review-agent-panel:has(.cs-archived-divider) .cs-composer-area{display:none}
+  html:root body .reviews-workspace .review-agent-panel .cs-latest{display:none}
   html:root body .reviews-workspace .review-agent-panel .cs-group-children{padding-left:10px;padding-right:10px}
   html:root body .reviews-workspace .review-agent-panel .cs-group-header:hover,
   html:root body .reviews-workspace .review-agent-panel .cs-action-header:hover{color:var(--cs-label-muted)}
