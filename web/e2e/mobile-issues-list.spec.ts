@@ -2,6 +2,42 @@ import { expect, test } from '@playwright/test'
 import { test as workspaceTest } from './workspace-fixture'
 import type { BootstrapData } from '../src/types/flow'
 
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`phone filter command menu ${viewport.width}`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Filter menu' })
+
+    workspaceTest('matches the filter command rows and keeps search and field navigation usable', async ({ page, workspaceKey }) => {
+      await page.goto(`/${workspaceKey}/my-issues/activity`)
+      await page.getByRole('button', { name: 'Add filter', exact: true }).click()
+      const menu = page.getByRole('dialog', { name: 'Add Filter…', exact: true })
+      await expect.poll(async () => (await menu.boundingBox())?.x).toBe(16)
+      const panel = await menu.boundingBox()
+      expect(panel?.x).toBe(16)
+      expect(panel?.width).toBe(viewport.width - 32)
+      expect(panel?.height).toBe(450)
+      expect(Math.abs((panel?.y ?? 0) - viewport.height * .13)).toBeLessThanOrEqual(1)
+      const ai = menu.getByRole('option', { name: 'AI filter', exact: true })
+      expect((await ai.boundingBox())?.height).toBe(46)
+      await expect(ai.locator('span').nth(1)).toHaveCSS('font-size', '13px')
+      await expect(ai.locator('span').nth(1)).toHaveCSS('font-weight', '450')
+      await expect(menu.locator('[cmdk-separator]').first()).toHaveCSS('height', '12px')
+      const team = menu.getByRole('option', { name: 'Team', exact: true })
+      await expect(team.locator('svg')).toHaveAttribute('viewBox', '0 0 16 16')
+      await expect(team.locator('path')).toHaveCount(3)
+      const search = menu.getByRole('combobox', { name: 'Add Filter…' })
+      await search.fill('Status')
+      const status = menu.getByRole('option', { name: 'Status', exact: true })
+      await expect(status).toBeVisible()
+      expect((await status.boundingBox())?.y).toBeLessThan((panel?.y ?? 0) + 100)
+      await expect(team).toHaveCount(0)
+      await status.click()
+      await expect(page.getByRole('listbox', { name: 'Status', exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  })
+}
+
 workspaceTest.describe('mobile issue lists and views', () => {
   workspaceTest.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
@@ -212,7 +248,8 @@ test.describe('mobile Subscribed tab', () => {
     await page.waitForTimeout(200)
     await page.getByRole('option', { name: 'No grouping', exact: true }).click()
     await page.waitForTimeout(200)
-    await page.getByRole('checkbox', { name: 'Nested sub-issues' }).check()
+    await page.getByRole('combobox', { name: 'Nested sub-issues', exact: true }).click()
+    await page.getByRole('option', { name: 'Show all', exact: true }).click()
     await page.waitForTimeout(200)
     await page.keyboard.press('Escape')
     await expect(page.locator('[data-my-issues-surface] [class*="groupHeader"]').first()).toBeHidden()
