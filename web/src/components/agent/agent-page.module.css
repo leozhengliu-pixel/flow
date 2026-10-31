@@ -43,9 +43,10 @@
   max-width: 360px;
   margin: 0;
   overflow: hidden;
-  color: var(--theme-text-primary);
+  color: var(--text);
   font-size: 13px;
   font-weight: 500;
+  line-height: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -339,7 +340,7 @@
   color: var(--agent-composer-placeholder);
 }
 .composer > footer {
-  height: 32px;
+  height: 24px;
   display: grid;
   grid-template-columns: auto 1fr 24px 24px;
   align-items: end;
@@ -360,6 +361,7 @@
   place-items: center;
   padding: 0 2px;
 }
+.composer > footer > .attachButton { color: var(--text); }
 .composer > footer > button:hover:not(:disabled):not(.sendButton),
 .skillsButton:hover,
 .skillsButton[aria-expanded="true"] {
@@ -399,8 +401,8 @@
   width: auto;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 6px 0 4px;
+  gap: 5px;
+  padding: 0 4px;
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
@@ -1018,10 +1020,14 @@
   height: 14px;
 }
 @media (min-width: 801px) {
-  .skillsMenu { width: 171px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .skillsMenu { box-sizing: border-box; width: 170.5px; height: 43.1px; overflow: hidden; padding: 0; border: 0.5px solid var(--popover-border); border-radius: 12px; background: var(--theme-surface-2); box-shadow: var(--shadow-dialog); }
   .skillsMenuHeader { box-sizing: border-box; display: flex; align-items: center; height: 12px; padding: 0 10px; color: var(--theme-text-secondary); font-size: 11px; font-weight: 450; }
   .skillsMenu .menuSearch { display: none; }
   .skillsMenu [role="option"] { height: 31px; padding: 0 14px; }
+  .editorScroll > div > .editor { min-height: 44px; }
+  .emptyComposerSlot > .composer { top: 2px; }
+  .emptyComposerSlot > .composer > footer { position: relative; top: 8px; }
+  .emptyComposerSlot > .composer .skillsButton { padding-right: 5px; }
 }
 .danger {
   color: var(--semantic-danger);
@@ -1162,6 +1168,7 @@
   .composer .skillsButton {
     height: 28px;
     gap: 5px;
+    padding: 0 6px 0 4px;
   }
   .composer .editorScroll > div > .editor {
     color: var(--agent-composer-text);
@@ -1418,7 +1425,7 @@
 :global(:root[data-theme="light"]) .danger { color: var(--semantic-danger); }
 :global(:root[data-theme="light"]) .attachments > span { border-color: var(--theme-border); background: var(--theme-surface-hover); }
 @media (min-width: 801px) {
-  :global(:root[data-theme="light"]) .skillsMenu { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  :global(:root[data-theme="light"]) .skillsMenu { box-sizing: border-box; width: 170.5px; height: 43.1px; border: 0.5px solid var(--popover-border); border-radius: 12px; background: var(--theme-surface-2); box-shadow: var(--shadow-dialog); }
   :global(:root[data-theme="light"]) .skillsMenuHeader { box-sizing: border-box; display: flex; align-items: center; height: 12px; padding: 0 10px; }
   :global(:root[data-theme="light"]) .skillsMenu [role="option"] { height: 31px; padding: 0 14px; }
 }
