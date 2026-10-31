@@ -7,6 +7,7 @@
   .workspace-announcements-dialog .settings-input { width: 100%; }
   .workspace-announcements-dialog textarea { box-sizing: border-box; width: 100%; resize: vertical; padding: 10px; border: 1px solid var(--set-sep); border-radius: 8px; background: var(--set-card); color: var(--set-text); font: 13px/20px var(--font); }
   html:root .settings-app .settings-main > .settings-content { padding-top: 63.5px; }
+  html:root .settings-app .settings-main:has(.settings-workspace-members) { scrollbar-gutter: auto; }
   html:root .settings-app .settings-main > .settings-content:has(.settings-teams-page) { padding-top: 63.5px; }
   html:root .settings-app .settings-sidebar { padding: 0; }
   html:root .settings-app .settings-back { gap: 5px; margin: 16.5px 0 12px 16px; text-decoration: none; }
