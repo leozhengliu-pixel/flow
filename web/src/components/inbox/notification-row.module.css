@@ -11,7 +11,7 @@
 
 .snoozeOption time {
   margin-left: auto;
-  color: var(--theme-text-secondary);
+  color: var(--pk-muted);
   font-size: 13px;
   font-weight: 450;
   white-space: nowrap;

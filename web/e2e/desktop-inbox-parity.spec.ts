@@ -30,6 +30,10 @@ test('row menu fits its labels and typed snooze persists the chosen time', async
   await menu.getByRole('menuitem', { name: /Snooze/ }).hover()
   const snooze = page.locator('.flow-inbox-snooze-menu')
   await expect.poll(async () => Math.round((await snooze.boundingBox())!.width)).toBe(318)
+  const parentRect = (await menu.boundingBox())!
+  const snoozeRect = (await snooze.boundingBox())!
+  expect(Math.abs(snoozeRect.x - parentRect.x - parentRect.width + 1.5)).toBeLessThanOrEqual(1)
+  expect(Math.abs(snoozeRect.y - parentRect.y - 27)).toBeLessThanOrEqual(1)
   await expect(snooze.locator('time')).toHaveCount(5)
   await expect(snooze.getByRole('menuitem', { name: 'Custom…' }).locator('svg')).toHaveCount(1)
   const mutation = page.waitForResponse(r => r.request().method() === 'PATCH' && /\/api\/notifications\//.test(r.url()))
@@ -86,6 +90,26 @@ test('welcome document keeps its measured layout and Flow resources in view', as
   expect(resources.y).toBeLessThan(760)
   expect((await support.boundingBox())!.y).toBeLessThan(850)
   await expect(page.getByText('Issue is no longer available')).toHaveCount(0)
+})
+
+test('unread-empty state uses the measured ghost action without extra copy', async ({ page, workspaceKey }) => {
+  await page.goto(`/${workspaceKey}/inbox`)
+  const markedRead = page.waitForResponse(r => r.request().method() === 'PATCH' && /\/api\/notifications\//.test(r.url()))
+  await page.getByText('Welcome to Flow', { exact: true }).click()
+  await markedRead
+  await page.goto(`/${workspaceKey}/inbox`)
+  await page.getByRole('button', { name: 'Show unreads only', exact: true }).click()
+  const title = page.getByText('No unreads', { exact: true })
+  const action = page.getByRole('button', { name: 'Show all notifications', exact: true })
+  await expect(title).toBeVisible()
+  await expect(action).toBeVisible()
+  expect(Math.abs((await title.boundingBox())!.y - 420.75)).toBeLessThanOrEqual(1)
+  expect(Math.abs((await action.boundingBox())!.y - 452.25)).toBeLessThanOrEqual(1)
+  expect(await action.evaluate(e => getComputedStyle(e).backgroundColor)).toMatch(/rgba\(0, 0, 0, 0\)|\/ 0\)$/)
+  expect(await action.evaluate(e => getComputedStyle(e).fontWeight)).toBe('500')
+  await expect(page.getByText('All caught up', { exact: true })).toHaveCount(0)
+  await action.click()
+  await expect(page.locator('.flow-inbox-row')).toHaveCount(1)
 })
 
 test('Pulse empty state has left-aligned content and a compact action row', async ({ page, workspaceKey }) => {
