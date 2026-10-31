@@ -1,6 +1,6 @@
 /*
  * The app-wide tooltip (measured against the reference app in both themes): a 27.5px surface — 5px 8px padding,
- * .5px border, 8px radius, a hairline shadow — with the label in 450 11px/16.5px and the shortcut as 18×17px
+ * .5px border, 8px radius, a hairline shadow — with the label in 400 11px/16.5px and the shortcut as 18×17px
  * boxed keys 3px apart, 8px after the label. Colours come from the --tooltip-* tokens in styles/tokens.css;
  * `--raised` (over dialogs and floating panels) and `--elevated` (over the agent composer card) are the lighter
  * palettes used over raised surfaces.
@@ -20,7 +20,7 @@
   background: var(--tooltip-bg);
   box-shadow: var(--tooltip-shadow);
   color: var(--tooltip-text);
-  font: 450 11px/16.5px var(--font);
+  font: 400 11px/16.5px var(--font);
   letter-spacing: normal;
   white-space: nowrap;
   user-select: none;
@@ -39,6 +39,9 @@
   --tooltip-muted: var(--tooltip-elevated-muted);
   --tooltip-key-border: var(--tooltip-elevated-key-border);
 }
+
+/* The sidebar search tooltip sits tighter than the default 8px label/shortcut gap. */
+.flow-tooltip-content.sidebar-search-tooltip { gap: 5px; }
 
 /* Long labels wrap at the reference's 520px text width. */
 .flow-tooltip-copy { min-width: 0; max-width: 520px; overflow-wrap: anywhere; white-space: normal; }

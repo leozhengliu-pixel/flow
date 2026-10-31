@@ -42,6 +42,13 @@ export function WorkspaceMenu({
       if (isEditable(event.target)) return;
       const key = event.key.toLowerCase(),
         now = Date.now();
+      // Log out (⌥⇧Q), the shortcut the workspace menu advertises.
+      if (event.altKey && event.shiftKey && !event.metaKey && !event.ctrlKey && key === "q") {
+        event.preventDefault();
+        sequence.current = { key: "", at: 0 };
+        void onLogout();
+        return;
+      }
       if (
         sequence.current.key === "o" &&
         key === "w" &&
@@ -73,7 +80,7 @@ export function WorkspaceMenu({
     };
     addEventListener("keydown", listener);
     return () => removeEventListener("keydown", listener);
-  }, [onSettings]);
+  }, [onLogout, onSettings]);
   const workspace = data.workspace;
   const choose = (run: () => void) => { setOpen(false); run() };
   if (phone) return <>

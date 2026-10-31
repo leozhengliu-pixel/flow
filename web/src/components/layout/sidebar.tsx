@@ -700,11 +700,11 @@ export function Sidebar({
             onCreate={onCreateWorkspace}
             onLogout={onLogout}
           />
-          <FlowTooltip label="Search workspace" shortcut="⌘ K">
+          <FlowTooltip label={translate('Search')} shortcut="/" contentClassName="sidebar-search-tooltip">
             <button
               className="sidebar-top-action"
               type="button"
-              aria-label="Search workspace"
+              aria-label={translate('Search')}
               onClick={() => { close(); onSearch() }}
             >
               <FlowIcon name="Search" />
