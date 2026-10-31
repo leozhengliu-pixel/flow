@@ -156,7 +156,7 @@ export function WorkspaceTeamsSettings({
           </button>
         )}
         <button className="settings-action primary" type="button" onClick={onCreate}>
-          {t(desktop ? "Create new team" : "Create team")}
+          {t("Create team")}
         </button>
       </div>
       {visibility === "Recently deleted" ? (

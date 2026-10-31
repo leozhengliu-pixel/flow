@@ -15,6 +15,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Restore visible desktop profile field borders and settings search text, use the shared Create team wording, and align remaining settings controls and section spacing without changing phone layouts.
+
 - Restore desktop initiative detail columns, the latest saved update card and actions, browser titles, and project-count progress rings while retaining phone layouts and team controls.
 
 - Restore desktop project milestone chips, honor ungrouped rows and display properties, align list columns and compact date controls, and correct overview property spacing without changing phone layouts.

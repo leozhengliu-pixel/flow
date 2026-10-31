@@ -1,6 +1,8 @@
 import { ChevronRight, Info } from "lucide-react";
+import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import { useI18n } from "@/i18n/i18n";
 import { formatCredits, useAICredits } from "@/lib/ai-credits";
+import { settingsPath } from '@/lib/app-routes';
 import type { BootstrapData } from "@/types/flow";
 import { SettingsPageTitle } from "./settings-primitives";
 import { CheckGlyph } from "./billing-glyphs";
@@ -46,12 +48,14 @@ export function BillingSettings({ data, onOpenUsage }: { data: BootstrapData; on
   const users = (data.members ?? []).filter((member) => member.status === "active" && !member.user.app).length || 1;
   const unavailable = t("Billing is not available in Flow");
   const credits = useAICredits();
+  const desktop = useDesktopSettings();
+  const UsageControl = desktop ? 'a' : 'button';
   return (
     <div className="billing-page">
       <SettingsPageTitle
         description={
           <>
-            {t("For questions about billing,")}{" "}
+            {t("For questions about billing,")}{desktop ? '' : ' '}
             <a className="billing-link" href={DOCS_URL} target="_blank" rel="noreferrer">
               {t("contact us")}
             </a>
@@ -108,13 +112,19 @@ export function BillingSettings({ data, onOpenUsage }: { data: BootstrapData; on
         </div>
       </section>
 
-      <button type="button" className="billing-card billing-usage-row" onClick={onOpenUsage}>
+      <UsageControl type={desktop ? undefined : 'button'} href={desktop ? settingsPath(data.workspace.urlKey, 'usage') : undefined} className="billing-card billing-usage-row" onClick={event => {
+        if (desktop) {
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+        }
+        onOpenUsage();
+      }}>
         <span>
           <strong>{t("Usage")}</strong>
           {credits && <span>{t("{amount} remaining").replace("{amount}", formatCredits(credits.remainingMicros))}</span>}
         </span>
         <ChevronRight size={16} aria-hidden="true" />
-      </button>
+      </UsageControl>
 
       <h3 className="billing-invoices-title">{t("Recent invoices")}</h3>
       <section className="billing-card billing-invoices" aria-label={t("Recent invoices")}>
