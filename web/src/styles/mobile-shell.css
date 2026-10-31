@@ -53,8 +53,16 @@
   .sidebar .workspace-row { margin-bottom: 8.75px; }
   html:root .sidebar .workspace-row > button.sidebar-top-action { width: 32px; }
   html:root .sidebar .workspace-row > button.sidebar-compose { height: 32px; }
-  .sidebar-footer { height: 32px; flex-basis: 32px; margin-left: -2px; }
-  .sidebar-help { width: 32px; height: 32px; }
+  .sidebar-footer { height: 32px; flex-basis: 32px; margin: 0 0 0 -2px; padding: 0; }
+  .sidebar-help { width: 32px; height: 32px; flex: 0 0 32px; box-shadow: none; }
+  .sidebar-plan-button { display: none; }
+  /* The desktop sidebar metrics above must not leak into the phone drawer. */
+  .sidebar .workspace-row strong { font-size: 14px; font-weight: 500; line-height: 20px; letter-spacing: 0; }
+  .sidebar .workspace-menu-trigger .workspace-avatar { border-radius: 6px; font-size: 9px; font-weight: 600; }
+  html:root .sidebar .workspace-row > button.sidebar-top-action { border-radius: 50%; font-size: 13px; font-weight: 450; }
+  html:root .sidebar .workspace-row > button.sidebar-compose { background: var(--bg-subtle); }
+  .sidebar .nav-item { color: var(--issue-muted); }
+  .sidebar .section-label { font-size: 13px; line-height: 24px; }
   .sidebar .nav-item.active { background: var(--theme-surface-hover); }
   .sidebar .section-action { width: 28px; height: 28px; flex-basis: 28px; opacity: 1; }
   .sidebar .team-menu-trigger { opacity: 1; }
