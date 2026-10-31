@@ -77,6 +77,10 @@
   html:root body :global(.app) [data-issue-explorer] [data-content-view-header] [data-sidebar-trigger]::before,html:root body :global(.app) [data-issue-explorer] [data-content-view-header] [data-sidebar-trigger]::after{display:none}
   [data-issue-explorer] [data-content-view-breadcrumb] a{height:24px;padding:0 5px 0 4px;border:0;border-radius:8px;background:transparent;color:var(--text);font-size:13px;font-weight:500;line-height:normal}
   [data-issue-explorer] [data-content-view-breadcrumb]{width:156px;max-width:156px;flex:0 0 156px;overflow:hidden}
+  [data-issue-explorer] [data-content-view-breadcrumb]>span{min-width:0;overflow:hidden}
+  [data-issue-explorer] [data-content-view-breadcrumb]>span:first-child{flex:1}
+  [data-issue-explorer] [data-content-view-breadcrumb] a{min-width:0;max-width:100%;overflow:hidden}
+  [data-issue-explorer] [data-content-view-breadcrumb] a>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   [data-issue-explorer] [data-content-view-breadcrumb] a>span:first-child{width:16px;height:16px;flex:0 0 16px;font-size:16px;font-weight:400;line-height:24px;color:var(--bright);border-style:none}
   [data-issue-explorer] [data-content-view-breadcrumb] a>span:first-child>*{width:16px;height:16px}
   [data-issue-explorer] [data-content-view-breadcrumb] a>span:last-child{line-height:normal;color:var(--text);border-style:none}
