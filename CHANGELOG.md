@@ -11,6 +11,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Phone history and display popovers paint a true half-pixel edge, chat switcher times align to the right inset and compact older weeks without changing sub-day units, and inactive display layout pills retain their ring. Desktop layouts and timestamps are unchanged.
 - Phone navigation drawers retain a visible compose fill, the team header and child spacing, indented cycle labels, and a dismissible Import issues entry without changing the desktop sidebar.
 - Phone initiative lists use compact touch-sized tabs and actions, full-width name and health rows, and matching navigation and health glyphs without changing desktop layouts.
 - Desktop Inbox's unread-empty title and ghost action use the measured vertical placement, normal text line box and medium action weight without changing the phone empty state. Snooze inputs and date columns use the measured desktop insets.

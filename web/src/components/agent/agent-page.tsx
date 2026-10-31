@@ -492,6 +492,7 @@ export function AgentPage({
           </Popover.Trigger>
           <Popover.Portal>
             <Popover.Content data-flow-motion="floating"
+              data-phone-popover
               data-testid="agent-chat-switcher-popover"
               align="start"
               alignOffset={8}
@@ -544,7 +545,7 @@ export function AgentPage({
                         <i aria-hidden="true" data-unread={agentSessionUnread(item) || undefined} />
                         <strong data-i18n-ignore>{item.title}</strong>
                         <span>{current?.id === item.id ? t("Current") : ""}</span>
-                        <time>{formatAgentHistoryTime(item.updatedAt, t)}</time>
+                        <time>{formatAgentHistoryTime(item.updatedAt, t, undefined, phone)}</time>
                       </button>;
                     })}
                   </Fragment>
