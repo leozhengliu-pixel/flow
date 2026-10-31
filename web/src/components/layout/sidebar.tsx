@@ -138,10 +138,9 @@ import "./sidebar.css";
 import { pulseSidebarPath, usePulseUnread } from "@/components/pulse/pulse-unread";
 import { inboxUnread as inboxUnreadStore, useInboxUnread } from "@/lib/inbox-unread";
 import { pulseAudio, usePulseAudio } from "@/lib/pulse-audio";
-import { Command } from 'cmdk';
 import { usePhoneLayout } from '@/hooks/use-phone-layout';
 import { useDesktopSettings } from '@/hooks/use-desktop-settings';
-import { PhoneCommandMenu } from '@/components/ui/phone-menu';
+import { PhoneHelpMenu } from './phone-help-menu';
 
 export type PageId =
   | "inbox"
@@ -864,6 +863,7 @@ export function Sidebar({
 
         <footer className="sidebar-footer">
           <HelpMenu
+            onPhoneOpen={close}
             onSettings={() => onOpenSettings("workspace")}
             onShortcuts={() => setShortcutsOpen(true)}
           />
@@ -2342,9 +2342,11 @@ function SidebarDragHandleIcon() {
 }
 
 export function HelpMenu({
+  onPhoneOpen,
   onSettings,
   onShortcuts,
 }: {
+  onPhoneOpen?: () => void;
   onSettings: () => void;
   onShortcuts: () => void;
 }) {
@@ -2357,20 +2359,8 @@ export function HelpMenu({
     return () => window.removeEventListener('flow:open-help-menu', openHelp);
   }, []);
   if (phone) {
-    const docs = 'https://github.com/leozhengliu-pixel/flow/tree/main/docs';
-    const entries = [
-      { label: 'Docs', icon: <BookOpen/>, run: () => openExternal(docs) },
-      { label: 'Contact us', icon: <MessageCircle/>, run: () => openExternal('https://github.com/leozhengliu-pixel/flow/issues/new/choose') },
-      { label: 'Keyboard shortcuts', icon: <Keyboard/>, run: onShortcuts },
-      { label: 'Flow status', icon: <CircleCheck/>, run: () => openExternal(`${location.origin}/api/health`) },
-      { label: 'Download apps', icon: <Download/>, run: () => openExternal('https://github.com/leozhengliu-pixel/flow/releases') },
-      { label: 'Settings', icon: <Settings/>, run: onSettings },
-    ];
-    return <><button className="sidebar-help" type="button" aria-label={t('Open Help menu')} onClick={() => setOpen(true)}><ViewGlyph icon="QuestionMark" color="currentColor"/></button>
-      <PhoneCommandMenu heading open={open} onOpenChange={setOpen} label={t('Help')}>
-        {entries.map(item => <Command.Item key={item.label} onSelect={() => { setOpen(false); item.run() }}>{item.icon}<span>{t(item.label)}</span></Command.Item>)}
-        <Command.Group heading={t('What’s new')}><Command.Item onSelect={() => { setOpen(false); openExternal('https://github.com/leozhengliu-pixel/flow/blob/main/CHANGELOG.md') }}>{t('Full changelog')}</Command.Item></Command.Group>
-      </PhoneCommandMenu>
+    return <><button className="sidebar-help" type="button" aria-label={t('Open Help menu')} onClick={() => { onPhoneOpen?.(); setOpen(true) }}><ViewGlyph icon="QuestionMark" color="currentColor"/></button>
+      <PhoneHelpMenu open={open} onOpenChange={setOpen} onSettings={onSettings} onShortcuts={onShortcuts}/>
     </>;
   }
   return (
