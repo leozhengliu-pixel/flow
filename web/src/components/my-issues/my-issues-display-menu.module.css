@@ -198,7 +198,8 @@
     width: 144px;
     min-width: 144px;
     height: 28px;
-    padding: 3px 10px 3px 12px;
+    padding: 3px 24px 3px 12px;
+    position: relative;
     border-radius: 8px;
     background: var(--pk-control-phone);
     box-shadow: var(--pk-control-inset-ring-phone);
@@ -211,6 +212,7 @@
     color: var(--pk-muted);
     transform: translateY(-1px);
   }
+  .popover[data-issue-display-menu="true"] .selectTrigger:not(#_) > span:last-child { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
   .popover[data-issue-display-menu="true"] .selectTrigger:not(#_) > span:first-child {
     min-width: 0;
     white-space: nowrap;
@@ -314,6 +316,7 @@
   .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] > .sectionLabel:first-child:not(#_) { margin-bottom: 2px; }
   .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] > .nestedSelectRow + .switchRow { margin-top: 4px; }
   .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] { margin-top: 1px; }
+  .popover[data-issue-display-menu="true"] .footer { position: static; }
   .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] > .sectionLabel:first-child:not(#_) { margin-bottom: 2px; }
   .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] > .sectionLabel:nth-of-type(2):not(#_) { margin-top: 8px; }
 }
