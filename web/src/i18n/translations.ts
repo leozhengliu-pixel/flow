@@ -76,6 +76,8 @@ export const zhCN: Record<string, string> = {
   "Could not update due date.": "无法更新截止日期。",
   "Try: 24h, 7 days, Feb 9": "试试：24 小时、7 天、2 月 9 日",
   "Show {count} older activities": "显示 {count} 条更早的动态",
+  'Team overview': '团队概览',
+  'Message': '消息',
   'No email address': '未设置邮箱',
   'No enabled integrations': '暂无已启用的集成',
   'Discover integrations': '发现集成',

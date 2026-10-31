@@ -90,6 +90,17 @@ describe('built-in agent avatar', () => {
     expect(person.container.querySelector('[data-agent-avatar-slot]')).toBeNull()
   })
 
+  it.each([
+    ['[mobile] Skyler Anderson', 'MS'],
+    ['Dev User', 'DU'],
+    ['Jean-Luc Picard', 'JP'],
+    ['dev.user@example.test', 'DE'],
+  ])('renders shared initials for %s', (name, expected) => {
+    const view = render(<UserAvatar name={name} />)
+    expect(view.container.querySelector('span')).toHaveTextContent(expected)
+    view.unmount()
+  })
+
   it('falls back to initials when a remote avatar cannot be loaded', () => {
     const view = render(<UserAvatar name="Flow QA" avatarUrl="https://example.test/missing.png" />)
     const image = view.container.querySelector('img')!

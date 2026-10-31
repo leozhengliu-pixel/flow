@@ -1,6 +1,7 @@
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useDesktopSettings } from '@/hooks/use-desktop-settings';
+import { avatarInitials } from '@/lib/avatar-initials';
 import {
   useCallback,
   useEffect,
@@ -1089,7 +1090,7 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
       <PersonalSection>
         <PersonalRow title={p("Profile picture")}>
           <span className="personal-avatar" data-i18n-ignore>
-            {initials(displayName)}
+            {avatarInitials(displayName)}
           </span>
         </PersonalRow>
         <PersonalRow title={p("Email")}>
@@ -3874,17 +3875,6 @@ function defaultNotificationPreferences(
     updatedAt: new Date().toISOString(),
   };
 }
-function initials(value: string) {
-  return (
-    value
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase())
-      .join("") || "?"
-  );
-}
-
 function apiKeyPermissionsLabel(
   key: { scopes?: string[] | null },
   p: PersonalTranslate,

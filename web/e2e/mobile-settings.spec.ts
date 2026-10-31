@@ -18,6 +18,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await page.goto(`/${workspaceKey}/settings/account/profile`)
       const card = page.locator('.personal-section:first-of-type > .settings-card')
       await expect(page.locator('.personal-avatar')).toBeVisible()
+      await expect(page.locator('.personal-avatar')).toHaveText('MP')
       await expect(page.locator('.personal-static')).toHaveText('mobile-profile@example.test')
       expect((await card.boundingBox())?.height).toBeCloseTo(482.5, 1)
       expect((await page.getByRole('textbox', { name: 'Full name', exact: true }).boundingBox())?.width).toBeCloseTo(viewport.width - 65.3333, 1)
