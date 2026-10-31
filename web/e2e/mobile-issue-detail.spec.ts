@@ -49,6 +49,18 @@ async function noOverflow(page: Page) {
   expect(await page.locator('.issue-scroll').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
 }
 
+test('phone work actions stay available in issue options without widening the copy strip', async ({ page }) => {
+  await openIssue(page)
+  await expect(page.locator('.issue-command-buttons > button')).toHaveCount(3)
+  await expect(page.locator('.issue-work-control')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Issue options', exact: true }).click()
+  await page.getByRole('option', { name: 'Work on issue', exact: true }).click()
+  const work = page.locator('.issue-options-submenu[data-menu="Work on issue"]')
+  await expect(work.getByRole('option', { name: 'Copy as prompt', exact: true })).toBeVisible()
+  await work.getByRole('option', { name: 'Configure coding tools…', exact: true }).click()
+  await expect(page).toHaveURL(/settings\/account\/code-and-reviews\/coding-tools$/)
+})
+
 async function geometry(page: Page) {
   return page.evaluate(() => Object.fromEntries(['.issue-header','.title-editor','.issue-mobile-properties','.issue-description-root .description-editor','.document-actions','.flow-sub-issues','.detail-sub-issue-row','.activity-heading','.composer'].map(selector => {
     const element = document.querySelector(selector)!

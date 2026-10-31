@@ -6,7 +6,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/lib/toast'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput, Presence, WorkflowState } from '@/types/flow'
-import { IssueOptionsMenu, type IssueOptionsActions } from '@/components/issue/issue-options-menu'
+import { IssueMenuOption, IssueOptionsMenu, type IssueOptionsActions } from '@/components/issue/issue-options-menu'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { FlowBranchIcon, FlowChevronIcon, FlowCodingToolsIcon, FlowFavoriteFilledIcon, FlowFavoriteIcon, FlowIssueIdIcon, FlowNextIcon, FlowPreviousIcon, FlowUrlIcon, FlowWorkIcon } from '@/components/issue/flow-header-icons'
 import { issuePath, settingsPath } from '@/lib/app-routes'
 import { enabledCodingTools, type CodingTool } from '@/lib/coding-tools'
@@ -67,7 +68,7 @@ export function IssueHeader({ issue, presence = [], saveState, onRetrySave, data
   const presenceGroup=viewers.length>0?<IssuePresence viewers={viewers} label={t('People viewing this issue')}/>:null
   return <header className={triage?'issue-header issue-header--triage':'issue-header'}>
     <button type="button" data-sidebar-trigger aria-label="Open sidebar" onClick={() => window.dispatchEvent(new Event('flow:open-sidebar'))} />
-    <div className="issue-header-context"><nav className="issue-breadcrumb" aria-label="Issue breadcrumb">{!triage&&breadcrumbs.map((crumb,index)=><span className="issue-breadcrumb-segment" key={crumb.href}><BreadcrumbLink crumb={crumb} data={data} onClick={index===breadcrumbs.length-1 && hasOrigin && onNavigateRoot ?event=>activateLink(event,onNavigateRoot) : undefined}/><span className="issue-breadcrumb-separator" aria-hidden="true">›</span></span>)}<a className="issue-breadcrumb-current" href={issuePath(data.workspace.urlKey,issue)} aria-current="page"><span className="issue-breadcrumb-label"><strong>{issue.identifier}</strong><span>{issue.title}</span></span></a></nav><HeaderTooltip label={t(favorite?'Unfavorite issue':'Favorite issue')} shortcut="⌥ F"><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}>{favorite?<FlowFavoriteFilledIcon className="issue-header-favorite-filled"/>:<FlowFavoriteIcon/>}</button></HeaderTooltip><IssueOptionsMenu onDeleteRelation={onDeleteRelation} issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
+    <div className="issue-header-context"><nav className="issue-breadcrumb" aria-label="Issue breadcrumb">{!triage&&breadcrumbs.map((crumb,index)=><span className="issue-breadcrumb-segment" key={crumb.href}><BreadcrumbLink crumb={crumb} data={data} onClick={index===breadcrumbs.length-1 && hasOrigin && onNavigateRoot ?event=>activateLink(event,onNavigateRoot) : undefined}/><span className="issue-breadcrumb-separator" aria-hidden="true">›</span></span>)}<a className="issue-breadcrumb-current" href={issuePath(data.workspace.urlKey,issue)} aria-current="page"><span className="issue-breadcrumb-label"><strong>{issue.identifier}</strong><span>{issue.title}</span></span></a></nav><HeaderTooltip label={t(favorite?'Unfavorite issue':'Favorite issue')} shortcut="⌥ F"><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}>{favorite?<FlowFavoriteFilledIcon className="issue-header-favorite-filled"/>:<FlowFavoriteIcon/>}</button></HeaderTooltip><IssueOptionsMenu phoneWorkOptions={close => <PhoneWorkOptions tools={tools} onOpenTool={tool => void openInTool(tool)} onCopyPrompt={() => void copyWork('prompt')} configurePath={`${settingsPath(data.workspace.urlKey,'code-and-reviews')}/coding-tools`} onStartCodingSession={coding.available ? () => void coding.start() : undefined} onDone={close}/>} onDeleteRelation={onDeleteRelation} issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
     {saveState==='error'?<button type="button" className="save-state error" onClick={onRetrySave}>Save failed · Retry</button>:<span className={`save-state ${saveState}`} role="status" aria-live="polite">{saveState==='saving'?'Saving...':saveState==='saved'?'Saved':''}</span>}
     {triage&&presenceGroup}
     {triageActions}
@@ -84,11 +85,12 @@ export function IssueHeader({ issue, presence = [], saveState, onRetrySave, data
 /** The reference app's floating copy / work strip under the header's right edge: it overlays the content and stays put while it scrolls. */
 function IssueCommandStrip({issue,tools,configurePath,onCopyWork,onOpenTool,onStartCodingSession}:{issue:Issue;tools:CodingTool[];configurePath:string;onCopyWork:(kind:'branch'|'prompt')=>void;onOpenTool:(tool:CodingTool)=>void;onStartCodingSession?:()=>void}){
   const t = useOptionalTranslate()
+  const phone = usePhoneLayout()
   return <div className="issue-command-strip"><div className="issue-command-buttons">
     <CommandButton label={t('Copy issue URL')} shortcut="⌘ ⇧ ," onClick={()=>copyText(location.href,'Issue URL copied to clipboard')}><FlowUrlIcon/></CommandButton>
     <CommandButton label={t('Copy issue ID')} shortcut="⌘ ." onClick={()=>copyText(issue.identifier,'Issue ID copied to clipboard')}><FlowIssueIdIcon/></CommandButton>
     <CommandButton label={t('Copy branch name')} shortcut="⌘ ⇧ ." onClick={()=>onCopyWork('branch')}><FlowBranchIcon/></CommandButton>
-    <div className="issue-work-control" role="group" aria-label={t('Work on issue')}><CommandButton className="issue-work-prompt" label={t('Copy as prompt')} shortcut="⌘ ⌥ P" onClick={()=>onCopyWork('prompt')}><FlowWorkIcon/></CommandButton><WorkMenu tools={tools} onOpenTool={onOpenTool} onCopyPrompt={()=>onCopyWork('prompt')} configurePath={configurePath} onStartCodingSession={onStartCodingSession}/></div>
+    {!phone && <div className="issue-work-control" role="group" aria-label={t('Work on issue')}><CommandButton className="issue-work-prompt" label={t('Copy as prompt')} shortcut="⌘ ⌥ P" onClick={()=>onCopyWork('prompt')}><FlowWorkIcon/></CommandButton><WorkMenu tools={tools} onOpenTool={onOpenTool} onCopyPrompt={()=>onCopyWork('prompt')} configurePath={configurePath} onStartCodingSession={onStartCodingSession}/></div>}
   </div></div>
 }
 
@@ -115,6 +117,17 @@ function WorkMenu({tools,onOpenTool,onCopyPrompt,configurePath,onStartCodingSess
       </Command>
     </Popover.Content></Popover.Portal>
   </Popover.Root>
+}
+
+function PhoneWorkOptions({ tools, onOpenTool, onCopyPrompt, configurePath, onStartCodingSession, onDone }: { tools: CodingTool[]; onOpenTool: (tool: CodingTool) => void; onCopyPrompt: () => void; configurePath: string; onStartCodingSession?: () => void; onDone: () => void }) {
+  const navigate = useNavigate()
+  const choose = (action: () => void) => { onDone(); action() }
+  return <>
+    {onStartCodingSession && <IssueMenuOption icon={<AgentCodingGlyph/>} label="Start coding session" onSelect={() => choose(onStartCodingSession)}/>}
+    {tools.map(tool => <IssueMenuOption key={tool.id} icon={<ExternalLink/>} label={`Open in ${tool.name}`} onSelect={() => choose(() => onOpenTool(tool))}/>)}
+    <IssueMenuOption icon={<FlowWorkIcon/>} label="Copy as prompt" onSelect={() => choose(onCopyPrompt)}/>
+    <IssueMenuOption icon={<FlowCodingToolsIcon/>} label="Configure coding tools…" onSelect={() => choose(() => navigate(configurePath))}/>
+  </>
 }
 
 /** One crumb: team and project crumbs carry their icon; the project opens its hover card, "Projects" and an
