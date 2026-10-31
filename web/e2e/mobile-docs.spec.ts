@@ -172,3 +172,53 @@ test.describe('mobile documents filter menu', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/documents-filter-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 })
+
+test.describe('mobile documents display options', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+
+  test('the rightmost toolbar button opens the compact display popover', async ({ page, request }, testInfo) => {
+    const workspaceKey = `mobile-docs-display-${testInfo.project.name}-${testInfo.retry}`
+    const team = await seedTeamDocuments(request, workspaceKey, '[mobile] Docs display')
+
+    await page.goto(`/${workspaceKey}/team/${team.key}/documents?doc-filter=${advancedFilterParam()}`)
+    const trigger = page.locator('.team-documents-toolbar button[aria-label="Display options"]')
+    await trigger.click()
+
+    const popover = page.locator('[data-list-display]')
+    await expect(popover).toBeVisible()
+    await page.waitForTimeout(250)
+    const box = await popover.boundingBox()
+    expect(box?.width).toBe(301)
+    expect(Math.abs((box?.height ?? 0) - 244)).toBeLessThanOrEqual(1)
+    expect(Math.abs((box?.x ?? 0) - 81)).toBeLessThanOrEqual(1)
+    expect(Math.abs((box?.y ?? 0) - 85.67)).toBeLessThanOrEqual(1)
+    await expect(popover).toHaveCSS('border-radius', '8px')
+
+    const rows = popover.locator('section').first().locator('> div')
+    expect(await rows.count()).toBe(4)
+    for (let index = 0; index < 4; index++) expect((await rows.nth(index).boundingBox())?.height).toBe(36)
+
+    const grouping = popover.locator('section').first().locator('[role="combobox"]')
+    expect(await grouping.count()).toBe(2)
+    for (let index = 0; index < 2; index++) {
+      expect((await grouping.nth(index).boundingBox())?.width).toBe(102)
+      expect((await grouping.nth(index).boundingBox())?.height).toBe(28)
+    }
+    expect((await popover.locator('[data-sort-direction]').boundingBox())?.width).toBe(28)
+
+    const toggles = popover.locator('section').first().locator('input[type="checkbox"]')
+    expect(await toggles.count()).toBe(2)
+    for (let index = 0; index < 2; index++) {
+      expect((await toggles.nth(index).boundingBox())?.width).toBe(22)
+      expect((await toggles.nth(index).boundingBox())?.height).toBe(14)
+    }
+
+    const chips = popover.locator('section').nth(1).locator('button')
+    expect(await chips.count()).toBe(3)
+    for (let index = 0; index < 3; index++) expect((await chips.nth(index).boundingBox())?.height).toBe(28)
+    await expect(chips.first()).toHaveCSS('background-color', 'lch(25.834 1.525 272)')
+
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/documents-display-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
+  })
+})
