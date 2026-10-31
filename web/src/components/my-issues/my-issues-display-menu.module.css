@@ -126,8 +126,8 @@
     color: var(--bright) !important;
   }
   .popover[data-issue-display-menu="true"] {
-    height: 550px;
-    max-height: 550px;
+    height: 478px;
+    max-height: 478px;
     margin-top: 1px;
     padding-top: 0;
     border-radius: 12px;
@@ -280,7 +280,7 @@
   }
   .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button {
     height: 28px;
-    margin: 0 4px 4px 0;
+    margin: 0 4px 5px 0;
     box-shadow: none;
     font: 500 12px/normal var(--font);
   }
@@ -318,6 +318,22 @@
   .popover[data-issue-display-menu="true"] section[aria-label="List options"] {
     position: relative;
     border-top: 0 !important;
+  }
+  .popover[data-issue-display-menu="true"] > section[aria-label="Grouping options"] > .switchRow {
+    display: none;
+  }
+  .popover[data-issue-display-menu="true"] > section[aria-label="Visible issues"] {
+    display: flex;
+    flex-direction: column;
+  }
+  .popover[data-issue-display-menu="true"] > section[aria-label="Visible issues"] > .switchRow:nth-child(2) {
+    order: 3;
+  }
+  .popover[data-issue-display-menu="true"] > section[aria-label="Visible issues"] > .switchRow:nth-child(3) {
+    order: 2;
+  }
+  .popover[data-issue-display-menu="true"] > section[aria-label="List options"] > .switchRow:has(input[aria-label="Show empty groups"]) {
+    display: none;
   }
   .popover[data-issue-display-menu="true"] section[aria-label="Visible issues"]::before,
   .popover[data-issue-display-menu="true"] section[aria-label="List options"]::before {
