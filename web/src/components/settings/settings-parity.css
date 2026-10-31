@@ -1353,4 +1353,196 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
     font-weight: 500;
     line-height: normal;
   }
+
+  /* Team overview phone layout: the compact desktop list becomes the larger,
+     icon-led cards used by the native settings surface. */
+  html:root .settings-app .settings-content:has(.team-overview-page) > .settings-crumb {
+    position: static;
+    width: max-content;
+    height: 15.5px;
+    margin: 2.25px 0 18.25px 14.5px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    gap: 6px;
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-settings-header {
+    position: relative;
+    min-height: 72px;
+    margin: 0 16px 24px;
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-settings-header > div { gap: 0; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-settings-header > div > p {
+    margin-top: 4px;
+    line-height: 18px;
+    width: 200px;
+    color: var(--set-group-desc);
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-shortcut {
+    position: absolute;
+    top: 40px;
+    right: -6px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 6px 0 8px;
+    border: .5px solid transparent;
+    border-radius: 9999px;
+    color: var(--set-button-text);
+    font: 500 12px/normal var(--font);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-page .settings-section {
+    margin-bottom: 24px;
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-page .settings-section > h3 {
+    height: 23px;
+    margin: 0 16px 16px;
+    color: var(--set-text);
+    font: 500 15px/23px var(--font);
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > :is(button, a, div) {
+    position: relative;
+    box-sizing: border-box;
+    height: 65px;
+    min-height: 65px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 16px 10.6667px;
+    border: 0;
+    border-bottom: 0;
+    background: transparent;
+    color: var(--set-text);
+    text-align: left;
+    text-decoration: none;
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > :is(button, a, div)::after {
+    position: absolute;
+    right: 10.6667px;
+    bottom: 0;
+    left: 10.6667px;
+    border-bottom: .5px solid var(--set-sep);
+    content: "";
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > :is(button, a, div):last-child { border-bottom: 0; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > :is(button, a, div):last-child::after { display: none; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="general"],
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="project-labels"],
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="templates"],
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="recurring-issues"] { height: 79.5px; min-height: 79.5px; }
+  @media (max-width: 380px) {
+    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="issue-labels"] { height: 79.5px; min-height: 79.5px; }
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-icon {
+    box-sizing: border-box;
+    flex: 0 0 32px;
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    background: var(--set-control);
+    color: var(--set-text);
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-icon svg { width: 16px; height: 16px; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-copy {
+    min-width: 0;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 3px;
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-copy strong {
+    color: var(--set-label);
+    font: 500 13px/normal var(--font);
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-copy small {
+    overflow: visible;
+    color: var(--set-desc);
+    font: 450 12px/14.5px var(--font);
+    white-space: normal;
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-summary {
+    flex: none;
+    max-width: 160px;
+    color: var(--set-desc);
+    font: 450 12px/normal var(--font);
+    white-space: nowrap;
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-summary.is-plan {
+    width: 159.67px;
+    max-width: 159.67px;
+    color: var(--set-button-text);
+    font: 500 13px/18px var(--font);
+    white-space: normal;
+    text-align: left;
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > :is(button, a, div) > svg {
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+    color: var(--set-desc);
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="project-labels"] { height: 78.5px; min-height: 78.5px; }
+  @media (max-width: 380px) {
+    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > [data-team-overview-row="project-labels"] { height: 93px; min-height: 93px; }
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-page .settings-card {
+    color: var(--set-text);
+    font: 400 16px/24px var(--font);
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell {
+    position: relative;
+    height: 65px;
+    min-height: 65px;
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell::after {
+    position: absolute;
+    right: 10.6667px;
+    bottom: 0;
+    left: 10.6667px;
+    border-bottom: .5px solid var(--set-sep);
+    content: "";
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:last-child::after { display: none; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > :is(button, a, div) {
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--set-text);
+    font: 400 16px/24px var(--font);
+    text-align: left;
+    text-decoration: none;
+  }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > :is(button, a, div) > .team-overview-icon { margin-left: 10.6667px; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > :is(button, a, div) > svg { margin-right: 10.6667px; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > :is(button, a, div) > .team-overview-summary.is-plan { margin-right: 10.6667px; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > .team-overview-unavailable { opacity: .55; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:first-child > :is(button, a, div) { border-radius: 10px 10px 0 0; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:last-child > :is(button, a, div) { border-radius: 0 0 10px 10px; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > [data-team-overview-row="general"],
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > [data-team-overview-row="project-labels"],
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > [data-team-overview-row="templates"],
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > [data-team-overview-row="recurring-issues"] { height: 79.5px; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:has(> [data-team-overview-row="general"]),
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:has(> [data-team-overview-row="project-labels"]),
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:has(> [data-team-overview-row="templates"]),
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:has(> [data-team-overview-row="recurring-issues"]) { height: 79.5px; min-height: 79.5px; }
+  @media (max-width: 380px) {
+    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > [data-team-overview-row="issue-labels"] { height: 79.5px; }
+    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell > [data-team-overview-row="project-labels"] { height: 93px; }
+    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:has(> [data-team-overview-row="issue-labels"]) { height: 79.5px; min-height: 79.5px; }
+    html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-list > .team-overview-row-shell:has(> [data-team-overview-row="project-labels"]) { height: 93px; min-height: 93px; }
+  }
 }
