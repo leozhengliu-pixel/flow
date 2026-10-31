@@ -2461,7 +2461,6 @@ export const zhCN: Record<string, string> = {
   "No issues in scope": "范围内没有事项",
   "No labels in scope": "范围内没有标签",
   "No matching issues": "没有匹配的事项",
-  "No issues matching the filters": "没有符合筛选条件的事项",
   "No target date": "无目标日期",
   "No project updates illustration": "无项目更新插图",
   "No emoji found": "未找到表情",

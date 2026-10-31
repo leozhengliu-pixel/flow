@@ -33,7 +33,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
         data: { name: '[mobile] Drawer parity', urlKey: key, region: 'us', tutorial: false },
       })
       expect(created.status()).toBe(201)
-      const headers = { 'X-Flow-Workspace': key }
+      const headers = { 'X-Workspace-Key': key }
       for (let i = 0; i < 5; i++) {
         const team = await request.post(`${api}/api/workspaces/${key}/teams`, { headers, data: { name: `[mobile] Drawer team ${i}`, key: `DR${i}` } })
         expect(team.status()).toBe(201)

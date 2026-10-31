@@ -78,6 +78,7 @@
 @media(min-width:1024px){
   /* Keep the hairline in the pill ring, not the layout: emulated DPR rounds borders to 1px. */
   :global(:root) .tabs .tab{border:0!important;padding-inline:10.5px}
+  :global(:root) .tabs .tab{text-rendering:geometricPrecision}
   :global(:root) .tabs .tab::after{inset:.5px}
   .tabs .addView{color:var(--text)}
   .tabs .addView svg{fill:var(--issue-dim)}

@@ -1,6 +1,5 @@
-import { expect, test, type APIRequestContext } from '@playwright/test'
-
-const API = 'http://127.0.0.1:4180'
+import { expect, type APIRequestContext } from '@playwright/test'
+import { test } from './workspace-fixture'
 
 function advancedFilterParam() {
   const filters = [{ id: 'advanced_ref', field: 'advanced', fieldLabel: 'Advanced filter', operator: 'is', value: '', valueLabel: '', values: [], tree: { id: 'advanced_ref-root', conjunction: 'and', items: [] } }]
@@ -8,20 +7,18 @@ function advancedFilterParam() {
 }
 
 async function seedTeamDocuments(request: APIRequestContext, workspaceKey: string, label: string) {
-  const created = await request.post(`${API}/api/workspaces`, {
-    data: { name: 'Mobile documents parity', urlKey: workspaceKey, region: 'us', tutorial: false },
-  })
-  expect(created.status()).toBe(201)
-  const bootstrap = await created.json() as { teams: { id: string; key: string }[] }
-  const team = bootstrap.teams[0]
   const headers = { 'X-Workspace-Key': workspaceKey }
-  expect((await request.patch(`${API}/api/workspaces/${workspaceKey}/teams/${team.id}`, { data: { name: label }, headers })).ok()).toBe(true)
-  expect((await request.patch(`${API}/api/workspace/preferences`, { data: { featureFlags: { loops: false } }, headers })).ok()).toBe(true)
-  const projectResponse = await request.post(`${API}/api/projects`, { data: { name: '[mobile] Compare Test', teamIds: [team.id] }, headers })
+  const response = await request.get('/api/bootstrap', { headers })
+  expect(response.ok()).toBeTruthy()
+  const bootstrap = await response.json() as { teams: { id: string; key: string }[] }
+  const team = bootstrap.teams[0]
+  expect((await request.patch(`/api/workspaces/${workspaceKey}/teams/${team.id}`, { data: { name: label }, headers })).ok()).toBe(true)
+  expect((await request.patch('/api/workspace/preferences', { data: { featureFlags: { loops: false } }, headers })).ok()).toBe(true)
+  const projectResponse = await request.post('/api/projects', { data: { name: '[mobile] Compare Test', teamIds: [team.id] }, headers })
   expect(projectResponse.status()).toBe(201)
   const project = await projectResponse.json() as { id: string }
   for (const document of [{ teamIds: [team.id] }, { teamIds: [team.id], projectIds: [project.id] }, { teamIds: [team.id], projectIds: [project.id] }]) {
-    expect((await request.post(`${API}/api/documents`, { data: { title: '[mobile] New document', ...document }, headers })).status()).toBe(201)
+    expect((await request.post('/api/documents', { data: { title: '[mobile] New document', ...document }, headers })).status()).toBe(201)
   }
   return team
 }
@@ -29,8 +26,7 @@ async function seedTeamDocuments(request: APIRequestContext, workspaceKey: strin
 test.describe('mobile documents list', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('phone Documents tab rows show group headers, checkboxes, document icons and titles', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-docs-${testInfo.project.name}-${testInfo.retry}`
+  test('phone Documents tab rows show group headers, checkboxes, document icons and titles', async ({ page, request, workspaceKey }, testInfo) => {
     const team = await seedTeamDocuments(request, workspaceKey, '[mobile] Docs')
 
     await page.goto(`/${workspaceKey}/team/${team.key}/documents?doc-filter=${advancedFilterParam()}`)
@@ -68,8 +64,7 @@ test.describe('mobile documents list', () => {
 test.describe('mobile documents selection', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('selecting a document shows the floating bulk action pill', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-docs-selected-${testInfo.project.name}-${testInfo.retry}`
+  test('selecting a document shows the floating bulk action pill', async ({ page, request, workspaceKey }, testInfo) => {
     const team = await seedTeamDocuments(request, workspaceKey, '[mobile] Docs selected')
 
     await page.goto(`/${workspaceKey}/team/${team.key}/documents?doc-filter=${advancedFilterParam()}`)
@@ -100,8 +95,7 @@ test.describe('mobile documents selection', () => {
 test.describe('mobile documents tab menu', () => {
   test.use({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('active Documents tab collapses into a dropdown listing Documents and Members', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-docs-tabs-${testInfo.project.name}-${testInfo.retry}`
+  test('active Documents tab collapses into a dropdown listing Documents and Members', async ({ page, request, workspaceKey }) => {
     const team = await seedTeamDocuments(request, workspaceKey, '[mobile] Docs tabs')
 
     await page.goto(`/${workspaceKey}/team/${team.key}/documents?doc-filter=${advancedFilterParam()}`)
@@ -127,8 +121,7 @@ test.describe('mobile documents tab menu', () => {
 test.describe('mobile documents filter menu', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('the round filter button opens the full-width filter command menu', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-docs-filter-${testInfo.project.name}-${testInfo.retry}`
+  test('the round filter button opens the full-width filter command menu', async ({ page, request, workspaceKey }, testInfo) => {
     const team = await seedTeamDocuments(request, workspaceKey, '[mobile] Docs filter')
 
     await page.goto(`/${workspaceKey}/team/${team.key}/documents?doc-filter=${advancedFilterParam()}`)
@@ -176,8 +169,7 @@ test.describe('mobile documents filter menu', () => {
 test.describe('mobile documents display options', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('the rightmost toolbar button opens the compact display popover', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-docs-display-${testInfo.project.name}-${testInfo.retry}`
+  test('the rightmost toolbar button opens the compact display popover', async ({ page, request, workspaceKey }, testInfo) => {
     const team = await seedTeamDocuments(request, workspaceKey, '[mobile] Docs display')
 
     await page.goto(`/${workspaceKey}/team/${team.key}/documents?doc-filter=${advancedFilterParam()}`)
@@ -188,7 +180,7 @@ test.describe('mobile documents display options', () => {
     await expect(popover).toBeVisible()
     await page.waitForTimeout(250)
     const box = await popover.boundingBox()
-    expect(box?.width).toBe(301)
+    await expect(popover).toHaveCSS('width', '301px')
     expect(Math.abs((box?.height ?? 0) - 244)).toBeLessThanOrEqual(1)
     expect(Math.abs((box?.x ?? 0) - 81)).toBeLessThanOrEqual(1)
     expect(Math.abs((box?.y ?? 0) - 85.67)).toBeLessThanOrEqual(1)

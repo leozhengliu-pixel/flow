@@ -4,7 +4,7 @@ test.skip(({ isMobile }) => isMobile, 'Desktop triage queue')
 test.use({ viewport: { width: 1440, height: 900 } })
 
 test('enables a throwaway team queue, shows its count, and opens a real issue in the detail pane', async ({ page, request, workspaceKey, issueList }) => {
-  const headers = { 'X-Flow-Workspace': workspaceKey }
+  const headers = { 'X-Workspace-Key': workspaceKey }
   const team = issueList.data.teams[0]
   const settings = await request.patch(`/api/teams/${team.id}/settings`, { headers, data: { triageEnabled: true } })
   expect(settings.ok()).toBeTruthy()
