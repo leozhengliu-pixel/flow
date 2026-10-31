@@ -843,6 +843,9 @@ function Conversation({
     if (newestIsUser) followLatestRef.current = true;
     if (!followLatestRef.current) return;
     requestAnimationFrame(() => {
+      // Phones keep the top of a conversation in view when its overflow is only the transcript's bottom padding,
+      // like the reference app; a longer transcript still opens at the newest message.
+      if (window.matchMedia?.("(max-width: 767px)").matches && viewport.scrollHeight - viewport.clientHeight <= 48) return;
       if (typeof viewport.scrollTo === "function") viewport.scrollTo({ top: viewport.scrollHeight });
       else viewport.scrollTop = viewport.scrollHeight;
     });
@@ -863,11 +866,18 @@ function Conversation({
     if (!viewport) return;
     const update = () => onLatestChange?.(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight > 48);
     const trackFollow = () => { followLatestRef.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 48; };
+    // The reference app follows the newest message while a phone transcript grows (an expanded step list),
+    // unless the reader had scrolled away from the bottom.
+    const grow = () => {
+      if (!window.matchMedia?.("(max-width: 767px)").matches || !followLatestRef.current) return;
+      if (viewport.scrollHeight - viewport.clientHeight <= 48) return;
+      viewport.scrollTop = viewport.scrollHeight;
+    };
     update();
     trackFollow();
     viewport.addEventListener("scroll", update, { passive: true });
     viewport.addEventListener("scroll", trackFollow, { passive: true });
-    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(update) : undefined;
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(() => { update(); grow(); }) : undefined;
     observer?.observe(viewport);
     if (viewport.firstElementChild) observer?.observe(viewport.firstElementChild);
     return () => {
@@ -926,7 +936,7 @@ function Conversation({
                   : message.parts?.length
                     ? <AgentMessageParts {...answer} attachments={sessionAttachments} changes={{ sessionId: session.id.startsWith("pending-") ? undefined : session.id, onSessionChange }} onAnswer={index === latestAssistantIndex ? onAnswer : undefined} answerDisabled={busy} draftContext={draftContext} draftProject={draftProject} message={message} onRetry={retryTarget && !busy && index === session.messages.length - 1 ? () => onRetry(retryTarget) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
                     : message.role === "user"
-                      ? <AgentContentWithBlocks content={message.content} renderText={(text) => <AgentMessageText {...answer} content={text} draftContext={draftContext} draftProject={draftProject}/>}/>
+                      ? <AgentContentWithBlocks content={message.content} renderText={(text) => <AgentMessageText {...answer} autoLinkEmails={false} content={text} draftContext={draftContext} draftProject={draftProject}/>}/>
                       : <AgentMessageText {...answer} content={message.content} draftContext={draftContext} draftProject={draftProject}/>}
                 {message.role === "user" && <AgentMessageAttachments attachments={message.attachments?.filter((item) => !item.url || !message.content.includes(`](${item.url})`))}/>}
               </div>
@@ -984,12 +994,12 @@ function AgentMessageParts({ attachments, changes, draftContext, draftProject, m
  * Message text with any ```update block shown as the reference app's "Created draft" card instead of raw code. Assistant replies
  * (`data` set) also get the reference app's answer chrome: inline entity chips, referenced issues and follow-up suggestions.
  */
-function AgentMessageText({ changeCards, changedKeys, content, data, draftContext, draftProject, onSuggestion, streaming = false }: AnswerProps & { changeCards?: ReactNode; changedKeys?: string[]; content: string; draftContext: string; draftProject?: Project }) {
+function AgentMessageText({ autoLinkEmails = true, changeCards, changedKeys, content, data, draftContext, draftProject, onSuggestion, streaming = false }: AnswerProps & { autoLinkEmails?: boolean; changeCards?: ReactNode; changedKeys?: string[]; content: string; draftContext: string; draftProject?: Project }) {
   const { prose, draft } = splitAgentDraft(content, "update");
   const answer = useMemo(() => data ? parseAgentAnswer(prose, data) : undefined, [data, prose]);
   const draftCard = draft && <AgentDraftCard context={draftContext} draft={draft} icon={draftProject ? <span style={{ color: healthColor(draftProject.health), display: "inline-flex" }}><HealthGlyph health={draftProject.health}/></span> : undefined} title="Update draft"/>;
   if (!answer) return <>
-    {prose && <AgentRichText className={`${styles.messageDocument} agent-chat-document`} content={prose}/>}
+    {prose && <AgentRichText autoLinkEmails={autoLinkEmails} className={`${styles.messageDocument} agent-chat-document`} content={prose}/>}
     {changeCards}
     {draftCard}
   </>;
