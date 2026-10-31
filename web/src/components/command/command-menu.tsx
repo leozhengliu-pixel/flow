@@ -48,6 +48,7 @@ import { GLOBAL_RELEASE_PAGES, releaseCommands, type ReleaseCommandHost } from '
 import { contextChip, useContextCommands, type CommandPage, type ContextCommandHandlers, type PageOption } from './context-commands'
 import './command-menu.css'
 import { AgentCursorGlyph, AgentHistoryGlyph } from '@/components/ui/agent-glyph'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 
 /** A Settings › Security "who can" permission for the viewer; without workspace data the command stays listed. */
 function viewerAllowed(data: BootstrapData | undefined, key: 'templatePermission' | 'teamCreatePermission') {
@@ -167,6 +168,7 @@ export function CommandMenu({
   documentHost?: DocumentCommandHost
 } & ContextCommandHandlers) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const [query, setQuery] = useState('')
   const [pages, setPages] = useState<CommandPage[]>(() => initialIssuePicker ? [{ id: 'issueOpen', label: 'Open issue…' }] : initialDocumentPicker ? [{ id: 'documentOpen', label: 'Open document…' }] : initialReleasePicker ? [{ id: 'releaseCreate', label: 'Create new release…' }] : [])
   const page = pages.at(-1)
@@ -206,6 +208,22 @@ export function CommandMenu({
     actions: context?.kind === 'document' ? documents.actions : context?.kind === 'release' ? context.actions : issueCommands.actions,
     options: page?.id === 'issueOpen' ? issueOpenOptions : documents.options.length ? documents.options : releasePage ? releases.options : context?.kind === 'release' ? (page && context.pageOptions?.(page, query)) || [] : issueCommands.options,
   }
+  const phoneSelectionContext = phone && context?.kind === 'issues' && context.source === 'selection'
+  const visibleContextActions = phoneSelectionContext
+    ? ['ctx-assignee', 'ctx-assign-me', 'ctx-status', 'ctx-priority', 'ctx-project', 'ctx-labels', 'ctx-team', 'ctx-due-date']
+      .map(id => contextCommands.actions.find(action => action.id === id))
+      .filter((action): action is NonNullable<typeof action> => Boolean(action))
+      .map(action => ({
+      ...action,
+      icon: <PhoneCommandGlyph id={action.id} fallback={action.icon}/>,
+      label: ({
+        'ctx-priority': 'Set priority…',
+        'ctx-project': 'Add to project…',
+        'ctx-team': 'Move to a different team…',
+        'ctx-assign-me': 'Un-assign from me',
+      } as Record<string, string>)[action.id] ?? action.label,
+      }))
+    : contextCommands.actions
   const openPage = (next: CommandPage) => { setPages(current => [...current, next]); setQuery('') }
   const back = () => { setPages(current => current.slice(0, -1)); setQuery('') }
   // Tab (or the "Ask Flow" hint): the typed question runs in the chat at once; an empty box just opens the chat.
@@ -377,8 +395,8 @@ export function CommandMenu({
           <Command.Empty>{t('No results found.')}</Command.Empty>
         </Command.List> : <Command.List>
           {loading && <div className="command-loading">Searching...</div>}
-          {contextCommands.actions.length > 0 && <Command.Group heading={contextCommands.heading ? t(contextCommands.heading) : undefined}>
-            {contextCommands.actions.map(action => <Command.Item key={action.id} value={`${action.label} ${action.keywords ?? ''}`} keywords={translatedKeywords([action.label], t)} onSelect={() => void registry.execute(action.id, { source: 'command-menu' })}>
+          {visibleContextActions.length > 0 && <Command.Group className={phoneSelectionContext ? 'command-context-actions' : undefined} style={phoneSelectionContext ? { height: `${visibleContextActions.length * 46}px` } : undefined} heading={contextCommands.heading ? t(contextCommands.heading) : undefined}>
+            {visibleContextActions.map((action, index) => <Command.Item key={action.id} style={phoneSelectionContext ? { position: 'absolute', top: `${index * 46}px`, left: 0, right: 0 } : undefined} value={`${action.label} ${action.keywords ?? ''}`} keywords={translatedKeywords([action.label], t)} onSelect={() => void registry.execute(action.id, { source: 'command-menu' })}>
               <span className="command-item-icon">{action.icon}</span>
               <span>{t(action.label)}</span>
               {action.detail && <span className="command-option-detail" data-i18n-ignore>{action.detail}</span>}
@@ -404,6 +422,29 @@ export function CommandMenu({
 /** The reference app's customer glyph (a sheet with a person), used by the customer commands. */
 function CustomerCommandIcon() {
   return <svg aria-hidden="true" fill="currentColor" viewBox="0 0 16 16"><path clipRule="evenodd" d="M11.0247 12.3333C13.6728 12.3334 14.6225 13.529 14.9606 14.319C15.112 14.6739 14.806 15 14.4046 15H7.59537C7.18784 14.9997 6.8816 14.6641 7.04464 14.3073C7.40663 13.5172 8.38955 12.3333 11.0247 12.3333Z" fillRule="evenodd"/><path clipRule="evenodd" d="M11 7C12.1045 7 12.9998 7.89543 12.9998 9C12.9998 10.1046 12.1045 11 11 11C9.89553 11 9.00018 10.1046 9.00018 9C9.00018 7.89543 9.89553 7 11 7Z" fillRule="evenodd"/><path clipRule="evenodd" d="M10 4.25V3.75C10 3.05964 9.44036 2.5 8.75 2.5H3.75C3.05964 2.5 2.5 3.05964 2.5 3.75V13.25C2.5 13.3881 2.61193 13.5 2.75 13.5H4.25C4.66421 13.5 5 13.8358 5 14.25C5 14.6642 4.66421 15 4.25 15H2.75C1.7835 15 1 14.2165 1 13.25V3.75C1 2.23122 2.23122 1 3.75 1H8.75C10.2688 1 11.5 2.23122 11.5 3.75V4.25C11.5 4.66421 11.1642 5 10.75 5C10.3358 5 10 4.66421 10 4.25Z" fillRule="evenodd"/><path clipRule="evenodd" d="M7.75 4.25C8.16421 4.25 8.5 4.58579 8.5 5C8.5 5.41421 8.16421 5.75 7.75 5.75H4.75C4.33579 5.75 4 5.41421 4 5C4 4.58579 4.33579 4.25 4.75 4.25H7.75Z" fillRule="evenodd"/><path clipRule="evenodd" d="M6.5 7.25C6.91421 7.25 7.25 7.58579 7.25 8C7.25 8.41421 6.91421 8.75 6.5 8.75H4.75C4.33579 8.75 4 8.41421 4 8C4 7.58579 4.33579 7.25 4.75 7.25H6.5Z" fillRule="evenodd"/><path clipRule="evenodd" d="M6.5 10.25C6.91421 10.25 7.25 10.5858 7.25 11C7.25 11.4142 6.91421 11.75 6.5 11.75H4.75C4.33579 11.75 4 11.4142 4 11C4 10.5858 4.33579 10.25 4.75 10.25H6.5Z" fillRule="evenodd"/></svg>
+}
+
+/** Phone command rows use the compact issue-action glyphs rather than the desktop Lucide set. */
+function PhoneCommandGlyph({ id, fallback }: { id: string; fallback: React.ReactNode }) {
+  const glyphs: Record<string, string[]> = {
+    'ctx-assignee': [
+      'M12.2616 10.1807C12.5759 9.91122 13.0496 9.94763 13.3192 10.2617L14.8192 12.0117C15.0599 12.2926 15.0599 12.7074 14.8192 12.9883L13.3192 14.7383C13.0496 15.0523 12.5759 15.0888 12.2616 14.8193C11.9476 14.5498 11.9114 14.0761 12.1805 13.7617L12.619 13.25H9.81821C9.31854 13.2504 8.86663 13.5485 8.66978 14.0078L8.43931 14.5459C8.27587 14.926 7.83438 15.1024 7.45396 14.9395C7.0739 14.7761 6.89769 14.3345 7.0604 13.9541L7.29087 13.417C7.72409 12.4061 8.7185 11.7504 9.81821 11.75H12.619L12.1805 11.2383C11.9114 10.924 11.9476 10.4502 12.2616 10.1807Z',
+      'M8.57603 8C9.16635 8.00005 9.73859 8.10941 10.2684 8.31152C10.6549 8.45932 10.8493 8.89258 10.702 9.2793C10.5544 9.6662 10.1202 9.86031 9.73325 9.71289C9.37143 9.57489 8.98057 9.50005 8.57603 9.5H7.42563C6.0104 9.50003 4.75811 10.4161 4.32896 11.7646L3.46567 14.4775C3.34008 14.8721 2.91789 15.0902 2.52329 14.9648C2.12863 14.8392 1.9104 14.4171 2.03599 14.0225L2.89927 11.3096C3.52653 9.3386 5.35724 8.00003 7.42563 8H8.57603Z',
+      'M7.99985 1C9.51864 1 10.7499 2.23122 10.7499 3.75C10.7499 5.26878 9.51864 6.5 7.99985 6.5C6.4812 6.49985 5.24985 5.26869 5.24985 3.75C5.24985 2.23131 6.4812 1.00015 7.99985 1Z',
+    ],
+    'ctx-assign-me': [
+      'M13.5604 10.4541C13.7236 10.0738 14.1652 9.89774 14.5457 10.0605C14.9262 10.2238 15.1023 10.6653 14.9393 11.0459L14.7088 11.583C14.2755 12.594 13.2814 13.2498 12.1815 13.25H9.38068L9.81916 13.7617C10.0887 14.0762 10.0524 14.5497 9.7381 14.8193C9.42366 15.0887 8.95003 15.0526 8.68048 14.7383L7.18048 12.9883C6.93986 12.7075 6.93989 12.2926 7.18048 12.0117L8.68048 10.2617C8.95004 9.94741 9.42366 9.91125 9.7381 10.1807C10.0524 10.4503 10.0887 10.9238 9.81916 11.2383L9.38068 11.75H12.1815C12.6813 11.7498 13.133 11.4517 13.3299 10.9922L13.5604 10.4541Z',
+      'M7.42462 8C7.83884 8 8.17462 8.33579 8.17462 8.75C8.17462 9.16421 7.83884 9.5 7.42462 9.5C6.00944 9.50011 4.75705 10.4161 4.32795 11.7646L3.46466 14.4775C3.33902 14.8722 2.91695 15.0904 2.52228 14.9648C2.12775 14.8392 1.90945 14.4171 2.03498 14.0225L2.89826 11.3096C3.52547 9.33861 5.35628 8.00011 7.42462 8Z',
+      'M7.99982 1C9.5186 1 10.7498 2.23122 10.7498 3.75C10.7498 5.26878 9.5186 6.5 7.99982 6.5C6.48119 6.49982 5.24982 5.26867 5.24982 3.75C5.24982 2.23133 6.48119 2.00018 7.99982 1Z',
+    ],
+    'ctx-status': ['M13.5 8C13.5 4.96243 11.0376 2.5 8 2.5C4.96243 2.5 2.5 4.96243 2.5 8C2.5 11.0376 4.96243 13.5 8 13.5C11.0376 13.5 13.5 11.0376 13.5 8ZM15 8C15 11.866 11.866 15 8 15C4.13401 15 1 11.866 1 8C1 4.13401 4.13401 1 8 1C11.866 1 15 4.13401 15 8ZM12 8C12 10.2091 10.2091 12 8 12V4C10.2091 4 12 5.79086 12 8Z'],
+    'ctx-labels': ['M12 11.5V13H5.132v-1.5H12Zm1.5-1.5V6a1.5 1.5 0 0 0-1.346-1.492L12 4.5H5.133a.5.5 0 0 0-.303.103l-.08.076-2.382 2.834a.5.5 0 0 0-.11.234l-.008.087v.331a.5.5 0 0 0 .118.321l2.382 2.835a.5.5 0 0 0 .383.179V13l-.22-.012a2 2 0 0 1-1.16-.54l-.15-.16L1.218 9.45a2 2 0 0 1-.46-1.11L.75 8.165v-.331a2 2 0 0 1 .363-1.147l.106-.14 2.383-2.834a2 2 0 0 1 1.312-.701L5.134 3H12a3 3 0 0 1 3 3v4a3 3 0 0 1-3.002 3v-1.5c.778 0 1.417-.59 1.494-1.347L13.5 10Z','M5.5 8a1 1 0 1 1 2 0 1 1 0 0 1-2 0Z'],
+    'ctx-team': ['m11.6 9 .072.005.016.001a.6.6 0 0 1 .313.148l2.887 2.592a.4.4 0 0 1 0 .595l-2.887 2.593A.6.6 0 0 1 11 14.487v-1.114c-4.667-.603-7-1.06-7-1.371 0-.018.01-.036.027-.055a.451.451 0 0 1 .113-.078l.039-.019a2.279 2.279 0 0 1 .31-.115 6.335 6.335 0 0 1 .265-.078l.072-.019.054-.014a17.874 17.874 0 0 1 1.072-.239 40.991 40.991 0 0 1 .69-.13l.043-.008a56.84 56.84 0 0 1 1.51-.254l.432-.067.065-.01.04-.006a82.873 82.873 0 0 1 2.27-.312L11 9.6a.6.6 0 0 1 .6-.6ZM6.782 7.645l.195.114.719.448c.611.38 1.037.984 1.2 1.668-.658.097-1.327.203-1.94.309l-.45.079-.583.109c-.463.09-.866.177-1.2.26l-.193.05-.326.094c-.15.047-.28.094-.392.143-.476.207-.765.419-.807.944L3 12 2.5 12A1.5 1.5 0 0 1 1 10.5c0-.87.42-1.684 1.119-2.19l.154-.103.72-.448a3.768 3.768 0 0 1 3.789-.114Zm6-1 .195.114.719.448A2.702 2.702 0 0 1 14.969 9.5c0 .285-.08.552-.218.78l-2.082-1.87a1.6 1.6 0 0 0-2.662 1.044L10 9.6v.119l-.031.004A3 3 0 0 0 8.76 7.724l-.605-.439.118-.078.72-.448a3.768 3.768 0 0 1 3.789-.114ZM4.969 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z'],
+    'ctx-due-date': ['M15 5C15 2.79086 13.2091 1 11 1H5C2.79086 1 1 2.79086 1 5V11C1 13.2091 2.79086 15 5 15H6.25C6.66421 15 7 14.6642 7 14.25C7 13.8358 6.66421 13.5 6.25 13.5H5C3.61929 13.5 2.5 12.3807 2.5 11V6H13.5V6.25C13.5 6.66421 13.8358 7 14.25 7C14.6642 7 15 6.66421 15 6.25V5ZM11.5001 8C11.9143 8 12.2501 8.33579 12.2501 8.75V10.75L14.2501 10.75C14.6643 10.75 15.0001 11.0858 15.0001 11.5C15.0001 11.9142 14.6643 12.25 14.2501 12.25L12.2501 12.25V14.25C12.2501 14.6642 11.9143 15 11.5001 15C11.0859 15 10.7501 14.6642 10.7501 14.25V12.25H8.75C8.33579 12.25 8 11.9142 8 11.5C8 11.0858 8.33579 10.75 8.75 10.75L10.7501 10.75V8.75C10.7501 8.33579 11.0859 8 11.5001 8Z'],
+  }
+  const paths = glyphs[id]
+  if (!paths) return fallback
+  return <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">{paths.map(path => <path key={path} d={path}/>)}</svg>
 }
 
 function ResourceIcon({ result }: { result: SearchResult }) {

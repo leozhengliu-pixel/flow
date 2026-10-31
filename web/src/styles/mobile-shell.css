@@ -5,6 +5,7 @@
   :is(.pulse-page, .reviews-workspace, .project-detail-page) :is(button, input, textarea, select) { text-rendering: inherit; }
   /* The reference phone shell has no fixed Agent/history footer bar. */
   html:root body .bottom-agent { display: none; }
+  html:root body:has(.command-dialog) [data-my-issues-bulk-bar] { display: none; }
   .phone-create-issue { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; margin-left: auto; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--issue-muted); }
   .phone-create-issue:hover { background: var(--theme-surface-hover); }
   .phone-create-issue:focus-visible { outline: 2px solid var(--focus-ring); }
