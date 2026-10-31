@@ -1,0 +1,16 @@
+.help-phone-menu .phone-menu-heading > .phone-menu-context { padding: 2px 6px; line-height: 18px; font-weight: 400; }
+.help-phone-menu .help-phone-input { height: 40px; border-radius: 12px; font: 400 13px/19.5px var(--font); }
+.help-phone-menu .help-phone-input input { font: inherit; }
+.help-phone-menu .help-phone-rows { position: relative; }
+.help-phone-menu .help-phone-news-heading { position: absolute; height: 30px; display: flex; align-items: center; padding-inline: 12px; color: var(--pk-muted); font-size: 12px; font-weight: 500; }
+html:root body .help-phone-menu [cmdk-item]:not(#_) { position: absolute; width: 100%; border-radius: 0; background: transparent; color: var(--pk-text); }
+.help-phone-menu [cmdk-item] { --help-icon-color: var(--pk-muted); }
+.help-phone-menu [cmdk-item][data-selected=true] { --help-icon-color: var(--pk-text-strong); }
+.help-phone-menu > [cmdk-root] { position: relative; left: -.5px; top: -.5px; width: calc(100vw - 32px); border: 0; }
+.help-phone-menu [cmdk-item]::before { content: ''; position: absolute; inset: 2px -1px; border-radius: 8px; pointer-events: none; }
+.help-phone-menu [cmdk-item][data-selected=true]::before { background: var(--pk-hover); }
+.help-phone-menu [cmdk-item] > :is(span, svg) { position: relative; }
+.help-phone-menu [cmdk-item] > span { font-size: 13px; font-weight: 450; line-height: 15.6px; }
+.help-phone-menu [cmdk-item][data-selected=true] > span { color: var(--pk-text-strong); }
+html:root body .help-phone-menu [cmdk-item] > svg { color: var(--pk-muted); }
+html:root body .help-phone-menu [cmdk-item][data-selected=true] > svg { color: var(--pk-text-strong); }

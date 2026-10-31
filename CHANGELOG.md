@@ -19,6 +19,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Match the phone Help panel's chip, filter, support rows and glyphs, and close the drawer when opening it without changing desktop menus.
 - Refine phone workspace fiscal controls, initials, description wrapping, and onboarding text tones.
 - Restore the phone workspace trigger's open pill and the keyboard-selected workspace-menu row highlight.
 - Stack workspace general fields on phones, refine time and region spacing, and keep announcement settings accessible without changing desktop layout.
