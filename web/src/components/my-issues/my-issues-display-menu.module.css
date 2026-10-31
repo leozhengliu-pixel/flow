@@ -26,7 +26,7 @@
 /* The issue display popover uses the same 364px surface as the reference app. */
 .popover{width:var(--filter-display-width);height:auto;max-height:min(531px,calc(100dvh - 103px));overflow:auto}
 .popover,.selectMenu{border-color:var(--popover-border);box-shadow:var(--shadow-control)}
-.selectTrigger{min-width:116px;height:var(--filter-control-height)}
+.selectTrigger{min-width:156.8px;height:var(--filter-control-height)}
 /* The reference app view-options footer: Reset (ghost) + Save as default (primary text). */
 .footer{position:sticky;bottom:0;display:flex;justify-content:flex-end;gap:6px;padding:8px 16px;background:var(--theme-surface-2);border-top:.5px solid var(--theme-border)}
 .footerButton{height:24px;padding:0 8px;white-space:nowrap;flex:0 0 auto;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--theme-text-secondary);font:500 12px/18px inherit;cursor:pointer}

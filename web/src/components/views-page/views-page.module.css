@@ -157,3 +157,9 @@
 .contextMenu,.displayPopover,.orderingList{border-radius:var(--filter-popover-radius)}
 
 .toolbarEnd :global(.cvh-search){margin-right:4px}
+@media(min-width:1024px){
+  .groupHeader{height:36px;margin:0 8px;padding:0 10px;border-radius:8px;background:var(--theme-surface-1)}
+  .identity small{display:none}
+  .owner{padding:0;background:transparent;border-radius:0;font-size:13px;color:var(--muted)}
+  .owner:hover,.owner[data-state=open]{background:transparent;color:var(--text)}
+}

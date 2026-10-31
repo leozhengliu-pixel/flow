@@ -44,6 +44,11 @@ describe('filter → server query translation', () => {
     expect(filterToQueryNode(filter('assignee', ['', 'u1']), { data })).toEqual({ or: [{ field: 'assignee', operator: 'in', values: ['u1'] }, { field: 'assignee', operator: 'isEmpty' }] })
   })
 
+  it('maps team and estimate filters to indexed issue fields', () => {
+    expect(filterToQueryNode(filter('team', ['team-1']), { data })).toEqual({ field: 'teamId', operator: 'in', values: ['team-1'] })
+    expect(filterToQueryNode(filter('estimate', ['']), { data })).toEqual({ field: 'estimate', operator: 'isEmpty' })
+  })
+
   it('turns date categories into comparisons', () => {
     const now = Date.parse('2026-09-24T12:00:00Z')
     expect(filterToQueryNode(filter('dates', ['created-past-week']), { data, now })).toEqual({ field: 'createdAt', operator: 'after', values: ['2026-09-17T12:00:00.000Z'] })

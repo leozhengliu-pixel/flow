@@ -66,7 +66,7 @@ describe('issue explorer workflow model', () => {
   it('builds property counts and applies issue filters', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-15T12:00:00.000Z'))
-    const first = makeIssue({ dueDate: '2026-08-15', externalSource: 'email', autoClosed: true, templateId: 'template-1', suggestedLabelIds: [label.id] })
+    const first = makeIssue({ dueDate: '2026-08-15', externalSource: 'email', autoClosed: true, templateId: 'template-1', suggestedLabelIds: [label.id], estimate: 2 })
     first.project = { id: project.id, name: project.name, color: project.color, icon: project.icon }
     const second = makeIssue({ id: 'issue-2', identifier: 'TST-2', priority: 4, state: backlog, assignee: undefined, labels: [], subscriberIds: [], dueDate: undefined })
     const data = makeBootstrap({
@@ -78,9 +78,13 @@ describe('issue explorer workflow model', () => {
     expect(options.status.find(item => item.id === started.id)?.count).toBe(1)
     expect(explorerFilterOptions('assignee', options)?.[0].count).toBe(1)
     expect(options.labels[0].count).toBe(1)
+    expect(options.team.some(option => option.id === first.team.id)).toBe(true)
+    expect(options.estimate.find(option => option.id === '2')?.count).toBe(1)
 
     expect(applyExplorerFilters(data.issues, [filter('priority', ['2'])], data).map(issue => issue.id)).toEqual([first.id])
     expect(applyExplorerFilters(data.issues, [filter('status', ['backlog'])], data).map(issue => issue.id)).toEqual([second.id])
+    expect(applyExplorerFilters(data.issues, [filter('team', [first.team.id])], data).map(issue => issue.id)).toEqual([first.id, second.id])
+    expect(applyExplorerFilters(data.issues, [filter('estimate', ['2'])], data).map(issue => issue.id)).toEqual([first.id])
     expect(matchesExplorerFilter(issueToExplorerRow(first, 'workspace', data.issues, data), filter('content', ['query:Issue body']))).toBe(true)
     expect(matchesExplorerFilter(issueToExplorerRow(first, 'workspace', data.issues, data), filter('dates', ['today']))).toBe(true)
     expect(matchesExplorerFilter(issueToExplorerRow(first, 'workspace', data.issues, data), filter('externalSource', ['email'], 'isNot'))).toBe(false)
