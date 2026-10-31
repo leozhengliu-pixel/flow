@@ -25,6 +25,8 @@ import {
 import { Check, ChevronRight, Minus } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { DocumentGlyph } from '@/components/documents/document-icon'
+import { StatusIcon } from '@/components/issue/issue-icons'
+import { useIssueSearch } from '@/components/issue/use-issue-search'
 import { PulseIcon } from '@/components/pulse/pulse-icon'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 import { searchWorkspace } from '@/lib/api'
@@ -101,6 +103,7 @@ export function CommandMenu({
   data,
   initialCustomerPicker = false,
   initialDocumentPicker = false,
+  initialIssuePicker = false,
   initialReleasePicker = false,
   documentHost,
   releaseHost,
@@ -155,6 +158,7 @@ export function CommandMenu({
   initialCustomerPicker?: boolean
   /** Open straight on the "Open document…" picker (the O then D shortcut). */
   initialDocumentPicker?: boolean
+  initialIssuePicker?: boolean
   /** Open straight on the "Create new release…" pipeline picker (the N then R shortcut). */
   initialReleasePicker?: boolean
   /** Navigation and the New release composer for the release commands; omitted where releases are unavailable. */
@@ -164,8 +168,9 @@ export function CommandMenu({
 } & ContextCommandHandlers) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
-  const [pages, setPages] = useState<CommandPage[]>(() => initialDocumentPicker ? [{ id: 'documentOpen', label: 'Open document…' }] : initialReleasePicker ? [{ id: 'releaseCreate', label: 'Create new release…' }] : [])
+  const [pages, setPages] = useState<CommandPage[]>(() => initialIssuePicker ? [{ id: 'issueOpen', label: 'Open issue…' }] : initialDocumentPicker ? [{ id: 'documentOpen', label: 'Open document…' }] : initialReleasePicker ? [{ id: 'releaseCreate', label: 'Create new release…' }] : [])
   const page = pages.at(-1)
+  const issuePickerOptions = useIssueSearch(query, data?.issues ?? [], open && page?.id === 'issueOpen')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   // "Open customer…" lists the workspace's customers in place of the root commands.
@@ -187,10 +192,19 @@ export function CommandMenu({
   const documents = documentCommands({ context, data, page, query, host, close: () => onOpenChange(false), t, pathname: location.pathname })
   const releases = releaseCommands({ data: releaseHost ? data : undefined, pathname: location.pathname, page, host: releaseHost ?? { navigate: () => undefined, createRelease: () => undefined }, close: () => onOpenChange(false) })
   const releasePage = Boolean(page && GLOBAL_RELEASE_PAGES.has(page.id))
+  const issueOpenOptions: PageOption[] = page?.id === 'issueOpen' ? issuePickerOptions.filter(issue => !issue.archivedAt).map(issue => ({
+    id: issue.id,
+    label: issue.title,
+    entity: true,
+    keywords: `${issue.identifier} ${issue.team.name}`,
+    icon: <StatusIcon state={issue.state} size={16}/>,
+    detail: issue.identifier,
+    select: closeAnd(() => onOpenResult({ type: 'issue', id: issue.id, identifier: issue.identifier, title: issue.title, score: 0 })),
+  })) : []
   const contextCommands = {
     heading: context?.kind === 'document' ? 'Document' : context?.kind === 'release' ? '' : issueCommands.heading,
     actions: context?.kind === 'document' ? documents.actions : context?.kind === 'release' ? context.actions : issueCommands.actions,
-    options: documents.options.length ? documents.options : releasePage ? releases.options : context?.kind === 'release' ? (page && context.pageOptions?.(page, query)) || [] : issueCommands.options,
+    options: page?.id === 'issueOpen' ? issueOpenOptions : documents.options.length ? documents.options : releasePage ? releases.options : context?.kind === 'release' ? (page && context.pageOptions?.(page, query)) || [] : issueCommands.options,
   }
   const openPage = (next: CommandPage) => { setPages(current => [...current, next]); setQuery('') }
   const back = () => { setPages(current => current.slice(0, -1)); setQuery('') }
@@ -219,6 +233,7 @@ export function CommandMenu({
     ...(data && data.viewerRole !== 'guest' ? [{ id: 'view-admins', group: 'Navigation', label: 'View workspace admins', icon: <UserRound/>, keywords: 'admin owner members', run: closeAnd(onNavigateMembers) }] : []),
     { id: 'go-inbox', group: 'Navigation', label: 'Go to Inbox', icon: <Inbox/>, shortcut: ['G', 'then', 'I'], run: closeAnd(onNavigateInbox) },
     { id: 'go-my-issues', group: 'Navigation', label: 'Go to My issues', icon: <SquareDot/>, shortcut: ['G', 'then', 'M'], run: closeAnd(onNavigateMyIssues) },
+    { id: 'open-issue', group: 'Navigation', label: 'Open issue…', icon: <SquareDot/>, shortcut: ['O', 'then', 'I'], keywords: 'issue picker ticket find', run: () => openPage({ id: 'issueOpen', label: 'Open issue…' }) },
     { id: 'open-project', group: 'Navigation', label: 'Open project…', icon: <Box/>, shortcut: ['O', 'then', 'P'], keywords: 'project picker', run: closeAnd(onNavigateProjects) },
     { id: 'go-projects', group: 'Navigation', label: 'Go to projects', icon: <ArrowRight/>, shortcut: ['G', 'then', 'P'], run: closeAnd(onNavigateProjects) },
     ...(onNavigateRecentlyDeletedProjects ? [{ id: 'go-deleted-projects', group: 'Navigation', label: 'Go to recently deleted projects', icon: <Trash2/>, keywords: 'trash restore removed', run: closeAnd(onNavigateRecentlyDeletedProjects) }] : []),
@@ -281,7 +296,7 @@ export function CommandMenu({
     ? groups.find(group => actions.some(action => action.group === group && `${action.label} ${action.keywords ?? ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())))
     : undefined
   // The context vanished (selection cleared, issue closed): nested pages no longer apply.
-  useEffect(() => { if (!context) setPages(current => current.filter(item => GLOBAL_DOCUMENT_PAGES.has(item.id) || GLOBAL_RELEASE_PAGES.has(item.id))) }, [context])
+  useEffect(() => { if (!context) setPages(current => current.filter(item => item.id === 'issueOpen' || GLOBAL_DOCUMENT_PAGES.has(item.id) || GLOBAL_RELEASE_PAGES.has(item.id))) }, [context])
   const onInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Backspace' && !query && customerPicker) { event.preventDefault(); setCustomerPicker(false); return }
     if (event.key === 'Backspace' && !query && pastChats) { event.preventDefault(); setPastChats(false); return }

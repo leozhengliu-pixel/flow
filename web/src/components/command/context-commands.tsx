@@ -42,6 +42,7 @@ import { issueReleaseCommands } from './release-commands'
 import { issueDeleteConfirmation, issueDeleteDescription } from '@/lib/issue-delete-confirmation'
 
 export type CommandPageId =
+  | 'issueOpen'
   | 'status' | 'assignee' | 'priority' | 'labels' | 'dueDate' | 'project' | 'cycle' | 'estimate' | 'team'
   | 'relation' | 'relatedIssue' | 'parent' | 'subIssue'
   | 'issueRelease' | 'issueReleaseRemove' | 'releaseOpenPipeline' | 'releaseCreate' | 'releaseDate' | 'releaseStage'

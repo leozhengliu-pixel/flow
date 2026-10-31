@@ -24,6 +24,7 @@ function shortcutGroups(sendCommentKeys: string[]): { title: string; shortcuts: 
     { title: 'Navigation', shortcuts: [
       { label: 'Toggle left sidebar', keys: ['['] },
       { label: 'Toggle right sidebar', keys: [']'] },
+      { label: 'Open issue', keys: ['O', 'then', 'I'] },
       { label: 'Open parent issue', keys: ['⌘', '⇧', '↑'] },
       { label: 'Go to team', keys: ['Ctrl', '⇧', '1-9'] },
       { label: 'Go to inbox', keys: ['G', 'then', 'I'] },
