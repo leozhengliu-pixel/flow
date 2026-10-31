@@ -134,6 +134,8 @@ import {
 import "./issues-projects-settings.css";
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { AgentSkillsIcon } from '@/components/agent/agent-icons'
+import { LabelIcon, MembersIcon, SlackIcon } from '@/components/issue/issue-icons'
+import { TeamSettingsIcon } from '@/components/layout/team-menu-icons'
 import { TeamAgentGuidanceSettings } from './team-agent-guidance'
 import { chatTeamNotificationsCopy, useChatPlatform } from '@/lib/chat-platform'
 import { ChatTeamNotifications } from './chat-team-notifications'
@@ -288,7 +290,6 @@ export function TeamWorkflowSettings({
   const { t } = useI18n();
   const chat = useChatPlatform(data);
   const chatCopy = chatTeamNotificationsCopy(chat.platform);
-  const desktop = useDesktopSettings();
   if (section === "statuses")
     return (
       <StatusesSettings
@@ -364,9 +365,9 @@ export function TeamWorkflowSettings({
               t(TEAM_SECTION_TITLES[section] ?? SECTIONS.find((item) => item.id === section)?.label ?? "")
             )}
           </h1>
-          {section === "overview" && desktop ? <p>{t(team.private || data.teamSettings?.[team.id]?.access === 'private' ? 'Only accessible to team members' : 'Accessible to all workspace members')}</p> : section === "templates" ? <TeamTemplatesDescription workspaceSlug={data.workspace.urlKey} /> : section === "notifications" ? <p>{chat.format(t(chatCopy.page))}</p> : TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
+          {section === "overview" ? <p>{t(team.private || data.teamSettings?.[team.id]?.access === 'private' ? 'Only accessible to team members' : 'Accessible to all workspace members')}</p> : section === "templates" ? <TeamTemplatesDescription workspaceSlug={data.workspace.urlKey} /> : section === "notifications" ? <p>{chat.format(t(chatCopy.page))}</p> : TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
         </div>
-        {section === 'overview' && desktop && <a className="team-overview-shortcut" href={teamHomePath(data.workspace.urlKey, team.key)}>{t('Team overview')}<ChevronRight size={14}/></a>}
+        {section === 'overview' && <a className="team-overview-shortcut" href={teamHomePath(data.workspace.urlKey, team.key)}>{t('Team overview')}<ChevronRight size={14}/></a>}
       </header>
       {section === "overview" && (
         <TeamOverview
@@ -589,40 +590,39 @@ function TeamOverview({
       default: return undefined;
     }
   };
-  const icons: Partial<Record<TeamSettingsSection, typeof Settings>> = { general: Settings, security: LockKeyhole, members: Users, notifications: MessageSquare, 'issue-labels': Tag, 'project-labels': Tag, templates: FileText, 'recurring-issues': Repeat, statuses: CircleDot, 'project-statuses': FolderKanban, workflow: Layers, triage: Layers, cycles: Repeat };
+  const desktopIcons: Partial<Record<TeamSettingsSection, typeof Settings>> = { general: Settings, security: LockKeyhole, members: Users, notifications: MessageSquare, 'issue-labels': Tag, 'project-labels': Tag, templates: FileText, 'recurring-issues': Repeat, statuses: CircleDot, 'project-statuses': FolderKanban, workflow: Layers, triage: Layers, cycles: Repeat };
+  const mobileIcons: Partial<Record<TeamSettingsSection, ComponentType<{ size?: number }>>> = { general: () => <TeamSettingsIcon />, security: LockKeyhole, members: MembersIcon, notifications: SlackIcon, 'issue-labels': LabelIcon, 'project-labels': LabelIcon, templates: FileText, 'recurring-issues': Repeat, statuses: CircleDot, 'project-statuses': FolderKanban, workflow: Layers, triage: Layers, cycles: Repeat };
   const group = (title: string | undefined, ids: TeamSettingsSection[]) => (
     <TeamSection title={title}>
-      <div className="team-overview-list">
+      <div className="team-overview-list" data-team-overview-group={ids.join("-")}>
         {ids.map((id) => {
           const item = SECTIONS.find((value) => value.id === id)!;
           const notifications = item.id === "notifications";
-          const Icon = icons[id] ?? Settings;
+          const Icon = (desktop ? desktopIcons[id] : mobileIcons[id]) ?? Settings;
+          const unavailable = id === "project-labels" && !desktop;
+          const showSummary = desktop || ["members", "notifications", "issue-labels", "project-labels", "templates", "recurring-issues"].includes(id);
+          const rowSummary = showSummary ? summary(id) : undefined;
           const content = <>
-            {desktop && <span className="team-overview-icon"><Icon size={16}/></span>}
+            <span className="team-overview-icon"><Icon size={16}/></span>
             <span className="team-overview-copy"><strong>{notifications ? chat.format(t(chatCopy.label)) : t(item.label)}</strong><small>{notifications ? chat.format(t(chatCopy.description)) : t(item.description)}</small></span>
-            {desktop && summary(id) !== undefined && <span className="team-overview-summary">{summary(id)}</span>}
-            <ChevronRight size={15}/>
+            {rowSummary !== undefined && <span className={`team-overview-summary${unavailable ? " is-plan" : ""}`}>{unavailable ? t("Available on Business") : rowSummary}</span>}
+            <>{!unavailable && <ChevronRight size={15}/>}</>
           </>;
-          if (desktop) return <a key={id} href={settingsPath(data.workspace.urlKey, 'team', team.key, id)}>{content}</a>;
-          return (
-            <button key={item.id} onClick={() => onNavigate(item.id)}>
-              <span>
-                <strong>{notifications ? chat.format(t(chatCopy.label)) : t(item.label)}</strong>
-                <small>{notifications ? chat.format(t(chatCopy.description)) : t(item.description)}</small>
-              </span>
-              <ChevronRight size={15} />
-            </button>
-          );
+          if (desktop) return <a key={id} data-team-overview-row={id} href={settingsPath(data.workspace.urlKey, 'team', team.key, id)}>{content}</a>;
+          const row = unavailable
+            ? <div data-team-overview-row={id} className="team-overview-unavailable">{content}</div>
+            : <button data-team-overview-row={id} onClick={() => onNavigate(item.id)}>{content}</button>;
+          return <div key={item.id} className="team-overview-row-shell">{row}</div>;
         })}
       </div>
     </TeamSection>
   );
   return (
-    <>
-      {group(undefined, desktop ? ["general", "members", "notifications", "security"] : ["general", "security", "members", "notifications"])}
-      {group(t(desktop ? "Issues, projects, and documents" : "Issues, projects, and docs"), [
+    <div className="team-overview-page">
+      {group(undefined, desktop ? ["general", "members", "notifications", "security"] : ["general", "members", "notifications"])}
+      {group(t("Issues, projects, and documents"), [
         "issue-labels",
-        ...(desktop ? ['project-labels' as const] : []),
+        "project-labels",
         "templates",
         "recurring-issues",
       ])}
@@ -717,7 +717,7 @@ function TeamOverview({
         team={team}
         onReload={onReload}
       />
-    </>
+    </div>
   );
 }
 

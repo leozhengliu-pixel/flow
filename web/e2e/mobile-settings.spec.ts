@@ -5,6 +5,26 @@ import { test as workspaceTest } from './workspace-fixture'
 const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`${viewport.width}px team settings overview`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Team general' })
+
+    workspaceTest('matches the compact team settings hub cards', async ({ page, request, workspaceKey }) => {
+      const headers = { 'X-Flow-Workspace': workspaceKey, 'X-Workspace-Key': workspaceKey }
+      const bootstrap = await (await request.get('/api/bootstrap', { headers })).json()
+      const team = bootstrap.teams[0]
+      await request.patch(`/api/workspaces/${workspaceKey}/teams/${team.id}`, { headers, data: { name: '[mobile] Flow', key: 'FLO' } })
+      await page.goto(`/${workspaceKey}/settings/teams/FLO`)
+      await expect(page.locator('.team-settings-header h1')).toBeVisible()
+      await expect(page.locator('.team-overview-page [data-team-overview-row=general]')).toBeVisible()
+      await expect(page.locator('.team-overview-page [data-team-overview-row=project-labels]')).toBeVisible()
+      await expect(page.locator('.team-overview-page .settings-section').first().locator('.settings-card')).toHaveCSS('border-radius', '10px')
+      expect((await page.locator('.team-overview-page .settings-section').first().locator('.settings-card').boundingBox())?.y).toBeCloseTo(191.5, 1)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  })
+}
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   workspaceTest.describe(`${viewport.width}px teams`, () => {
     workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Teams' })
 
