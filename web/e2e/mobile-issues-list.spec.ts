@@ -36,6 +36,48 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     })
   })
+
+  workspaceTest(`matches the status value picker with counts ${viewport.width}`, async ({ page, request, workspaceKey }) => {
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await (await request.get('/api/bootstrap', { headers })).json() as BootstrapData
+    const team = bootstrap.teams[0]
+    const createState = async (name: string, type: string, color?: string) => {
+      const response = await request.post(`/api/teams/${team.id}/states`, { headers, data: { name, type, color } })
+      expect(response.status()).toBe(201)
+      return response.json() as Promise<{ id: string }>
+    }
+    const triage = await createState('Triage', 'backlog', '#FF6B2C')
+    const review = await createState('In Review', 'started', 'lch(60% 64.37 141.95)')
+    const afterStates = await (await request.get('/api/bootstrap', { headers })).json() as BootstrapData
+    const teamStates = afterStates.states.filter(state => state.teamId === team.id)
+    const stateId = (name: string) => teamStates.find(state => state.name === name)!.id
+    const reorder = await request.post(`/api/teams/${team.id}/states/reorder`, { headers, data: {
+      stateIds: [triage.id, stateId('Backlog'), stateId('Todo'), stateId('In Progress'), review.id, stateId('Done'), stateId('Canceled'), stateId('Duplicate')],
+    } })
+    expect(reorder.ok()).toBe(true)
+    const createIssue = async (index: number, stateId: string) => {
+      const response = await request.post('/api/issues', { headers, data: { title: `[mobile] Status picker ${index}`, description: '', teamId: team.id, stateId, assigneeId: afterStates.viewer.id } })
+      expect(response.status()).toBe(201)
+    }
+    await createIssue(1, triage.id)
+    for (let index = 2; index <= 12; index += 1) await createIssue(index, stateId('Todo'))
+    for (let index = 13; index <= 19; index += 1) await createIssue(index, stateId('In Progress'))
+
+    await page.goto(`/${workspaceKey}/my-issues/activity`)
+    await page.getByRole('button', { name: 'Display options', exact: true }).click()
+    await page.locator('[role="dialog"][aria-label="Display options"] button[aria-label="Grouping"]').click()
+    await page.getByRole('option', { name: 'My activity', exact: true }).click()
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: 'Add filter', exact: true }).click()
+    await page.locator('[data-surface="my-issues"][data-variant="root"] [data-value="Status"]').click()
+    const panel = page.locator('[data-field="status"]')
+    await expect(panel).toHaveCSS('height', '426px')
+    await expect(panel.getByRole('option')).toHaveCount(8)
+    await expect(panel.getByRole('option', { name: 'Triage 1 issue', exact: true })).toBeVisible()
+    await expect(panel.getByRole('option', { name: 'Todo 11 issues', exact: true })).toBeVisible()
+    await expect(panel.getByRole('option', { name: 'In Progress 7 issues', exact: true })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
 }
 
 workspaceTest.describe('mobile issue lists and views', () => {
