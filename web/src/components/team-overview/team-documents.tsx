@@ -10,6 +10,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSPr
 
 import { openCommandMenu, useRegisterCommandContext } from '@/components/command/command-context'
 import { useLatestRef } from '@/hooks/use-latest-ref'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { documentDisplayTitle, documentOwner, type DocumentActionContext } from '@/components/documents/document-actions'
 import { DocumentMenuItems, DocumentRowMenu } from '@/components/documents/document-menu'
@@ -97,6 +98,7 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
   team: Team
 }) {
   const { t, formatRelative, formatDate } = useI18n()
+  const phone = usePhoneLayout()
   const initial = useMemo(() => readDocumentDirectoryState(), [])
   const [search, setSearch] = useState(initial.search)
   const [searchOpen, setSearchOpen] = useState(Boolean(initial.search))
@@ -190,7 +192,7 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
   }
 
   // "Actions" scopes ⌘K to the selection (the reference app: one document, or "N documents").
-  useRegisterCommandContext(selectedDocuments.length ? { kind: 'document', document: selectedDocuments[0], documents: selectedDocuments } : undefined)
+  useRegisterCommandContext(selectedDocuments.length ? { kind: 'document', document: selectedDocuments[0], documents: selectedDocuments, onAskAgent: phone ? () => setAgentOpen(true) : undefined } : undefined)
   useFlowRowShortcuts(DOCUMENT_ROW_SHORTCUTS)
 
   const changeOrder = (next: DocumentOrdering) => {
@@ -351,7 +353,7 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
           <span className="team-docs-selection-label"><span>{selectedVisible.length}</span> {t('selected')}</span>
           <div className="team-docs-selection-buttons">
             <button className="team-docs-selection-actions" type="button" onClick={() => openCommandMenu()}><kbd className="team-docs-selection-kbd">⌘</kbd><span className="team-docs-selection-command"><CommandGlyph/></span><span className="team-docs-selection-actions-label">{t('Actions')}</span></button>
-            <FlowTooltip label={t('Ask agent')}><button aria-label={t('Ask agent')} className="team-docs-selection-agent" type="button" onClick={() => setAgentOpen(true)}><AgentCursorGlyph size={16}/></button></FlowTooltip>
+            {!phone && <FlowTooltip label={t('Ask agent')}><button aria-label={t('Ask agent')} className="team-docs-selection-agent" type="button" onClick={() => setAgentOpen(true)}><AgentCursorGlyph size={16}/></button></FlowTooltip>}
             <button className="team-docs-selection-clear" type="button" onClick={() => setSelected([])} aria-label={t('Clear selection')}><X className="team-docs-selection-close" size={14}/><span className="team-docs-selection-close-glyph"><CloseGlyph/></span></button>
           </div>
         </div>

@@ -268,6 +268,10 @@ test.describe('mobile documents selection', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/documents-selected-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
 
+    await actions.click()
+    await page.getByRole('option', { name: 'Ask agent', exact: true }).click()
+    await expect(page.locator('[data-agent-panel]')).toBeVisible()
+    await page.getByRole('button', { name: 'Close chat', exact: true }).click()
     await page.locator('.team-docs-selection-clear').click()
     await expect(page.locator('.team-docs-selection')).toHaveCount(0)
     await expect(row).toHaveAttribute('data-selected', 'false')

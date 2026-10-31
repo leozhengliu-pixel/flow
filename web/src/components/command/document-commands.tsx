@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 
 import { DocumentGlyph } from '@/components/documents/document-icon'
+import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { toast } from '@/lib/toast'
 
 import {
@@ -127,6 +128,7 @@ export function documentCommands({ context, data: source, page: current, query, 
   const docs = context?.kind === 'document' ? (context.documents ?? [context.document]).map(item => data.documents.find(found => found.id === item.id) ?? item) : []
   const doc = docs[0]
   const actions: ContextAction[] = doc ? documentActions(ctx, docs, { host, close, pathname }) : []
+  if (doc && context?.kind === 'document' && context.onAskAgent) actions.push({ id: 'doc-ask-agent', label: 'Ask agent', icon: <AgentCursorGlyph/>, run: () => { close(); context.onAskAgent?.() } })
   const options = pageOptions({ ctx, data, docs, page: current, query, t, open, choose })
   return { global, actions, options }
 }

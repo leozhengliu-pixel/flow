@@ -79,6 +79,13 @@ const option = (name: RegExp | string) => screen.getByRole('option', { name })
 const hint = (row: HTMLElement) => [...row.querySelectorAll('kbd')].map(key => key.textContent).join(' ')
 
 describe('document commands in ⌘K', () => {
+  it('hands the document selection to its agent action from the palette', async () => {
+    const onAskAgent = vi.fn()
+    const { user } = setup({ kind: 'document', document: launch, documents: [launch, untitled], onAskAgent })
+    await user.click(option('Ask agent'))
+    expect(onAskAgent).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
   beforeEach(() => {
     localStorage.setItem('flow:locale', 'en-US')
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
