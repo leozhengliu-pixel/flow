@@ -19,6 +19,8 @@ test('desktop shell commands keep commands first, list real shortcuts and open t
   expect(issue.status()).toBe(201)
 
   await page.goto(`/${workspaceKey}/agent`)
+  await expect(page.locator('.sidebar')).toBeVisible()
+  await page.mouse.click(800, 20)
 
   // The sidebar search tooltip advertises the shortcut that really opens search.
   await page.getByRole('button', { name: 'Search', exact: true }).hover()
@@ -55,7 +57,8 @@ test('desktop shell commands keep commands first, list real shortcuts and open t
   }
   await expect(shortcuts.getByText('Go to reviews', { exact: true })).toBeVisible()
   await expect(shortcuts.getByText('Open customer…', { exact: true })).toBeVisible()
-  await expect(shortcuts.getByText('Open help menu', { exact: true })).toHaveCount(0)
+  await expect(shortcuts.getByText('Open help menu', { exact: true })).toBeVisible()
+  await page.keyboard.press('Escape')
 
   // The create dialog sits at the reference height, leaves the assignee unassigned and keeps the chip order.
   await page.keyboard.press('Escape')

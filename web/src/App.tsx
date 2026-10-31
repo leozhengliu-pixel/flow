@@ -217,6 +217,7 @@ import {
   dashboardsPath,
   dashboardsNewPath,
   customersPath,
+  draftsPath,
   customerPath,
   cyclePath,
   documentPath,
@@ -925,15 +926,39 @@ function App() {
     const key = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
       const targetEditable = isEditableTarget(e.target);
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      if ((e.metaKey || e.ctrlKey) && !targetEditable && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setCommandOpen((open) => !open);
         return;
       }
       // "Ask Flow" (⌘J, the reference app's "Ask the reference app"): open or close the floating agent chat. The Agent page is the chat already.
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "j") {
+      if ((e.metaKey || e.ctrlKey) && !targetEditable && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "j") {
         e.preventDefault();
         if (route.kind !== "agent") setFloatingAgentOpen((open) => !open);
+        return;
+      }
+      if (e.key === "Escape" && !targetEditable && !hasOpenShortcutScope() && window.history.length > 1) {
+        e.preventDefault();
+        window.history.back();
+        return;
+      }
+      if (e.key === "?" && !targetEditable && !hasOpenShortcutScope() && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        window.dispatchEvent(new Event('flow:open-help-menu'));
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && !targetEditable && !hasOpenShortcutScope() && e.shiftKey && !e.altKey && e.key === 'ArrowUp' && route.kind === 'issue') {
+        e.preventDefault();
+        window.dispatchEvent(new Event('flow:open-parent-issue'));
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !targetEditable && !hasOpenShortcutScope() && e.shiftKey && !e.altKey && /^Digit[1-9]$/.test(e.code) && data) {
+        const teams = data.teams.filter(team => !team.archivedAt && !team.retiredAt);
+        const team = teams[Number(e.code.slice(-1)) - 1];
+        if (team) {
+          e.preventDefault();
+          navigateTo(teamHomePath(data.workspace.urlKey, team.key));
+        }
         return;
       }
       if (
@@ -1002,6 +1027,37 @@ function App() {
         navigateTo(agentPath(data.workspace.urlKey));
         return;
       }
+      if (inSequence && sequence.key === "g" && pressed === "d" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        navigateTo(draftsPath(data.workspace.urlKey));
+        return;
+      }
+      if (inSequence && sequence.key === "g" && pressed === "a" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        navigateTo(workspaceIssuesPath(data.workspace.urlKey, "active"));
+        return;
+      }
+      if (inSequence && sequence.key === "g" && pressed === "b" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        navigateTo(workspaceIssuesPath(data.workspace.urlKey, "backlog"));
+        return;
+      }
+      if (inSequence && sequence.key === "g" && pressed === "c" && data) {
+        const team = data.teams.find(item => !item.archivedAt && !item.retiredAt) ?? data.teams[0];
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        if (team) navigateTo(teamCyclesPath(data.workspace.urlKey, team.key));
+        return;
+      }
+      if (inSequence && sequence.key === "g" && pressed === "p" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        navigateTo(projectsPath(data.workspace.urlKey));
+        return;
+      }
       if (inSequence && sequence.key === "g" && pressed === "r" && data) {
         e.preventDefault();
         shortcutSequence.current = { key: "", at: 0 };
@@ -1031,6 +1087,12 @@ function App() {
         }
         return;
       }
+      if (inSequence && sequence.key === "o" && pressed === "p" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        navigateTo(projectsPath(data.workspace.urlKey));
+        return;
+      }
       if (inSequence && sequence.key === "o" && pressed === "d" && data) {
         e.preventDefault();
         shortcutSequence.current = { key: "", at: 0 };
@@ -1046,6 +1108,11 @@ function App() {
       }
       if (pressed === "n" || pressed === "g" || pressed === "o") {
         shortcutSequence.current = { key: pressed, at: now };
+        return;
+      }
+      if (pressed === "]" && ['my-issues', 'project', 'initiative'].includes(route.kind)) {
+        e.preventDefault();
+        window.dispatchEvent(new Event('flow:toggle-right-sidebar'));
         return;
       }
       shortcutSequence.current = { key: "", at: 0 };
@@ -7471,6 +7538,18 @@ function IssueDetails(
     "comments" | "activities"
   > & { issue: Issue; data: BootstrapData },
 ) {
+  const { data, issue, onNavigateIssue } = props;
+  useEffect(() => {
+    const openParent = (event: Event) => {
+      if (event.defaultPrevented || !issue.parentId || !onNavigateIssue) return;
+      event.preventDefault();
+      const parent = data.issues.find(item => item.id === issue.parentId);
+      if (parent) onNavigateIssue(parent);
+      else void fetchIssueRecord(issue.parentId).then(onNavigateIssue).catch(() => undefined);
+    };
+    window.addEventListener('flow:open-parent-issue', openParent);
+    return () => window.removeEventListener('flow:open-parent-issue', openParent);
+  }, [data.issues, issue.parentId, onNavigateIssue]);
   return (
     <DetailPane
       {...props}
@@ -7500,15 +7579,16 @@ function isEditableTarget(target: EventTarget | null) {
   return (
     target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement ||
-    (target instanceof HTMLElement && target.isContentEditable)
+    (target instanceof HTMLElement && (target.isContentEditable || Boolean(target.closest('select,[contenteditable="true"],[role="textbox"],[role="searchbox"]'))))
   );
 }
 function hasOpenShortcutScope() {
-  return Boolean(
-    document.querySelector(
-      '[role="dialog"], [role="menu"][data-state="open"], [data-radix-popper-content-wrapper]',
-    ),
-  );
+  const visible = (element: HTMLElement) => {
+    const style = getComputedStyle(element);
+    return style.display !== 'none' && style.visibility !== 'hidden' && element.getBoundingClientRect().width > 0;
+  };
+  if ([...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="menu"][data-state="open"]')].some(visible)) return true;
+  return [...document.querySelectorAll<HTMLElement>('[data-radix-popper-content-wrapper]')].some(visible);
 }
 function applyOptimisticIssue(
   issue: Issue,

@@ -217,6 +217,16 @@ export function InitiativeDetailPage(props: Props) {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [setDetailsOpen])
+  useEffect(() => {
+    const toggle = (event: Event) => {
+      if (event.defaultPrevented) return
+      setResolvedCommentsOpen(false)
+      setUpdatesOpen(false)
+      setDetailsOpen(value => !value)
+    }
+    window.addEventListener('flow:toggle-right-sidebar', toggle)
+    return () => window.removeEventListener('flow:toggle-right-sidebar', toggle)
+  }, [setDetailsOpen])
 
   return <main className="main-panel li-detail">
     <div className="li-detail-top" data-testid="initiative-detail-header">
