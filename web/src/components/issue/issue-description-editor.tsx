@@ -74,6 +74,8 @@ interface DescriptionEditorProps {
   ariaLabel?: string
   users?: User[]
   onInsertImage?: DescriptionImageUpload
+  /** Exposes the collaborative save flush to inline comment anchors. */
+  onPersistReady?: (persist?: () => Promise<void>) => void
   /** Shows the floating heading outline in the left gutter (documents). */
   outline?: boolean
   collaboration?: {
@@ -104,7 +106,7 @@ export function IssueDescriptionEditor(props: DescriptionEditorProps) {
   return <DescriptionEditorSession key={sessionKey} {...props}/>
 }
 
-function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, extensions = [], className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [], onInsertImage, outline = false, readOnly = false }: DescriptionEditorProps) {
+function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, extensions = [], className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [], onInsertImage, onPersistReady, outline = false, readOnly = false }: DescriptionEditorProps) {
   const { t } = useI18n()
   const getPlaceholder = useStableCallback(() => t(placeholder))
   const getDocumentId = useStableCallback(() => collaboration?.issueId ?? collaboration?.documentId)
@@ -400,7 +402,11 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     return task
   }
   // Timers and provider events reach the latest `persist` through the ref (it closes over the current editor and session).
-  useInsertionEffect(() => { persistRef.current = persist })
+  useInsertionEffect(() => {
+    persistRef.current = persist
+    onPersistReady?.(persist)
+    return () => onPersistReady?.(undefined)
+  })
 
   const commands = useMemo<EditorCommand[]>(() => {
     if (!editor) return []

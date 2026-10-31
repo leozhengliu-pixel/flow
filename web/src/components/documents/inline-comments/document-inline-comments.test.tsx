@@ -74,12 +74,12 @@ function setViewport(width: number) {
   window.matchMedia = ((query: string) => ({ matches: width >= Number(/min-width: (\d+)px/.exec(query)?.[1] ?? 0), media: query, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, onchange: null, dispatchEvent: () => false })) as typeof window.matchMedia
 }
 
-function renderComments(props: { data?: BootstrapData; comments: Comment[]; editor: Editor | null; draft?: CommentDraft; onDraftChange?: (draft?: CommentDraft) => void; canEdit?: boolean; canComment?: boolean; viewport?: number; railOpen?: boolean }) {
+function renderComments(props: { data?: BootstrapData; comments: Comment[]; editor: Editor | null; draft?: CommentDraft; onDraftChange?: (draft?: CommentDraft) => void; onPersist?: () => Promise<void>; canEdit?: boolean; canComment?: boolean; viewport?: number; railOpen?: boolean }) {
   const data = props.data ?? makeBootstrap({ documents: [flowDocument] })
   const shell = document.createElement('div')
   if (props.viewport !== undefined) setViewport(props.viewport)
   const onReload = vi.fn().mockResolvedValue(undefined)
-  const view = render(<I18nProvider><DocumentInlineComments data={data} document={flowDocument} comments={props.comments} editor={props.editor} shell={shell} draft={props.draft} onDraftChange={props.onDraftChange ?? vi.fn()} canComment={props.canComment ?? true} canEdit={props.canEdit ?? true} onReload={onReload} railOpen={props.railOpen}/></I18nProvider>)
+  const view = render(<I18nProvider><DocumentInlineComments data={data} document={flowDocument} comments={props.comments} editor={props.editor} shell={shell} draft={props.draft} onDraftChange={props.onDraftChange ?? vi.fn()} canComment={props.canComment ?? true} canEdit={props.canEdit ?? true} onReload={onReload} onPersist={props.onPersist} railOpen={props.railOpen}/></I18nProvider>)
   return { ...view, onReload, data }
 }
 
@@ -214,6 +214,17 @@ describe('DocumentInlineComments', () => {
     expect(input.anchorId).toMatch(/^cmt_[0-9a-f]+/)
     await waitFor(() => expect(findMarkRanges(editor.state.doc).get(input.anchorId)).toEqual(range))
     expect(onDraftChange).toHaveBeenCalledWith(undefined)
+  })
+
+  it('flushes the anchor mark before reloading after posting a comment', async () => {
+    const editor = makeEditor()
+    const range = rangeOf(editor, 'two adds comments')
+    api.createDocumentComment.mockResolvedValue(comment({ id: 'new-thread', anchorId: 'x', user: viewer }))
+    const onPersist = vi.fn().mockResolvedValue(undefined)
+    const { onReload } = renderComments({ comments: [], editor, draft: { ...range, text: 'two adds comments' }, onPersist })
+    await userEvent.click(await screen.findByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(onPersist).toHaveBeenCalled())
+    expect(onPersist.mock.invocationCallOrder[0]).toBeLessThan(onReload.mock.invocationCallOrder[0])
   })
 
   it('lets a commenter comment without editing the document (anchored by quote)', async () => {

@@ -103,11 +103,12 @@ export interface DocumentInlineCommentsProps {
   onReload: () => Promise<void>
   /** Reports whether gutter cards are shown, so the page can shift the document left. */
   onGutterChange?: (shown: boolean) => void
+  onPersist?: () => Promise<void>
   /** The agent rail is open: no room beside the text, so threads open as popovers. */
   railOpen?: boolean
 }
 
-export function DocumentInlineComments({ data, document, comments, editor, shell, draft, onDraftChange, canComment, canEdit, visible = true, onReload, onGutterChange, railOpen = false }: DocumentInlineCommentsProps) {
+export function DocumentInlineComments({ data, document, comments, editor, shell, draft, onDraftChange, canComment, canEdit, visible = true, onReload, onGutterChange, onPersist, railOpen = false }: DocumentInlineCommentsProps) {
   const actions = useThreadActions({ data, document, editor, canEdit, onReload })
   const renderAgentThread = useAgentThreadRenderer(data, document)
   const canModerate = data.viewerRole === 'admin' || String(data.viewerRole) === 'owner'
@@ -132,6 +133,7 @@ export function DocumentInlineComments({ data, document, comments, editor, shell
     renderAgentThread={renderAgentThread}
     createThread={createThread}
     onReload={onReload}
+    onPersist={onPersist}
   />
 }
 
