@@ -263,7 +263,6 @@
     gap: 0;
   }
   .popover[data-issue-display-menu="true"] section[aria-label="List options"] {
-    top: 1px;
     padding-top: 3.5px;
   }
   .popover[data-issue-display-menu="true"] section[aria-label="List options"] > .sectionLabel:first-child:not(#_) {

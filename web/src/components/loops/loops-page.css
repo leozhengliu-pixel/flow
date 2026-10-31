@@ -491,7 +491,7 @@ html:root body .command-dialog.loops-picker-dialog [cmdk-item].is-preview:not(#_
 .loops-icon-picker.loops-icon-picker:hover,
 .loops-icon-picker.loops-icon-picker[data-state='open'] { background: color-mix(in srgb, var(--view-color) 22%, transparent); }
 .loops-icon-picker.loops-icon-picker svg { width: 16px; height: 16px; }
-.loops-name-input { width: 596px; min-width: 0; flex: 0 0 596px; height: 32px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--theme-text-primary); font: 500 32px/40px var(--font); }
+.loops-name-input { min-width: 0; flex: 1 1 0; height: 40px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--theme-text-primary); font: 500 32px/40px var(--font); }
 .loops-name-input::placeholder { color: var(--theme-text-tertiary); }
 .loops-level-button { flex: none; }
 @media (min-width: 801px) {

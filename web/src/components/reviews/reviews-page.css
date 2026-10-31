@@ -672,7 +672,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
 .review-byline-branches{display:contents}
 .review-tab-label{display:inline}
 @media (max-width: 767px){
-  html:root body .app .review-detail-chrome{box-sizing:border-box;height:87.5px;flex:0 0 87.5px;display:flex;flex-direction:column;gap:12px;background:var(--bg-panel);color:var(--review-fg)}
+  html:root body .app .review-detail-chrome{box-sizing:border-box;height:87.5px;flex:0 0 87.5px;display:flex;flex-direction:column;background:var(--bg-panel);color:var(--review-fg)}
   html:root body .app .review-detail-top{box-sizing:border-box;height:44px;flex:0 0 44px;display:flex;align-items:center;gap:0;padding:0 14px 0 8px;border-style:none}
   html:root body .app .review-detail-top .review-menu-button::before,html:root body .app .review-detail-top .review-menu-button::after{content:none}
   html:root body .app .review-detail-top .review-menu-button{display:grid!important;width:32px;height:32px;flex:0 0 32px;margin:0;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font:500 12px/normal var(--font)}
@@ -701,13 +701,12 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-phone-pr-number span{padding:0;border-style:none;color:var(--issue-muted);font:500 13px/normal var(--font)}
   html:root body .app .review-breadcrumb .review-actions-trigger{width:32px;height:32px;flex:0 0 32px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font:500 12px/normal var(--font)}
   html:root body .app .review-breadcrumb .review-actions-trigger svg{width:14px;height:14px;color:var(--issue-muted)}
-  html:root body .app .review-detail-tabs{box-sizing:border-box;height:43.5px;flex:0 0 43.5px;display:flex;align-items:center;gap:6px;margin-top:-12px;padding:0 8px 0 14px;border-style:none}
-  html:root body .app .review-detail-tabs nav{display:flex;align-items:center;gap:6px;margin-right:auto}
-  html:root body .app .review-detail-tabs nav a{box-sizing:border-box;height:32px;display:flex;align-items:center;padding:0 10px;border:.5px solid transparent;border-radius:9999px;font:500 12px/normal var(--font);text-decoration:none}
-  html:root body .app .review-detail-tabs nav a[data-review-tab=review]{display:none}
+  html:root body .app .review-detail-tabs{box-sizing:border-box;height:43.5px;flex:0 0 43.5px;display:flex;align-items:center;gap:6px;padding:0 8px 0 14px;border-style:none}
+  html:root body .app .review-detail-tabs nav{min-width:0;flex:1;display:flex;align-items:center;gap:6px;margin-right:auto;overflow-x:auto;scrollbar-width:none}
+  html:root body .app .review-detail-tabs nav a{box-sizing:border-box;height:32px;flex:none;display:flex;align-items:center;padding:0 10px;border:.5px solid transparent;border-radius:9999px;font:500 12px/normal var(--font);text-decoration:none}
   html:root body .app .review-detail-tabs nav a[data-review-tab=changes]{color:var(--review-fg-muted)}
   html:root body .app .review-tab-label{margin-right:-1px}
-  html:root body .app .review-detail-tab-actions{display:flex;align-items:center;gap:6px;margin-left:0}
+  html:root body .app .review-detail-tab-actions{display:flex;flex:none;align-items:center;gap:6px;margin-left:0}
   html:root body .app .review-detail-tab-actions>.review-pill-button{height:32px;padding:0 10px;border:.5px solid transparent}
   html:root body .app .review-ready-label--desktop{display:none}
   html:root body .app .review-ready-label--phone{display:inline;margin-right:-1px}

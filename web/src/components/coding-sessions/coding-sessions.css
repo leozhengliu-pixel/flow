@@ -233,7 +233,6 @@
   html:root body .reviews-workspace .review-agent-panel .cs-group-label{line-height:normal}
   html:root body .reviews-workspace .review-agent-panel .cs-reasoning p{letter-spacing:-.08px}
   html:root body .reviews-workspace .review-agent-panel .cs-reasoning code{font:450 11.25px/14.625px var(--cs-terminal-font)}
-  html:root body .reviews-workspace .review-agent-panel .cs-reasoning code{position:relative;top:-2px}
   html:root body .reviews-workspace .review-agent-panel .cs-action{gap:16px}
   html:root body .reviews-workspace .review-agent-panel .cs-action-header{gap:6px}
   html:root body .reviews-workspace .review-agent-panel .cs-action-label{line-height:normal}
@@ -241,7 +240,6 @@
   html:root body .reviews-workspace .review-agent-panel .cs-action-header.is-disclosure{gap:3px;padding:0 8px;margin:0 -8px;border-radius:4px}
   html:root body .reviews-workspace .review-agent-panel .cs-action-header.is-disclosure .cs-action-detail{margin-left:3px}
   html:root body .reviews-workspace .review-agent-panel:has(.cs-archived-divider) .cs-composer-area{display:none}
-  html:root body .reviews-workspace .review-agent-panel .cs-latest{display:none}
   html:root body .reviews-workspace .review-agent-panel .cs-group-children{padding-left:10px;padding-right:10px}
   html:root body .reviews-workspace .review-agent-panel .cs-group-header:hover,
   html:root body .reviews-workspace .review-agent-panel .cs-action-header:hover{color:var(--cs-label-muted)}
