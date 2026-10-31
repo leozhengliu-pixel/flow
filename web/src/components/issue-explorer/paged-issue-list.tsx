@@ -327,7 +327,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
         if (!issue) return <IssuePagePlaceholder load={() => load(group.value, pageIndex)}/>
         const row = rowFor(issue, page!.items)
         openTargets.current.set(issue.id, { issue, group: group.value })
-        return <><StalePageProbe stale={staleKeys.current.has(cache.key(group.value, pageIndex))} revision={revision} run={() => revalidate(group.value, pageIndex)}/><MyIssuesRow issue={row} selected={rowProps.selectedIds?.has(issue.id)} displayProperties={rowProps.displayProperties} nestedLines={nested ? nestedPageLines(page!.items).get(issue.id) : undefined} showSubIssueProgress={!nested} propertyOptions={rowProps.propertyOptions} mutationError={rowProps.mutationErrors?.get(issue.id)} onOpen={openRow} onPropertyChange={rowProps.onPropertyChange} onSelect={rowProps.onSelectIssue} onContextAction={rowProps.onContextAction} onRetryMutation={rowProps.onRetryMutation}/></>
+        return <><StalePageProbe stale={staleKeys.current.has(cache.key(group.value, pageIndex))} revision={revision} run={() => revalidate(group.value, pageIndex)}/><MyIssuesRow issue={row} selected={rowProps.selectedIds?.has(issue.id)} displayProperties={rowProps.displayProperties} nestedLines={nested ? nestedPageLines(page!.items).get(issue.id) : undefined} propertyOptions={rowProps.propertyOptions} mutationError={rowProps.mutationErrors?.get(issue.id)} onOpen={openRow} onPropertyChange={rowProps.onPropertyChange} onSelect={rowProps.onSelectIssue} onContextAction={rowProps.onContextAction} onRetryMutation={rowProps.onRetryMutation}/></>
       }}/>
   }
   // While a query loads, the previous result stays (inert) and fades out after 500ms;

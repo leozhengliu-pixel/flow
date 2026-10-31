@@ -204,7 +204,8 @@
   .panel.inline .summaryCard{padding:12.5px 14.5px}
   .tabs{height:28px}
   .summaryList{margin-top:10px;margin-right:-3px}
-  .tabs button{flex:1 1 auto;padding-inline:12px;font-family:inherit;font-size:12px;font-weight:500;line-height:normal}
+  .tabs button{flex:1 1 auto;padding-inline:12px;background:var(--my-issues-details-tab-bg);box-shadow:inset 0 0 0 .5px var(--ui-pill-ring);font-family:inherit;font-size:12px;font-weight:500;line-height:normal}
+  .tabs button[aria-selected="true"]{background:var(--my-issues-details-tab-active-bg)}
 }
 .dot {
   width: 9px;

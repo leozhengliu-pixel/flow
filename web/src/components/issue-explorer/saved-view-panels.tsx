@@ -42,7 +42,8 @@ export function SavedViewDetailsPanel({ belowFilterBar = false, favorite, inline
   const { t } = useI18n()
   const phone = usePhoneLayout()
   const estimateSettingsFor = useTeamEstimateSettings()
-  const [tab, setTab] = useState<'assignee' | 'labels' | 'project' | 'team'>('assignee')
+  const [selectedTab, setTab] = useState<'assignee' | 'labels' | 'project' | 'team'>('assignee')
+  const tab = phone && selectedTab === 'team' ? 'assignee' : selectedTab
   const owner = users.find(user => user.id === view.ownerId)
   const localItems = useMemo(() => summaryItems(rows, tab, inline), [rows, tab, inline])
   const queryKey = summaryQuery ? JSON.stringify({ ...summaryQuery, groupBy: tab === 'labels' ? 'label' : tab, groupCases: undefined }) : undefined

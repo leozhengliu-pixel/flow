@@ -24,11 +24,14 @@ describe('MyIssuesList virtualization', () => {
     const state = { id: 'started', name: 'In progress', type: 'started' as const, color: '#f2c94c' }
     const row = (id: string, parentId?: string): MyIssuesGroupData['issues'][number] => ({ id, identifier: `FLOW-${id}`, title: id, href: `#${id}`, priority: 0, state, parentId, createdAt: '2026-09-07T00:00:00.000Z', updatedAt: '2026-09-07T00:00:00.000Z' })
     const groups: MyIssuesGroupData[] = [{ id: 'started', label: 'In progress', issues: [row('parent'), row('child-1', 'parent'), row('child-2', 'parent'), row('other')] }]
+    groups[0].issues[0].subIssueProgress = { completed: 0, total: 2 }
+    groups[0].issues[0].subIssues = groups[0].issues.slice(1, 3)
     const view = (nestedSubIssues: boolean) => <I18nProvider><VirtuosoMockContext.Provider value={{ viewportHeight: 440, itemHeight: 44 }}><MyIssuesList groups={groups} nestedSubIssues={nestedSubIssues}/></VirtuosoMockContext.Provider></I18nProvider>
     const { container, rerender } = render(view(true))
     await waitFor(() => expect(container.querySelectorAll('a[data-issue-row-id]').length).toBe(4))
     const nested = () => [...container.querySelectorAll('a[data-issue-row-id]')].map(link => `${link.getAttribute('data-issue-row-id')}:${link.getAttribute('data-nested')}`)
     expect(nested()).toEqual(['parent:false', 'child-1:true', 'child-2:true', 'other:false'])
+    expect(container.querySelector('button[aria-label="0 of 2 sub-issues completed"]')).not.toBeNull()
     rerender(view(false))
     await waitFor(() => expect(nested()).toEqual(['parent:false', 'child-1:false', 'child-2:false', 'other:false']))
   })

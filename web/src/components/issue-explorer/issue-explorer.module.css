@@ -80,6 +80,13 @@
   .insightsButton{order:-1}
 }
 @media(min-width:1024px){
+  .filterBar [data-filter-chip]{padding:.5px;border:0;box-shadow:inset 0 0 0 .5px var(--theme-border-strong);font-weight:400;background:var(--project-toolbar-bg);color:var(--text)}
+  .filterBar [data-filter-chip]>span,.filterBar [data-filter-chip]>button{border:0;box-shadow:inset -.5px 0 0 var(--theme-border-strong)}
+  .filterBar [data-filter-chip]>span:first-child{padding:0 6.5px 0 6px}
+  .filterBar [data-filter-chip]>span:first-child>:not(:last-child){display:none}
+  .filterBar [data-filter-chip]>button{padding:0 6.5px 0 6px;gap:4px}
+  .filterBar [data-filter-chip]>button:not(:last-child)>svg{width:12px;height:12px;flex-basis:12px}
+  .filterBar [data-filter-chip]>button:last-child{width:24px;padding:0;box-shadow:none}
   /* Keep the hairline in the pill ring, not the layout: emulated DPR rounds borders to 1px. */
   :global(:root) .tabs .tab{border:0!important;padding-inline:10.5px}
   :global(:root) .tabs .tab{text-rendering:geometricPrecision}
