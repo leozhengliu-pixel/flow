@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Desktop issue view pills no longer accumulate border-width drift; the add-view glyph and issue composer's team text, action glyphs, and undivided footer match the desktop shell styling without changing phone controls.
 - The Inbox no longer shows notifications from an older navigation cache: the snapshot keeps inbox rows out of storage, reconciles them from the notifications API, and a cancelled or partial bootstrap stream is retried instead of leaving deleted rows on screen. The full bootstrap also omits deleted and archived notifications, and both workspace header spellings select the same workspace.
 - Large MySQL workspaces list, sort, search and count issues without full-table scans: priority sorting, triage filters, saved views, cycle capacity and cycle history use matching composite indexes, plain totals use the maintained issue counters, and the activity-to-cycle index keeps the cycle graph from parsing every activity row.
 - The MCP `count_issues` team fast path is no longer disabled by the injected tool base URL, so it reads the maintained team counters instead of counting the whole issue table.
