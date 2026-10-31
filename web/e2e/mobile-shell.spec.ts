@@ -75,6 +75,34 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await noOverflow(page)
     })
 
+    test('composer labels picker matches workspace label rows', async ({ page, workspaceKey }) => {
+      await page.goto(`${base}/${workspaceKey}/my-issues/assigned`)
+      await page.getByRole('button', { name: 'New issue', exact: true }).click()
+      const composer = page.getByRole('dialog', { name: 'New issue', exact: true })
+      await composer.locator('[data-property="labels"]').click()
+      const picker = page.locator('.phone-menu-surface:has([role=listbox][aria-label=Labels])')
+      await geometry(picker, { x: 16, y: Math.min(110, viewport.height * .1304), width: viewport.width - 32, height: 260 })
+      await expect(picker.locator('.phone-menu-context')).toHaveText('New issue')
+      await expect(picker.locator('.property-command-search')).toHaveText('')
+      await expect(picker.locator('.property-command-search input')).toHaveAttribute('placeholder', 'Add labels…')
+      await expect(picker.locator('.property-command-group')).toHaveText('Workspace labels')
+      const options = picker.getByRole('option')
+      await expect(options).toHaveCount(3)
+      for (const name of ['Bug', 'Feature', 'Improvement']) {
+        const option = options.filter({ has: picker.locator('.property-command-label', { hasText: new RegExp(`^${name}$`) }) })
+        await geometry(option, { x: 22.5, width: viewport.width - 44, height: 46 })
+        await expect(option).toHaveAttribute('aria-checked', 'false')
+        await expect(option.locator('.property-command-label')).toHaveCSS('font-size', '13px')
+        await expect(option.locator('.property-command-label')).toHaveCSS('font-weight', '450')
+      }
+      await expect(picker.locator('.option-dot').nth(0)).toHaveCSS('background-color', 'rgb(235, 87, 87)')
+      await expect(picker.locator('.option-dot').nth(1)).toHaveCSS('background-color', 'rgb(187, 135, 252)')
+      await expect(picker.locator('.option-dot').nth(2)).toHaveCSS('background-color', 'rgb(78, 167, 252)')
+      await expect(page.locator('.bottom-agent')).toBeHidden()
+      await noOverflow(page)
+      if (shots) await page.screenshot({ path: `${shots}/composer-labels-${viewport.width}.png` })
+    })
+
     test('search phone header, empty state and filter panels match', async ({ page, workspaceKey }) => {
       await page.goto(`${base}/${workspaceKey}/search`)
       const input = page.getByRole('textbox', { name: 'Search issues, projects, and documents…' })
