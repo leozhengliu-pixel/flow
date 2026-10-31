@@ -20,7 +20,7 @@
   .issue-view .activity-blocking-icon svg { width: 14px; height: 14px; }
   .issue-view .issue-activity-timeline .activity-relation-link { padding: 0; border: 0; border-radius: 0; background: transparent; font-size: 13px; font-weight: 450; line-height: normal; }
   .issue-view .issue-document > .composer { width: calc(100% + 16px); min-height: 83px; margin-top: 10px; margin-left: -8px; }
-  .issue-view .issue-document > .composer .comment-prosemirror p.is-editor-empty:first-child::before { color: var(--agent-thread-placeholder); }
+  .issue-view .issue-document > .composer .comment-prosemirror p.is-editor-empty:first-child::before { color: var(--issue-desktop-comment-placeholder); }
   .issue-view .issue-document > .composer .composer-tools > button,
   .issue-view .issue-document > .composer .composer-send:disabled { color: var(--issue-muted); }
   .issue-view .issue-activity-timeline .comment-thread { background: var(--issue-comment-bg); }

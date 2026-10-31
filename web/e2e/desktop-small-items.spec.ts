@@ -43,7 +43,7 @@ test('dims the issue placeholder, updates event disclosure and fits project crea
   await page.goto(`/${workspaceKey}/issue/${issue.identifier}`)
   const placeholder = page.locator('.issue-document > .composer .is-editor-empty').first()
   await expect(placeholder).toBeVisible()
-  expect(await placeholder.evaluate(el => getComputedStyle(el, '::before').color)).toBe('lch(36.975 1.2 272)')
+  expect(await placeholder.evaluate(el => getComputedStyle(el, '::before').color)).toBe('lch(39.452 1.425 272)')
   const events = page.getByRole('button', { name: /^Show 3 events/ })
   await events.click()
   await expect(page.getByRole('button', { name: 'Show less', exact: true })).toHaveAttribute('aria-expanded', 'true')
