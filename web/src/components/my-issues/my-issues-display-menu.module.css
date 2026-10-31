@@ -134,6 +134,13 @@
     color: var(--bright) !important;
   }
   .popover[data-issue-display-menu="true"] {
+    height: 550px;
+    max-height: 550px;
+    margin-top: 1px;
+    padding-top: 0;
+    border-radius: 12px;
+  }
+  .popover[data-my-issues-display-menu="true"] {
     height: 478px;
     max-height: 478px;
     margin-top: 1px;
@@ -227,6 +234,7 @@
     white-space: nowrap;
   }
   .popover[data-issue-display-menu="true"] button[aria-label="Ordering"]:not(#_) { color: var(--pk-text-strong); }
+  .popover[data-issue-display-menu="true"] button[data-ordering="myActivity"] svg { transform: none; }
   .popover[data-issue-display-menu="true"] .desktopModeIcon,
   .popover[data-issue-display-menu="true"] .desktopSortIcon { display: none; }
   .popover[data-issue-display-menu="true"] .phoneModeIcon,
@@ -327,20 +335,20 @@
     position: relative;
     border-top: 0 !important;
   }
-  .popover[data-issue-display-menu="true"] > section[aria-label="Grouping options"] > .switchRow {
+  .popover[data-my-issues-display-menu="true"] > section[aria-label="Grouping options"] > .switchRow {
     display: none;
   }
-  .popover[data-issue-display-menu="true"] > section[aria-label="Visible issues"] {
+  .popover[data-my-issues-display-menu="true"] > section[aria-label="Visible issues"] {
     display: flex;
     flex-direction: column;
   }
-  .popover[data-issue-display-menu="true"] > section[aria-label="Visible issues"] > .switchRow:nth-child(2) {
+  .popover[data-my-issues-display-menu="true"] > section[aria-label="Visible issues"] > .switchRow:nth-child(2) {
     order: 3;
   }
-  .popover[data-issue-display-menu="true"] > section[aria-label="Visible issues"] > .switchRow:nth-child(3) {
+  .popover[data-my-issues-display-menu="true"] > section[aria-label="Visible issues"] > .switchRow:nth-child(3) {
     order: 2;
   }
-  .popover[data-issue-display-menu="true"] > section[aria-label="List options"] > .switchRow:has(input[aria-label="Show empty groups"]) {
+  .popover[data-my-issues-display-menu="true"] > section[aria-label="List options"] > .switchRow:has(input[aria-label="Show empty groups"]) {
     display: none;
   }
   .popover[data-issue-display-menu="true"] section[aria-label="Visible issues"]::before,
