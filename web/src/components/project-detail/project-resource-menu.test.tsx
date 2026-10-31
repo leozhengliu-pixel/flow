@@ -106,7 +106,7 @@ it('uses the shared document menu for a document chip: items, order and shortcut
   const menu = await screen.findByRole('menu')
   expect(menu).toHaveClass('flow-menu')
   expect(menu).toHaveAttribute('aria-label', 'Document actions')
-  expect(documentLabelsOf(menu)).toEqual(['Move to', 'Pin to team', 'Duplicate', 'New template from document', 'Rename…', 'Favorite', 'Copy', 'Remind me', 'Show document history', 'Delete'])
+  expect(documentLabelsOf(menu)).toEqual(['Move to', 'Pin to team', 'Duplicate', 'Rename…', 'New template from document', 'Favorite', 'Copy', 'Remind me', 'Show document history', 'Delete'])
   // Rename… | Favorite … Remind me | Show document history | Delete
   expect(sepCount(menu)).toBe(3)
   expect(shortcutOf(menu, /Move to/)).toBe('⇧ P')
