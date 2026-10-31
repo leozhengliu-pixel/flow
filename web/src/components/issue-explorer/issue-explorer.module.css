@@ -155,7 +155,9 @@
   [data-issue-explorer]:has([data-new-content-view-header-title]) [data-content-view-title]{margin-left:4px}
   [data-issue-explorer]:has([data-new-content-view-header-title]) [data-content-view-title] > span:first-child{margin-right:6px}
   [data-issue-explorer]:has([data-new-content-view-header-title]) [data-content-view-title] > span:first-child{color:var(--phone-view-icon)}
-  [data-issue-explorer]:has([data-new-content-view-header-title]) [data-new-content-view-header-title] [class*="titleActions"]{position:absolute;left:138.97px;top:6px;height:32px;margin-left:0;gap:2px}
+  [data-issue-explorer]:has([data-new-content-view-header-title]) [data-new-content-view-header-title] [class*="titleActions"]{position:static;height:32px;margin-left:8px;gap:2px}
+  [data-issue-explorer]:has([data-new-content-view-header-title]) [data-content-view-title]{min-width:0;flex:0 1 auto}
+  [data-issue-explorer]:has([data-new-content-view-header-title]) [data-content-view-title] [data-truncate]{display:block;max-width:57px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   [data-issue-explorer]:has([data-new-content-view-header-title]) [data-new-content-view-header-title] [class*="titleActions"] > button,
   [data-issue-explorer]:has([data-new-content-view-header-title]) [data-new-content-view-header-title] [class*="titleActions"] [class*="headerViewActions"] > button{width:32px;height:32px;flex:0 0 32px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--phone-control-fg);font:500 12px/normal var(--font)}
   [data-issue-explorer]:has([data-new-content-view-header-title]) [data-new-content-view-header-title] [class*="titleActions"] [class*="headerViewActions"]{display:inline-flex;align-items:center;width:32px;height:32px}
@@ -163,5 +165,5 @@
   [data-issue-explorer]:has([data-new-content-view-header-title]) [data-new-content-view-header-title] [class*="titleActions"] svg{color:var(--phone-icon-fg)}
   [data-issue-explorer]:has([data-new-content-view-header-title]) [data-content-view-subheader] [class*="viewCount"]{font-size:13px;font-weight:500;line-height:normal}
   [data-issue-explorer]:has([data-new-content-view-header-title]) [data-my-issues-group-header] [class*="groupCount"]{color:var(--phone-group-started-count)}
-  [data-issue-explorer]:has([data-new-content-view-header-title]) [data-issue-row-id]:first-of-type [data-row-avatar]{margin-right:13.5px;line-height:24px}
+  [data-issue-explorer]:has([data-new-content-view-header-title]) [role="list"] > section:first-child > div > div:first-child > [data-issue-row-id] [data-row-avatar]{margin-right:13.5px;line-height:24px}
 }
