@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, makeIssue } from '@/test/fixtures'
 import { listIssueRecordGroups } from '@/lib/api'
@@ -13,6 +13,7 @@ vi.mock('@/lib/api', async original => ({ ...await original<object>(), listIssue
 const data = makeBootstrap()
 const view = { id: 'v', name: 'Review queue', scope: 'personal', ownerId: data.viewer.id } as SavedView
 beforeEach(() => { localStorage.clear(); vi.clearAllMocks() })
+afterEach(() => vi.restoreAllMocks())
 
 it('shows real owner and visibility, includes unassigned issues, and drills into the selected assignee', () => {
   const select = vi.fn()
@@ -36,7 +37,9 @@ it('uses complete server counts instead of only the loaded rows and retries a fa
   await waitFor(() => expect(listIssueRecordGroups).toHaveBeenLastCalledWith(expect.objectContaining({ teamId: 'team-1', groupBy: 'assignee', filter: { and: [] } }), expect.any(AbortSignal)))
 })
 
-it('shows Teams even for a single team and drills into that team', () => {
+it.each([false, true])('shows Teams even for a single team and drills into it (phone: %s)', phone => {
+  const matchMedia = window.matchMedia.bind(window)
+  vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ ...matchMedia(query), matches: phone && query === '(max-width: 767px)' }))
   const select = vi.fn()
   const issue = makeIssue({ id: 'one' })
   render(<I18nProvider><SavedViewDetailsPanel inline favorite={false} menu={null} onClose={vi.fn()} onSummaryItemSelect={select} onToggleFavorite={vi.fn()} rows={[issueToExplorerRow(issue, data.workspace.urlKey)]} teams={[issue.team]} users={data.users} view={view} workspace={data.workspace}/></I18nProvider>)

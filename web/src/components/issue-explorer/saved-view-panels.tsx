@@ -10,7 +10,6 @@ import { avatarColor } from '@/components/issue/avatar-color'
 import { useI18n } from '@/i18n/i18n'
 import { listIssueRecordGroups, type IssueQueryInput } from '@/lib/api'
 import { EstimateIcon } from '@/components/issue/estimate-icon'
-import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { useTeamEstimateSettings } from '@/components/my-issues/use-issue-row-actions'
 import { estimatePoints, formatEstimatePoints, sumEstimatePoints, teamUsesEstimates } from '@/lib/estimates'
 
@@ -41,10 +40,8 @@ export function SavedViewDetailsPanel({ belowFilterBar = false, favorite, inline
   workspace: Workspace
 }) {
   const { t } = useI18n()
-  const phone = usePhoneLayout()
   const estimateSettingsFor = useTeamEstimateSettings()
-  const [selectedTab, setTab] = useState<'assignee' | 'labels' | 'project' | 'team'>('assignee')
-  const tab = phone && selectedTab === 'team' ? 'assignee' : selectedTab
+  const [tab, setTab] = useState<'assignee' | 'labels' | 'project' | 'team'>('assignee')
   const owner = users.find(user => user.id === view.ownerId)
   const localItems = useMemo(() => summaryItems(rows, tab, inline), [rows, tab, inline])
   const queryKey = summaryQuery ? JSON.stringify({ ...summaryQuery, groupBy: tab === 'labels' ? 'label' : tab, groupCases: undefined }) : undefined
@@ -66,7 +63,7 @@ export function SavedViewDetailsPanel({ belowFilterBar = false, favorite, inline
     return { id: group.value, label: teamOption?.name ?? option?.label ?? group.value, color: teamOption?.color ?? option?.color, avatarUrl: option?.avatarUrl, count: group.count }
   }) : localItems
   const enabledTeams = (teams ?? []).filter(item => teamUsesEstimates(estimateSettingsFor(item.id)))
-  const estimatesKey = queryKey && !phone && enabledTeams.length && remote.key === queryKey && remote.groups
+  const estimatesKey = queryKey && enabledTeams.length && remote.key === queryKey && remote.groups
     ? JSON.stringify({ query: JSON.parse(queryKey), revision: summaryRevision, groups: remote.groups, teams: enabledTeams.map(item => ({ id: item.id, settings: estimateSettingsFor(item.id) })) }) : undefined
   const [remotePoints, setRemotePoints] = useState<{ key?: string; values?: Record<string, number> }>({})
   useEffect(() => {
@@ -109,12 +106,12 @@ export function SavedViewDetailsPanel({ belowFilterBar = false, favorite, inline
     </section>
     <section className={styles.summaryCard}>
       <div aria-label={t('View summary')} className={styles.tabs} role="tablist">
-        {([['assignee', 'Assignees'], ['labels', 'Labels'], ['project', 'Projects'], ...(!phone ? [['team', 'Teams'] as const] : [])] as const).map(([id, label]) => <button aria-selected={tab === id} key={id} onClick={() => setTab(id)} onKeyDown={handleSummaryTabKeyDown} role="tab" tabIndex={tab === id ? 0 : -1} type="button">{t(label)}</button>)}
+        {([['assignee', 'Assignees'], ['labels', 'Labels'], ['project', 'Projects'], ['team', 'Teams']] as const).map(([id, label]) => <button aria-selected={tab === id} key={id} onClick={() => setTab(id)} onKeyDown={handleSummaryTabKeyDown} role="tab" tabIndex={tab === id ? 0 : -1} type="button">{t(label)}</button>)}
       </div>
       <div aria-label={tabLabel} aria-busy={loading || undefined} className={styles.summaryList} role="tabpanel">
         {loading ? <div className={styles.empty}>{t('Loading...')}</div> : failed ? <div className={styles.empty}><span>{t('Could not load view summary')}</span><button type="button" onClick={() => { setRemote({}); setRetry(value => value + 1) }}>{t('Retry')}</button></div> : items.length ? items.map(item => {
           const label = item.id ? item.label : t(tab === 'assignee' ? 'No assignee' : tab === 'project' ? 'No project' : tab === 'team' ? 'No team' : 'No labels')
-          const points = phone ? undefined : queryKey ? remotePoints.key === estimatesKey ? remotePoints.values?.[item.id] : undefined : sumEstimatePoints(rowsForDimension(rows, tab, item.id), estimateSettingsFor)
+          const points = queryKey ? remotePoints.key === estimatesKey ? remotePoints.values?.[item.id] : undefined : sumEstimatePoints(rowsForDimension(rows, tab, item.id), estimateSettingsFor)
           return <button aria-label={`${label} ${item.count}`} className={styles.summaryItem} key={item.id} onClick={() => onSummaryItemSelect(tab, item.id, label, item.color)} type="button">
           <SummaryMark color={item.color} kind={tab} name={label} avatarUrl={item.avatarUrl} unassigned={!item.id} inline={inline}/><span data-i18n-ignore>{label}</span><small>{t('See issues')}</small><b>{points !== undefined && <EstimateIcon size={14}/>}<span>{points !== undefined ? formatEstimatePoints(points) : item.count}</span></b>
         </button>}) : <div className={styles.empty}>{t('No matching data')}</div>}

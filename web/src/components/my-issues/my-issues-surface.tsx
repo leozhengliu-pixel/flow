@@ -140,7 +140,7 @@ export function MyIssuesSurface({
       if (!widths.length) return
       const activePill = measure.querySelector<HTMLElement>('[data-tab-measure-active]')
       const activePillWidth = activePill?.getBoundingClientRect().width ?? (widths[activeIndex] ?? 0) + 15
-      const countPillWidth = 74.96, gap = 8
+      const gap = 8
       let count = 0, used = 0
       for (let index = 0; index < views.length; index++) {
         const next = used + (count ? gap : 0) + widths[index]
@@ -149,6 +149,7 @@ export function MyIssuesSurface({
           if (next <= available + 0.5) { count = index + 1; used = next }
           break
         }
+        const countPillWidth = measure.querySelector<HTMLElement>(`[data-tab-measure-count="${remaining}"]`)?.getBoundingClientRect().width ?? 0
         const pill = activeIndex <= index ? countPillWidth : activePillWidth
         if (next + gap + pill <= available + 0.5) { count = index + 1; used = next } else break
       }
@@ -160,7 +161,7 @@ export function MyIssuesSurface({
     observer.observe(nav)
     observer.observe(measure)
     return () => observer.disconnect()
-  }, [phone, activeIndex])
+  }, [phone, activeIndex, t])
   const showOverflow = phone && visibleCount < views.length
   const shownViews = phone ? views.slice(0, visibleCount) : views
   const overflowViews = phone ? views.slice(visibleCount) : []
@@ -208,6 +209,7 @@ export function MyIssuesSurface({
           </Popover.Root>}
           {phone && <div ref={measureRef} className={styles.tabMeasure} aria-hidden="true">
             {views.map(view => <span key={view.id} data-tab-measure className={`${styles.tab} ui-pill`}>{view.label}</span>)}
+            {views.map((_, index) => <span key={index} data-tab-measure-count={index + 1} className={`${styles.tab} ${styles.tabsOverflow} ${styles.tabsOverflowCount} ui-pill`}><span>{t('{count} more').replace('{count}', String(index + 1))}</span><TabsOverflowIcon/></span>)}
             <span data-tab-measure-active className={`${styles.tab} ${styles.tabsOverflow} ${styles.tabsOverflowActive} ui-pill`} data-active="true"><span>{views[activeIndex].label}</span><TabsOverflowIcon/></span>
           </div>}
         </nav>
