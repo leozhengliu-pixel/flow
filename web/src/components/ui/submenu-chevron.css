@@ -1,0 +1,6 @@
+.flow-submenu-chevron > svg { display: none; }
+@media (min-width: 1024px) {
+  .flow-submenu-chevron { display: grid; place-items: center; }
+  .flow-submenu-chevron > span { display: none; }
+  .flow-submenu-chevron > svg { display: block; }
+}

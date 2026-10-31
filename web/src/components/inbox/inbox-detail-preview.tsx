@@ -103,7 +103,7 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
           {!props.minimalHeader && issueOptions}
           {!props.minimalHeader && props.onSubscribeChange && !pulse ? <DetailIconButton data-detail-action="subscription" disabled={props.pending} label={props.subscribed ? 'Unsubscribe from issue' : 'Subscribe to issue'} pressed={props.subscribed} onClick={() => props.onSubscribeChange?.(notification, !props.subscribed)}>{phone ? <span className="flow-inbox-detail__bell"><span className="flow-inbox-detail__bell-plain"><FlowBellIcon /></span><span className="flow-inbox-detail__bell-check"><FlowBellCheckIcon /></span></span> : <BellIcon />}</DetailIconButton> : null}
           <DetailSnoozeMenu notification={notification} onSnooze={props.onSnooze} pending={props.pending} open={snoozeOpen} onOpenChange={setSnoozeOpen} phone={phone} />
-          <DetailIconButton data-detail-action="delete" disabled={props.pending} label="Delete notification" onClick={() => props.onDelete(notification)}>{phone ? <DeleteInboxIcon /> : <DeleteDetailIcon />}</DetailIconButton>
+          <DetailIconButton data-detail-action="delete" disabled={props.pending} label="Delete notification" onClick={() => props.onDelete(notification)}><DeleteInboxIcon /></DetailIconButton>
         </div>
         {props.issue && !props.minimalHeader ? <IssueDetailCopyStrip issue={props.issue} /> : null}
       </header>}
@@ -207,7 +207,6 @@ function BackIcon(){return <svg viewBox="0 0 16 16"><path d="m10 3-5 5 5 5" fill
 function StarIcon(){return <svg viewBox="0 0 16 16"><path d="m8 2 1.8 3.6 4 .6-2.9 2.8.7 4L8 11.1 4.4 13l.7-4-2.9-2.8 4-.6L8 2Z" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>}
 function BellIcon(){return <svg viewBox="0 0 16 16"><path d="M3.5 11h9l-1-1.7V6a3.5 3.5 0 1 0-7 0v3.3L3.5 11Zm3 2h3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>}
 function ClockIcon(){return <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M8 4.8v3.4l2.2 1.3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>}
-function DeleteDetailIcon(){return <svg viewBox="0 0 16 16"><path d="M3 4.5h10M6 2.5h4m-6 2 .6 9h6.8l.6-9M6.5 7v4m3-4v4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>}
 /** The reference sidebar toggle: a rounded frame with the 1.5px navigation bar inside. */
 function SidebarNavigationIcon(){return <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M4.25 2C2.45508 2 1 3.45508 1 5.25V10.75C1 12.5449 2.45508 14 4.25 14H11.75C13.5449 14 15 12.5449 15 10.75V5.25C15 3.45508 13.5449 2 11.75 2H4.25ZM2.5 5.5C2.5 4.39543 3.39543 3.5 4.5 3.5H11.5C12.6046 3.5 13.5 4.39543 13.5 5.5V10.5C13.5 11.6046 12.6046 12.5 11.5 12.5H4.5C3.39543 12.5 2.5 11.6046 2.5 10.5V5.5Z" /><rect x="4" y="5" width="1.5" height="6" rx=".75" /></svg>}
 function SnoozeClockIcon(){return <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M8 4.6V8h3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>}

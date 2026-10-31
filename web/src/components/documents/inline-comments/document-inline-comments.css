@@ -249,6 +249,12 @@
 .document-thread-draft > .document-thread-avatar { align-self: flex-start; margin-top: 3px; }
 .document-thread-draft-composer { flex: 1 1 auto; min-width: 0; }
 
+@media (min-width: 1024px) {
+  .document-thread-card .composer.compact { overflow: visible; }
+  .document-thread-card .composer-submit .composer-send:disabled { background: var(--document-desktop-send-bg); color: var(--action-menu-muted); }
+  .document-thread-draft > .document-thread-avatar { background: var(--document-desktop-avatar-bg); color: var(--issue-activity-avatar-fg); }
+}
+
 @media (min-width: 1232px) {
   .document-inline-gutter.is-popover .document-thread-draft { width: 298px; margin-left: 15.5px; }
   .document-inline-gutter.is-popover .document-thread-draft .composer-send { transform: translateX(23.5px); }
