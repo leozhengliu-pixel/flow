@@ -477,8 +477,8 @@ function LoopEditorForm({
             </div>
           </section>
 
-          <section className="loops-section" aria-label={t("Permissions")}>
-            <h3 className="loops-section-title">{t("Permissions")}</h3>
+          <section className="loops-section" aria-label={t("Capabilities & access")}>
+            <h3 className="loops-section-title">{t("Capabilities & access")}</h3>
             <div className="loops-card loops-permissions">
             <div className="loops-permission-row">
               <span>

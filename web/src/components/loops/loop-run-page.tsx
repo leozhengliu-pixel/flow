@@ -391,7 +391,7 @@ export function LoopRunPage({
           <div className="loops-run-list-toolbar">
             <label className="loops-search">
               <Search size={16} />
-              <input aria-label={t("Search runs…")} placeholder={t("Search runs…")} value={query} onChange={(event) => setQuery(event.target.value)} />
+              <input aria-label={t("Search runs…")} placeholder={t("Search runs by issue ID or title…")} value={query} onChange={(event) => setQuery(event.target.value)} />
             </label>
             <DropdownMenu>
               <DropdownMenuTrigger className={`loops-icon-button${statusFilters.length || triggerFilters.length ? " is-open" : ""}`} aria-label={t("Filter")}>
@@ -729,8 +729,8 @@ function RunReplyComposer({
         </div>
       )}
       <textarea
-        aria-label={t("Reply…")}
-        placeholder={t(busy ? "The agent is working…" : "Reply…")}
+        aria-label={t("Ask about this run…")}
+        placeholder={t(busy ? "The agent is working…" : "Ask about this run…")}
         value={body}
         rows={2}
         onChange={(event) => setBody(event.target.value)}

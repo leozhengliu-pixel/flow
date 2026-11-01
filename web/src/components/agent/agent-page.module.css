@@ -888,6 +888,10 @@
 .newChat {
   grid-template-columns: 16px minmax(0, 1fr) !important;
 }
+@media (min-width: 801px) {
+  .historyMenu { box-shadow: var(--shadow-control); }
+  .noHistory { justify-items: start; padding-inline: 14px; font: 450 13px/normal var(--font); }
+}
 @media (max-width: 767px) {
   :global([data-radix-popper-content-wrapper]):has(> .historyMenu) {
     position: fixed !important;

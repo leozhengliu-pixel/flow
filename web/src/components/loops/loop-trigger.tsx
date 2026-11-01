@@ -158,10 +158,15 @@ export function LoopTriggerEditor({
   const change: TriggerChange = (type, next) => onChange?.(type, next);
   const set = (patch: Config) => change(triggerType, { ...config, ...patch });
   if (triggerType === "schedule")
-    return (
-      <div className={`loops-trigger-sentence${readOnly ? " is-readonly" : ""}`} data-trigger="schedule">
-        <TriggerMenu data={data} triggerType={triggerType} config={config} onChange={change} readOnly={readOnly} />
-        <ScheduleSentence config={config} onChange={set} readOnly={readOnly} />
+    return readOnly ? (
+      <div className="loops-trigger-sentence is-readonly" data-trigger="schedule">
+        <TriggerMenu data={data} triggerType={triggerType} config={config} onChange={change} readOnly />
+        <ScheduleSentence config={config} onChange={set} readOnly />
+      </div>
+    ) : (
+      <div className="loops-trigger-schedule">
+        <div className="loops-trigger-type"><TriggerMenu data={data} triggerType={triggerType} config={config} onChange={change} readOnly={false} /></div>
+        <div className="loops-trigger-sentence" data-trigger="schedule"><ScheduleSentence config={config} onChange={set} readOnly={false} /></div>
       </div>
     );
   const teamScoped = level === "team" || triggerType === "team";
@@ -551,7 +556,7 @@ function ScheduleSentence({ config, onChange, readOnly }: { config: Config; onCh
       ) : (
         <SelectControl className="loops-time-select" label={t("Time")} value={time} onChange={(value) => onChange({ time: value })} options={timeOptions} />
       )}
-      {(unit === "week" || unit === "day") && (!readOnly || weekdays.length > 0) && (
+      {(unit === "week" || (unit === "day" && weekdays.length > 0)) && (!readOnly || weekdays.length > 0) && (
         <span className="loops-weekdays" role="group" aria-label={t("Weekdays")}>
           <span className="loops-sentence-text">{t("On")}</span>
           {WEEKDAYS.map((day) => {

@@ -185,7 +185,6 @@ export function LoopCreateHub({
       </form>
       <nav className="loops-hub-categories" aria-label={t("Loop template categories")}>{categories.map((item) => <button key={item} type="button" className={category === item ? "is-active" : undefined} aria-pressed={category === item} onClick={() => setCategory(item)}>{t(item)}</button>)}</nav>
       {visibleTemplates?.length !== 0 && <div className="loops-hub-templates">
-        <h3>{t("or pick a template")}</h3>
         <div className="loops-template-grid">
           {templates === undefined
             ? Array.from({ length: 4 }, (_, index) => <div aria-hidden="true" className="loops-template-card is-loading" key={index} />)

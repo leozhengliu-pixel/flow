@@ -4,6 +4,10 @@
  * Merged into zhCN by translations.ts.
  */
 export const loopRunsZhCN: Record<string, string> = {
+  "Capabilities & access": "能力与访问权限",
+  "Runs ( 30d )": "运行次数（30 天）",
+  "Search runs by issue ID or title…": "按事项编号或标题搜索运行记录…",
+  "Ask about this run…": "询问此次运行…",
   "Needs review": "需要审核",
   "Cancelled": "已取消",
   "Interrupted": "已中断",

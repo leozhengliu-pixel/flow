@@ -89,6 +89,16 @@ describe('LoopTriggerEditor', () => {
     expect(onChange).toHaveBeenCalledWith('issue', { event: 'triage', teamIds: undefined, filters: undefined })
   })
 
+  it('keeps a daily schedule compact and preserves explicitly selected weekdays', () => {
+    const daily = { startDate: '2026-09-29', interval: 1, unit: 'day', time: '07:00' }
+    const { view } = renderTrigger({ triggerType: 'schedule', config: daily })
+    expect(screen.queryByRole('group', { name: 'Weekdays' })).toBeNull()
+    expect(view.container.querySelector('.loops-trigger-type')).toContainElement(screen.getByRole('button', { name: 'Trigger' }))
+    view.unmount()
+    renderTrigger({ triggerType: 'schedule', config: { ...daily, weekdays: ['mon', 'fri'] } })
+    expect(within(screen.getByRole('group', { name: 'Weekdays' })).getByRole('button', { name: 'Fr' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('renders the schedule row with 12-hour times and weekly day chips', async () => {
     const user = userEvent.setup()
     const { onChange, view } = renderTrigger({ triggerType: 'schedule', config: { startDate: '2026-09-29', interval: 1, unit: 'week', time: '07:00', weekdays: ['mon'] } })
