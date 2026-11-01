@@ -177,7 +177,7 @@
   align-items: center;
   gap: 5px;
   padding: 0 4px;
-  color: var(--issue-muted);
+  color: var(--sidebar-nav-fg);
   background: transparent;
   border: 0;
   border-radius: 8px;
