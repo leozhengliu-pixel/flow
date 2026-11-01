@@ -248,7 +248,7 @@
 .sidebar-favorite-context-menu [role="menuitem"] > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-favorite-context-menu [role="menuitem"] > svg:last-child:not(:first-child) { width: 13px; height: 13px; margin-left: auto; }
 
-.sidebar-more-trigger { color: #99999d; }
+.sidebar-more-trigger { padding: 0 9px 0 8px; color: var(--sidebar-nav-fg); }
 .sidebar-more-trigger > svg { flex: 0 0 15px; }
 .sidebar-more-trigger[data-state="open"] { color: var(--theme-text-primary); background: var(--theme-control); }
 
