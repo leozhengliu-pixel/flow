@@ -234,10 +234,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect((await header.boundingBox())?.height).toBe(44)
       expect((await page.locator('main > header [data-sidebar-trigger]').boundingBox())?.x).toBe(8)
       const favorite = page.locator('main > header button[aria-label="Add to favorites"]')
-      expect((await favorite.boundingBox())!.x).toBeCloseTo(323.69, 1)
+      expect((await favorite.boundingBox())!.x).toBe(viewport.width - 76)
       expect((await favorite.boundingBox())?.width).toBe(32)
       const optionsBox = (await page.locator('main > header button[aria-label="Chat options"]').boundingBox())!
-      expect(optionsBox.x).toBeCloseTo(355.69, 1)
+      expect(optionsBox.x + optionsBox.width).toBe(viewport.width - 8)
       await expect(page.locator('main > header button[aria-label="Move to toolbar"]')).toBeHidden()
 
       const scroll = page.locator('main [role="group"][aria-label="Agent conversation"]')
@@ -293,6 +293,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await page.locator('main > header button[aria-label="Chat options"]').click()
       const chatOptions = page.locator('.agent-chat-options-phone-menu')
       await expect(chatOptions).toBeVisible()
+      expect((await page.locator('main > header').boundingBox())?.x).toBe(0)
+      expect((await page.locator('main > header button[aria-label="Chat options"]').boundingBox())?.x).toBe(optionsBox.x)
       await chatOptions.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
       expect((await chatOptions.boundingBox())?.x).toBe(16)
       expect((await chatOptions.boundingBox())?.width).toBe(viewport.width - 32)
@@ -302,6 +304,20 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       for (const option of await chatOptions.getByRole('option').all()) await expect(option).toHaveCSS('height', '46px')
       expect(await chatOptions.evaluate(node => node.scrollHeight <= node.clientHeight)).toBe(true)
       expect(['0.5px', '1px']).toContain(await chatOptions.locator('.agent-chat-options-divider').evaluate(node => getComputedStyle(node).height))
+
+      for (const title of ['[mobile] Short', '[mobile] 很长的对话标题，用于确认操作按钮不会随标题或语言移动']) {
+        await page.keyboard.press('Escape')
+        const renamed = await request.patch(`${api}/api/agent/sessions/${chat.id}`, { headers, data: { title } })
+        expect(renamed.ok()).toBe(true)
+        const next = await renamed.json() as Chat & { slugId: string }
+        await page.goto(`/${workspaceKey}/agent/${next.slugId}`)
+        const options = page.locator('main > header button[aria-label="Chat options"]')
+        await expect(options).toBeVisible()
+        expect((await options.boundingBox())?.x).toBe(optionsBox.x)
+        await options.click()
+        await expect(chatOptions).toBeVisible()
+        expect((await page.locator('main > header').boundingBox())?.x).toBe(0)
+      }
 
       if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/agent-conversation-${viewport.width}.png`, scale: 'css', animations: 'disabled' })
       await chatOptions.getByRole('option', { name: 'Move to toolbar', exact: true }).click()

@@ -1226,9 +1226,9 @@
   .page > header:has(.headerIcon) .switcher {
     box-sizing: border-box;
     min-width: 0;
-    width: 275.69px;
-    max-width: 275.69px;
-    flex: 0 0 275.69px;
+    width: auto;
+    max-width: none;
+    flex: 1;
   }
   .page > header:has(.headerIcon) .switcher h2 {
     min-width: 0;
@@ -1247,9 +1247,6 @@
     font-weight: 500;
     line-height: normal;
   }
-  .page > header > .headerRow > .headerIcon[role="switch"] { position: absolute; top: 5.75px; left: 323.69px; }
-  .page > header > .headerRow > .headerIcon[aria-haspopup] { position: absolute; top: 5.75px; left: 355.69px; }
-  .headerSpacer + .headerIcon { display: none; }
   .page > header > .headerRow > .headerIcon svg {
     color: var(--agent-thread-muted);
   }

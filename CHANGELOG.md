@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Keep phone chat actions right-aligned for every title and prevent opening Chat options from scrolling the header sideways.
+
 - Group phone saved-view identities around a centered avatar frame without changing desktop spacing.
 
 - Constrain long project and milestone names inside phone issue properties instead of letting their nested rows overflow.
