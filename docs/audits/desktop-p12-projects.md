@@ -46,6 +46,8 @@ Display preferences were reproduced through Flow's controls, not encoded as new 
 | 11: Releases workspace entry | Fixed already | Standard sidebar keeps Releases under More rather than always painting a top-level row; custom sidebar preferences remain usable. | `4c0010f1` |
 | 11: Release plan gate and associated search/empty-state chrome | Not applicable | Flow has no paid plans. No upgrade card, billing navigation or unavailable paid gate was restored. | `4c0010f1` |
 
+Settled reference check: the title/summary editors do not initially mount in a background tab. After read-only focus emulation and waiting for them, Properties/Resources/Latest update/Description measured y287/327/379.75/563. Flow measured y286.5/326.5/379/562. The audit's earlier y232/272/324.75/508 omitted that mounted title block; no 55px compensating offset was added.
+
 Counts: fixed already 33; fixed 0; not applicable 6; still open 0. No product decision required.
 
 Verification: full `npm run lint` (includes typecheck) exit 0; 35 tests across four targeted project Vitest files exit 0; all three `desktop-projects-parity` browser tests exit 0. Only the browser regression and this report changed in this area; no product rule, default, API, phone stylesheet or phone state was changed, so there is no new shared phone rule requiring a mobile gate.
