@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   resolveReviewThread: vi.fn(),
   submitReview: vi.fn(),
   updateReview: vi.fn(),
+  updateUserSettings: vi.fn(),
 }));
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
@@ -28,6 +29,27 @@ const render = (ui: ReactNode) => renderUI(<MemoryRouter>{ui}</MemoryRouter>);
 beforeEach(() => {
   localStorage.clear();
   BackgroundReviewProcessor.resetForTests();
+  api.updateUserSettings.mockReset().mockResolvedValue({});
+});
+
+it('offers the desktop onboarding actions and keeps both code hosts available', async () => {
+  const user = userEvent.setup();
+  const onNavigate = vi.fn();
+  render(<I18nProvider><ReviewsPage data={makeBootstrap({ reviews: [], integrationConnections: [] })} view="for-you" onNavigate={onNavigate} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>);
+  await user.click(screen.getByRole('button', { name: 'Get started' }));
+  expect(onNavigate).toHaveBeenCalledWith('/workspace/settings/integrations/github');
+  expect(screen.getByRole('button', { name: 'Connect GitHub' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Connect GitLab' })).toBeVisible();
+});
+
+it('persists review opt-out and returns to Agent', async () => {
+  const user = userEvent.setup();
+  const onNavigate = vi.fn(), onReload = vi.fn().mockResolvedValue(undefined);
+  render(<I18nProvider><ReviewsPage data={makeBootstrap({ reviews: [], integrationConnections: [] })} view="for-you" onNavigate={onNavigate} onReload={onReload}/></I18nProvider>);
+  await user.click(screen.getByRole('button', { name: "I don't do code review" }));
+  await waitFor(() => expect(api.updateUserSettings).toHaveBeenCalledWith({ codeReviewsEnabled: false }));
+  expect(onReload).toHaveBeenCalled();
+  expect(onNavigate).toHaveBeenCalledWith('/workspace/agent');
 });
 
 const review: CodeReview = {

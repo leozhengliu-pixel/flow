@@ -1,9 +1,11 @@
 import { expect } from '@playwright/test'
 import { test } from './workspace-fixture'
 
-test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, isMobile: false, hasTouch: false })
+test.use({ viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false, launchOptions: { args: ['--force-device-scale-factor=2'] } })
 
-test.beforeEach(async ({ request, workspaceKey }) => {
+test.beforeEach(async ({ request, workspaceKey, page, context }) => {
+  const session = await context.newCDPSession(page)
+  await session.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 0, mobile: false })
   const headers = { 'X-Workspace-Key': workspaceKey }
   const settings = await request.patch('/api/workspace/preferences', {
     headers,

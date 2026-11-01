@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Restore desktop Reviews onboarding actions and title icon, and the measured Pulse empty-state artwork; retain phone layouts and both code-host connections.
+
 - Size desktop document metadata intrinsically, restore history preview spacing and action fill, and keep advanced insert blocks searchable without expanding the default document menu.
 
 - Keep automatic similarity suggestions off desktop issue pages and triage peeks, and omit empty release actions without changing phone screens.

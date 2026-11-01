@@ -159,6 +159,7 @@
 .flow-framed-workspace.pulse-page .pulse-empty-body{width:340px;max-width:100%;display:flex;flex-direction:column;align-items:flex-start}
 .flow-framed-workspace.pulse-page .pulse-empty-art{margin:0 0 20px;color:var(--text-strong)}
 .flow-framed-workspace.pulse-page .pulse-empty-art path,.flow-framed-workspace.pulse-page .pulse-empty-art circle{stroke:var(--text-strong);stroke-width:1.25}
+.flow-framed-workspace.pulse-page .pulse-empty-art.pulse-empty-art--stack path{stroke:none}
 .flow-framed-workspace.pulse-page .pulse-empty-art-layers path{stroke:var(--text-strong);stroke-width:.75}
 .flow-framed-workspace.pulse-page .pulse-empty-art .pulse-empty-art-top{fill:var(--theme-surface-1)}
 .flow-framed-workspace.pulse-page .pulse-empty-art .pulse-empty-art-glyph{fill:var(--text-placeholder);stroke:none}
