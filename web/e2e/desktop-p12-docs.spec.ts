@@ -54,6 +54,9 @@ test('document list aligns its metadata and opens intrinsic metadata and subscri
   await page.locator('.document-edited').click()
   await expect(metadata).toBeVisible()
   expect((await metadata.boundingBox())!.width).toBeGreaterThan(shortWidth)
+  const ownerAvatar = (await metadata.locator('.document-owner-row .document-meta-avatar').boundingBox())!
+  const editorAvatar = (await metadata.locator('.document-last-edit-row .document-meta-avatar').boundingBox())!
+  expect(Math.abs(ownerAvatar.x - editorAvatar.x)).toBeLessThanOrEqual(1)
   await expect(metadata.getByRole('button', { name: 'Show document history', exact: true })).toHaveCSS('height', '28px')
   await page.waitForTimeout(500)
   if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/docs-metadata.png`, animations: 'disabled' })
