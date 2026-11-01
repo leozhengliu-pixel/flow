@@ -831,6 +831,8 @@ button.document-icon.is-empty:hover,
   }
   .document-owner-row .document-person--button {
     flex: 0 1 auto;
+    /* The padded hover target must not widen the shared editor-name column. */
+    margin-right: -6px;
   }
   .document-owner-row .document-person strong,
   .document-last-edit-row .document-person strong {
