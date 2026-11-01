@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Let document selection actions and Agent history ages size to their rendered text in every language.
+
 - Separate the document label and title naturally in phone subscriber chips.
 
 - Preserve the base branch's text padding before the phone review direction arrow.
