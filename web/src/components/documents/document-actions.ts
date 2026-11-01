@@ -166,6 +166,10 @@ export async function renameDocument(ctx: DocumentActionContext, document: FlowD
   return guarded(ctx, () => updateDocument(document.id, { title: value }), undefined, 'Could not rename document')
 }
 
+export function setDocumentVisual(ctx: DocumentActionContext, document: FlowDocument, visual: { icon: string; color: string }) {
+  return guarded(ctx, () => updateDocument(document.id, visual), undefined, 'Could not update document icon')
+}
+
 export async function deleteDocumentWithConfirm(ctx: DocumentActionContext, document: FlowDocument, afterDelete?: () => void) {
   const title = documentDisplayTitle(document, ctx.t)
   const confirmed = await confirmAction(ctx.t('Delete "{name}"?').replace('{name}', title), {

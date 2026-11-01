@@ -11,8 +11,8 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSPr
 import { openCommandMenu, useRegisterCommandContext } from '@/components/command/command-context'
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
-import { DocumentGlyph } from '@/components/documents/document-icon'
-import { documentDisplayTitle, documentOwner, type DocumentActionContext } from '@/components/documents/document-actions'
+import { DocumentGlyph, DocumentIconPicker } from '@/components/documents/document-icon'
+import { documentDisplayTitle, documentOwner, setDocumentVisual, type DocumentActionContext } from '@/components/documents/document-actions'
 import { DocumentMenuItems, DocumentRowMenu } from '@/components/documents/document-menu'
 import { DOCUMENT_ROW_SHORTCUTS } from '@/components/documents/document-menu-shortcuts'
 import { DocumentOwnerPicker } from '@/components/documents/document-owner-picker'
@@ -270,9 +270,9 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
   }, [data.workspace.urlKey, rowIdsRef, handlers, activeRef, selectionRef, visibleDocumentsRef])
   const visibleProperties = properties
   const hasDocuments = documents.some(document => !document.archivedAt)
-  const sortIcon = (key: DocumentOrdering) => ordering === key ? <SortGlyph ascending={descending}/> : null
+  const sortIcon = (key: DocumentOrdering) => !phone || ordering === key ? <SortGlyph ascending={ordering === key && descending}/> : null
   const heading = (key: DocumentOrdering, label: string, className = '') => (
-    <button className={`team-docs-heading ${className}`} aria-label={`${t('Order by')} ${label}`} data-active={ordering === key || undefined} onClick={() => changeOrder(key)} type="button"><span className="team-docs-heading-label">{label}</span>{sortIcon(key)}</button>
+    <span className={`team-docs-heading-cell ${className}`}><button className={`team-docs-heading ${className}`} aria-label={`${t('Order by')} ${label}`} data-active={ordering === key || undefined} onClick={() => changeOrder(key)} type="button"><span className="team-docs-heading-label">{label}</span>{sortIcon(key)}</button></span>
   )
   const header = <header className="team-docs-header">
     <span className="team-docs-check-spacer"/>
@@ -382,6 +382,7 @@ function DocumentRow({ active, created, ctx, document, formatDate, formatRelativ
 }) {
   const { t } = ctx
   const { data } = ctx
+  const phone = usePhoneLayout()
   const owner = documentOwner(document, data.users)
   const href = documentPath(data.workspace.urlKey, document)
   const fullDate = (value: string) => formatDate(value, { dateStyle: 'medium', timeStyle: 'short' })
@@ -403,7 +404,7 @@ function DocumentRow({ active, created, ctx, document, formatDate, formatRelativ
           <span aria-hidden="true"><Check className="team-docs-check-desktop" size={10} strokeWidth={3}/><CheckGlyph className="team-docs-check-phone"/></span>
         </label>
       </FlowTooltip>
-      <span className="team-docs-title"><DocumentGlyph document={document}/><strong data-i18n-ignore={document.title.trim() ? true : undefined}>{title}</strong></span>
+      <span className="team-docs-title">{phone ? <DocumentGlyph document={document}/> : <DocumentIconPicker document={document} onChange={visual => void setDocumentVisual(ctx, document, visual)} triggerClassName="team-docs-icon"/>}<strong data-i18n-ignore={document.title.trim() ? true : undefined}>{title}</strong></span>
       {created && <time className="team-docs-date is-created" dateTime={document.createdAt} title={fullDate(document.createdAt)}>{formatRelative(document.createdAt)}</time>}
       {updated && <time className="team-docs-date" dateTime={document.updatedAt} title={fullDate(document.updatedAt)}>{formatRelative(document.updatedAt)}</time>}
       {showOwner && <span className="team-docs-owner-cell">

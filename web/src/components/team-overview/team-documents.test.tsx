@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   replaceDocumentPermissions: vi.fn(),
   pinTeamResource: vi.fn(),
   deleteTeamResource: vi.fn(),
+  updateDocument: vi.fn(),
 }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
 const prompt = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
@@ -67,6 +68,24 @@ describe('team documents list', () => {
     window.history.replaceState(null, '', '/')
     resetCommandContext()
     for (const mock of Object.values(api)) mock.mockReset().mockResolvedValue(undefined)
+  })
+
+  it('keeps every desktop sort target content-sized with a direction glyph', () => {
+    setup([makeDocument()])
+    const headers = ['Name', 'Created', 'Last edited', 'Owner'].map(label => screen.getByRole('button', { name: `Order by ${label}` }))
+    for (const header of headers) {
+      expect(header.querySelector('svg')).toHaveAttribute('width', '12')
+      expect(header.parentElement).toHaveClass('team-docs-heading-cell')
+    }
+  })
+
+  it('opens the row icon picker without navigating and persists its visual', async () => {
+    const { onNavigate, onReload } = setup([makeDocument()])
+    await userEvent.click(screen.getByRole('button', { name: 'Document icon' }))
+    await userEvent.click(within(screen.getByRole('tabpanel', { name: 'Icons' })).getByRole('button', { name: 'BookOpen' }))
+    await waitFor(() => expect(api.updateDocument).toHaveBeenCalledWith('doc-1', expect.objectContaining({ icon: 'BookOpen' })))
+    await waitFor(() => expect(onReload).toHaveBeenCalledOnce())
+    expect(onNavigate).not.toHaveBeenCalled()
   })
 
   it('opens the full document menu on right click, with the reference app order and "Pin to overview"', async () => {

@@ -6,9 +6,9 @@
   .workspace-announcements-dialog > label.workspace-announcements-toggle { flex-direction: row; justify-content: space-between; }
   .workspace-announcements-dialog .settings-input { width: 100%; }
   .workspace-announcements-dialog textarea { box-sizing: border-box; width: 100%; resize: vertical; padding: 10px; border: 1px solid var(--set-sep); border-radius: 8px; background: var(--set-card); color: var(--set-text); font: 13px/20px var(--font); }
-  html:root .settings-app .settings-main > .settings-content { padding-top: 63.5px; }
+  html:root .settings-app .settings-main > .settings-content { padding-top: 64px; }
   html:root .settings-app .settings-main:has(.settings-workspace-members) { scrollbar-gutter: auto; }
-  html:root .settings-app .settings-main > .settings-content:has(.settings-teams-page) { padding-top: 63.5px; }
+  html:root .settings-app .settings-main > .settings-content:has(.settings-teams-page) { padding-top: 64px; }
   html:root .settings-app .settings-sidebar { padding: 0; }
   html:root .settings-app .settings-back { gap: 5px; margin: 16.5px 0 12px 16px; text-decoration: none; }
   html:root .settings-app .settings-search { margin: 0 12px; }
@@ -24,6 +24,7 @@
   html:root .settings-app .settings-sidebar-footer .sidebar-help { position: relative; box-sizing: border-box; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: .5px solid var(--set-sep); border-radius: 50%; background: var(--set-panel-bg); color: var(--set-nav); }
   html:root .settings-app .settings-plan-button { box-sizing: border-box; height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 6px; border: .5px solid var(--set-sep); border-radius: 12px; background: var(--set-panel-bg); color: var(--set-nav); font: 500 11px var(--font); }
   html:root .settings-app .settings-main .personal-static { font: 450 13px/normal var(--font); }
+  html:root .settings-app .settings-main .personal-emoticon-emoji { display: inline-block; font: 450 13px/14px var(--font); vertical-align: bottom; }
   html:root .settings-app .settings-main .personal-avatar { width: 32px; height: 32px; font: 400 14px/normal var(--font); font-size: 14px !important; }
   html:root .settings-app .settings-main .personal-input { background: var(--set-card); }
   html:root .settings-app .settings-main[data-settings-page=profile] .personal-input { border: .5px solid var(--set-input-border); color: var(--set-text); font: 400 13px/normal var(--font); }
@@ -35,7 +36,7 @@
   html:root .settings-app .settings-main .personal-icon-action { background: var(--set-control); color: var(--set-control-text); }
   html:root .settings-app .settings-main .settings-row:has(.personal-avatar) { min-height: 66px; }
   html:root .settings-app .settings-main input[data-control=toggle] { margin-right: 6px; }
-  html:root .settings-app .settings-main[data-settings-page=notifications] .settings-card > .settings-row { min-height: 65px; padding-block: 15.5px; }
+  html:root .settings-app .settings-main[data-settings-page=notifications] .settings-card > .settings-row { min-height: 65px; padding-block: 16px; }
   html:root .settings-app .settings-main .personal-channel { box-sizing: border-box; height: 65px; min-height: 65px; grid-template-columns: 32px minmax(0, 1fr) 16px; }
   html:root .settings-app .settings-main .personal-channel-icon,
   html:root .settings-app .settings-main .settings-row-icon { box-sizing: border-box; width: 32px; min-width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; background: var(--theme-surface-2); }
@@ -65,8 +66,9 @@
   html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar { gap: 6px; margin-bottom: 21px; }
   html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar > .settings-select { height: 32px; }
   html:root .settings-app .settings-main .settings-teams-page .settings-members-columns,
-  html:root .settings-app .settings-main .settings-teams-page .settings-member-directory-row { grid-template-columns: minmax(240px, 320fr) minmax(250px, 371fr) 108px 80px 70px 70px 32px; column-gap: 12px; padding: 0 19.5px 0 51.5px; }
-  html:root .settings-app .settings-main .settings-teams-page .settings-members-columns button { margin-left: -6px; font: 500 12px/normal var(--font); }
+  html:root .settings-app .settings-main .settings-teams-page .settings-member-directory-row { grid-template-columns: minmax(240px, 320fr) minmax(250px, 371fr) 108px 80px 70px 70px 32px; column-gap: 12px; padding: 0 20px 0 52px; }
+  html:root .settings-app .settings-main .settings-teams-page .settings-members-columns button { display: inline-flex; align-items: center; gap: 2px; margin-left: -6.5px; border: .5px solid transparent; font: 500 12px/normal var(--font); }
+  html:root .settings-app .settings-main .settings-teams-page .settings-members-columns button > span { font-weight: 450; }
   html:root .settings-app .settings-main .settings-teams-row { height: 44px; }
   html:root .settings-app .settings-main .settings-teams-row small { font-weight: 500; }
   html:root .settings-app .settings-team-count { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 5px; color: inherit; text-decoration: none; }
@@ -77,13 +79,15 @@
   html:root .settings-app .settings-main[data-settings-page=workspace] .settings-url { height: 32px; }
   html:root .settings-app .settings-main[data-settings-page=workspace] .settings-input { padding: 6px 12px; font: 400 13px/normal var(--font); }
   html:root .settings-app .settings-main[data-settings-page=workspace] .settings-url > span { font: 400 13px/normal var(--font); }
-  html:root .settings-app .settings-main[data-settings-page=workspace] .settings-section:has(> h3) .settings-row { min-height: 65px; height: 65px; padding-block: 14.5px; }
+  html:root .settings-app .settings-main[data-settings-page=workspace] .settings-section:has(> h3) .settings-row { min-height: 65px; height: 65px; padding-block: 16px; }
   html:root .settings-app .settings-main[data-settings-page=workspace] .settings-section:nth-of-type(3) .settings-row { min-height: 64px; height: 64px; }
   html:root .settings-app .settings-main[data-settings-page=workspace] .workspace-logo-control > button { width: 32px; height: 32px; font-size: 11px; font-weight: 400; }
   html:root .settings-app .settings-main .settings-action.danger { height: 32px; border-radius: 9999px; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns,
-  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row { grid-template-columns: minmax(0, 408.6fr) minmax(0, 266.4fr) 146px 82px 82px 82px 32px; padding: 0 19.5px 0 51.5px; }
-  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=name] { margin-left: -6px; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row { grid-template-columns: minmax(0, 408.6fr) minmax(0, 266.4fr) 146px 82px 82px 82px 32px; padding: 0 20px 0 52px; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button { gap: 2px; margin-left: -6.5px; border: .5px solid transparent; font-weight: 500; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-column-label { font-weight: 450; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=name] { margin-left: -6.5px; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=role] { margin-left: 0; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-more { width: 32px; height: 32px; }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label { position: relative; padding: 0; }
@@ -103,8 +107,8 @@
   .desktop-integration-search { position: relative; box-sizing: border-box; height: 44px; display: flex; align-items: center; border: 1px solid var(--set-search-border); border-radius: 8px; color: var(--set-desc); }
   .desktop-integration-search > svg { position: absolute; left: 16px; pointer-events: none; }
   .desktop-integration-search input { box-sizing: border-box; width: 100%; height: 42px; padding: 12px 12px 12px 40px; border: 0; outline: none; background: transparent; color: var(--set-text); font: 400 15px var(--font); }
-  .desktop-enabled { margin-top: 46.5px; min-height: 100px; }
-  .desktop-enabled h2, .desktop-integration-catalog h2 { margin: 0 16px 16px; color: var(--set-desc); font: 500 12px/15px var(--font); text-transform: uppercase; }
+  .desktop-enabled { margin-top: 48px; min-height: 100px; }
+  .desktop-enabled h2, .desktop-integration-catalog h2 { margin: 0 16px 16px; color: var(--set-group-desc); font: 500 11px/normal var(--font); text-transform: uppercase; }
   .desktop-enabled h2 button { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-transform: inherit; }
   .desktop-enabled p { margin: 0 16px; color: var(--set-desc); font-size: 13px; }
   .desktop-enabled-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }

@@ -134,7 +134,7 @@ export function WorkspaceTeamsSettings({
     URL.revokeObjectURL(url);
   };
   const count = (value: number) => (value ? value.toLocaleString() : "-");
-  const header = (key: TeamSort, label: string) => desktop ? <span role="columnheader" aria-sort={sort === key ? descending ? 'descending' : 'ascending' : 'none'}><button type="button" aria-label={`${t('Order by')} ${t(label)}`} onClick={() => { if (sort === key) setDescending(value => !value); else { setSort(key); setDescending(key === 'members' || key === 'issues'); } }}>{t(label)}{sort === key && (descending ? <ArrowDown size={12}/> : <ArrowUp size={12}/>)}</button></span> : <span>{t(label)}</span>;
+  const header = (key: TeamSort, label: string) => desktop ? <span role="columnheader" aria-sort={sort === key ? descending ? 'descending' : 'ascending' : 'none'}><button type="button" aria-label={`${t('Order by')} ${t(label)}`} onClick={() => { if (sort === key) setDescending(value => !value); else { setSort(key); setDescending(key === 'members' || key === 'issues'); } }}><span>{t(label)}</span>{sort === key && !descending ? <ArrowUp size={12}/> : <ArrowDown size={12}/>}</button></span> : <span>{t(label)}</span>;
   return (
     <div className="settings-members-page settings-teams-page" data-i18n-ignore>
       <SettingsPageTitle>{t("Teams")}</SettingsPageTitle>

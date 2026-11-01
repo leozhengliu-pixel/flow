@@ -254,7 +254,7 @@ export function IssueExplorerSurface({
   )
 
   return (
-    <ContentViewContainer framed data-issue-explorer="true" data-team-issue-surface={scopeTeam && !savedView && !resourceHeader ? 'true' : undefined} className={className}>
+    <ContentViewContainer framed inset="tall" data-issue-explorer="true" data-team-issue-surface={scopeTeam && !savedView && !resourceHeader ? 'true' : undefined} className={className}>
       {header}
       {mode === 'view' && toolbar}
       {mode === 'edit' && <ContentViewSubheader borderless start={<span className={styles.viewCount}>{itemCount} {itemCount === 1 ? 'issue' : 'issues'}</span>} />}

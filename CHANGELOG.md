@@ -16,6 +16,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Remove sampled phone metadata and overflow widths; let team tabs use the space their rendered labels actually need.
 
 - Shard browser CI across four isolated runners within the twenty-job limit, preserve the required Browser E2E check and per-shard reports, avoid duplicate device scenarios and unnecessary app reloads, and wait for notification and animation readiness instead of fixed sleeps.
+- Remove desktop hairline spacing compensation, restore the Agent composer grid and footer rhythm, and align document sort/icon targets and settings rows with their declared spacing.
 
 - Let phone chat actions follow short titles while long titles truncate within the viewport.
 

@@ -146,8 +146,8 @@ button.flow-toast__chip:focus-visible { outline: 2px solid var(--focus-ring); ou
 @media (min-width: 1024px) {
   .flow-toast {
     min-height: 41px;
-    padding: 12.5px;
-    border: 0;
+    padding: 12px;
+    border: .5px solid transparent;
     background: var(--pk-surface);
     font-family: ui-sans-serif, system-ui, sans-serif;
     line-height: normal;

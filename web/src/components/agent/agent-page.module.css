@@ -217,7 +217,8 @@
   mask-image: linear-gradient(black, transparent 61.2%);
 }
 @media (min-width: 801px) {
-  .emptyLogo { top: -166px; }
+  .examples { grid-row: 3; }
+  .composer { row-gap: 8px; }
 }
 .history {
   grid-row: 3;
@@ -1048,7 +1049,7 @@
   .skillsMenuHeader { box-sizing: border-box; display: flex; align-items: center; height: 12px; padding: 0 10px; color: var(--theme-text-secondary); font-size: 11px; font-weight: 450; }
   .skillsMenu [role="option"] { height: 31px; padding: 0 14px; }
   .editorScroll > div > .editor { min-height: 44px; }
-  .emptyComposerSlot > .composer .skillsButton { padding-right: 5px; }
+  .emptyComposerSlot > .composer .skillsButton { padding-right: 6px; line-height: normal; }
 }
 .danger {
   color: var(--semantic-danger);

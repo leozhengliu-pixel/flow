@@ -1,4 +1,8 @@
 @media (min-width: 1024px) {
+  .project-detail-page__toolbar { height: 43.5px; flex-basis: 43.5px; }
+  .project-activity { padding-top: 44px; }
+  .project-activity__composer > footer { padding-bottom: 12px; }
+  .project-activity__composer > footer button.is-submit { padding-inline: 8px; }
   .project-detail-page__toolbar-actions > [data-project-insights] { order: -1; }
   .project-overview__property-section,
   .project-overview__row-section { grid-template-columns: 67.73px minmax(0, 1fr); }
