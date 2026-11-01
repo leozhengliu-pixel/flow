@@ -10,6 +10,15 @@ async function workspaceTeamId(request: APIRequestContext, workspaceKey: string)
   return data.teams[0].id
 }
 
+async function waitForNotifications(request: APIRequestContext, workspaceKey: string, count: number) {
+  await expect.poll(async () => {
+    const response = await request.get('/api/notifications?limit=50', { headers: { 'X-Workspace-Key': workspaceKey } })
+    expect(response.status()).toBe(200)
+    const data = await response.json() as { notifications: unknown[] }
+    return data.notifications.length
+  }).toBe(count)
+}
+
 test.describe('mobile inbox list', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
@@ -37,11 +46,11 @@ test.describe('mobile inbox list', () => {
     const unreadIssue = await createIssue('[mobile] First unread issue', 'state_progress')
     const readIssue = await createIssue('[mobile] Second read issue', 'state_todo')
     const readReminder = await remind(readIssue.id)
-    await page.waitForTimeout(900)
+    await waitForNotifications(request, workspaceKey, 1)
     const readResponse = await request.patch(`/api/notifications/${readReminder.id}`, { headers, data: { read: true } })
     expect(readResponse.status()).toBe(200)
     await remind(unreadIssue.id)
-    await page.waitForTimeout(900)
+    await waitForNotifications(request, workspaceKey, 2)
 
     await page.goto(`/${workspaceKey}/inbox`)
     const header = page.locator('header.flow-inbox__header')
@@ -87,7 +96,7 @@ test.describe('mobile inbox list', () => {
     expect(comment.status()).toBe(201)
     const reminder = await request.post(`/api/issues/${issue.id}/reminders`, { headers, data: { remindAt: new Date(Date.now() + 400).toISOString() } })
     expect(reminder.status()).toBe(201)
-    await page.waitForTimeout(1200)
+    await waitForNotifications(request, workspaceKey, 1)
 
     await page.goto(`/${workspaceKey}/inbox`)
     const row = page.locator('.flow-inbox-notification-list > [role="listitem"] [role="link"]').first()
@@ -147,15 +156,15 @@ test.describe('mobile inbox list', () => {
       const reminder = await request.post(`/api/issues/${issueBody.id}/reminders`, { headers, data: { remindAt: new Date(Date.now() + 300).toISOString() } })
       expect(reminder.status()).toBe(201)
     }
-    await page.waitForTimeout(900)
+    await waitForNotifications(request, workspaceKey, 2)
 
     await page.goto(`/${workspaceKey}/inbox`)
     await page.locator('.flow-inbox__header-controls button[aria-label="Add filter"]').click()
-    await page.waitForTimeout(400)
 
     const near = (actual: number | undefined, expected: number) => expect(Math.abs((actual ?? Number.NaN) - expected)).toBeLessThanOrEqual(1)
     const surface = page.locator('.phone-menu-surface.inbox-filter-phone-properties')
     await expect(surface).toBeVisible()
+    await surface.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
     near((await surface.boundingBox())?.x, 16)
     near((await surface.boundingBox())?.y, 110)
     near((await surface.boundingBox())?.width, 358)
@@ -205,15 +214,15 @@ test.describe('mobile inbox list', () => {
       const reminder = await request.post(`/api/issues/${issueBody.id}/reminders`, { headers, data: { remindAt: new Date(Date.now() + 300).toISOString() } })
       expect(reminder.status()).toBe(201)
     }
-    await page.waitForTimeout(900)
+    await waitForNotifications(request, workspaceKey, 2)
 
     await page.goto(`/${workspaceKey}/inbox`)
     await page.locator('.flow-inbox__header button[aria-label="Notification actions"]').click()
-    await page.waitForTimeout(400)
 
     const near = (actual: number | undefined, expected: number) => expect(Math.abs((actual ?? Number.NaN) - expected)).toBeLessThanOrEqual(1)
     const surface = page.locator('.phone-menu-surface.inbox-actions-phone-menu')
     await expect(surface).toBeVisible()
+    await surface.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
     near((await surface.boundingBox())?.x, 16)
     near((await surface.boundingBox())?.y, 110)
     near((await surface.boundingBox())?.width, 358)

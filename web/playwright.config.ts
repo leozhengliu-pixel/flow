@@ -19,7 +19,9 @@ export default defineConfig({
     // Phone specs select their own viewports/touch settings, including their
     // desktop-width regressions. Running them in both projects repeats them.
     { name: 'chromium', testIgnore: ['**/security/**', '**/mobile-*.spec.ts'], use: { ...devices['Desktop Chrome'], ...(process.env.CI ? {} : { channel: 'chrome' }) } },
-    { name: 'mobile-chromium', use: { ...devices['Pixel 7'], ...(process.env.CI ? {} : { channel: 'chrome' }) } },
+    // These files already skip phones (or explicitly force desktop settings).
+    // Exclude them before sharding so skipped tests do not skew shard sizes.
+    { name: 'mobile-chromium', testIgnore: ['**/security/**', '**/desktop-*.spec.ts', '**/keyboard-shortcuts.spec.ts', '**/loops-output-contract.spec.ts'], use: { ...devices['Pixel 7'], ...(process.env.CI ? {} : { channel: 'chrome' }) } },
   ],
   webServer: [
     {
