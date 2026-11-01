@@ -514,6 +514,11 @@
 .sidebar-shortcuts-scroll kbd{min-width:20px;box-sizing:border-box;display:grid;place-items:center;padding:4px;border:.5px solid var(--agent-code-border);border-radius:3px;background:transparent;color:var(--theme-text-secondary);font:450 11px/12.1px var(--font)}
 .sidebar-shortcuts-scroll small{padding:0;color:var(--theme-text-secondary);font-size:11px;font-weight:450;line-height:12.1px}
 .sidebar-shortcuts-empty{margin:28px 4px;color:var(--theme-text-secondary);font-size:13px;text-align:center}
+@media (min-width: 1024px) {
+  .sidebar-shortcuts-dialog { --theme-text-secondary: var(--shortcut-muted); }
+  .sidebar-shortcuts-dialog h2 { margin: 20px 20px 15px; padding: 0; }
+  .sidebar-shortcuts-dialog > .dialog-close { padding: 0 2px; }
+}
 .sidebar-customize-group { display: flex; flex-direction: column; gap: 8px; margin: 0; }
 .sidebar-customize-group h3 { height: 16px; display: flex; align-items: center; margin: 0; color: var(--theme-text-primary); font-size: 13px; font-weight: 500; line-height: 16px; }
 .sidebar-customize-group > div { padding: 6px 12px; background: var(--theme-surface-1); border: 1px solid var(--theme-border-strong); border-radius: 6px; }

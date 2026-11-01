@@ -177,9 +177,26 @@ html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
   html:root body .command-dialog [cmdk-group-heading] {
     height: 30px;
     align-items: flex-start;
-    padding: 8px 12px 0;
+    padding: 8px 12px;
     font-size: 12px;
     line-height: normal;
+  }
+  html:root body .command-dialog .command-shortcut kbd {
+    height: auto;
+    min-width: 20px;
+    padding: 4px;
+    border-radius: 3px;
+    line-height: 12.1px;
+  }
+  html:root body .command-dialog .command-shortcut { gap: 3px; }
+  html:root body .command-dialog .command-shortcut small {
+    line-height: 12.1px;
+  }
+  html:root body .command-dialog .command-input > button kbd {
+    height: auto;
+    padding: 2px;
+    font-weight: 400;
+    line-height: 12.1px;
   }
 }
 
