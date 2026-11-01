@@ -431,7 +431,7 @@ html:root[data-theme="light"] body .dialog-content .loops-hub-composer textarea 
 .loops-hub-categories button:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 .loops-hub-categories button.is-active { background: var(--theme-control-hover); color: var(--theme-text-primary); font-weight: 500; }
 .loops-hub-attach,
-.loops-hub-send { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0.5px solid transparent; border-radius: 9999px; cursor: pointer; }
+.loops-hub-send { width: 24px; height: 24px; display: grid; place-items: center; padding: 0 2px; border: 0.5px solid transparent; border-radius: 9999px; cursor: pointer; }
 .loops-hub-attach { background: transparent; color: var(--theme-text-primary); }
 .loops-hub-attach:hover:not(:disabled) { background: var(--theme-surface-hover); }
 .loops-hub-attach:disabled { opacity: 0.45; cursor: default; }
@@ -912,6 +912,8 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-feedback button.is-active { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 
 @media (min-width: 801px) {
+  .loops-title h2,
+  .loops-breadcrumb h2:not(.loops-breadcrumb-current) { color: var(--text); }
   .loops-topbar,
   .loops-editor-topbar {
     gap: 12px;
@@ -920,6 +922,8 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
   .loops-title,
   .loops-breadcrumb { margin-left: 18px; }
   .loops-topbar-actions { margin-right: 8px; }
+  :root:is([data-sidebar-mode="collapsed"], [data-sidebar-mode="compact"]) :is(.loops-title, .loops-breadcrumb) { margin-left: 0; }
+  :root:is([data-sidebar-mode="collapsed"], [data-sidebar-mode="compact"]) :is(.loops-topbar, .loops-editor-topbar) > [data-sidebar-trigger] { margin-right: -4px; }
   .loops-toolbar,
   .loops-run-tabs { height: 43.5px; flex-basis: 43.5px; }
   .loops-toolbar-left { gap: 12px; }
@@ -941,6 +945,7 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
   .loops-hub-composer { height: 104px; gap: 8px; padding: 12px; }
   .loops-hub-composer textarea { min-height: 48px; padding: 2px 6px; }
   .loops-hub-composer footer { height: 24px; padding: 0; }
+  .loops-hub-send:disabled { background: var(--loops-schedule-bg); }
   .loops-hub-categories button.is-active { background: var(--bg-active); }
   .loops-section-title,
   .loops-section-heading .loops-section-title { line-height: normal; }

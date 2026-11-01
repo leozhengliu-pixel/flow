@@ -66,6 +66,7 @@ export function CodingSessionPage({ data, sessionId, onNavigate, onOpenSidebar }
   })
   return <main className="main-panel coding-session-page" aria-label={t('Coding session')}>
     <header className="coding-session-page-bar">
+      <div className="coding-session-page-bar-inner">
       <button type="button" className="coding-session-page-menu" aria-label={t('Open sidebar')} data-sidebar-trigger onClick={onOpenSidebar}><Menu size={16}/></button>
       {issue && <>
         <AppLink className="coding-session-dialog-crumb" href={issuePath(workspace, issue)}><StatusIcon state={issue.state} size={14}/><span data-i18n-ignore>{issue.identifier}</span></AppLink>
@@ -85,6 +86,7 @@ export function CodingSessionPage({ data, sessionId, onNavigate, onOpenSidebar }
       <ScopedFlowTooltip label={t(showAgent ? 'Hide agent' : 'Show agent')} shortcut="]" align="end">
         <button type="button" className="coding-session-agent-toggle" aria-pressed={showAgent} aria-label={t(showAgent ? 'Hide agent' : 'Show agent')} onClick={toggleAgent}>{showAgent ? <AgentCursorFilledGlyph size={14}/> : <AgentCursorGlyph size={14}/>}</button>
       </ScopedFlowTooltip>
+      </div>
     </header>
     {session
       ? <CodingSessionPanel session={session} data={data} onChange={apply} agentHidden={!showAgent} className="coding-session-page-body"
