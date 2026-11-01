@@ -471,11 +471,13 @@ func TestParseAgentFileWithinBoundsConcurrentParses(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "too many files") {
 		t.Fatalf("full slots error = %v", err)
 	}
-	if text, err := parseAgentFileWithin(context.Background(), file, []byte("hi")); err != nil || text != "hi" {
-		t.Fatalf("after release = %q, %v", text, err)
-	}
-	if len(agentFileParseSlots) != 0 {
-		t.Errorf("slots leaked: %d", len(agentFileParseSlots))
+	for i := 0; i < 100; i++ {
+		if text, err := parseAgentFileWithin(context.Background(), file, []byte("hi")); err != nil || text != "hi" {
+			t.Fatalf("after release = %q, %v", text, err)
+		}
+		if len(agentFileParseSlots) != 0 {
+			t.Fatalf("parse %d returned before releasing its slot: %d", i, len(agentFileParseSlots))
+		}
 	}
 }
 
