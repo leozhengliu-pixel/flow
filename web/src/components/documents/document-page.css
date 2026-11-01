@@ -54,6 +54,7 @@
   color: var(--issue-breadcrumb-text);
   font: 500 13px/normal var(--font);
 }
+.document-breadcrumb-ancestors { display: contents; }
 .document-breadcrumb-link {
   height: 24px;
   min-width: 0;
@@ -712,7 +713,7 @@ button.document-icon.is-empty:hover,
   .document-breadcrumbs { flex: 1 1 0; }
   .document-breadcrumb-parent,
   .document-breadcrumb-documents,
-  .document-breadcrumbs > .document-breadcrumb-separator { display: none; }
+  .document-breadcrumb-ancestors > .document-breadcrumb-separator { display: none; }
   .document-breadcrumb-current { flex: 1 1 auto; padding: 0 4px; }
   .document-title-actions { gap: 0; }
   .document-edited { width: 28px; padding: 0; justify-content: center; }
@@ -761,9 +762,10 @@ button.document-icon.is-empty:hover,
     overflow: hidden;
   }
   .document-breadcrumb-parent,
-  .document-breadcrumbs > .document-breadcrumb-separator { display: flex; }
+  .document-breadcrumb-ancestors > .document-breadcrumb-separator { display: flex; }
+  .document-breadcrumb-ancestors { min-width: 0; flex: 0 1 auto; display: flex; align-items: center; }
   .document-breadcrumb-parent { min-width: 0; flex: 0 1 auto; }
-  .document-breadcrumbs > .document-breadcrumb-separator {
+  .document-breadcrumb-ancestors > .document-breadcrumb-separator {
     margin: -2px 8px 0;
   }
   .document-breadcrumb-documents { display: none; }
