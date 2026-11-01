@@ -1,6 +1,8 @@
 # Desktop Physical-Scale Audit
 
-Measured Flow at 1440 x 900 in bundled Chromium with `--force-device-scale-factor=2`, `--window-size=1440,900`, and `viewport: null`. No context `deviceScaleFactor` was supplied. Browser assertions verify `[innerWidth, innerHeight, devicePixelRatio] = [1440, 900, 2]` and a computed 0.5px border. Reference evidence is `/tmp/desktop-ref/<area>/`; all work used a throwaway API/database and workspace under `/tmp/codex-desktop-halfpx/`.
+Measured Flow at 1440 x 900 in bundled Chromium with `--force-device-scale-factor=2`, `--window-size=1440,900`, and `viewport: null`. No context `deviceScaleFactor` was supplied for those one-off measurements. Reference evidence is `/tmp/desktop-ref/<area>/`; all work used a throwaway API/database and workspace under `/tmp/codex-desktop-halfpx/`.
+
+The automated regression spec now uses `web/playwright.config.ts` and its standard desktop context. Its original custom context was incompatible with the project's inherited device scale and failed all four CI tests before assertions. Scale-sensitive checks now assert active stylesheet declarations and layout relationships, not physical-scale coordinates. The existing project filters collect this desktop spec only in `chromium`, before sharding.
 
 ## Measurements
 
@@ -34,7 +36,7 @@ All heavy commands used `~/.flow-local/heavy.sh`; targeted runs only.
 - `npm ci`: exit 0; requested Node 24.7 emitted engine-version warnings.
 - `npm run lint` (including `npm run typecheck` and all repository checks): exit 0.
 - `npx vitest run --maxWorkers=2 <targeted files>`: runs of 143, 23, 32 and 40 tests, each exit 0. Files cover Agent empty state/tooltips, issue rows/bulk/assignee/activity, issue explorer/content view, project activity/surface, settings/members/integrations, documents/actions/icons.
-- `npx playwright test --config=/tmp/codex-desktop-halfpx/playwright.config.cjs desktop-hairlines.spec.ts`: 4 passed, exit 0. New fixtures create their own workspaces; the tests do not depend on local verification data.
+- Regression rerun: `npx playwright test --config=playwright.config.ts e2e/desktop-hairlines.spec.ts`, both with `CI=1` and in normal local mode: 4 passed each, exit 0. Fixtures create their own workspaces; the tests do not depend on local verification data. `FLOW_E2E_DATABASE_PATH` allows the repo config's API server to use an isolated scratch database without changing its default CI path.
 - Existing browser specs `desktop-issue-detail-properties`, `desktop-projects-parity`, `desktop-shell-remaining`, and `desktop-settings-parity`: all passed in targeted runs, exit 0.
 - After rebasing the concurrent phone cleanup: full lint/typecheck, 111 targeted unit tests and 12 targeted browser tests passed again, all exit 0. Phone gate evidence below was collected before that independent cleanup was merged.
 - `mobile-gate`: 21 distinct screens, 932 element checks, zero failures; affected Docs/Issues screens were rerun after their final changes.
