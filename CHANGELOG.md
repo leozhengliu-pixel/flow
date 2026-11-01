@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Let phone chat actions follow short titles while long titles truncate within the viewport.
+
 - Use natural icon spacing in phone review and cycle controls, and let issue composer toolbars contain their controls and bottom padding.
 
 - Align phone preference action hit areas with other settings actions and use the standard icon gap for new webhooks.

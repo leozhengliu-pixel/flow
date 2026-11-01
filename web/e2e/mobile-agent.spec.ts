@@ -234,10 +234,13 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect((await header.boundingBox())?.height).toBe(44)
       expect((await page.locator('main > header [data-sidebar-trigger]').boundingBox())?.x).toBe(8)
       const favorite = page.locator('main > header button[aria-label="Add to favorites"]')
-      expect((await favorite.boundingBox())!.x).toBe(viewport.width - 76)
+      const switcherBox = (await page.locator('main > header [data-agent-chat-switcher]').boundingBox())!
+      const favoriteBox = (await favorite.boundingBox())!
+      expect(favoriteBox.x).toBe(switcherBox.x + switcherBox.width + 4)
       expect((await favorite.boundingBox())?.width).toBe(32)
       const optionsBox = (await page.locator('main > header button[aria-label="Chat options"]').boundingBox())!
-      expect(optionsBox.x + optionsBox.width).toBe(viewport.width - 8)
+      expect(optionsBox.x).toBe(favoriteBox.x + favoriteBox.width + 4)
+      expect(optionsBox.x + optionsBox.width).toBeLessThanOrEqual(viewport.width - 8)
       await expect(page.locator('main > header button[aria-label="Move to toolbar"]')).toBeHidden()
 
       const scroll = page.locator('main [role="group"][aria-label="Agent conversation"]')
@@ -313,10 +316,21 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
         await page.goto(`/${workspaceKey}/agent/${next.slugId}`)
         const options = page.locator('main > header button[aria-label="Chat options"]')
         await expect(options).toBeVisible()
-        expect((await options.boundingBox())?.x).toBe(optionsBox.x)
+        const titleBox = (await page.locator('main > header [data-agent-chat-switcher]').boundingBox())!
+        const nextFavoriteBox = (await favorite.boundingBox())!
+        const nextOptionsBox = (await options.boundingBox())!
+        expect(nextFavoriteBox.x).toBe(titleBox.x + titleBox.width + 4)
+        expect(nextOptionsBox.x).toBe(nextFavoriteBox.x + nextFavoriteBox.width + 4)
+        expect(nextOptionsBox.x + nextOptionsBox.width).toBeLessThanOrEqual(viewport.width - 8)
+        const titleText = page.locator('main > header [data-agent-chat-switcher] h2')
+        const truncated = await titleText.evaluate(node => node.scrollWidth > node.clientWidth)
+        expect(truncated).toBe(title !== '[mobile] Short')
+        if (title === '[mobile] Short') expect(nextOptionsBox.x).toBeLessThan(optionsBox.x)
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
         await options.click()
         await expect(chatOptions).toBeVisible()
         expect((await page.locator('main > header').boundingBox())?.x).toBe(0)
+        expect((await options.boundingBox())?.x).toBe(nextOptionsBox.x)
       }
 
       if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/agent-conversation-${viewport.width}.png`, scale: 'css', animations: 'disabled' })
