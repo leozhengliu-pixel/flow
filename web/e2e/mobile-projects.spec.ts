@@ -356,7 +356,9 @@ test.describe('mobile project properties panel', () => {
     expect((await page.locator('.project-details-sidebar__property-add').boundingBox())?.width).toBe(28)
     expect((await page.locator('.project-details-sidebar__section.is-milestones').boundingBox())?.y).toBeCloseTo(501, 0)
     expect((await page.locator('.project-details-sidebar__milestone').first().boundingBox())?.height).toBe(36)
-    expect((await page.locator('.project-details-sidebar__section').last().boundingBox())?.y).toBeCloseTo(623.5, 0)
+    const milestonesBox = (await page.locator('.project-details-sidebar__section.is-milestones').boundingBox())!
+    expect((await page.locator('.project-details-sidebar__section').last().boundingBox())?.y).toBe(milestonesBox.y + milestonesBox.height + 8)
+    await expect(page.locator('.project-details-sidebar__see-all')).toHaveCSS('display', 'block')
     expect((await page.locator('.project-details-sidebar__see-all > span').boundingBox())?.x).toBeCloseTo(331.5, 0)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/project-properties-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
