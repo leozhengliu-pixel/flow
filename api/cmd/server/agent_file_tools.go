@@ -243,14 +243,17 @@ func parseAgentFileWithin(ctx context.Context, file domain.AgentMessageAttachmen
 	}
 	done := make(chan result, 1)
 	go func() {
-		defer func() { <-agentFileParseSlots }()
+		outcome := result{}
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				done <- result{err: fmt.Errorf("the file could not be parsed")}
+				outcome = result{err: fmt.Errorf("the file could not be parsed")}
 			}
+			// Release before publishing the result. The caller may observe the
+			// slot count as soon as it receives the buffered result.
+			<-agentFileParseSlots
+			done <- outcome
 		}()
-		text, err := parseAgentFile(file.Name, file.ContentType, data)
-		done <- result{text, err}
+		outcome.text, outcome.err = parseAgentFile(file.Name, file.ContentType, data)
 	}()
 	timer := time.NewTimer(agentFileParseTimeout)
 	defer timer.Stop()
