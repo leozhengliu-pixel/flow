@@ -1,20 +1,24 @@
 import { createHmac } from 'node:crypto'
-import { expect } from '@playwright/test'
-import { test, test as workspaceTest } from './workspace-fixture'
+import { expect, type APIRequestContext } from '@playwright/test'
+import { test } from './workspace-fixture'
+
+async function workspaceTeamId(request: APIRequestContext, workspaceKey: string) {
+  const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
+  expect(response.status()).toBe(200)
+  const data = await response.json() as { teams: Array<{ id: string }> }
+  expect(data.teams[0]).toBeTruthy()
+  return data.teams[0].id
+}
 
 test.describe('mobile inbox list', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
   test('shows the phone top bar and notification rows', async ({ page, request, workspaceKey }, testInfo) => {
-    const workspaceResponse = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
-    expect(workspaceResponse.status()).toBe(200)
-    const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
-    const teamId = workspace.teams?.[0]?.id
-    expect(teamId).toBeTruthy()
+    const teamId = await workspaceTeamId(request, workspaceKey)
     const headers = { 'X-Workspace-Key': workspaceKey }
 
     const createIssue = async (title: string, stateId: string) => {
-      const response = await request.post('http://127.0.0.1:4180/api/issues', {
+      const response = await request.post('/api/issues', {
         headers,
         data: { title, description: 'Mobile inbox row', teamId, stateId },
       })
@@ -22,7 +26,7 @@ test.describe('mobile inbox list', () => {
       return response.json() as Promise<{ id: string; identifier: string }>
     }
     const remind = async (issueId: string) => {
-      const response = await request.post(`http://127.0.0.1:4180/api/issues/${issueId}/reminders`, {
+      const response = await request.post(`/api/issues/${issueId}/reminders`, {
         headers,
         data: { remindAt: new Date(Date.now() + 500).toISOString() },
       })
@@ -34,7 +38,7 @@ test.describe('mobile inbox list', () => {
     const readIssue = await createIssue('[mobile] Second read issue', 'state_todo')
     const readReminder = await remind(readIssue.id)
     await page.waitForTimeout(900)
-    const readResponse = await request.patch(`http://127.0.0.1:4180/api/notifications/${readReminder.id}`, { headers, data: { read: true } })
+    const readResponse = await request.patch(`/api/notifications/${readReminder.id}`, { headers, data: { read: true } })
     expect(readResponse.status()).toBe(200)
     await remind(unreadIssue.id)
     await page.waitForTimeout(900)
@@ -68,24 +72,20 @@ test.describe('mobile inbox list', () => {
   })
 
   test('opens a notification as the phone issue page with notification actions', async ({ page, request, workspaceKey }, testInfo) => {
-    const workspaceResponse = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
-    expect(workspaceResponse.status()).toBe(200)
-    const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
-    const teamId = workspace.teams?.[0]?.id
-    expect(teamId).toBeTruthy()
+    const teamId = await workspaceTeamId(request, workspaceKey)
     const headers = { 'X-Workspace-Key': workspaceKey }
     const createIssue = async (title: string, description: string) => {
-      const response = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description, teamId, stateId: 'state_todo' } })
+      const response = await request.post('/api/issues', { headers, data: { title, description, teamId, stateId: 'state_todo' } })
       expect(response.status()).toBe(201)
       return response.json() as Promise<{ id: string; identifier: string }>
     }
     const related = await createIssue('[mobile] Related issue', '[mobile] Related issue body')
     const issue = await createIssue('[mobile] Inbox notification issue', 'External https://example.com\n\nIssue https://example.com/flow-app12/issue/FLO-1/get-familiar-with-flow\n\nProject https://example.com/app12/projects/all\n\nCustom custom text after')
-    const relation = await request.post(`http://127.0.0.1:4180/api/issues/${issue.id}/relations`, { headers, data: { type: 'related', relatedIssueId: related.id } })
+    const relation = await request.post(`/api/issues/${issue.id}/relations`, { headers, data: { type: 'related', relatedIssueId: related.id } })
     expect(relation.ok()).toBe(true)
-    const comment = await request.post(`http://127.0.0.1:4180/api/issues/${issue.id}/comments`, { headers, data: { body: '[mobile] A comment on the issue' } })
+    const comment = await request.post(`/api/issues/${issue.id}/comments`, { headers, data: { body: '[mobile] A comment on the issue' } })
     expect(comment.status()).toBe(201)
-    const reminder = await request.post(`http://127.0.0.1:4180/api/issues/${issue.id}/reminders`, { headers, data: { remindAt: new Date(Date.now() + 400).toISOString() } })
+    const reminder = await request.post(`/api/issues/${issue.id}/reminders`, { headers, data: { remindAt: new Date(Date.now() + 400).toISOString() } })
     expect(reminder.status()).toBe(201)
     await page.waitForTimeout(1200)
 
@@ -135,20 +135,16 @@ test.describe('mobile inbox list', () => {
   })
 
   test('opens the phone filter sheet with the reference field list', async ({ page, request, workspaceKey }, testInfo) => {
-    const workspaceResponse = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
-    expect(workspaceResponse.status()).toBe(200)
-    const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
-    const teamId = workspace.teams?.[0]?.id
-    expect(teamId).toBeTruthy()
+    const teamId = await workspaceTeamId(request, workspaceKey)
     const headers = { 'X-Workspace-Key': workspaceKey }
 
-    const initiative = await request.post('http://127.0.0.1:4180/api/initiatives', { headers, data: { name: '[mobile] Filter initiative', leadTeamId: teamId } })
+    const initiative = await request.post('/api/initiatives', { headers, data: { name: '[mobile] Filter initiative', leadTeamId: teamId } })
     expect(initiative.status()).toBe(201)
     for (const title of ['[mobile] Filter notification one', '[mobile] Filter notification two']) {
-      const issue = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description: 'Mobile inbox filter row', teamId, stateId: 'state_todo' } })
+      const issue = await request.post('/api/issues', { headers, data: { title, description: 'Mobile inbox filter row', teamId, stateId: 'state_todo' } })
       expect(issue.status()).toBe(201)
       const issueBody = await issue.json() as { id: string }
-      const reminder = await request.post(`http://127.0.0.1:4180/api/issues/${issueBody.id}/reminders`, { headers, data: { remindAt: new Date(Date.now() + 300).toISOString() } })
+      const reminder = await request.post(`/api/issues/${issueBody.id}/reminders`, { headers, data: { remindAt: new Date(Date.now() + 300).toISOString() } })
       expect(reminder.status()).toBe(201)
     }
     await page.waitForTimeout(900)
@@ -199,18 +195,14 @@ test.describe('mobile inbox list', () => {
   })
 
   test('opens the phone notification actions sheet', async ({ page, request, workspaceKey }, testInfo) => {
-    const workspaceResponse = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
-    expect(workspaceResponse.status()).toBe(200)
-    const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
-    const teamId = workspace.teams?.[0]?.id
-    expect(teamId).toBeTruthy()
+    const teamId = await workspaceTeamId(request, workspaceKey)
     const headers = { 'X-Workspace-Key': workspaceKey }
 
     for (const title of ['[mobile] Actions notification one', '[mobile] Actions notification two']) {
-      const issue = await request.post('http://127.0.0.1:4180/api/issues', { headers, data: { title, description: 'Mobile inbox action row', teamId, stateId: 'state_todo' } })
+      const issue = await request.post('/api/issues', { headers, data: { title, description: 'Mobile inbox action row', teamId, stateId: 'state_todo' } })
       expect(issue.status()).toBe(201)
       const issueBody = await issue.json() as { id: string }
-      const reminder = await request.post(`http://127.0.0.1:4180/api/issues/${issueBody.id}/reminders`, { headers, data: { remindAt: new Date(Date.now() + 300).toISOString() } })
+      const reminder = await request.post(`/api/issues/${issueBody.id}/reminders`, { headers, data: { remindAt: new Date(Date.now() + 300).toISOString() } })
       expect(reminder.status()).toBe(201)
     }
     await page.waitForTimeout(900)
@@ -258,12 +250,12 @@ test.describe('mobile inbox list', () => {
 
   test('shows the phone Pulse feed with one initiative update card', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const settings = await request.patch('http://127.0.0.1:4180/api/account/settings', { headers, data: { pulseWelcomeDismissed: true } })
+    const settings = await request.patch('/api/account/settings', { headers, data: { pulseWelcomeDismissed: true } })
     expect(settings.status()).toBe(200)
-    const initiative = await request.post('http://127.0.0.1:4180/api/initiatives', { headers, data: { name: '[mobile] test123' } })
+    const initiative = await request.post('/api/initiatives', { headers, data: { name: '[mobile] test123' } })
     expect(initiative.status()).toBe(201)
     const initiativeBody = await initiative.json() as { id: string }
-    const update = await request.post(`http://127.0.0.1:4180/api/initiatives/${initiativeBody.id}/updates`, { headers, data: { body: '[mobile] test', health: 'onTrack' } })
+    const update = await request.post(`/api/initiatives/${initiativeBody.id}/updates`, { headers, data: { body: '[mobile] test', health: 'onTrack' } })
     expect(update.status()).toBe(201)
 
     await page.goto(`/${workspaceKey}/pulse/following`)
@@ -286,12 +278,18 @@ test.describe('mobile inbox list', () => {
     await expect(tabs).toHaveCount(3)
     expect((await tabs.nth(0).boundingBox())?.height).toBe(32)
     await expect(tabs.nth(0)).toHaveCSS('background-color', 'lch(16.706 0.979 272)')
-    const tabBoxes = await tabs.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()))
-    const tabGap = await page.locator('.pulse-view-tabs').evaluate(node => parseFloat(getComputedStyle(node).columnGap))
-    expect(tabBoxes[2].x).toBe(tabBoxes[1].x + tabBoxes[1].width + tabGap)
+    const tabBoxes = await tabs.evaluateAll(elements => elements.map(element => {
+      const box = element.getBoundingClientRect()
+      return { x: box.x, right: box.right, contentWidth: box.width - 2 * element.clientLeft }
+    }))
+    near(tabBoxes[0].x, 8)
+    for (const [index, width] of [59.44, 64, 59.93].entries()) {
+      near(tabBoxes[index].contentWidth, width)
+      if (index > 0) near(tabBoxes[index].x - tabBoxes[index - 1].right, 4)
+    }
     const addView = page.locator('.pulse-add-view')
     expect((await addView.boundingBox())?.width).toBe(32)
-    expect((await addView.boundingBox())?.x).toBe(tabBoxes[2].x + tabBoxes[2].width + tabGap)
+    near((await addView.boundingBox())!.x - tabBoxes.at(-1)!.right, 4)
 
     const section = page.locator('.pulse-group-header > span')
     near((await section.boundingBox())?.y, 135.5)
@@ -340,7 +338,7 @@ test.describe('mobile inbox list', () => {
   test('shows the phone reviews header, tab counts and empty state', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
     const secret = `mobile-reviews-${workspaceKey}`
-    const integration = await request.put('http://127.0.0.1:4180/api/integrations/github', {
+    const integration = await request.put('/api/integrations/github', {
       headers,
       data: { name: '[mobile] GitHub', config: { organization: 'mobile-e2e', webhookSecret: secret, codeAccess: 'true' }, scopes: ['repo'] },
     })
@@ -349,7 +347,7 @@ test.describe('mobile inbox list', () => {
     const webhook = async (payload: Record<string, unknown>, delivery: string) => {
       const body = JSON.stringify(payload)
       const signature = 'sha256=' + createHmac('sha256', secret).update(body).digest('hex')
-      const response = await request.post('http://127.0.0.1:4180/api/integrations/github/webhook', {
+      const response = await request.post('/api/integrations/github/webhook', {
         headers: { ...headers, 'Content-Type': 'application/json', 'X-GitHub-Event': 'pull_request', 'X-GitHub-Delivery': delivery, 'X-Hub-Signature-256': signature },
         data: body,
       })
@@ -416,7 +414,7 @@ test.describe('mobile inbox list', () => {
   test('groups the phone Created reviews by Ready to merge and Draft', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
     const secret = `mobile-reviews-created-${workspaceKey}`
-    const integration = await request.put('http://127.0.0.1:4180/api/integrations/github', {
+    const integration = await request.put('/api/integrations/github', {
       headers,
       data: { name: '[mobile] GitHub', config: { organization: 'mobile-e2e', webhookSecret: secret, codeAccess: 'true' }, scopes: ['repo'] },
     })
@@ -426,7 +424,7 @@ test.describe('mobile inbox list', () => {
       const pullRequest = { number, id: 9100 + number, title: `[mobile] Review ${number}`, body: '', html_url: `https://github.com/mobile-e2e/repo/pull/${number}`, state: 'open', user: { login: 'flowuser' }, base: { ref: 'main' }, head: { ref: `mobile/review-${number}`, sha: 'abc' }, additions: 3, deletions: 1, commits: 1 }
       const body = JSON.stringify({ action: 'opened', number, pull_request: pullRequest, repository: { full_name: 'mobile-e2e/repo' }, sender: { login: 'flowuser' } })
       const signature = 'sha256=' + createHmac('sha256', secret).update(body).digest('hex')
-      const response = await request.post('http://127.0.0.1:4180/api/integrations/github/webhook', {
+      const response = await request.post('/api/integrations/github/webhook', {
         headers: { ...headers, 'Content-Type': 'application/json', 'X-GitHub-Event': 'pull_request', 'X-GitHub-Delivery': delivery, 'X-Hub-Signature-256': signature },
         data: body,
       })
@@ -437,10 +435,10 @@ test.describe('mobile inbox list', () => {
     const readyTwo = await webhook(202, `${workspaceKey}-open-202`)
     const draft = await webhook(203, `${workspaceKey}-open-203`)
     for (const id of [readyOne, readyTwo]) {
-      const approved = await request.patch(`http://127.0.0.1:4180/api/reviews/${id}`, { headers, data: { status: 'approved' } })
+      const approved = await request.patch(`/api/reviews/${id}`, { headers, data: { status: 'approved' } })
       expect(approved.status()).toBe(200)
     }
-    const drafted = await request.patch(`http://127.0.0.1:4180/api/reviews/${draft}`, { headers, data: { draft: true } })
+    const drafted = await request.patch(`/api/reviews/${draft}`, { headers, data: { draft: true } })
     expect(drafted.status()).toBe(200)
 
     await page.goto(`/${workspaceKey}/reviews/created`)
@@ -459,6 +457,7 @@ test.describe('mobile inbox list', () => {
     await expect(toReview).toHaveCSS('padding', '0px 9.5px')
     const toReviewLabel = (await toReview.locator('.reviews-tab-label--phone').boundingBox())!
     await expect(toReview).toHaveJSProperty('clientWidth', Math.round(toReviewLabel.width + 19))
+    near(await toReview.evaluate(element => element.getBoundingClientRect().width - 2 * element.clientLeft), 74.29)
     await expect(toReview.locator('.reviews-tab-count')).toHaveCount(0)
 
     const sections = page.locator('.review-groups > section')
@@ -506,13 +505,13 @@ test.describe('mobile inbox list', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/reviews-created-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 
-  workspaceTest('shows the phone review page with folded properties and description', async ({ page, request, workspaceKey }, testInfo) => {
+  test('shows the phone review page with folded properties and description', async ({ page, request, workspaceKey }, testInfo) => {
     const workspaceResponse = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
     const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
     const teamId = workspace.teams?.[0]?.id
     expect(teamId).toBeTruthy()
     const headers = { 'X-Workspace-Key': workspaceKey }
-    const issue = await request.post('http://127.0.0.1:4180/api/issues', {
+    const issue = await request.post('/api/issues', {
       headers,
       data: { title: '[mobile] QA session question: shout(name) punctuation', description: '[mobile] Question', teamId, stateId: 'state_progress' },
     })
@@ -520,7 +519,7 @@ test.describe('mobile inbox list', () => {
     const createdIssue = await issue.json() as { id: string }
     const secret = `mobile-review-detail-${workspaceKey}`
     // A non-matching organization keeps the fake workspace offline, so the page never shows a sync error.
-    const integration = await request.put('http://127.0.0.1:4180/api/integrations/github', {
+    const integration = await request.put('/api/integrations/github', {
       headers,
       data: { name: '[mobile] GitHub', config: { organization: 'mobile-other', webhookSecret: secret, codeAccess: 'true' }, scopes: ['repo'] },
     })
@@ -528,13 +527,13 @@ test.describe('mobile inbox list', () => {
     const pullRequest = { number: 6, id: 9506, title: '[mobile] Add shout(name) with exclamation mark', body: 'Adds exported `shout(name)` in `src/greet.js`, returning the uppercase name followed by `!`, as confirmed.\n\nVerified `node -e "require(\'./src/greet.js\')"`, `git log --oneline -5`, and `git diff --check` completed successfully. No tests added or run, as requested.', html_url: 'https://github.com/mobile-e2e/repo/pull/6', state: 'open', draft: true, user: { login: 'flowuser' }, base: { ref: 'main' }, head: { ref: 'bcgroupdev/mobile-6-qa-session-question-shoutname-punctuation-31f7', sha: 'abc' }, additions: 12, deletions: 3, commits: 1 }
     const body = JSON.stringify({ action: 'opened', number: 6, pull_request: pullRequest, repository: { full_name: 'mobile-e2e/repo' }, sender: { login: 'flowuser' } })
     const signature = 'sha256=' + createHmac('sha256', secret).update(body).digest('hex')
-    const webhook = await request.post('http://127.0.0.1:4180/api/integrations/github/webhook', {
+    const webhook = await request.post('/api/integrations/github/webhook', {
       headers: { ...headers, 'Content-Type': 'application/json', 'X-GitHub-Event': 'pull_request', 'X-GitHub-Delivery': `${workspaceKey}-open-6`, 'X-Hub-Signature-256': signature },
       data: body,
     })
     expect(webhook.status()).toBe(202)
     const reviewId = (await webhook.json() as { reviewId: string }).reviewId
-    const patched = await request.patch(`http://127.0.0.1:4180/api/reviews/${reviewId}`, { headers, data: { draft: true, issueIds: [createdIssue.id] } })
+    const patched = await request.patch(`/api/reviews/${reviewId}`, { headers, data: { draft: true, issueIds: [createdIssue.id] } })
     expect(patched.status()).toBe(200)
     expect((await patched.json() as { issueIds: string[] }).issueIds).toEqual([createdIssue.id])
 

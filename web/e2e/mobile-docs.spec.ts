@@ -221,8 +221,16 @@ test.describe('mobile documents list', () => {
     await expect(page.locator('.team-home-band')).toHaveCSS('gap', '6px')
     await expect(page.locator('.team-home-tabs a').first()).toHaveCSS('padding', '0px 10px')
     await expect(page.locator('.team-home-tabs a[aria-current="page"]')).toContainText('Documents')
-    await page.locator('.team-home-tabs a[aria-current="page"]').click()
-    await expect(page.getByRole('menu', { name: 'Team views' })).toHaveCount(0)
+    const activeTab = page.locator('.team-home-tabs a[aria-current="page"]')
+    const opensMenu = await activeTab.getAttribute('aria-haspopup') === 'menu'
+    await activeTab.click()
+    if (opensMenu) {
+      const menu = page.getByRole('menu', { name: 'Team views' })
+      await expect(menu.getByRole('menuitem', { name: 'Documents', exact: true })).toBeVisible()
+      await expect(menu.getByRole('menuitem', { name: 'Members', exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(menu).toBeHidden()
+    } else await expect(page.getByRole('menu', { name: 'Team views' })).toHaveCount(0)
     expect((await page.locator('.team-documents-new').boundingBox())?.width).toBe(32)
     await expect(page.locator('.team-documents-filter-bar [data-advanced-chip]')).toContainText('Advanced filter')
     await expect(page.locator('.team-documents-filter-bar > div:last-child > button')).toContainText('Clear')

@@ -81,7 +81,7 @@ test('welcome document keeps its measured layout and Flow resources in view', as
   await expect(title).toBeVisible()
   for (const [element, expected] of [[mark, { x: 608.5, y: 108.5, width: 44, height: 44 }], [title, { x: 608.5, y: 176.5, width: 759, height: 46 }], [video, { x: 608.5, y: 300.5, width: 759, height: 426.94 }]] as const) {
     const rect = (await element.boundingBox())!
-    for (const dimension of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(rect[dimension] - expected[dimension])).toBeLessThanOrEqual(1)
+    for (const dimension of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(rect[dimension] - expected[dimension]), `${element} ${dimension}`).toBeLessThanOrEqual(1)
   }
   await expect(page.getByText('Introductory video unavailable')).toBeVisible()
   const docs = page.getByRole('link', { name: 'Flow documentation' })
