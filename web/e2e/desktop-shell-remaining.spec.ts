@@ -74,7 +74,9 @@ test('desktop text, query inset, shortcut focus and workspace menu retain their 
   const menu = page.locator('.workspace-primary-menu')
   await expect(menu.getByRole('menuitem').first()).toHaveCSS('line-height', 'normal')
   await expect.poll(async () => (await menu.boundingBox())?.width).toBeCloseTo(219.5, 1)
-  await expect.poll(async () => (await menu.boundingBox())?.height).toBeCloseTo(192.08, 0)
+  await expect(menu.getByRole('menuitem')).toHaveText([/Settings/, /Invite and manage members/, /Switch workspace/, /Log out/])
+  await expect(menu.getByRole('menuitem', { name: 'Download desktop app', exact: true })).toHaveCount(0)
+  await expect.poll(async () => (await menu.boundingBox())?.height).toBeCloseTo(148.96, 0)
 })
 
 test('clipboard toast uses a neutral desktop copy icon while compact styles stay unchanged', async ({ page, workspaceKey }) => {
