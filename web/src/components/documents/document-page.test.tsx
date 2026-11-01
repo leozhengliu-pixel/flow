@@ -527,6 +527,10 @@ describe('DocumentPage header, measured against the reference', () => {
     // An untouched document icon colour takes the header's dim glyph token; a chosen colour is kept.
     expect(title.querySelector('svg')).toHaveAttribute('data-color', 'var(--issue-header-icon)')
     expect(nav.querySelectorAll('.document-breadcrumb-separator')).toHaveLength(1)
+    const ancestors = nav.querySelector('.document-breadcrumb-ancestors')!
+    expect(ancestors).toContainElement(crumb)
+    expect(ancestors).toContainElement(nav.querySelector('.document-breadcrumb-separator') as HTMLElement)
+    expect(ancestors).not.toContainElement(title as HTMLElement)
   })
 
   it('draws a team parent as Team (page glyph in the team colour) › Documents › title', () => {

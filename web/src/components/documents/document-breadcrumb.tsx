@@ -63,8 +63,7 @@ export function DocumentBreadcrumb({ data, document, origin, onBack }: {
     crumbs = <button className="document-breadcrumb-link document-breadcrumb-parent" onClick={onBack} type="button"><FileText aria-hidden="true"/><span>{documentsLabel}</span></button>
   }
   return <nav aria-label={t('Document breadcrumb')} className="document-breadcrumbs">
-    {crumbs}
-    {separator}
+    <span className="document-breadcrumb-ancestors">{crumbs}{separator}</span>
     <strong className="document-breadcrumb-current"><span aria-hidden="true" className="document-breadcrumb-glyph is-document"><DocumentGlyph color={documentCrumbColor(document)} document={document}/></span><span data-i18n-ignore>{documentDisplayTitle(document, t)}</span></strong>
   </nav>
 }

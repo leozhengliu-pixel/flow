@@ -73,6 +73,27 @@ test.describe('mobile document view', () => {
       await expect(page.locator('.document-header')).toHaveCSS('gap', '12px')
       await expect(page.locator('.document-header-row')).toHaveCSS('padding', '0px 8px')
       await expect(page.locator('.document-title-actions')).toHaveCSS('gap', '6px')
+      const crumbs = await page.locator('.document-breadcrumbs').evaluate(nav => {
+        const parent = nav.querySelector('.document-breadcrumb-parent')!
+        const separator = nav.querySelector('.document-breadcrumb-separator')!
+        const current = nav.querySelector('.document-breadcrumb-current')!
+        const basis = (node: Element) => {
+          const clone = node.cloneNode(true) as HTMLElement
+          clone.style.cssText = 'position:fixed; width:max-content; flex:none; visibility:hidden'
+          node.parentElement!.append(clone)
+          const width = clone.getBoundingClientRect().width
+          clone.remove()
+          return width
+        }
+        const group = parent.parentElement!
+        const groupBasis = basis(group)
+        const currentBasis = basis(current)
+        const available = nav.getBoundingClientRect().width
+        const expectedGroup = available * groupBasis / (groupBasis + currentBasis)
+        return { sameGroup: separator.parentElement === group, actual: group.getBoundingClientRect().width, expected: expectedGroup }
+      })
+      expect(crumbs.sameGroup).toBe(true)
+      expect(crumbs.actual).toBeCloseTo(crumbs.expected, 1)
       expect((await page.locator('.document-title').boundingBox())?.y).toBe(150)
       expect((await page.locator('.document-editor .flow-prosemirror').boundingBox())?.x).toBe(-2)
       for (const selector of ['.document-mobile-menu', '.document-title-actions button[role="switch"]', '.document-title-actions button[aria-label="Document options"]', '.document-edited', '.document-header-actions button[aria-label="Copy document URL"]', '.document-header-actions button[aria-label="Change document subscribers"]']) {
