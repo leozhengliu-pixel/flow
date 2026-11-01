@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Separate the document label and title naturally in phone subscriber chips.
+
 - Preserve the base branch's text padding before the phone review direction arrow.
 
 - Align phone document metadata values using the widest translated label instead of a sampled label width.

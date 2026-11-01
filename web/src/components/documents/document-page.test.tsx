@@ -182,6 +182,7 @@ describe('DocumentPage header', () => {
     const user = userEvent.setup()
     const { props } = renderPage()
     await user.click(screen.getByRole('button', { name: 'Change document subscribers' }))
+    expect(screen.getByTestId('document-subscriber-chip')).toHaveTextContent(`Document ⋅ ${flowDocument.title}`)
     const list = await screen.findByRole('group', { name: 'Document subscribers' })
     expect(within(list).getByRole('checkbox', { name: 'Viewer' })).toBeChecked()
     expect(within(list).getByRole('checkbox', { name: 'Teammate' })).not.toBeChecked()
