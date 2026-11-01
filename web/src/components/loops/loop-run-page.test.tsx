@@ -65,7 +65,7 @@ describe('LoopRunPage', () => {
     const user = userEvent.setup()
     const { onNavigate } = renderPage()
     expect(await screen.findByRole('button', { name: /Scheduled run/ })).toBeVisible()
-    expect(screen.getByPlaceholderText('Search runs…')).toBeVisible()
+    expect(screen.getByPlaceholderText('Search runs by issue ID or title…')).toBeVisible()
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(/^Today at/)
     expect(screen.getByRole('button', { name: 'Edit loop' })).toBeVisible()
     expect(screen.getByText('Instructions')).toBeVisible()
@@ -105,7 +105,7 @@ describe('LoopRunPage', () => {
     const user = userEvent.setup()
     renderPage()
     await screen.findByRole('button', { name: /Scheduled run/ })
-    await user.type(screen.getByPlaceholderText('Search runs…'), 'scheduled')
+    await user.type(screen.getByPlaceholderText('Search runs by issue ID or title…'), 'scheduled')
     expect(screen.queryByRole('button', { name: /Manual run/ })).toBeNull()
     expect(screen.getByRole('button', { name: /Scheduled run/ })).toBeVisible()
   })
@@ -211,7 +211,7 @@ describe('LoopRunPage', () => {
     const reply = { id: 'reply-1', userId: viewer.id, body: 'Which bugs?', status: 'completed' as const, output: 'Bugs **A** and B.', createdAt: now.toISOString(), finishedAt: now.toISOString() }
     api.replyToLoopRun.mockResolvedValue({ ...completed, replies: [reply] })
     renderPage('run-1')
-    const box = await screen.findByRole('textbox', { name: 'Reply…' })
+    const box = await screen.findByRole('textbox', { name: 'Ask about this run…' })
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled()
     await user.type(box, 'Which bugs?{Enter}')
     await waitFor(() => expect(api.replyToLoopRun).toHaveBeenCalledWith('loop-1', 'run-1', 'Which bugs?', { skillIds: [], attachments: [] }))
@@ -225,7 +225,7 @@ describe('LoopRunPage', () => {
     const reply = { id: 'reply-1', userId: viewer.id, body: 'Check this', status: 'running' as const, attachments: [{ name: 'notes.md', contentType: 'text/markdown', size: 12 }], createdAt: now.toISOString() }
     api.replyToLoopRun.mockResolvedValue({ ...completed, replies: [reply] })
     const { onNavigate } = renderPage('run-1')
-    const box = await screen.findByRole('textbox', { name: 'Reply…' })
+    const box = await screen.findByRole('textbox', { name: 'Ask about this run…' })
     const footer = box.closest('form')!.querySelector('.loops-run-composer-actions')!
     // The reference app's layout: Skills on the left, attach then send on the right.
     expect([...footer.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Skills', 'Attach images, files, or videos', 'Send message'])

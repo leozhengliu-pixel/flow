@@ -41,7 +41,7 @@ const END_COLUMNS: Column[] = ["runs", "lastRun"];
 const COLUMNS: { id: Column; label: string }[] = [
   { id: "trigger", label: "Trigger" },
   { id: "owner", label: "Owner" },
-  { id: "runs", label: "Runs (30d)" },
+  { id: "runs", label: "Runs ( 30d )" },
   { id: "lastRun", label: "Last executed" },
 ];
 const TRIGGER_ORDER: LoopTriggerType[] = ["schedule", "issue", "project", "initiative", "release", "team", "cycle"];
@@ -319,8 +319,7 @@ export function LoopList({
           </div>
         </header>
       )}
-      {!empty && (
-        <div className="loops-toolbar">
+        <div className={`loops-toolbar${empty ? " is-empty" : ""}`}>
           {/* The reference app: tabs, then the "Find loops…" field inline; filter and display stay on the right. */}
           <div className="loops-toolbar-left">
             <div className="loops-tabs" role="tablist" aria-label={t("Loops")}>
@@ -373,7 +372,6 @@ export function LoopList({
             <LoopDisplayMenu settings={display} onChange={setDisplay} hideTeamToggle={Boolean(teamId)} />
           </div>
         </div>
-      )}
       {!empty && filtersActive && <LoopFilterBar data={data} filters={filters} groups={filterGroups} onChange={setFilters} onChoice={changeFilter} onDate={() => setDateOpen(true)} />}
       <TeamDateFilterDialog
         open={dateOpen}

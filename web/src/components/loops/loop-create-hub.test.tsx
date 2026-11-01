@@ -43,7 +43,8 @@ describe('LoopCreateHub', () => {
     expect(screen.getByText('Automate manual work for your team and keep your process moving')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Start from scratch' })).toBeVisible()
     expect(screen.getByPlaceholderText('Ask Flow to build the loop for you')).toBeVisible()
-    expect(screen.getByText('or pick a template')).toBeVisible()
+    expect(screen.queryByText('or pick a template')).toBeNull()
+    expect(screen.getByRole('navigation', { name: 'Loop template categories' })).toBeVisible()
     const card = await screen.findByRole('button', { name: /Triage agent/ })
     expect(card).toHaveTextContent('On triage')
     expect(card).toHaveTextContent('Route the issue to an owner')
@@ -65,10 +66,10 @@ describe('LoopCreateHub', () => {
     expect(takeLoopAgentAutostart('loop-new')).toBe(true)
   })
 
-  it('centers "or pick a template" on a divider and uses the reference app’s template icons', async () => {
+  it('places templates below the category filters and uses the matching template icons', async () => {
     const { view } = renderHub()
-    const heading = screen.getByRole('heading', { name: 'or pick a template' })
-    expect(heading.closest('.loops-hub-templates')).not.toBeNull()
+    expect(screen.queryByRole('heading', { name: 'or pick a template' })).toBeNull()
+    expect(view.container.querySelector('.loops-hub-categories + .loops-hub-templates')).not.toBeNull()
     const triage = await screen.findByRole('button', { name: /Triage agent/ })
     // The orange Triage status glyph, not the server's generic icon.
     const triageIcon = triage.querySelector('.loops-template-icon')!

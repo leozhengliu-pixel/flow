@@ -146,7 +146,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 0 8px 0 6px;
+  padding: 0 8px;
   border: 0;
   border-radius: 9999px;
   background: var(--theme-control);
@@ -235,7 +235,7 @@
   gap: 8px;
   padding: 0 8px;
 }
-.loops-tabs { display: flex; align-items: center; gap: 5px; }
+.loops-tabs { display: flex; align-items: center; gap: 6px; }
 .loops-tabs a {
   box-sizing: border-box;
   height: 28px;
@@ -379,7 +379,7 @@
 .loops-filtered-empty-notice button:first-of-type { margin-left: auto; }
 .loops-filtered-empty-notice button:last-child { width: 26px; display: grid; place-items: center; padding: 0; color: var(--theme-text-tertiary); }
 
-/* Creation hub — the reference app: 18/500 title, 15px subtitle, borderless composer, two-level template cards. */
+/* Creation hub */
 .loops-hub-scroll { min-height: 0; flex: 1; overflow: auto; padding: 56px 24px 48px; }
 .loops-hub { width: min(751px, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
 .loops-hub.is-dialog { width: auto; padding: 24px; }
@@ -433,10 +433,6 @@ html:root[data-theme="light"] body .dialog-content .loops-hub-composer textarea 
 .loops-hub-attach:disabled { opacity: 0.45; cursor: default; }
 .loops-hub-send { background: var(--accent-primary); color: var(--on-accent); }
 .loops-hub-send:disabled { background: var(--theme-surface-hover); color: var(--theme-text-primary); cursor: default; }
-/* "or pick a template" sits centered on a hairline. */
-.loops-hub-templates h3 { display: flex; align-items: center; gap: 12px; margin: 0 0 24px; color: var(--theme-text-secondary); font-size: 13px; font-weight: 450; line-height: 15px; text-align: center; }
-.loops-hub-templates h3::before,
-.loops-hub-templates h3::after { content: ""; flex: 1; height: 0.5px; background: var(--theme-border); }
 .loops-template-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .loops-template-card {
   position: relative;
@@ -491,15 +487,9 @@ html:root body .command-dialog.loops-picker-dialog [cmdk-item].is-preview:not(#_
 .loops-icon-picker.loops-icon-picker:hover,
 .loops-icon-picker.loops-icon-picker[data-state='open'] { background: color-mix(in srgb, var(--view-color) 22%, transparent); }
 .loops-icon-picker.loops-icon-picker svg { width: 16px; height: 16px; }
-.loops-name-input { min-width: 0; flex: 1 1 0; height: 40px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--theme-text-primary); font: 500 32px/40px var(--font); }
+.loops-name-input { min-width: 0; flex: 1 1 0; height: 32px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--theme-text-primary); font: 500 32px/40px var(--font); }
 .loops-name-input::placeholder { color: var(--theme-text-tertiary); }
 .loops-level-button { flex: none; }
-@media (min-width: 801px) {
-  .loops-trigger-button { background: var(--cs-control-tertiary); border-color: var(--cs-border-solid); font-weight: 450; }
-  .loops-date-control.date-time-control { min-width: 104px; background: var(--cs-control-tertiary); border-color: var(--cs-border-solid); font-weight: 400; }
-  .loops-interval-input { height: 26px; background: var(--cs-control-tertiary); border-color: var(--cs-border-solid); font-weight: 400; }
-  .loops-trigger-sentence .select-control { height: 26px; background: var(--cs-control-tertiary); border-color: var(--cs-border-solid); font-weight: 400; }
-}
 /* The reference app's settings-list card: one step lighter than the page, a hairline outline and the panel shadow.
    On the loop page and in the editor the cards bleed 16px past the text column. */
 .loops-card {
@@ -575,6 +565,8 @@ html:root body .command-dialog.loops-picker-dialog [cmdk-item].is-preview:not(#_
 .loops-versions-button:hover { background: var(--bg-hover); }
 
 /* Trigger sentence */
+.loops-trigger-schedule { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.loops-trigger-type { display: contents; }
 .loops-trigger-event { display: flex; flex-direction: column; gap: 8px; }
 .loops-trigger-sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--theme-text-secondary); font-size: 13px; line-height: 28px; }
 .loops-sentence-text { color: var(--theme-text-secondary); white-space: nowrap; }
@@ -912,6 +904,48 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-feedback button:hover,
 .loops-run-feedback button.is-active { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 
+@media (min-width: 801px) {
+  .loops-toolbar,
+  .loops-run-tabs { height: 43.5px; flex-basis: 43.5px; }
+  .loops-toolbar-left { gap: 12px; }
+  .loops-search.is-inline { position: relative; padding: 0; border: 0; background: transparent; }
+  .loops-search.is-inline > svg { position: absolute; z-index: 1; left: 10px; pointer-events: none; }
+  .loops-search.is-inline input { box-sizing: border-box; width: 100%; height: 28px; padding: 6px 25px 6px 32px; border: .5px solid transparent; border-radius: 9999px; background: var(--bg-panel); }
+  .loops-search.is-inline input:focus { border-color: var(--focus-ring); }
+  .loops-search-clear { position: absolute; right: 6px; }
+  .loops-badge { line-height: normal; }
+  .loops-group-row,
+  .loops-template-card,
+  .loops-card { background: var(--loops-card-bg); }
+  .loops-hub-scratch.loops-secondary-button,
+  .loops-hub-composer { background: var(--bg-subtle); }
+  .loops-hub-scroll { padding: 48px 32px; }
+  .loops-hub:not(.is-dialog) { width: min(752px, 100%); gap: 32px; }
+  .loops-hub:not(.is-dialog) .loops-hub-header h2 { margin-bottom: 12px; padding-top: 4px; }
+  .loops-hub:not(.is-dialog) .loops-hub-categories { margin-top: 0; }
+  .loops-hub-composer { height: 104px; padding: 12px; }
+  .loops-hub-composer textarea { min-height: 44px; padding: 0 6px; }
+  .loops-hub-composer footer { height: 24px; padding: 0; }
+  .loops-hub-categories button.is-active { background: var(--bg-active); }
+  .loops-section-title,
+  .loops-section-heading .loops-section-title { line-height: normal; }
+  .loops-section-title { margin-bottom: 12px; }
+  .loops-trigger-schedule { flex-direction: column; align-items: stretch; gap: 8px; }
+  .loops-trigger-type { height: 28px; display: flex; align-items: center; }
+  .loops-trigger-button { background: var(--loops-schedule-bg); border-color: var(--loops-schedule-border); }
+  .loops-trigger-button-label { font: 450 12px/normal var(--font); }
+  .loops-date-control.date-time-control { min-width: 104px; background: var(--loops-schedule-bg); border-color: var(--loops-schedule-border); font-weight: 400; }
+  .loops-interval-input { height: 26px; background: var(--loops-schedule-bg); border-color: var(--loops-schedule-border); font-weight: 400; }
+  .loops-trigger-sentence .select-control { height: 26px; min-width: 0; background: var(--loops-schedule-bg); border-color: var(--loops-schedule-border); font-weight: 400; }
+  .loops-permission-row .loops-select-button { height: 30px; font-size: 13px; font-weight: 400; }
+  .loops-run-body { padding: 16px 8px 48px; }
+  .loops-run-header { padding: 0 12px; }
+  .loops-run-header h1 { font: 500 13px/16px var(--font); }
+  .loops-run-subtitle { margin-inline: 12px; }
+  .loops-run-composer { margin-inline: 8px; }
+  .loops-run-composer-actions .loops-run-skills { line-height: normal; }
+}
+
 /* Team page embed: the toolbar joins the team tab header. */
 .loops-embedded .loops-toolbar { position: absolute; z-index: 22; top: -44px; right: 0; left: auto; border: 0; background: transparent; }
 .loops-embedded .loops-tabs { display: none; }
@@ -923,6 +957,7 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
   .loops-detail-page,
   .loops-run-page { height: 100%; margin: 0; border: 0; border-radius: 0; }
   .loops-mobile-menu { display: grid; }
+  .loops-toolbar.is-empty { display: none; }
   .loops-template-grid { grid-template-columns: minmax(0, 1fr); }
   .loops-table-head,
   .loops-table-row { grid-template-columns: minmax(0, 1fr); padding-right: 16px; padding-left: 20px; }

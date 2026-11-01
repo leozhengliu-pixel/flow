@@ -85,7 +85,7 @@ describe('LoopEditor', () => {
     expect(screen.getByRole('button', { name: 'Compose with Agent' })).toBeVisible()
     expect(await screen.findByRole('textbox', { name: 'Instructions' })).toHaveTextContent('Route incoming issues.')
     expect(screen.getByText('No connectors added')).toBeVisible()
-    const permissions = screen.getByRole('region', { name: 'Permissions' })
+    const permissions = screen.getByRole('region', { name: 'Capabilities & access' })
     expect(permissions).toHaveTextContent("Choose which team's data are available to this loop")
     expect(within(permissions).getByRole('button', { name: 'Team access' })).toHaveTextContent('All public teams')
     expect(within(permissions).getByRole('checkbox', { name: 'Allow changes outside triggering issue' })).toBeChecked()
@@ -118,7 +118,7 @@ describe('LoopEditor', () => {
     const user = userEvent.setup()
     api.getLoopConfig.mockResolvedValue({ webSearchAvailable: false, webSearchProvider: '' })
     const { onNavigate } = renderEditor({ ...draft, templateId: undefined })
-    const permissions = screen.getByRole('region', { name: 'Permissions' })
+    const permissions = screen.getByRole('region', { name: 'Capabilities & access' })
     expect(await within(permissions).findByRole('note')).toHaveTextContent("Web search isn't configured for this workspace.")
     const toggle = within(permissions).getByRole('checkbox', { name: 'Web search' })
     expect(toggle).toBeEnabled()
@@ -129,7 +129,7 @@ describe('LoopEditor', () => {
   it('shows no web search hint when a provider is configured', async () => {
     renderEditor({ ...draft, templateId: undefined })
     await waitFor(() => expect(api.getLoopConfig).toHaveBeenCalled())
-    expect(within(screen.getByRole('region', { name: 'Permissions' })).queryByRole('note')).toBeNull()
+    expect(within(screen.getByRole('region', { name: 'Capabilities & access' })).queryByRole('note')).toBeNull()
   })
 
   it('uses the trigger placeholder for empty instructions', async () => {
