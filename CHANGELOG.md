@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Use the shared muted foreground for desktop sidebar team headings while retaining the highlighted team-menu hover state and phone styles.
 
+- Match desktop project sidebar labels, disclosure spacing and icon-button padding to the measured panel controls without changing phone layouts.
+
 - Update browser inventories for expanded desktop shortcut help and the four default My issues tabs, while checking the shared view remains available.
 
 - Keep the desktop M M shortcut on triage's duplicate workflow so it records the relation, changes status and advances the queue.
