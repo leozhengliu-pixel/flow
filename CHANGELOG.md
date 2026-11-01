@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match desktop command and shortcut-help keycap typography, group-heading padding and muted labels without changing phone controls.
+
 - Use the shared muted foreground for desktop sidebar team headings while retaining the highlighted team-menu hover state and phone styles.
 
 - Match desktop project sidebar labels, disclosure spacing and icon-button padding to the measured panel controls without changing phone layouts.

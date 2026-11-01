@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "../components/workspace/workspace.css";
+:root{--shortcut-muted:lch(63.304% 1.425 272)}
+:root[data-theme="light"]{--shortcut-muted:lch(40% 1 282)}
 :root{--document-desktop-send-bg:lch(17.349 1.139 272);--document-desktop-avatar-bg:lch(70 60 30)}
 :root[data-theme="light"]{--document-desktop-send-bg:var(--theme-surface-hover)}
 :root{--issue-desktop-comment-placeholder:lch(39.452 1.425 272)}
