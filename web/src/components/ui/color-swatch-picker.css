@@ -22,7 +22,6 @@
 .csp-custom-value[data-note] label{flex:none}
 .csp-custom-value label span{flex:none;color:var(--csp-hex-label);font-size:13px;line-height:normal;font-weight:500}
 .csp-custom-value input{box-sizing:border-box;min-width:0;flex:1;height:15.5px;padding:0 6px;border:0;outline:0;background:transparent;color:var(--csp-hex-text);font-family:inherit;font-size:13px;line-height:normal;font-weight:400}
-.csp-custom-value[data-note] input{width:89.67px;flex:none}
 .csp-custom-note{min-width:0;overflow:hidden;color:var(--csp-hex-label);font-size:13px;line-height:normal;font-weight:450;text-overflow:ellipsis;white-space:nowrap}
 .csp-custom-controls{height:100px;display:flex;gap:16px;margin-top:16px}
 .csp-pad{position:relative;min-width:0;flex:0 1 350px;height:100px}

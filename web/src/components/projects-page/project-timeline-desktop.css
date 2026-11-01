@@ -7,8 +7,8 @@
   .lp-project-timeline__zoom-options [role=menuitemradio] { display: flex; align-items: center; min-height: 28px; padding: 0 8px; border-radius: 6px; outline: none; }
   .lp-project-timeline__zoom-options [data-highlighted],
   .lp-project-timeline__zoom-options [data-state=checked] { background: var(--theme-control-hover); }
-  .lp-project-timeline__today { width: 52.1px; padding-inline: 0; justify-content: center; }
-  .lp-project-timeline__zoom-menu { width: 56.9px; padding-inline: 0; justify-content: center; }
+  .lp-project-timeline__today { justify-content: center; }
+  .lp-project-timeline__zoom-menu { justify-content: center; }
   .lp-project-timeline__header { height: 32px; }
   .lp-project-timeline__corner { display: none; }
   .lp-project-timeline__major, .lp-project-timeline__minor { height: 16px; }

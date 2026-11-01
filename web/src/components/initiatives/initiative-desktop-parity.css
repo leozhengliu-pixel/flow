@@ -30,7 +30,7 @@
   .li-overview .li-resources__content { min-height: 28px; margin: 0; }
   .li-overview .li-resource-add { height: 28px; }
   .li-detail .li-overview > .li-resources { padding: 0; min-height: 28px; }
-  .li-overview h3 { flex: 0 0 67.73px; width: 67.73px; margin: 0; font: 500 13px var(--font); line-height: 28px; }
+  .li-overview h3 { flex: none; width: auto; margin: 0; font: 500 13px var(--font); line-height: 28px; }
   .li-overview .li-properties { flex-wrap: wrap; gap: 4px; }
   .li-overview .li-properties .lp-project-property-trigger,
   .li-overview .li-properties .project-target-date-picker-trigger { height: 28px; padding: 0 6px; gap: 8px; font: 500 13px var(--font); line-height: normal; }
@@ -103,7 +103,7 @@
 .li-project-count__ring, .li-latest-update > .li-latest-update__desktop-action, .li-sidebar-teams { display: none; }
 @media (min-width: 1024px) {
   .li-project-count__ring { display: inline-flex; }
-  .li-project-count { min-width: 57.4px; padding-inline: 2.5px; font-weight: 450; }
+  .li-project-count { padding-inline: 2.5px; font-weight: 450; }
   .li-project-count__value { display: inline; }
   .li-detail .li-latest-update > .li-latest-update__desktop-action { display: inline-flex; }
   .li-detail-sidebar > .li-sidebar-teams { display: block; }

@@ -204,8 +204,6 @@
 .document-owner-row { height: 44px; }
 .document-last-edit-row { height: 40px; }
 .document-owner-row > span:first-child,
-.document-last-edit-row > span:first-child { flex: 0 0 71.4px; }
-.document-owner-row > span:first-child,
 .document-last-edit-row > span:first-child,
 .document-last-edit-row time { color: var(--theme-text-secondary); }
 .document-last-edit-row time { margin-left: auto; white-space: nowrap; }
@@ -559,7 +557,6 @@ button.document-icon.is-empty:hover,
     color: var(--action-menu-text);
     font: 400 12px/18px var(--font);
     white-space: nowrap;
-    min-width: 104.98px;
   }
   .document-subscribers__document > span > span { display: inline; color: inherit; font: 500 12px/18px var(--font); }
   .document-subscribers__document > span::after { content: ""; }

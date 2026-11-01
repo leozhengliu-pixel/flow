@@ -333,8 +333,6 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
     line-height: normal;
     letter-spacing: normal;
   }
-  html:root .settings-app .settings-main .domain-labels-header .settings-action:first-child { width: 93.04px; }
-  html:root .settings-app .settings-main .domain-labels-header .settings-action:last-child { width: 86.09px; }
   html:root .settings-app .settings-main .domain-labels-toolbar.label-settings-toolbar {
     box-sizing: border-box;
     width: 100%;

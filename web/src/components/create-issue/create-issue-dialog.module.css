@@ -227,7 +227,7 @@
   .iconButton .compactGlyph, .moreButton svg, .attachButton .compactGlyph { opacity: .72; }
   .footer { height: 44px; flex-basis: 44px; padding: 0 12px 12px; border-top: 0; gap: 18px; }
   .attachButton { width: 32px; height: 32px; flex: 0 0 32px; padding: 0 2px; font-size: 12px; font-weight: 500; line-height: normal; }
-  .submit { box-sizing: border-box; min-width: 0; width: 92.63px; height: 32px; flex: 0 0 92.63px; padding: 0 10px; box-shadow: var(--set-search-shadow); line-height: normal; white-space: nowrap; }
+  .submit { box-sizing: border-box; min-width: 0; height: 32px; padding: 0 10px; box-shadow: var(--set-search-shadow); line-height: normal; white-space: nowrap; }
   .createMore { min-width: 0; gap: 6px; font-weight: 400; white-space: nowrap; }
   .createMore :global([data-control="toggle"]) { background: var(--create-issue-toggle-off); }
   .confirmActions { height: auto; min-height: 40px; display: flex; flex-wrap: wrap; justify-content: flex-end; }
