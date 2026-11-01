@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext } from '@playwright/test'
 import { test } from './workspace-fixture'
+import type { FlowDocument } from '../src/types/flow'
 
 test.describe('mobile document options', () => {
   test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
@@ -52,7 +53,7 @@ test.describe('mobile document options', () => {
 })
 
 test.describe('mobile document view', () => {
-  test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+  test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark', timezoneId: 'America/Los_Angeles' })
 
   for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
     test(`short project document retains its header and editable body at ${viewport.width}px`, async ({ page, request, workspaceKey }) => {
@@ -117,6 +118,26 @@ test.describe('mobile document view', () => {
       const response = await request.post('/api/documents', { headers, data: { title: '[mobile] Metadata parity', content: '[mobile] Body' } })
       expect(response.status()).toBe(201)
       const document = await response.json() as { slugId: string }
+      const ownerName = 'Skyler Anderson'
+      const editedAt = '2026-10-29T06:26:00Z'
+      const metadata = (doc: FlowDocument) => ({
+        ...doc, updatedAt: editedAt,
+        creator: { ...doc.creator, name: ownerName, displayName: ownerName },
+        revisions: doc.revisions.map(revision => ({ ...revision, createdAt: editedAt, author: { ...revision.author, name: ownerName, displayName: ownerName } })),
+      })
+      await page.route('**/api/bootstrap*', async route => {
+        const response = await route.fetch()
+        const data = await response.json()
+        for (const user of [data.viewer, ...data.users]) user.name = user.displayName = ownerName
+        data.documents = data.documents.map(metadata)
+        await route.fulfill({ response, json: data })
+      })
+      await page.route('**/api/documents/**', async route => {
+        if (route.request().method() !== 'GET') return route.continue()
+        const response = await route.fetch()
+        const data = await response.json()
+        await route.fulfill({ response, json: data.creator ? metadata(data) : data })
+      })
       await page.setViewportSize(viewport)
       await page.goto(`/${workspaceKey}/document/${document.slugId}`)
 
@@ -139,6 +160,10 @@ test.describe('mobile document view', () => {
       const editorAvatar = (await page.locator('.document-last-edit-row .document-meta-avatar').boundingBox())!
       expect(ownerAvatar.x).toBeCloseTo(editorAvatar.x, 1)
       expect(ownerAvatar.x - ownerLabel.x - ownerLabel.width).toBeCloseTo(12, 1)
+      const editor = (await page.locator('.document-last-edit-row .document-person').boundingBox())!
+      const time = page.locator('.document-last-edit-row time')
+      await expect(time).toHaveText('Oct 28, 11:26 PM')
+      expect((await time.boundingBox())!.x - editor.x - editor.width).toBeCloseTo(12, 1)
       const history = (await page.locator('.document-history-action button').boundingBox())!
       expect(history.x - box.x).toBeCloseTo(box.x + box.width - history.x - history.width, 0)
       expect(history.width).toBeGreaterThan(box.width - 20)

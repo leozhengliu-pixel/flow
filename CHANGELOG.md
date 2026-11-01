@@ -91,6 +91,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Match initiative overview spacing, property pills, header controls and latest update cards on phones without changing desktop layout.
 
 ### Fixed
+- Keep the document owner button's hover padding out of phone metadata column sizing, so the editor-to-time gap stays consistent.
 - Shrink phone document parent breadcrumbs and their separator together, preserving the title's natural share of the header.
 - Let phone chat titles use the available header space while keeping adjacent favorite and options controls inside the viewport.
 - Center the desktop Inbox welcome document within symmetric insets, and keep isolated browser checks aligned with adaptive tabs, supported workspace commands and native border rounding.
