@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Use natural icon spacing in phone review and cycle controls, and let issue composer toolbars contain their controls and bottom padding.
+
 - Align phone preference action hit areas with other settings actions and use the standard icon gap for new webhooks.
 
 - Use consistent phone team-tab padding and toolbar gaps, and keep restore-only document history controls on a compact toolbar while history navigation can still wrap.
