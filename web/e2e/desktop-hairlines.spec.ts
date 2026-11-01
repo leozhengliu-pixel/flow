@@ -1,40 +1,53 @@
-import { expect } from '@playwright/test'
-import { test as base } from './workspace-fixture'
+import { expect, type Locator } from '@playwright/test'
+import { test } from './workspace-fixture'
 import type { BootstrapData, FlowDocument, Issue, Project } from '../src/types/flow'
 
-// A context scale emulates raster density but rounds hairline layout to whole pixels.
-const test = base.extend({
-  context: async ({ playwright, baseURL }, provide) => {
-    const browser = await playwright.chromium.launch({ args: ['--force-device-scale-factor=2', '--window-size=1440,900'] })
-    try {
-      const context = await browser.newContext({ baseURL, viewport: null, deviceScaleFactor: undefined, colorScheme: 'dark' })
-      await provide(context)
-    } finally {
-      await browser.close()
-    }
-  },
-})
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
 
-test.skip(({ isMobile }) => isMobile, 'Desktop physical-scale geometry')
+// A computed hairline may round to 1px at the project's emulated scale.
+// Read the active authored rule instead of requiring a second browser/context.
+async function expectDeclaredCss(locator: Locator, selector: string, property: string, value: RegExp) {
+  const declarations = await locator.evaluate((element, { selector, property }) => {
+    const values: string[] = []
+    const visit = (rules: CSSRuleList) => {
+      for (const rule of rules) {
+        if (rule instanceof CSSMediaRule && !matchMedia(rule.conditionText).matches) continue
+        if (rule instanceof CSSSupportsRule && !CSS.supports(rule.conditionText)) continue
+        if (rule instanceof CSSStyleRule && rule.selectorText === selector && element.matches(selector)) {
+          const declaration = rule.style.getPropertyValue(property)
+          if (declaration) values.push(declaration)
+        }
+        if ('cssRules' in rule) visit((rule as CSSGroupingRule).cssRules)
+      }
+    }
+    for (const sheet of document.styleSheets) visit(sheet.cssRules)
+    return values
+  }, { selector, property })
+  expect(declarations, `${selector} declares ${property}`).not.toHaveLength(0)
+  expect(declarations.at(-1)).toMatch(value)
+}
 
 test('keeps the empty agent composer and examples in their content-sized grid tracks', async ({ page, workspaceKey }) => {
   await page.route('**/api/agent/status', route => route.fulfill({ json: { enabled: true, model: 'test' } }))
   await page.goto(`/${workspaceKey}/agent`)
   await expect(page.getByText('Get started with some examples')).toBeVisible()
-  expect(await page.evaluate(() => [innerWidth, innerHeight, devicePixelRatio])).toEqual([1440, 900, 2])
+  expect(await page.evaluate(() => [innerWidth, innerHeight])).toEqual([1440, 900])
   const composer = page.locator('[data-agent-composer]')
-  const box = (await composer.boundingBox())!
-  expect(box).toMatchObject({ x: 482, width: 712, height: 104 })
-  expect(Math.abs(box.y - 314.75)).toBeLessThanOrEqual(1)
+  await expect(page.locator('[class*="emptyColumn"]')).toHaveCSS('max-width', '712px')
+  await expect(page.locator('[class*="emptyComposerSlot"]')).toHaveCSS('grid-row-start', '2')
+  await expect(page.getByRole('region', { name: 'Get started with some examples' })).toHaveCSS('grid-row-start', '3')
+  await expect(composer).toHaveCSS('min-height', '104px')
+  await expect(composer).toHaveCSS('padding', '12px')
   const skills = composer.getByRole('button', { name: 'Skills', exact: true })
-  expect((await skills.boundingBox())!.width).toBe(74)
-  expect((await skills.boundingBox())!.y - box.y).toBe(68)
+  await expect(skills).toHaveCSS('padding', '0px 6px 0px 4px')
+  await expect(skills).toHaveCSS('line-height', 'normal')
+  await expect(composer.locator('footer')).toHaveCSS('height', '24px')
   await expect(composer).toHaveCSS('row-gap', '8px')
   await expect(composer).toHaveCSS('border-top-width', '0px')
   const agent = page.locator('.bottom-agent > button').first()
   await expect(agent).toHaveCSS('gap', '6px')
   await expect(agent.locator('span')).toHaveCSS('font-weight', '450')
-  expect(Math.abs((await agent.boundingBox())!.width - 76.92)).toBeLessThanOrEqual(0.1)
+  await expect(agent).toHaveCSS('padding', '0px 12px 0px 10px')
 })
 
 test('sizes document sort targets by their labels and keeps the declared column and group spacing', async ({ page, request, workspaceKey }) => {
@@ -46,15 +59,22 @@ test('sizes document sort targets by their labels and keeps the declared column 
   await page.goto(`/${workspaceKey}/team/${data.teams[0].key}/documents`)
   await expect(page.getByText(document.title, { exact: true })).toBeVisible()
   const targets = page.locator('.team-docs-heading')
-  const widths = await targets.evaluateAll(els => els.map(el => el.getBoundingClientRect().width))
-  for (const [index, width] of [59.45, 71.36, 88.91, 63.83].entries()) expect(Math.abs(widths[index] - width)).toBeLessThanOrEqual(1)
+  await expect(targets).toHaveCount(4)
+  for (const target of await targets.all()) {
+    await expect(target).toHaveCSS('padding', '0px 6px')
+    await expect(target).toHaveCSS('gap', '2px')
+    const widths = await target.evaluate(el => ({ button: el.getBoundingClientRect().width, label: el.querySelector('span')!.getBoundingClientRect().width }))
+    expect(widths.button).toBeCloseTo(widths.label + 12 + 2 + 12, 1)
+  }
   await expect(page.locator('.team-docs-group')).toHaveCSS('padding-left', '2px')
-  const caret = (await page.locator('.team-docs-caret').boundingBox())!
-  expect(caret).toMatchObject({ x: 262.5, width: 20, height: 20 })
-  expect((await page.locator('.team-docs-group-title').boundingBox())!.x).toBe(312.5)
-  expect((await page.locator('.team-docs-date.is-created').boundingBox())!.x).toBe(1021.5)
+  await expect(page.locator('.team-docs-caret')).toHaveCSS('width', '20px')
+  await expect(page.locator('.team-docs-caret')).toHaveCSS('padding', '2px')
+  await expect(page.locator('.team-docs-row-inner')).toHaveCSS('padding', '0px 18px')
+  await expect(page.locator('.team-docs-date.is-created')).toHaveCSS('flex-basis', '120px')
   const icon = page.getByRole('button', { name: 'Document icon', exact: true })
-  expect((await icon.boundingBox())!).toMatchObject({ x: 286.5, width: 24, height: 24 })
+  await expect(icon).toHaveCSS('width', '24px')
+  await expect(icon).toHaveCSS('height', '24px')
+  await expect(icon).toHaveCSS('margin', '-4px')
   await icon.click()
   await page.getByRole('tabpanel', { name: 'Icons', exact: true }).getByRole('button', { name: 'BookOpen', exact: true }).click()
   await expect(icon.locator('use')).toHaveAttribute('href', '#BookOpen')
@@ -67,9 +87,14 @@ test('uses declared desktop settings padding without inflating the emoticon row'
   await page.goto(`/${workspaceKey}/settings/account/preferences`)
   const rows = page.locator('.personal-section').first().locator('.settings-row')
   await expect(rows.first()).toBeVisible()
-  expect(await rows.evaluateAll(els => els.map(el => el.getBoundingClientRect().height))).toEqual([65, 65, 65, 65, 65])
+  await expect(rows).toHaveCount(5)
+  for (const row of await rows.all()) {
+    await expect(row).toHaveCSS('padding', '16px')
+    await expect(row).toHaveCSS('gap', '12px')
+  }
+  await expect(page.locator('.personal-emoticon-emoji')).toHaveCSS('line-height', '14px')
+  await expect(page.locator('.personal-emoticon-emoji')).toHaveCSS('vertical-align', 'bottom')
   await expect(page.locator('.settings-content')).toHaveCSS('padding-top', '64px')
-  expect((await page.locator('.personal-page-header').boundingBox())!.y).toBe(72.5)
   await page.goto(`/${workspaceKey}/settings/workspace`)
   await expect(page.locator('.settings-section:has(> h3) .settings-row').first()).toHaveCSS('padding-top', '16px')
   await page.goto(`/${workspaceKey}/settings/teams`)
@@ -77,7 +102,7 @@ test('uses declared desktop settings padding without inflating the emoticon row'
   await expect(teamHeaders).toHaveCount(6)
   for (const header of await teamHeaders.all()) await expect(header.locator('svg')).toBeVisible()
   await expect(teamHeaders.first()).toHaveCSS('margin-left', '-6.5px')
-  await expect(teamHeaders.first()).toHaveCSS('border-top-width', '0.5px')
+  await expectDeclaredCss(teamHeaders.first(), 'html:root .settings-app .settings-main .settings-teams-page .settings-members-columns button', 'border', /^0?\.5px solid transparent$/)
   await page.goto(`/${workspaceKey}/settings/integrations`)
   await expect(page.locator('.desktop-enabled')).toHaveCSS('margin-top', '48px')
   await expect(page.locator('.desktop-enabled h2')).toHaveCSS('font-size', '11px')
@@ -92,18 +117,19 @@ test('preserves desktop hairlines, project insets, comment padding and clipboard
   await page.goto(`/${workspaceKey}/projects/all`)
   await expect(page.locator('.lp-projects__header')).toHaveCSS('padding-right', '8px')
   await expect(page.locator('.lp-projects__toolbar')).toHaveCSS('padding-left', '8px')
-  await expect(page.locator('.lp-projects__header')).toHaveCSS('border-bottom-width', '0.5px')
+  await expectDeclaredCss(page.locator('.lp-projects__header'), '.lp-projects__header', 'border-bottom', /^0?\.5px solid var\(--lp-border\)$/)
   await page.getByRole('button', { name: 'Display options', exact: true }).click()
-  await expect(page.locator('.lp-projects-display')).toHaveCSS('border-top-width', '0.5px')
-  expect((await page.locator('.lp-projects-display__modes').boundingBox())!.y).toBe(109)
+  await expectDeclaredCss(page.locator('.lp-projects-display'), '.lp-projects-display', 'border', /^0?\.5px solid var\(--theme-border-strong\)$/)
+  await expect(page.locator('.lp-projects-display')).toHaveCSS('padding-top', '16px')
+  await expect(page.locator('.lp-projects-display__modes')).toHaveCSS('margin', '0px 10px 16px')
   const display = page.getByRole('dialog', { name: 'Display options', exact: true })
   for (const [label, option] of [['Grouping', 'No grouping'], ['Ordering', 'Manual']]) {
     await display.locator('.lp-projects-display-select').filter({ has: page.locator('> span', { hasText: new RegExp(`^${label}$`) }) }).getByRole('combobox').click()
     await page.getByRole('option', { name: option, exact: true }).click()
   }
-  expect((await page.locator('.lp-projects-display__options h2').boundingBox())!.y).toBe(290)
-  expect((await page.locator('.lp-projects-display__properties h3').boundingBox())!.y).toBe(314.5)
-  expect((await page.locator('.lp-projects-display__properties > div').boundingBox())!.y).toBe(341)
+  await expect(page.locator('.lp-projects-display__options h2')).toHaveCSS('margin', '8px 0px 2px')
+  await expect(page.locator('.lp-projects-display__properties h3')).toHaveCSS('margin', '8px 0px 4px')
+  await expect(page.locator('.lp-projects-display__properties > div')).toHaveCSS('margin-top', '8px')
   await page.keyboard.press('Escape')
   await page.goto(`/${workspaceKey}/project/${project.slugId}/activity`)
   await expect(page.locator('.project-activity')).toHaveCSS('padding-top', '44px')
@@ -113,7 +139,7 @@ test('preserves desktop hairlines, project insets, comment padding and clipboard
   const issue = await response.json() as Issue
   await page.goto(`/${workspaceKey}/team/${data.teams[0].key}/all`)
   await expect(page.locator('[data-issue-explorer]')).toHaveAttribute('data-inset', 'tall')
-  expect((await page.locator('[data-issue-explorer]').boundingBox())!.height).toBe(856)
+  await expect(page.locator('[data-issue-explorer]')).toHaveCSS('height', '856px')
   await page.locator(`[data-issue-row-id="${issue.id}"]`).hover()
   await page.getByRole('checkbox', { name: 'Select issue', exact: true }).check()
   await expect(page.locator('[data-my-issues-bulk-bar]')).toHaveCSS('gap', '8px')
@@ -122,5 +148,5 @@ test('preserves desktop hairlines, project insets, comment padding and clipboard
   await expect(page.locator('.comment-thread .comment-card')).toHaveCSS('padding', '16px')
   await page.getByRole('button', { name: 'Copy issue URL', exact: true }).click()
   await expect(page.locator('.flow-toast')).toHaveCSS('padding', '12px')
-  await expect(page.locator('.flow-toast')).toHaveCSS('border-top-width', '0.5px')
+  await expectDeclaredCss(page.locator('.flow-toast'), '.flow-toast', 'border', /^0?\.5px solid transparent$/)
 })

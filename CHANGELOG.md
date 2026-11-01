@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Run desktop spacing browser checks with the repository's project context and assert declared hairlines instead of device-scale-dependent coordinates.
+
 - Let document selection actions and Agent history ages size to their rendered text in every language.
 
 - Separate the document label and title naturally in phone subscriber chips.
