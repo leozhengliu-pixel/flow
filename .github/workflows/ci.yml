@@ -23,6 +23,11 @@ jobs:
   # "Web (Node 24 LTS)" below is the required status check that gathers them.
   web-checks:
     name: Web lint, route inventory and build
+    # Keep the initial 20 hosted runners available for all API shards, browser
+    # shards, the web coverage gates, and the API static checks. This short job
+    # starts as soon as the browser aggregate frees a runner.
+    needs: [e2e]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -112,6 +117,8 @@ jobs:
 
   web-node-26:
     name: Web (Node 26 compatibility)
+    needs: [e2e]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -141,6 +148,8 @@ jobs:
 
   sdk:
     name: TypeScript SDK
+    needs: [e2e]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -172,9 +181,9 @@ jobs:
       - name: Build
         run: npm run build
 
-  # 4 browser + 6 API test + 10 other initially runnable jobs = 20, the
-  # hosted-runner limit. Aggregates replace completed dependencies, not add to
-  # that peak. Keep api-test.max-parallel in sync with this budget.
+  # 4 browser + 12 API test + 3 web coverage gates + 1 API static job = 20,
+  # the hosted-runner limit. The remaining short jobs wait for the browser
+  # aggregate, so all API shards run in one wave instead of two.
   e2e-shard:
     name: Browser E2E (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
@@ -320,7 +329,7 @@ jobs:
         working-directory: api
     strategy:
       fail-fast: false
-      max-parallel: 6
+      max-parallel: 12
       matrix:
         include:
           - { name: 'server 1/8', profile: server-1, package: ./cmd/server, shard: 1, shards: 8 }
@@ -496,6 +505,8 @@ jobs:
 
   infrastructure:
     name: Infrastructure integration
+    needs: [e2e]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -591,6 +602,8 @@ jobs:
   # coding sessions (track C): the in-sandbox runner and the sandbox image files.
   sandbox-runner:
     name: Sandbox runner
+    needs: [e2e]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -628,6 +641,8 @@ jobs:
   # egress proxy entrypoint test. Offline only (KUBECONFIG=/dev/null).
   helm-chart:
     name: Helm chart
+    needs: [e2e]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
