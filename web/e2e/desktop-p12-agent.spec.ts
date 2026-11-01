@@ -30,10 +30,9 @@ test('empty chat and skill picker use the desktop controls without changing phon
 
 test('loop list owner is interactive and the editor retains compact daily controls', async ({ page, request, workspaceKey }) => {
   const headers = { 'X-Workspace-Key': workspaceKey }
-  const response = await request.post('/api/loops', { headers, data: { name: '[audit] Daily review', level: 'workspace', status: 'draft', instructions: 'Review the workspace.', triggerType: 'schedule', triggerConfig: { interval: 1, unit: 'day', time: '23:00' } } })
+  const response = await request.post('/api/loops', { headers, data: { name: '[audit] Daily review', level: 'workspace', status: 'draft', instructions: 'Review the workspace.', outputContract: { source: 'person', readOnly: true, outputs: [] }, triggerType: 'schedule', triggerConfig: { interval: 1, unit: 'day', time: '23:00' } } })
   expect(response.status()).toBe(201)
   const loop = await response.json() as { id: string }
-  await page.route(`**/api/loops/${loop.id}/output-contract`, route => route.fulfill({ json: { ...loop, outputContract: { source: 'model', readOnly: true, outputs: [] } } }))
   await page.goto(`/${workspaceKey}/loops/all`)
   const owner = page.getByRole('button', { name: 'Change owner', exact: true })
   await expect(owner).toHaveCSS('height', '28px')
