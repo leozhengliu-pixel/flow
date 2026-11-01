@@ -67,7 +67,6 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await geometry(viewer.locator('.core-person-picker-avatar'), { width: 18, height: 18 })
       await expect(viewer.locator('.property-command-check svg')).toBeVisible()
       await noOverflow(page)
-      await page.waitForTimeout(600)
       if (shots) await page.screenshot({ path: `${shots}/flow-assignee-${viewport.width}.png` })
       await picker.getByRole('textbox').fill('[mobile] App agent')
       await expect(picker.getByRole('option')).toHaveCount(1)
@@ -476,12 +475,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/settings/import-export$`))
     })
 
-    test('phone drawer labels, floating footer, glyphs and focus remain usable', async ({ page, request }) => {
-      const key = `mobile-drawer-parity-${viewport.width}-${Date.now()}`
-      const created = await request.post(`${api}/api/workspaces`, {
-        data: { name: '[mobile] Drawer parity', urlKey: key, region: 'us', tutorial: false },
-      })
-      expect(created.status()).toBe(201)
+    test('phone drawer labels, floating footer, glyphs and focus remain usable', async ({ page, request, workspaceKey: key }) => {
       const headers = { 'X-Workspace-Key': key }
       for (let i = 0; i < 5; i++) {
         const team = await request.post(`${api}/api/workspaces/${key}/teams`, { headers, data: { name: `[mobile] Drawer team ${i}`, key: `DR${i}` } })
@@ -626,7 +620,6 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await github.focus()
       await page.keyboard.press('Enter')
       await expect(page.locator('.flow-toast')).toBeVisible()
-      await page.waitForTimeout(500)
       await noOverflow(page)
       if (shots) await page.screenshot({ path: `${shots}/flow-toast-${viewport.width}.png` })
     })
@@ -721,7 +714,11 @@ test.describe('inbox phone top bar', () => {
       data: { remindAt: new Date(Date.now() + 500).toISOString() },
     })
     expect(reminder.status()).toBe(201)
-    await page.waitForTimeout(900)
+    await expect.poll(async () => {
+      const response = await request.get(`${api}/api/notifications?limit=50`, { headers })
+      expect(response.status()).toBe(200)
+      return (await response.json() as { notifications: unknown[] }).notifications.length
+    }).toBe(1)
 
     await page.goto(`${base}/${workspaceKey}/inbox`)
     await geometry(page.locator('.flow-inbox__header-wrapper'), { x: 0, y: 0, width: 390, height: 44 })
