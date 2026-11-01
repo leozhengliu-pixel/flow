@@ -677,7 +677,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-detail-top .review-menu-button::before,html:root body .app .review-detail-top .review-menu-button::after{content:none}
   html:root body .app .review-detail-top .review-menu-button{display:grid!important;width:32px;height:32px;flex:0 0 32px;margin:0;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font:500 12px/normal var(--font)}
   html:root body .app .review-detail-top .review-menu-button svg{display:block;width:14px;height:14px;color:var(--issue-muted);opacity:1}
-  html:root body .app .review-detail-top .review-menu-button svg{color:var(--cs-label-base)}
+  html:root body .app .reviews-workspace.has-agent-panel .review-detail-top .review-menu-button svg{color:var(--cs-label-base)}
   html:root body .app .review-detail-top .review-menu-button svg.review-menu-glyph--desktop,html:root body .app .review-actions-glyph--desktop{display:none}
   html:root body .app .review-detail-top .review-menu-button svg.review-menu-glyph--phone,html:root body .app .review-actions-glyph--phone{display:block}
   html:root body .app .review-breadcrumb{min-width:0;flex:1;display:flex;align-items:center;margin-left:-1px;overflow:visible}
@@ -728,7 +728,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-byline-branches{display:flex;flex:1 0 100%;align-items:center;gap:0;min-width:0}
   html:root body .app .review-byline-branch{flex:none;max-width:40%;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--issue-muted);font:450 12px/14.5px var(--font-monospace)}
   html:root body .app .review-byline-head{display:flex;flex:1 1 0;min-width:0;align-items:center}
-  html:root body .app .review-byline-branch:first-child{flex:none}
+  html:root body .app .review-byline-branches>.review-byline-branch:first-child{flex:none;padding-right:2px}
   html:root body .app .review-byline-branch:last-child{flex:0 1 auto;max-width:none;color:var(--issue-muted)}
   html:root body .app .review-byline-branch--head{display:block;flex:1 1 0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   html:root body .app .review-byline-arrow{width:16px;flex:none;margin-left:0;color:var(--review-fg-faint);font:450 12px/14.5px var(--font-monospace);text-align:center}
