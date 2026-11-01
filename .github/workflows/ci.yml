@@ -25,8 +25,8 @@ jobs:
     name: Web lint, route inventory and build
     # Keep the initial 20 hosted runners available for all API shards, browser
     # shards, the web coverage gates, and the API static checks. This short job
-    # starts as soon as the browser aggregate frees a runner.
-    needs: [e2e]
+    # starts after static checks, while the long-running tests finish.
+    needs: [api-static]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -117,7 +117,7 @@ jobs:
 
   web-node-26:
     name: Web (Node 26 compatibility)
-    needs: [e2e]
+    needs: [api-static]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     defaults:
@@ -148,7 +148,7 @@ jobs:
 
   sdk:
     name: TypeScript SDK
-    needs: [e2e]
+    needs: [api-static]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     defaults:
@@ -182,8 +182,8 @@ jobs:
         run: npm run build
 
   # 4 browser + 12 API test + 3 web coverage gates + 1 API static job = 20,
-  # the hosted-runner limit. The remaining short jobs wait for the browser
-  # aggregate, so all API shards run in one wave instead of two.
+  # the hosted-runner limit. The remaining short jobs wait for API static
+  # checks, so all API shards start in one wave instead of two.
   e2e-shard:
     name: Browser E2E (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
@@ -352,6 +352,7 @@ jobs:
       SHARD: ${{ matrix.shard }}
       SHARDS: ${{ matrix.shards }}
       PROFILE: ${{ matrix.profile }}
+      BUILD_CACHE_GROUP: ${{ matrix.package == './cmd/server' && 'server' || matrix.package == './internal/store' && 'store' || 'other' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -361,6 +362,18 @@ jobs:
         with:
           go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
+
+      # setup-go's dependency-only key is immutable: a hit never saves newly
+      # compiled source or race/coverage variants. Layer a source-keyed build
+      # cache over it, with one writer per package group and prior-source fallback.
+      - name: Restore race and coverage build cache
+        id: race-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.cache/go-build
+          key: go-race-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUILD_CACHE_GROUP }}-${{ hashFiles('api/go.mod', 'api/go.sum') }}-${{ hashFiles('api/**/*.go') }}
+          restore-keys: |
+            go-race-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUILD_CACHE_GROUP }}-${{ hashFiles('api/go.mod', 'api/go.sum') }}-
 
       - name: Test with race detector and coverage
         run: |
@@ -380,7 +393,7 @@ jobs:
           # plain `go test` would, and the failing tests' output follows a failure.
           events="$GITHUB_WORKSPACE/timings/$PROFILE.jsonl"
           status=0
-          go test -json -race -timeout 30m -covermode=atomic \
+          go test -json -race -count=1 -timeout 30m -covermode=atomic \
             -coverprofile="$GITHUB_WORKSPACE/coverage/$PROFILE.out" \
             "${selection[@]}" "${packages[@]}" 2>&1 |
             tee "$events" | ../scripts/ci/go-test-json.sh log || status=$?
@@ -395,6 +408,22 @@ jobs:
             ../scripts/ci/go-test-json.sh timings "$(go list -m)" \
               "$GITHUB_WORKSPACE/timings/$PROFILE.json" "$events"
           fi
+
+      - name: Save race and coverage build cache
+        if: ${{ success() && (matrix.shard == 1 || matrix.shard == 0) && steps.race-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/go-build
+          key: ${{ steps.race-cache.outputs.cache-primary-key }}
+
+      - name: Upload per-package and per-test events
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: go-test-events-${{ matrix.profile }}
+          path: timings/${{ matrix.profile }}.jsonl
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: Upload coverage profile
         uses: actions/upload-artifact@v7
@@ -505,7 +534,7 @@ jobs:
 
   infrastructure:
     name: Infrastructure integration
-    needs: [e2e]
+    needs: [api-static]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     services:
@@ -602,7 +631,7 @@ jobs:
   # coding sessions (track C): the in-sandbox runner and the sandbox image files.
   sandbox-runner:
     name: Sandbox runner
-    needs: [e2e]
+    needs: [api-static]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     defaults:
@@ -641,7 +670,7 @@ jobs:
   # egress proxy entrypoint test. Offline only (KUBECONFIG=/dev/null).
   helm-chart:
     name: Helm chart
-    needs: [e2e]
+    needs: [api-static]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
