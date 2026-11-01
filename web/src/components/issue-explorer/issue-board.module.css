@@ -111,7 +111,14 @@
   border-radius:5px;
   cursor:pointer;
 }
-.count+.headerButton{margin-left:auto}
+.columnActions{display:flex;align-items:center;gap:8px;margin-left:auto}
+@media(min-width:1024px){
+  .columnHeader{padding-right:12px}
+  .columnActions{gap:2px}
+  .columnActions .headerButton{border-radius:9999px}
+  .count{display:flex;align-items:center;gap:4px;line-height:normal}
+  .countEstimate{display:block;flex:none}
+}
 .headerButton:hover{background:var(--bg-active);color:var(--bright)}
 .cards{
   position:relative;
@@ -119,6 +126,7 @@
   padding:1px 12px 8px;
   border-radius:8px;
 }
+@media(min-width:1024px){.cards{padding-bottom:0}}
 .cards[data-over-end=true]:after{
   content:"";
   display:block;

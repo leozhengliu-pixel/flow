@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
 
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { I18nProvider } from '@/i18n/i18n'
@@ -50,6 +51,14 @@ describe('IssueRelationSections', () => {
     const lonely = makeIssue({ id: 'lonely', relations: [] })
     renderSections(lonely, { issues: [lonely] })
     expect(document.querySelector('.issue-relation-section')).toBeNull()
+  })
+
+  it.each([0, 3])('only shows an assigned priority in the hover preview (%s)', async priority => {
+    renderSections(main, { issues: [main, { ...blocker, priority }, blocked, relatedOld, relatedNew, duplicate] })
+    await userEvent.hover(screen.getByRole('link', { name: 'Blocker issue' }))
+    const preview = await screen.findByRole('tooltip')
+    expect(within(preview).queryByText('No priority')).toBeNull()
+    if (priority) expect(within(preview).getByText('Medium')).toBeVisible()
   })
 
   it('shows only non-empty sections, in the reference app order, newest relation first', () => {

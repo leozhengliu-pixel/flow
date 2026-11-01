@@ -12,6 +12,8 @@ test('defaults the saved view details open, drills into unassigned issues, and r
   expect(response.status()).toBe(201)
   const view = await response.json() as SavedView
   await page.goto(`/${workspaceKey}/view/${view.slugId || view.id}`)
+  await expect(page.locator('[data-content-view-subheader] [class*="viewCount"]')).toHaveCSS('font-size', '13px')
+  await expect(page.locator('[data-content-view-subheader] [class*="viewCount"]')).toHaveCSS('font-weight', '500')
   const panel = page.getByRole('complementary', { name: 'View sidebar' })
   await expect(panel).toBeVisible()
   await expect(panel.getByText('Personal', { exact: true })).toBeVisible()

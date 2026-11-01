@@ -28,7 +28,7 @@
   .name::placeholder{color:var(--bright)}
   .description{grid-column:2/4;grid-row:2;margin:5px 0 0 1px;width:calc(100% - 1px)}
   .commands{grid-column:3;grid-row:1}
-  .cancel,.save{padding-inline:8px}
+  .cancel,.save{padding-inline:8px;border:.5px solid transparent}
   .editor[data-mode=create] .actions{padding-bottom:8px}
 }
 @media(max-width:700px){.header{grid-template-columns:28px minmax(0,1fr)}.commands{grid-column:1/3;justify-content:flex-end;margin-top:6px}.saveTo{margin-right:auto}.targetMenu,.menu{max-width:calc(100vw - 16px)}}

@@ -68,7 +68,7 @@ test('teams sort by every column, expose member links, and show live overview va
   const response = await request.post(`/api/workspaces/${workspaceKey}/teams`, { data: { name: '[audit] Zulu', key: 'ZUL' } })
   expect(response.status()).toBe(201)
   await page.goto(`/${workspaceKey}/settings/teams`)
-  await expect(page.getByRole('button', { name: 'Create team', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Create new team', exact: true })).toBeVisible()
   for (const column of ['Description', 'Visibility', 'Members', 'Issues', 'Created', 'Name']) {
     const button = page.getByRole('button', { name: `Order by ${column}`, exact: true })
     await button.click()

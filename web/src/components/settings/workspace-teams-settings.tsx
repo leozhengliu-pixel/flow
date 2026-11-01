@@ -160,7 +160,7 @@ export function WorkspaceTeamsSettings({
             {t("Export CSV")}
           </button>
         )}
-        <button className="settings-action primary" type="button" onClick={onCreate}>
+        <button className="settings-action primary" type="button" aria-label={phone ? undefined : t("Create new team")} onClick={onCreate}>
           {t("Create team")}
         </button>
       </div>
