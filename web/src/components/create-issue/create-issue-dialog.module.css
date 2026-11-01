@@ -207,6 +207,7 @@
   .propertyGroup { width: 100%; min-height: 62px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; }
   .properties :global(.mini-property-trigger) { height: 28px; border: 0; background: var(--create-issue-control-bg); }
   .properties :global(.mini-property-trigger) { border: .5px solid transparent; color: var(--project-status-usage); gap: 4px; font-size: 12px; font-weight: 500; line-height: 12px; }
+  .properties :global(.mini-property-trigger[data-property="labels"][aria-expanded="true"]) { color: var(--project-status-usage); }
   .properties :global(.mini-property-trigger) > :global(.avatar:first-child) { margin-left: -2px; width: 17px; height: 17px; }
   .properties :global(.mini-property-trigger) > span:not(:global(.avatar)) { font-weight: 450; }
   .properties :global(.mini-property-trigger) > span:not(:global(.avatar)) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
