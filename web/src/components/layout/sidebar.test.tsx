@@ -103,6 +103,12 @@ function renderSidebar(flags: Record<string, boolean>, locale: 'en-US' | 'zh-CN'
   return render(sidebarTree(sidebarData(flags)))
 }
 
+it('keeps help without a paid-plan pill', () => {
+  renderSidebar({})
+  expect(screen.queryByRole('button', { name: 'Free plan' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Open Help menu' })).toBeInTheDocument()
+})
+
 async function openMore() {
   const existing = document.querySelector('.sidebar-more-menu')
   if (existing) return existing as HTMLElement

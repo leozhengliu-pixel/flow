@@ -1,16 +1,8 @@
-import { expect, test, type APIRequestContext } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './workspace-fixture'
 
-async function createWorkspace(request: APIRequestContext, key: string) {
-  const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-    data: { name: 'Sidebar workspace', urlKey: key, region: 'us' },
-  })
-  expect(response.status()).toBe(201)
-}
-
-test('matches the desktop sidebar header, section labels and footer', async ({ page, request }, testInfo) => {
+test('matches the desktop sidebar header, section labels and help footer', async ({ page, workspaceKey }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'The sidebar layout is desktop-only')
-  const workspaceKey = `e2e-sidebar-${Date.now()}`
-  await createWorkspace(request, workspaceKey)
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto(`/${workspaceKey}/agent`)
 
@@ -38,24 +30,13 @@ test('matches the desktop sidebar header, section labels and footer', async ({ p
   await expect(page.locator('.sidebar-footer .sidebar-help')).toHaveCSS('font-size', '12px')
   await expect(page.locator('.sidebar-footer .sidebar-help')).toHaveCSS('font-weight', '500')
 
-  const plan = page.locator('.sidebar-plan-button')
-  const planBox = await plan.boundingBox()
-  expect(planBox!.x).toBeCloseTo(42, 0)
-  expect(planBox!.y).toBeCloseTo(866, 0)
-  expect(Math.abs(planBox!.width - 84.5)).toBeLessThanOrEqual(1)
-  expect(planBox!.height).toBeCloseTo(24, 0)
-  await expect(plan).toHaveCSS('border-radius', '12px')
-  await expect(plan.locator('span')).toHaveCSS('font-size', '11px')
-  await expect(plan.locator('span')).toHaveCSS('font-weight', '500')
-
-  await plan.click()
-  await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/settings/billing`))
+  await expect(page.getByRole('button', { name: 'Free plan' })).toHaveCount(0)
+  await page.locator('.sidebar-footer .sidebar-help').click()
+  await expect(page.getByRole('menu')).toBeVisible()
 })
 
-test('collapses the desktop sidebar sections with 8px gaps', async ({ page, request }, testInfo) => {
+test('collapses the desktop sidebar sections with 8px gaps', async ({ page, workspaceKey }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'The sidebar layout is desktop-only')
-  const workspaceKey = `e2e-sidebar-collapse-${Date.now()}`
-  await createWorkspace(request, workspaceKey)
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto(`/${workspaceKey}/agent`)
 

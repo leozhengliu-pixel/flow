@@ -15,21 +15,40 @@ async function expectCopyToGrowRows(rows: Locator) {
   }
 }
 
-for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
-  workspaceTest.describe(`${viewport.width}px billing`, () => {
-    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Billing' })
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  workspaceTest.describe(`${viewport.width}px open-source settings`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: viewport.width < 768, hasTouch: viewport.width < 768, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Settings' })
 
-    workspaceTest('shows real credits and no invoice rows in a new workspace', async ({ page, workspaceKey }) => {
-      await page.route('**/api/workspace/ai-credits', route => route.fulfill({ json: { includedMicros: 5_000_000, spentMicros: 1_250_000, remainingMicros: 3_750_000 } }))
+    workspaceTest('omits paid-plan UI in both sidebars and opens settings home from an old billing URL', async ({ page, workspaceKey }) => {
+      await page.goto(`/${workspaceKey}/my-issues/assigned`)
+      if (viewport.width < 768) await page.locator('[data-sidebar-trigger]').first().click()
+      const sidebar = page.locator('.sidebar')
+      await expect(sidebar).toBeVisible()
+      await expect(sidebar.getByRole('button', { name: 'Free plan' })).toHaveCount(0)
+      await expect(sidebar.locator('.sidebar-help')).toBeVisible()
+
       await page.goto(`/${workspaceKey}/settings/billing`)
-      await expect(page.locator('.billing-mobile-title h1')).toHaveText('Billing')
-      await expect(page.locator('.billing-mobile-current')).toBeVisible()
-      await expect(page.locator('.billing-mobile-usage')).toBeVisible()
-      await expect(page.locator('.billing-mobile-usage')).toContainText('$3.75 remaining')
-      await expect(page.locator('.billing-mobile-invoices')).toContainText('No invoices yet')
-      await expect(page.locator('.billing-mobile-invoice')).toHaveCount(0)
-      await expect(page.locator('.billing-mobile').getByRole('button', { name: /plan|upgrade/i })).toHaveCount(0)
+      await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/settings/account/preferences$`))
+      await expect(page.getByRole('heading', { name: 'Preferences', exact: true })).toBeVisible()
+      if (viewport.width < 768) await page.getByRole('button', { name: 'Settings navigation', exact: true }).click()
+      const settings = page.locator('.settings-sidebar')
+      await expect(settings).toBeVisible()
+      await expect(settings.getByRole('button', { name: 'Free plan' })).toHaveCount(0)
+      await expect(settings.getByRole('link', { name: 'Billing', exact: true })).toHaveCount(0)
+      await expect(settings.getByRole('button', { name: 'Billing', exact: true })).toHaveCount(0)
+      await expect(settings.locator('.sidebar-help')).toBeVisible()
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+
+    workspaceTest('keeps real usage and spend limits without credit-purchase controls', async ({ page, workspaceKey }) => {
+      await page.route('**/api/workspace/ai-credits', route => route.fulfill({ json: { includedMicros: 5_000_000, spentMicros: 1_250_000, remainingMicros: 3_750_000 } }))
+      await page.goto(`/${workspaceKey}/settings/usage`)
+      await expect(page.getByTestId('workspace-credits')).toHaveText('$3.75 remaining')
+      await expect(page.getByRole('button', { name: 'Add credits', exact: true })).toHaveCount(0)
+      await expect(page.getByText('Automatic reload', { exact: true })).toHaveCount(0)
+      await page.getByRole('button', { name: /^Spend limits/ }).click()
+      await expect(page.getByRole('heading', { name: 'Spend limits', exact: true })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Set limit', exact: true })).toHaveCount(3)
     })
   })
 }
@@ -446,8 +465,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect(footerBox?.y).toBe(viewport.height - 52)
       expect((await page.locator('.settings-sidebar-footer .sidebar-help').boundingBox())?.width).toBe(32)
       await expect(page.locator('.settings-sidebar-footer .sidebar-help > svg')).toHaveCSS('color', 'lch(61.803 1.2 272)')
-      expect((await page.locator('.settings-plan-button').boundingBox())?.x).toBe(50)
-      await expect(page.locator('.settings-plan-button')).toContainText('Free plan')
+      await expect(page.getByRole('button', { name: 'Free plan' })).toHaveCount(0)
+      await expect(page.locator('.settings-sidebar').getByRole('button', { name: 'Billing', exact: true })).toHaveCount(0)
 
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/settings-nav-${viewport.width}.png`, scale: 'css', animations: 'disabled' })

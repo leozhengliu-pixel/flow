@@ -536,7 +536,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await geometry(drawer.locator('.sidebar-header'), { x: 0, y: 0, width: 330, height: 51.5 })
       await geometry(drawer.locator('.sidebar-footer'), { x: 0, y: viewport.height - 52, width: 330, height: 52 })
       await geometry(drawer.locator('.sidebar-help'), { x: 10, y: viewport.height - 42, width: 32, height: 32 })
-      await geometry(drawer.locator('.sidebar-plan-button'), { x: 50, y: viewport.height - 42, height: 32 })
+      await expect(drawer.getByRole('button', { name: 'Free plan' })).toHaveCount(0)
       if (await drawer.locator('.sidebar-team .team-heading').count()) {
         await geometry(drawer.locator('.sidebar-team .team-heading').first(), { x: 12, width: 306, height: 36 })
       }

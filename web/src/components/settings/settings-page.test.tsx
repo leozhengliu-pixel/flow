@@ -229,16 +229,18 @@ it('shows members the workspace feature pages and hides administration', () => {
     expect(labels).not.toContain(hidden);
 });
 
-it('lists Billing and Usage & limits between Applications and Import & export for admins', async () => {
+it('lists Usage & limits without billing or a plan pill for admins', () => {
   localStorage.setItem('flow:locale', 'en');
   const input = props();
-  input.page = 'billing';
+  input.page = 'preferences';
   input.data = { ...input.data, viewerRole: 'owner' };
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
   const labels = navLabels();
   const admin = labels.slice(labels.indexOf('Workspace'));
-  expect(admin.slice(0, 9)).toEqual(['Workspace', 'Teams', 'Members', 'Security', 'API', 'Applications', 'Billing', 'Usage & limits', 'Import & export']);
-  expect(await screen.findByRole('heading', { level: 1, name: 'Billing' })).toBeInTheDocument();
+  expect(admin.slice(0, 8)).toEqual(['Workspace', 'Teams', 'Members', 'Security', 'API', 'Applications', 'Usage & limits', 'Import & export']);
+  expect(labels).not.toContain('Billing');
+  expect(screen.queryByRole('button', { name: 'Free plan' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Open Help menu' })).toBeInTheDocument();
 });
 
 it('hides workspace templates from members when only admins manage templates', () => {

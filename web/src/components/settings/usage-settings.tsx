@@ -72,11 +72,9 @@ function DocsLink({ children }: { children: string }) {
 
 function UsageOverview({ data, onOpenView }: UsageProps) {
   const { t } = useI18n();
-  const [creditsOpen, setCreditsOpen] = useState(false);
   const credits = useAICredits();
   const limits = data.workspaceSettings?.spendLimits;
   const limitSummary = [limits?.workspaceLimit, limits?.userLimit, limits?.loopLimit].some((value) => (value ?? 0) > 0) ? t("Limits set") : t("No limits set");
-  const unavailable = t("Billing is not available in Flow");
   return (
     <div className="usage-page">
       <SettingsPageTitle description={t("Track usage, manage credits, and set spend limits across your workspace")}>
@@ -102,25 +100,10 @@ function UsageOverview({ data, onOpenView }: UsageProps) {
               {t("Credits apply to usage of")} <em>{t("Coding sessions")}</em> {t("and")} <em>{t("Loops")}</em>. <DocsLink>{t("Docs")}</DocsLink>
             </p>
           </div>
-          <button type="button" className="usage-pill-button usage-raised" onClick={() => setCreditsOpen(true)}>
-            {t("Add credits")}
-          </button>
         </header>
         <div className="usage-card usage-row usage-row-short">
           <strong>{t("Workspace credits")}</strong>
           <strong data-testid="workspace-credits">{credits ? t("{amount} remaining").replace("{amount}", formatCredits(credits.remainingMicros)) : "…"}</strong>
-        </div>
-        <div className="usage-card usage-row">
-          <span className="usage-row-copy">
-            <strong>{t("Automatic reload")}</strong>
-            <span className="usage-status-line">
-              <i aria-hidden="true" />
-              {t("Disabled")} - {t("Automatically top up credits when your balance runs low")}
-            </span>
-          </span>
-          <button type="button" className="usage-pill-button" disabled title={unavailable}>
-            {t("Manage")}
-          </button>
         </div>
         <button type="button" className="usage-card usage-link-row" onClick={() => onOpenView("spend-limits")}>
           <span className="usage-row-copy">
@@ -133,57 +116,10 @@ function UsageOverview({ data, onOpenView }: UsageProps) {
       </section>
       {/* coding sessions (track F): coding spend by user and loop */}
       <CodingUsageBlock users={data.users ?? []} />
-      {creditsOpen && <AddCreditsDialog onClose={() => setCreditsOpen(false)} />}
     </div>
   );
 }
 
-/** "Add credits": the reference dialog. Flow has no payment provider, so it cannot be submitted and says so. */
-function AddCreditsDialog({ onClose }: { onClose: () => void }) {
-  const { t } = useI18n();
-  const [amount, setAmount] = useState<"50" | "75" | "other">("50");
-  const [agreed, setAgreed] = useState(false);
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="usage-dialog usage-credits-dialog">
-        <DialogTitle>{t("Add credits")}</DialogTitle>
-        <p className="usage-dialog-description">{t("Unused credits expire 12 months after purchase")}</p>
-        <div className="usage-amount-box">
-          <strong>{t("Amount")}</strong>
-          <div role="radiogroup" aria-label={t("Amount")}>
-            {(["50", "75", "other"] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                role="radio"
-                aria-checked={amount === option}
-                className={amount === option ? "is-selected" : ""}
-                onClick={() => setAmount(option)}
-              >
-                {option === "other" ? t("Other") : `$${option}`}
-              </button>
-            ))}
-          </div>
-        </div>
-        <label className="usage-agree">
-          <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />
-          <span>
-            {t("I agree to the")} <b>{t("AI Addendum")}</b> {t("and")} <b>{t("Acceptable Use Policy")}</b>
-          </span>
-        </label>
-        <footer>
-          <span className="usage-dialog-note">{t("Billing is not available in Flow")}</span>
-          <button type="button" className="usage-pill-button usage-raised" onClick={onClose}>
-            {t("Cancel")}
-          </button>
-          <button type="button" className="usage-primary-button" disabled title={t("Billing is not available in Flow")}>
-            {t("Add credits")}
-          </button>
-        </footer>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 type LimitKind = "workspace" | "user" | "loop";
 

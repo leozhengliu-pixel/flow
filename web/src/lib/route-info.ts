@@ -14,14 +14,6 @@ const SETTINGS_TITLE = new Map(
   SETTINGS_SEARCH_PAGES.map((page) => [page.id, page.title] as const),
 );
 
-/** Explicitly omit billing / usage settings titles (OUT_OF_SCOPE_BILLING). */
-const BILLING_SETTINGS = new Set<string>([
-  "billing",
-  "usage",
-  "spend-limits",
-  "plans",
-]);
-
 export type RouteInfoData = Pick<
   BootstrapData,
   "workspace" | "issues" | "projects" | "teams" | "notifications"
@@ -32,7 +24,7 @@ export type RouteInfoData = Pick<
 
 /**
  * LS-0538 — centralized match → chrome info for document.title / future tabs.
- * First slice: issue / project / inbox / my-issues / settings (non-billing).
+ * First slice: issue / project / inbox / my-issues / settings.
  */
 export function routeInfo(
   route: AppRoute,
@@ -137,7 +129,7 @@ export function routeInfo(
     if (route.page === "shortcuts") {
       return { title: t("Not found"), pinnedTitle: t("Not found"), icon: "settings" };
     }
-    if (BILLING_SETTINGS.has(route.page)) {
+    if (route.page === "usage") {
       return { title: t("Settings"), pinnedTitle: t("Settings"), icon: "settings" };
     }
     if (route.page === "team" && route.teamKey) {

@@ -851,24 +851,6 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
     ],
   },
   {
-    id: 'billing',
-    title: 'Billing',
-    section: 'Administration',
-    keywords: ['plan', 'subscription', 'invoices', 'payment', 'upgrade', 'pricing'],
-    groups: [
-      {
-        title: 'Plan',
-        items: [
-          { title: 'Free plan', keywords: ['current plan'] },
-          { title: 'Business plan', keywords: ['upgrade', 'trial'] },
-          { title: 'Switch plan', keywords: ['change plan', 'downgrade'] },
-        ],
-      },
-      { title: 'Usage', items: [{ title: 'Usage', keywords: ['credits remaining'] }] },
-      { title: 'Recent invoices', items: [{ title: 'Recent invoices', keywords: ['receipts', 'billing history'] }] },
-    ],
-  },
-  {
     id: 'usage',
     title: 'Usage & limits',
     section: 'Administration',
@@ -878,9 +860,7 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
       {
         title: 'AI credits',
         items: [
-          { title: 'Add credits', keywords: ['top up', 'buy'] },
           { title: 'Workspace credits', keywords: ['balance', 'remaining'] },
-          { title: 'Automatic reload', keywords: ['auto top up'] },
           { title: 'Spend limits', keywords: ['budget', 'cap', 'per user', 'per loop'] },
         ],
       },

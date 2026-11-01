@@ -38,27 +38,17 @@ beforeEach(() => {
   vi.mocked(fetchAICredits).mockResolvedValue({ includedMicros: 10_000_000, spentMicros: 510_000, remainingMicros: 9_490_000 })
 })
 
-it('lists credits, automatic reload and spend limits and opens the sub-pages', async () => {
+it('lists real credits and spend limits without purchase controls and opens the sub-pages', async () => {
   const { onOpenView } = renderUsage()
   expect(screen.getByRole('heading', { level: 1, name: 'Usage & limits' })).toBeInTheDocument()
   expect(await screen.findByText('$9.49 remaining')).toBeInTheDocument()
   expect(screen.getByText('No limits set')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Manage' })).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'Manage' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Add credits' })).not.toBeInTheDocument()
+  expect(screen.queryByText('Automatic reload')).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: /Usage explorer/ }))
   await userEvent.click(screen.getByRole('button', { name: /Spend limits/ }))
   expect(onOpenView.mock.calls).toEqual([['analytics'], ['spend-limits']])
-})
-
-it('cannot purchase credits without a billing provider and says so in the dialog', async () => {
-  renderUsage()
-  await userEvent.click(screen.getByRole('button', { name: 'Add credits' }))
-  const dialog = screen.getByRole('dialog')
-  expect(within(dialog).getByText('Unused credits expire 12 months after purchase')).toBeInTheDocument()
-  expect(within(dialog).getByRole('radio', { name: '$50' })).toHaveAttribute('aria-checked', 'true')
-  await userEvent.click(within(dialog).getByRole('radio', { name: '$75' }))
-  expect(within(dialog).getByRole('radio', { name: '$75' })).toHaveAttribute('aria-checked', 'true')
-  expect(within(dialog).getByText('Billing is not available in Flow')).toBeInTheDocument()
-  expect(within(dialog).getByRole('button', { name: 'Add credits' })).toBeDisabled()
 })
 
 it('saves a workspace limit and a reset frequency', async () => {
