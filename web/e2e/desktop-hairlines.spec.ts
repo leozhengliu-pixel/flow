@@ -6,9 +6,12 @@ import type { BootstrapData, FlowDocument, Issue, Project } from '../src/types/f
 const test = base.extend({
   context: async ({ playwright, baseURL }, provide) => {
     const browser = await playwright.chromium.launch({ args: ['--force-device-scale-factor=2', '--window-size=1440,900'] })
-    const context = await browser.newContext({ baseURL, viewport: null, colorScheme: 'dark' })
-    await provide(context)
-    await browser.close()
+    try {
+      const context = await browser.newContext({ baseURL, viewport: null, deviceScaleFactor: undefined, colorScheme: 'dark' })
+      await provide(context)
+    } finally {
+      await browser.close()
+    }
   },
 })
 
