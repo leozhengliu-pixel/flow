@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Align phone document metadata values using the widest translated label instead of a sampled label width.
+
 - Preserve the phone composer's dim Labels pill while its picker is open and restore the review chat author header's top padding.
 
 - Let phone settings rows and selects grow with their actual content, and retain language, export and onboarding controls outside the reference content.
