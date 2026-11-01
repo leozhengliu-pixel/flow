@@ -209,7 +209,7 @@ Viewport 1470x706 for these measurements.
 ### Round-3 interaction references (dark, viewport 1470x706)
 
 - **Insights toggle:** "Open project insights" (28x28) is shown on every tab
-  (Overview, Activity, Issues) in the Business plan. It sits immediately left
+  (Overview, Activity, Issues). It sits immediately left
   of "Close project details" with a 34px pitch. On Issues the order is
   Add filter (1323.5), Display options (1357.5), insights (1391.5), close
   (1425.5).

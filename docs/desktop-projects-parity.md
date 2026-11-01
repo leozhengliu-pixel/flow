@@ -75,7 +75,7 @@ Full computed styles and exact rectangles, including menu items, are in `/tmp/co
 - Saved grouping, ordering, summary and zoom preferences are not evidence of fresh-account defaults. They were not copied into application defaults. Lead team remains an available initiative-list property; matching settings removes it for the comparison.
 - The modified-view footer is functional Flow behavior, not unexplained popover height. Removing it would remove Reset and Set default for everyone.
 - Flow Insights, Progress, Teams, Drafts, Loops and agent features remain available. Shared project toolbar controls keep the reference positions; initiative-specific extra cards follow Activity.
-- Releases is intentionally ungated in Flow. The reference evidence shows only a paid-plan gate, not a releases list. No reference billing entitlement, navigation restriction or plan configuration was encoded.
+- Releases is available without restrictions in Flow.
 - Data differences include `[audit]` names, dates, authors, icons/colors, resource contents and history. Timeline bar start/end positions follow actual dates, not the reference account's schedule.
 - Some P3 glyphs and text metrics remain different: milestone menu icons/shortcut rendering, the cycle message's 3.88px wider text metric, and the No updates button's approximately 1px width difference. The six milestone commands remain present and functional; the shortcut legend follows the actual command rather than the audit's conflicting single-key description. These are not missing features.
 - The reference PNGs and JSON have documented state/timing differences. No claim of a zero-pixel screenshot diff is made.
@@ -138,6 +138,6 @@ mobile-gate inbox / inbox-list: 44 element checks, 0 failures
 3. `/verify/project/audit-compare-test-9c10770b6ca3/overview`: inspect Properties through Description and the right rail; open Alpha actions. Switch to Issues for the centered empty state, and Activity for the composer/feed.
 4. `/verify/initiatives`: Display options, turn Lead team off to match reference properties. Inspect the Projects ring/count, then open the initiative.
 5. `/verify/initiative/audit-test123-b8ab1f505a11/overview`: inspect the saved Latest update and docked rail, collapse/reopen Properties, click Update or Comments to enter Activity, and inspect the browser title.
-6. `/verify/team/DPC/cycles`: inspect the team breadcrumb and enabled-empty message; the empty team has no desktop Cycles navigation row. Releases remains at `/verify/release-pipelines` without a copied paid-plan gate.
+6. `/verify/team/DPC/cycles`: inspect the team breadcrumb and enabled-empty message; the empty team has no desktop Cycles navigation row. Releases remains at `/verify/release-pipelines`.
 
 Scratch API and Vite processes are stopped after verification, and installed dependencies are removed. Logs, measurement JSON and crops remain under `/tmp/codex-desktop-projects/`.

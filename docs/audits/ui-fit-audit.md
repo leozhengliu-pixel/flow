@@ -7,7 +7,7 @@ added CSS/TSX, then small surrounding reads. This is a targeted audit of that
 change set, not a claim that every pre-existing control in the application
 has been audited. Concurrent main changes were rebased normally.
 
-`billing-settings` and all e2e specs were left untouched. No API, database
+All e2e specs were left untouched. No API, database
 schema, production infrastructure, reference expectations, or gate locators
 were changed. Browser mutations used a private scratch database only.
 

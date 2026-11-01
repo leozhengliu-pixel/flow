@@ -52,8 +52,7 @@ a nonempty leading team. Creation from a team page preselects its team.
 A hidden leading team cannot be bypassed by attaching a public project or
 contributing team. Projection removes hidden parent IDs, relations and updates;
 restricted API-key and MCP projections also redact hierarchy links. Existing
-Flow workspace/team access policies continue to apply. Commercial plan gates
-are not introduced.
+Flow workspace/team access policies continue to apply.
 
 ## UI
 
