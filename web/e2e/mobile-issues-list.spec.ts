@@ -474,19 +474,24 @@ test.describe('mobile Activity tab', () => {
 test.describe('desktop my issues tab strip', () => {
   test.use({ viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false })
 
-  test('shows only the five tab links without the off-screen measurement row', async ({ page, workspaceKey }) => {
+  test('shows the four desktop tabs without the off-screen measurement row and retains the shared view', async ({ page, workspaceKey }) => {
     await page.goto(`/${workspaceKey}/my-issues/assigned`)
     const nav = page.getByRole('navigation', { name: 'My issues views' })
     await expect(nav).toBeVisible()
-    await expect(nav.getByRole('link')).toHaveCount(5)
+    await expect(nav.getByRole('link')).toHaveCount(4)
     await expect(page.locator('[data-tab-measure]')).toHaveCount(0)
     await expect(page.locator('[class*="tabMeasure"]')).toHaveCount(0)
     const labels = await nav.getByRole('link').evaluateAll(nodes => nodes.map(node => (node.textContent ?? '').trim()))
-    expect(labels).toEqual(['Assigned', 'Created', 'Subscribed', 'Activity', 'Shared with me'])
+    expect(labels).toEqual(['Assigned', 'Created', 'Subscribed', 'Activity'])
     const visibleText = await nav.evaluate(node => (node as HTMLElement).innerText.replace(/\s+/g, ' ').trim())
-    expect(visibleText).toBe('Assigned Created Subscribed Activity Shared with me')
+    expect(visibleText).toBe('Assigned Created Subscribed Activity')
     const names = await nav.getByRole('link').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label') ?? (node.textContent ?? '').trim()))
-    expect(new Set(names).size).toBe(5)
+    expect(new Set(names).size).toBe(4)
+    if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-my-issues-tabs.png`, animations: 'disabled' })
+
+    await page.goto(`/${workspaceKey}/my-issues/shared`)
+    await expect(nav.getByRole('link')).toHaveCount(5)
+    await expect(nav.getByRole('link', { name: /^Shared with me/ })).toHaveAttribute('aria-current', 'page')
   })
 })
 
