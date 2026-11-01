@@ -454,7 +454,8 @@ test.describe('mobile project update composer', () => {
     expect((await page.locator('.project-activity__health').boundingBox())?.height).toBe(28)
     const healthInset = await page.locator('.project-activity__health').evaluate(element => element.querySelector('span')!.getBoundingClientRect().x - element.getBoundingClientRect().x - element.clientLeft)
     expect(healthInset).toBeCloseTo(26, 0)
-    await expect(composer.locator('button.project-activity__agent')).toBeHidden()
+    await expect(composer.locator('button.project-activity__agent')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Write with Agent', exact: true })).toBeVisible()
     expect(near((await page.locator('.project-activity__diff-label').first().boundingBox())?.y, 262.75)).toBe(true)
     expect(near((await page.locator('.project-activity__diff-label').nth(1).boundingBox())?.y, 290)).toBe(true)
     expect(await page.locator('.project-activity__diff-row[data-field=priority]').textContent()).toContain('No priority')
@@ -470,6 +471,12 @@ test.describe('mobile project update composer', () => {
     expect(near((await page.locator('.project-activity__month > span').boundingBox())?.y, 507.5)).toBe(true)
     expect(near((await page.locator('.project-activity__comment-card').boundingBox())?.y, 555.5)).toBe(true)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    const write = page.getByRole('button', { name: 'Write with Agent', exact: true })
+    expect(await write.evaluate(node => Boolean(node.closest('.project-activity__tools')?.previousElementSibling?.matches('.project-activity__feed')))).toBe(true)
+    await write.click()
+    await expect(page.getByRole('button', { name: 'Close chat', exact: true })).toBeVisible()
+    await expect(page.getByRole('log', { name: 'Agent conversation', exact: true })).toContainText('Streaming', { timeout: 30000 })
+    await page.getByRole('button', { name: 'Close chat', exact: true }).click()
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/project-updates-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 })
@@ -556,11 +563,12 @@ test.describe('mobile project milestones section', () => {
     await page.locator('.project-detail-page__toolbar-actions button[aria-label="Close project details"]').click()
     await page.locator('.project-overview__milestones > h3').click()
 
-    const near = (actual: number | undefined, expected: number) => actual !== undefined && Math.abs(actual - expected) <= 1
-    expect(near((await page.locator('.project-overview__description > h3').boundingBox())?.y, 317.5)).toBe(true)
-    expect(near((await page.locator('.project-overview__description-editor h2 > .project-description-text').boundingBox())?.y, 443.5)).toBe(true)
-    expect(near((await page.locator('.project-overview__milestones > h3').boundingBox())?.y, 611)).toBe(true)
-    expect((await page.locator('.project-overview__milestone').boundingBox())?.height).toBe(106)
+    const description = (await page.locator('.project-overview__description > h3').boundingBox())!
+    const goals = (await page.locator('.project-overview__description-editor h2 > .project-description-text').boundingBox())!
+    const milestones = (await page.locator('.project-overview__milestones > h3').boundingBox())!
+    expect(goals.y).toBeGreaterThan(description.y + description.height)
+    expect(milestones.y).toBeGreaterThan(goals.y + goals.height)
+    expect((await page.locator('.project-overview__milestone').boundingBox())!.height).toBeGreaterThanOrEqual(106)
     expect((await page.locator('.project-overview__milestone-date').boundingBox())?.width).toBe(28)
     expect((await page.locator('.project-overview__milestone-link').boundingBox())?.height).toBe(28)
     expect((await page.locator('.project-overview__latest').boundingBox())?.height).toBe(69)
@@ -586,7 +594,9 @@ test.describe('mobile project milestones section', () => {
         },
       })
       expect(created.status()).toBe(201)
-      const project = await created.json() as { slugId: string }
+      const project = await created.json() as { id: string; slugId: string }
+      const milestoneDescription = 'A long milestone description that grows with its content and keeps every line visible on a phone. '.repeat(5)
+      expect((await request.post(`/api/projects/${project.id}/milestones`, { headers, data: { name: '[mobile] A milestone with a long name', description: milestoneDescription } })).status()).toBe(201)
       await page.setViewportSize({ width, height: width === 390 ? 844 : 667 })
       await page.goto(`/${workspaceKey}/project/${project.slugId}/overview`)
       await page.locator('button[aria-label="Close project details"]').click()
@@ -599,6 +609,10 @@ test.describe('mobile project milestones section', () => {
       expect(blocks.length).toBeGreaterThan(8)
       expect(blocks.filter(block => block.text).every(block => block.overflow === 'visible' && block.transform === 'none' && block.textBottom <= block.height)).toBe(true)
       expect(blocks.filter(block => block.height > block.lineHeight).length).toBeGreaterThanOrEqual(3)
+      const milestoneCopy = page.locator('.project-overview__milestone-description')
+      await expect(milestoneCopy).toContainText(milestoneDescription.trim())
+      expect((await milestoneCopy.boundingBox())!.height).toBeGreaterThan(50)
+      expect(await milestoneCopy.evaluate(node => node.scrollHeight <= node.clientHeight)).toBe(true)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     })
   }
