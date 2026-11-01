@@ -321,7 +321,7 @@
   display: grid;
   flex: 0 0 24px;
   place-items: center;
-  padding: 0;
+  padding: 0 2px;
   color: var(--text);
   background: transparent;
   border: 0;
