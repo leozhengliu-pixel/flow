@@ -15,6 +15,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Remove sampled phone metadata and overflow widths; let team tabs use the space their rendered labels actually need.
 
+- Shard browser CI across four isolated runners, preserve the required Browser E2E check and per-shard reports, and run explicitly phone-sized scenarios only once.
+
 - Let phone chat actions follow short titles while long titles truncate within the viewport.
 
 - Use natural icon spacing in phone review and cycle controls, and let issue composer toolbars contain their controls and bottom padding.

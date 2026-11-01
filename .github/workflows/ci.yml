@@ -172,9 +172,16 @@ jobs:
       - name: Build
         run: npm run build
 
-  e2e:
-    name: Browser E2E
+  # 4 browser + 6 API test + 10 other initially runnable jobs = 20, the
+  # hosted-runner limit. Aggregates replace completed dependencies, not add to
+  # that peak. Keep api-test.max-parallel in sync with this budget.
+  e2e-shard:
+    name: Browser E2E (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -215,22 +222,23 @@ jobs:
           # The API's log (the detail behind any 500) goes to this file.
           FLOW_E2E_API_LOG: ${{ runner.temp }}/flow-e2e-api.log
           FLOW_E2E_API_BIN: ${{ runner.temp }}/flow-e2e-api
-        run: npm run test:e2e
+        run: npm run test:e2e -- --shard=${{ matrix.shard }}/4
 
       # The response security headers in a real browser, against the production web build
       # the API serves: passkeys, embeds, math, the collaboration socket, CSP reports and
       # the service worker. Reuse the API; build the web app and fixture API once.
       - name: Run security header browser tests
+        if: matrix.shard == 1
         working-directory: web
         env:
           FLOW_SECURITY_API_BIN: ${{ runner.temp }}/flow-e2e-api
         run: npm run test:e2e:security
 
       - name: Upload API log and Playwright output
-        if: failure()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-failure
+          name: e2e-shard-${{ matrix.shard }}
           path: |
             ${{ runner.temp }}/flow-e2e-api.log
             web/playwright-report
@@ -239,6 +247,24 @@ jobs:
             web/test-results-security
           if-no-files-found: ignore
           retention-days: 7
+
+  e2e:
+    name: Browser E2E
+    needs: [e2e-shard]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every browser shard to pass
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != success ]; then
+              echo "A browser shard did not succeed." >&2
+              exit 1
+            fi
+          done
 
   # The API suite is split so no single runner carries it all: cmd/server (about
   # 55 minutes under the race detector) and internal/store (about 17 minutes) are
@@ -294,6 +320,7 @@ jobs:
         working-directory: api
     strategy:
       fail-fast: false
+      max-parallel: 6
       matrix:
         include:
           - { name: 'server 1/8', profile: server-1, package: ./cmd/server, shard: 1, shards: 8 }
