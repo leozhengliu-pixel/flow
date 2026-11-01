@@ -98,7 +98,9 @@
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label { position: relative; padding: 0; }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label > svg { position: absolute; left: 11px; pointer-events: none; }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label > input { box-sizing: border-box; width: 100%; height: 32px; padding: 6px 25px 6px 32px; border-radius: 8px; }
-  html:root .settings-app .settings-main[data-settings-page=api] > .settings-content > .settings-page-header { margin-bottom: 59px; }
+  html:root .settings-app .settings-main[data-settings-page=api] > .settings-content > .settings-page-header { margin-bottom: 32px; }
+  html:root .settings-app .settings-main[data-settings-page=api] > .settings-content > .settings-page-header p { margin-top: 4px; line-height: 22px; }
+  html:root .settings-app .settings-main[data-settings-page=api] .api-community-link { color: var(--set-text); text-decoration: none; }
   html:root .settings-app .settings-main[data-settings-page=api] a.settings-inline-link { display: inline-block; line-height: normal; text-decoration: none; }
   html:root .settings-app .settings-main .pst-actions { position: absolute; right: 16px; }
   html:root .settings-app .settings-main .pst-copy { padding-right: 44px; }

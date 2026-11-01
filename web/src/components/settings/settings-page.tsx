@@ -2275,6 +2275,7 @@ function SecurityPage({
   onNavigate: (page: SettingsPageId, teamKey?: string, teamSection?: TeamSettingsSection) => void;
 }) {
   const { t } = useI18n();
+  const desktop = useDesktopSettings();
   const [settings, setSettings] = useState(data.workspaceSettings);
   const [uploadPolicyOpen, setUploadPolicyOpen] = useState(false);
   const [privacyDialog, setPrivacyDialog] = useState<"support" | "health" | null>(null);
@@ -2326,6 +2327,10 @@ function SecurityPage({
     <PermissionRow title={title} description={description} settingKey={settingKey} settings={settings} save={save} />
   );
   const identityProviders = data.identityProviders?.length ?? 0;
+  const authenticationPolicy = <>
+    {toggle("Disable authentication bypass for admins", "disableAdminBypass", "When enabled, admins are restricted to the enabled authentication methods")}
+    {toggle("Require two-factor authentication", "requireTwoFactor", "Require a second factor for all members")}
+  </>;
   return (
     <>
       <PageTitle>Security</PageTitle>
@@ -2350,8 +2355,7 @@ function SecurityPage({
           <Row title="SAML & SCIM" description={identityProviders ? `${identityProviders} identity provider${identityProviders === 1 ? "" : "s"} configured` : "Manage logins via an identity provider’s SSO"}>
             <ActionButton onClick={() => onNavigate("authentication")}>Configure</ActionButton>
           </Row>
-          {toggle("Disable authentication bypass for admins", "disableAdminBypass", "When enabled, admins are restricted to the enabled authentication methods")}
-          {toggle("Require two-factor authentication", "requireTwoFactor", "Require a second factor for all members")}
+          {!desktop && authenticationPolicy}
           <Row title="Session duration" description="How long members stay signed in before re-authenticating">
             <Select
               label="Session duration"
@@ -2386,6 +2390,7 @@ function SecurityPage({
             <ActionButton onClick={() => onNavigate("audit-log")}>Open</ActionButton>
           </Row>
         </Group>
+        {desktop && <Group title="Authentication methods">{authenticationPolicy}</Group>}
       </Section>
       <Section title="Integrations & applications">
         {toggle("Review third-party applications", "reviewThirdPartyApplications", "Control which applications can be installed to your workspace")}
@@ -2588,7 +2593,7 @@ function ApiPage({
   };
   return (
     <>
-      <PageTitle description={<>{t('Flow’s API provides a programmable interface to your data. Use it to build public or private apps, workflows, and integrations for Flow.')} {phone && <><a className="api-community-link" href="https://github.com/leozhengliu-pixel/flow/issues" target="_blank" rel="noreferrer">{t('Join our developer community')}</a> {t('for help and questions.')} </>}<ApiDocsLink file="api.md"/></>}>
+      <PageTitle description={<>{t('Flow’s API provides a programmable interface to your data. Use it to build public or private apps, workflows, and integrations for Flow.')} {(phone || desktop) && <><a className="api-community-link" href="https://github.com/leozhengliu-pixel/flow/issues" target="_blank" rel="noreferrer">{t('Join our developer community')}</a> {t('for help and questions.')} </>}<ApiDocsLink file="api.md"/></>}>
         API
       </PageTitle>
       <OAuthApplicationsSection data={data} />

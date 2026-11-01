@@ -54,6 +54,15 @@ function props(page: SettingsPageId) {
 }
 
 describe('personal settings workflows', () => {
+  it('omits the extra Refresh control only on desktop', async () => {
+    const media=vi.spyOn(window,'matchMedia').mockImplementation(query=>({matches:query==='(min-width: 1024px)',addEventListener:vi.fn(),removeEventListener:vi.fn()}) as unknown as MediaQueryList)
+    try {
+      api.fetchAccountSessions.mockResolvedValue([{id:'audit',current:true,name:'Audit browser',createdAt:'2026-01-01',lastSeenAt:'2026-01-01',expiresAt:'2027-01-01'}])
+      render(<MemoryRouter><I18nProvider><PersonalSettings {...props('account-security')}/></I18nProvider></MemoryRouter>)
+      expect(await screen.findByText('Audit browser')).toBeVisible()
+      expect(screen.queryByRole('button',{name:'Refresh'})).toBeNull()
+    } finally {media.mockRestore()}
+  })
   it('shows session geography only when supplied and refreshes the actual session list', async () => {
     const session = { id: 'audit', current: true, name: 'Audit browser', createdAt: '2026-01-01', lastSeenAt: '2026-01-01', expiresAt: '2027-01-01' }
     api.fetchAccountSessions.mockResolvedValueOnce([{ ...session, location: 'Test city', countryCodes: ['US', 'JP'] }]).mockResolvedValue([session])
