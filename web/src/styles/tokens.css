@@ -364,7 +364,7 @@
 .sub-issues-display-menu{min-height:291px}
 .bottom-agent{right:10px;bottom:4px;height:28px;gap:2px;padding:0;border:0;background:transparent}
 .bottom-agent>button{height:28px;display:flex;align-items:center;justify-content:center;gap:7px;padding:0 12px 0 10px;border:.5px solid transparent;border-radius:8px;background:transparent;color:inherit;font-size:12px;font-weight:500}
-.bottom-agent>button:last-child{width:28px;padding:0;color:var(--faint)}
+.bottom-agent>button:last-child{width:28px;padding:0 2px;color:var(--faint)}
 @media(min-width:1024px){.bottom-agent>button:first-of-type{gap:6px;line-height:normal;color:var(--sidebar-nav-fg)}.bottom-agent>button:first-of-type>span{font-weight:450}}
 :root[data-theme="light"] .bottom-agent>button:last-child{color:lch(18.888% 1.25 282)}
 .bottom-agent>button:hover,.bottom-agent>button:focus-visible{background:var(--theme-surface-hover);color:var(--theme-text-primary);outline:0}
