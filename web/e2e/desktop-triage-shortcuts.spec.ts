@@ -88,6 +88,8 @@ for (const keys of [['3'], ['m', 'm']]) {
     await expect(dialog).toBeVisible()
     const target = issueList.issues[0]
     await dialog.getByRole('combobox').fill(target.identifier)
+    await expect(dialog.getByRole('option').filter({ hasText: target.title })).toBeVisible()
+    if (process.env.FLOW_CI_SHOTS && keys.length === 2) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/triage-duplicate.png`, animations: 'disabled' })
     await dialog.getByRole('option').filter({ hasText: target.title }).click()
     await expect(dialog).toBeHidden()
     await expect(rows).toHaveCount(2)

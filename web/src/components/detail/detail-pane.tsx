@@ -87,6 +87,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   const{t}=useI18n(),phoneLayout=usePhoneLayout(),[title,setTitle]=useState(issue.title),[subOpen,setSubOpen]=useState(false),[subEditorKey,setSubEditorKey]=useState(0),[linkOpen,setLinkOpen]=useState(false),[subCollapsed,setSubCollapsed]=useState(false),[subSelected,setSubSelected]=useState(new Set<string>()),[subDisplay,setSubDisplay]=useState<SubIssueDisplay>({ordering:'priority',direction:'asc',completed:'all',nested:true,properties:new Set(['status','labels','assignee'])}),[relationType,setRelationType]=useState<IssueRelationType|null>(null),[uploadState,setUploadState]=useState<AttachmentUploadState>()
   const peoplePresence=workspacePresence??presence
   const desktopLayout=useDesktopLayout()
+  const inTriage=isIssueInTriage(issue,data.teamSettings)
   const viewRef=useRef<HTMLElement>(null)
   const openProperty=(property:string)=>{const trigger=[...viewRef.current?.querySelectorAll<HTMLButtonElement>(`button[data-property="${property}"]`)??[]].find(button=>button.getClientRects().length>0);trigger?.click()}
   const copyShortcut=(value:string)=>{void navigator.clipboard.writeText(value).then(()=>toast.success(t('Copied to clipboard'))).catch(()=>toast.error(t('Could not write to clipboard')))}
@@ -97,7 +98,8 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
     '⇧ R':()=>viewRef.current?.querySelector<HTMLElement>('.title-editor[contenteditable="true"]')?.focus(),
     'Ctrl ⇧ I':()=>viewRef.current?.querySelector<HTMLElement>('.description-editor[contenteditable="true"]')?.focus(),
     '⌘ ⇧ O':()=>setSubOpen(true),
-    'M then B':()=>setRelationType('blocked_by'), 'M then X':()=>setRelationType('blocks'), 'M then R':()=>setRelationType('related'), 'M then M':()=>setRelationType('duplicate'),
+    'M then B':()=>setRelationType('blocked_by'), 'M then X':()=>setRelationType('blocks'), 'M then R':()=>setRelationType('related'),
+    ...(!inTriage?{'M then M':()=>setRelationType('duplicate')}:{}),
     '⌘ .':()=>copyShortcut(issue.identifier), '⌘ ⇧ ,':()=>copyShortcut(new URL(issuePath(data.workspace.urlKey,issue),location.origin).href),
     '⌘ ⇧ .':()=>copyShortcut(configuredIssueBranch(issue,data)), '⌘ ⇧ \x27':()=>copyShortcut(issue.title), '⌘ ⌥ C':()=>copyShortcut(issueEverythingMarkdown(issue,new URL(issuePath(data.workspace.urlKey,issue),location.origin).href,data)),
   },desktopLayout&&!embedded,undefined,true)
@@ -143,7 +145,6 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   const toggleLabel=async(id:string)=>{await onUpdate({labelIds:toggleGroupedLabelIds(issue.labels.map(x=>x.id),id,availableLabels)})}
   const createLabel=onCreateLabel?async(name:string,groupId?:string)=>{const label=await onCreateLabel(name,groupId);await onUpdate({labelIds:toggleGroupedLabelIds(issue.labels.map(x=>x.id),label.id,[...availableLabels,label])})}:undefined
   const toggleSubscriber=async(id:string)=>onUpdate({subscriberIds:issue.subscriberIds.includes(id)?issue.subscriberIds.filter(x=>x!==id):[...issue.subscriberIds,id]})
-  const inTriage=isIssueInTriage(issue,data.teamSettings)
   // Inbox owns 1/2/3/H there, so the embedded pane shows the buttons without registering shortcuts.
   const triageActions=inTriage?<TriageHeaderActions key={issue.id} issue={issue} data={data} shortcuts={!embedded} onDone={updated=>onIssueUpdated?.(updated)}/>:undefined
   const upload=async(file:File, options?:{embed?:boolean})=>{setUploadState({name:file.name,progress:20,file});try{setUploadState({name:file.name,progress:70,file});const attachment=await onUpload(file, options);setUploadState(undefined);return attachment}catch(error){setUploadState({name:file.name,progress:100,file,error:error instanceof Error?error.message:'Upload failed'});throw error}}
