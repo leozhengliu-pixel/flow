@@ -93,3 +93,28 @@ more work to reduce the remaining long jobs, such as one Vitest coverage
 collection with all three existing scope gates. Neither isolation nor that
 coverage redesign was verified here. This change stops at the measured result
 rather than weakening checks or claiming an unmeasured 15-minute result.
+
+## Local Verification
+
+After the final rebase, all commands below exited 0 through the machine-wide
+heavy-command lock. Go used `GOMAXPROCS=2`; browser tests used bundled Chromium,
+no retries, the scratch API binary/database under `/tmp/codex-gap-ci`, and a
+temporary Playwright config removed afterwards. The changed browser spec passed
+all 19 tests. No application component changed, so no component Vitest file was
+selected. No screenshots were taken.
+
+```sh
+# api/
+go vet ./...
+go test -p 1 -race -covermode=atomic ./cmd/server -run '^(TestReadFileParsesDocuments|TestReadFileCapsOutputAndRefusesZipBombs|TestAgentChatReadsAttachedFilesThroughTools|TestParseAgentFileWithinBoundsConcurrentParses|TestWorkspaceSettingsPersistence)$' -count=1
+go test -p 1 -race -covermode=atomic ./internal/store -run '^(TestAuthTestFixtureKeepsPasswordCostAndIsolation|TestAccountAuthenticationAndSessionLifecycle|TestOpenSQLiteStartsWithoutFixtureWorkspace|TestSchemaMigrationsAreVersionedAndIdempotent)$' -count=1
+# web/
+npm run typecheck
+npm run lint
+npx playwright test e2e/mobile-docs.spec.ts --config=playwright.ci-local.config.ts --project=mobile-chromium
+```
+
+The parser regression also passed 20 repetitions with 100 release assertions
+per repetition. The race/coverage shard partition check and YAML initial-job
+budget check exited 0. The earlier profiling passes were targeted tests only,
+not local full-suite runs.
