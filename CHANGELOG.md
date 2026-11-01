@@ -19,6 +19,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align desktop issue property controls with the shared property-rail inset without changing phone layouts.
 
+- Restore issue identifiers in desktop activity links and align issue title tracking, sub-issue controls, subscriber surfaces and the floating command strip.
+
 - Update browser inventories for expanded desktop shortcut help and the four default My issues tabs, while checking the shared view remains available.
 
 - Keep the desktop M M shortcut on triage's duplicate workflow so it records the relation, changes status and advances the queue.
