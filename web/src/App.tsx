@@ -4358,6 +4358,10 @@ function App() {
       else navigateTo(to, options);
     };
     if (!routeBelongsToWorkspace(route, workspace)) return;
+    if (route.kind === "settings" && /\/settings\/billing\/?$/.test(location.pathname)) {
+      canonicalize(settingsPath(workspace, "preferences"), { replace: true });
+      return;
+    }
     // There is no workspace-wide Documents list: old links land on a team's Documents tab.
     if (route.kind === "documents") {
       navigateTo(documentsRedirectPath(data), { replace: true });

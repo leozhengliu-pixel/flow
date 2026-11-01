@@ -68,7 +68,6 @@ import {
 import { ReleasePipelineIcon, ReleaseStatusIcon } from "@/components/releases/release-icons";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { WorkspaceMenu } from "@/components/workspace/workspace-menu";
-import { SettingsPlanGlyph } from "@/components/settings/settings-nav-glyphs";
 import { FlowGlyph } from "@/components/ui/menu-glyphs";
 import {
   agentPath,
@@ -200,7 +199,7 @@ export function Sidebar({
   onOpenChange?: (open: boolean) => void;
   onSearch: () => void;
   onCreate: () => void;
-  onOpenSettings: (page?: "workspace" | "members" | "billing") => void;
+  onOpenSettings: (page?: "workspace" | "members") => void;
   onSwitchWorkspace: (workspace: Workspace) => void;
   onCreateWorkspace: () => void;
   onLogout: () => Promise<void>;
@@ -867,15 +866,6 @@ export function Sidebar({
             onSettings={() => onOpenSettings("workspace")}
             onShortcuts={() => setShortcutsOpen(true)}
           />
-          <button
-            className="sidebar-plan-button"
-            type="button"
-            aria-label={translate("Free plan")}
-            onClick={() => onOpenSettings("billing")}
-          >
-            <SettingsPlanGlyph size={16} />
-            <span>{translate("Free plan")}</span>
-          </button>
         </footer>
         {!layout.compact && <FlowTooltip label={layout.collapsed ? 'Expand sidebar' : 'Collapse sidebar'} shortcut="["><button
           className="sidebar-resize-handle"

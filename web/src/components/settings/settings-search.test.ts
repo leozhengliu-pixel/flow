@@ -4,6 +4,15 @@ import { createSettingsSearchIndex, searchTeams, SETTINGS_SEARCH_PAGES } from '.
 import { translateToChinese } from '@/i18n/translate'
 
 describe('settings search index', () => {
+  it('omits retired billing, plan and purchase entries in both languages', () => {
+    expect(SETTINGS_SEARCH_PAGES.map(page => page.id)).not.toContain('billing')
+    for (const translate of [undefined, translateToChinese]) {
+      const index = createSettingsSearchIndex(SETTINGS_SEARCH_PAGES, translate)
+      for (const query of ['billing', 'pricing', 'invoices', 'Free plan', 'Add credits', 'Automatic reload', '账单', '充值额度']) {
+        expect(index.search(query)).toEqual([])
+      }
+    }
+  })
   it('finds the actual Asks enable control in both languages', () => {
     const index = createSettingsSearchIndex(SETTINGS_SEARCH_PAGES)
     expect(index.search('Enable Asks')).toEqual(expect.arrayContaining([expect.objectContaining({ page: 'asks', title: 'Enable Asks' })]))

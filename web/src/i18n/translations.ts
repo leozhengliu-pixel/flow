@@ -31,7 +31,7 @@ import { mcpConnectorsZhCN } from './translations-mcp-connectors';
 import { codingSessionsZhCN } from './translations-coding-sessions';
 import { aiSettingsZhCN } from './translations-ai-settings';
 import { webhookSettingsZhCN } from './translations-webhook-settings';
-import { billingUsageSettingsZhCN } from './translations-billing-usage-settings';
+import { usageSettingsZhCN } from './translations-usage-settings';
 import { teamMemberOriginsZhCN } from './translations-team-member-origins';
 import { scimProvisioningZhCN } from './translations-scim-provisioning';
 import { agentMentionsZhCN } from './translations-agent-mentions';
@@ -1929,7 +1929,6 @@ export const zhCN: Record<string, string> = {
     "事项的每次变更都会生成并保留独立历史记录，以便进行更详细的审计。",
   "Team icon color": "团队图标颜色",
   "Team colors": "团队颜色",
-  "Available on Enterprise": "企业版可用",
   "Danger zone": "危险区域",
   "Delete workspace": "删除工作区",
   "Schedule workspace to be permanently deleted": "安排永久删除工作区",
@@ -2440,7 +2439,6 @@ export const zhCN: Record<string, string> = {
     "创建新团队以管理独立的周期、工作流和通知",
   "Team access": "团队访问权限",
   "Change team access": "更改团队访问权限",
-  "Available on Business": "商业版可用",
   Timezone: "时区",
   "Used for team schedules, dates, and cycle start times":
     "用于团队计划、日期和周期开始时间",
@@ -3454,7 +3452,6 @@ export const zhCN: Record<string, string> = {
   "Email address": "邮箱地址",
   Emojis: "表情",
   Empty: "空",
-  Enterprise: "企业版",
   Error: "错误",
   Estimate: "估算",
   Export: "导出",
@@ -4488,8 +4485,6 @@ Object.assign(zhCN, {
   "Apply authentication requirements to workspace administrators.":
     "将身份验证要求应用于工作区管理员。",
   "SAML and SCIM": "SAML 和 SCIM",
-  "Identity provider provisioning requires the Enterprise plan.":
-    "身份提供商预配需要企业版方案。",
   "Identity providers": "身份提供商",
   "Add identity provider": "添加身份提供商",
   "Configure identity provider": "配置身份提供商",
@@ -6042,7 +6037,7 @@ for (const [key, value] of Object.entries(mcpConnectorsZhCN)) if (!(key in zhCN)
 for (const [key, value] of Object.entries(codingSessionsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 for (const [key, value] of Object.entries(aiSettingsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 Object.assign(zhCN, webhookSettingsZhCN);
-for (const [key, value] of Object.entries(billingUsageSettingsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
+for (const [key, value] of Object.entries(usageSettingsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 Object.assign(zhCN, teamMemberOriginsZhCN);
 // SCIM provisioning: only fills keys the shared dictionary does not already translate.
 for (const [key, value] of Object.entries(scimProvisioningZhCN)) if (!(key in zhCN)) zhCN[key] = value;

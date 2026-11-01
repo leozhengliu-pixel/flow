@@ -85,7 +85,7 @@ import type { NotificationSettingsView, SettingsPageId, TeamSettingsSection } fr
 import { AgentCursorGlyph, AgentHistoryGlyph } from '@/components/ui/agent-glyph'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { AppLink } from "@/components/ui/app-link";
-import { SettingsBackChevronGlyph, SettingsNavGlyph, SettingsPlanGlyph, SettingsSearchGlyph, type SettingsNavGlyphName } from './settings-nav-glyphs'
+import { SettingsBackChevronGlyph, SettingsNavGlyph, SettingsSearchGlyph, type SettingsNavGlyphName } from './settings-nav-glyphs'
 import {
   apiKeysSettingsPath,
   identityProviderSettingsPath,
@@ -168,10 +168,6 @@ import { WorkspaceMembersPage } from "./workspace-members-page";
 const TeamWorkflowSettings = lazyPage(
   () => import("./team-workflow-settings"),
   "TeamWorkflowSettings",
-);
-const BillingSettings = lazyPage(
-  () => import("./billing-settings"),
-  "BillingSettings",
 );
 const UsageSettings = lazyPage(
   () => import("./usage-settings"),
@@ -282,7 +278,6 @@ export async function preloadSettingsPage(page: SettingsPageProps['page'], optio
   if (page === 'team') return TeamWorkflowSettings.preload()
   if (page === 'audit-log') return AuditLogSettings.preload()
   if (page === 'import-export') return ImportExportSettings.preload()
-  if (page === 'billing') return BillingSettings.preload()
   if (page === 'usage') return UsageSettings.preload()
   if (page === 'workflows') return WorkflowAutomationSettings.preload()
   if (page === 'releases' && options.releasePipelineMode) return PipelineEditorPage.preload()
@@ -447,7 +442,6 @@ const NAV: { title: string; items: NavItem[] }[] = [
       { id: "security", label: "Security", glyph: "security" },
       { id: "api", label: "API", glyph: "code" },
       { id: "applications", label: "Applications", glyph: "applications" },
-      { id: "billing", label: "Billing", glyph: "billing" },
       { id: "usage", label: "Usage & limits", glyph: "usage" },
       { id: "import-export", label: "Import & export", glyph: "importExport" },
     ],
@@ -817,15 +811,6 @@ export function SettingsPage(props: SettingsPageProps) {
               onSettings={() => { props.onNavigate("preferences"); setMobileNav(false); }}
               onShortcuts={() => setShortcutsOpen(true)}
             />
-            <button
-              type="button"
-              className="settings-plan-button"
-              aria-label={t("Free plan")}
-              onClick={() => { props.onNavigate("billing"); setMobileNav(false); }}
-            >
-              <SettingsPlanGlyph size={16} />
-              <span>{t("Free plan")}</span>
-            </button>
           </footer>
         </aside>
         <button
@@ -1247,8 +1232,6 @@ function SettingsBodyContent(
     return <InstalledApplicationPage data={props.data} clientId={props.applicationId} onReload={props.onReload} />;
   if (page === "applications")
     return <InstalledApplicationsPage data={props.data} />;
-  if (page === "billing")
-    return <BillingSettings data={props.data} onOpenUsage={() => props.onOpenUsageView?.()} />;
   if (page === "usage")
     return <UsageSettings data={props.data} view={props.usageView} onReload={props.onReload} onOpenView={(view) => props.onOpenUsageView?.(view)} />;
   if (page === "import-export")

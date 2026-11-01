@@ -28,8 +28,6 @@ html:root .settings-app .settings-main .usage-page > .settings-page-header { mar
 .usage-row-meta { line-height: 15px; color: var(--set-desc); font-size: 12px; font-weight: 450; }
 .usage-chevron { flex: none; color: var(--set-desc); }
 .usage-icon-box { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: 8px; background: color-mix(in lch, var(--set-text) 6%, transparent); color: var(--set-desc); }
-.usage-status-line { display: inline-flex; align-items: center; gap: 6px; }
-.usage-status-line i { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--set-desc); }
 
 .usage-section { margin-top: 48px; }
 .usage-limits-page .usage-section { margin-top: 32px; }
@@ -64,7 +62,6 @@ html:root .settings-app .settings-main .usage-page > .settings-page-header { mar
 .usage-primary-button { background: var(--set-primary); box-shadow: var(--set-primary-shadow); color: var(--set-primary-text); }
 .usage-primary-button:hover:not(:disabled) { background: color-mix(in lch, var(--set-primary) 88%, white); }
 .usage-remove { margin-right: auto; color: var(--semantic-danger); }
-.usage-section-header > .usage-pill-button { margin-right: 0; }
 
 /* Dialogs */
 .dialog-content.usage-dialog {
@@ -82,17 +79,8 @@ html:root .settings-app .settings-main .usage-page > .settings-page-header { mar
 .usage-dialog > h2, .usage-dialog [role="dialog"] > h2 { margin: 0; color: var(--set-label); font-size: 15px; font-weight: 600; line-height: 23px; }
 .usage-dialog .dialog-close { top: 26px; right: 20px; }
 .usage-dialog-description { margin: 2px 0 0; color: var(--set-desc); font-size: 13px; font-weight: 450; line-height: 16px; }
-.usage-dialog-note { margin-right: auto; color: var(--set-desc); font-size: 12px; line-height: 15px; }
 .usage-dialog-error { margin: 8px 0 0; color: var(--semantic-danger); font-size: 12px; }
 .usage-dialog > footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 21px; }
-.usage-amount-box { box-sizing: border-box; height: 61px; display: flex; align-items: center; justify-content: space-between; margin-top: 24px; padding: 0 16px; border-radius: 8px; box-shadow: var(--set-card-shadow); }
-.usage-amount-box strong { color: var(--set-label); font-size: 13px; font-weight: 500; }
-.usage-amount-box > div { display: flex; gap: 9px; }
-.usage-amount-box button { box-sizing: border-box; height: 28px; padding: 0 16px; border: 1px solid transparent; border-radius: 9999px; background: transparent; color: var(--set-button-text); font: 500 12px/normal var(--font); }
-.usage-amount-box button.is-selected { background: var(--set-card); box-shadow: var(--set-card-shadow); }
-.usage-agree { display: flex; align-items: center; gap: 8px; margin-top: 11px; padding-left: 1px; color: var(--set-desc); font-size: 12px; font-weight: 400; }
-.usage-agree b { color: var(--set-button-text); font-weight: 450; }
-.usage-agree input { width: 14px; height: 14px; margin: 0; }
 .usage-limit-input { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; color: var(--set-label); font-size: 13px; font-weight: 500; }
 .usage-money { box-sizing: border-box; width: 160px; height: 32px; display: flex; align-items: center; overflow: hidden; border: 1px solid var(--set-search-border); border-radius: 8px; background: var(--set-search-bg); }
 .usage-money i { padding-left: 10px; color: var(--set-desc); font-style: normal; font-size: 13px; }

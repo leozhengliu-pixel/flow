@@ -66,10 +66,10 @@ describe("routeInfo", () => {
     ).toBe("Profile");
   });
 
-  it("skips billing settings titles", () => {
+  it("uses the settings title for usage settings", () => {
     expect(
       routeInfo(
-        { kind: "settings", workspaceSlug: "acme", page: "billing" as never },
+        { kind: "settings", workspaceSlug: "acme", page: "usage" },
         data,
       ).title,
     ).toBe("Settings");

@@ -76,7 +76,6 @@
   html:root .sidebar .workspace-row > button.sidebar-compose { width: 32px; flex: 0 0 32px; }
   .sidebar-footer { height: 32px; flex-basis: 32px; margin: 0 0 0 -2px; padding: 0; }
   .sidebar-help { width: 32px; height: 32px; flex: 0 0 32px; box-shadow: none; }
-  .sidebar-plan-button { display: none; }
   /* The desktop sidebar metrics above must not leak into the phone drawer. */
   .sidebar .workspace-row strong { font-size: 14px; font-weight: 500; line-height: 20px; letter-spacing: 0; }
   .sidebar .workspace-menu-trigger .workspace-avatar { border-radius: 6px; font-size: 9px; font-weight: 600; }
@@ -404,8 +403,7 @@
     font-weight: 500;
     line-height: normal;
   }
-  html:root .sidebar .sidebar-help::before,
-  html:root .sidebar .sidebar-plan-button::before {
+  html:root .sidebar .sidebar-help::before {
     content: "";
     position: absolute;
     inset: 0;
@@ -413,8 +411,7 @@
     background: var(--set-panel-bg);
     box-shadow: var(--set-drawer-pill-shadow);
   }
-  html:root .sidebar .sidebar-help > svg,
-  html:root .sidebar .sidebar-plan-button > svg { position: relative; }
+  html:root .sidebar .sidebar-help > svg { position: relative; }
   html:root .sidebar .sidebar-help::before {
     inset: auto;
     width: 32px;
@@ -424,41 +421,4 @@
     transform: translate(-50%, -50%);
   }
   html:root .sidebar .sidebar-help > svg { width: 14px; height: 14px; color: var(--text); opacity: .64; }
-  html:root .sidebar .sidebar-plan-button {
-    position: absolute;
-    top: 10px;
-    left: 50px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    height: 32px;
-    padding: 1px 6px;
-    border: 0;
-    border-radius: 12px;
-    background: transparent;
-    box-shadow: none;
-    color: var(--set-drawer-plan-text);
-    font-family: var(--font);
-    font-size: 13.3333px;
-    font-weight: 400;
-    line-height: normal;
-    white-space: nowrap;
-  }
-  html:root .sidebar .sidebar-plan-button > svg {
-    width: 16px;
-    height: 16px;
-    flex: none;
-    color: var(--issue-muted);
-  }
-  html:root .sidebar .sidebar-plan-button > span {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    height: 13px;
-    margin-right: 4px;
-    font-family: var(--font);
-    font-size: 11px;
-    font-weight: 500;
-    line-height: normal;
-  }
 }

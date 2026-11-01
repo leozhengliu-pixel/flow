@@ -95,7 +95,6 @@ export type SettingsPageId =
   | "audit-log"
   | "api"
   | "applications"
-  | "billing"
   | "usage"
   | "import-export"
   | "workflows"
@@ -452,6 +451,7 @@ const AI_SUBPAGE_PATHS: Partial<Record<SettingsPageId, string>> = {
  */
 function settingsAlias(rest: string[]): string[] | undefined {
   const [first, second, third] = rest;
+  if (first === "billing" && rest.length === 1) return ["account", "preferences"];
   // coding sessions (track F): `environments` (legacy page, redirects) and `environments/:id|new` (editor).
   if (first === "ai" && second === "coding-sessions")
     return third === "environments" && rest.length <= 4 ? ["coding-environments"] : rest.length === 2 ? ["coding-sessions"] : undefined;
@@ -1966,7 +1966,6 @@ const SETTINGS_PAGES = new Set<SettingsPageId>([
   "audit-log",
   "api",
   "applications",
-  "billing",
   "usage",
   "import-export",
   "workflows",

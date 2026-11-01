@@ -22,7 +22,6 @@
   html:root .settings-app .settings-nav-link.active { background: var(--set-nav-active-bg); color: var(--set-nav-active); }
   html:root .settings-app .settings-sidebar-footer { flex: 0 0 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px; }
   html:root .settings-app .settings-sidebar-footer .sidebar-help { position: relative; box-sizing: border-box; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: .5px solid var(--set-sep); border-radius: 50%; background: var(--set-panel-bg); color: var(--set-nav); }
-  html:root .settings-app .settings-plan-button { box-sizing: border-box; height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 6px; border: .5px solid var(--set-sep); border-radius: 12px; background: var(--set-panel-bg); color: var(--set-nav); font: 500 11px var(--font); }
   html:root .settings-app .settings-main .personal-static { font: 450 13px/normal var(--font); }
   html:root .settings-app .settings-main .personal-emoticon-emoji { display: inline-block; font: 450 13px/14px var(--font); vertical-align: bottom; }
   html:root .settings-app .settings-main .personal-avatar { width: 32px; height: 32px; font: 400 14px/normal var(--font); font-size: 14px !important; }
@@ -95,11 +94,6 @@
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label > input { box-sizing: border-box; width: 100%; height: 32px; padding: 6px 25px 6px 32px; border-radius: 8px; }
   html:root .settings-app .settings-main[data-settings-page=api] > .settings-content > .settings-page-header { margin-bottom: 59px; }
   html:root .settings-app .settings-main[data-settings-page=api] a.settings-inline-link { display: inline-block; line-height: normal; text-decoration: none; }
-  html:root .settings-app .settings-main .billing-link { padding: 1px 4px; border-radius: 8px; }
-  html:root .settings-app .settings-main .billing-ghost-button { border-width: .5px; }
-  html:root .settings-app .settings-main .billing-all-plans { padding-left: 8px; }
-  html:root .settings-app .settings-main .billing-current-plan { height: 74.5px; }
-  html:root .settings-app .settings-main .billing-usage-row { height: 65px; text-decoration: none; }
   html:root .settings-app .settings-main .pst-actions { position: absolute; right: 16px; }
   html:root .settings-app .settings-main .pst-copy { padding-right: 44px; }
   html:root .settings-app .settings-main .domain-label-name > input.domain-label-name-input:not([type=color]) { height: 28.5px; border-radius: 7px; }
