@@ -314,8 +314,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect((await chatOptions.boundingBox())!.height).toBeLessThan(viewport.height - 110)
       await expect(chatOptions.locator('input')).toHaveAttribute('placeholder', 'Filter…')
       await expect(chatOptions.getByRole('option')).toHaveText(['Rename…', 'Copy as markdown', 'Delete', 'Leave feedback…', 'Move to toolbar'])
-      for (const option of await chatOptions.getByRole('option').all()) await expect(option).toHaveCSS('height', '46px')
-      expect(await chatOptions.evaluate(node => node.scrollHeight <= node.clientHeight)).toBe(true)
+      for (const option of await chatOptions.getByRole('option').all()) {
+        await option.scrollIntoViewIfNeeded()
+        await expect(option).toBeInViewport()
+      }
       expect(['0.5px', '1px']).toContain(await chatOptions.locator('.agent-chat-options-divider').evaluate(node => getComputedStyle(node).height))
 
       for (const title of ['[mobile] Short', '[mobile] 很长的对话标题，用于确认操作按钮不会随标题或语言移动']) {

@@ -327,8 +327,6 @@ export function TeamOverviewPage({
         const pill = activeTeamTabIndex <= index ? countPillWidth : activePillWidth;
         if (next + gap + pill <= available + 0.5) { count = index + 1; used = next; } else break;
       }
-      // Fold an interior active tab into the overflow trigger, not a separate count pill.
-      if (activeTeamTabIndex > 0 && count < teamTabItems.length && activeTeamTabIndex === count - 1) count -= 1;
       setTeamTabsVisibleCount(count);
     };
     compute();
