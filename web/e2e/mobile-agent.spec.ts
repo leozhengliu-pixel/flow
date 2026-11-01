@@ -32,6 +32,16 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
         const link = panel.locator('.coding-session-prompt a')
         await expect(link).toHaveText(issue.identifier)
         await expect(link).toHaveAttribute('href', new RegExp(`/issue/${issue.identifier}/`))
+        const promptHeader = panel.locator('.coding-session-prompt header')
+        await expect(promptHeader).toHaveCSS('padding-top', '2px')
+        const author = panel.locator('.coding-session-prompt header strong')
+        const authorInset = await author.evaluate(node => {
+          const header = node.parentElement!
+          const style = getComputedStyle(header)
+          return node.getBoundingClientRect().y - header.getBoundingClientRect().y
+            - parseFloat(style.paddingTop) - (header.clientHeight - parseFloat(style.paddingTop) - node.getBoundingClientRect().height) / 2
+        })
+        expect(Math.abs(authorInset)).toBeLessThan(.1)
         expect(await panel.locator('.coding-agent-panel-surface').evaluate(node => getComputedStyle(node).backgroundColor)).toBe(await panel.locator('.coding-agent-panel-header').evaluate(node => getComputedStyle(node).backgroundColor))
         await panel.locator('.cs-group-header').first().click()
         const gaps = await panel.locator('.cs-action-header').evaluateAll(rows => rows.map(row => {

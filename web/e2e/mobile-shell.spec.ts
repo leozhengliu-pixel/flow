@@ -237,9 +237,13 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
     test('composer labels picker matches workspace label rows', async ({ page, workspaceKey }) => {
       await page.goto(`${base}/${workspaceKey}/my-issues/assigned`)
       await page.getByRole('button', { name: 'New issue', exact: true }).click()
-      const composer = page.getByRole('dialog', { name: 'New issue', exact: true })
-      await composer.locator('[data-property="labels"]').click()
+      const composer = page.getByRole('dialog', { name: 'New issue', exact: true, includeHidden: true })
+      const labels = composer.locator('[data-property="labels"]')
+      const labelColor = await labels.locator('span').last().evaluate(node => getComputedStyle(node).color)
+      await labels.click()
       const picker = page.locator('.phone-menu-surface:has([role=listbox][aria-label=Labels])')
+      await expect(labels).toHaveAttribute('aria-expanded', 'true')
+      await expect(labels.locator('span').last()).toHaveCSS('color', labelColor)
       await geometry(picker, { x: 16, y: Math.min(110, viewport.height * .1304), width: viewport.width - 32 })
       // Intrinsic outer height includes platform-rounded hairlines; pin the content geometry.
       await geometry(picker.locator('.phone-menu-heading'), { height: 40 })

@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Preserve the phone composer's dim Labels pill while its picker is open and restore the review chat author header's top padding.
+
 - Let phone chat actions follow short titles while long titles truncate within the viewport.
 
 - Use natural icon spacing in phone review and cycle controls, and let issue composer toolbars contain their controls and bottom padding.
