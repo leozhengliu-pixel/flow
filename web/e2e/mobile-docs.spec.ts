@@ -421,6 +421,10 @@ test.describe('mobile documents tab menu', () => {
     await expect(page.getByRole('menu', { name: 'Team views' }).getByRole('menuitem')).toHaveText(['Documents', 'Members'])
     await page.keyboard.press('Escape')
     await page.setViewportSize({ width: 390, height: 844 })
+    await expect(nav.locator('[aria-current="page"], [data-team-tab-active]')).toContainText('Documents')
+    // The toolbar and font metrics determine where the tabs fit, not a fixed
+    // phone breakpoint. Exercise the expanded state with ample phone width.
+    await page.setViewportSize({ width: 600, height: 844 })
     await expect(nav.locator('[data-team-tab-active]')).toHaveCount(0)
     await expect(nav.getByRole('link')).toHaveText(['Overview', 'Documents', 'Members'])
     await page.setViewportSize({ width: 375, height: 667 })
