@@ -912,6 +912,14 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-feedback button.is-active { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 
 @media (min-width: 801px) {
+  .loops-topbar,
+  .loops-editor-topbar {
+    gap: 12px;
+    padding: 0;
+  }
+  .loops-title,
+  .loops-breadcrumb { margin-left: 18px; }
+  .loops-topbar-actions { margin-right: 8px; }
   .loops-toolbar,
   .loops-run-tabs { height: 43.5px; flex-basis: 43.5px; }
   .loops-toolbar-left { gap: 12px; }
