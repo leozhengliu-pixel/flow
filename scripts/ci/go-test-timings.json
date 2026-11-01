@@ -1652,7 +1652,7 @@
     "TestMySQLBooleanPhraseBoundsLongText": 0,
     "TestMySQLURLConversion": 0,
     "TestNULTextReachesTheStore": 2.55,
-    "TestNestedIssueCountsMatchWalk": 456.56,
+    "TestNestedIssueCountsMatchWalk": 691.06,
     "TestNestedIssueMovesFromIndexMatchWalk": 46.58,
     "TestNestedIssueQuery": 2.61,
     "TestNestedMapKeysAddedOnTwoServersAreBothKept": 2.72,
