@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Preserve the phone composer's dim Labels pill while its picker is open and restore the review chat author header's top padding.
 
+- Let phone settings rows and selects grow with their actual content, and retain language, export and onboarding controls outside the reference content.
+
 - Size phone milestone text intrinsically and keep project update Agent writing reachable after the activity feed.
 
 - Remove sampled phone metadata and overflow widths; let team tabs use the space their rendered labels actually need.

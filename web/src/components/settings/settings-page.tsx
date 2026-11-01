@@ -1662,7 +1662,7 @@ function WorkspacePage(
       <Section title="Member onboarding">
         <Row
           title="Welcome message"
-          description="Configure a message that new users will receive when they join the workspace"
+          description={phone ? undefined : "Configure a message that new users will receive when they join the workspace"}
           className="personal-row-link"
           role="button"
           tabIndex={0}
