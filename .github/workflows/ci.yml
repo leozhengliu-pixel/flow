@@ -183,7 +183,7 @@ jobs:
 
   # 4 browser + 12 API test + 3 web coverage gates + 1 API static job = 20,
   # the hosted-runner limit. The remaining short jobs wait for API static
-  # checks, so all API shards start in one wave instead of two.
+  # checks, so all API shards are eligible together instead of in two waves.
   e2e-shard:
     name: Browser E2E (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
@@ -345,8 +345,8 @@ jobs:
           - { name: 'store 3/3', profile: store-3, package: ./internal/store, shard: 3, shards: 3 }
           - { name: 'other packages', profile: other, package: others, shard: 0, shards: 0 }
     env:
-      # Same flags as the test run, so the instrumented test binary is built once
-      # and the list step is served from the build cache.
+      # Use the test run's instrumentation so listing and execution reuse the
+      # same race/coverage build objects.
       GO_TEST_LIST_FLAGS: -race -covermode=atomic
       PACKAGE: ${{ matrix.package }}
       SHARD: ${{ matrix.shard }}
