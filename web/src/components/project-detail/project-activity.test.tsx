@@ -190,6 +190,23 @@ describe('ProjectActivity', () => {
     expect(screen.getByRole('button', { name: 'Post update' })).toHaveClass('is-primary')
   })
 
+  it('keeps phone Agent writing after the feed and applies its draft to the composer', async () => {
+    const matchMedia = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: query === '(max-width: 767px)', media: query, onchange: null, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: () => false }))
+    try {
+      const { container } = render(<I18nProvider><ProjectActivity {...activityProps()} /></I18nProvider>)
+      await userEvent.click(screen.getByRole('tab', { name: 'Update' }))
+      const write = screen.getByRole('button', { name: 'Write with Agent' })
+      expect(write.closest('.project-activity__tools')?.previousElementSibling).toHaveClass('project-activity__feed')
+      expect(container.querySelector('.project-activity__composer .project-activity__agent')).toBeNull()
+      await userEvent.click(write)
+      await userEvent.click(await screen.findByRole('button', { name: 'Finish draft' }))
+      await waitFor(() => expect(container.querySelector('.project-activity__editor')).toHaveTextContent('Agent drafted update'))
+      expect(screen.getByRole('button', { name: 'Post update' })).toBeEnabled()
+    } finally {
+      matchMedia.mockRestore()
+    }
+  })
+
   it('turns the submit primary with a Cancel that clears the composer once it has content', async () => {
     const props = activityProps()
     const draft = { id: 'draft-update', type: 'project_update', resourceId: props.project.id, title: props.project.name, body: 'Shipped the beta', metadata: { resourceType: 'project', health: 'atRisk' }, createdAt: '2026-09-27T12:00:00.000Z', updatedAt: '2026-09-27T12:00:00.000Z' }
