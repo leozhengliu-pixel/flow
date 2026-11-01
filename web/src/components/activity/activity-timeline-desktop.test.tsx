@@ -47,7 +47,7 @@ describe('desktop issue activity', () => {
     expect(screen.getByText(/created the issue/)).toBeVisible()
   })
 
-  it('hides only the redundant parent event and renders a fetched issue title as a plain link', async () => {
+  it('hides only the redundant parent event and renders a fetched issue identifier and title as a plain link', async () => {
     const target = makeIssue({ id: 'target', identifier: 'TST-2', title: 'Related target' })
     vi.spyOn(api, 'fetchIssueRecord').mockResolvedValue(target)
     const events: ActivityEvent[] = [
@@ -56,9 +56,9 @@ describe('desktop issue activity', () => {
     ]
     const view = render(<I18nProvider><ActivityTimeline {...props} events={events} comments={[]} context={makeBootstrap({ issues: [] })}/></I18nProvider>)
     expect(view.container.textContent).not.toContain('parent of')
-    const link = await screen.findByRole('link', { name: 'Related target' })
+    const link = await screen.findByRole('link', { name: 'TST-2 Related target' })
     expect(link).toHaveClass('activity-relation-link')
-    expect(link).not.toHaveTextContent('TST-2')
+    expect(link.querySelector('b')).toHaveTextContent('TST-2')
     await waitFor(() => expect(link).toHaveAttribute('href', '/workspace/issue/TST-2/related-target'))
   })
 })

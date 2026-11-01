@@ -426,7 +426,7 @@ function EventGroupToggle({ events, open, onToggle }: { events: ActivityEvent[];
 function ActivityIssueLink({ id, label, context }: { id: string; label: string; context: ActivityContext }) {
   const targets = useIssuesById([id], context)
   const issue = targets.get(id)
-  return <a className="activity-relation-link" href={issuePath(context.workspace.urlKey, issue ?? { identifier: label, title: '' })}>{issue?.title ?? label}</a>
+  return <a className="activity-relation-link" href={issuePath(context.workspace.urlKey, issue ?? { identifier: label, title: '' })}>{issue ? <><b>{issue.identifier}</b> {issue.title}</> : label}</a>
 }
 
 function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?: ActivityContext }) {
