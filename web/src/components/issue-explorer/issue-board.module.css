@@ -384,6 +384,7 @@
   .columnHeader{position:relative;z-index:0;height:50px;gap:2px;padding:4px 16px 0 22px;background:transparent}
   .columnHeader::before{content:"";position:absolute;z-index:-1;left:8px;right:8px;top:4px;bottom:0;border-radius:5px 5px 0 0;background:color-mix(in srgb,var(--bg-sidebar) 40%,transparent)}
   .columnHeader strong{margin-left:8px;font-size:13px;font-weight:500}
+  .columnActions{gap:2px}
   .count{height:24px;display:flex;align-items:center;gap:3px;margin-left:6px;padding:0;font-size:13px;font-weight:450}
   .countEstimate{display:block;flex:none}
   .headerButton svg{opacity:.64}
