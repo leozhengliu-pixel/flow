@@ -595,7 +595,6 @@
   .team-docs-selection-buttons { display: flex; align-items: center; gap: 8px; }
   .team-docs-selection button { min-width: 0; height: 32px; }
   .team-docs-selection .team-docs-selection-actions {
-    width: 84.375px;
     height: 32px;
     padding: 0 10px;
     border: .5px solid transparent;

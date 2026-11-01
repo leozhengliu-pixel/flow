@@ -305,7 +305,6 @@
 }
 .historyTime {
   flex: 0 0 auto;
-  min-width: 33.18px;
   margin-left: 16px;
   color: var(--agent-history-text);
   /* A fixed line box keeps the Chinese unit glyph from making the row taller than the Latin "8d" does. */
