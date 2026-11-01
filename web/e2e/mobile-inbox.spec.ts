@@ -554,6 +554,7 @@ test.describe('mobile inbox list', () => {
     const menu = page.locator('.review-detail-top .review-menu-button')
     near((await menu.boundingBox())?.x, 8)
     expect((await menu.boundingBox())?.width).toBe(32)
+    await expect(menu.locator('svg:visible')).toHaveCSS('color', 'lch(61.803 1.2 272)')
     near((await page.locator('.review-breadcrumb-issue').boundingBox())?.x, 34)
     await expect(page.locator('.review-breadcrumb-issue-label')).toBeHidden()
     near((await page.locator('.review-breadcrumb-state--phone').boundingBox())?.x, 67)
@@ -576,7 +577,12 @@ test.describe('mobile inbox list', () => {
     near((await page.locator('.review-overview-title').boundingBox())?.y, 97.5)
     near((await page.locator('.review-byline-avatar').boundingBox())?.x, 16)
     near((await page.locator('.review-byline-author').boundingBox())?.x, 40)
-    near((await page.locator('.review-byline-head').boundingBox())?.x, 62.8)
+    const baseBranch = page.locator('.review-byline-branches > .review-byline-branch')
+    await expect(baseBranch).toHaveCSS('padding-right', '2px')
+    const baseBounds = (await baseBranch.boundingBox())!
+    const arrowBounds = (await page.locator('.review-byline-arrow').boundingBox())!
+    near(arrowBounds.x, baseBounds.x + baseBounds.width)
+    near((await page.locator('.review-byline-head').boundingBox())?.x, arrowBounds.x + arrowBounds.width)
     const branch = page.locator('.review-byline-head .review-byline-branch')
     await expect(branch).toContainText('…')
     const branchText = await branch.innerText()
