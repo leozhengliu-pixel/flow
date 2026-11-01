@@ -2,15 +2,10 @@ import { expect } from '@playwright/test'
 import { test } from './workspace-fixture'
 import type { BootstrapData, FlowDocument } from '../src/types/flow'
 
-test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', timezoneId: 'America/Los_Angeles', launchOptions: { args: ['--force-device-scale-factor=2', '--window-size=1440,900'] } })
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', timezoneId: 'America/Los_Angeles' })
 test.skip(({ isMobile }) => isMobile, 'Desktop document audit')
-test.beforeEach(async ({ page, context }) => {
-  const session = await context.newCDPSession(page)
-  await session.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 0, mobile: false })
-  expect(await page.evaluate(() => [innerWidth, innerHeight, devicePixelRatio])).toEqual([1440, 900, 2])
-})
 
-test('document list, intrinsic metadata and subscriber controls retain their desktop geometry', async ({ page, request, workspaceKey }) => {
+test('document list aligns its metadata and opens intrinsic metadata and subscriber controls', async ({ page, request, workspaceKey }) => {
   const headers = { 'X-Workspace-Key': workspaceKey }
   const boot = await (await request.get('/api/bootstrap', { headers })).json() as BootstrapData
   const created = await request.post('/api/documents', { headers, data: { title: '[audit] Plain document', content: 'A paragraph for the desktop audit.', teamIds: [boot.teams[0].id] } })
@@ -18,10 +13,19 @@ test('document list, intrinsic metadata and subscriber controls retain their des
   const doc = await created.json() as FlowDocument
   await page.goto(`/${workspaceKey}/team/${boot.teams[0].key}/documents`)
   await expect(page.getByRole('button', { name: /Create document in/ }).first()).toBeVisible()
-  for (const [selector, x] of [['.team-docs-header .is-created .team-docs-heading-label', 1021.5], ['.team-docs-header .is-date:not(.is-created) .team-docs-heading-label', 1147.5]] as const) {
-    await expect.poll(async () => (await page.locator(selector).boundingBox())!.x).toBeCloseTo(x, 0)
+  const row = page.locator(`[data-document-id="${doc.id}"]`)
+  await expect(row).toBeVisible()
+  // Compare each heading with its own data column, not a platform-specific viewport coordinate.
+  for (const [label, selector] of [['Created', '.team-docs-date.is-created'], ['Last edited', '.team-docs-date:not(.is-created)']] as const) {
+    const heading = page.getByRole('button', { name: `Order by ${label}`, exact: true })
+    const value = row.locator(selector)
+    await expect(heading).toBeInViewport()
+    await expect(value).toBeInViewport()
+    await expect.poll(async () => Math.abs((await heading.locator('.team-docs-heading-label').boundingBox())!.x - (await value.boundingBox())!.x)).toBeLessThanOrEqual(1)
   }
-  await page.goto(`/${workspaceKey}/document/${doc.slugId}`)
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/docs-list.png`, animations: 'disabled' })
+  await row.getByText(doc.title, { exact: true }).click()
+  await expect(page).toHaveURL(`/${workspaceKey}/document/${doc.slugId}`)
   await page.locator('.document-edited').click()
   const metadata = page.locator('.document-edited-popover')
   await expect(metadata).toHaveCSS('min-width', '0px')
