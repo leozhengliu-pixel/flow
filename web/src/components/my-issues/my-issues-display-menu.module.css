@@ -73,6 +73,8 @@
 .propertyGrid:not(#_){gap:5px}
 
 @media (min-width: 1024px) {
+  .selectTrigger:not(#_){width:116px;line-height:normal}
+  .popover[data-layout=board] .selectTrigger:not(#_){width:160px}
   .desktopModeIcon,.desktopSortIcon{display:none}
   .phoneModeIcon,.phoneSortIcon{display:block}
   .popover { max-height: calc(100dvh - 103px); }

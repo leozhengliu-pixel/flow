@@ -45,6 +45,7 @@ test('shows every display property and footer, persists defaults, and filters su
   await expect(childRow).toHaveCount(0)
   await page.getByRole('button', { name: 'Display options', exact: true }).click()
   await panel.getByRole('tab', { name: 'Board', exact: true }).click()
+  await expect(panel.getByRole('combobox',{name:'Grouping',exact:true})).toHaveCSS('width','160px')
   await expect(panel.getByText('Columns', { exact: true })).toBeVisible()
   await expect(panel.getByText('Rows', { exact: true })).toBeVisible()
   const geometry = await panel.evaluate(e => {
