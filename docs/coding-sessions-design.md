@@ -29,7 +29,7 @@ Contents
 17. Browser testing
 18. Debug terminal, Configure/Fix with agent, .env import
 19. Security model
-20. Billing, metering and spend limits
+20. Usage metering and spend limits
 21. Observability
 22. Failure modes
 23. Integration order
@@ -54,7 +54,7 @@ Contents
 | Activities thought/action/response/elicitation/error/prompt; signals stop/continue/auth/select | Reuses the AgentTask/AgentActivity protocol (§16). In issue activity a delegated session is a session card ("Flow started by …", the status row "Setting up owner/repo…" / "Finished" with the PR number, and Copy link, Unsubscribe from chat and Archive); its conversation shows in the session view |
 | Error reason codes | `domain.CodingErrorCode`. The reference codes are kept verbatim; Flow adds sandbox codes (§4.4) |
 | Triggers: delegate, chat or comment, Loops "Start a coding session", PR follow-ups, "fix this PR" | §15 |
-| Billing: AI credits, sandbox runtime by time, spend limits | LLM proxy metering plus runtime metering, enforced against the existing `SpendLimitSettings` (§20) |
+| Usage: AI credits, sandbox runtime by time, spend limits | LLM proxy metering plus runtime metering, enforced against the existing `SpendLimitSettings` (§20) |
 
 ## 2. Architecture
 
@@ -1136,14 +1136,14 @@ Controls:
   the risk but cannot remove it.
 - Secrets used in setup can persist on disk and in archives if the prepare script writes them there.
 
-## 20. Billing, metering and spend limits
+## 20. Usage metering and spend limits
 
 - **LLM usage**: the proxy writes a `coding_usage_records` row with `kind=llm` per request, using the model, the
   token counts and `cost_micros` from `FLOW_CODING_MODEL_PRICES`.
-- **Runtime**: the sandbox reconciler bills `kind=runtime` per sandbox: `runtime_seconds` from `started_at` to now or
+- **Runtime**: the sandbox reconciler meters `kind=runtime` per sandbox: `runtime_seconds` from `started_at` to now or
   `ended_at`, in 5-minute increments (`billed_seconds` prevents double counting), priced with
-  `FLOW_CODING_RUNTIME_PRICES[size]`. Snapshot builds and debug terminals are billed to the requesting user. The warm
-  pool is not billed.
+  `FLOW_CODING_RUNTIME_PRICES[size]`. Snapshot builds and debug terminals are attributed to the requesting user. The warm
+  pool is not metered.
 - **Attribution**: `user_id` is the session creator (the loop owner for loops), plus `loop_id`. The session's
   `cost_micros` is a running sum shown in the session view.
 - **Enforcement** (`coding.SpendGuard`, track B): the existing `SpendLimitSettings` (workspace, user and loop limits
