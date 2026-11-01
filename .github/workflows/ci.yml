@@ -368,7 +368,7 @@ jobs:
       # cache over it, with one writer per package group and prior-source fallback.
       - name: Restore race and coverage build cache
         id: race-cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/go-build
           key: go-race-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.BUILD_CACHE_GROUP }}-${{ hashFiles('api/go.mod', 'api/go.sum') }}-${{ hashFiles('api/**/*.go') }}
@@ -411,7 +411,7 @@ jobs:
 
       - name: Save race and coverage build cache
         if: ${{ success() && (matrix.shard == 1 || matrix.shard == 0) && steps.race-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ~/.cache/go-build
           key: ${{ steps.race-cache.outputs.cache-primary-key }}
