@@ -105,6 +105,11 @@ test.describe('mobile cycle detail', () => {
       await page.locator('input[aria-label="Nested sub-issues"]').click()
       await page.keyboard.press('Escape')
       await expect(page.locator('[data-cycle-detail-header]')).toHaveCSS('height', '87.5px')
+      await expect(page.locator('.cycle-switcher-play')).toHaveCSS('margin-right', '8px')
+      await expect(page.locator('.cycle-switcher-chevron')).toHaveCSS('margin-left', '5px')
+      const favoriteBox = (await page.locator('[data-content-view-favorite]').boundingBox())!
+      const optionsBox = (await page.getByRole('button', { name: 'Cycle options', exact: true }).boundingBox())!
+      expect(optionsBox.x - favoriteBox.x - favoriteBox.width).toBe(2)
       expect((await page.locator('[data-content-view-subheader]').boundingBox())?.y).toBe(44)
       expect((await page.locator('[data-my-issues-group-header]').boundingBox())?.x).toBe(8)
       await expect(page.locator('a[data-issue-row-id]').nth(0)).toContainText('Estimate test B')

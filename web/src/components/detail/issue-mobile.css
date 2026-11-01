@@ -129,7 +129,7 @@
   .issue-view .issue-comment-form > .composer { width: 100%; margin: 0; border-width: .5px; }
   .issue-view .issue-comment-form .comment-prosemirror { padding-right: 32px; }
   .issue-view .issue-comment-form .comment-prosemirror p.is-editor-empty:first-child::before { color: var(--issue-comment-placeholder); }
-  .issue-view .composer-toolbar { height: 29px; padding: 0 2px 2px 0; }
+  .issue-view .composer-toolbar { height: auto; padding: 0 2px 2px 0; }
   .issue-view .composer-tools > button { width: 28px; height: 28px; flex-basis: 28px; border: .5px solid transparent; font-size: 12px; font-weight: 500; line-height: normal; }
   .issue-view .composer-submit .composer-send { border: .5px solid transparent; line-height: normal; }
   .issue-view .issue-comment-form .composer-send:disabled > svg { opacity: .6; }

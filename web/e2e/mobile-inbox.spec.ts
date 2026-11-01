@@ -1,16 +1,13 @@
 import { createHmac } from 'node:crypto'
-import { expect, test } from '@playwright/test'
-import { test as workspaceTest } from './workspace-fixture'
+import { expect } from '@playwright/test'
+import { test, test as workspaceTest } from './workspace-fixture'
 
 test.describe('mobile inbox list', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
-  test('shows the phone top bar and notification rows', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-inbox-${testInfo.project.name}-${testInfo.retry}`
-    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: 'Mobile inbox parity', urlKey: workspaceKey, region: 'us' },
-    })
-    expect(workspaceResponse.status()).toBe(201)
+  test('shows the phone top bar and notification rows', async ({ page, request, workspaceKey }, testInfo) => {
+    const workspaceResponse = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
+    expect(workspaceResponse.status()).toBe(200)
     const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
     const teamId = workspace.teams?.[0]?.id
     expect(teamId).toBeTruthy()
@@ -70,12 +67,9 @@ test.describe('mobile inbox list', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/inbox-list-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 
-  test('opens a notification as the phone issue page with notification actions', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-inbox-notification-${testInfo.project.name}-${testInfo.retry}`
-    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: '[mobile] Inbox notification', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(workspaceResponse.status()).toBe(201)
+  test('opens a notification as the phone issue page with notification actions', async ({ page, request, workspaceKey }, testInfo) => {
+    const workspaceResponse = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
+    expect(workspaceResponse.status()).toBe(200)
     const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
     const teamId = workspace.teams?.[0]?.id
     expect(teamId).toBeTruthy()
@@ -140,12 +134,9 @@ test.describe('mobile inbox list', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/inbox-notification-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 
-  test('opens the phone filter sheet with the reference field list', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-inbox-filters-${testInfo.project.name}-${testInfo.retry}`
-    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: '[mobile] Inbox filters', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(workspaceResponse.status()).toBe(201)
+  test('opens the phone filter sheet with the reference field list', async ({ page, request, workspaceKey }, testInfo) => {
+    const workspaceResponse = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
+    expect(workspaceResponse.status()).toBe(200)
     const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
     const teamId = workspace.teams?.[0]?.id
     expect(teamId).toBeTruthy()
@@ -207,12 +198,9 @@ test.describe('mobile inbox list', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/inbox-filters-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 
-  test('opens the phone notification actions sheet', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-inbox-actions-${testInfo.project.name}-${testInfo.retry}`
-    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: '[mobile] Inbox actions', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(workspaceResponse.status()).toBe(201)
+  test('opens the phone notification actions sheet', async ({ page, request, workspaceKey }, testInfo) => {
+    const workspaceResponse = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
+    expect(workspaceResponse.status()).toBe(200)
     const workspace = await workspaceResponse.json() as { teams?: Array<{ id: string }> }
     const teamId = workspace.teams?.[0]?.id
     expect(teamId).toBeTruthy()
@@ -268,12 +256,7 @@ test.describe('mobile inbox list', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/inbox-actions-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 
-  test('shows the phone Pulse feed with one initiative update card', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-inbox-pulse-${testInfo.project.name}-${testInfo.retry}`
-    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: '[mobile] Pulse feed', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(workspaceResponse.status()).toBe(201)
+  test('shows the phone Pulse feed with one initiative update card', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
     const settings = await request.patch('http://127.0.0.1:4180/api/account/settings', { headers, data: { pulseWelcomeDismissed: true } })
     expect(settings.status()).toBe(200)
@@ -303,10 +286,12 @@ test.describe('mobile inbox list', () => {
     await expect(tabs).toHaveCount(3)
     expect((await tabs.nth(0).boundingBox())?.height).toBe(32)
     await expect(tabs.nth(0)).toHaveCSS('background-color', 'lch(16.706 0.979 272)')
-    near((await tabs.nth(2).boundingBox())?.x, 141.44)
+    const tabBoxes = await tabs.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()))
+    const tabGap = await page.locator('.pulse-view-tabs').evaluate(node => parseFloat(getComputedStyle(node).columnGap))
+    expect(tabBoxes[2].x).toBe(tabBoxes[1].x + tabBoxes[1].width + tabGap)
     const addView = page.locator('.pulse-add-view')
     expect((await addView.boundingBox())?.width).toBe(32)
-    near((await addView.boundingBox())?.x, 206.37)
+    expect((await addView.boundingBox())?.x).toBe(tabBoxes[2].x + tabBoxes[2].width + tabGap)
 
     const section = page.locator('.pulse-group-header > span')
     near((await section.boundingBox())?.y, 135.5)
@@ -352,12 +337,7 @@ test.describe('mobile inbox list', () => {
 
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/pulse-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
-  test('shows the phone reviews header, tab counts and empty state', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-inbox-reviews-list-${testInfo.project.name}-${testInfo.retry}`
-    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: '[mobile] Reviews list', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(workspaceResponse.status()).toBe(201)
+  test('shows the phone reviews header, tab counts and empty state', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
     const secret = `mobile-reviews-${workspaceKey}`
     const integration = await request.put('http://127.0.0.1:4180/api/integrations/github', {
@@ -433,12 +413,7 @@ test.describe('mobile inbox list', () => {
     if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/reviews-list-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
   })
 
-  test('groups the phone Created reviews by Ready to merge and Draft', async ({ page, request }, testInfo) => {
-    const workspaceKey = `mobile-inbox-reviews-created-${testInfo.project.name}-${testInfo.retry}`
-    const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: '[mobile] Reviews created', urlKey: workspaceKey, region: 'us', tutorial: false },
-    })
-    expect(workspaceResponse.status()).toBe(201)
+  test('groups the phone Created reviews by Ready to merge and Draft', async ({ page, request, workspaceKey }, testInfo) => {
     const headers = { 'X-Workspace-Key': workspaceKey }
     const secret = `mobile-reviews-created-${workspaceKey}`
     const integration = await request.put('http://127.0.0.1:4180/api/integrations/github', {
@@ -481,7 +456,9 @@ test.describe('mobile inbox list', () => {
     await expect(created.locator('.reviews-tab-label--phone')).toHaveText('Created')
     await expect(created).toHaveCSS('background-color', 'lch(16.706 0.979 272)')
     const toReview = page.locator('.reviews-tabs a:nth-of-type(1)')
-    near((await toReview.boundingBox())?.width, 75.29)
+    await expect(toReview).toHaveCSS('padding', '0px 9.5px')
+    const toReviewLabel = (await toReview.locator('.reviews-tab-label--phone').boundingBox())!
+    await expect(toReview).toHaveJSProperty('clientWidth', Math.round(toReviewLabel.width + 19))
     await expect(toReview.locator('.reviews-tab-count')).toHaveCount(0)
 
     const sections = page.locator('.review-groups > section')
@@ -603,6 +580,7 @@ test.describe('mobile inbox list', () => {
     near((await statusLabel.boundingBox())?.y, 230)
     await expect(page.locator('[data-mobile-property="status"] .review-status-value')).toHaveCSS('font-weight', '500')
     near((await page.locator('[data-mobile-property="reviewers"] .review-sidebar-button.is-muted').boundingBox())?.x, 84)
+    await expect(page.locator('[data-mobile-property="reviewers"] .review-sidebar-button.is-muted svg')).toHaveCSS('margin', '0px 6px 0px 0px')
     near((await page.locator('[data-mobile-property="branch"] .review-mobile-label').boundingBox())?.y, 300.75)
     near((await page.locator('[data-mobile-property="resolves"] .review-mobile-issue-title').boundingBox())?.x, 36)
     near((await page.locator('.review-description > h3').boundingBox())?.y, 405.5)

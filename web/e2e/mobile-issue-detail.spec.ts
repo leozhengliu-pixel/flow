@@ -135,7 +135,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
     expect(values['.flow-sub-issues'].y).toBeCloseTo(viewport.width===390?335.75:301.75, 0)
     expect(values['.composer'].x).toBe(6)
     expect(values['.composer'].width).toBe(viewport.width - 12)
-    expect(values['.composer'].height).toBeCloseTo(87, 0)
+    await expect(page.locator('.issue-comment-form .composer')).toHaveJSProperty('clientHeight', 86)
+    const toolsBox = (await page.locator('.issue-comment-form .composer-tools').boundingBox())!
+    const toolbarBox = (await page.locator('.issue-comment-form .composer-toolbar').boundingBox())!
+    expect(toolbarBox.height).toBe(toolsBox.height + 2)
     await expect(page.locator('.issue-properties-rail')).toBeHidden()
     await expect(page.getByRole('button', { name: 'Copy issue URL', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Copy issue ID', exact: true })).toBeVisible()
@@ -184,7 +187,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
     const form = page.locator('.issue-comment-form')
     const card = form.locator('.composer')
     expect((await card.boundingBox())?.x).toBe(6)
-    expect((await card.boundingBox())?.height).toBeCloseTo(87, 0)
+    await expect(card).toHaveJSProperty('clientHeight', 86)
     await expect(form.getByRole('textbox')).toBeEmpty()
     await expect(form.getByRole('button', { name: 'Submit comment', exact: true })).toBeDisabled()
     await expect(form.locator('.composer-send svg')).toHaveAttribute('viewBox', '0 0 16 16')
