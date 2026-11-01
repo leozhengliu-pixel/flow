@@ -1,0 +1,70 @@
+import { expect } from '@playwright/test'
+import { test } from './workspace-fixture'
+
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', launchOptions: { args: ['--force-device-scale-factor=2'] } })
+test.skip(({ isMobile }) => isMobile, 'Desktop inbox audit')
+test.beforeEach(async ({ page, context }) => {
+  const session = await context.newCDPSession(page)
+  await session.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 0, mobile: false })
+  expect(await page.evaluate(() => [innerWidth, innerHeight, devicePixelRatio])).toEqual([1440, 900, 2])
+})
+
+test('same welcome-only data keeps seven filters, unread count and the plain preview header', async ({ page, request, workspaceKey }) => {
+  const headers = { 'X-Workspace-Key': workspaceKey }
+  expect((await request.post('/api/initiatives', { headers, data: { name: '[audit] Inbox initiative' } })).ok()).toBeTruthy()
+  expect((await request.patch('/api/workspace/preferences', { headers, data: { welcomeMessageTitle: 'Welcome to Flow', welcomeMessage: 'Workspace resources.', welcomeMessageEnabled: true } })).ok()).toBeTruthy()
+  expect((await request.post('/api/workspace/welcome-message/test', { headers })).ok()).toBeTruthy()
+  await page.goto(`/${workspaceKey}/inbox`)
+  await expect(page.getByText('1 unread notification', { exact: true })).toBeVisible()
+  expect(Math.abs((await page.locator('.flow-inbox__list-pane').boundingBox())!.width - 300)).toBeLessThanOrEqual(1)
+  const row = page.locator('.flow-inbox-row').first()
+  await expect(row).toContainText('Welcome to Flow')
+  expect((await row.innerText()).match(/Welcome/g)).toHaveLength(1)
+  await page.getByRole('button', { name: 'Add filter', exact: true }).click()
+  for (const name of ['Team', 'Initiative']) await expect(page.getByRole('option', { name, exact: true })).toBeVisible()
+  await expect(page.getByRole('option', { name: 'Review status', exact: true })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await row.click()
+  await expect(page.getByRole('heading', { name: 'Welcome to Flow', exact: true })).toBeVisible()
+  const preview = page.getByRole('region', { name: 'Notification preview', exact: true })
+  await expect(preview.getByRole('button', { name: 'Add to favorites', exact: true })).toHaveCount(0)
+  await expect(preview.getByRole('button', { name: 'Issue options', exact: true })).toHaveCount(0)
+  await page.waitForTimeout(500)
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/inbox-welcome.png`, animations: 'disabled' })
+})
+
+test('Pulse keeps the measured desktop illustration and full text column', async ({ page, workspaceKey }) => {
+  await page.goto(`/${workspaceKey}/pulse/following`)
+  const body = page.locator('.pulse-empty-body')
+  await expect(body).toBeVisible()
+  await expect(body.locator('svg')).toHaveAttribute('viewBox', '0 0 91 86')
+  await expect(body.locator('svg path')).toHaveCount(18)
+  await expect(body.locator('svg path').first()).toHaveCSS('stroke', 'none')
+  await expect(body.locator(':scope > p')).toHaveCSS('width', '340px')
+  await page.waitForTimeout(500)
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/inbox-pulse.png`, animations: 'disabled' })
+})
+
+test('Reviews onboarding offers a real connection action and persisted opt-out', async ({ page, workspaceKey }) => {
+  await page.goto(`/${workspaceKey}/reviews`)
+  const header = page.locator('.reviews-topbar')
+  await expect(header.locator('.reviews-desktop-icon')).toBeVisible()
+  expect(Math.abs((await header.getByRole('heading', { name: 'Reviews' }).boundingBox())!.x - 284.5)).toBeLessThanOrEqual(1)
+  await header.getByRole('button', { name: 'Get started', exact: true }).click()
+  await expect(page).toHaveURL(/settings\/integrations\/github$/)
+  await page.goto(`/${workspaceKey}/reviews`)
+  await expect(page.getByRole('button', { name: 'Connect GitLab', exact: true })).toBeVisible()
+  await page.waitForTimeout(500)
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/inbox-reviews.png`, animations: 'disabled' })
+  for (const width of [375, 390]) {
+    await page.setViewportSize({ width, height: 844 })
+    await expect(header.locator('.reviews-desktop-icon')).toBeHidden()
+    await expect(header.getByRole('button', { name: 'Get started', exact: true })).toHaveCount(0)
+    await expect(header.getByRole('button', { name: "I don't do code review", exact: true })).toHaveCount(0)
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const saved = page.waitForResponse(response => response.request().method() === 'PATCH' && response.url().includes('/api/account/settings'))
+  await header.getByRole('button', { name: "I don't do code review", exact: true }).click()
+  expect((await saved).ok()).toBeTruthy()
+  await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/agent$`))
+})

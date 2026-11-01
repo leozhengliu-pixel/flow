@@ -26,6 +26,7 @@ import { newestPulseItemTime, pulseConfigFromView, pulseGroupLabels, pulseGroupS
 import { PulseUpdateCard, type PulseCardHandlers } from './pulse-update-card'
 import { pulseUnread, usePulseUnread, writePulseLastTab } from './pulse-unread'
 import { PulseWelcomeBanner } from './pulse-welcome-banner'
+import { PulseStackIllustration } from './pulse-stack-illustration'
 import { recordPulseSeen, usePulseFeed, type PulseFeedState } from './use-pulse-feed'
 import { useShowPulseWelcomeBanner } from './use-show-pulse-welcome-banner'
 import './pulse.css'
@@ -434,6 +435,8 @@ function PulseViewTabs({ activeId, views, workspaceKey, onOpen, onEdit, onDuplic
 
 /** The reference app's empty-state art: a stack of hexagonal layers with an avatar on top. */
 function PulseEmptyIllustration() {
+  const phone = usePhoneLayout()
+  if (!phone) return <PulseStackIllustration/>
   return <svg aria-hidden="true" className="pulse-empty-art" fill="none" height="80" viewBox="0 0 84 80" width="84">
     <g className="pulse-empty-art-layers" strokeDasharray="2 2"><path d="M4 40v26M80 40v26M42 56v22"/></g>
     <g className="pulse-empty-art-edges"><path d="M4 48l38 16 38-16M4 56l38 16 38-16M4 64l38 16 38-16"/></g>

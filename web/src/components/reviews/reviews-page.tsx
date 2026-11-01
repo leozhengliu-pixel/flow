@@ -7,10 +7,11 @@ import { usePropertyCommand } from "@/components/property/use-property-command";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { useI18n } from "@/i18n/i18n";
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import { toggleFavoriteFor } from "@/lib/favorites";
 import { isWorkspaceAdmin } from "@/lib/settings-access";
 import { importReviews, submitReview, syncReview, updateIntegrationConnection, updateReview, updateUserSettings } from "@/lib/api";
-import { integrationSettingsPath, reviewAgentPath, reviewPath, reviewsPath, type ReviewRouteTab } from "@/lib/app-routes";
+import { agentPath, integrationSettingsPath, reviewAgentPath, reviewPath, reviewsPath, type ReviewRouteTab } from "@/lib/app-routes";
 import type { BootstrapData, CodeReview } from "@/types/flow";
 
 import "./reviews-page.css";
@@ -181,6 +182,22 @@ function ReviewList({
   onOpenSidebar?: () => void;
 }) {
   const { t } = useI18n();
+  const phone = usePhoneLayout();
+  const onboarding = !phone && !data.reviews.length && !data.integrationConnections.some(item => item.provider === "github" || item.provider === "gitlab") && data.userSettings?.[data.viewer.id]?.codeReviewsEnabled !== false;
+  const [optingOut, setOptingOut] = useState(false);
+  const optOut = async () => {
+    if (optingOut) return;
+    setOptingOut(true);
+    try {
+      await updateUserSettings({ codeReviewsEnabled: false });
+      await onReload();
+      onNavigate(agentPath(data.workspace.urlKey));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not update settings"));
+    } finally {
+      setOptingOut(false);
+    }
+  };
   const { filters, setFilters, display, setDisplay } = useReviewListControls(data.workspace.id, data.viewer.id, view);
   const [filterHost, setFilterHost] = useState<HTMLDivElement | null>(null);
   const [toggledGroups, setToggledGroups] = useState<Set<string>>(new Set());
@@ -225,17 +242,21 @@ function ReviewList({
           <button className="reviews-mobile-sidebar" aria-label={t("Open sidebar")} data-sidebar-trigger onClick={onOpenSidebar} type="button">
             <SidebarLeftIcon />
           </button>
+          <GitPullRequest aria-hidden="true" className="reviews-desktop-icon" size={16}/>
           <h1>{t("Reviews")}</h1>
+          {onboarding && <button className="reviews-get-started" type="button" onClick={() => onNavigate(integrationSettingsPath(data.workspace.urlKey, "github"))}>{t("Get started")}</button>}
           <div>
+            {onboarding ? <button className="reviews-opt-out" type="button" disabled={optingOut} onClick={() => void optOut()}>{t("I don't do code review")}</button> : <>
             {/* Running the import is for workspace admins; members would only get a refusal. */}
             {isWorkspaceAdmin(data) && <button type="button" className="review-ghost-button" aria-label={t("Sync now")} title={t("Sync now")} disabled={syncing} aria-busy={syncing} onClick={() => void syncNow()}>
               <RefreshCw className={syncing ? "reviews-sync-spinning" : undefined} />
             </button>}
             <ReviewFilters filters={filters} data={data} items={baseItems} onChange={setFilters} filterBarHost={filterHost} />
             <ReviewDisplayMenu display={display} view={view} onChange={setDisplay} />
+            </>}
           </div>
         </header>
-        <nav className="reviews-tabs" aria-label={t("Reviews")}>
+        {!onboarding && <nav className="reviews-tabs" aria-label={t("Reviews")}>
           {tabs.map((item) => (
             <a
               key={item.id}
@@ -252,7 +273,7 @@ function ReviewList({
               {item.count > 0 && <span className="reviews-tab-count">{item.count}</span>}
             </a>
           ))}
-        </nav>
+        </nav>}
       </div>
       <div className="review-filter-host" ref={setFilterHost} />
       {visible.length ? (
