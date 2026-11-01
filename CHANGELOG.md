@@ -19,7 +19,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align shared desktop sidebar colours, header inset ownership, icon-button padding and settings table controls while preserving phone metrics.
 
-- Size desktop document metadata intrinsically, restore history preview spacing and action fill, and keep advanced insert blocks searchable without expanding the default document menu.
+- Size desktop document metadata intrinsically and align its author columns, restore history preview spacing and action fill, and keep advanced insert blocks searchable without expanding the default document menu.
 
 - Align desktop issue and view navigation, filter categories, and default display-property choices while retaining phone layouts and saved selections.
 

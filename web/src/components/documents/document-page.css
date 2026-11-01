@@ -468,6 +468,10 @@ button.document-icon.is-empty:hover,
 }
 
 @media (min-width: 801px) {
+  .document-metadata-people { display: grid; grid-template-columns: max-content max-content max-content; column-gap: 12px; }
+  .document-metadata-people > .document-owner-row,
+  .document-metadata-people > .document-last-edit-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
+  .document-owner-row .document-person--button { justify-self: start; margin-right: -6px; }
   .document-history-action button { background: var(--document-desktop-send-bg); }
   .document-page .issue-description-root.document-editor {
     width: calc(100% + 28px);
