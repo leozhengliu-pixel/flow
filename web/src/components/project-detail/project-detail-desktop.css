@@ -1,4 +1,17 @@
 @media (min-width: 1024px) {
+  .project-details-sidebar {
+    --pd-label: var(--phone-project-panel-label);
+    --pd-copy: var(--phone-project-panel-text);
+    --pd-text: var(--phone-project-panel-text);
+  }
+  .project-detail-page__header-action,
+  .project-detail-page__add-view,
+  .project-detail-page__toolbar-button { padding-inline: 2px; }
+  .project-details-sidebar__section:not(.is-milestones) > header { margin-inline: 12px; }
+  .project-details-sidebar__section:not(.is-milestones) > header > button:first-child { position: relative; left: -8px; padding-inline: 8px; gap: 3px; }
+  .project-details-sidebar__section > header > button:last-child:not(:first-child) { padding-inline: 2px; }
+  .project-details-sidebar__section.is-milestones > header > button:first-child { gap: 3px; }
+  .project-details-sidebar__section > header > .project-details-sidebar__see-all { color: var(--pd-label) !important; }
   .project-detail-page__toolbar { height: 43.5px; flex-basis: 43.5px; }
   .project-activity { padding-top: 44px; }
   .project-activity__composer > footer { padding-bottom: 12px; }
