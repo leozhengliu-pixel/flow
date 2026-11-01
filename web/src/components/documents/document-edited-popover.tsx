@@ -59,16 +59,18 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot
           <span>{t('Show author names')}</span>
           <Toggle checked={showAuthorNames} label={t(showAuthorNames ? 'Hide author names' : 'Show author names')} onChange={onShowAuthorNames}/>
         </label>
-        <div className="document-owner-row">
-          <span>{t('Owned by')}</span>
-          {readOnly
-            ? <span className="document-person">{ownerValue}</span>
-            : <DocumentOwnerPicker ctx={ctx} document={document} trigger={ownerValue} triggerClassName="document-person document-person--button" open={ownerOpen} onOpenChange={onOwnerOpenChange}/>}
-        </div>
-        <div className="document-last-edit-row">
-          <span>{t('Last edit by')}</span>
-          <span className="document-person"><UserAvatar avatarUrl={attributedActorAvatar(lastEditor, editorBot)} className="document-meta-avatar" name={editorName}/><strong data-i18n-ignore>{editorName}</strong><ViaApp user={lastEditor} botActor={editorBot}/></span>
-          <time dateTime={lastEditedAt}>{formatDate(lastEditedAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
+        <div className="document-metadata-people">
+          <div className="document-owner-row">
+            <span>{t('Owned by')}</span>
+            {readOnly
+              ? <span className="document-person">{ownerValue}</span>
+              : <DocumentOwnerPicker ctx={ctx} document={document} trigger={ownerValue} triggerClassName="document-person document-person--button" open={ownerOpen} onOpenChange={onOwnerOpenChange}/>}
+          </div>
+          <div className="document-last-edit-row">
+            <span>{t('Last edit by')}</span>
+            <span className="document-person"><UserAvatar avatarUrl={attributedActorAvatar(lastEditor, editorBot)} className="document-meta-avatar" name={editorName}/><strong data-i18n-ignore>{editorName}</strong><ViaApp user={lastEditor} botActor={editorBot}/></span>
+            <time dateTime={lastEditedAt}>{formatDate(lastEditedAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
+          </div>
         </div>
         <div className="document-history-action">
           <Popover.Close asChild><button onClick={onShowHistory} type="button"><IssueActionGlyph label="Show document history" fallback={<History size={14}/>} />{t('Show document history')}</button></Popover.Close>

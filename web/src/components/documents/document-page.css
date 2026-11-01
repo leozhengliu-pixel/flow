@@ -201,6 +201,7 @@
   padding: 8px 16px;
   border-top: .5px solid var(--theme-border);
 }
+.document-metadata-people { display: contents; }
 .document-owner-row { height: 44px; }
 .document-last-edit-row { height: 40px; }
 .document-owner-row > span:first-child,
@@ -514,6 +515,16 @@ button.document-icon.is-empty:hover,
 
 /* ---------- mobile ---------- */
 @media (max-width: 767px) {
+  .document-metadata-people {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+  }
+  .document-metadata-people > .document-owner-row,
+  .document-metadata-people > .document-last-edit-row {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+  }
   [data-radix-popper-content-wrapper]:has(> .document-subscribers) {
     position: fixed !important;
     inset: 13vh 16px auto !important;

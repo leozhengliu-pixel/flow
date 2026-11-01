@@ -111,46 +111,61 @@ test.describe('mobile document view', () => {
       expect(box.x + box.width).toBeLessThanOrEqual(viewport.width)
       const owner = (await page.locator('.document-owner-row .document-person--button').boundingBox())!
       expect(owner.x + owner.width).toBeLessThanOrEqual(box.x + box.width)
+      const ownerLabel = (await page.locator('.document-owner-row > span:first-child').boundingBox())!
+      const editorLabel = (await page.locator('.document-last-edit-row > span:first-child').boundingBox())!
+      expect(ownerLabel.width).toBeCloseTo(editorLabel.width, 1)
+      const ownerAvatar = (await page.locator('.document-owner-row .document-meta-avatar').boundingBox())!
+      const editorAvatar = (await page.locator('.document-last-edit-row .document-meta-avatar').boundingBox())!
+      expect(ownerAvatar.x).toBeCloseTo(editorAvatar.x, 1)
+      expect(ownerAvatar.x - ownerLabel.x - ownerLabel.width).toBeCloseTo(12, 1)
       const history = (await page.locator('.document-history-action button').boundingBox())!
       expect(history.x - box.x).toBeCloseTo(box.x + box.width - history.x - history.width, 0)
       expect(history.width).toBeGreaterThan(box.width - 20)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     })
 
-    test(`metadata contains long owner names at ${viewport.width}px`, async ({ page, request, workspaceKey }) => {
-      const ownerName = '[mobile] A very long document owner name that must stay inside the metadata panel'
-      const headers = { 'X-Workspace-Key': workspaceKey }
-      const response = await request.post('/api/documents', { headers, data: { title: '[mobile] Long metadata', content: '[mobile] Body' } })
-      expect(response.status()).toBe(201)
-      const document = await response.json() as { slugId: string }
-      await page.route('**/api/bootstrap*', async route => {
-        const response = await route.fetch()
-        const data = await response.json()
-        data.viewer.name = ownerName
-        data.viewer.displayName = ownerName
-        data.users = data.users.map((user: { id: string; name: string }) => user.id === data.viewer.id ? { ...user, name: ownerName, displayName: ownerName } : user)
-        await route.fulfill({ response, json: data })
+    for (const locale of ['en-US', 'zh-CN']) {
+      test(`metadata contains long owner names in ${locale} at ${viewport.width}px`, async ({ page, request, workspaceKey }) => {
+        const ownerName = '[mobile] A very long document owner name that must stay inside the metadata panel'
+        const headers = { 'X-Workspace-Key': workspaceKey }
+        const response = await request.post('/api/documents', { headers, data: { title: '[mobile] Long metadata', content: '[mobile] Body' } })
+        expect(response.status()).toBe(201)
+        const document = await response.json() as { slugId: string }
+        await page.route('**/api/bootstrap*', async route => {
+          const response = await route.fetch()
+          const data = await response.json()
+          data.viewer.name = ownerName
+          data.viewer.displayName = ownerName
+          data.userSettings[data.viewer.id] = { ...data.userSettings[data.viewer.id], language: locale }
+          data.users = data.users.map((user: { id: string; name: string }) => user.id === data.viewer.id ? { ...user, name: ownerName, displayName: ownerName } : user)
+          await route.fulfill({ response, json: data })
+        })
+        await page.route('**/api/documents/**', async route => {
+          if (route.request().method() !== 'GET') return route.continue()
+          const response = await route.fetch()
+          const data = await response.json()
+          if (data.creator) data.creator = { ...data.creator, name: ownerName, displayName: ownerName }
+          await route.fulfill({ response, json: data })
+        })
+        await page.setViewportSize(viewport)
+        await page.addInitScript(locale => localStorage.setItem('flow:locale', locale), locale)
+        await page.goto(`/${workspaceKey}/document/${document.slugId}`)
+        await page.locator('.document-edited').click()
+        const panel = page.locator('.document-edited-popover')
+        await expect(panel).toContainText('A very long document owner')
+        const box = (await panel.boundingBox())!
+        expect(box.x).toBeGreaterThanOrEqual(0)
+        expect(box.x + box.width).toBeLessThanOrEqual(viewport.width)
+        const owner = (await panel.locator('.document-person--button').boundingBox())!
+        expect(owner.x + owner.width).toBeLessThanOrEqual(box.x + box.width)
+        const labels = await panel.locator('.document-owner-row > span:first-child, .document-last-edit-row > span:first-child').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().width))
+        expect(labels[0]).toBeCloseTo(labels[1], 1)
+        const avatars = await panel.locator('.document-metadata-people .document-meta-avatar').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().x))
+        expect(avatars[0]).toBeCloseTo(avatars[1], 1)
+        await panel.locator('.document-history-action button').click()
+        await expect(page.locator('.document-history-dialog')).toBeVisible()
       })
-      await page.route('**/api/documents/**', async route => {
-        if (route.request().method() !== 'GET') return route.continue()
-        const response = await route.fetch()
-        const data = await response.json()
-        if (data.creator) data.creator = { ...data.creator, name: ownerName, displayName: ownerName }
-        await route.fulfill({ response, json: data })
-      })
-      await page.setViewportSize(viewport)
-      await page.goto(`/${workspaceKey}/document/${document.slugId}`)
-      await page.locator('.document-edited').click()
-      const panel = page.locator('.document-edited-popover')
-      await expect(panel).toContainText('A very long document owner')
-      const box = (await panel.boundingBox())!
-      expect(box.x).toBeGreaterThanOrEqual(0)
-      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width)
-      const owner = (await panel.locator('.document-person--button').boundingBox())!
-      expect(owner.x + owner.width).toBeLessThanOrEqual(box.x + box.width)
-      await panel.getByRole('button', { name: 'Show document history' }).click()
-      await expect(page.getByRole('dialog', { name: 'History for [mobile] Long metadata', exact: true })).toBeVisible()
-    })
+    }
   }
 })
 
