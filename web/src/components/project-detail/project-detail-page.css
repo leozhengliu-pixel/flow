@@ -1622,11 +1622,12 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-label-control.is-sidebar { padding-left: 0; }
   .project-details-sidebar__property .project-label-add { color: var(--phone-project-panel-label); font-size: 12px; font-weight: 450; line-height: normal; }
   .project-details-sidebar__milestone { height: 36px; flex-basis: 36px; }
-  .project-details-sidebar__milestones { gap: 0; padding-bottom: .5px; }
+  .project-details-sidebar__milestones { gap: 0; }
   .project-details-sidebar__properties { margin-bottom: 11.5px; }
   .project-details-sidebar__milestone strong { color: var(--phone-project-panel-text); }
   .project-details-sidebar__milestone.is-unassigned strong { color: var(--phone-project-panel-label); }
-  .project-details-sidebar__section > header > button.project-details-sidebar__see-all:last-child:not(:first-child) { width: auto; padding: 2px 0 !important; color: var(--phone-project-panel-label); }
+  .project-details-sidebar__section > header > button.project-details-sidebar__see-all:last-child:not(:first-child) { display: block; width: auto; padding: 2px 0 !important; color: var(--phone-project-panel-label); font-size: 16px; line-height: 24px; }
+  .project-details-sidebar__see-all > span { font-size: 12px; line-height: normal; }
   /* Project activity: the reference app's phone feed. Scoped to the activity surface so the
      overview and properties screens keep their measured layout. */
   .project-detail-page__header .project-detail-page__mobile-menu::before,
