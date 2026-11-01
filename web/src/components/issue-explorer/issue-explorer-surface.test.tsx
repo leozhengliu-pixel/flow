@@ -14,6 +14,7 @@ beforeEach(() => localStorage.setItem('flow:locale', 'en-US'))
 it('keeps the create-view filter menu clickable outside the fixed editor panel', async () => {
   const user = userEvent.setup()
   render(<I18nProvider><IssueExplorerSurface creatingView scopeName="Workspace" activeView="all" viewHref={() => '#'} filters={[]} displayOptions={display} detailsOpen={false} onFilterToggle={vi.fn()} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()} filterOptions={() => [{ id: 'open', label: 'Open' }] as never} viewEditor={controls => <div aria-label="New issue view">Editor{controls.filterButton}</div>} onNewViewResourceChange={vi.fn()} onOpenSidebar={vi.fn()}>Content</IssueExplorerSurface></I18nProvider>)
+  expect(screen.getByRole('main')).toHaveAttribute('data-inset', 'tall')
   await user.click(screen.getByRole('button', { name: 'Add filter' }))
   expect(document.querySelector('.rootSearch input, input[placeholder="Add Filter…"]')).toBeTruthy()
 })

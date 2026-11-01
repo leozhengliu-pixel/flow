@@ -13,16 +13,19 @@
 .lp-project-row__date-icon { display: none; }
 
 @media (min-width: 1024px) {
-  .lp-projects-display { width: 331px; right: 12px; padding-top: 10.5px; background: var(--directory-display-menu-bg); }
-  .lp-projects-display__modes { margin: 0 10.5px 22px; gap: 6px; }
+  .lp-projects__header { padding-right: 8px; }
+  .lp-projects__header h1 { color: var(--text); }
+  .lp-projects__toolbar { padding-inline: 8px; }
+  .lp-projects-display { width: 331px; right: 12px; padding-top: 16px; border: .5px solid var(--theme-border-strong); background: var(--directory-display-menu-bg); box-shadow: var(--shadow-control); }
+  .lp-projects-display__modes { margin: 0 10px 16px; gap: 6px; }
   .lp-projects-display__modes button,
   .lp-projects-display-select > span,
   .lp-projects-display__row > span { line-height: normal; }
   .lp-projects-display__properties button:not(.is-selected) { color: var(--theme-text-secondary); }
   .lp-projects-display__options h2 { height: 27.5px; line-height: normal; }
-  .lp-projects-display__properties { padding: 0 17px 13px; }
+  .lp-projects-display__properties { padding: 0 16px 12px; }
   .lp-projects-display__properties h3 { height: 21.5px; line-height: normal; }
-  .lp-projects-display__properties > div { margin-top: 8.5px; }
+  .lp-projects-display__properties > div { margin-top: 8px; }
   .lp-projects-display__properties > div > button { padding-inline: 10px; }
   .lp-project-table {
     --lp-health-width: 130px;

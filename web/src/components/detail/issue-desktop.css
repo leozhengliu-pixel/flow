@@ -25,7 +25,7 @@
   .issue-view .issue-document > .composer .composer-send:disabled { color: var(--issue-muted); }
   .issue-view .issue-activity-timeline .comment-thread { background: var(--issue-comment-bg); }
   .issue-view .issue-activity-timeline .timeline-item.comment { padding-top: 9px; }
-  .issue-view .issue-activity-timeline .comment-thread .comment-card { padding: 16px 16px 15.5px; }
+  .issue-view .issue-activity-timeline .comment-thread .comment-card { padding: 16px; }
   .issue-view .issue-activity-timeline .comment-thread .comment-body { margin-top: 4px; }
   .issue-view .issue-activity-timeline .comment-card__actions { gap: 0; margin-right: -5px; transform: translateY(-1px); }
   .issue-view .issue-activity-timeline .comment-card__actions button { width: 28px; height: 28px; border-radius: 9999px; }

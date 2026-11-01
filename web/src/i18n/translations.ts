@@ -3934,6 +3934,7 @@ export const zhCN: Record<string, string> = {
   "Subscribed to document": "已订阅文档",
   "Unsubscribed from document": "已取消订阅文档",
   "Could not update document subscription": "无法更新文档订阅",
+  "Could not update document icon": "无法更新文档图标",
   Summary: "摘要",
   "Switch workspace": "切换工作区",
   "System preference": "跟随系统",

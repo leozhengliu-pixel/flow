@@ -32,6 +32,9 @@ it('sorts every team column in both directions using the displayed data', async 
   expect(screen.queryByRole('button', { name: 'Create new team' })).not.toBeInTheDocument()
   const first = () => container.querySelector('.settings-teams-row strong')?.textContent
   expect(first()).toBe('Alpha')
+  for (const label of ['Name', 'Description', 'Visibility', 'Members', 'Issues', 'Created']) {
+    expect(screen.getByRole('button', { name: `Order by ${label}` }).querySelector('svg')).toHaveAttribute('width', '12')
+  }
   for (const [column, expected] of [['Description', 'Zulu'], ['Visibility', 'Zulu'], ['Members', 'Alpha'], ['Issues', 'Zulu'], ['Created', 'Alpha'], ['Name', 'Alpha']]) {
     await userEvent.click(screen.getByRole('button', { name: `Order by ${column}` }))
     expect(first()).toBe(expected)
