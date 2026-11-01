@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Update browser inventories for expanded desktop shortcut help and the four default My issues tabs, while checking the shared view remains available.
+
 - Keep the desktop M M shortcut on triage's duplicate workflow so it records the relation, changes status and advances the queue.
 
 - Check desktop triage selection and document column alignment without sampled pixel positions or private browser emulation.
