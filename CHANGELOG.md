@@ -19,6 +19,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Run all API CI shards in one twenty-runner wave, retain source-keyed race/coverage builds, and reuse the test fixture's full-cost password hash without changing production hashing or coverage gates.
 - Release file-parser capacity before returning completed results so back-to-back reads cannot falsely report an occupied slot.
+- Verify both compact and expanded document-tab navigation without assuming a font-dependent 390px fitting breakpoint.
 
 - Remove paid-plan badges, billing settings and unsupported credit-purchase controls; keep usage tracking and instance spend limits available.
 
