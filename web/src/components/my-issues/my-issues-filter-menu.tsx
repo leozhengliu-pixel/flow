@@ -10,6 +10,7 @@ import { usePropertyCommand } from '@/components/property/use-property-command'
 import { matchesSearch, translatedKeywords } from '@/lib/search-match'
 import { useI18n } from '@/i18n/i18n'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { AgentBadge } from '@/components/agent/agent-badge'
 import styles from './my-issues-filter-menu.module.css'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
@@ -92,6 +93,7 @@ const DOCUMENT_SEARCH_MINIMUM = 4
 export function MyIssuesFilterMenu({ align = 'center', availableFields, layout = 'issues', filters = [], onAddGroup, onAdvanced, onOpenChange, onToggle, open, options, scope = 'issues', surface, trigger, variant = 'root' }: MyIssuesFilterMenuProps) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
+  const desktop = useDesktopLayout()
   const phoneRoot = phone && surface === 'my-issues' && variant === 'root'
   const [activeField, setActiveField] = useState<MyIssuesFilterKey>()
   const [query, setQuery] = useState('')
@@ -113,6 +115,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
     const field = item.id as MyIssuesFilterKey
     if (field === 'advanced' && (variant === 'advanced' || !onAdvanced)) return false
     if (field === 'ai' && variant === 'advanced') return false
+    if (desktop && layout === 'issues' && variant === 'root' && ['triageIntelligence', 'releases', 'autoClosed'].includes(field)) return false
     return (!availableFields || availableFields.includes(field)) && !hiddenFields.includes(field)
   })).filter(group => group.length)
   // The reference app's deep search: "Priority › Urgent", "Labels › Bug  1 issue", "Project properties › Project priority › Urgent".

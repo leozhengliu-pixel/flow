@@ -11,9 +11,11 @@ import { dateFilterMenu } from './issue-date-filter'
 import { SavedViewMenu } from './saved-view-editor'
 
 class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }
+const layout=vi.hoisted(()=>({desktop:false}))
+vi.mock('@/hooks/use-desktop-layout',()=>({useDesktopLayout:()=>layout.desktop}))
 Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: TestResizeObserver })
 
-beforeEach(() => localStorage.setItem('flow:locale', 'en-US'))
+beforeEach(() => {localStorage.setItem('flow:locale', 'en-US');layout.desktop=false})
 
 const view = { id: 'view-1', name: 'Urgent todo', description: '', scope: 'workspace', resource: 'issues', view: 'all', filters: [], display: {}, createdAt: '', updatedAt: '' } as SavedView
 const users = [{ id: 'user-1', name: 'Dev User', displayName: 'Dev User', email: 'dev@example.com', active: true }] as User[]
@@ -58,6 +60,15 @@ const statusOptions: MyIssuesFilterOption[] = [{ id: 'todo', label: 'Todo', kind
 const options = (field: MyIssuesFilterKey) => field === 'dates' ? dateFilterMenu() : field === 'status' ? statusOptions : undefined
 
 describe('filter menus', () => {
+  it('keeps the desktop root compact while retaining the full advanced inventory', async () => {
+    layout.desktop=true
+    const props={open:true,trigger:<button type="button">Filter</button>,options,onOpenChange:vi.fn(),onToggle:vi.fn()}
+    const {rerender}=render(<I18nProvider><MyIssuesFilterMenu {...props}/></I18nProvider>)
+    for(const name of ['Team','Estimate','Suggested label'])expect(screen.getByRole('option',{name:new RegExp(`^${name}`)})).toBeVisible()
+    for(const name of ['Triage Intelligence','Releases','Auto-closed'])expect(screen.queryByRole('option',{name:new RegExp(`^${name}`)})).toBeNull()
+    rerender(<I18nProvider><MyIssuesFilterMenu {...props} variant="advanced"/></I18nProvider>)
+    for(const name of ['Triage Intelligence','Releases','Auto-closed'])expect(screen.getByRole('option',{name:new RegExp(`^${name}`)})).toBeVisible()
+  })
   it('aligns "Add filter group" with the other rows: a 16px glyph in the shared icon slot', async () => {
     render(<I18nProvider><MyIssuesFilterMenu open variant="advanced" trigger={<button type="button">Filter</button>} options={options} onOpenChange={vi.fn()} onToggle={vi.fn()} onAddGroup={vi.fn()}/></I18nProvider>)
     const group = await screen.findByRole('option', { name: /Add filter group/ })

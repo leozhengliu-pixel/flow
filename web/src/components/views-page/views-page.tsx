@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { PeopleMenuItems } from '@/components/property/people-menu-items'
 import { VirtualColumnList } from '@/components/ui/virtual-column-list';
 import * as ContextMenu from "@radix-ui/react-context-menu";
@@ -102,6 +103,7 @@ export function ViewsPage({
   viewHref,
 }: ViewsPageProps) {
   const { t } = useI18n();
+  const desktop = useDesktopLayout();
   const storageKey = `${data.workspace.urlKey}:views-directory:${scope.kind === "team" ? scope.team.id : "workspace"}:${resource}`;
   const [ordering, setOrdering] = useState<Ordering>(
     () =>
@@ -350,7 +352,7 @@ export function ViewsPage({
             href: resourceHref("projects"),
             onSelect: () => onResourceChange("projects"),
           },
-          ...(data.workspaceSettings.featureFlags.dashboards !== false
+          ...(!desktop && data.workspaceSettings.featureFlags.dashboards !== false
             ? [
                 {
                   resource: "dashboards" as const,
