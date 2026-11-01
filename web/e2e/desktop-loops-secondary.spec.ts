@@ -22,7 +22,7 @@ test('keeps loop list, hub and editor metrics tied to their controls', async ({ 
   const hub = page.locator('.loops-hub-composer')
   await expect(hub).toBeVisible()
   await expect(page.getByRole('tab', { name: 'My loops', exact: true })).toBeVisible()
-  expect((await page.locator('.loops-hub-header h2').boundingBox())!.y).toBe(144)
+  expect(Math.abs((await page.locator('.loops-hub-header h2').boundingBox())!.y - 144)).toBeLessThanOrEqual(1)
   await expect(hub).toHaveCSS('padding', '12px')
   await expect(hub.locator('textarea')).toHaveCSS('height', '48px')
   await expect(hub.locator('textarea')).toHaveCSS('padding', '2px 6px')

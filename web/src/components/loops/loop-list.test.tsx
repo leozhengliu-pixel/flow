@@ -7,7 +7,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { makeBootstrap, teammate, viewer } from '@/test/fixtures'
 import type { Loop } from '@/types/flow'
 
-const api = vi.hoisted(() => ({ listLoops: vi.fn(), listLoopTemplates: vi.fn() }))
+const api = vi.hoisted(() => ({ listLoops: vi.fn(), listLoopTemplates: vi.fn(), updateLoop: vi.fn() }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
 
 import { LoopList } from './loop-list'
@@ -53,7 +53,17 @@ describe('LoopList', () => {
   beforeEach(() => {
     localStorage.clear()
     api.listLoopTemplates.mockReset().mockResolvedValue([])
+    api.updateLoop.mockReset().mockImplementation(async (id: string, input: Partial<Loop>) => ({ ...loops.find(loop => loop.id === id), ...input }))
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  })
+
+  it('changes the owner directly from the owner cell without opening the loop', async () => {
+    const user = userEvent.setup()
+    const { onNavigate } = renderList([loops[0]])
+    await user.click(await screen.findByRole('button', { name: 'Change owner' }))
+    await user.click(screen.getByRole('option', { name: /Teammate/ }))
+    await waitFor(() => expect(api.updateLoop).toHaveBeenCalledWith('loop-1', { ownerId: teammate.id }))
+    expect(onNavigate).not.toHaveBeenCalled()
   })
 
   it('shows the reference app table grouped by workspace and team', async () => {

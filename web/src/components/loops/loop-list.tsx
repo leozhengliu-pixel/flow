@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, typ
 import { ArrowDown, ArrowUp, Check, Search, Settings2, UserRound, X } from "lucide-react";
 import { PlusIcon } from "@/components/ui/view-action-icons";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { PropertyMenu } from "@/components/property/property-menu";
+import { updateLoop } from "@/lib/api";
+import { toast } from "@/lib/toast";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { DirectoryFilterMenu } from "@/components/workspace-directory/directory-menus";
@@ -584,8 +587,10 @@ function LoopRow({
           </span>
         ) : column === "owner" ? (
           <span key={column} role="cell" className="loops-cell-owner">
-            {owner && <UserAvatar avatarUrl={owner.avatarUrl} className="avatar loops-avatar" name={owner.displayName || owner.name} />}
-            <span data-i18n-ignore>{owner?.displayName || owner?.name}</span>
+            <PropertyMenu label="Owner" ariaLabel="Change owner" selectedId={owner?.id} triggerClassName="loops-owner-button" triggerRole="button"
+              trigger={<>{owner && <UserAvatar avatarUrl={owner.avatarUrl} className="avatar loops-avatar" name={owner.displayName || owner.name}/>}<span data-i18n-ignore>{owner?.displayName || owner?.name}</span></>}
+              options={data.users.filter(user => user.active !== false && !user.app).map(user => ({ id: user.id, label: user.displayName || user.name, person: user, i18nIgnore: true }))}
+              onChange={async ownerId => { try { onChanged(await updateLoop(loop.id, { ownerId })); } catch (error) { toast.error(error instanceof Error ? error.message : t("Could not update loop")); } }}/>
           </span>
         ) : column === "runs" ? (
           <span key={column} role="cell" className="loops-cell-muted is-number is-end">
