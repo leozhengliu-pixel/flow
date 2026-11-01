@@ -2114,6 +2114,8 @@ export const zhCN: Record<string, string> = {
   "Turn an idea into a well-scoped project": "将想法整理为范围清晰的项目",
   "Research a topic": "研究一个主题",
   "Research a topic across the issue backlog": "在事项积压中研究一个主题",
+  "Create automated loop": "创建自动化 Loop",
+  "Learn what loops can do and create your first one": "了解 Loop 的能力并创建你的第一个 Loop",
   "Set up new team": "创建新团队",
   "Create a team that matches how your organization works":
     "创建符合组织工作方式的团队",

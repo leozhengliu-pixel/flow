@@ -55,13 +55,16 @@ describe('agent page empty state', () => {
     renderPage([])
     expect(screen.queryByRole('navigation', { name: 'Recent agent chats' })).not.toBeInTheDocument()
     expect(await screen.findByText('Get started with some examples')).toBeVisible()
+    expect(screen.getByText('Create a new project')).toBeVisible()
+    expect(screen.getByText('Research a topic')).toBeVisible()
+    expect(screen.getByText('Create automated loop')).toBeVisible()
   })
 
   it('remembers dismissing starter examples', async () => {
     localStorage.removeItem('flow:agent-examples-dismissed')
     renderPage([])
     await screen.findByText('Get started with some examples')
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Dismiss examples' }))
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Dismiss' }))
     expect(screen.queryByText('Get started with some examples')).not.toBeInTheDocument()
     expect(localStorage.getItem('flow:agent-examples-dismissed')).toBe('1')
   })
