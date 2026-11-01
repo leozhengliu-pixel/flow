@@ -4,11 +4,12 @@ import { Search } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { useI18n } from '@/i18n/i18n'
 import { useUserPreferences } from '@/lib/runtime-preferences'
+import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 
 type Shortcut = { label: string; keys: string[] }
 
-function shortcutGroups(sendCommentKeys: string[]): { title: string; shortcuts: Shortcut[] }[] {
-  return [
+function shortcutGroups(sendCommentKeys: string[], desktop: boolean): { title: string; shortcuts: Shortcut[] }[] {
+  const groups = [
     { title: 'General', shortcuts: [
       { label: 'Open command menu', keys: ['⌘', 'K'] },
       { label: 'Save or submit', keys: ['⌘', 'Enter'] },
@@ -62,15 +63,76 @@ function shortcutGroups(sendCommentKeys: string[]): { title: string; shortcuts: 
       { label: 'New initiative', keys: ['N', 'then', 'I'] },
     ] },
   ]
+  if (desktop) {
+    groups.find(group => group.title === 'Navigation')!.shortcuts.push(
+      { label: 'Open team archive', keys: ['G', 'then', 'X'] },
+      { label: 'Go to all issues', keys: ['G', 'then', 'E'] },
+      { label: 'Go to Loops', keys: ['G', 'then', 'L'] },
+      { label: 'Go to current cycle', keys: ['G', 'then', 'V'] },
+      { label: 'Go to upcoming cycle', keys: ['G', 'then', 'W'] },
+      { label: 'Go to initiatives', keys: ['G', 'then', 'N'] },
+      { label: 'Go to dashboards', keys: ['G', 'then', '-'] },
+      { label: 'Open a favorite', keys: ['O', 'then', 'F'] },
+      { label: 'Open a project', keys: ['O', 'then', 'P'] },
+      { label: 'Open a cycle', keys: ['O', 'then', 'C'] },
+      { label: 'Open a team', keys: ['O', 'then', 'T'] },
+      { label: 'Open a user', keys: ['O', 'then', 'U'] },
+      { label: 'Open view', keys: ['O', 'then', 'V'] },
+      { label: 'Open initiative', keys: ['O', 'then', 'N'] },
+      { label: 'Open link from last toast', keys: ['⌘', '⌥', 'O'] },
+      { label: 'Dismiss all toasts', keys: ['⌘', '⌥', 'X'] },
+      { label: 'Show display options', keys: ['⇧', 'V'] },
+    )
+    groups.find(group => group.title === 'Issues')!.shortcuts.push(
+      { label: 'New issue in full screen view', keys: ['V'] },
+      { label: 'Assign issue to user', keys: ['A'] },
+      { label: 'Assign to me', keys: ['I'] },
+      { label: 'Change labels', keys: ['L'] },
+      { label: 'Change issue status', keys: ['S'] },
+      { label: 'Change priority', keys: ['P'] },
+      { label: 'Change estimate', keys: ['⇧', 'E'] },
+      { label: 'Set due date', keys: ['⇧', 'D'] },
+      { label: 'Rename', keys: ['⇧', 'R'] },
+      { label: 'Focus issue description input', keys: ['Ctrl', '⇧', 'I'] },
+      { label: 'Mark as favorite', keys: ['⌥', 'F'] },
+      { label: 'Remind about issue', keys: ['⇧', 'H'] },
+      { label: 'Move to another team', keys: ['⌘', '⇧', 'M'] },
+      { label: 'Delete issue', keys: ['⌘', '⌫'] },
+      { label: 'Subscribe to issue', keys: ['⇧', 'S'] },
+      { label: 'Manage issue subscribers', keys: ['⌘', '⇧', 'S'] },
+      { label: 'Mark as blocked', keys: ['M', 'then', 'B'] },
+      { label: 'Mark as blocking', keys: ['M', 'then', 'X'] },
+      { label: 'Reference related issue', keys: ['M', 'then', 'R'] },
+      { label: 'Mark as duplicate of another issue', keys: ['M', 'then', 'M'] },
+      { label: 'Link any URL to issue…', keys: ['Ctrl', 'L'] },
+      { label: 'Copy issue id', keys: ['⌘', '.'] },
+      { label: 'Copy git branch name', keys: ['⌘', '⇧', '.'] },
+      { label: 'Copy issue URL', keys: ['⌘', '⇧', ','] },
+      { label: 'Copy issue title', keys: ['⌘', '⇧', "'"] },
+      { label: 'Copy everything as Markdown', keys: ['⌘', '⌥', 'C'] },
+      { label: 'Copy as prompt', keys: ['⌘', '⌥', 'P'] },
+      { label: 'Create sub-issue', keys: ['⌘', '⇧', 'O'] },
+      { label: 'Add to cycle', keys: ['⇧', 'C'] },
+      { label: 'Add to project', keys: ['⇧', 'P'] },
+    )
+    groups.push({ title: 'Inbox', shortcuts: [
+      { label: 'Delete notification', keys: ['E'] },
+      { label: 'Mark as read/unread', keys: ['U'] },
+      { label: 'Mark all as read', keys: ['⌥', 'U'] },
+      { label: 'Snooze notification', keys: ['H'] },
+    ] })
+  }
+  return groups
 }
 
 export function KeyboardShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t } = useI18n()
   const { sendComments } = useUserPreferences()
+  const desktop = useDesktopLayout()
   const [query, setQuery] = useState('')
-  const filtered = useMemo(() => shortcutGroups(sendComments === '⌘ Enter' ? ['⌘', 'Enter'] : ['Enter']).map(group => ({ ...group, shortcuts: group.shortcuts.filter(shortcut =>
+  const filtered = useMemo(() => shortcutGroups(sendComments === '⌘ Enter' ? ['⌘', 'Enter'] : ['Enter'], desktop).map(group => ({ ...group, shortcuts: group.shortcuts.filter(shortcut =>
     matchesSearch(query, [shortcut.label, shortcut.keys.join(' ')], t),
-  ) })).filter(group => group.shortcuts.length), [query, sendComments, t])
+  ) })).filter(group => group.shortcuts.length), [query, sendComments, t, desktop])
 
   return <Dialog open={open} onOpenChange={next => { onOpenChange(next); if (!next) setQuery('') }}>
     <DialogContent aria-describedby={undefined} className="sidebar-shortcuts-dialog" closeLabel={t('Close dialog')}>

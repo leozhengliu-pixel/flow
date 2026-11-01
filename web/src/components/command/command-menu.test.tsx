@@ -26,7 +26,7 @@ function Register({ context }: { context?: CommandContext }) {
   return null
 }
 
-function setup(context?: CommandContext, agent: { sessions?: AgentSession[] } = {}, bootstrap = data) {
+function setup(context?: CommandContext, agent: { sessions?: AgentSession[] } = {}, bootstrap = data, navigate?: (path: string) => void) {
   const onAskAgent = vi.fn()
   const onAskAgentQuery = vi.fn()
   const onOpenAgentSession = vi.fn()
@@ -40,6 +40,7 @@ function setup(context?: CommandContext, agent: { sessions?: AgentSession[] } = 
     return <>
       <Register context={context}/>
       <CommandMenu open={open} onOpenChange={value => { onOpenChange(value); setOpen(value) }} data={bootstrap} onUpdateIssue={onUpdateIssue} onUpdateIssues={onUpdateIssues}
+        documentHost={navigate ? { reload: async () => undefined, navigate } : undefined}
         onCreateIssue={noop} onCreateIssueTemplate={noop} onCreateProject={noop} onCreateView={noop} onCreateInitiative={noop} onSearchWorkspace={noop}
         onNavigateInbox={noop} onNavigateMyIssues={noop} onNavigateProjects={noop} onNavigateInitiatives={noop} onNavigateViews={noop} onNavigateMembers={noop}
         onNavigateCustomers={noop} onNavigateAgent={noop} onOpenResult={onOpenResult}
@@ -94,6 +95,18 @@ describe('context-aware command menu', () => {
     await user.keyboard('{Backspace}')
     expect(screen.queryByLabelText('Command context')).not.toBeInTheDocument()
     expect(screen.getByRole('option', { name: /Open issue…/ })).toBeVisible()
+  })
+
+  it('opens a project picker, searches server-only projects and navigates to the chosen project', async () => {
+    const navigate = vi.fn()
+    api.searchWorkspace.mockResolvedValue({ results: [{ type: 'project', id: 'remote-project', slugId: 'remote-project', title: 'Remote project', score: 1 }] })
+    const { user } = setup(undefined, {}, data, navigate)
+    await user.click(screen.getByRole('option', { name: /Open project…/ }))
+    expect(screen.getByLabelText('Command context')).toHaveTextContent('Open project…')
+    await user.type(input(), 'Remote')
+    await user.click(await screen.findByRole('option', { name: 'Remote project' }))
+    expect(api.searchWorkspace).toHaveBeenCalledWith('Remote', ['project'], 50, expect.any(AbortSignal))
+    expect(navigate).toHaveBeenCalledWith('/workspace/project/remote-project/overview')
   })
 
   it('shows the open issue as a context chip and lists issue actions first', () => {

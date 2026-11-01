@@ -8,6 +8,7 @@ import {
   FileText,
   FolderKanban,
   GitPullRequest,
+  Settings2,
   Hand,
   LifeBuoy,
   Inbox,
@@ -49,6 +50,7 @@ import { contextChip, useContextCommands, type CommandPage, type ContextCommandH
 import './command-menu.css'
 import { AgentCursorGlyph, AgentHistoryGlyph } from '@/components/ui/agent-glyph'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { NAVIGATION_PAGES, navigationOptions, navigationPageLabels } from './navigation-commands'
 
 /** A Settings › Security "who can" permission for the viewer; without workspace data the command stays listed. */
 function viewerAllowed(data: BootstrapData | undefined, key: 'templatePermission' | 'teamCreatePermission') {
@@ -105,6 +107,7 @@ export function CommandMenu({
   initialCustomerPicker = false,
   initialDocumentPicker = false,
   initialIssuePicker = false,
+  initialPage,
   initialReleasePicker = false,
   documentHost,
   releaseHost,
@@ -160,6 +163,7 @@ export function CommandMenu({
   /** Open straight on the "Open document…" picker (the O then D shortcut). */
   initialDocumentPicker?: boolean
   initialIssuePicker?: boolean
+  initialPage?: CommandPage
   /** Open straight on the "Create new release…" pipeline picker (the N then R shortcut). */
   initialReleasePicker?: boolean
   /** Navigation and the New release composer for the release commands; omitted where releases are unavailable. */
@@ -170,7 +174,7 @@ export function CommandMenu({
   const { t } = useI18n()
   const phone = usePhoneLayout()
   const [query, setQuery] = useState('')
-  const [pages, setPages] = useState<CommandPage[]>(() => initialIssuePicker ? [{ id: 'issueOpen', label: 'Open issue…' }] : initialDocumentPicker ? [{ id: 'documentOpen', label: 'Open document…' }] : initialReleasePicker ? [{ id: 'releaseCreate', label: 'Create new release…' }] : [])
+  const [pages, setPages] = useState<CommandPage[]>(() => initialPage ? [initialPage] : initialIssuePicker ? [{ id: 'issueOpen', label: 'Open issue…' }] : initialDocumentPicker ? [{ id: 'documentOpen', label: 'Open document…' }] : initialReleasePicker ? [{ id: 'releaseCreate', label: 'Create new release…' }] : [])
   const page = pages.at(-1)
   const issuePickerOptions = useIssueSearch(query, data?.issues ?? [], open && page?.id === 'issueOpen')
   const [results, setResults] = useState<SearchResult[]>([])
@@ -206,7 +210,7 @@ export function CommandMenu({
   const contextCommands = {
     heading: context?.kind === 'document' ? 'Document' : context?.kind === 'release' ? '' : issueCommands.heading,
     actions: context?.kind === 'document' ? documents.actions : context?.kind === 'release' ? context.actions : issueCommands.actions,
-    options: page?.id === 'issueOpen' ? issueOpenOptions : documents.options.length ? documents.options : releasePage ? releases.options : context?.kind === 'release' ? (page && context.pageOptions?.(page, query)) || [] : issueCommands.options,
+    options: page && NAVIGATION_PAGES.has(page.id) ? navigationOptions(data, page, results, host.navigate, () => onOpenChange(false)) : page?.id === 'issueOpen' ? issueOpenOptions : documents.options.length ? documents.options : releasePage ? releases.options : context?.kind === 'release' ? (page && context.pageOptions?.(page, query)) || [] : issueCommands.options,
   }
   const phoneSelectionContext = phone && context?.kind === 'issues' && context.source === 'selection'
   const visibleContextActions = phoneSelectionContext
@@ -252,7 +256,8 @@ export function CommandMenu({
     { id: 'go-inbox', group: 'Navigation', label: 'Go to Inbox', icon: <Inbox/>, shortcut: ['G', 'then', 'I'], run: closeAnd(onNavigateInbox) },
     { id: 'go-my-issues', group: 'Navigation', label: 'Go to My issues', icon: <SquareDot/>, shortcut: ['G', 'then', 'M'], run: closeAnd(onNavigateMyIssues) },
     { id: 'open-issue', group: 'Navigation', label: 'Open issue…', icon: <SquareDot/>, shortcut: ['O', 'then', 'I'], keywords: 'issue picker ticket find', run: () => openPage({ id: 'issueOpen', label: 'Open issue…' }) },
-    { id: 'open-project', group: 'Navigation', label: 'Open project…', icon: <Box/>, shortcut: ['O', 'then', 'P'], keywords: 'project picker', run: closeAnd(onNavigateProjects) },
+    { id: 'open-project', group: 'Navigation', label: 'Open project…', icon: <Box/>, shortcut: ['O', 'then', 'P'], keywords: 'project picker', run: phone ? closeAnd(onNavigateProjects) : () => openPage({ id: 'projectOpen', label: 'Open project…' }) },
+    ...(!phone ? (Object.entries(navigationPageLabels) as Array<[keyof typeof navigationPageLabels, string]>).filter(([id]) => id !== 'projectOpen').map(([id, label]) => ({ id, group: 'Navigation', label, icon: <Layers3/>, run: () => openPage({ id, label }) })) : []),
     { id: 'go-projects', group: 'Navigation', label: 'Go to projects', icon: <ArrowRight/>, shortcut: ['G', 'then', 'P'], run: closeAnd(onNavigateProjects) },
     ...(onNavigateRecentlyDeletedProjects ? [{ id: 'go-deleted-projects', group: 'Navigation', label: 'Go to recently deleted projects', icon: <Trash2/>, keywords: 'trash restore removed', run: closeAnd(onNavigateRecentlyDeletedProjects) }] : []),
     { id: 'go-initiatives', group: 'Navigation', label: 'Go to Initiatives', icon: <Lightbulb/>, run: closeAnd(onNavigateInitiatives) },
@@ -268,11 +273,11 @@ export function CommandMenu({
     ...(onNavigatePulse ? [{ id: 'go-pulse', group: 'Navigation', label: 'Go to pulse', icon: <PulseIcon size={14}/>, shortcut: ['G', 'then', 'F'], keywords: 'feed updates', run: closeAnd(onNavigatePulse) }] : []),
     ...(pulseToggle ? [{ id: 'toggle-pulse', group: 'Pulse', label: pulseToggle.enabled ? 'Disable Pulse' : 'Enable Pulse', icon: <PulseIcon size={14}/>, keywords: 'feed updates', run: closeAnd(pulseToggle.run) }] : []),
     ...(onNavigateReviews ? [{ id: 'go-reviews', group: 'Reviews', label: 'Go to Reviews', icon: <GitPullRequest/>, shortcut: ['G', 'then', 'R'], run: closeAnd(onNavigateReviews) }] : []),
-    ...(onNavigateSettings ? [{ id: 'touch-optimized', group: 'Settings', label: 'Force UI optimized for touch', icon: <Hand/>, keywords: 'pro touch settings', run: closeAnd(onNavigateSettings) }] : []),
+    ...(onNavigateSettings ? [phone ? { id: 'touch-optimized', group: 'Settings', label: 'Force UI optimized for touch', icon: <Hand/>, keywords: 'pro touch settings', run: closeAnd(onNavigateSettings) } : { id: 'go-settings', group: 'Settings', label: 'Go to settings', icon: <Settings2/>, run: closeAnd(onNavigateSettings) }] : []),
     ...(onReportPerformance ? [
       { id: 'report-performance', group: 'Help', label: 'Report performance problem', icon: <LifeBuoy/>, keywords: 'pro feedback diagnostics', run: closeAnd(onReportPerformance) },
-      { id: 'contact-support', group: 'Help', label: 'Contact support', icon: <LifeBuoy/>, keywords: 'pro', run: closeAnd(onReportPerformance) },
-      { id: 'whats-new', group: 'Help', label: "What's new", icon: <Lightbulb/>, keywords: 'pro', run: closeAnd(onReportPerformance) },
+      { id: 'contact-support', group: 'Help', label: 'Contact support', icon: <LifeBuoy/>, keywords: 'pro', run: closeAnd(() => { window.open('https://github.com/leozhengliu-pixel/flow/issues/new/choose', '_blank', 'noopener,noreferrer') }) },
+      { id: 'whats-new', group: 'Help', label: "What's new", icon: <Lightbulb/>, keywords: 'pro', run: closeAnd(() => { window.open('https://github.com/leozhengliu-pixel/flow/blob/main/CHANGELOG.md', '_blank', 'noopener,noreferrer') }) },
     ] : []),
     { id: 'copy-url', group: 'Other', label: 'Copy current page link', icon: <Clipboard/>, run: closeAnd(() => void navigator.clipboard.writeText(window.location.href)) },
     ...displayCommands.map(command => ({ id: command.id, group: 'Display options', label: `Display options ${command.path.join(' ')}`, path: ['Display options', ...command.path], icon: <CustomerCommandIcon/>, keywords: `${t('Display options')} ${command.path.map(part => t(part)).join(' ')}`, run: closeAnd(command.run) })),
@@ -285,12 +290,12 @@ export function CommandMenu({
 
   useEffect(() => {
     if (!open) { setQuery(''); setResults([]); setPages([]); setCustomerPicker(false); setPastChats(false); return }
-    if (page || customerPicker || pastChats || !query.trim()) { setResults([]); setLoading(false); return }
+    if (page && page.id !== 'projectOpen' || customerPicker || pastChats || !query.trim()) { setResults([]); setLoading(false); return }
     let active = true
     const controller = new AbortController()
     setLoading(true)
     const timer = window.setTimeout(() => {
-      searchWorkspace(query.trim(), [], 12, controller.signal)
+      searchWorkspace(query.trim(), page?.id === 'projectOpen' ? ['project'] : [], page?.id === 'projectOpen' ? 50 : 12, controller.signal)
         .then(response => { if (active) setResults(response.results) })
         .catch(reason => { if (active && !(reason instanceof Error && reason.name === 'AbortError')) setResults([]) })
         .finally(() => { if (active) setLoading(false) })
@@ -314,7 +319,7 @@ export function CommandMenu({
     ? groups.find(group => actions.some(action => action.group === group && `${action.label} ${action.keywords ?? ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())))
     : undefined
   // The context vanished (selection cleared, issue closed): nested pages no longer apply.
-  useEffect(() => { if (!context) setPages(current => current.filter(item => item.id === 'issueOpen' || GLOBAL_DOCUMENT_PAGES.has(item.id) || GLOBAL_RELEASE_PAGES.has(item.id))) }, [context])
+  useEffect(() => { if (!context) setPages(current => current.filter(item => item.id === 'issueOpen' || NAVIGATION_PAGES.has(item.id) || GLOBAL_DOCUMENT_PAGES.has(item.id) || GLOBAL_RELEASE_PAGES.has(item.id))) }, [context])
   const onInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Backspace' && !query && customerPicker) { event.preventDefault(); setCustomerPicker(false); return }
     if (event.key === 'Backspace' && !query && pastChats) { event.preventDefault(); setPastChats(false); return }

@@ -130,18 +130,25 @@ function safeMatches(element: Element, selector: string) {
  * Page-level key hints (e.g. a detail page's "…" menu): runs the handler for a completed hint unless
  * focus is in a text field or a menu or dialog is already open.
  */
-export function useFlowHotkeys(handlers: Record<string, () => void>, enabled = true, scope?: string) {
+export function useFlowHotkeys(handlers: Record<string, () => void>, enabled = true, scope?: string, deferNavigation = false) {
   const latest = useRef(handlers)
   useEffect(() => { latest.current = handlers })
   const key = Object.keys(handlers).join('|')
   useEffect(() => {
     if (!enabled) return
     const matcher = createShortcutMatcher(isMacPlatform())
+    let navigationPrefixAt = 0
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       const target = event.target instanceof Element ? event.target : null
       if (event.defaultPrevented || target?.closest('input,textarea,select,[contenteditable="true"],[role="textbox"]')) return
       if (document.querySelector(BLOCKING_OVERLAYS)) return
       if (scope && !target?.closest(scope) && !document.activeElement?.closest(scope)) return
+      if (deferNavigation && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+        const key = event.key.toLowerCase(), now = Date.now()
+        if (navigationPrefixAt && now - navigationPrefixAt < SHORTCUT_SEQUENCE_TIMEOUT) { navigationPrefixAt = 0; matcher.reset(); return }
+        navigationPrefixAt = key === 'g' || key === 'o' ? now : 0
+        if (navigationPrefixAt) { matcher.reset(); return }
+      }
       const result = matcher.match(event, key.split('|').filter(Boolean))
       if (!result || result === 'pending') return
       event.preventDefault()
@@ -150,5 +157,5 @@ export function useFlowHotkeys(handlers: Record<string, () => void>, enabled = t
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [enabled, key, scope])
+  }, [enabled, key, scope, deferNavigation])
 }

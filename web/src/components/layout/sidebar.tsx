@@ -1234,7 +1234,8 @@ interface FavoriteDescriptor {
   parent?: string;
 }
 
-function favoriteDescriptor(
+// oxlint-disable-next-line react/only-export-components -- The pure descriptor is shared with navigation pickers.
+export function favoriteDescriptor(
   data: BootstrapData,
   favorite: Favorite,
   workspaceSlug: string,

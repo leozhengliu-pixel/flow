@@ -17,6 +17,14 @@ function setPlatform(platform: string) {
 }
 
 describe('toast system', () => {
+  it('dismisses all toasts with the desktop shortcut', async () => {
+    act(() => { toast.success('First toast'); toast.info('Second toast') })
+    await settle(50)
+    expect(items()).toHaveLength(2)
+    fireEvent.keyDown(window, { key: 'x', code: 'KeyX', metaKey: true, altKey: true })
+    await settle(600)
+    expect(items()).toHaveLength(0)
+  })
   beforeEach(() => {
     vi.useFakeTimers()
     setPlatform('MacIntel')
