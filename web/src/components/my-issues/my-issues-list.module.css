@@ -189,7 +189,7 @@
 }
 
 @media(min-width:1024px){
-  .contextMenu{min-width:175px}
+  .contextMenu{min-width:175px;max-height:calc(100dvh - 20px)}
   .row{--row-status-column:16px}
   .cycleChip{padding-inline:9px;gap:6px;border-radius:48px;background:var(--bg-panel);box-shadow:inset 0 0 0 .5px var(--ui-pill-ring)}
   .cycleChip svg{width:14px;height:14px}
