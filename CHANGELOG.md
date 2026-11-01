@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Use consistent phone team-tab padding and toolbar gaps, and keep restore-only document history controls on a compact toolbar while history navigation can still wrap.
+
 - Preserve the milestone list's bottom inset and the inline text baseline of the phone project activity link.
 
 - Keep phone chat actions right-aligned for every title and prevent opening Chat options from scrolling the header sideways.

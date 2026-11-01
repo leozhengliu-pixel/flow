@@ -160,7 +160,7 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
                   </span>
                   <DocumentJsonView className="document-history-doc" doc={preview.doc} emptyLabel={t('Empty document')}/>
                 </div>
-                <div aria-label={t('Version actions')} className="document-history-pill" role="toolbar">
+                <div aria-label={t('Version actions')} className={`document-history-pill${previous ? '' : ' is-restore-only'}`} role="toolbar">
                   {previous && <label className="document-history-highlight">
                     <Toggle checked={highlight} label={t('Highlight changes')} onChange={setHighlight} size="regular"/>
                     <span>{t('Highlight changes')}</span>
