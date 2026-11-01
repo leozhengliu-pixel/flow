@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Group phone saved-view identities around a centered avatar frame without changing desktop spacing.
+
 - Constrain long project and milestone names inside phone issue properties instead of letting their nested rows overflow.
 
 - Group the phone Agent header inside its page header, restore activity hit-area padding without changing row pitch, and make document layout checks wait for settled dialogs and real tab overflow.

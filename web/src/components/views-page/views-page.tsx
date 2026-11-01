@@ -225,9 +225,11 @@ export function ViewsPage({
     await onDelete(view);
   };
   const renderGroupHeader = (group: Extract<ViewListEntry, { kind: "group" }>['group']) => <div className={styles.groupHeader} data-testid="views-group-header">
+    <div className={styles.groupIdentity}>
     <ScopeAvatar kind={group.kind} label={group.label} team={data.teams.find((team) => team.id === group.id)} />
     <strong data-i18n-ignore data-testid="views-group-name">{group.label}</strong>
-    <span data-testid="views-group-scope">{group.kind === "personal" ? `· ${t("Only visible to you")}` : `· ${t("Workspace")}`}</span>
+    <span className={styles.groupScope} data-testid="views-group-scope">{group.kind === "personal" ? `· ${t("Only visible to you")}` : `· ${t("Workspace")}`}</span>
+    </div>
     <button
       aria-label={t(`Create ${resource === "issues" ? "issue" : "project"} view in ${group.label}`)}
       onClick={onCreate}
@@ -901,7 +903,7 @@ function ScopeAvatar({
   team?: Team;
 }) {
   return (
-    <span className={styles.scopeAvatarFrame} data-testid="views-group-avatar"><span className={styles.scopeAvatar}>
+    <span className={styles.scopeAvatarFrame}><span className={styles.scopeAvatarContent} data-testid="views-group-avatar"><span className={styles.scopeAvatar}>
       {kind === "personal" ? (
         <UserRound size={13} />
       ) : kind === "team" ? (
@@ -909,7 +911,7 @@ function ScopeAvatar({
       ) : (
         label.slice(0, 2).toUpperCase()
       )}
-    </span></span>
+    </span></span></span>
   );
 }
 function ViewOwnerAvatar({ user }: { user: User }) {
