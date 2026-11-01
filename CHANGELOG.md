@@ -15,6 +15,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Wire desktop entity-navigation pickers and issue keyboard controls, expand shortcut help without changing phone content, and send performance reports to a real support destination.
 
+- Keep the desktop session list free of the extra Refresh action, move additional authentication policies below workspace management, and restore the API community link and measured intro spacing without changing phones.
+
 - Restore desktop Reviews onboarding actions and title icon, and the measured Pulse empty-state artwork; retain phone layouts and both code-host connections.
 
 - Align shared desktop sidebar colours, header inset ownership, icon-button padding and settings table controls while preserving phone metrics.

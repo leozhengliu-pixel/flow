@@ -4,6 +4,18 @@ import { expect } from '@playwright/test'
 test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
 test.beforeEach(({ isMobile }) => { test.skip(isMobile, 'Desktop-only settings geometry') })
 
+test('keeps desktop session and authentication controls in their intended sections', async ({ page, workspaceKey }) => {
+  await page.goto(`/${workspaceKey}/settings/account/security`)
+  await expect(page.getByRole('heading',{name:'Sessions',exact:true})).toBeVisible()
+  await expect(page.getByRole('button',{name:'Refresh',exact:true})).toHaveCount(0)
+  await page.goto(`/${workspaceKey}/settings/security`)
+  const policy=page.getByRole('checkbox',{name:'Require two-factor authentication',exact:true})
+  await expect(policy).toBeAttached()
+  const headings=await policy.evaluate(input=>[...input.closest('.settings-section')!.querySelectorAll('h3,.settings-group > header > strong')].map(x=>x.textContent))
+  expect(headings).toContain('Workspace management')
+  expect(headings).toContain('Authentication methods')
+})
+
 test('desktop settings keep measured select text, workspace sections, empty headers, and full-width status content', async ({ page, request, workspaceKey }) => {
   await page.goto(`/${workspaceKey}/settings/account/preferences`)
   await expect(page.locator('.settings-select-value > span').first()).toHaveCSS('font-size', '13px')
@@ -134,6 +146,7 @@ test('workspace announcements save in the throwaway workspace and reopen after r
   await expect(dialog.getByRole('checkbox', { name: 'Enable announcements' })).toBeChecked()
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await page.goto(`/${workspaceKey}/settings/api`)
+  await expect(page.getByRole('link',{name:'Join our developer community',exact:true})).toHaveAttribute('href','https://github.com/leozhengliu-pixel/flow/issues')
   await expect(page.getByRole('link', { name: 'Docs' })).toHaveCount(3)
   for (const [label, y] of [['OAuth applications', 206.5], ['Webhooks', 381.5], ['API keys', 578.5]] as const) {
     const rect = await page.getByRole('heading', { name: label, exact: true }).boundingBox()

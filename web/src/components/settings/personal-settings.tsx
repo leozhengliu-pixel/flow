@@ -1772,6 +1772,7 @@ function SecurityOverview({
   p,
 }: PersonalProps) {
   const { formatDate, locale } = useI18n();
+  const desktop = useDesktopSettings();
   const [sessions, setSessions] = useState<
     Awaited<ReturnType<typeof fetchAccountSessions>>
   >([]);
@@ -1973,11 +1974,11 @@ function SecurityOverview({
         title={p("Sessions")}
         description={p("Devices logged into your account")}
       >
-        <div className="personal-section-action">
+        {!desktop && <div className="personal-section-action">
           <Action onClick={() => void refreshSessions()} disabled={sessionsBusy}>
             {sessionsBusy ? p("Refreshing…") : p("Refresh")}
           </Action>
-        </div>
+        </div>}
         {sessions.filter((item) => item.current).length ? (
           sessions
             .filter((item) => item.current)
