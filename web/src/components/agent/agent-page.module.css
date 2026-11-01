@@ -1048,9 +1048,13 @@
   height: 14px;
 }
 @media (min-width: 801px) {
-  .skillsMenu { box-sizing: border-box; width: 240px; max-width: calc(100vw - 32px); padding: 6px; border: 0.5px solid var(--popover-border); border-radius: 12px; background: var(--theme-surface-2); box-shadow: var(--shadow-dialog); }
-  .skillsMenuHeader { box-sizing: border-box; display: flex; align-items: center; height: 12px; padding: 0 10px; color: var(--theme-text-secondary); font-size: 11px; font-weight: 450; }
-  .skillsMenu [role="option"] { height: 31px; padding: 0 14px; }
+  /* Desktop keeps the skill picker as the compact single-action menu. The
+     searchable command surface remains available on phone layouts. */
+  .skillsMenu { box-sizing: content-box; min-width: 174px; width: max-content; max-width: calc(100vw - 32px); padding: 0; border: 0.5px solid var(--popover-border); border-radius: 12px; background: var(--release-popover-bg); box-shadow: var(--release-popover-shadow); }
+  .skillsMenuHeader { display: none; }
+  .skillsMenu > .menuSearch { position: fixed; left: -99999px; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+  .skillsMenu [role="listbox"] { padding: 6px 0; }
+  .skillsMenu [role="option"] { height: 32px; padding: 0 18px 0 14px; }
   .editorScroll > div > .editor { min-height: 44px; }
   .emptyComposerSlot > .composer .skillsButton { padding-right: 6px; line-height: normal; }
 }
@@ -1464,9 +1468,9 @@
 :global(:root[data-theme="light"]) .danger { color: var(--semantic-danger); }
 :global(:root[data-theme="light"]) .attachments > span { border-color: var(--theme-border); background: var(--theme-surface-hover); }
 @media (min-width: 801px) {
-  :global(:root[data-theme="light"]) .skillsMenu { border: 0.5px solid var(--popover-border); border-radius: 12px; background: var(--theme-surface-2); box-shadow: var(--shadow-dialog); }
-  :global(:root[data-theme="light"]) .skillsMenuHeader { box-sizing: border-box; display: flex; align-items: center; height: 12px; padding: 0 10px; }
-  :global(:root[data-theme="light"]) .skillsMenu [role="option"] { height: 31px; padding: 0 14px; }
+  :global(:root[data-theme="light"]) .skillsMenu { width: max-content; padding: 0; border: 0.5px solid var(--popover-border); border-radius: 12px; background: var(--release-popover-bg); box-shadow: var(--release-popover-shadow); }
+  :global(:root[data-theme="light"]) .skillsMenuHeader { display: none; }
+  :global(:root[data-theme="light"]) .skillsMenu [role="option"] { height: 32px; padding: 0 18px 0 14px; }
 }
 /* Preflight strips list markers; answers show bullets and numbers. */
 .messageDocument ul { list-style: disc; }

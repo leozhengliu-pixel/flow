@@ -86,6 +86,17 @@ describe('LoopRunPage', () => {
     expect(screen.getByText('AI credits are not set up').closest('details')).not.toHaveAttribute('open')
   })
 
+  it('discloses instructions from the title and exposes the loop menu', async () => {
+    const user = userEvent.setup()
+    renderPage('run-1')
+    const title = await screen.findByRole('button', { name: 'Instructions' })
+    expect(title).toHaveAttribute('aria-expanded', 'false')
+    await user.click(title)
+    expect(title).toHaveAttribute('aria-expanded', 'true')
+    await user.click(screen.getByRole('button', { name: 'Loop actions' }))
+    expect(await screen.findByRole('menuitem', { name: 'Show run history' })).toBeVisible()
+  })
+
   it('polls a running run until it finishes', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLatestRef } from "@/hooks/use-latest-ref";
-import { AlertTriangle, ArrowDown, ArrowUp, Ban, CheckCircle2, CircleAlert, CircleStop, Info, Link2, Paperclip, Pencil, Search, Settings2, SkipForward, ThumbsDown, ThumbsUp, Unplug, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Ban, CheckCircle2, ChevronDown, CircleAlert, CircleStop, Info, Link2, MoreHorizontal, Paperclip, Pencil, Search, Settings2, SkipForward, ThumbsDown, ThumbsUp, Unplug, XCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -25,6 +25,8 @@ import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, LoopRun, LoopRunReply, LoopRunStatus, LoopVersion } from "@/types/flow";
 import { copyText, loopUrl, runParts, useLoopRecord } from "./loop-data";
 import { LoopBreadcrumb } from "./loop-breadcrumb";
+import { LoopActionsMenu } from "./loop-actions";
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
 import { dayLabel, runDuration } from "./loop-model";
 import { describeRunFailure, runSkipNote, runTriggerText } from "./loop-run-labels";
@@ -146,7 +148,8 @@ export function LoopRunPage({
 }) {
   const { t } = useI18n();
   const workspace = data.workspace.urlKey;
-  const { loop, missing } = useLoopRecord(data, loopId);
+  const phone = usePhoneLayout();
+  const { loop, setLoop, missing } = useLoopRecord(data, loopId);
   const [runs, setRuns] = useState<LoopRun[]>();
   const [selected, setSelected] = useState<LoopRun>();
   const [query, setQuery] = useState("");
@@ -363,7 +366,16 @@ export function LoopRunPage({
         <button className="loops-mobile-menu" aria-label={t("Open sidebar")} data-sidebar-trigger onClick={onOpenSidebar}>
           <Settings2 />
         </button>
-        <LoopBreadcrumb data={data} loop={loop} loopId={loopId} onNavigate={onNavigate} />
+        <LoopBreadcrumb data={data} loop={loop} loopId={loopId} onNavigate={onNavigate} actions={!phone && loop ? <LoopActionsMenu
+          align="start"
+          data={data}
+          loop={loop}
+          onNavigate={onNavigate}
+          onRun={() => void runNow()}
+          onChanged={setLoop}
+          onDeleted={() => onNavigate(loopsPath(workspace))}
+          trigger={<button className="loops-icon-button is-plain" aria-label={t("Loop actions")} type="button"><MoreHorizontal size={16}/></button>}
+        /> : undefined} />
         {loop && (
           <div className="loops-topbar-actions">
             <button className="loops-icon-button is-plain" aria-label={t("Copy link")} title={t("Copy link")} onClick={() => void copyText(loopUrl(workspace, loop), t("Link copied"))}>
@@ -522,7 +534,7 @@ export function LoopRunPage({
               ))}
               {loop && (
                 <section className={`loops-run-instructions${instructionsOpen ? "" : " is-collapsed"}`} aria-label={t("Instructions")}>
-                  <h3>{t("Instructions")}</h3>
+                  {phone ? <h3>{t("Instructions")}</h3> : <button className="loops-run-instructions-title" type="button" aria-expanded={instructionsOpen} onClick={() => setInstructionsOpen(value => !value)}>{t("Instructions")}<ChevronDown size={14}/></button>}
                   {runDefinition === null && selected.version !== undefined && (
                     <p className="loops-run-notice" role="note">
                       <Info size={14} />
@@ -543,9 +555,9 @@ export function LoopRunPage({
                       />
                     </div>
                   )}
-                  <button className="loops-expand-button is-small" type="button" aria-expanded={instructionsOpen} onClick={() => setInstructionsOpen((value) => !value)}>
+                  {phone && <button className="loops-expand-button is-small" type="button" aria-expanded={instructionsOpen} onClick={() => setInstructionsOpen((value) => !value)}>
                     {t(instructionsOpen ? "Collapse" : "Expand")}
-                  </button>
+                  </button>}
                 </section>
               )}
               {selected.outputContract && (

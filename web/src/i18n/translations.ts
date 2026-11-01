@@ -5086,6 +5086,7 @@ Object.assign(zhCN, {
   "Updated workflow definition draft": "已更新工作流定义草稿",
   "Created automation": "已创建自动化",
   "Web search": "网络搜索",
+  "Web access": "网络访问",
   "or pick a template": "或选择一个模板",
   "Loop template categories": "Loop 模板分类",
   Featured: "精选",

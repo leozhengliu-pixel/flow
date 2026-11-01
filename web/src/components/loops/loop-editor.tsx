@@ -16,6 +16,7 @@ import { TeamIcon } from "@/components/issue/issue-icons";
 import { createLoop, deleteDraft, deleteLoop, getLoop, updateLoop, type LoopMutation } from "@/lib/api";
 import { loopPath, loopsPath, newLoopPath, teamLoopsPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import type { BootstrapData, Loop, LoopCodeAccess, LoopTriggerType } from "@/types/flow";
 import { LoopAgentPanel } from "./loop-agent-panel";
 import { LoopBreadcrumb } from "./loop-breadcrumb";
@@ -227,6 +228,8 @@ function LoopEditorForm({
 }) {
   const { t } = useI18n();
   const draft = isLoopDraft(loop);
+  const phone = usePhoneLayout();
+  const webAccessLabel = t(phone ? "Web search" : "Web access");
   const workspace = data.workspace.urlKey;
   const teams = activeTeams(data.teams);
   const [form, setForm] = useState<Form>(() => formOf(loop));
@@ -523,9 +526,9 @@ function LoopEditorForm({
             )}
             <div className="loops-permission-row">
               <span>
-                <strong>{t("Web search")}</strong>
+                <strong>{webAccessLabel}</strong>
                 <small>{t(LOOP_PERMISSION_COPY.webSearch)}</small>
-                {loopConfig && !loopConfig.webSearchAvailable && (
+                {phone && loopConfig && !loopConfig.webSearchAvailable && (
                   <small className="loops-permission-hint" role="note">
                     {t("Web search isn't configured for this workspace.")}{" "}
                     <a
@@ -540,7 +543,7 @@ function LoopEditorForm({
                   </small>
                 )}
               </span>
-              <Toggle size="regular" checked={form.webSearch} label={t("Web search")} onChange={(checked) => update({ webSearch: checked })} />
+              <Toggle size="regular" checked={form.webSearch} label={webAccessLabel} onChange={(checked) => update({ webSearch: checked })} />
             </div>
             <div className="loops-permission-row">
               <span>

@@ -355,6 +355,10 @@
 .loops-cell-owner { min-width: 0; min-height: 28px; line-height: normal; display: flex; align-items: center; gap: 8px; overflow: hidden; padding-left: 6px; color: var(--theme-text-primary); font-size: 13px; font-weight: 450; white-space: nowrap; }
 .loops-cell-owner .loops-avatar { width: 18px; height: 18px; flex-basis: 18px; font-size: 9px; }
 .loops-cell-owner > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.loops-cell-owner:has(.loops-owner-button) { padding-left: 0; }
+.loops-owner-button { box-sizing: border-box; display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; height: 28px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; text-align: left; pointer-events: auto; cursor: pointer; }
+.loops-owner-button:hover { background: var(--theme-surface-hover); }
+.loops-owner-button > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 .loops-row-menu-anchor { position: fixed; width: 0; height: 0; pointer-events: none; }
 /* The reference app's selection checkbox sits in the 28px slot left of the row icon; it shows on hover and while anything is selected. */
 .loops-row-check { position: absolute; z-index: 2; top: 13px; left: 23px; width: 14px; height: 14px; display: grid; place-items: center; padding: 0; border: 1px solid var(--checkbox-border, var(--theme-border-strong)); border-radius: 3px; background: var(--bg-panel); color: var(--on-accent); opacity: 0; cursor: pointer; transition: opacity var(--quick) var(--ease); }
@@ -855,6 +859,9 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-subtitle { display: flex; align-items: center; gap: 6px; margin: 4px 0 16px; color: var(--theme-text-secondary); font-size: 12px; }
 .loops-run-instructions { position: relative; margin: 0 0 16px; padding: 12px 16px; border: 0.5px solid var(--theme-border); border-radius: 10px; background: var(--theme-surface-2); }
 .loops-run-instructions h3 { margin: 0 0 10px; color: var(--theme-text-secondary); font: 500 12px/15px var(--font); }
+.loops-run-instructions-title { display: inline-flex; align-items: center; gap: 4px; height: 24px; margin: 0 0 2px; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-secondary); font: 500 12px/normal var(--font); cursor: pointer; }
+.loops-run-instructions-title:hover { background: var(--theme-surface-hover); }
+.loops-run-instructions-title[aria-expanded="true"] svg { transform: rotate(180deg); }
 .loops-run-instructions .loops-instructions-text.is-collapsed { max-height: 42px; }
 .loops-run-instructions.is-collapsed .loops-expand-button { position: absolute; bottom: 12px; left: 50%; margin: 0; transform: translateX(-50%); }
 .loops-expand-button.is-small { height: 24px; padding: 0 8px; font-size: 12px; }
@@ -942,6 +949,10 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
   .loops-run-header { padding: 0 12px; }
   .loops-run-header h1 { font: 500 13px/16px var(--font); }
   .loops-run-subtitle { margin-inline: 12px; }
+  .loops-run-instructions { padding: 12px; }
+  .loops-editor-heading .loops-level-button,
+  .loops-editor-page .loops-permission-footnote { display: none; }
+  .loops-editor-scroll .loops-card.is-instructions { margin-inline: 0; padding: 0; background: transparent; box-shadow: none; }
   .loops-run-composer { margin-inline: 8px; }
   .loops-run-composer-actions .loops-run-skills { line-height: normal; }
 }

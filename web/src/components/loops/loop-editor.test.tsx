@@ -89,7 +89,7 @@ describe('LoopEditor', () => {
     expect(permissions).toHaveTextContent("Choose which team's data are available to this loop")
     expect(within(permissions).getByRole('button', { name: 'Team access' })).toHaveTextContent('All public teams')
     expect(within(permissions).getByRole('checkbox', { name: 'Allow changes outside triggering issue' })).toBeChecked()
-    expect(within(permissions).getByRole('checkbox', { name: 'Web search' })).not.toBeChecked()
+    expect(within(permissions).getByRole('checkbox', { name: 'Web access' })).not.toBeChecked()
     expect(within(permissions).getByRole('combobox', { name: 'Access code' })).toHaveTextContent('Read')
     expect(within(permissions).getByRole('checkbox', { name: 'Allow changes to externally synced issues and comments' })).not.toBeChecked()
     // Trusted sources live in the workspace Loops settings; the editor only links there.
@@ -119,11 +119,11 @@ describe('LoopEditor', () => {
     api.getLoopConfig.mockResolvedValue({ webSearchAvailable: false, webSearchProvider: '' })
     const { onNavigate } = renderEditor({ ...draft, templateId: undefined })
     const permissions = screen.getByRole('region', { name: 'Capabilities & access' })
-    expect(await within(permissions).findByRole('note')).toHaveTextContent("Web search isn't configured for this workspace.")
-    const toggle = within(permissions).getByRole('checkbox', { name: 'Web search' })
+    expect(within(permissions).queryByRole('note')).toBeNull()
+    const toggle = within(permissions).getByRole('checkbox', { name: 'Web access' })
     expect(toggle).toBeEnabled()
-    await user.click(within(permissions).getByRole('link', { name: 'Learn more' }))
-    expect(onNavigate).toHaveBeenCalledWith('/workspace/settings/loops#web-search')
+    await user.click(within(permissions).getByRole('link', { name: 'Loops settings' }))
+    expect(onNavigate).toHaveBeenCalledWith('/workspace/settings/loops')
   })
 
   it('shows no web search hint when a provider is configured', async () => {
