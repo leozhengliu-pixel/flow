@@ -58,6 +58,8 @@ import './issue-description-editor.css'
 import '@/components/editor/rich-text-body.css'
 
 interface DescriptionEditorProps {
+  /** Documents keep advanced block kinds searchable rather than in the unfiltered insert list. */
+  compactInsertMenu?: boolean
   /** Renders the content without editing (deleted documents). */
   readOnly?: boolean
   selectionActions?: DescriptionSelectionActions
@@ -106,7 +108,7 @@ export function IssueDescriptionEditor(props: DescriptionEditorProps) {
   return <DescriptionEditorSession key={sessionKey} {...props}/>
 }
 
-function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, extensions = [], className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [], onInsertImage, onPersistReady, outline = false, readOnly = false }: DescriptionEditorProps) {
+function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, extensions = [], className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [], onInsertImage, onPersistReady, outline = false, readOnly = false, compactInsertMenu = false }: DescriptionEditorProps) {
   const { t } = useI18n()
   const getPlaceholder = useStableCallback(() => t(placeholder))
   const getDocumentId = useStableCallback(() => collaboration?.issueId ?? collaboration?.documentId)
@@ -423,7 +425,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       { id: 'heading-1', group: 'headings', label: 'Heading 1', keywords: 'h1 title', shortcut: '⌘⌥1', icon: Heading1, run: execute(() => editor.chain().focus().toggleHeading({ level: 1 }).run()) },
       { id: 'heading-2', group: 'headings', label: 'Heading 2', keywords: 'h2 title', shortcut: '⌘⌥2', icon: Heading2, run: execute(() => editor.chain().focus().toggleHeading({ level: 2 }).run()) },
       { id: 'heading-3', group: 'headings', label: 'Heading 3', keywords: 'h3 subtitle', shortcut: '⌘⌥3', icon: Heading3, run: execute(() => editor.chain().focus().toggleHeading({ level: 3 }).run()) },
-      { id: 'heading-4', group: 'headings', label: 'Heading 4', keywords: 'h4 subheading', shortcut: '⌘⌥4', icon: Heading4, run: execute(() => editor.chain().focus().toggleHeading({ level: 4 }).run()) },
+      { id: 'heading-4', group: 'headings', searchOnly: compactInsertMenu, label: 'Heading 4', keywords: 'h4 subheading', shortcut: '⌘⌥4', icon: Heading4, run: execute(() => editor.chain().focus().toggleHeading({ level: 4 }).run()) },
       { id: 'bullet-list', group: 'lists', label: 'Bulleted list', keywords: 'unordered bullets', shortcut: '⌘⇧8', icon: List, run: execute(() => editor.chain().focus().toggleBulletList().run()) },
       { id: 'number-list', group: 'lists', label: 'Numbered list', keywords: 'ordered numbers', shortcut: '⌘⇧9', icon: ListOrdered, run: execute(() => editor.chain().focus().toggleOrderedList().run()) },
       { id: 'checklist', group: 'lists', label: 'Checklist', keywords: 'todo task checkbox', shortcut: '⌘⇧7', icon: ListTodo, run: execute(() => editor.chain().focus().toggleTaskList().run()) },
@@ -443,7 +445,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       }) },
       { id: 'collapse', group: 'blocks', label: 'Collapsible section', keywords: 'details toggle fold', shortcut: '⌘⇧6', icon: ChevronsDownUp, run: execute(() => editor.chain().focus().setDetails().run()) },
       { id: 'quote', group: 'blocks', label: 'Blockquote', keywords: 'blockquote citation', shortcut: '⌥⇧.', icon: Quote, run: execute(() => editor.chain().focus().toggleBlockquote().run()) },
-      { id: 'callout', group: 'blocks', label: 'Callout', keywords: 'aside note warning info', icon: Lightbulb, run: execute(() => {
+      { id: 'callout', group: 'blocks', searchOnly: compactInsertMenu, label: 'Callout', keywords: 'aside note warning info', icon: Lightbulb, run: execute(() => {
         if (editor.can().wrapIn('callout')) editor.chain().focus().wrapIn('callout').run()
         else editor.chain().focus().insertContent({ type: 'callout', content: [{ type: 'paragraph' }] }).run()
       }) },
@@ -452,7 +454,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     ]
     // Row/column commands only exist while the caret is in a table (the reference app lists them first).
     return slash.active ? [...tableSlashCommands(editor).map(tableAction), ...base] : base
-  }, [editor, slash.active, getUploadImage])
+  }, [editor, slash.active, getUploadImage, compactInsertMenu])
   useInsertionEffect(() => { commandsRef.current = commands })
   const filteredCommands = filterEditorCommands(commands, slash.query, t)
 

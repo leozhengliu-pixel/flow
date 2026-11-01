@@ -62,6 +62,16 @@ describe('block rhythm and list markers', () => {
 })
 
 describe('slash menu', () => {
+  it('keeps advanced document blocks searchable without expanding the default list', async () => {
+    const editor = await mount('/', { compactInsertMenu: true })
+    caretAtEndOfFirstTextblock(editor)
+    const menu = await screen.findByRole('listbox', { name: 'Insert block' })
+    expect(within(menu).getAllByRole('option')).toHaveLength(13)
+    expect(within(menu).queryByRole('option', { name: /Heading 4/ })).toBeNull()
+    expect(within(menu).queryByRole('option', { name: /Callout/ })).toBeNull()
+    act(() => { editor.commands.insertContent('callout') })
+    expect(await within(menu).findByRole('option', { name: /Callout/ })).toBeVisible()
+  })
   it('opens after a space mid-line and inside list items and tables, but not glued to a word', async () => {
     const editor = await mount('- item\n\nplain')
     const slash = (text: string, at: 'list' | 'paragraph') => {

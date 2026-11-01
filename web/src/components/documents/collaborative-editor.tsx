@@ -8,6 +8,7 @@ import { IssueDescriptionEditor } from '@/components/issue/issue-description-edi
 import type { DescriptionSnapshot } from '@/components/issue/editor/editor-content'
 import type { DescriptionSelectionActions } from '@/components/issue/editor/structured-blocks'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import type { BootstrapData, FlowDocument, User } from '@/types/flow'
 import './collaborative-editor.css'
 
@@ -65,6 +66,7 @@ export function CollaborativeEditor({
   readOnly = false,
   editorRef,
 }: CollaborativeEditorProps) {
+  const phone = usePhoneLayout()
   // The collaborative base state's version: compaction is accepted only
   // against the current one, so it follows every saved document.
   const contentVersion = useRef(document.contentVersion ?? 0)
@@ -116,6 +118,7 @@ export function CollaborativeEditor({
       )}
       {contentContext}
       <IssueDescriptionEditor
+        compactInsertMenu={!phone}
         ariaLabel={ariaLabel}
         className={className}
         collaboration={{
