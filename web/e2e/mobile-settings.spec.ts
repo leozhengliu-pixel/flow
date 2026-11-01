@@ -1,6 +1,19 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import { test as workspaceTest } from './workspace-fixture'
+
+async function expectCopyToGrowRows(rows: Locator) {
+  for (const row of await rows.all()) {
+    const copy = row.locator('.settings-row-copy > span')
+    if (!(await copy.count())) continue
+    const text = await copy.textContent()
+    const before = (await row.boundingBox())!.height
+    await copy.evaluate(node => { node.textContent = 'Long translated settings descriptions must wrap without clipping or overlapping controls. '.repeat(8) })
+    expect((await row.boundingBox())!.height).toBeGreaterThan(before)
+    expect(await copy.evaluate(node => node.scrollHeight <= node.clientHeight)).toBe(true)
+    await copy.evaluate((node, value) => { node.textContent = value }, text)
+  }
+}
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
   workspaceTest.describe(`${viewport.width}px billing`, () => {
@@ -155,6 +168,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       const table = page.locator('.mobile-teams-table')
       const rows = table.locator('.mobile-team-row')
       await expect(rows).toHaveCount(3)
+      const downloadEvent = page.waitForEvent('download')
+      await page.getByRole('button', { name: 'Export CSV', exact: true }).click()
+      expect((await downloadEvent).suggestedFilename()).toBe('teams.csv')
       await expect(table.locator('.mobile-teams-group')).toHaveText('Active2')
       expect((await rows.first().boundingBox())!.y).toBeCloseTo(225.5, 1)
       expect((await rows.first().boundingBox())!.height).toBe(44)
@@ -217,7 +233,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(page.getByRole('heading', { name: 'Workspace', exact: true })).toBeVisible()
       await expect(page.locator('.workspace-logo-initials')).toHaveText('MW')
       expect((await card.boundingBox())?.y).toBeCloseTo(115.5, 1)
-      expect((await card.boundingBox())?.height).toBeCloseTo(290, 1)
+      expect((await card.boundingBox())!.height).toBeGreaterThan(0)
       const name = page.getByRole('textbox', { name: 'Name', exact: true })
       expect((await name.boundingBox())?.width).toBeCloseTo(256, 1)
       const month = page.getByRole('combobox', { name: 'First month of the fiscal year' })
@@ -228,10 +244,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
         await expect(value).toHaveCSS('color', 'lch(90.826 1.425 272)')
         await expect(value).toHaveCSS('opacity', '0.6')
       }
-      await expect(onboarding.nth(0).locator('strong')).toHaveCSS('opacity', '0.5')
-      await expect(onboarding.nth(1).locator('strong')).toHaveCSS('opacity', '0.5')
-      expect((await page.locator('.settings-section:nth-of-type(2) .settings-row:first-child .settings-row-copy > span').boundingBox())?.width).toBeCloseTo(187, 1)
       await expect(page.getByText('United States', { exact: true })).toBeVisible()
+      await expectCopyToGrowRows(page.locator('.settings-card > .settings-row'))
       await page.getByRole('button', { name: 'Edit URL', exact: true }).click()
       await expect(page.getByRole('textbox', { name: 'URL', exact: true })).toBeFocused()
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
@@ -244,6 +258,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(page.getByRole('dialog')).toBeVisible()
       await page.getByRole('button', { name: 'Cancel', exact: true }).click()
       await expect(page.getByRole('dialog')).toBeHidden()
+      await page.getByRole('button', { name: /Welcome message/ }).click()
+      await expect(page.getByRole('heading', { name: 'Welcome message', level: 1, exact: true })).toBeVisible()
+      await expect(page.getByText('Configure a message that new users will receive when they join the workspace', { exact: true })).toBeVisible()
     })
   })
 }
@@ -324,7 +341,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(priority).not.toBeChecked()
       const inboxCard = page.locator('.personal-section:first-of-type > .settings-card')
       expect((await inboxCard.boundingBox())?.y).toBeCloseTo(192.5, 1)
-      expect((await inboxCard.boundingBox())?.height).toBeCloseTo(159, 1)
+      expect((await inboxCard.boundingBox())!.height).toBeGreaterThan(0)
+      await expectCopyToGrowRows(inboxCard.locator('.settings-row'))
       const channels = page.locator('.personal-channel')
       await expect(channels).toHaveCount(4)
       await expect(channels.nth(0)).toContainText('Disabled')
@@ -332,7 +350,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(page.getByRole('button', { name: 'Mobile', exact: true })).toBeDisabled()
       await expect(channels.nth(0).locator('.personal-channel-icon')).toHaveCSS('width', '32px')
       await expect(channels.nth(0).locator('.personal-channel-status')).toBeVisible()
-      expect((await channels.nth(0).boundingBox())?.y).toBeCloseTo(470.5, 1)
+      expect((await channels.nth(0).boundingBox())!.y).toBeGreaterThan((await inboxCard.boundingBox())!.y + (await inboxCard.boundingBox())!.height)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       await page.getByRole('link', { name: 'Desktop', exact: true }).click()
       await expect(page.getByRole('checkbox', { name: 'Enable desktop notifications' })).not.toBeChecked()
@@ -359,10 +377,11 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(page.locator('.personal-avatar')).toBeVisible()
       await expect(page.locator('.personal-avatar')).toHaveText('MP')
       await expect(page.locator('.personal-static')).toHaveText('mobile-profile@example.test')
-      expect((await card.boundingBox())?.height).toBeCloseTo(482.5, 1)
+      expect((await card.boundingBox())!.height).toBeGreaterThan(0)
+      await expectCopyToGrowRows(card.locator('.settings-row'))
       expect((await page.getByRole('textbox', { name: 'Full name', exact: true }).boundingBox())?.width).toBeCloseTo(viewport.width - 65.3333, 1)
       await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('')
-      expect((await page.getByRole('heading', { name: 'Workspace access' }).boundingBox())?.y).toBeCloseTo(622, 1)
+      expect((await page.getByRole('heading', { name: 'Workspace access' }).boundingBox())!.y).toBeGreaterThan((await card.boundingBox())!.y + (await card.boundingBox())!.height)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/profile-${viewport.width}.png`, scale: 'css', animations: 'disabled' })
 
@@ -449,13 +468,19 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(page.locator('.settings-mobile-header')).toHaveCSS('height', '43.5px')
       expect((await page.locator('.personal-page-header h1').boundingBox())?.x).toBeCloseTo(38, 1)
       expect((await page.locator('.personal-section:first-of-type > .settings-card').boundingBox())?.x).toBeCloseTo(22, 1)
-      expect((await page.locator('.personal-section:first-of-type > .settings-card').boundingBox())?.height).toBeCloseTo(386, 1)
-      await expect(page.locator('.personal-section').first().getByRole('combobox', { name: 'Language', exact: true })).toHaveCount(0)
+      const language = page.getByRole('combobox', { name: 'Language', exact: true })
+      await expect(language).toBeVisible()
       await expect(page.getByRole('combobox', { name: 'Default home view' }).locator('option:checked')).toHaveText('Flow Agent (default)')
       await expect(page.getByRole('checkbox', { name: 'Convert text emoticons into emojis' })).toBeChecked()
       await expect(page.locator('.personal-section:nth-of-type(2) .personal-action')).toHaveCSS('height', '36px')
       await expect(page.locator('.personal-section:nth-of-type(2) .personal-action')).toHaveCSS('margin-right', '-6px')
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await expectCopyToGrowRows(page.locator('.personal-section:nth-of-type(-n+2) .settings-row'))
+      await language.selectOption({ label: '简体中文' })
+      const chineseLanguage = page.locator('.personal-language-section select')
+      await expect(chineseLanguage.locator('option:checked')).toHaveText('简体中文')
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await chineseLanguage.selectOption({ label: 'English' })
     })
   })
 }

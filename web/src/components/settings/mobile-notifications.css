@@ -13,7 +13,6 @@
     }
     .personal-section:first-of-type > .settings-card > .settings-row:first-child { display: flex; }
     .personal-section:first-of-type > .settings-card > .settings-row { min-height: 79.5px; }
-    .personal-section:first-of-type > .settings-card > .settings-row:nth-child(n) { height: 79.5px; }
     .personal-section > .settings-card > .settings-row:nth-child(n) .settings-row-copy > span {
       height: auto;
       font: 450 12px/normal var(--font);

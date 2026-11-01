@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useCurrentTimeMs } from "@/hooks/use-current-time";
 import { useDesktopSettings } from '@/hooks/use-desktop-settings';
+import { usePhoneLayout } from '@/hooks/use-phone-layout';
 import { useNavigate } from "react-router-dom";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { ArrowDown, ArrowUp, Check, ChevronDown, Command, MoreHorizontal, Search, UserRound, X } from "lucide-react";
@@ -123,6 +124,7 @@ function installationIdOf(userId: string) {
  */
 export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; onReload: () => Promise<void> }) {
   const desktop = useDesktopSettings();
+  const phone = usePhoneLayout();
   const { t } = useI18n();
   const navigate = useNavigate();
   const workspace = data.workspace.urlKey;
@@ -525,10 +527,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
   const teamOptions =
     teamsTarget?.mode === "add" ? data.teams.filter((team) => !teamsTarget.members.every((member) => isMemberOfTeam(member.user.id, team.id))) : data.teams;
 
-  return (
-    <div className="settings-members-page settings-workspace-members" data-i18n-ignore>
-      <PageTitle>{t("Members")}</PageTitle>
-      <div className="settings-members-toolbar">
+  const filterControls = <>
         <label>
           <Search size={14} className="settings-members-desktop-search" />
           <SettingsSearchGlyph size={16} className="settings-members-phone-search" />
@@ -557,6 +556,13 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
         <PhoneNativeSelect className="settings-members-phone-filter" aria-label={t("Member filter")} value={activeFilter} onChange={event => setFilter(event.target.value as MemberFilter)}>
           {filters.map(value => <option key={value} value={value}>{t(value)}</option>)}
         </PhoneNativeSelect>
+  </>;
+
+  return (
+    <div className="settings-members-page settings-workspace-members" data-i18n-ignore>
+      <PageTitle>{t("Members")}</PageTitle>
+      <div className="settings-members-toolbar">
+        {phone ? <div className="settings-members-filters">{filterControls}</div> : filterControls}
         <span />
         <button type="button" className="settings-action" onClick={exportCsv}>
           {t("Export CSV")}
