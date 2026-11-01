@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Match desktop toast dismiss padding and muted foreground without changing phone controls.
 
+- Match Agent starter examples to project planning, backlog research and automated Loop prompts, with Chinese translations.
+
 - Align desktop issue creation control colours, title and team breadcrumb spacing, and icon-button padding while retaining phone styles.
 
 - Match desktop command and shortcut-help keycap typography, group-heading padding and muted labels without changing phone controls.

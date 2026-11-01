@@ -795,7 +795,7 @@ export function AgentPage({
         {!shown && !sessions.length && status?.enabled && !examplesDismissed && <section className={styles.examples} aria-label={t("Get started with some examples")}>
           <p>{t("Get started with some examples")}</p>
           <button
-            aria-label={t("Dismiss examples")}
+            aria-label={t("Dismiss")}
             className={styles.examplesDismiss}
             onClick={() => {
               setExamplesDismissed(true);
@@ -805,9 +805,9 @@ export function AgentPage({
           ><X size={14} /></button>
           <div className={styles.exampleGrid}>
             {([
-              { Icon: Box, title: "Summarize the latest project updates", description: "Pull together a concise update from recent project activity." },
-              { Icon: Search, title: "Research a topic for my team", description: "Find useful context and turn it into clear next steps." },
-              { Icon: Workflow, title: "Build a workflow for recurring work", description: "Describe a repetitive process and shape it into a Loop." },
+              { Icon: Box, title: "Create a new project", description: "Turn an idea into a well-scoped project" },
+              { Icon: Search, title: "Research a topic", description: "Research a topic across the issue backlog" },
+              { Icon: Workflow, title: "Create automated loop", description: "Learn what loops can do and create your first one" },
             ] satisfies { Icon: LucideIcon; title: string; description: string }[]).map(({ Icon, title, description }) => <button className={styles.exampleCard} key={title} type="button" onClick={() => writeInput(t(title))}>
               <Icon className={styles.exampleIcon} aria-hidden="true" size={14} />
               <strong>{t(title)}</strong>

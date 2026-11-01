@@ -47,7 +47,9 @@ describe('agent page composer', () => {
     expect(await screen.findByRole('textbox', { name: 'Send a message to Flow AI' })).toHaveAttribute('data-placeholder', 'Ask Flow…')
     expect(screen.getByRole('button', { name: 'Skills' })).toBeVisible()
     expect(screen.getByText('Get started with some examples')).toBeVisible()
-    expect(screen.getByText('Summarize the latest project updates')).toBeVisible()
+    expect(screen.getByText('Create a new project')).toBeVisible()
+    expect(screen.getByText('Research a topic')).toBeVisible()
+    expect(screen.getByText('Create automated loop')).toBeVisible()
     expect(document.querySelector('svg.emptyGraphic, [class*="emptyGraphic"]')).toBeNull()
   })
 
