@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Measure phone resource-tab overflow with its complete menu controls and available toolbar space; restore the full animated-images preference description on phones.
+
 - Remove paid-plan badges, billing settings and unsupported credit-purchase controls; keep usage tracking and instance spend limits available.
 
 - Run desktop spacing browser checks with the repository's project context and assert declared hairlines instead of device-scale-dependent coordinates.

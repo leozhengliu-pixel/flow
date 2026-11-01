@@ -492,6 +492,12 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(page.getByRole('combobox', { name: 'Default home view' }).locator('option:checked')).toHaveText('Flow Agent (default)')
       await expect(page.getByRole('checkbox', { name: 'Convert text emoticons into emojis' })).toBeChecked()
       await expect(page.locator('.personal-section:nth-of-type(2) .personal-action')).toHaveCSS('height', '36px')
+      const animationDescription = page.locator('.personal-section:nth-of-type(2) .settings-row').last().locator('.settings-row-copy > span')
+      expect(await animationDescription.evaluate(node => {
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        return range.getClientRects().length
+      })).toBe(viewport.width === 375 ? 3 : 2)
       await expect(page.locator('.personal-section:nth-of-type(2) .personal-action')).toHaveCSS('margin-right', '-6px')
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       await expectCopyToGrowRows(page.locator('.personal-section:nth-of-type(-n+2) .settings-row'))

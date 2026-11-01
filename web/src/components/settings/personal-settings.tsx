@@ -205,6 +205,8 @@ const PERSONAL_ZH: Record<string, string> = {
   "Disable animated images & emoji": "停用动画图片和 Emoji",
   "When enabled, GIFs and animated emojis remain static until hovered":
     "启用后，GIF 和动态 Emoji 在悬停前保持静止",
+  "When enabled, GIFs and animated emojis will be static by default and animate only on hover.":
+    "启用后，GIF 和动态 Emoji 默认保持静止，仅在悬停时播放动画。",
   "Interface theme": "界面主题",
   "Light theme": "浅色主题",
   "Theme to use for light system appearance": "系统为浅色外观时使用的主题",
@@ -861,7 +863,9 @@ function Preferences({
         <PersonalRow
           title={p("Disable animated images & emoji")}
           description={p(
-            "When enabled, GIFs and animated emojis remain static until hovered",
+            desktop
+              ? "When enabled, GIFs and animated emojis remain static until hovered"
+              : "When enabled, GIFs and animated emojis will be static by default and animate only on hover.",
           )}
         >
           <SettingsToggle

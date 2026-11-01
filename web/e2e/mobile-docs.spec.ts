@@ -368,8 +368,17 @@ test.describe('mobile documents tab menu', () => {
     const team = await seedTeamDocuments(request, workspaceKey, '[mobile] Docs tabs')
 
     await page.goto(`/${workspaceKey}/team/${team.key}/documents?doc-filter=${advancedFilterParam()}`)
-    const nav = page.getByRole('navigation', { name: 'Team views' })
+    const nav = page.locator('.team-home-tabs')
     await expect(nav).toBeVisible()
+    await expect(nav.locator('[data-team-tab-active]')).toContainText('Documents')
+    await nav.locator('[data-team-tab-active]').click()
+    await expect(page.getByRole('menu', { name: 'Team views' }).getByRole('menuitem')).toHaveText(['Documents', 'Members'])
+    await page.keyboard.press('Escape')
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(nav.locator('[data-team-tab-active]')).toHaveCount(0)
+    await expect(nav.getByRole('link')).toHaveText(['Overview', 'Documents', 'Members'])
+    await page.setViewportSize({ width: 375, height: 667 })
+    await expect(nav.locator('[data-team-tab-active]')).toContainText('Documents')
     const members = nav.getByRole('link', { name: 'Members', exact: true })
     if (await members.count()) await members.click()
     else {
@@ -382,6 +391,29 @@ test.describe('mobile documents tab menu', () => {
     }
     await expect(page).toHaveURL(new RegExp(`/${team.key}/members$`))
     await expect(nav.locator('[aria-current="page"], [data-team-tab-active]')).toContainText('Members')
+    await nav.getByRole('link', { name: 'Overview', exact: true }).click()
+    await expect(nav.getByRole('link')).toHaveText(['Overview', 'Documents', 'Members'])
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    expect((await request.patch('/api/workspace/preferences', { data: { featureFlags: { loops: true } }, headers })).ok()).toBe(true)
+    await page.goto(`/${workspaceKey}/team/${team.key}/documents`)
+    for (const width of [375, 390, 405]) {
+      await page.setViewportSize({ width, height: 844 })
+      await expect(nav.locator('[data-team-tab-active]')).toContainText('Documents')
+    }
+    await page.setViewportSize({ width: 430, height: 844 })
+    await expect(nav.locator('button.team-home-tabs-overflow-pill')).toContainText('2 more')
+    await expect(nav.locator('button.team-home-tabs-overflow-pill svg')).toBeVisible()
+    await page.goto(`/${workspaceKey}/settings/account/preferences`)
+    await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption({ label: '简体中文' })
+    await expect(page.locator('.personal-language-section select option:checked')).toHaveText('简体中文')
+    await page.goto(`/${workspaceKey}/team/${team.key}/documents`)
+    for (const width of [320, 375, 390, 430]) {
+      await page.setViewportSize({ width, height: 844 })
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await expect(nav.locator('[aria-current="page"], [data-team-tab-active]')).toContainText('文档')
+    }
+    await page.goto(`/${workspaceKey}/settings/account/preferences`)
+    await page.locator('.personal-language-section select').selectOption({ label: 'English' })
   })
 })
 
