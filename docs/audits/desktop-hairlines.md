@@ -27,7 +27,7 @@ Removed reference-backed compensation in comment cards, list/bulk gaps, project 
 
 Preserved real fractional values: project milestone gap 7.5 and left padding 2.5; delegated avatar overlap -4.5; entity-link padding 1.5/4.5/1.5/3; 0.5 hairlines; 43.5 toolbar height. Sidebar 13.5 spacing preserves its correctly measured y60.5 first row. Secondary dialogs, hover/code typography and account-only states without equivalent reference evidence were not rounded speculatively.
 
-Confirmed P3 fixes cover Agent footer/Skills metrics, document headers/group/row text/icon targets, selected-issue toolbar gap, project display headings and settings sort/integration headings. This is not a claim that every secondary editor/run/menu observation in the older notes is resolved. The empty Loop hub remains y108.5 versus reference y144 because its empty state omits the list toolbar; a 35.5px fitted offset was deliberately not added. Reference-unobserved conversations and data-dependent activity remain unverified.
+Confirmed P3 fixes cover Agent footer/Skills metrics, document headers/group/row text/icon targets, selected-issue toolbar gap, project display headings and settings sort/integration headings. The subsequent [P3 follow-up](desktop-p3-closeout.md) records the secondary Loop editor/run/menu fixes and remaining-note review. It restores the empty hub's real toolbar and declared padding, placing its heading at y144 without a fitted offset. Reference-unobserved conversations and data-dependent activity remain unverified.
 
 ## Verification
 
