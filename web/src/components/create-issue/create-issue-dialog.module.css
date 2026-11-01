@@ -281,6 +281,15 @@
 @media (min-width: 1024px) {
   .footer { border-top: 0; }
   .header .team { color: var(--create-issue-fg); }
+  .header .team:not(#_) { gap: 0; }
+  .header h2 { font-weight: 450; }
+  .breadcrumb { color: var(--create-issue-icon-fg); }
+  .properties :global(.mini-property-trigger) { color: var(--create-issue-icon-fg); }
+  .properties :global(.mini-property-trigger[data-property="status"] span) { color: var(--create-issue-fg); }
+  .properties .cycleChip, .moreButton, .attachButton { padding: 0 2px; }
+  .properties .cycleChip { color: var(--create-issue-icon-fg); }
+  .titleField :global(.title-editor) { padding-top: 0; }
+  .footer .submit { letter-spacing: normal; }
   .iconButton .compactGlyph, .attachButton .compactGlyph { display: none; }
   .iconButton .desktopGlyph { display: block; width: 16px; height: 16px; }
   .attachButton .desktopGlyph { display: block; }
