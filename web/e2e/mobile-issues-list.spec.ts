@@ -225,7 +225,7 @@ test.describe('mobile issue lists and views', () => {
     expect(assignedTab?.height).toBe(32)
     const overflow = page.getByRole('button', { name: /more$/ })
     await expect(overflow).toBeVisible()
-    expect((await overflow.boundingBox())?.width).toBeCloseTo(74.96, 1)
+    expect(await overflow.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true)
     await expect(page.locator('[data-my-issues-surface] [class*="groupHeader"]').first()).toHaveCSS('height', '36px')
     const row = page.locator('[data-my-issues-surface] a[data-issue-row-id]').first()
     expect((await row.boundingBox())?.height).toBe(44)

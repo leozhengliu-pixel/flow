@@ -10,12 +10,17 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       const { teams } = await response.json() as { teams: Array<{ key: string }> }
       for (const view of ['overview', 'documents', 'members']) {
         await page.goto(`/${workspaceKey}/team/${teams[0].key}/${view}`)
-        const active = page.locator('.team-home-tabs a[aria-current="page"]')
+        const active = page.locator('.team-home-tabs [aria-current="page"], .team-home-tabs [data-team-tab-active]')
         await expect(active).toBeVisible()
         await expect(active).toHaveCSS('background-color', 'lch(16.706 0.979 272)')
         await expect(active).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)')
         const more = page.locator('button.team-home-tabs-overflow-pill')
-        if (await more.count()) await expect(more).toHaveCSS('background-color', 'lch(10.149 0.593 272)')
+        if (await more.count()) {
+          if (!(await more.getAttribute('data-team-tab-active'))) await expect(more).toHaveCSS('background-color', 'lch(10.149 0.593 272)')
+          await more.click()
+          await expect(page.getByRole('menu', { name: 'Team views' })).toBeVisible()
+          await page.keyboard.press('Escape')
+        }
         await expect(page.locator('.bottom-agent')).toBeHidden()
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       }

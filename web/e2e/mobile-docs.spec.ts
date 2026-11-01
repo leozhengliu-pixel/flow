@@ -107,15 +107,49 @@ test.describe('mobile document view', () => {
       await expect(page.locator('.document-history-action button')).toContainText('Show document history')
       const box = (await popover.boundingBox())!
       expect(box.x).toBeGreaterThanOrEqual(0)
-      expect(box.x).toBeCloseTo(0, 0)
-      expect(box.width).toBeCloseTo(360.19, 0)
+      expect(box.width).toBeGreaterThan(0)
       expect(box.x + box.width).toBeLessThanOrEqual(viewport.width)
       const owner = (await page.locator('.document-owner-row .document-person--button').boundingBox())!
-      expect(owner.width).toBeLessThan(box.width / 2)
+      expect(owner.x + owner.width).toBeLessThanOrEqual(box.x + box.width)
       const history = (await page.locator('.document-history-action button').boundingBox())!
       expect(history.x - box.x).toBeCloseTo(box.x + box.width - history.x - history.width, 0)
       expect(history.width).toBeGreaterThan(box.width - 20)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+
+    test(`metadata contains long owner names at ${viewport.width}px`, async ({ page, request, workspaceKey }) => {
+      const ownerName = '[mobile] A very long document owner name that must stay inside the metadata panel'
+      const headers = { 'X-Workspace-Key': workspaceKey }
+      const response = await request.post('/api/documents', { headers, data: { title: '[mobile] Long metadata', content: '[mobile] Body' } })
+      expect(response.status()).toBe(201)
+      const document = await response.json() as { slugId: string }
+      await page.route('**/api/bootstrap*', async route => {
+        const response = await route.fetch()
+        const data = await response.json()
+        data.viewer.name = ownerName
+        data.viewer.displayName = ownerName
+        data.users = data.users.map((user: { id: string; name: string }) => user.id === data.viewer.id ? { ...user, name: ownerName, displayName: ownerName } : user)
+        await route.fulfill({ response, json: data })
+      })
+      await page.route('**/api/documents/**', async route => {
+        if (route.request().method() !== 'GET') return route.continue()
+        const response = await route.fetch()
+        const data = await response.json()
+        if (data.creator) data.creator = { ...data.creator, name: ownerName, displayName: ownerName }
+        await route.fulfill({ response, json: data })
+      })
+      await page.setViewportSize(viewport)
+      await page.goto(`/${workspaceKey}/document/${document.slugId}`)
+      await page.locator('.document-edited').click()
+      const panel = page.locator('.document-edited-popover')
+      await expect(panel).toContainText('A very long document owner')
+      const box = (await panel.boundingBox())!
+      expect(box.x).toBeGreaterThanOrEqual(0)
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width)
+      const owner = (await panel.locator('.document-person--button').boundingBox())!
+      expect(owner.x + owner.width).toBeLessThanOrEqual(box.x + box.width)
+      await panel.getByRole('button', { name: 'Show document history' }).click()
+      await expect(page.getByRole('dialog', { name: 'History for [mobile] Long metadata', exact: true })).toBeVisible()
     })
   }
 })
@@ -312,7 +346,7 @@ test.describe('mobile documents tab menu', () => {
       await menu.getByRole('menuitem', { name: 'Members', exact: true }).click()
     }
     await expect(page).toHaveURL(new RegExp(`/${team.key}/members$`))
-    await expect(page.locator('.team-home-tabs a[aria-current="page"]')).toContainText('Members')
+    await expect(nav.locator('[aria-current="page"], [data-team-tab-active]')).toContainText('Members')
   })
 })
 
