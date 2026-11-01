@@ -621,6 +621,7 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
     position: relative;
     top: -.25px;
   }
+  html:root .settings-app .settings-main[data-settings-page="preferences"] .settings-control > .personal-action { margin-right: -6px; }
   html:root .settings-app .settings-main .personal-action {
     height: 36px;
   }

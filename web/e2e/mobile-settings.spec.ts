@@ -39,6 +39,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(root.locator('.api-mobile-docs')).toHaveCount(3)
       await expect(root.locator('.oauth-app-list-header')).toContainText('1 OAuth application')
       await expect(root.locator('.api-webhooks-section')).toContainText('No webhooks')
+      await expect(root.locator('.api-webhooks-section .settings-action')).toHaveCSS('gap', '6px')
       const policy = root.getByRole('combobox', { name: 'API key creation' })
       await expect(policy.locator('option:checked')).toHaveText('All members')
       expect((await policy.boundingBox())!.width).toBeCloseTo(viewport.width - 65.3334, 1)
@@ -439,17 +440,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
 }
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
-  test.describe(`${viewport.width}px account preferences`, () => {
-    test.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+  workspaceTest.describe(`${viewport.width}px account preferences`, () => {
+    workspaceTest.use({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark', workspaceNamePrefix: '[mobile] Account preferences' })
 
-    test('matches the compact preferences groups', async ({ page, request }) => {
-      const requestedKey = `settings-preferences-${randomUUID()}`
-      const created = await request.post(`${API}/api/workspaces`, {
-        data: { name: '[mobile] Account preferences', urlKey: requestedKey, region: 'us', tutorial: false },
-      })
-      expect(created.status()).toBe(201)
-      const { workspace: { urlKey: workspaceKey } } = await created.json() as { workspace: { urlKey: string } }
-
+    workspaceTest('matches the compact preferences groups', async ({ page, workspaceKey }) => {
       await page.goto(`/${workspaceKey}/settings/account/preferences`)
       await expect(page.locator('.bottom-agent')).toBeHidden()
       await expect(page.locator('.settings-mobile-header')).toHaveCSS('height', '43.5px')
@@ -460,6 +454,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(page.getByRole('combobox', { name: 'Default home view' }).locator('option:checked')).toHaveText('Flow Agent (default)')
       await expect(page.getByRole('checkbox', { name: 'Convert text emoticons into emojis' })).toBeChecked()
       await expect(page.locator('.personal-section:nth-of-type(2) .personal-action')).toHaveCSS('height', '36px')
+      await expect(page.locator('.personal-section:nth-of-type(2) .personal-action')).toHaveCSS('margin-right', '-6px')
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     })
   })
