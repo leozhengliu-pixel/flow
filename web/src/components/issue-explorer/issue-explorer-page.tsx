@@ -44,6 +44,7 @@ import { IssuesSplitLayout, IssueViewSplitPage } from '@/components/issues-split
 import { MyIssuesSummaryCard } from '@/components/my-issues/my-issues-summary-card'
 import { labelGroups, PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, pagedDisplayQuery } from './issue-grouping'
 import { isActiveSubscription } from '@/lib/subscription-records'
+import { BacklogEmptyState } from './backlog-empty-state'
 
 export interface IssueExplorerPageProps {
   data: BootstrapData
@@ -521,6 +522,9 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const hiddenByFilters = clearableFilters.length ? Math.max(0, (data.issueCollectionPaged ? baseTotal ?? 0 : clientBaseCount ?? 0) - visibleCount) : 0
   const clearPersonalFilters = () => { if (bandActive) setExtraFilters([]); else persistFilters([]) }
   const filteredEmptyState = effectiveFilters.length ? <NoMatchingIssues hidden={hiddenByFilters} onClear={clearPersonalFilters}/> : undefined
+  const viewEmptyState = emptyState ?? filteredEmptyState ?? (desktop && scope.kind === 'team' && view === 'backlog' && !savedView && !creatingView
+    ? <BacklogEmptyState onCreateIssue={onCreateIssue ? () => onCreateIssue({ teamId: scope.team.id, stateId: data.states.find(state => state.type === 'backlog' && (!state.teamId || state.teamId === scope.team.id))?.id }) : undefined}/>
+    : undefined)
   const editorCard = editorMode && ((controls: ViewEditorControls) => <SavedViewEditor
     mode={editorMode}
     ariaLabel={editorMode === 'edit' ? 'Edit view' : 'New view'}
@@ -653,7 +657,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
         onTotalChange={setPagedTotal}
         onLoadedIssuesChange={setPagedIssues}
-        emptyState={emptyState ?? filteredEmptyState}
+        emptyState={viewEmptyState}
         collapsedGroupIds={collapsedGroups}
         displayProperties={split || (detailsOpen && previewIssueId) ? splitProperties : display.properties}
         nestedSubIssues={display.nestedSubIssues}
@@ -675,7 +679,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         collapsedGroupIds={collapsedGroups}
         displayProperties={split || (detailsOpen && previewIssueId) ? splitProperties : display.properties}
         nestedSubIssues={display.nestedSubIssues}
-        emptyState={emptyState ?? filteredEmptyState}
+        emptyState={viewEmptyState}
         propertyOptions={rowOptions}
         mutationErrors={mutationErrors}
         onCreateIssue={group => { const stateId = stateIdForExplorerGroup(group, data); const context = group.createContext ?? (stateId ? { stateId } : undefined); onCreateIssue?.(scope.kind === 'team' ? { ...context, teamId: scope.team.id } : context) }}
