@@ -5,7 +5,7 @@ go 1.26.10
 require (
 	github.com/Deln0r/ygo v1.29.0
 	github.com/ProtonMail/go-crypto v1.5.2
-	github.com/alicebob/miniredis/v2 v2.39.0
+	github.com/alicebob/miniredis/v2 v2.40.0
 	github.com/aws/aws-sdk-go-v2 v1.47.4
 	github.com/aws/aws-sdk-go-v2/config v1.33.3
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.10
