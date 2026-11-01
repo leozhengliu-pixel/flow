@@ -1,5 +1,5 @@
 @media (min-width: 1024px) {
-  .settings-desktop-docs { display: inline-flex; align-items: center; gap: 2px; padding: 1px 4px; border-radius: 8px; color: var(--set-text); font: 500 12px/15.5px var(--font); text-decoration: none; }
+  .settings-desktop-docs { display: inline-flex; align-items: center; gap: 2px; padding: 1px 4px; border-radius: 8px; color: var(--set-text); font: 450 13px/15.5px var(--font); text-decoration: none; }
   .settings-desktop-docs:hover { background: var(--bg-hover); }
   .workspace-announcements-open { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--set-desc); font: 450 12px var(--font); }
   .workspace-announcements-dialog > label { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; font-size: 13px; }
@@ -21,7 +21,13 @@
   html:root .settings-app .settings-nav-link:hover { background: var(--set-nav-hover-bg); color: var(--set-nav-active); }
   html:root .settings-app .settings-nav-link.active { background: var(--set-nav-active-bg); color: var(--set-nav-active); }
   html:root .settings-app .settings-sidebar-footer { flex: 0 0 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px; }
-  html:root .settings-app .settings-sidebar-footer .sidebar-help { position: relative; box-sizing: border-box; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: .5px solid var(--set-sep); border-radius: 50%; background: var(--set-panel-bg); color: var(--set-nav); }
+  html:root .settings-app .settings-sidebar-footer .sidebar-help { position: relative; box-sizing: border-box; width: 24px; height: 24px; display: grid; place-items: center; padding: 0 2px; border: .5px solid transparent; border-radius: 50%; background: transparent; color: var(--set-nav); }
+  html:root .settings-app .settings-main .domain-labels-table-header button { gap: 2px; }
+  .settings-app .settings-main .label-settings-icon-button { padding: 0 2px; }
+  html:root .settings-app .settings-main .domain-labels-table-header button.active,
+  html:root .settings-app .settings-main .domain-labels-row .domain-label-text { color: var(--text); }
+  html:root .settings-app .settings-main .settings-row--empty strong,
+  html:root .settings-app .settings-main .personal-security-empty-row strong { color: var(--set-desc); font-weight: 450; }
   html:root .settings-app .settings-main .personal-static { font: 450 13px/normal var(--font); }
   html:root .settings-app .settings-main .personal-emoticon-emoji { display: inline-block; font: 450 13px/14px var(--font); vertical-align: bottom; }
   html:root .settings-app .settings-main .personal-avatar { width: 32px; height: 32px; font: 400 14px/normal var(--font); font-size: 14px !important; }

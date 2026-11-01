@@ -198,7 +198,7 @@
 .coding-session-dialog-crumb:hover{background:var(--theme-surface-hover)}
 .coding-session-dialog-separator{color:var(--theme-text-secondary);font:500 13px/16px var(--font)}
 .coding-session-dialog-title{flex:1;min-width:0;margin:0;overflow:hidden;color:var(--cs-page-text);font:500 13px/16px var(--font);text-overflow:ellipsis;white-space:nowrap}
-.coding-session-agent-toggle{width:28px;height:28px;display:grid;place-items:center;flex:none;padding:0;border:.5px solid transparent;border-radius:50%;background:var(--cs-agent-toggle-on-bg);color:var(--cs-agent-toggle-on-fg);cursor:pointer;transition:background-color .15s,color .15s}
+.coding-session-agent-toggle{width:28px;height:28px;display:grid;place-items:center;flex:none;padding:0 2px;border:.5px solid transparent;border-radius:50%;background:var(--cs-agent-toggle-on-bg);color:var(--cs-agent-toggle-on-fg);cursor:pointer;transition:background-color .15s,color .15s}
 .coding-session-agent-toggle[aria-pressed=false]{background:var(--cs-agent-toggle-bg);color:var(--theme-text-secondary)}
 .coding-session-agent-toggle[aria-pressed=false]:hover{background:var(--cs-agent-toggle-hover-bg);color:var(--cs-agent-toggle-on-fg)}
 .coding-session-dialog>.coding-session-panel{flex:1;min-height:0}
@@ -251,6 +251,8 @@ html:root .dialog-content.coding-session-dialog{top:50%;transform:translate(-50%
 /* Session page (/<workspace>/diff/<id>): 44px crumb bar over the code changes and the agent panel */
 .coding-session-page{position:relative}
 .coding-session-page-bar{flex:0 0 44px;display:flex;align-items:center;gap:6px;height:44px;box-sizing:border-box;padding:0 10px 0 8px;border-bottom:.5px solid var(--theme-border);font:500 13px/16px var(--font)}
+.coding-session-page-bar-inner{display:contents}
+@media(min-width:801px){.coding-session-page-bar{gap:12px;padding:0}.coding-session-page-bar-inner{min-width:0;flex:1;display:flex;align-items:center;gap:6px;padding:0 8px}}
 .coding-session-page-menu{display:none;width:28px;height:28px;place-items:center;flex:none;padding:0;border:0;border-radius:9999px;background:transparent;color:var(--theme-text-secondary);cursor:pointer}
 .coding-session-page-title{display:inline-flex;align-items:center;gap:6px;flex:1;min-width:0;color:var(--cs-page-text)}
 .coding-session-page-title .coding-diff-glyph{flex:none;color:var(--theme-text-secondary)}
