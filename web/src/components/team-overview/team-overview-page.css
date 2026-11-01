@@ -51,6 +51,9 @@
   align-items: center;
   gap: 4px;
 }
+@media (min-width: 801px) {
+  .team-home-topbar { gap: 6px; }
+}
 .team-home-top-actions > button,
 .team-home-top-actions [data-radix-collection-item],
 .team-home-copy-url {

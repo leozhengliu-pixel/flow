@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Measure phone resource-tab overflow with its complete menu controls and available toolbar space; restore the full animated-images preference description on phones.
 
+- Align desktop inbox and team title insets, board header controls, saved-view counts and creation borders, and the team creation accessible label.
+
 - Restore secondary desktop loop schedule, hub, table and run composer metrics, plus run-specific prompts and capability labels.
 
 - Remove unreferenced desktop settings measurement scripts.

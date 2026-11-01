@@ -9,6 +9,7 @@
 .mobileSidebarButton{display:none;width:32px;height:32px;padding:8px;border:0;border-radius:6px;background:transparent}.mobileSidebarButton span{display:block;width:14px;height:1px;margin:3px 0;background:var(--issue-muted)}
 .toolbar{height:43px;flex:0 0 43px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;border-bottom:0}.tabs,.actions{display:flex;align-items:center}.tabs{min-width:0;flex:1;gap:4px;overflow:hidden}.actions{flex:none;gap:6px}.savedTabs{height:32px;min-width:0;flex:1;overflow:hidden}.savedTabs .savedTab{margin-right:8px}
 .viewCount{padding-left:10px;color:var(--muted);font-size:12px;font-weight:450}
+@media(min-width:1024px){.viewCount{font-size:13px;font-weight:500;line-height:normal}}
 :global(:root[data-theme="light"]) .header{border-bottom-color:var(--border);border-bottom-width:.5px}
 :global(:root[data-theme="light"]) .header h2,:global(:root[data-theme="light"]) .scope{color:var(--theme-text-primary)}
 :global(:root[data-theme="light"]) .tab,:global(:root[data-theme="light"]) .savedTab{background:var(--ui-pill-bg);color:var(--ui-pill-fg)}

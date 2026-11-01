@@ -93,7 +93,7 @@ function IssueRelationRow({ kind, issue, data, onOpen, onRemove }: { kind: Issue
   </div>
 }
 
-/** The reference app's issue hover card: identifier, title, then status and priority. */
+/** Issue preview properties omit an unset priority. */
 function IssueRelationCard({ issue, onOpen }: { issue: Issue; onOpen: () => void }) {
   const { t } = useI18n()
   return <div className="issue-relation-card__body">
@@ -103,7 +103,7 @@ function IssueRelationCard({ issue, onOpen }: { issue: Issue; onOpen: () => void
     </div>
     <div className="issue-relation-card__properties">
       <span className="issue-relation-card__status"><StatusIcon state={tintedState(issue.state)} size={14}/><span data-i18n-ignore>{issue.state.name}</span></span>
-      <span className="issue-relation-card__priority"><PriorityIcon priority={issue.priority} size={16}/><span>{t(PRIORITY_NAMES[Math.max(0, Math.min(4, issue.priority))])}</span></span>
+      {issue.priority > 0 && <span className="issue-relation-card__priority"><PriorityIcon priority={issue.priority} size={16}/><span>{t(PRIORITY_NAMES[Math.max(0, Math.min(4, issue.priority))])}</span></span>}
     </div>
   </div>
 }

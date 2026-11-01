@@ -14,12 +14,18 @@ test.beforeEach(async ({ page }) => {
 
 test('keeps loop list, hub and editor metrics tied to their controls', async ({ page, request, workspaceKey }) => {
   const headers = { 'X-Workspace-Key': workspaceKey }
+  await page.goto(`/${workspaceKey}/agent`)
+  await page.getByRole('button', { name: 'Switch agent chat', exact: true }).click()
+  await expect(page.getByTestId('agent-chat-switcher-popover')).toHaveCSS('background-color', 'lch(12.72 0.85 272)')
+  await expect(page.getByText('No history', { exact: true })).toHaveCSS('font-size', '13px')
   await page.goto(`/${workspaceKey}/loops`)
   const hub = page.locator('.loops-hub-composer')
   await expect(hub).toBeVisible()
   await expect(page.getByRole('tab', { name: 'My loops', exact: true })).toBeVisible()
   expect((await page.locator('.loops-hub-header h2').boundingBox())!.y).toBe(144)
   await expect(hub).toHaveCSS('padding', '12px')
+  await expect(hub.locator('textarea')).toHaveCSS('height', '48px')
+  await expect(hub.locator('textarea')).toHaveCSS('padding', '2px 6px')
   await expect(hub.locator('footer')).toHaveCSS('height', '24px')
   await expect(page.getByText('or pick a template', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Engineering', exact: true })).toBeVisible()

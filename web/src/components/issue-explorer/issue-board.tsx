@@ -262,8 +262,10 @@ export function IssueBoardGroupHeader({group,createIssueLabel='Add new issue',on
           size={14}
         />}
         <strong data-board-column-title data-i18n-ignore>{group.label}</strong><button className={styles.count} data-board-column-count type="button" aria-label={t(`${count} issues`)}><EstimateIcon className={styles.countEstimate} size={14}/><span className={styles.countValue}>{count}</span></button>
+        <div className={styles.columnActions}>
         <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.headerButton} type="button" aria-label={t('Open menu')}><span className={styles.desktopIcon}><Ellipsis size={14}/></span><span className={styles.phoneIcon}><BoardEllipsisIcon/></span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" aria-label={t('Open menu')} className={styles.columnMenu} align="end" sideOffset={4}><DropdownMenu.Item className={styles.columnMenuItem} onSelect={()=>group.issues.forEach(issue=>onSelectIssue?.(issue.id,true,false))}>{t(count>group.issues.length?'Select loaded issues':'Select all in column')}</DropdownMenu.Item><DropdownMenu.Item className={styles.columnMenuItem} onSelect={()=>onHideGroup?.(group.id)}>{t('Hide column')}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
         <button className={styles.headerButton} type="button" aria-label={t(createIssueLabel)} onClick={() => onCreateIssue?.(group)}><span className={styles.desktopIcon}><Plus size={15}/></span><span className={styles.phoneIcon}><BoardPlusIcon/></span></button>
+        </div>
       </header>
     </div>
 }

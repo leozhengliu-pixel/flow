@@ -923,8 +923,8 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
   .loops-hub:not(.is-dialog) { width: min(752px, 100%); gap: 32px; }
   .loops-hub:not(.is-dialog) .loops-hub-header h2 { margin-bottom: 12px; padding-top: 4px; }
   .loops-hub:not(.is-dialog) .loops-hub-categories { margin-top: 0; }
-  .loops-hub-composer { height: 104px; padding: 12px; }
-  .loops-hub-composer textarea { min-height: 44px; padding: 0 6px; }
+  .loops-hub-composer { height: 104px; gap: 8px; padding: 12px; }
+  .loops-hub-composer textarea { min-height: 48px; padding: 2px 6px; }
   .loops-hub-composer footer { height: 24px; padding: 0; }
   .loops-hub-categories button.is-active { background: var(--bg-active); }
   .loops-section-title,
