@@ -304,6 +304,9 @@ import { rememberTeamHomeTab, teamHomeTab, teamHomeTabOf, teamHomeTabPath } from
 import { findTrashedDocument } from "@/components/documents/document-trash";
 import { issueDeleteDescription } from "@/lib/issue-delete-confirmation";
 import { OPEN_COMMAND_MENU_EVENT } from "@/components/command/command-context";
+import type { CommandPage } from "@/components/command/context-commands";
+import { navigationPageLabels } from "@/components/command/navigation-commands";
+import { currentCyclePath } from "@/lib/app-routes";
 import type { CreateIssueInput } from "@/components/create-issue/create-issue-dialog";
 
 function mergeProjectRelations(data: BootstrapData, projectId: string, relations: ProjectRelation[]) {
@@ -547,6 +550,7 @@ function App() {
     // "O then D" opens it on "Open document…".
     [commandDocumentPicker, setCommandDocumentPicker] = useState(false),
     [commandIssuePicker, setCommandIssuePicker] = useState(false),
+    [commandPage, setCommandPage] = useState<CommandPage>(),
     // "N then R" opens it on "Create new release…" (pipeline picker).
     [commandReleasePicker, setCommandReleasePicker] = useState(false),
     // The New release composer opened from ⌘K or N then R.
@@ -974,6 +978,31 @@ function App() {
       const now = Date.now();
       const sequence = shortcutSequence.current;
       const inSequence = now - sequence.at < 1100;
+      if (inSequence && data && window.matchMedia('(min-width: 1024px)').matches) {
+        const teamKey = 'teamKey' in route ? route.teamKey : route.kind === 'issue' ? data.issues.find(issue => issue.identifier === route.identifier)?.team.key : undefined;
+        const team = data.teams.find(team => team.key === teamKey) ?? data.teams.find(team => !team.archivedAt && !team.retiredAt);
+        const workspace = data.workspace.urlKey;
+        if (sequence.key === 'g') {
+          const paths: Record<string, string | undefined> = { x: team ? teamArchivePath(workspace, team.key) : undefined, e: team ? teamIssuesPath(workspace, team.key, 'all') : workspaceIssuesPath(workspace, 'all'), l: loopsPath(workspace), v: team ? currentCyclePath(workspace, team.key) : undefined, w: team ? upcomingCyclePath(workspace, team.key) : undefined, n: workspaceFeatureEnabled(data.workspaceSettings.featureFlags, 'initiatives') ? initiativesPath(workspace) : undefined, '-': workspaceFeatureEnabled(data.workspaceSettings.featureFlags, 'dashboards') ? dashboardsPath(workspace) : undefined };
+          if (paths[pressed]) {
+            e.preventDefault();
+            shortcutSequence.current = { key: '', at: 0 };
+            navigateTo(paths[pressed]!);
+            return;
+          }
+        }
+        if (sequence.key === 'o') {
+          const pages = { p: 'projectOpen', c: 'cycleOpen', t: 'teamOpen', u: 'userOpen', v: 'viewOpen', n: 'initiativeOpen', f: 'favoriteOpen' } as const;
+          const id = pages[pressed as keyof typeof pages];
+          if (id) {
+            e.preventDefault();
+            shortcutSequence.current = { key: '', at: 0 };
+            setCommandPage({ id, label: navigationPageLabels[id] });
+            setCommandOpen(true);
+            return;
+          }
+        }
+      }
       if (inSequence && sequence.key === "n" && pressed === "p" && data) {
         e.preventDefault();
         shortcutSequence.current = { key: "", at: 0 };
@@ -1118,7 +1147,7 @@ function App() {
         shortcutSequence.current = { key: pressed, at: now };
         return;
       }
-      if (pressed === "]" && ['my-issues', 'project', 'initiative'].includes(route.kind)) {
+      if (pressed === "]" && (['my-issues', 'project', 'initiative'].includes(route.kind) || window.matchMedia('(min-width: 1024px)').matches)) {
         e.preventDefault();
         window.dispatchEvent(new Event('flow:toggle-right-sidebar'));
         return;
@@ -7116,7 +7145,8 @@ function App() {
         {commandOpen && (
           <CommandMenu
             open={commandOpen}
-            onOpenChange={open => { setCommandOpen(open); if (!open) { setCommandCustomerPicker(false); setCommandDocumentPicker(false); setCommandIssuePicker(false); setCommandReleasePicker(false); } }}
+            onOpenChange={open => { setCommandOpen(open); if (!open) { setCommandCustomerPicker(false); setCommandDocumentPicker(false); setCommandIssuePicker(false); setCommandReleasePicker(false); setCommandPage(undefined); } }}
+            initialPage={commandPage}
             initialCustomerPicker={commandCustomerPicker}
             initialDocumentPicker={commandDocumentPicker}
             initialIssuePicker={commandIssuePicker}
@@ -7169,7 +7199,12 @@ function App() {
               navigateTo(membersPath(data.workspace.urlKey))
             }
             onNavigateSettings={() => navigateTo(settingsPath(data.workspace.urlKey, "preferences"))}
-            onReportPerformance={() => navigateTo(settingsPath(data.workspace.urlKey, "preferences"))}
+            onReportPerformance={() => {
+              const url = new URL('https://github.com/leozhengliu-pixel/flow/issues/new');
+              url.searchParams.set('title', translateTitle('Report performance problem'));
+              url.searchParams.set('body', `${translateTitle('Browser:')} ${navigator.userAgent}\n\n${translateTitle('Describe the problem:')}\n`);
+              window.open(url.toString(), '_blank', 'noopener,noreferrer');
+            }}
             onCreateTeam={() => navigateTo(newTeamPath(data.workspace.urlKey))}
             onNavigateCustomers={() =>
               navigateTo(`${customersPath(data.workspace.urlKey)}?create=1`)

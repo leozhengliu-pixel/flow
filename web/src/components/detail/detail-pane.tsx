@@ -78,11 +78,29 @@ import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { IssueRelationSections } from '@/components/issue/issue-relation-sections'
 import { useRegisterCommandContext } from '@/components/command/command-context'
+import { useFlowHotkeys } from '@/components/ui/menu-shortcuts'
+import { issuePath } from '@/lib/app-routes'
+import { configuredIssueBranch } from '@/lib/issue-work-actions'
+import { issueEverythingMarkdown } from '@/components/issue/issue-options-model'
 
 export function DetailPane({issue,data,comments,activities,historyLoading=false,historyError,onRetryHistory,highlightTarget,presence=[],workspacePresence,full=false,embedded=false,triageView=false,issueOptionsActions,onClose,onNavigateIssue,onNavigateRoot,returnPath,navigationTrail,navigationIssueIds,onUpdate,onIssueUpdated,onDelete,onCreateSubIssue,onCreateProject,onCreateProjectMilestone,onCreateLabel,onReactIssue,onComment,onEditComment,onDeleteComment,onReactComment,onResolveComment,onRelation,onDeleteRelation,onUpload,onDeleteAttachment,onIssueAccessLost}:{issue:Issue;data:BootstrapData;comments:Comment[];activities:ActivityEvent[];historyLoading?:boolean;historyError?:string;onRetryHistory?:()=>void;highlightTarget?:ActivityHighlightTarget;presence?:Presence[];workspacePresence?:Presence[];full?:boolean;embedded?:boolean;/** The reference app's triage issue view beside the triage list: compact header, single column. */triageView?:boolean;issueOptionsActions?:IssueOptionsActions;onClose:()=>void;onExpand?:()=>void;/** `sibling`: J / K stepped through the list (the list stays the origin); otherwise a link drilled into the issue. */onNavigateIssue?:(issue:Issue,options?:{sibling?:boolean})=>void;onNavigateRoot?:()=>void;returnPath?:string;/** The pages this issue was opened from, oldest first: the header's breadcrumb. */navigationTrail?:string[];navigationIssueIds?:string[];onUpdate:(input:IssueUpdateInput)=>Promise<void>;onIssueUpdated?:(issue:Issue)=>void;onDelete:()=>Promise<void>;onCreateSubIssue:(input:SubIssueInput)=>Promise<void>;onCreateProject?:(draft:NewProjectDraft)=>Promise<Project>;onCreateProjectMilestone?:(projectId:string,input:{name:string})=>Promise<ProjectMilestone>;onCreateLabel?:(name:string,groupId?:string)=>Promise<IssueLabel>;onReactIssue:(emoji:string)=>Promise<void>;onComment:(body:string,bodyData?:Record<string,unknown>,parentId?:string)=>Promise<void>;onEditComment:(id:string,body:string,bodyData?:Record<string,unknown>)=>Promise<void>;onDeleteComment:(id:string)=>Promise<void>;onReactComment:(id:string,emoji:string)=>Promise<void>;onResolveComment?:(id:string,resolved:boolean)=>Promise<void>;onRelation:(type:IssueRelationType,relatedIssueId:string)=>Promise<void>;onDeleteRelation:(relationId:string)=>Promise<void>;onUpload:(file:File, options?:{embed?:boolean})=>Promise<Attachment|void>;onDeleteAttachment:(attachmentId:string)=>Promise<void>;/** The viewer can no longer open the issue (found when its description editor lost access). */onIssueAccessLost?:(issueId:string)=>void}){
   const{t}=useI18n(),phoneLayout=usePhoneLayout(),[title,setTitle]=useState(issue.title),[subOpen,setSubOpen]=useState(false),[subEditorKey,setSubEditorKey]=useState(0),[linkOpen,setLinkOpen]=useState(false),[subCollapsed,setSubCollapsed]=useState(false),[subSelected,setSubSelected]=useState(new Set<string>()),[subDisplay,setSubDisplay]=useState<SubIssueDisplay>({ordering:'priority',direction:'asc',completed:'all',nested:true,properties:new Set(['status','labels','assignee'])}),[relationType,setRelationType]=useState<IssueRelationType|null>(null),[uploadState,setUploadState]=useState<AttachmentUploadState>()
   const peoplePresence=workspacePresence??presence
   const desktopLayout=useDesktopLayout()
+  const viewRef=useRef<HTMLElement>(null)
+  const openProperty=(property:string)=>{const trigger=[...viewRef.current?.querySelectorAll<HTMLButtonElement>(`button[data-property="${property}"]`)??[]].find(button=>button.getClientRects().length>0);trigger?.click()}
+  const copyShortcut=(value:string)=>{void navigator.clipboard.writeText(value).then(()=>toast.success(t('Copied to clipboard'))).catch(()=>toast.error(t('Could not write to clipboard')))}
+  useFlowHotkeys({
+    A:()=>openProperty('assignee'), S:()=>openProperty('status'), P:()=>openProperty('priority'), L:()=>openProperty('labels'),
+    I:()=>{void onUpdate({assigneeId:issue.assignee?.id===data.viewer.id?'':data.viewer.id}).catch(error=>toast.error(error instanceof Error?error.message:t('Could not update issue')))},
+    '⇧ E':()=>openProperty('estimate'), '⇧ C':()=>openProperty('cycle'),
+    '⇧ R':()=>viewRef.current?.querySelector<HTMLElement>('.title-editor[contenteditable="true"]')?.focus(),
+    'Ctrl ⇧ I':()=>viewRef.current?.querySelector<HTMLElement>('.description-editor[contenteditable="true"]')?.focus(),
+    '⌘ ⇧ O':()=>setSubOpen(true),
+    'M then B':()=>setRelationType('blocked_by'), 'M then X':()=>setRelationType('blocks'), 'M then R':()=>setRelationType('related'), 'M then M':()=>setRelationType('duplicate'),
+    '⌘ .':()=>copyShortcut(issue.identifier), '⌘ ⇧ ,':()=>copyShortcut(new URL(issuePath(data.workspace.urlKey,issue),location.origin).href),
+    '⌘ ⇧ .':()=>copyShortcut(configuredIssueBranch(issue,data)), '⌘ ⇧ \x27':()=>copyShortcut(issue.title), '⌘ ⌥ C':()=>copyShortcut(issueEverythingMarkdown(issue,new URL(issuePath(data.workspace.urlKey,issue),location.origin).href,data)),
+  },desktopLayout&&!embedded,undefined,true)
   useRegisterCommandContext({kind:'issues',source:'detail',issues:[issue],onUpdate,onDelete,onRelation})
   const fileRef=useRef<HTMLInputElement>(null)
   const uploadCommentFile=async(file:File)=>{const attachment=await onUpload(file,{embed:false});if(!attachment?.url)throw new Error('Upload failed');return attachment.url}
@@ -129,7 +147,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   // Inbox owns 1/2/3/H there, so the embedded pane shows the buttons without registering shortcuts.
   const triageActions=inTriage?<TriageHeaderActions key={issue.id} issue={issue} data={data} shortcuts={!embedded} onDone={updated=>onIssueUpdated?.(updated)}/>:undefined
   const upload=async(file:File, options?:{embed?:boolean})=>{setUploadState({name:file.name,progress:20,file});try{setUploadState({name:file.name,progress:70,file});const attachment=await onUpload(file, options);setUploadState(undefined);return attachment}catch(error){setUploadState({name:file.name,progress:100,file,error:error instanceof Error?error.message:'Upload failed'});throw error}}
-  return <section className={`issue-view ${full?'full':''} ${embedded?'issue-view--embedded':''} ${triageView?'issue-view--triage':''}`}>
+  return <section ref={viewRef} className={`issue-view ${full?'full':''} ${embedded?'issue-view--embedded':''} ${triageView?'issue-view--triage':''}`}>
     {!embedded&&<IssueHeader
       issue={issue} returnPath={returnPath} navigationTrail={navigationTrail} states={availableStates} presence={presence} saveState={saveState} data={data} activities={activities} issueOptionsActions={issueOptionsActions}
       onRetrySave={()=>void retry()} position={sequenceIndex+1} total={navigationIssueIds?.includes(issue.id)?sequence.length:0} closable={!full}

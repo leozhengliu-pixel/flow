@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { useInRouterContext, useNavigate } from 'react-router-dom'
-import { Toaster } from 'sonner'
+import { Toaster, toast } from 'sonner'
 import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
 import { chordMatches, parseShortcut } from '@/components/ui/menu-shortcuts'
 import './toast.css'
@@ -17,6 +17,7 @@ const OFFSET = { top: 24, right: 24, bottom: 52, left: 24 }
 const MOBILE_OFFSET = { top: 16, right: 16, bottom: 44, left: 16 }
 const TOASTER_STYLE = { '--width': '384px' } as CSSProperties
 const OPEN_LINK_CHORD = parseShortcut(OPEN_TOAST_LINK_SHORTCUT)[0]
+const DISMISS_ALL_CHORD = parseShortcut('⌘ ⌥ X')[0]
 
 function RouterBridge() {
   const navigate = useNavigate()
@@ -32,7 +33,9 @@ function useOpenToastLinkShortcut() {
   useEffect(() => {
     const mac = isMacPlatform()
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !chordMatches(event, OPEN_LINK_CHORD, mac)) return
+      if (event.defaultPrevented) return
+      if (chordMatches(event, DISMISS_ALL_CHORD, mac)) { toast.dismiss(); event.preventDefault(); return }
+      if (!chordMatches(event, OPEN_LINK_CHORD, mac)) return
       if (openLatestToastLink()) event.preventDefault()
     }
     window.addEventListener('keydown', onKeyDown)
