@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Keep the desktop M M shortcut on triage's duplicate workflow so it records the relation, changes status and advances the queue.
+
 - Check desktop triage selection and document column alignment without sampled pixel positions or private browser emulation.
 
 - Wire desktop entity-navigation pickers and issue keyboard controls, expand shortcut help without changing phone content, and send performance reports to a real support destination.

@@ -26,6 +26,7 @@ vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<object>
 // The detail pane's description editor is replaced by a plain field; the comment field of the dialogs is covered with the real editor in triage-action-dialogs.test.tsx.
 vi.mock('@/components/issue/issue-description-editor', () => ({ IssueDescriptionEditor: ({ ariaLabel, value, onChange }: { ariaLabel?: string; value: string; onChange?: (snapshot: { markdown: string }) => void }) => <textarea aria-label={ariaLabel} value={value} onChange={event => onChange?.({ markdown: event.target.value })}/> }))
 vi.mock('@/components/editor/composer', () => ({ Composer: () => <div /> }))
+vi.mock('@/hooks/use-desktop-layout', () => ({ useDesktopLayout: () => true }))
 
 class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }
 
@@ -199,6 +200,13 @@ describe('issue page in triage', () => {
     expect(screen.getByRole('group', { name: 'Triage actions' }).closest('.issue-header')).not.toBeNull()
     expect(screen.getByRole('button', { name: 'Accept issue from triage' })).toBeInTheDocument()
     expect(screen.getAllByLabelText(/Current status is Triage/).length).toBeGreaterThan(0)
+  })
+
+  it('keeps M M on the triage duplicate workflow instead of the relation-only picker', async () => {
+    renderPane({})
+    fireEvent.keyDown(document.body, { key: 'm', code: 'KeyM' })
+    fireEvent.keyDown(document.body, { key: 'm', code: 'KeyM' })
+    expect(await screen.findByRole('dialog', { name: 'Mark issue as duplicate of' })).toBeVisible()
   })
 
   it('hides triage actions once the issue has been triaged', () => {
