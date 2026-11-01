@@ -17,7 +17,7 @@ const test = base.extend<{ detail: { key: string; data: BootstrapData; issue: Is
 })
 
 test.skip(({ isMobile }) => isMobile, 'Desktop issue property geometry')
-test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, colorScheme: 'dark' })
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', launchOptions: { args: ['--force-device-scale-factor=2'] } })
 
 test('aligns the issue columns and property rhythm, toggles labels, and keeps short and long project lists searchable', async ({ page, request, detail }) => {
   const { key, data, issue } = detail

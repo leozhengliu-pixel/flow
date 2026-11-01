@@ -27,6 +27,13 @@ test('enables a throwaway team queue, shows its count, and opens a real issue in
   await rows.first().click()
   const detail = page.locator('[data-split-view-detail]')
   await expect(detail.locator('.issue-title-field')).toBeVisible()
+  const paneBox=(await detail.boundingBox())!
+  const titleBox=(await detail.locator('.title-editor').boundingBox())!
+  expect(titleBox.x-paneBox.x).toBe(14)
+  expect(titleBox.y).toBe(112.25)
+  expect(titleBox.width).toBe(paneBox.width-28)
+  await expect(detail.locator('.issue-mobile-properties')).toHaveCSS('height','24px')
+  await expect(detail.getByRole('region',{name:'Similar issues',exact:true})).toHaveCount(0)
   await expect(detail.getByRole('button', { name: /Accept/ }).first()).toBeVisible()
   await detail.getByRole('button', { name: 'Accept issue from triage', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Accept', exact: true }).click()
