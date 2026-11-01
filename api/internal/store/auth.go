@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -55,6 +56,12 @@ func actorFromContext(ctx context.Context) (domain.User, bool) {
 	return user, ok && user.ID != ""
 }
 
+// Each isolated fixture uses the same test password. Keep its full-cost hash
+// across database opens; real account creation still generates a fresh salt.
+var testFixturePasswordHash = sync.OnceValues(func() ([]byte, error) {
+	return bcrypt.GenerateFromPassword([]byte("test-password"), bcrypt.DefaultCost)
+})
+
 func (s *SQLiteStore) ensureAuthTestFixture(ctx context.Context) error {
 	var count int
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth_users`).Scan(&count); err != nil {
@@ -67,7 +74,13 @@ func (s *SQLiteStore) ensureAuthTestFixture(ctx context.Context) error {
 	if password == "" {
 		return errors.New("test fixture password is required")
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	var hash []byte
+	var err error
+	if password == "test-password" {
+		hash, err = testFixturePasswordHash()
+	} else {
+		hash, err = bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	}
 	if err != nil {
 		return err
 	}
