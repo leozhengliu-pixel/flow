@@ -1,0 +1,15 @@
+.empty { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 100%; padding: 32px 24px; }
+.body { width: 340px; max-width: 100%; color: var(--text); }
+.art { display: block; width: 86.5px; height: 80px; overflow: visible; margin-bottom: 24px; stroke: var(--issue-dim); stroke-width: 1.5; }
+.highlight { stroke: var(--issue-muted); }
+.body > strong { display: block; margin-bottom: 8px; font-size: 15px; font-weight: 600; line-height: 23px; }
+.body > p { margin: 0 0 16px; color: var(--issue-muted); font-size: 13px; font-weight: 450; line-height: 18.2px; }
+.body > p:last-of-type { margin-bottom: 24px; }
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.actions > button, .actions > a { display: inline-flex; align-items: center; justify-content: center; height: 28px; gap: 6px; padding: 0 10px; border: .5px solid transparent; border-radius: 9999px; font: 500 12px var(--font); line-height: normal; text-decoration: none; }
+.actions > button { background: var(--accent-primary); color: var(--on-accent); }
+.actions > button:hover { background: var(--accent-primary-hover); }
+.actions > button:disabled { opacity: .5; }
+.actions > a { background: var(--ui-pill-bg); color: var(--text); }
+.actions > a:hover { background: var(--ui-pill-hover-bg); color: var(--ui-pill-hover-fg); }
+.actions kbd { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 2px; border: .5px solid color-mix(in srgb, var(--on-accent) 40%, transparent); border-radius: 4px; color: var(--on-accent); font: 500 11px/12.1px var(--font); }

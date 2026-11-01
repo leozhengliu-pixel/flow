@@ -24,6 +24,20 @@ function dataWithGroups(first: number, second: number) {
 describe('complete issue grouping', () => {
   beforeEach(() => localStorage.clear())
 
+  it('shows the desktop backlog introduction and creates in the scoped backlog', () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    const data = makeBootstrap({ issues: [], favorites: [], teamMembers: [] }), onCreateIssue = vi.fn()
+    const first = render(page(data, { scope: { kind: 'team', team: data.teams[0] }, view: 'backlog', onCreateIssue }))
+    expect(screen.getByText('Backlog issues')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create new issue' }))
+    expect(onCreateIssue).toHaveBeenCalledWith({ teamId: data.teams[0].id, stateId: backlog.id })
+    first.unmount()
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    render(page(data, { scope: { kind: 'team', team: data.teams[0] }, view: 'backlog' }))
+    expect(screen.queryByText('Backlog issues')).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
   it('counts only issues in the current display and clears persisted team filters from the empty state', async () => {
     const data = dataWithGroups(0, 3)
     const key = `${data.workspace.urlKey}:issue-explorer:workspace:all:filters`
