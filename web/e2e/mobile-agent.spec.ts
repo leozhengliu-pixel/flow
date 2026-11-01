@@ -249,8 +249,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect(favoriteBox.x).toBe(switcherBox.x + switcherBox.width + 4)
       expect((await favorite.boundingBox())?.width).toBe(32)
       const optionsBox = (await page.locator('main > header button[aria-label="Chat options"]').boundingBox())!
-      expect(optionsBox.x).toBe(favoriteBox.x + favoriteBox.width + 4)
-      expect(optionsBox.x + optionsBox.width).toBeLessThanOrEqual(viewport.width - 8)
+      expect(optionsBox.x).toBe(favoriteBox.x + favoriteBox.width)
+      expect(optionsBox.x + optionsBox.width).toBeLessThanOrEqual(viewport.width)
       await expect(page.locator('main > header button[aria-label="Move to toolbar"]')).toBeHidden()
 
       const scroll = page.locator('main [role="group"][aria-label="Agent conversation"]')
@@ -320,7 +320,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       }
       expect(['0.5px', '1px']).toContain(await chatOptions.locator('.agent-chat-options-divider').evaluate(node => getComputedStyle(node).height))
 
-      for (const title of ['[mobile] Short', '[mobile] 很长的对话标题，用于确认操作按钮不会随标题或语言移动']) {
+      for (const title of ['Create Invite Test team and add people', '[mobile] Short', '[mobile] 很长的对话标题，用于确认操作按钮不会随标题或语言移动']) {
         await page.keyboard.press('Escape')
         const renamed = await request.patch(`${api}/api/agent/sessions/${chat.id}`, { headers, data: { title } })
         expect(renamed.ok()).toBe(true)
@@ -332,11 +332,11 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
         const nextFavoriteBox = (await favorite.boundingBox())!
         const nextOptionsBox = (await options.boundingBox())!
         expect(nextFavoriteBox.x).toBe(titleBox.x + titleBox.width + 4)
-        expect(nextOptionsBox.x).toBe(nextFavoriteBox.x + nextFavoriteBox.width + 4)
-        expect(nextOptionsBox.x + nextOptionsBox.width).toBeLessThanOrEqual(viewport.width - 8)
+        expect(nextOptionsBox.x).toBe(nextFavoriteBox.x + nextFavoriteBox.width)
+        expect(nextOptionsBox.x + nextOptionsBox.width).toBeLessThanOrEqual(viewport.width)
         const titleText = page.locator('main > header [data-agent-chat-switcher] h2')
         const truncated = await titleText.evaluate(node => node.scrollWidth > node.clientWidth)
-        expect(truncated).toBe(title !== '[mobile] Short')
+        expect(truncated).toBe(title !== '[mobile] Short' && (title !== 'Create Invite Test team and add people' || viewport.width === 375))
         if (title === '[mobile] Short') expect(nextOptionsBox.x).toBeLessThan(optionsBox.x)
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
         await options.click()

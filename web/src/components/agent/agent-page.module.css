@@ -1104,6 +1104,8 @@
     background: var(--bg-panel);
   }
   .headerRow { box-sizing: border-box; width: 100%; min-width: 0; height: 43.5px; display: flex; align-items: center; gap: 4px; padding: 0 8px; }
+  .headerRow:has(.headerIcon) { gap: 0; padding-right: 0; }
+  .headerRow:has(.headerIcon) > .switcher { margin: 0 4px; }
   .page > header::after {
     content: "";
     position: absolute;

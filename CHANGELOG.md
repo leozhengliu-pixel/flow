@@ -91,6 +91,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Match initiative overview spacing, property pills, header controls and latest update cards on phones without changing desktop layout.
 
 ### Fixed
+- Let phone chat titles use the available header space while keeping adjacent favorite and options controls inside the viewport.
 - Center the desktop Inbox welcome document within symmetric insets, and keep isolated browser checks aligned with adaptive tabs, supported workspace commands and native border rounding.
 - Keep initiative selection/actions and the document-selection Agent action reachable on phones.
 - Restore phone review Guide navigation and Latest, let loop names flex, and remove fake welcome-video controls and the unsupported desktop-app download link.
