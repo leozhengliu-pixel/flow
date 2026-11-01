@@ -1225,7 +1225,7 @@
     height: 43.5px;
     flex: 0 0 43.5px;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     padding: 0 8px;
     border: 0;
     background: transparent;
@@ -1278,7 +1278,7 @@
     background: transparent;
     overflow: hidden;
   }
-  .team-home-tabs a { height: 32px; gap: 6px; padding: 0 9.5px; border: .5px solid transparent; }
+  .team-home-tabs a { height: 32px; gap: 6px; padding: 0 10px; border: .5px solid transparent; }
   .team-home-tab-label { display: block; line-height: normal; border: 0; }
   .team-home-tab-caret { width: 8px; height: 9px; flex: 0 0 8px; }
   .team-home-tabs-overflow-pill {
@@ -1298,7 +1298,7 @@
   }
   .team-home-tabs-overflow-pill:hover { background: var(--ui-pill-hover-bg); color: var(--ui-pill-hover-fg); }
   .team-home-tabs-measure { position: absolute; top: -9999px; left: 0; display: flex; gap: 8px; visibility: hidden; pointer-events: none; white-space: nowrap; }
-  .team-home-tabs-measure-pill { box-sizing: border-box; height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9.5px; border: .5px solid transparent; border-radius: 9999px; font: 500 12px/normal var(--font); }
+  .team-home-tabs-measure-pill { box-sizing: border-box; height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: .5px solid transparent; border-radius: 9999px; font: 500 12px/normal var(--font); }
   .team-home-tabs-menu {
     z-index: 1100;
     box-sizing: border-box;
