@@ -69,6 +69,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect((await toolbar.boundingBox())?.height).toBe(43.5)
       expect((await directory.getByTestId('views-group-header').boundingBox())?.y).toBe(87.5)
       await expect(directory.getByTestId('views-group-scope')).toBeVisible()
+      expect((await directory.getByTestId('views-group-avatar').boundingBox())?.x).toBe(17)
+      expect((await directory.getByTestId('views-group-name').boundingBox())?.x).toBe(45)
       const row = directory.getByTestId('views-row')
       const box = await row.boundingBox()
       expect(box).toMatchObject({ x: 0, y: 125.5, width: viewport.width, height: 60 })
