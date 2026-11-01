@@ -1,12 +1,29 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { MyIssuesDisplayMenu } from './my-issues-display-menu'
 import { createIssueDisplayOptions } from './my-issues-display-defaults'
 import { PAGED_GROUPINGS, PAGED_ORDERINGS } from '@/components/issue-explorer/issue-grouping'
+const layout=vi.hoisted(()=>({desktop:false}))
+vi.mock('@/hooks/use-desktop-layout',()=>({useDesktopLayout:()=>layout.desktop}))
 
 describe('display options: nested sub-issues', () => {
+  beforeEach(()=>{layout.desktop=false})
+  it('uses the desktop property inventory without trapping saved extra selections', async () => {
+    layout.desktop=true
+    const options=createIssueDisplayOptions({properties:['id','sla']})
+    const onChange=vi.fn()
+    render(<I18nProvider><MyIssuesDisplayMenu open onOpenChange={vi.fn()} options={options} onChange={onChange}/></I18nProvider>)
+    expect(screen.queryByRole('button',{name:'Release'})).toBeNull()
+    expect(screen.queryByRole('button',{name:'My activity date'})).toBeNull()
+    await userEvent.click(screen.getByRole('button',{name:'SLA'}))
+    expect(onChange.mock.calls[0][0].properties.has('sla')).toBe(false)
+  })
+  it('retains the additional property choices off desktop', () => {
+    render(<I18nProvider><MyIssuesDisplayMenu open onOpenChange={vi.fn()} options={createIssueDisplayOptions()} onChange={vi.fn()}/></I18nProvider>)
+    for(const name of ['SLA','Release','My activity date'])expect(screen.getByRole('button',{name})).toBeVisible()
+  })
   it('offers Nested sub-issues in list layout, also for server-backed lists, and turns sub-issues on with it', async () => {
     const onChange = vi.fn()
     const options = createIssueDisplayOptions({ showSubIssues: false })

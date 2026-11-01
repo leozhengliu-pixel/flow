@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Size desktop document metadata intrinsically, restore history preview spacing and action fill, and keep advanced insert blocks searchable without expanding the default document menu.
 
+- Align desktop issue and view navigation, filter categories, and default display-property choices while retaining phone layouts and saved selections.
+
 - Keep automatic similarity suggestions off desktop issue pages and triage peeks, and omit empty release actions without changing phone screens.
 
 - Finish desktop Agent skill-menu sizing, interactive loop owners, run menus and instruction disclosure, and compact loop editor controls without changing phone layouts.

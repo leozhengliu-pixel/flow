@@ -6,6 +6,7 @@ import { useI18n } from '@/i18n/i18n'
 import { useRef, type ReactNode } from 'react'
 import { Toggle } from '@/components/ui/toggle'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesOrdering, MyIssuesProperty } from './my-issues-surface'
 import { GROUPING_LABELS, ORDERING_LABELS, defaultOrderDirection } from '@/components/issue-explorer/issue-grouping'
 import styles from './my-issues-display-menu.module.css'
@@ -88,6 +89,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
 export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false, desktopIssueMenu = false, myIssuesPhoneMenu = false, phoneExtraActions, extraActions }: MyIssuesDisplayMenuProps) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
+  const desktop = useDesktopLayout()
   const popoverRef = useRef<HTMLDivElement>(null)
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
   const toggleProperty = (property: MyIssuesProperty) => {
@@ -184,7 +186,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
           {options.layout === 'list' && (!phone || !myIssuesPhoneMenu) && <SwitchRow label="Show empty groups" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
           <span className={styles.sectionLabel}>{t('Display properties')}</span>
           <div className={styles.propertyGrid}>
-            {[...propertyOptions.filter(property => !hiddenProperties.includes(property.value))].sort((left, right) => {
+            {[...propertyOptions.filter(property => !hiddenProperties.includes(property.value) && (!desktop || !['sla', 'release', 'myActivity'].includes(property.value) || options.properties.has(property.value)))].sort((left, right) => {
               if (!phone || !phoneIssueMenu) return 0
               const phoneOrder: MyIssuesProperty[] = ['status', 'assignee', 'creator', 'priority', 'project', 'timeInStatus', 'cycle', 'dueDate', 'milestone', 'sla', 'estimate', 'release', 'labels', 'links', 'customers', 'customerRevenue', 'myActivity', 'created', 'updated', 'id', 'pullRequests']
               return phoneOrder.indexOf(left.value) - phoneOrder.indexOf(right.value)

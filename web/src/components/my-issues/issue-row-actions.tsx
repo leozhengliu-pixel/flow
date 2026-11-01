@@ -19,6 +19,7 @@ import { IssueRowActionContext, useIssueRowActions, type IssueRowActionContextVa
 import styles from './my-issues-list.module.css'
 import { ContextMenuIcon } from './context-menu-icon'
 import { SubmenuChevron } from '@/components/ui/submenu-chevron'
+import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 
 export function IssueRowActionsProvider({ value, children }: { value: IssueRowActionContextValue; children: ReactNode }) {
   return <IssueRowActionContext.Provider value={value}>{children}</IssueRowActionContext.Provider>
@@ -87,6 +88,7 @@ export function IssueRowActionGroups({ row, onDelete }: { row: MyIssuesRowData; 
 }
 
 function ActionGroups({ row, onDelete }: { row: MyIssuesRowData; onDelete?: () => void }) {
+  const desktop = useDesktopLayout()
   const { context, data, issue, update } = useRowHelpers(row)
   const viewerId = data.viewer.id
   const subscribed = Boolean(issue?.subscriberIds.includes(viewerId))
@@ -174,7 +176,7 @@ function ActionGroups({ row, onDelete }: { row: MyIssuesRowData; onDelete?: () =
     </Sub>
     <Separator/>
     <Item top label={favorite ? 'Unfavorite' : 'Favorite'} shortcut="⌥ F" onSelect={() => void toggleFavoriteFor(data, 'issue', row.id, !favorite, favorite)}/>
-    <Item top label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="⇧ S" onSelect={() => issue && void update({ subscriberIds: subscribed ? issue.subscriberIds.filter(id => id !== viewerId) : [...issue.subscriberIds, viewerId] }, subscribed ? 'Unsubscribed' : 'Subscribed')}/>
+    {!desktop && <Item top label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="⇧ S" onSelect={() => issue && void update({ subscriberIds: subscribed ? issue.subscriberIds.filter(id => id !== viewerId) : [...issue.subscriberIds, viewerId] }, subscribed ? 'Unsubscribed' : 'Subscribed')}/>}
     <Sub label="Remind me" shortcut="⇧ H">
       <Item label="An hour from now" onSelect={() => remind(new Date(Date.now() + 3600_000))}/>
       <Item label="Tomorrow" onSelect={() => remind(at(1))}/>

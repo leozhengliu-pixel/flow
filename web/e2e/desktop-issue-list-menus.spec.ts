@@ -4,6 +4,27 @@ import type { Team } from '../src/types/flow'
 test.skip(({ isMobile }) => isMobile, 'Desktop issue menus')
 test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
 
+test('keeps the desktop tab, root filter and row action inventories compact', async ({ page, request, workspaceKey, issueList }) => {
+  const team=await request.post(`/api/workspaces/${workspaceKey}/teams`,{headers:{'X-Workspace-Key':workspaceKey},data:{name:'[audit] Other team',key:'OTH'}})
+  expect(team.status()).toBe(201)
+  await page.goto(`/${workspaceKey}/my-issues/created`)
+  await expect(page.locator('[data-issue-row-id]').first()).toBeVisible()
+  await expect(page.getByRole('navigation',{name:'My issues views'}).getByRole('link')).toHaveCount(4)
+  await page.getByRole('button',{name:'Display options',exact:true}).click()
+  await page.getByRole('combobox',{name:'Grouping',exact:true}).click()
+  await page.getByRole('option',{name:'No grouping',exact:true}).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-my-issues-group-header]')).toHaveCount(0)
+  await page.goto(issueList.route)
+  await page.getByRole('button',{name:'Add filter',exact:true}).click()
+  for(const name of ['Team','Estimate','Suggested label'])await expect(page.getByRole('option',{name:new RegExp(`^${name}$`)})).toBeVisible()
+  for(const name of ['Triage Intelligence','Releases','Auto-closed'])await expect(page.getByRole('option',{name:new RegExp(`^${name}$`)})).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await page.locator('[data-issue-row-id]').first().click({button:'right'})
+  for(const name of ['Convert to','Move'])await expect(page.getByRole('menuitem',{name,exact:true})).toBeVisible()
+  for(const name of ['Subscribe','Unsubscribe'])await expect(page.getByRole('menuitem',{name,exact:true})).toHaveCount(0)
+})
+
 test('shows every display property and footer, persists defaults, and filters sub-team issues', async ({ page, request, workspaceKey, issueList }) => {
   const headers = { 'X-Workspace-Key': workspaceKey }
   const parent = issueList.data.teams[0]
@@ -35,7 +56,7 @@ test('shows every display property and footer, persists defaults, and filters su
   expect(geometry.scroll).toBeLessThanOrEqual(1)
   expect(geometry.bottom).toBeLessThan(900)
   expect(geometry.lastChip).toBeLessThan(geometry.footer)
-  for (const property of ['SLA', 'Release', 'My activity date']) await expect(panel.getByRole('button', { name: property, exact: true })).toBeVisible()
+  for (const property of ['SLA', 'Release', 'My activity date']) await expect(panel.getByRole('button', { name: property, exact: true })).toHaveCount(0)
   await panel.getByRole('button', { name: 'Reset', exact: true }).click()
   await expect(panel.getByRole('checkbox', { name: 'Show sub-team issues', exact: true })).toBeChecked()
   await panel.getByRole('tab', { name: 'Board', exact: true }).click()
@@ -91,12 +112,14 @@ test('new-view title stays editable while its bright fallback and full-width des
   const metrics = await name.evaluate(input => {
     const description = document.querySelector('input[aria-label="Description (optional)"]')!
     const field = input.getBoundingClientRect(), desc = description.getBoundingClientRect()
-    return { name: [field.x, field.y], description: [desc.x, desc.y, desc.width], placeholder: getComputedStyle(input, '::placeholder').color, bright: getComputedStyle(input).getPropertyValue('--bright').trim() }
+    const header = input.parentElement!.parentElement!.getBoundingClientRect()
+    const style = getComputedStyle(input.parentElement!.parentElement!)
+    return { name: [field.x, field.y], description: [desc.x, desc.y, desc.width], header: [header.x, header.y], padding: [parseFloat(style.paddingLeft), parseFloat(style.paddingTop)], placeholder: getComputedStyle(input, '::placeholder').color, bright: getComputedStyle(input).getPropertyValue('--bright').trim() }
   })
-  expect(metrics.name[0]).toBeCloseTo(299, 0)
-  expect(metrics.name[1]).toBeCloseTo(75, 0)
-  expect(metrics.description[0]).toBeCloseTo(300, 0)
-  expect(metrics.description[1]).toBeCloseTo(107, 0)
+  expect(metrics.name[0] - metrics.header[0]).toBe(metrics.padding[0] + 28 + 5)
+  expect(metrics.name[1] - metrics.header[1]).toBe(metrics.padding[1] + 1)
+  expect(metrics.description[0] - metrics.name[0]).toBe(1)
+  expect(metrics.description[1] - metrics.name[1]).toBe(32)
   expect(metrics.description[2]).toBeGreaterThan(1100)
   expect(metrics.placeholder).not.toContain('36.975')
   await name.fill('[audit] Desktop view')
@@ -110,6 +133,7 @@ test('views directory keeps its compact filled group and single-line name', asyn
   const response = await request.post('/api/views', { headers: { 'X-Workspace-Key': workspaceKey }, data: { name: '[audit] Menu review', resource: 'issues', scope: 'personal', view: 'all', filters: [], display: { grouping: 'status' } } })
   expect(response.status()).toBe(201)
   await page.goto(`/${workspaceKey}/views/issues`)
+  await expect(page.getByRole('link',{name:'Dashboards',exact:true})).toHaveCount(0)
   const heading = page.getByRole('heading', { name: 'Views', exact: true })
   await expect(heading).toHaveCSS('color', 'lch(90.451 1.2 272)')
   const group = page.locator('[class*="groupHeader"]').filter({ hasText: 'Personal views' })

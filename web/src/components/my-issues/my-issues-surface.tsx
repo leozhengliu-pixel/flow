@@ -9,6 +9,7 @@ import { DisplayMenuActionRow, MyIssuesDisplayMenu, type MyIssuesDisplayMenuProp
 import { MyIssuesFilterMenu } from './my-issues-filter-menu'
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { useOptionalTranslate } from '@/i18n/i18n'
 import styles from './my-issues.module.css'
 import {
@@ -119,6 +120,7 @@ export function MyIssuesSurface({
 }: MyIssuesSurfaceProps) {
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
   const phone = usePhoneLayout()
+  const desktop = useDesktopLayout()
   const t = useOptionalTranslate()
   const navRef = useRef<HTMLElement>(null)
   const measureRef = useRef<HTMLDivElement>(null)
@@ -163,7 +165,7 @@ export function MyIssuesSurface({
     return () => observer.disconnect()
   }, [phone, activeIndex, t])
   const showOverflow = phone && visibleCount < views.length
-  const shownViews = phone ? views.slice(0, visibleCount) : views
+  const shownViews = phone ? views.slice(0, visibleCount) : views.filter(view => !desktop || view.id !== 'shared' || activeView === 'shared')
   const overflowViews = phone ? views.slice(visibleCount) : []
   const activeHidden = showOverflow && activeIndex >= visibleCount
   const menuViews = activeHidden ? overflowViews.filter(view => view.id !== activeView) : overflowViews
