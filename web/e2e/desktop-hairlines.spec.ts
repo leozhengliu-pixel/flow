@@ -28,6 +28,10 @@ test('keeps the empty agent composer and examples in their content-sized grid tr
   expect((await skills.boundingBox())!.y - box.y).toBe(68)
   await expect(composer).toHaveCSS('row-gap', '8px')
   await expect(composer).toHaveCSS('border-top-width', '0px')
+  const agent = page.locator('.bottom-agent > button').first()
+  await expect(agent).toHaveCSS('gap', '6px')
+  await expect(agent.locator('span')).toHaveCSS('font-weight', '450')
+  expect(Math.abs((await agent.boundingBox())!.width - 76.92)).toBeLessThanOrEqual(0.1)
 })
 
 test('sizes document sort targets by their labels and keeps the declared column and group spacing', async ({ page, request, workspaceKey }) => {
@@ -89,6 +93,14 @@ test('preserves desktop hairlines, project insets, comment padding and clipboard
   await page.getByRole('button', { name: 'Display options', exact: true }).click()
   await expect(page.locator('.lp-projects-display')).toHaveCSS('border-top-width', '0.5px')
   expect((await page.locator('.lp-projects-display__modes').boundingBox())!.y).toBe(109)
+  const display = page.getByRole('dialog', { name: 'Display options', exact: true })
+  for (const [label, option] of [['Grouping', 'No grouping'], ['Ordering', 'Manual']]) {
+    await display.locator('.lp-projects-display-select').filter({ has: page.locator('> span', { hasText: new RegExp(`^${label}$`) }) }).getByRole('combobox').click()
+    await page.getByRole('option', { name: option, exact: true }).click()
+  }
+  expect((await page.locator('.lp-projects-display__options h2').boundingBox())!.y).toBe(290)
+  expect((await page.locator('.lp-projects-display__properties h3').boundingBox())!.y).toBe(314.5)
+  expect((await page.locator('.lp-projects-display__properties > div').boundingBox())!.y).toBe(341)
   await page.keyboard.press('Escape')
   await page.goto(`/${workspaceKey}/project/${project.slugId}/activity`)
   await expect(page.locator('.project-activity')).toHaveCSS('padding-top', '44px')

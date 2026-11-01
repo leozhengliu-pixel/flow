@@ -22,9 +22,10 @@
   .lp-projects-display-select > span,
   .lp-projects-display__row > span { line-height: normal; }
   .lp-projects-display__properties button:not(.is-selected) { color: var(--theme-text-secondary); }
-  .lp-projects-display__options h2 { height: 27.5px; line-height: normal; }
-  .lp-projects-display__properties { padding: 0 16px 12px; }
-  .lp-projects-display__properties h3 { height: 21.5px; line-height: normal; }
+  .lp-projects-display__options { display: flow-root; }
+  .lp-projects-display__options h2 { height: auto; margin: 8px 0 2px; line-height: normal; }
+  .lp-projects-display__properties { display: flex; flex-direction: column; padding: 0 16px 12px; }
+  .lp-projects-display__properties h3 { height: auto; margin: 8px 0 4px; line-height: normal; }
   .lp-projects-display__properties > div { margin-top: 8px; }
   .lp-projects-display__properties > div > button { padding-inline: 10px; }
   .lp-project-table {
