@@ -36,6 +36,8 @@ test('aligns the issue columns and property rhythm, toggles labels, and keeps sh
   expect(Math.abs((await rail.boundingBox())!.x - 1008)).toBeLessThanOrEqual(1)
   await expect(rail.getByRole('combobox', { name: 'Change team', exact: true })).toContainText(issue.team.name)
   const controls = rail.locator('.core-property-trigger')
+  const statusText = controls.first().locator(':scope > span').first()
+  expect((await statusText.boundingBox())!.x - (await rail.boundingBox())!.x).toBe(33)
   const ys = await controls.evaluateAll(els=>els.slice(0,4).map(el=>el.getBoundingClientRect().y))
   expect(ys.slice(1).map((y,index)=>y-ys[index])).toEqual([32,32,32])
   const estimate = (await rail.locator('.estimate-picker .label-project-trigger').boundingBox())!

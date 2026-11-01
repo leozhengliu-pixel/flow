@@ -27,6 +27,7 @@
   .issue-team-property .issue-assignee-profile svg { transform: rotate(-90deg); }
   .issue-team-property:hover .issue-assignee-profile { opacity: 1; transform: none; }
   .issue-properties .core-property-trigger.muted { color: var(--issue-muted); }
+  .issue-properties :is(.core-property-picker, .estimate-picker, .cycle-picker, .issue-project-row) { padding-left: 1px; }
   .issue-properties > .estimate-picker,
   .issue-properties > .cycle-picker { min-height: 32px; display: flow-root; }
   .issue-properties .issue-project-group { margin-top: 33.25px; }
