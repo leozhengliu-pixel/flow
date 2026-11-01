@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 import { Fragment, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n } from '@/i18n/i18n'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import type { SlashGroup } from './editor-commands'
 
 export interface EditorCommand {
@@ -29,6 +30,7 @@ interface SlashCommandMenuProps {
 
 export function SlashCommandMenu({ commands, selectedIndex, position, onSelect, onDismiss }: SlashCommandMenuProps) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const selectedRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const [placement, setPlacement] = useState<{ top: number; maxHeight?: number }>({ top: position.top })
@@ -37,8 +39,8 @@ export function SlashCommandMenu({ commands, selectedIndex, position, onSelect, 
   useLayoutEffect(() => {
     const menu = menuRef.current
     if (!menu) return
-    // The natural height (the CSS max-height caps it at 442px) decides whether the menu needs to flip or shrink.
-    const height = Math.min(menu.scrollHeight + 8, 442)
+    // Use the same desktop limit as the menu surface when deciding whether to flip.
+    const height = Math.min(menu.scrollHeight + 8, phone ? 442 : 482.5)
     const aboveTop = (position.caretTop ?? position.top - 24) - height - 6
     const room = window.innerHeight - position.top - 8
     let next: { top: number; maxHeight?: number }
@@ -46,7 +48,7 @@ export function SlashCommandMenu({ commands, selectedIndex, position, onSelect, 
     else if (aboveTop >= 8) next = { top: aboveTop }
     else next = { top: position.top, maxHeight: Math.max(room, 160) }
     setPlacement(current => current.top === next.top && current.maxHeight === next.maxHeight ? current : next)
-  }, [commands.length, position.top, position.caretTop])
+  }, [commands.length, position.top, position.caretTop, phone])
 
   return createPortal(<div className="description-slash-menu description-slash-menu--floating" ref={menuRef} style={{ left: position.left, top: placement.top, maxHeight: placement.maxHeight }} role="listbox" aria-label={t('Insert block')}>
     {commands.length === 0 ? <div className="description-slash-empty" role="status">

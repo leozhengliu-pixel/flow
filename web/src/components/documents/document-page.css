@@ -170,8 +170,7 @@
   z-index: 900;
   box-sizing: border-box;
   width: max-content;
-  width: 359px;
-  min-width: 359px;
+  min-width: 0;
   max-width: calc(100vw - 20px);
   overflow: hidden;
   padding: 0;
@@ -469,6 +468,7 @@ button.document-icon.is-empty:hover,
 }
 
 @media (min-width: 801px) {
+  .document-history-action button { background: var(--document-desktop-send-bg); }
   .document-page .issue-description-root.document-editor {
     width: calc(100% + 28px);
     margin-left: -14px;

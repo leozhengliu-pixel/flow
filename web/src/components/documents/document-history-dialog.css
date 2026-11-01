@@ -69,6 +69,10 @@
 }
 .document-history-main { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; }
 .document-history-scroll { flex: 1; min-height: 0; overflow: auto; padding: 17px 16px 96px; scrollbar-width: thin; }
+@media (min-width: 801px) {
+  .document-history-title { padding: 20px 52px 12px 20px; }
+  .document-history-scroll { padding: 52px 16px 84px 24px; }
+}
 .document-history-doc { margin: 14px 0 0 8px; padding: 0 0 0 0; }
 .document-history-date {
   display: inline-flex;
