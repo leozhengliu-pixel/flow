@@ -3,7 +3,7 @@ import { test } from './workspace-fixture'
 import type { BootstrapData, Issue } from '../src/types/flow'
 
 test.skip(({ isMobile }) => isMobile, 'Desktop issue activity and menus')
-test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, colorScheme: 'dark' })
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', launchOptions: { args: ['--force-device-scale-factor=2'] } })
 
 test('fits compact project labels, hides redundant child history, and uses plain issue links', async ({ page, request, workspaceKey: key }) => {
   const headers = { 'X-Workspace-Key': key }
@@ -19,6 +19,7 @@ test('fits compact project labels, hides redundant child history, and uses plain
   const related = await create('[audit] Relation target')
   expect((await request.post(`/api/issues/${issue.id}/relations`, { headers, data: { type: 'related', relatedIssueId: related.id } })).status()).toBe(201)
   expect((await request.post('/api/projects', { headers, data: { name: 'Project name fits', teamIds: [issue.team.id] } })).status()).toBe(201)
+  await create('[audit] Desktop specimen follow-up')
   await page.goto(`/${key}/issue/${issue.identifier}`)
   const activity = page.locator('.issue-activity-timeline')
   await expect(activity).not.toContainText('parent of')
@@ -42,6 +43,10 @@ test('fits compact project labels, hides redundant child history, and uses plain
   }
   await menu.getByRole('option', { name: 'Project name fits', exact: true }).click()
   await expect(page.locator('.issue-properties .issue-project-trigger')).toContainText('Project name fits')
+  await expect(page.getByRole('region', { name: 'Similar issues', exact: true })).toHaveCount(0)
+  await page.goto(`/${key}/issue/${child.identifier}`)
+  await expect(page.locator('.issue-parent-context')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Similar issues', exact: true })).toHaveCount(0)
 })
 
 test('expands event groups without losing comments and posts a reply with desktop targets', async ({ page, request, workspaceKey: key }) => {
@@ -88,6 +93,7 @@ test('opens every action submenu and applies desktop date and reminder presets',
   await page.goto(`/${key}/issue/${issue.identifier}`)
   const trigger = page.getByRole('button', { name: 'Issue options', exact: true })
   await trigger.click()
+  await expect(page.locator('.issue-options-popover [data-submenu="release"]')).toHaveCount(0)
   for (const [key, label, count] of [['create', 'Create related', 5], ['mark', 'Mark as', 6], ['remove', 'Remove', 1], ['copy', 'Copy', 8], ['convert', 'Convert to', 3], ['remind', 'Remind me', 6]] as const) {
     const parent = page.locator(`.issue-options-popover [data-submenu="${key}"]`)
     await parent.hover()

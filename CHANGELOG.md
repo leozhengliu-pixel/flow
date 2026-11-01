@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Keep automatic similarity suggestions off desktop issue pages and triage peeks, and omit empty release actions without changing phone screens.
+
 - Measure phone resource-tab overflow with its complete menu controls and available toolbar space; restore the full animated-images preference description on phones.
 
 - Align desktop inbox and team title insets, board header controls, saved-view counts and creation borders, and the team creation accessible label.
