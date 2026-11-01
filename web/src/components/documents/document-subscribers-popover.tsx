@@ -66,7 +66,7 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
     <Popover.Portal>
       <Popover.Content align="end" className="document-subscribers" collisionPadding={10} data-flow-motion="floating" onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
         <div className="document-subscribers__document">
-          <span className="document-subscribers__chip" data-testid="document-subscriber-chip"><span data-testid="document-subscriber-chip-text">{t('Document ⋅')}</span>{document.title}</span>
+          <span className="document-subscribers__chip" data-testid="document-subscriber-chip"><span data-testid="document-subscriber-chip-text">{t('Document ⋅')}</span>{' '}{document.title}</span>
         </div>
         <div className="document-subscribers__search">
           <input aria-label={t('Change subscribers…')} autoComplete="off" className="document-subscribers__filter" onChange={event => setQuery(event.target.value)} placeholder={t('Change subscribers…')} spellCheck={false} value={query}/>

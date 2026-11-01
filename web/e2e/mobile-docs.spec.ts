@@ -190,10 +190,21 @@ test.describe('mobile document subscribers', () => {
       expect(box?.width).toBe(viewport.width - 32)
       expect(box?.height).toBe(306)
       expect(Math.abs((box?.y ?? 0) - viewport.height * .13)).toBeLessThanOrEqual(1)
-      await expect(page.getByTestId('document-subscriber-chip')).toContainText('Document')
+      await expect(page.getByTestId('document-subscriber-chip')).toHaveText('Document ⋅ [mobile] Subscribers')
       await expect(page.locator('.document-subscribers__filter')).toBeVisible()
       await expect(page.locator('.document-subscribers__row[data-subscribed="true"]')).toHaveCount(1)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await page.keyboard.press('Escape')
+      const longTitle = '[mobile] A document title that is much too long to fit in the subscriber chip'
+      const title = page.getByRole('textbox', { name: 'Document title', exact: true })
+      await title.fill(longTitle)
+      await title.blur()
+      await page.getByRole('button', { name: 'Change document subscribers', exact: true }).click()
+      const chip = page.getByTestId('document-subscriber-chip')
+      await expect(chip).toHaveText(`Document ⋅ ${longTitle}`)
+      await expect(chip).toHaveCSS('text-overflow', 'ellipsis')
+      const chipBox = (await chip.boundingBox())!
+      expect(chipBox.x + chipBox.width).toBeLessThanOrEqual(viewport.width - 30)
     })
   }
 })

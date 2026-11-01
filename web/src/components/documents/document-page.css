@@ -529,6 +529,7 @@ button.document-icon.is-empty:hover,
     position: fixed !important;
     inset: 13vh 16px auto !important;
     width: auto !important;
+    min-width: 0 !important;
     transform: none !important;
   }
   .document-subscribers {
@@ -561,12 +562,15 @@ button.document-icon.is-empty:hover,
   .document-subscribers__document > span {
     box-sizing: border-box;
     display: inline-block;
+    min-width: 0;
     height: 22px;
+    overflow: hidden;
     padding: 2px 6px;
     border-radius: 10px;
     background: var(--theme-surface-active);
     color: var(--action-menu-text);
     font: 400 12px/18px var(--font);
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
   .document-subscribers__document > span > span { display: inline; color: inherit; font: 500 12px/18px var(--font); }
