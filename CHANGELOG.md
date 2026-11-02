@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Correct desktop issue parent typography, property insets, sub-issue icon sizing, and due-date submenu search presentation.
 
+- Match desktop issue details-toggle fills and applied-filter borders and add-control padding without changing phone controls.
+
 - Keep the selected property option highlighted when a picker opens or its options finish loading.
 
 - Give desktop notification menus a separate list inset and snooze separator while preserving phone menus and dated snooze actions.

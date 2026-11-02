@@ -25,6 +25,7 @@ test('defaults the saved view details open, drills into unassigned issues, and r
   await expect(panel.getByRole('tablist', { name: 'View summary' })).toHaveCSS('gap', '2px')
   await expect(page.locator('[data-content-view-header]')).toHaveCSS('padding-left', '8px')
   await expect(page.locator('[data-content-view-title] h2')).toHaveCSS('color', 'lch(90.451 1.2 272)')
+  await expect(page.getByRole('button', { name: 'Close view details', exact: true })).toHaveCSS('background-color', 'lch(18.634 1.075 272)')
   await expect(panel.getByText(issueList.data.viewer.displayName, { exact: true }).first()).toBeVisible()
   expect((await panel.locator('[class*="identityCard"]').boundingBox())?.width).toBe(388)
   if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-saved-view.png`, animations: 'disabled' })

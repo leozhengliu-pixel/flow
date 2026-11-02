@@ -67,6 +67,9 @@
   [data-issue-explorer] [data-content-view-header]:has(.headerViewActions) [data-content-view-title]>h2{color:var(--text)}
   [data-issue-explorer] [data-content-view-header]:has(.headerViewActions) [data-content-view-favorite],.headerViewActions button{padding-inline:2px}
   .headerViewIcon{margin-right:0}
+  .iconButton[title]{--ui-pill-active-bg:var(--issue-toolbar-open-bg);--ui-pill-active-hover-bg:var(--issue-toolbar-open-bg)}
+  .filterBar{border:.5px solid var(--border);box-shadow:none}
+  .filterBar>div:first-child>button{padding-inline:2px}
   [data-issue-explorer] [data-content-view-subheader]{gap:6px}
   .resourceTab{--ui-pill-bg:var(--my-issues-details-tab-bg);--ui-pill-active-bg:var(--my-issues-details-tab-active-bg);--ui-pill-fg:var(--issue-muted);--ui-pill-active-fg:var(--text);padding-inline:16px;font-family:inherit;font-size:12px;font-weight:500;line-height:normal}
   .resourceTab::after{box-shadow:none!important}

@@ -1,7 +1,7 @@
 import { test, expect } from './issue-list-fixture'
 
 test.skip(({ isMobile }) => isMobile, 'Desktop filter empty state')
-test.use({ viewport: { width: 1440, height: 900 } })
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
 
 test('counts the hidden issues and clears the real filters without changing the team scope', async ({ page, issueList }) => {
   await page.goto(issueList.route)
@@ -10,6 +10,10 @@ test('counts the hidden issues and clears the real filters without changing the 
   await page.getByRole('option', { name: /^Urgent/ }).click()
   await page.keyboard.press('Escape')
   await expect(page.getByText('No issues matching the filters', { exact: true })).toBeVisible()
+  const band = page.getByLabel('Applied filters', { exact: true })
+  await expect(band).toHaveCSS('border-top-style', 'solid')
+  await expect(band).toHaveCSS('box-shadow', 'none')
+  await expect(band.getByRole('button', { name: 'Add another filter', exact: true })).toHaveCSS('padding', '0px 2px')
   const card = page.locator('[data-filter-empty-card]')
   await expect(card).toHaveText('3 issueshidden by filtersClear Filters')
   const rect = await card.boundingBox()
@@ -19,6 +23,7 @@ test('counts the hidden issues and clears the real filters without changing the 
   const action = card.getByRole('button', { name: 'Clear Filters', exact: true })
   expect(await action.boundingBox()).toMatchObject({ width: 104, height: 24 })
   expect((await action.locator('span').boundingBox())!.height).toBeLessThan(16)
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-filter-band.png`, animations: 'disabled' })
   await action.click()
   await expect(page.locator('[data-issue-row-id]')).toHaveCount(3)
   await expect(card).toHaveCount(0)
