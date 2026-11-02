@@ -22,4 +22,7 @@
   html:root body .property-command-project.issue-project-menu--compact .property-command-create span{min-width:0;white-space:nowrap}
   html:root body .property-command-project.issue-project-menu--compact .property-command-options .property-command-create{grid-template-columns:16px minmax(0,1fr)!important}
   .property-command-project.issue-project-menu--compact:has(.property-command-search:not(.is-visually-hidden)){width:339px}
+  .property-command-project.issue-project-menu{display:flex;flex-direction:column;max-height:min(490px,var(--radix-popover-content-available-height,calc(100vh - 20px)))}
+  .issue-project-menu>div{display:flex;flex-direction:column;min-height:0}
+  .issue-project-menu .property-command-options{min-height:0}
 }
