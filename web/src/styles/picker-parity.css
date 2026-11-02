@@ -1171,7 +1171,7 @@ html:root body .sub-issues-add-menu__item:not(#_) > kbd { margin-left: auto; col
 html:root body .sub-issues-collapse:not(#_) { gap: 3px; color: var(--sub-caret); }
 html:root body .sub-issues-collapse:not(#_) > svg { width: 14px; height: 14px; flex: 0 0 14px; transform: rotate(90deg); }
 html:root body .sub-issues-collapse:not(#_)[aria-expanded=false] > svg { transform: none; }
-html:root body .sub-issues-collapse:not(#_) > span { color: var(--sub-label); }
+.flow-sub-issues .sub-issues-collapse > span { color: var(--sub-label); }
 html:root body .sub-issues-progress:not(#_) { color: var(--sub-label); font-weight: 450; }
 html:root body .sub-issues-display:not(#_),
 html:root body .sub-issues-create:not(#_) { border: 0; background: var(--sub-button); box-shadow: var(--sub-button-ring); color: var(--sub-button-text); }

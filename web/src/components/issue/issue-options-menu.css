@@ -43,8 +43,6 @@
   .issue-options-team-parent>svg{width:5px;height:9px;flex:none}
   .issue-options-team-key{flex-shrink:0;color:var(--pk-faint)}
   .issue-options-team[data-current=true]::before{background:var(--issue-menu-active-bg)}
-  html:root .issue-options-due-date .due-date-command{min-width:232px}
-  .issue-options-due-date .due-date-shortcut{display:none}
   .issue-options-submenu .issue-options-then{line-height:1.1}
   .issue-options-submenu[data-menu="Remind me"]{width:318px}
   .issue-options-submenu[data-menu="Remind me"] .issue-options-detail{padding-left:0;font-size:13px}
@@ -82,9 +80,9 @@
     border-radius: 12px;
     background: var(--pk-surface) !important;
     border: .5px solid var(--pk-border) !important;
-    overflow: hidden;
     outline: none;
     box-shadow: var(--pk-card-shadow);
+    overflow: hidden;
   }
   .issue-options-popover > [cmdk-root] { position: relative; z-index: 1; width: calc(100vw - 32px); }
   .issue-options-popover[data-nested=true] { visibility: hidden; }
