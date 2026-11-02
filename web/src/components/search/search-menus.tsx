@@ -11,6 +11,7 @@ import { SelectControl } from '@/components/ui/select-control'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuCheckboxItem } from '@/components/ui/dropdown-menu'
 import { DisplayIcon, FilterIcon } from '@/components/ui/view-action-icons'
 import { useI18n } from '@/i18n/i18n'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { searchFields, type SearchPageState, type SearchFilterField, type SearchCondition, type SearchOrder } from './search-state'
 
 const searchStatuses = [{id:'backlog',label:'Backlog'},{id:'unstarted',label:'Unstarted'},{id:'started',label:'Started'},{id:'completed',label:'Completed'},{id:'canceled',label:'Canceled'}] as const
@@ -65,10 +66,11 @@ export function SearchMenus({state,onChange,users}:{state:SearchPageState;onChan
 function SearchFilterValue({field,value,onChange,compact=false,users}:{field:SearchFilterField;value:string;onChange:(value:string,operator?:SearchCondition['operator'])=>void;compact?:boolean;users?:User[]}) {
   const {t,locale}=useI18n()
   const directory=usePeopleDirectory()
+  const phone=usePhoneLayout()
   const [operator,setOperator]=useState<'after'|'before'>('after')
   if(field.endsWith('At')) return <div className="workspace-search-date-filter">
     {!compact&&<SelectControl label={t('Filter operator')} value={operator} options={[{value:'after',label:t('After')},{value:'before',label:t('Before')}]} onChange={next=>setOperator(next as 'after'|'before')}/>}
-    <DateTimeControl locale={locale} label={t(searchFields.find(item=>item.id===field)!.label)} portal={false} value={value} onChange={next=>onChange(next,operator)}/>
+    <DateTimeControl locale={locale} label={t(searchFields.find(item=>item.id===field)!.label)} portal={phone} value={value} onChange={next=>onChange(next,operator)}/>
   </div>
   if(field==='statusType') return <PropertyMenu label="Status type" ariaLabel={t('Status type')} searchPlaceholder={t('Filter status types…')} embedded={!compact} compact={compact} selectedId={value} value={searchStatuses.find(item=>item.id===value)?.label} options={searchStatuses.map(item=>({...item,icon:<StatusIcon state={{id:item.id,name:item.label,type:item.id,color:'var(--text-secondary)'}}/>}))} onChange={onChange}/>
   const label=field==='creatorId'?'Creator':'Assignee / Lead'

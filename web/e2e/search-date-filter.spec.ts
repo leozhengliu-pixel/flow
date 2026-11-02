@@ -25,6 +25,11 @@ async function applyDateFilter(page: Page, workspaceKey: string, phone = false) 
   await page.getByRole(phone ? 'option' : 'menuitem', { name: 'Updated date', exact: true }).click()
   await page.getByRole('button', { name: 'Updated date', exact: true }).click()
   await expect(page.locator('.date-time-popover')).toBeVisible()
+  // Hit-test before clicking: locator clicks can silently scroll a clipped calendar into view.
+  await expect.poll(() => page.locator('.date-time-grid button').evaluateAll(buttons => buttons.filter(button => {
+    const rect = button.getBoundingClientRect()
+    return button.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))
+  }).length)).toBe(42)
 
   const now = new Date()
   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
