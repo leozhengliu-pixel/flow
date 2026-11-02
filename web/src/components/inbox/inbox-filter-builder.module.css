@@ -92,6 +92,8 @@
 
 /* Phone filter sheet: the reference lists the filter fields as 46px rows. */
 .phoneShortcutProperty { color: var(--pk-muted); flex: none; }
+.phoneShortcutChevron { display: flex; flex: none; color: var(--pk-muted); }
+.phoneShortcutChevron svg { width: 12px; height: 12px; }
 .phoneMenu .avatar { display: inline-grid; place-items: center; flex: none; font-size: 7px; line-height: 1; }
 .phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-list]:not(#_)) {
   position: relative;
