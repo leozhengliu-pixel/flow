@@ -37,7 +37,7 @@ test('honors row properties, opens an icon-only date picker and keeps the overvi
   await display.getByRole('button', { name: 'Initiatives', exact: true }).click()
   await expect(page.getByRole('columnheader', { name: 'Initiatives', exact: true })).toHaveCount(0)
   const healthHeader = await page.getByRole('button', { name: 'Order by Health', exact: true }).boundingBox()
-  expect(Math.abs(healthHeader!.x - 881.5)).toBeLessThanOrEqual(1)
+  expect(Math.abs(healthHeader!.x - 809.5)).toBeLessThanOrEqual(1)
   await display.locator('.lp-projects-display-select').filter({ has: page.locator('> span', { hasText: /^Grouping$/ }) }).getByRole('combobox').click()
   await page.getByRole('option', { name: 'No grouping', exact: true }).click()
   await expect(page.locator('.lp-project-group__header')).toHaveCount(0)
