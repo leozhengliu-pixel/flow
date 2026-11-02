@@ -10,7 +10,7 @@
   .project-details-sidebar__property .lp-project-property-trigger > span:last-child { color: inherit; }
   .project-details-sidebar__property .project-label-add { color: var(--pd-label); }
   .project-overview__properties .lp-project-property-trigger > span:last-child { color: inherit; }
-  .project-overview__properties .project-lead-trigger > svg { width: 18px; height: 18px; }
+  .project-overview__properties .project-lead-trigger > svg { width: 16px; height: 16px; }
   .project-overview__initiative { height: 28px; gap: 8px; padding: 3px 6px; border-radius: 9999px; color: var(--text); font-size: 13px; font-weight: 500; line-height: normal; }
   :root .project-detail-page .project-overview .project-overview__name { letter-spacing: -.16px; }
   .project-overview__properties .project-overview__date { padding: 3px 6px; }
@@ -20,6 +20,7 @@
   .project-detail-page__header-action,
   .project-detail-page__add-view,
   .project-detail-page__toolbar-button { padding-inline: 2px; }
+  :root .project-detail-page .project-detail-page__header-action[data-state="open"] { background: transparent; }
   .project-details-sidebar__section:not(.is-milestones) > header { margin-inline: 12px; }
   .project-details-sidebar__section:not(.is-milestones) > header > button:first-child { position: relative; left: -8px; padding-inline: 8px; gap: 3px; }
   .project-details-sidebar__section > header > button:last-child:not(:first-child) { padding-inline: 2px; }
@@ -52,6 +53,7 @@
   .project-details-sidebar__see-all > span { font-size: 12px; line-height: normal; }
   .project-milestone-menu { margin-top: 3px; padding-block: 4px; font: 450 13px var(--font); line-height: normal; }
   .project-milestone-menu [role=menuitem] { padding-left: 12px; font-weight: 450; }
+  :root .project-milestone-menu [role=menuitem] > span.project-milestone-menu__submenu-arrow { color: var(--project-menu-chevron-fg); }
   .project-milestone-menu [role=menuitem][data-highlighted],
   .project-milestone-menu [role=menuitem][data-highlighted] > svg { color: var(--action-menu-active-text); }
   .project-issues { min-height: 100%; display: flex; flex-direction: column; padding: 0; }
