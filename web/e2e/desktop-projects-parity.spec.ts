@@ -126,6 +126,9 @@ test('honors row properties, opens an icon-only date picker and keeps the overvi
     return Math.abs(line!.x + line!.width / 2 - scroller!.x - scroller!.width / 2)
   }).toBeLessThanOrEqual(1)
   await expect(timeline.locator('.lp-project-timeline__bar')).toBeVisible()
+  const scrollerBox = await timeline.locator('.lp-project-timeline__scroller').boundingBox()
+  const gridBox = await timeline.locator('.lp-project-timeline__grid').boundingBox()
+  expect(Math.abs(gridBox!.y + gridBox!.height - scrollerBox!.y - scrollerBox!.height)).toBeLessThanOrEqual(1)
   if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-project-timeline.png`, animations: 'disabled' })
 })
 

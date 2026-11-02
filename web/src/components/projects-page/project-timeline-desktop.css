@@ -19,7 +19,9 @@
   .lp-project-timeline__major > span > b { left: 0; text-transform: uppercase; }
   .lp-project-timeline__minor > span { font-size: 13px; }
   .lp-project-timeline__today-chip { top: 16px; padding: 1px 4px; border-radius: 9999px; color: var(--on-accent); font: 500 11px var(--font); line-height: normal; text-transform: uppercase; }
-  .lp-project-timeline__body { min-height: 100%; }
+  .lp-project-timeline__canvas { display: flex; flex-direction: column; min-height: 100%; }
+  .lp-project-timeline__header { flex-shrink: 0; }
+  .lp-project-timeline__body { flex: 1 0 auto; }
   .lp-project-timeline__grid > i { border-left-style: dashed; }
   .lp-project-timeline__label { box-sizing: border-box; width: 320px; flex: 0 0 320px; padding: 0 13px; border: 0; }
   .lp-project-timeline__label > button { gap: 4px; padding: 0; color: var(--text); font-weight: 500; }
