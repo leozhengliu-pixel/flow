@@ -29,6 +29,7 @@ import {
   type ReviewDisplay,
 } from "./review-list-model";
 import { ReviewsEmptyIllustration } from "./reviews-empty-illustration";
+import { ReviewsOnboarding } from "./reviews-onboarding";
 import { SidebarLeftIcon } from "@/components/ui/view-action-icons";
 import { useReviewListControls } from "./use-review-list-controls";
 import { UserAvatar } from "@/components/ui/user-avatar";
@@ -239,13 +240,14 @@ function ReviewList({
     <section className="reviews-list-pane">
       <div className="reviews-header">
         <header className="reviews-topbar">
+          <div className="reviews-topbar-inner">
           <button className="reviews-mobile-sidebar" aria-label={t("Open sidebar")} data-sidebar-trigger onClick={onOpenSidebar} type="button">
             <SidebarLeftIcon />
           </button>
           <GitPullRequest aria-hidden="true" className="reviews-desktop-icon" size={16}/>
           <h1>{t("Reviews")}</h1>
           {onboarding && <button className="reviews-get-started" type="button" onClick={() => onNavigate(integrationSettingsPath(data.workspace.urlKey, "github"))}>{t("Get started")}</button>}
-          <div>
+          <div className="reviews-topbar-actions">
             {onboarding ? <button className="reviews-opt-out" type="button" disabled={optingOut} onClick={() => void optOut()}>{t("I don't do code review")}</button> : <>
             {/* Running the import is for workspace admins; members would only get a refusal. */}
             {isWorkspaceAdmin(data) && <button type="button" className="review-ghost-button" aria-label={t("Sync now")} title={t("Sync now")} disabled={syncing} aria-busy={syncing} onClick={() => void syncNow()}>
@@ -254,6 +256,7 @@ function ReviewList({
             <ReviewFilters filters={filters} data={data} items={baseItems} onChange={setFilters} filterBarHost={filterHost} />
             <ReviewDisplayMenu display={display} view={view} onChange={setDisplay} />
             </>}
+          </div>
           </div>
         </header>
         {!onboarding && <nav className="reviews-tabs" aria-label={t("Reviews")}>
@@ -311,6 +314,8 @@ function ReviewList({
             );
           })}
         </div>
+      ) : onboarding ? (
+        <ReviewsOnboarding onConnect={(provider) => onNavigate(integrationSettingsPath(data.workspace.urlKey, provider))} />
       ) : !filters.length && access.reason !== "granted" ? (
         <CodeReviewAccessActions
           data={data}

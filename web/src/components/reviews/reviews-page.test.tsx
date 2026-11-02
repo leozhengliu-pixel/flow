@@ -38,8 +38,15 @@ it('offers the desktop onboarding actions and keeps both code hosts available', 
   render(<I18nProvider><ReviewsPage data={makeBootstrap({ reviews: [], integrationConnections: [] })} view="for-you" onNavigate={onNavigate} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>);
   await user.click(screen.getByRole('button', { name: 'Get started' }));
   expect(onNavigate).toHaveBeenCalledWith('/workspace/settings/integrations/github');
-  expect(screen.getByRole('button', { name: 'Connect GitHub' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Connect personal GitHub account' })).toBeVisible();
   expect(screen.getByRole('button', { name: 'Connect GitLab' })).toBeVisible();
+  for (const title of ['Guided reviews', 'Review inbox', 'GitHub sync', 'Iterate']) expect(screen.getByRole('heading', { name: title })).toBeVisible();
+  expect(screen.getByRole('link', { name: 'Learn more' })).toHaveAttribute('href', 'https://github.com/leozhengliu-pixel/flow/blob/main/docs/code-scanning-review.md');
+  expect(screen.getByRole('img', { name: 'Review preview' })).toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'Connect personal GitHub account' }));
+  expect(onNavigate).toHaveBeenLastCalledWith('/workspace/settings/integrations/github');
+  await user.click(screen.getByRole('button', { name: 'Connect GitLab' }));
+  expect(onNavigate).toHaveBeenLastCalledWith('/workspace/settings/integrations/gitlab');
 });
 
 it('persists review opt-out and returns to Agent', async () => {

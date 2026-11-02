@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Match desktop issue reply placeholder typography and comment action padding without changing phone controls.
 
+- Restore desktop Reviews onboarding content, preview and integration actions with Chinese translations while keeping the phone connection view.
+
 - Keep desktop inbox header insets on its inner toolbar while preserving the title's text bounds and phone layout.
 
 - Match desktop toast dismiss padding and muted foreground without changing phone controls.
