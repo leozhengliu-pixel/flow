@@ -10,6 +10,7 @@ export const documentsPageZhCN: Record<string, string> = {
   'Could not move selection to new document': '无法将所选内容移至新文档',
   'Other users': '其他用户',
   'Selection moved to new document': '已将所选内容移至新文档',
+  'The selected content changed. The new document was created without removing the source.': '所选内容已更改。新文档已创建，原文档内容未删除。',
   'Could not save': '无法保存',
   'Unsaved change': '未保存的更改',
   '{name} is editing': '{name} 正在编辑',

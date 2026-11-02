@@ -43,6 +43,7 @@ import { DeletedDocumentMenuItems } from './document-deleted-menu'
 import { DocumentEditedPopover } from './document-edited-popover'
 import { DocumentHistoryDialog } from './document-history-dialog'
 import { DocumentMenuItems } from './document-menu'
+import { moveDocumentSelection } from './move-document-selection'
 import { DocumentSubscribersPopover } from './document-subscribers-popover'
 import { DocumentTemplateChip } from './document-template-chip'
 import { DOCUMENT_PAGE_SHORTCUTS, useDocumentPageShortcuts, useDocumentUiActions } from './use-document-page-shortcuts'
@@ -151,14 +152,16 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
     if (!editor || !selection.text.trim()) return
     try {
       const firstLine = selection.text.split(/\r?\n/, 1)[0].trim().slice(0, 120)
-      const created = await createDocument({
+      const { created, removed } = await moveDocumentSelection(editor, selection, () => createDocument({
         title: firstLine,
         content: selection.text,
         projectIds: document.projectIds,
         teamIds: document.teamIds,
-      })
-      editor.chain().focus().deleteSelection().run()
+      }))
+      if (!removed) throw new Error(t('The selected content changed. The new document was created without removing the source.'))
+      window.clearTimeout(pending.current)
       await updateDocument(document.id, { content: editor.getMarkdown(), contentData: editor.getJSON() as Record<string, unknown> })
+      await persistEditorRef.current?.()
       await onReload()
       toast.success(t('Selection moved to new document'))
       navigate(documentPath(data.workspace.urlKey, created))
