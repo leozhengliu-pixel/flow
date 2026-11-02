@@ -1733,15 +1733,12 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-activity__diff-arrow { flex: none; color: var(--theme-text-secondary); }
   .project-activity__feed { display: flex; flex-direction: column; margin-top: 12px; }
   .project-activity__month {
-    order: 1;
     height: 24px;
     display: block;
     margin: 60px 20px 24px;
     color: var(--text);
   }
   .project-activity__month > span { display: inline-block; font-size: 18px; font-weight: 500; line-height: normal; }
-  .project-activity__comment-card,
-  .project-activity__update { order: 1; }
   .project-activity__comment-card { padding: 0; }
   html:root:not([data-theme="light"]) body .project-activity__comment-card { border: .5px solid var(--phone-project-card-border); }
   .project-activity__comment-card > header { height: 22px; gap: 8px; margin: 12px 12px 0; }
@@ -1784,7 +1781,6 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
     line-height: normal;
   }
   .project-activity__event {
-    order: 0;
     box-sizing: content-box;
     height: 17px;
     min-height: 0;
@@ -1795,5 +1791,5 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-activity__event strong,
   .project-activity__event b { font-weight: 500; }
   .project-activity__event-dot { width: 16px; height: 16px; border-color: var(--phone-icon-fg); }
-  .project-activity__event.is-project-created { order: 2; padding-top: 12px; padding-bottom: 60px; }
+  .project-activity__event.is-project-created { padding-top: 12px; padding-bottom: 60px; }
 }

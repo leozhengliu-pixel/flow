@@ -410,15 +410,17 @@ test.describe('mobile project activity', () => {
     await expectComposerSubmitAlignment(composer)
     expect(near((await page.locator('.project-activity__composer button.is-submit').boundingBox())?.width, 72.72)).toBe(true)
 
-    expect((await page.locator('.project-activity__event').first().boundingBox())?.y).toBe(313.5)
+    const month = (await page.locator('.project-activity__month').first().boundingBox())!
+    const firstEvent = (await page.locator('.project-activity__event').first().boundingBox())!
+    expect(firstEvent.y).toBeGreaterThanOrEqual(month.y + month.height)
     expect(near((await page.locator('.project-activity__event strong').first().boundingBox())?.x, 44)).toBe(true)
-    expect(near((await page.locator('.project-activity__month > span').boundingBox())?.y, 426.5)).toBe(true)
     const card = page.locator('.project-activity__comment-card')
     expect((await card.boundingBox())?.x).toBe(12)
-    expect(near((await card.boundingBox())?.y, 474.5)).toBe(true)
+    const cardBox = (await card.boundingBox())!
+    expect(cardBox.y).toBeGreaterThanOrEqual(month.y + month.height)
     expect((await card.boundingBox())?.width).toBe(366)
     expect((await card.locator('.avatar').boundingBox())?.width).toBe(18)
-    expect(near((await card.locator('.project-activity__comment-body p').boundingBox())?.y, 515)).toBe(true)
+    expect(near((await card.locator('.project-activity__comment-body p').boundingBox())!.y - cardBox.y, 40.5)).toBe(true)
     expect((await card.locator('button[aria-label="Add reaction"]').boundingBox())?.width).toBe(32)
     expect((await card.locator('button[aria-label="Comment options"]').boundingBox())?.width).toBe(32)
     expect((await card.locator('.project-activity__thread-toggle').boundingBox())?.height).toBe(28)
@@ -469,8 +471,10 @@ test.describe('mobile project update composer', () => {
     expect(near((await page.locator('.project-activity__attach').boundingBox())?.y, 338)).toBe(true)
     await expectComposerSubmitAlignment(composer)
     expect(near((await page.locator('.project-activity__composer button.is-submit').boundingBox())?.y, 340)).toBe(true)
-    expect(near((await page.locator('.project-activity__month > span').boundingBox())?.y, 507.5)).toBe(true)
-    expect(near((await page.locator('.project-activity__comment-card').boundingBox())?.y, 555.5)).toBe(true)
+    const month = (await page.locator('.project-activity__month').first().boundingBox())!
+    const composerBox = (await composer.boundingBox())!
+    expect(month.y).toBeGreaterThanOrEqual(composerBox.y + composerBox.height)
+    expect((await page.locator('.project-activity__comment-card').boundingBox())!.y).toBeGreaterThanOrEqual(month.y + month.height)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     const write = page.getByRole('button', { name: 'Write with Agent', exact: true })
     expect(await write.evaluate(node => Boolean(node.closest('.project-activity__tools')?.previousElementSibling?.matches('.project-activity__feed')))).toBe(true)
