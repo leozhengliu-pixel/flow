@@ -19,6 +19,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Add the desktop backlog introduction, scoped issue creation and documentation action, with Chinese copy and unchanged phone empty states.
 
+- Use the measured desktop workspace-name typography and foreground without changing the phone workspace switcher.
+
 - Use the shared muted foreground for desktop sidebar team headings while retaining the highlighted team-menu hover state and phone styles.
 
 - Match desktop project sidebar labels, disclosure spacing and icon-button padding to the measured panel controls without changing phone layouts.
