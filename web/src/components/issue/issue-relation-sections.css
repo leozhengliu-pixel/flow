@@ -7,6 +7,9 @@
 .issue-properties .issue-relation-section + .issue-relation-section {
   margin-top: 30px;
 }
+@media (min-width: 1024px) {
+  .issue-view .issue-properties .issue-relation-section { margin-left: 4px; }
+}
 .issue-relation-section__header {
   display: flex;
   align-items: center;

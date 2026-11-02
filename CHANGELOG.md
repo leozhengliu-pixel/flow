@@ -25,6 +25,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align desktop inbox frame and menu borders, shortcut labels and read-notification text with the shared surface palette.
 
+- Align desktop issue document and property-rail inset ownership and the open options-button surface without changing phone rules.
+
 - Keep desktop personal settings actions transparent and aligned, with a compact Customize label and descriptive accessible name.
 
 - Match desktop issue reply placeholder typography and comment action padding without changing phone controls.

@@ -247,6 +247,11 @@
 .comment-reply strong,.comment-reply span{display:block;font-size:12px;line-height:18px}
 .comment-reply strong{font-weight:500}.comment-reply span{color:var(--muted)}
 
+@media (min-width: 1024px) {
+  :root { --issue-desktop-header-open-bg: rgb(45 45 47); }
+  :root[data-theme="light"] { --issue-desktop-header-open-bg: var(--theme-control); }
+}
+
 /* Issue reactions */
 .emoji-picker{z-index:1100;width:273px;height:321px;overflow:hidden;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-2);box-shadow:0 3px 8px #0002,0 2px 5px #0002,0 1px 1px #0002;outline:0;animation:menu-in var(--quick) var(--ease)}
 .emoji-picker[data-state="closed"]{display:none}

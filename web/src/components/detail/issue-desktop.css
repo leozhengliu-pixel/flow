@@ -1,8 +1,13 @@
 @media (min-width: 1024px) {
+  /* Desktop detail geometry is flush to the captured document and rail edges. */
+  .issue-view .issue-document { padding-bottom: 0; }
+  .issue-view .issue-properties { padding-left: 0; }
+  .issue-view .issue-properties > * { margin-left: 4px; }
+  .issue-view .issue-properties > .issue-detail-section { margin-left: 4px; }
   .issue-view .issue-command-buttons { height: 28px; }
   .issue-view .issue-work-control { width: 56.5px; height: 28px; border: 0; }
   .issue-view .issue-work-control .issue-work-prompt { margin-right: .5px; }
-  .issue-view .issue-header-icon:is([data-state=open], [aria-expanded=true]) { background: var(--issue-header-hover-bg); color: var(--issue-header-icon-hover); }
+  .issue-view .issue-header-icon:is([data-state=open], [aria-expanded=true]) { background: var(--issue-desktop-header-open-bg); color: var(--issue-header-icon-hover); }
   :root .issue-view .title-editor p { letter-spacing: -.16px; }
   .issue-view .document-actions .issue-document-action { padding: 0 2px; color: var(--issue-fg); }
   .issue-view .document-actions .issue-document-action svg { width: 14px; height: 14px; }
