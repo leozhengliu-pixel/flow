@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match subscribed document rows to the shared menu highlight color and phone inset in pointer and keyboard states.
+
 - Translate command navigation and saved-chat feedback labels into Chinese.
 
 - Use shared phone menu geometry and submenu navigation for issue, team, project and Skills controls.
