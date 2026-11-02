@@ -592,6 +592,9 @@ html:root body .command-dialog.loops-picker-dialog [cmdk-item].is-preview:not(#_
 .loops-sentence-token.is-button:hover,
 .loops-sentence-token.is-button[data-state='open'] { background: var(--theme-surface-hover); }
 .loops-trigger-sentence.is-readonly { gap: 4px; color: var(--theme-text-primary); font-weight: 450; line-height: 20px; }
+@media (min-width: 801px) {
+  .loops-trigger-sentence.is-readonly { font-size: 12px; }
+}
 .loops-trigger-sentence.is-readonly .loops-sentence-text { color: var(--theme-text-primary); }
 .loops-trigger-sentence.is-readonly .loops-sentence-token { height: 20px; padding: 0; border: 0; background: transparent; font: 450 13px var(--font); }
 /* The reference app's trigger dropdown: one chip labelled with the whole trigger. */

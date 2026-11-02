@@ -38,7 +38,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align desktop project team controls and section spacing with the shared overview measurements.
 
-- Match the shared desktop project Lead column to the measured 120px track.
+- Keep the shared desktop project Lead track compact and stable when opening display options; match desktop document title metrics, let document action menus grow with translated content, and use the measured milestone row inset.
 
 - Align desktop project header content insets and cycle breadcrumb separators with their visible chrome.
 

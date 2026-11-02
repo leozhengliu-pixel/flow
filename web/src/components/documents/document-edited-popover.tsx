@@ -17,6 +17,7 @@ import type { ActorBot, FlowDocument, User } from '@/types/flow'
 import { documentOwner, type DocumentActionContext } from './document-actions'
 import { documentEditedDate } from './document-edited-date'
 import { DocumentOwnerPicker } from './document-owner-picker'
+import { avatarColor } from '@/components/issue/avatar-color'
 
 export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot, lastEditedAt, showAuthorNames, onShowAuthorNames, onShowHistory, open, onOpenChange, ownerOpen, onOwnerOpenChange, readOnly }: {
   ctx: DocumentActionContext
@@ -41,7 +42,7 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot
   const editedLabel = t('Edited {date}').replace('{date}', documentEditedDate(lastEditedAt, formatDate))
   const ownerName = owner ? owner.displayName || owner.name : t('No owner')
   const ownerValue = <>
-    {owner ? <UserAvatar avatarUrl={owner.avatarUrl} className="document-meta-avatar" name={ownerName}/> : null}
+    {owner ? <UserAvatar avatarUrl={owner.avatarUrl} className="document-meta-avatar" color={avatarColor(owner.id)} name={ownerName}/> : null}
     <strong data-i18n-ignore>{ownerName}</strong>
   </>
   // A document created through an application keeps its "via <App>" attribution while its creator is the last editor.
@@ -68,7 +69,7 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot
           </div>
           <div className="document-last-edit-row">
             <span>{t('Last edit by')}</span>
-            <span className="document-person"><UserAvatar avatarUrl={attributedActorAvatar(lastEditor, editorBot)} className="document-meta-avatar" name={editorName}/><strong data-i18n-ignore>{editorName}</strong><ViaApp user={lastEditor} botActor={editorBot}/></span>
+            <span className="document-person"><UserAvatar avatarUrl={attributedActorAvatar(lastEditor, editorBot)} className="document-meta-avatar" color={avatarColor(lastEditor.id)} name={editorName}/><strong data-i18n-ignore>{editorName}</strong><ViaApp user={lastEditor} botActor={editorBot}/></span>
             <time dateTime={lastEditedAt}>{formatDate(lastEditedAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
           </div>
         </div>

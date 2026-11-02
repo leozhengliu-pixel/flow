@@ -464,12 +464,13 @@ button.document-icon.is-empty:hover,
 }
 
 @media (min-width: 801px) {
+  .document-actions-menu { width: max-content; min-width: 264px; }
   .document-header { padding: 0; gap: 12px; }
   .document-header-title-group { min-width: 0; display: flex; align-items: center; gap: 6px; }
   .document-breadcrumbs { padding-left: 18px; }
   .document-header-actions { padding-right: 8px; }
   .document-icon { padding: 0 8px; }
-  .document-title { height: 32px; line-height: 38.4px; }
+  .document-title { height: 32px; line-height: 32px; letter-spacing: -.16px; }
   .document-metadata-people { display: grid; grid-template-columns: max-content max-content max-content; column-gap: 12px; }
   .document-metadata-people > .document-owner-row,
   .document-metadata-people > .document-last-edit-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
@@ -480,6 +481,7 @@ button.document-icon.is-empty:hover,
   .document-last-edit-row > span:first-child,
   .document-last-edit-row time { color: var(--pk-muted); }
   .document-history-action button { padding: 0 10px 0 8px; border: 0; color: var(--pk-text); }
+  .document-edited-popover .document-meta-avatar { font-weight: 400; }
   .document-person,
   .document-person strong { color: var(--pk-text); }
   .document-icon-button[data-state="open"] { background: var(--document-open-action-bg); color: var(--bright); }

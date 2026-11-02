@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { PhoneNativeSelect } from '@/components/ui/phone-native-select'
 import { Toggle } from '@/components/ui/toggle'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { avatarColor } from '@/components/issue/avatar-color'
 import { ViaApp } from '@/components/ui/via-app'
 import { useI18n } from '@/i18n/i18n'
 import type { FlowDocument } from '@/types/flow'
@@ -210,7 +211,7 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
                           {entry.current && <em>{t('Current')}</em>}
                         </span>
                         <span className="document-history-version-author">
-                          <UserAvatar avatarUrl={entry.author?.avatarUrl} className="document-history-avatar" name={authorName(entry) || '?'}/>
+                          <UserAvatar avatarUrl={entry.author?.avatarUrl} className="document-history-avatar" color={entry.author ? avatarColor(entry.author.id) : undefined} name={authorName(entry) || '?'}/>
                           <span data-i18n-ignore>{authorName(entry)}</span><ViaApp user={entry.author} botActor={entry.botActor}/>
                         </span>
                       </div>

@@ -54,7 +54,7 @@
   :root .project-details-sidebar .project-details-sidebar__section > header > .project-details-sidebar__see-all { display: block; padding: 0 !important; font-size: 16px; line-height: 24px; }
   .project-details-sidebar__see-all > span { font-size: 12px; line-height: normal; }
   .project-milestone-menu { margin-top: 3px; padding-block: 4px; font: 450 13px var(--font); line-height: normal; }
-  .project-milestone-menu [role=menuitem] { padding-left: 12px; font-weight: 450; }
+  .project-milestone-menu [role=menuitem] { padding-left: 14px; font-weight: 450; }
   :root .project-milestone-menu [role=menuitem] > span.project-milestone-menu__submenu-arrow { color: var(--project-menu-chevron-fg); }
   .project-milestone-menu [role=menuitem][data-highlighted],
   .project-milestone-menu [role=menuitem][data-highlighted] > svg { color: var(--action-menu-active-text); }
