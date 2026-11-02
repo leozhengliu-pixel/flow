@@ -282,6 +282,7 @@ test('gives an empty cycle directory its team context without an empty sidebar l
   await expect(page.locator('.flow-cycles-empty strong')).toHaveCSS('letter-spacing', '-0.16px')
   await expect(page.locator('.cycle-team-breadcrumb__label')).toHaveCSS('gap', '6px')
   await expect(page.locator('.cycle-team-breadcrumb__separator')).toHaveCSS('margin', '-2px 8px 0px')
+  await expect(page.locator('.cycle-team-breadcrumb__separator')).toHaveCSS('color', 'lch(61.803 1.2 272)')
   await expect(page.locator('.flow-cycles-header .cycle-top-icon svg:visible')).toHaveCSS('width', '14px')
   await expect(page.locator('.cycle-team-breadcrumb')).toHaveCSS('color', 'lch(90.451 1.2 272)')
   await expect(page.locator('.flow-cycles-header h1')).toHaveCSS('transform', 'none')
