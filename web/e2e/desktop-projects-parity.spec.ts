@@ -3,7 +3,7 @@ import { test } from './workspace-fixture'
 import type { BootstrapData, Initiative, Project } from '../src/types/flow'
 
 test.skip(({ isMobile }) => isMobile, 'Desktop project geometry')
-test.use({ viewport: { width: 1440, height: 900 } })
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
 
 test('honors row properties, opens an icon-only date picker and keeps the overview rail', async ({ page, request, workspaceKey }) => {
   const headers = { 'X-Workspace-Key': workspaceKey }
@@ -17,9 +17,15 @@ test('honors row properties, opens an icon-only date picker and keeps the overvi
   await page.goto(`/${workspaceKey}/projects/all`)
   const row = page.getByRole('row', { name: project.name, exact: true })
   await expect(row).toBeVisible()
+  await expect(row.locator('strong')).toHaveCSS('color', 'lch(100 0 272)')
+  await expect(page.locator('.lp-projects')).toHaveCSS('background-color', 'lch(5.52 0.4 272)')
+  await expect(page.getByRole('columnheader', { name: 'Issues', exact: true }).locator('span')).toHaveCSS('padding-right', '12px')
   await expect(row.locator('.lp-project-row__milestone')).toBeVisible()
   await page.getByRole('button', { name: 'Display options', exact: true }).click()
   const display = page.getByRole('dialog', { name: 'Display options', exact: true })
+  await expect(display.getByRole('button', { name: 'ID', exact: true })).toHaveCSS('padding', '0px 8px')
+  await expect(display.getByRole('button', { name: 'ID', exact: true })).toHaveCSS('color', 'lch(64.714 1.425 272)')
+  await expect(display.getByRole('heading', { name: 'List options', exact: true })).toHaveCSS('padding', '0px')
   await display.locator('.lp-projects-display-select').filter({ has: page.locator('> span', { hasText: /^Grouping$/ }) }).getByRole('combobox').click()
   await page.getByRole('option', { name: 'No grouping', exact: true }).click()
   await expect(page.locator('.lp-project-group__header')).toHaveCount(0)
@@ -35,6 +41,7 @@ test('honors row properties, opens an icon-only date picker and keeps the overvi
   await expect(row.locator('.lp-project-row__milestone')).toBeHidden()
   await display.getByRole('button', { name: 'Milestones', exact: true }).click()
   await page.keyboard.press('Escape')
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-project-list.png`, animations: 'disabled' })
   const date = row.locator('.lp-project-row__date')
   await expect(date).toHaveCSS('width', '28px')
   await expect(date.locator('.lp-project-row__date-icon')).toBeVisible()
