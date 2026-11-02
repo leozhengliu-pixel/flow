@@ -5,6 +5,32 @@ test.skip(({ isMobile }) => isMobile, 'desktop-only top bar parity')
 
 test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
 
+test('shapes desktop identifiers with capital spacing and tabular digits', async ({ page, request, workspaceKey }) => {
+  const headers = { 'X-Workspace-Key': workspaceKey }
+  const response = await request.get('/api/bootstrap', { headers })
+  const data = await response.json() as { teams: Array<{ id: string; key: string }> }
+  const team = data.teams[0]
+  const issue = await request.post('/api/issues', { headers, data: { title: 'Font metrics sample', teamId: team.id } })
+  expect(issue.status()).toBe(201)
+  await page.goto(`/${workspaceKey}/team/${team.key}/all`)
+  const identifier = page.locator('[data-issue-row-id] [class*="identifier"]').first()
+  await expect(identifier).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  const widths = await identifier.evaluate(element => {
+    const probe = element.cloneNode(false) as HTMLElement
+    probe.style.cssText = 'position:fixed;width:max-content;max-width:none'
+    element.parentElement!.append(probe)
+    const widths = ['FLO-53', 'FLO-11', 'FLO-99', 'PIC-2'].map(text => {
+      probe.textContent = text
+      return probe.getBoundingClientRect().width
+    })
+    probe.remove()
+    return widths
+  })
+  for (const width of widths.slice(0, 3)) expect(width).toBeCloseTo(48.93, 1)
+  expect(widths[3]).toBeCloseTo(37.52, 1)
+})
+
 test('keeps the team Issues top bar controls, view pills and tool group at the desktop metrics', async ({ page, request, workspaceKey }) => {
   const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
   expect(response.ok()).toBeTruthy()

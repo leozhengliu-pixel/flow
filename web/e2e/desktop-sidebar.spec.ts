@@ -11,6 +11,18 @@ test('matches the desktop sidebar header, section labels and help footer', async
   await expect(name).toHaveCSS('font-weight', '550')
   await expect(name).toHaveCSS('line-height', '23px')
   await expect(name).toHaveCSS('letter-spacing', '-0.1px')
+  await expect(name).toHaveCSS('font-variation-settings', '"opsz" 28')
+  await page.evaluate(() => document.fonts.ready)
+  const width = await name.evaluate(element => {
+    const probe = element.cloneNode(false) as HTMLElement
+    probe.textContent = 'flow-app'
+    probe.style.cssText = 'position:fixed;width:max-content;max-width:none;flex:none'
+    element.parentElement!.append(probe)
+    const width = probe.getBoundingClientRect().width
+    probe.remove()
+    return width
+  })
+  expect(width).toBeCloseTo(52.53, 1)
 
   const sectionLabel = page.locator('.section-label span').first()
   await expect(sectionLabel).toHaveCSS('font-size', '12px')
