@@ -7,6 +7,7 @@ import { formatEstimatePoints } from '@/lib/estimates'
 import { cycleStats, formatCycleDay } from './cycle-model'
 import { cycleGraphSeries, isWeekend, type CycleGraphMeasure } from './cycle-graph-model'
 import { useCycleGraph } from './use-cycle-graph'
+import { THEME_CHANGE_EVENT } from '@/lib/theme'
 
 const PLAY_PATH = 'M6.95588 5.28329L10.6901 7.43926C11.0235 7.63171 11.0235 8.11283 10.6901 8.30528L6.95588 10.4612C6.62255 10.6537 6.20588 10.4131 6.20588 10.0282L6.20588 5.71631C6.20588 5.33141 6.62255 5.09084 6.95588 5.28329Z'
 
@@ -131,10 +132,13 @@ function TimelineChart({ graph, measure, label }: { graph?: CycleGraphData; meas
       }
     }
     draw()
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(draw)
-    observer.observe(canvas)
-    return () => observer.disconnect()
+    window.addEventListener(THEME_CHANGE_EVENT, draw)
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(draw)
+    observer?.observe(canvas)
+    return () => {
+      window.removeEventListener(THEME_CHANGE_EVENT, draw)
+      observer?.disconnect()
+    }
   }, [graph, measure])
   return <canvas ref={ref} className="cycle-timeline-chart" role="img" aria-label={label}/>
 }

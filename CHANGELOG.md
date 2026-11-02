@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Repaint phone cycle timeline charts immediately when the resolved interface theme changes.
+
 - Keep document names unchanged in subscriber chips when the interface language is Chinese.
 
 - Let document action menus size to their command labels and inherit the shared menu row height.
