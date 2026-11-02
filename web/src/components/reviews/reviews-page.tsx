@@ -230,11 +230,9 @@ function ReviewList({
     { id: "created" as const, label: "Created", phoneLabel: "Created", path: reviewsPath(data.workspace.urlKey, "created") },
   ].map((item) => ({
     ...item,
-    // A tab's badge counts what that view can show with its own defaults; the open tab already has its display applied.
-    count: item.id === view
-      ? baseItems.length
-      // The incoming badge counts review requests; the viewer's own pull requests live under Created.
-      : reviewBaseItems(data, item.id, defaultReviewDisplay(item.id)).filter((review) => item.id === 'created' || review.author.id !== data.viewer.id).length,
+    // The incoming badge counts review requests; the viewer's own pull requests live under Created.
+    // Keep the count independent of the selected tab so switching views cannot change its meaning.
+    count: reviewBaseItems(data, item.id, defaultReviewDisplay(item.id)).filter((review) => item.id === 'created' || review.author.id !== data.viewer.id).length,
   }));
   return (
     <section className="reviews-list-pane">
