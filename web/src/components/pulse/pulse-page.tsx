@@ -4,6 +4,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, ChevronDown, Menu, Trash2 } from 'lucide-react'
 import { useCurrentTime } from '@/hooks/use-current-time'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { toast } from '@/lib/toast'
@@ -448,6 +449,8 @@ function PulseEmptyIllustration() {
 
 function PulseEmptyState({ copy, onCreate }: { copy: string; onCreate: () => void }) {
   const { t } = useI18n()
+  const desktop = useDesktopLayout()
+  if (desktop) return <div className="pulse-empty"><div className="pulse-empty-body"><PulseEmptyIllustration/><div className="pulse-empty-content"><div className="pulse-empty-copy"><strong>{t('Pulse')}</strong><p>{copy}</p></div><div className="pulse-empty-actions"><button onClick={onCreate} type="button">{t('New update')}</button><a href={DOCS_URL} rel="noreferrer" target="_blank">{t('Documentation')}</a></div></div></div></div>
   return <div className="pulse-empty"><div className="pulse-empty-body"><PulseEmptyIllustration/><strong>{t('Pulse')}</strong><p>{copy}</p><div><button onClick={onCreate} type="button">{t('New update')}</button><a href={DOCS_URL} rel="noreferrer" target="_blank">{t('Documentation')}</a></div></div></div>
 }
 

@@ -449,8 +449,16 @@
 }
 
 @media (min-width: 1024px) {
-  .flow-framed-workspace.pulse-page .pulse-empty-body { align-items: flex-start; gap: 0; text-align: left; }
-  .flow-framed-workspace.pulse-page .pulse-empty-body .pulse-empty-art { margin: 0 0 24px; }
+  .flow-framed-workspace.pulse-page .pulse-empty-body { align-items: flex-start; gap: 24px; text-align: left; }
+  .flow-framed-workspace.pulse-page .pulse-empty-body .pulse-empty-art { margin: 0; }
+  .flow-framed-workspace.pulse-page .pulse-empty-body > .pulse-empty-content { display: flex; width: 100%; flex-direction: column; align-items: stretch; gap: 24px; }
+  .flow-framed-workspace.pulse-page .pulse-empty-copy { display: flex; flex-direction: column; gap: 8px; }
+  .flow-framed-workspace.pulse-page .pulse-empty-copy > strong { color: var(--text); font: 600 15px/23px var(--font); }
+  .flow-framed-workspace.pulse-page .pulse-empty-copy > p { width: 100%; margin: 0; color: var(--ui-pill-fg); font: 450 13px/18.2px var(--font); }
+  .flow-framed-workspace.pulse-page .pulse-empty-actions { display: flex; width: 100%; align-items: center; gap: 8px; }
+  .flow-framed-workspace.pulse-page .pulse-empty-actions > button,
+  .flow-framed-workspace.pulse-page .pulse-empty-actions > a { padding: 0 10px; font-size: 12px; font-weight: 500; }
+  .flow-framed-workspace.pulse-page .pulse-empty-actions > a { background: var(--ui-pill-bg); color: var(--text); box-shadow: 0 0 0 .5px var(--ui-pill-ring), var(--ui-pill-shadow); }
   .flow-framed-workspace.pulse-page .pulse-empty-body > strong { width: 100%; color: var(--text); }
   .flow-framed-workspace.pulse-page .pulse-empty-body > div { justify-content: flex-start; }
   .flow-framed-workspace.pulse-page .pulse-empty-body > div > button { font-size: 12px; }
