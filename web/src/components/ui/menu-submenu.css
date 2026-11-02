@@ -48,7 +48,7 @@
   :is([data-phone-menu],[data-phone-submenu],[data-phone-menu-options]) :is([role="menuitem"],[role="menuitemcheckbox"],[role="option"])::before {
     content: "";
     position: absolute;
-    inset: 2px 0 !important;
+    inset: var(--phone-menu-highlight-inset) !important;
     z-index: -1;
     border-radius: 8px;
     pointer-events: none;

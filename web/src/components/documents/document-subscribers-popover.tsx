@@ -82,7 +82,7 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
             const checked = isSubscribed(user)
             const name = user.displayName || user.name
             const kind = user.builtinAgent ? 'agent' : user.app ? 'oauth' : 'member'
-            return <button aria-checked={checked} aria-label={name} className="document-subscribers__row" data-subscribed={checked} data-subscriber-kind={kind} disabled={busy || Boolean(pending)} key={user.id} onClick={() => void toggle(user, checked)} role="checkbox" type="button">
+            return <button aria-checked={checked} aria-label={name} className="menu-option document-subscribers__row" data-subscribed={checked} data-subscriber-kind={kind} disabled={busy || Boolean(pending)} key={user.id} onClick={() => void toggle(user, checked)} role="checkbox" type="button">
               <span className="document-subscribers__check" data-checked={checked}>{checked && <CheckboxMark/>}</span>
               <span className="document-subscribers__avatar-wrap"><UserAvatar avatarUrl={user.avatarUrl} className="document-meta-avatar" color={avatarColor(user.id)} name={name}/>{kind !== 'agent' && <span aria-hidden="true" className="document-subscribers__avatar-label">{name}</span>}</span>
               <span className="document-subscribers__name" data-i18n-ignore>{name}</span>

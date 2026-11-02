@@ -2,7 +2,7 @@ import { expect } from '@playwright/test'
 import { test } from './workspace-fixture'
 import type { BootstrapData } from '../src/types/flow'
 
-test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true })
+test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
 test('keyboard navigation clears the previous pointer highlight in display selects', async ({ page, workspaceKey }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
@@ -73,4 +73,28 @@ test('team phone menu and subscription level share row geometry and return focus
   await submenu.getByRole('button', { name: 'Back', exact: true }).click()
   await expect(menu).toBeVisible()
   await expect(subscribe).toBeFocused()
+})
+
+test('checked document subscribers keep the shared highlight under pointer and keyboard', async ({ page, request, workspaceKey }) => {
+  const headers = { 'X-Workspace-Key': workspaceKey }
+  const response = await request.post('/api/documents', { headers, data: { title: 'Subscriber highlight check' } })
+  expect(response.status()).toBe(201)
+  const document = await response.json() as { slugId: string }
+  await page.goto(`/${workspaceKey}/document/${document.slugId}`)
+  await page.getByRole('button', { name: 'Change document subscribers', exact: true }).click()
+  const panel = page.locator('.document-subscribers')
+  const person = panel.getByRole('checkbox').first()
+  if (await person.getAttribute('aria-checked') !== 'true') await person.click()
+  await expect(person).toHaveAttribute('aria-checked', 'true')
+  await person.hover()
+  await expect.poll(() => person.evaluate(e => {
+    const paint = getComputedStyle(e, '::before')
+    return { background: paint.backgroundColor, inset: paint.inset, radius: paint.borderRadius }
+  })).toMatchObject({ inset: '2px 0px', radius: '8px' })
+  await expect.poll(() => person.evaluate(e => getComputedStyle(e, '::before').backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
+  await page.mouse.move(0, 0)
+  await panel.getByRole('textbox').focus()
+  await page.keyboard.press('Tab')
+  await expect(person).toBeFocused()
+  await expect.poll(() => person.evaluate(e => getComputedStyle(e, '::before').backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
 })
