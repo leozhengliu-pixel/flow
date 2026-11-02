@@ -185,6 +185,23 @@ test('shows persisted initiative updates with a docked, collapsible properties a
   await page.goto(`/${workspaceKey}/initiatives`)
   await expect(page.locator('.li-project-count__ring')).toBeVisible()
   await expect(page.locator('.li-project-count')).toHaveText('0 / 0')
+  await expect(page.locator('.li-page-header h2')).toHaveCSS('color', 'lch(90.451 1.2 272)')
+  await expect(page.locator('.li-name strong')).toHaveCSS('color', 'lch(90.451 1.2 272)')
+  for (const label of ['Owner', 'Projects', 'Active Projects']) {
+    const heading = page.locator('.li-columns > span').filter({ hasText: new RegExp(`^${label}$`) })
+    await expect(heading).toHaveCSS('font-weight', '450')
+    await expect(heading).toHaveCSS('color', 'lch(61.803 1.2 272)')
+    await expect(heading).toHaveCSS('padding', '0px 12px 0px 0px')
+  }
+  await expect(page.locator('.li-active-projects')).toHaveCSS('min-width', '32px')
+  await expect(page.locator('.li-row')).toHaveCSS('column-gap', '12px')
+  await expect(page.locator('.li-columns')).toHaveCSS('column-gap', '12px')
+  await expect(page.getByRole('button', { name: 'Order by Status', exact: true })).toHaveCSS('margin', '0px -6px')
+  await expect(page.locator('.li-cell--status')).toHaveCSS('width', '100px')
+  await expect(page.locator('.li-cell--priority')).toHaveCSS('width', '56px')
+  await expect(page.locator('.li-cell--target')).toHaveCSS('width', '100px')
+  await expect(page.locator('.li-cell--activeProjects')).toHaveCSS('margin-left', '-3px')
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-initiative-list.png`, animations: 'disabled' })
 })
 
 test('gives an empty cycle directory its team context without an empty sidebar link', async ({ page, request, workspaceKey }) => {
