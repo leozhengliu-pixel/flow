@@ -1,9 +1,9 @@
 import { expect } from '@playwright/test'
-import { test } from './workspace-fixture'
+import { test } from './issue-list-fixture'
 
 test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
 
-test('uses desktop column gutters and the hidden status line height', async ({ page, request, workspaceKey }) => {
+test('uses desktop column gutters and the hidden status line height', async ({ page, request, workspaceKey, issueList }) => {
   const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
   expect(response.ok()).toBeTruthy()
   const { teams } = await response.json() as { teams: Array<{ key: string }> }
@@ -15,6 +15,8 @@ test('uses desktop column gutters and the hidden status line height', async ({ p
 
   const column = page.locator('[data-board-column]').first()
   await expect(column).toBeVisible()
+  const title = page.getByText(issueList.issues[0].title, { exact: true })
+  await expect(title).toHaveCSS('color', 'lch(100 0 272)')
   await expect(column).toHaveCSS('width', '356px')
   const header = column.locator('[data-board-column-header] > header')
   await expect(header).toHaveCSS('padding', '2px 12px 0px 18px')

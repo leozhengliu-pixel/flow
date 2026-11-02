@@ -18,6 +18,7 @@ test('keeps the team Issues top bar controls, view pills and tool group at the d
   await expect(header.getByRole('link', { name: 'Setup team notifications' })).toBeVisible()
   await expect(header.getByRole('button', { name: 'New issue', exact: true })).toBeVisible()
   await expect(header.locator('[data-current]')).toHaveCSS('color', 'lch(90.451 1.2 272)')
+  await expect(header.locator('[data-content-view-breadcrumb] a>span:last-child')).toHaveCSS('color', 'lch(90.451 1.2 272)')
   await expect(page.locator('[data-content-view-subheader]')).toHaveCSS('gap', '6px')
 
   const geometry = await page.evaluate(() => {
