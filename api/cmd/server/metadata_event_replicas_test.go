@@ -25,7 +25,10 @@ import (
 	"flow/api/internal/store"
 )
 
-var metadataReplicaEvents = []string{"release_pipeline.access_key_used", "agent.message_feedback", "agent.session_feedback", "agent.message_changes", "agent.approval_resolved", "release_pipeline.access_key_revoked"}
+var metadataReplicaEvents = []string{
+	"release_pipeline.access_key_used", "agent.message_feedback", "agent.session_feedback", "agent.message_changes", "agent.approval_resolved", "release_pipeline.access_key_revoked",
+	"document.attachment_created", "document.attachment_saved", "document.attachment_deleted", "email_intake.updated", "oauth_application.secret_rotated", "review.written_back",
+}
 
 func metadataReplicaID(kind string, replica int) string {
 	return fmt.Sprintf("metadata_%s_%d", kind, replica)
@@ -56,6 +59,41 @@ func metadataReplicaEdit(data *domain.Bootstrap, event string, replica, round in
 		session.Messages[0].Parts[0].ToolCall.Change = &domain.AgentChange{State: "undone", Note: note, UpdatedAt: &stamp}
 	case "agent.approval_resolved":
 		session.Messages[0].Parts[1].Question.Approval.Decision = note
+	case "document.attachment_created", "document.attachment_saved", "document.attachment_deleted":
+		document, err := documentByID(data, metadataReplicaID("document", replica))
+		if err != nil {
+			return err
+		}
+		switch event {
+		case "document.attachment_created":
+			document.Attachments = append(document.Attachments, domain.Attachment{ID: fmt.Sprintf("created_%d", round), Title: note, CreatedAt: stamp})
+		case "document.attachment_saved":
+			index := slices.IndexFunc(document.Attachments, func(a domain.Attachment) bool { return a.ID == "saved" })
+			if index < 0 {
+				return errNotFound
+			}
+			document.Attachments[index].Title, document.Attachments[index].UpdatedAt = note, &stamp
+		case "document.attachment_deleted":
+			document.Attachments = slices.DeleteFunc(document.Attachments, func(a domain.Attachment) bool { return a.ID == fmt.Sprintf("delete_%d", round) })
+		}
+	case "email_intake.updated":
+		index := slices.IndexFunc(data.EmailIntakeAddresses, func(a domain.EmailIntakeAddress) bool { return a.ID == metadataReplicaID("intake", replica) })
+		if index < 0 {
+			return errNotFound
+		}
+		data.EmailIntakeAddresses[index].SenderName = note
+	case "oauth_application.secret_rotated":
+		index := slices.IndexFunc(data.OAuthApplications, func(a domain.OAuthApplication) bool { return a.ID == metadataReplicaID("application", replica) })
+		if index < 0 {
+			return errNotFound
+		}
+		data.OAuthApplications[index].ClientSecret = note
+	case "review.written_back":
+		index := slices.IndexFunc(data.Reviews, func(a domain.CodeReview) bool { return a.ID == metadataReplicaID("review", replica) })
+		if index < 0 {
+			return errNotFound
+		}
+		data.Reviews[index].Events[0].Sync = &domain.ReviewEventSync{State: "failed", Error: note, AttemptedAt: stamp}
 	default:
 		return errInvalid
 	}
@@ -127,9 +165,25 @@ func TestMetadataEventTwoReplicaGate(t *testing.T) {
 		if _, err := repo.CreateWorkspace(t.Context(), "Metadata scale", contractReplicaWorkspace, "us"); err != nil {
 			t.Fatal(err)
 		}
+		if err := repo.MutateWorkspace(t.Context(), contractReplicaWorkspace, "test.metadata_content", "seed", nil, func(data *domain.Bootstrap) error {
+			data.Issues = append(data.Issues, domain.Issue{ID: "metadata_issue", Identifier: "META-1", Number: 1, Title: "Unchanged", Team: data.Teams[0], State: data.States[0], Creator: data.Viewer, Version: 1})
+			if data.Comments == nil {
+				data.Comments = map[string][]domain.Comment{}
+			}
+			if data.Activities == nil {
+				data.Activities = map[string][]domain.ActivityEvent{}
+			}
+			data.Comments["metadata_issue"] = []domain.Comment{{ID: "metadata_comment", Body: "Unchanged", User: data.Viewer}}
+			data.Activities["metadata_issue"] = []domain.ActivityEvent{{ID: "metadata_activity", Type: "issue.created", Actor: data.Viewer}}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	err = repo.MutateWorkspace(t.Context(), contractReplicaWorkspace, "loop.created", "metadata_seed", nil, func(data *domain.Bootstrap) error {
 		data.AgentSessions, data.ReleasePipelines, data.Drafts = nil, nil, nil
+		data.Webhooks = nil
+		data.Documents, data.EmailIntakeAddresses, data.OAuthApplications, data.Reviews = nil, nil, nil, nil
 		for i := range 2 {
 			data.AgentSessions = append(data.AgentSessions, domain.AgentSession{ID: metadataReplicaID("session", i), UserID: data.Viewer.ID, Messages: []domain.AgentMessage{{ID: "reply", Role: "assistant", Parts: []domain.AgentMessagePart{
 				{ID: "tool", ToolCall: &domain.AgentToolCall{Change: &domain.AgentChange{Undoable: true}}},
@@ -137,6 +191,14 @@ func TestMetadataEventTwoReplicaGate(t *testing.T) {
 			}}}})
 			data.ReleasePipelines = append(data.ReleasePipelines, domain.ReleasePipeline{ID: metadataReplicaID("pipeline", i), Name: "Metadata"})
 			data.Drafts = append(data.Drafts, domain.Draft{ID: metadataReplicaID("draft", i), Type: "issue", UserID: data.Viewer.ID})
+			attachments := []domain.Attachment{{ID: "saved"}}
+			for round := range 12 {
+				attachments = append(attachments, domain.Attachment{ID: fmt.Sprintf("delete_%d", round)})
+			}
+			data.Documents = append(data.Documents, domain.Document{ID: metadataReplicaID("document", i), Creator: data.Viewer, Attachments: attachments})
+			data.EmailIntakeAddresses = append(data.EmailIntakeAddresses, domain.EmailIntakeAddress{ID: metadataReplicaID("intake", i), TeamID: data.Teams[0].ID})
+			data.OAuthApplications = append(data.OAuthApplications, domain.OAuthApplication{ID: metadataReplicaID("application", i)})
+			data.Reviews = append(data.Reviews, domain.CodeReview{ID: metadataReplicaID("review", i), Events: []domain.ReviewEvent{{ID: "event"}}})
 		}
 		return nil
 	})
@@ -300,6 +362,35 @@ func TestMetadataEventTwoReplicaGate(t *testing.T) {
 			return d.ID == metadataReplicaID("draft", i) && d.Title == fmt.Sprintf("Replica %d round %d", i, rounds-1) && d.Body == fmt.Sprintf("Saved body %d", rounds-1)
 		}) {
 			t.Fatalf("replica %d lost draft", i)
+		}
+		document, err := documentByID(&data, metadataReplicaID("document", i))
+		if err != nil || len(document.Attachments) != rounds+1 {
+			t.Fatalf("replica %d lost attachments", i)
+		}
+		if !slices.ContainsFunc(document.Attachments, func(a domain.Attachment) bool { return a.ID == "saved" && a.Title == note }) {
+			t.Fatalf("replica %d lost saved link", i)
+		}
+		for round := range rounds {
+			if !slices.ContainsFunc(document.Attachments, func(a domain.Attachment) bool {
+				return a.ID == fmt.Sprintf("created_%d", round) && a.Title == fmt.Sprintf("replica %d round %d", i, round)
+			}) {
+				t.Fatalf("lost upload round %d", round)
+			}
+		}
+		if !slices.ContainsFunc(data.EmailIntakeAddresses, func(a domain.EmailIntakeAddress) bool {
+			return a.ID == metadataReplicaID("intake", i) && a.SenderName == note
+		}) {
+			t.Fatalf("replica %d lost intake edit", i)
+		}
+		if !slices.ContainsFunc(data.OAuthApplications, func(a domain.OAuthApplication) bool {
+			return a.ID == metadataReplicaID("application", i) && a.ClientSecret == note
+		}) {
+			t.Fatalf("replica %d lost secret rotation", i)
+		}
+		if !slices.ContainsFunc(data.Reviews, func(a domain.CodeReview) bool {
+			return a.ID == metadataReplicaID("review", i) && a.Events[0].Sync != nil && a.Events[0].Sync.Error == note
+		}) {
+			t.Fatalf("replica %d lost writeback", i)
 		}
 	}
 	t.Logf("METADATA_REPLICAS driver=%s processes=2 events=%d requests=%d busy=0 lost_updates=0 content_sha256=%s elapsed=%s", config.Driver, len(metadataReplicaEvents), rounds*2*(len(metadataReplicaEvents)+1), before, time.Since(started).Round(time.Millisecond))
