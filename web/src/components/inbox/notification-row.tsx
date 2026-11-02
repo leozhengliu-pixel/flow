@@ -9,6 +9,7 @@ import { useCallback, useRef, useState, type CSSProperties, type FocusEvent, typ
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { PulseIcon } from '@/components/pulse/pulse-icon'
 import { DateTimeControl } from '@/components/ui/date-time-control'
+import { MenuSubmenu } from '@/components/ui/menu-submenu'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import type { WorkflowState } from '@/types/flow'
 
@@ -323,19 +324,14 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
           <RowMenuItem shortcut="⌫" icon={<DeleteIcon />} disabled={disabled} onSelect={() => props.onDelete(notification)}>
             {t('Delete notification')}
           </RowMenuItem>
-          <ContextMenu.Sub>
-            <ContextMenu.SubTrigger className="flow-inbox-menu__item" disabled={disabled}>
-              <span className="flow-inbox-menu__item-icon"><SnoozeIcon /></span>
-              <span className="flow-inbox-menu__item-label">{t('Snooze')}</span>
-              <kbd className="flow-inbox-menu__shortcut">H</kbd>
-              <span className="flow-inbox-menu__trailing"><ChevronRight size={14} strokeWidth={1.5} /></span>
-            </ContextMenu.SubTrigger>
-            <ContextMenu.Portal>
-              <ContextMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-snooze-menu flow-inbox-context-snooze" sideOffset={phone ? 4 : -1.5} alignOffset={phone ? -37 : -43}>
-                <RowSnoozeMenu notification={notification} disabled={disabled} onSnooze={props.onSnooze} />
-              </ContextMenu.SubContent>
-            </ContextMenu.Portal>
-          </ContextMenu.Sub>
+          <MenuSubmenu label={t('Snooze')} triggerProps={{ className: 'flow-inbox-menu__item', disabled }} trigger={<>
+            <span className="flow-inbox-menu__item-icon"><SnoozeIcon /></span>
+            <span className="flow-inbox-menu__item-label">{t('Snooze')}</span>
+            <kbd className="flow-inbox-menu__shortcut">H</kbd>
+            <span className="flow-inbox-menu__trailing"><ChevronRight size={14} strokeWidth={1.5} /></span>
+          </>} contentProps={{ 'data-flow-motion': 'floating', className: 'flow-inbox-menu flow-inbox-snooze-menu flow-inbox-context-snooze', sideOffset: phone ? 4 : -1.5, alignOffset: phone ? -37 : -43 }}>
+            <RowSnoozeMenu notification={notification} disabled={disabled} onSnooze={props.onSnooze} />
+          </MenuSubmenu>
           {pulse && props.onPulseFrequencyChange ? (
             <PulseFrequencyContextSubmenu
               value={props.pulseFrequency ?? 'daily'}

@@ -3,6 +3,8 @@ import { Check, Plus } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { LabelGroupIcon } from '@/components/issue/issue-icons'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
+import { PhoneSubmenuBack } from '@/components/ui/menu-submenu'
+import { usePhoneSubmenuLevel } from '@/components/ui/use-phone-submenu-level'
 import { useI18n } from '@/i18n/i18n'
 import type { PropertyOption } from './property-menu'
 import { projectLabelEntries, type ProjectLabelEntry } from './project-label-menu-model'
@@ -101,6 +103,9 @@ function ProjectLabelGroup({ entry, id, active, open, focusOnOpen, onOpenChange,
   const listId = useId()
   const { t } = useI18n()
   const options = (entry.children ?? []).filter(option => option.label.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+  const [trigger, setTrigger] = useState<HTMLButtonElement | null>(null)
+  const [content, setContent] = useState<HTMLDivElement | null>(null)
+  const phone = usePhoneSubmenuLevel(open, trigger, content)
   const canCreate = Boolean(onCreate && query.trim().length >= 2 && !entry.children?.some(option => option.label.toLocaleLowerCase() === query.trim().toLocaleLowerCase()))
   const cancel = () => { clearTimeout(timer.current); timer.current = undefined }
   useEffect(() => cancel, [])
@@ -119,11 +124,12 @@ function ProjectLabelGroup({ entry, id, active, open, focusOnOpen, onOpenChange,
     if (event.key === 'Enter' && options[activeIndex] && !options[activeIndex].disabled) { event.preventDefault(); onChoose(options[activeIndex]) }
   }
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
-    <Popover.Anchor asChild><button id={id} type="button" role="option" className="project-label-option is-group" aria-label={[entry.label, entry.detail].filter(Boolean).join(' ')} aria-selected={entry.checked} aria-checked={entry.checked} data-active={active || open} aria-haspopup="listbox" aria-expanded={open} onPointerEnter={() => { cancel(); timer.current = setTimeout(() => onOpenChange(true, false), 200) }} onPointerLeave={cancel} onFocus={() => onOpenChange(true)} onClick={() => onOpenChange(true)}>
+    <Popover.Anchor asChild><button ref={setTrigger} id={id} type="button" role="option" className="project-label-option is-group" aria-label={[entry.label, entry.detail].filter(Boolean).join(' ')} aria-selected={entry.checked} aria-checked={entry.checked} data-active={active || open} aria-haspopup="listbox" aria-expanded={open} onPointerEnter={() => { if (phone) return; cancel(); timer.current = setTimeout(() => onOpenChange(true, false), 200) }} onPointerLeave={cancel} onFocus={() => { if (!phone) onOpenChange(true) }} onClick={() => onOpenChange(true)}>
       <span className="project-label-option-bg"/>{entry.checked && <span className="project-label-checkbox" onPointerDown={event => event.preventDefault()} onClick={event => { event.stopPropagation(); cancel(); const selected = entry.children?.find(option => selectedIds.includes(option.id)); if (selected) onClear(selected) }}><CheckboxMark/></span>}
       <span className="project-label-option-icon"><LabelGroupIcon size={16} color={entry.color}/></span><span className="project-label-option-name" data-i18n-ignore>{entry.label}</span>{entry.detail && <span className="project-label-option-detail" data-i18n-ignore>{entry.detail}</span>}<span className="project-label-chevron" aria-hidden="true">▶</span>
     </button></Popover.Anchor>
-    <Popover.Portal container={portalContainer}><Popover.Content data-flow-motion="floating" className="project-label-submenu" side="right" align="start" alignOffset={-6.5} sideOffset={-2} collisionPadding={10} onOpenAutoFocus={event => { event.preventDefault(); if (focusOnOpen) inputRef.current?.focus() }} onCloseAutoFocus={event => { event.preventDefault() }} onKeyDown={onKeyDown} onClick={event => event.stopPropagation()}>
+    <Popover.Portal container={phone ? undefined : portalContainer}><Popover.Content ref={setContent} data-flow-motion="floating" data-phone-submenu={phone ? '' : undefined} className="project-label-submenu" side="right" align="start" alignOffset={-6.5} sideOffset={-2} collisionPadding={10} onOpenAutoFocus={event => { event.preventDefault(); if (focusOnOpen) inputRef.current?.focus() }} onCloseAutoFocus={event => { event.preventDefault() }} onInteractOutside={event => { if (phone && event.target instanceof Node && trigger?.contains(event.target)) event.preventDefault() }} onKeyDown={onKeyDown} onClick={event => event.stopPropagation()}>
+      {phone && <PhoneSubmenuBack label={entry.label} onBack={onBack}/>}
       <div className={`project-label-search${!query ? ' is-hidden' : ''}`}><input ref={inputRef} aria-label={entry.label} placeholder={entry.label} value={query} onChange={event => { setQuery(event.target.value); setActiveIndex(0) }} aria-controls={listId} aria-activedescendant={options[activeIndex] ? `${listId}-${options[activeIndex].id}` : undefined}/></div>
       <div className="project-label-options" id={listId} role="listbox" aria-label={entry.label} aria-multiselectable={false}>{options.map((option, index) => <ProjectLabelOption key={option.id} id={`${listId}-${option.id}`} entry={{ id: option.id, label: option.label, color: option.color, checked: selectedIds.includes(option.id), option }} active={index === activeIndex} multiple={false} onActive={() => setActiveIndex(index)} onChoose={() => onChoose(option)}/>)}{canCreate && <ProjectLabelCreateOption name={query.trim()} groupName={entry.label} onCreate={() => onCreate?.(query.trim())}/>} {!options.length && !canCreate && <div className="core-property-empty">{t('No results')}</div>}</div>
     </Popover.Content></Popover.Portal>

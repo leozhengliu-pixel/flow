@@ -7,6 +7,7 @@ import { useI18n } from '@/i18n/i18n'
 import { AppLink } from './app-link'
 import { FlowGlyph } from './menu-glyphs'
 import { SubmenuChevron } from './submenu-chevron'
+import { MenuSubmenu } from './menu-submenu'
 import { createShortcutMatcher, shortcutSteps, takeQueuedShortcut } from './menu-shortcuts'
 import './row-context-menu.css'
 
@@ -162,24 +163,18 @@ export function FlowSubmenu({ icon, label, detail, shortcut, children, className
     })
     return () => cancelAnimationFrame(frame)
   }, [container])
-  return <Kit.Sub open={open} onOpenChange={setOpen}>
-    <Kit.SubTrigger ref={setTrigger}className="flow-menu__row" data-menu-item={label} disabled={disabled}>
-      <FlowMenuRowContent icon={icon} label={text} detail={detail} shortcut={shortcut} submenu/>
-    </Kit.SubTrigger>
-    <Kit.Portal>
-      <RegistryContext.Provider value={registry}>
-        <Kit.SubContent ref={setContainer} data-flow-motion="floating" aria-label={text} className={`flow-menu flow-menu--sub${search ? ' has-search' : ''} ${className}`} data-menu={label} sideOffset={-2} alignOffset={search ? -42.3 : -6.5} collisionPadding={12}
-          onFocusOutside={event => {
-            // Radix briefly focuses the parent menu while the pointer crosses into the submenu.
-            const target = event.target
-            if (target instanceof HTMLElement && target.matches('[role=menu]') && target.contains(trigger)) event.preventDefault()
-          }}
-          onKeyDown={onKeyDown}>
-          {typeof children === 'function' ? children({ close, container }) : children}
-        </Kit.SubContent>
-      </RegistryContext.Provider>
-    </Kit.Portal>
-  </Kit.Sub>
+  return <MenuSubmenu kit={Kit} label={text} open={open} onOpenChange={setOpen}
+    triggerProps={{ ref: setTrigger, className: 'flow-menu__row', 'data-menu-item': label, disabled }}
+    trigger={<FlowMenuRowContent icon={icon} label={text} detail={detail} shortcut={shortcut} submenu/>}
+    contentProps={{ ref: setContainer, 'data-flow-motion': 'floating', 'aria-label': text, className: `flow-menu flow-menu--sub${search ? ' has-search' : ''} ${className}`, 'data-menu': label, sideOffset: -2, alignOffset: search ? -42.3 : -6.5, collisionPadding: 12,
+      onFocusOutside: event => {
+        // Radix briefly focuses the parent menu while the pointer crosses into the submenu.
+        const target = event.target
+        if (target instanceof HTMLElement && target.matches('[role=menu]') && target.contains(trigger)) event.preventDefault()
+      },
+      onKeyDown }}>
+    <RegistryContext.Provider value={registry}>{typeof children === 'function' ? children({ close, container }) : children}</RegistryContext.Provider>
+  </MenuSubmenu>
 }
 
 /** Filter field at the top of a submenu (the reference app: "Change status…", "Set lead…", "Filter…"). */

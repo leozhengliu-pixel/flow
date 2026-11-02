@@ -21,6 +21,7 @@ import { ContextMenuIcon } from './context-menu-icon'
 import { SubmenuChevron } from '@/components/ui/submenu-chevron'
 import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { FlowCodingToolsIcon } from '@/components/issue/flow-header-icons'
+import { MenuSubmenu } from '@/components/ui/menu-submenu'
 
 export function IssueRowActionsProvider({ value, children }: { value: IssueRowActionContextValue; children: ReactNode }) {
   return <IssueRowActionContext.Provider value={value}>{children}</IssueRowActionContext.Provider>
@@ -215,7 +216,7 @@ function Item({ label, icon, shortcut, checked, top = false, onSelect }: { label
 
 function Sub({ label, shortcut, issueSearch = false, children }: { label: string; shortcut?: string; issueSearch?: boolean; children: ReactNode }) {
   const desktop = useDesktopLayout()
-  return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true"><SubmenuChevron/></span></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={issueSearch ? `${styles.contextSubmenu} ${styles.issueSubmenu}` : styles.contextSubmenu} sideOffset={desktop ? 4.5 : 3} alignOffset={desktop ? -6.5 : -5}>{issueSearch ? children : <div className={styles.contextMenuList}>{children}</div>}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
+  return <MenuSubmenu label={label} triggerProps={{ className: styles.menuItem }} trigger={<><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true"><SubmenuChevron/></span></>} contentProps={{ 'data-flow-motion': 'floating', className: issueSearch ? `${styles.contextSubmenu} ${styles.issueSubmenu}` : styles.contextSubmenu, sideOffset: desktop ? 4.5 : 3, alignOffset: desktop ? -6.5 : -5 }}>{issueSearch ? children : <div className={styles.contextMenuList}>{children}</div>}</MenuSubmenu>
 }
 
 function IssueSearch({ data, exclude, onPick }: { data: BootstrapData; exclude: string; onPick: (issue: Issue) => void }) {
