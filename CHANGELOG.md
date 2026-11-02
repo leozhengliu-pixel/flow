@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Verify desktop text shaping, equal-width digits, and workspace-name containment without platform-specific glyph-width snapshots.
+
 - Check desktop issue picker readability and search behavior across platforms without fitting tests to intrinsic input widths.
 
 - Keep desktop issue project search on screen when a long project menu opens above its trigger, scrolling the options within the available space.

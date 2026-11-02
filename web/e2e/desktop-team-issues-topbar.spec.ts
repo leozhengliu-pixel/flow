@@ -14,7 +14,10 @@ test('shapes desktop identifiers with capital spacing and tabular digits', async
   expect(issue.status()).toBe(201)
   await page.goto(`/${workspaceKey}/team/${team.key}/all`)
   const identifier = page.locator('[data-issue-row-id] [class*="identifier"]').first()
-  await expect(identifier).toBeVisible()
+  await expect(identifier).toBeInViewport({ ratio: 1 })
+  await expect(identifier).toHaveCSS('font-feature-settings', '"calt", "cpsp", "tnum"')
+  await expect(identifier).toHaveCSS('font-variant-numeric', 'tabular-nums')
+  await expect(identifier).toHaveCSS('letter-spacing', '-0.26px')
   await page.evaluate(() => document.fonts.ready)
   const widths = await identifier.evaluate(element => {
     const probe = element.cloneNode(false) as HTMLElement
@@ -27,8 +30,10 @@ test('shapes desktop identifiers with capital spacing and tabular digits', async
     probe.remove()
     return widths
   })
-  for (const width of widths.slice(0, 3)) expect(width).toBeCloseTo(48.93, 1)
-  expect(widths[3]).toBeCloseTo(37.52, 1)
+  // Glyph advances differ across platforms; tabular digits must still align.
+  for (const width of widths.slice(1, 3)) expect(width).toBeCloseTo(widths[0], 3)
+  expect(widths[3]).toBeLessThan(widths[0])
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-identifiers.png`, animations: 'disabled' })
 })
 
 test('keeps the team Issues top bar controls, view pills and tool group at the desktop metrics', async ({ page, request, workspaceKey }) => {
