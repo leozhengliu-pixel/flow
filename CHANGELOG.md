@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Keep desktop loop picker entity names at the primary foreground while retaining muted team keys and phone styling.
+
 - Keep the selected property option highlighted when a picker opens or its options finish loading.
 
 - Give desktop notification menus a separate list inset and snooze separator while preserving phone menus and dated snooze actions.

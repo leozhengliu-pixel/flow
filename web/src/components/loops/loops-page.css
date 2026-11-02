@@ -943,9 +943,8 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
   .loops-run-instructions-title { margin-left: -6px; }
   .loops-run-instructions-title svg { width: 16px; height: 16px; }
   .loops-permission-value { font-weight: 400; }
-  .loops-picker-copy { color: var(--inbox-filter-muted); }
+  .loops-picker-copy { color: var(--bright); }
   .loops-picker-copy small { color: var(--inbox-filter-arrow); font-size: 13px; }
-  .loops-picker-item[data-selected='true'] .loops-picker-copy { color: var(--bright); }
   .loops-title h2,
   .loops-breadcrumb h2:not(.loops-breadcrumb-current) { color: var(--text); }
   .loops-topbar,
