@@ -264,7 +264,7 @@
   box-shadow: var(--shadow);
   cursor: pointer;
 }
-.document-history-action button:hover { background: var(--theme-surface-hover); }
+.document-history-action button:hover:not(:disabled) { background: var(--control-button-hover-bg); }
 .document-history-action svg { width: 14px; height: 14px; color: var(--theme-text-secondary); }
 
 /* ---------- subscribers popover ---------- */
@@ -642,7 +642,7 @@ button.document-icon.is-empty:hover,
     border-radius: 0;
     font: 450 13px/15.6px var(--font);
   }
-  .document-subscribers__row[data-subscribed="true"]::before { background: transparent; }
+  .document-subscribers__row[data-subscribed="true"]:not(:hover):not(:focus-visible)::before { background: transparent; }
   .document-subscribers__row .document-meta-avatar { width: 18px; height: 18px; flex-basis: 18px; }
   .document-subscribers__avatar-wrap { position: relative; width: 18px; height: 18px; flex: 0 0 18px; }
   .document-subscribers__avatar-label { position: absolute; inset: 0; overflow: hidden; opacity: 0; pointer-events: none; font: 400 9px/normal var(--font); white-space: nowrap; }

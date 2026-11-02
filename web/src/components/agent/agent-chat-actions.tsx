@@ -45,7 +45,7 @@ export function AgentChatMenu({ align = 'start', className, unsaved = false, onC
         type="button"
       ><FlowGlyph name="ellipsis" size={14}/></button>
       <PhoneCommandMenu
-        className="agent-chat-options-phone-menu"
+        className="agent-chat-options-phone-menu phone-menu-compact-text"
         label={t('Chat options')}
         onCloseAutoFocus={event => {
           event.preventDefault()

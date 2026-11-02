@@ -261,7 +261,7 @@ function SelectControl<T extends string>({ ariaLabel, disabled = false, onChange
     <Select.Portal>
       <Select.Content data-flow-motion="floating" className={styles.selectMenu} position="popper" side="bottom" align="end" sideOffset={5} collisionPadding={10}>
         <Select.Viewport className={styles.selectViewport}>
-          {options.map(option => <Select.Item className={styles.selectItem} key={option.value} value={option.value}>
+          {options.map(option => <Select.Item className={`menu-option ${styles.selectItem}`} key={option.value} value={option.value}>
             <Select.ItemText>{t(option.label)}</Select.ItemText>
             <Select.ItemIndicator className={styles.selectIndicator}><Check size={13} aria-hidden="true" /></Select.ItemIndicator>
           </Select.Item>)}

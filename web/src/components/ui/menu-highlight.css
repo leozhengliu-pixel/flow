@@ -1,0 +1,19 @@
+.menu-option {
+  position: relative;
+  isolation: isolate;
+}
+
+.menu-option::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: var(--menu-highlight-inset, 0 6px);
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.menu-option:is(:focus-visible,[aria-selected="true"],[data-highlighted]):not(:disabled):not([aria-disabled="true"]):not([data-disabled])::before {
+  background: var(--menu-highlight-bg, var(--pk-hover));
+}
+
+.menu-option:focus-visible { outline: none; }

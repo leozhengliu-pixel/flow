@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Restore shared inset menu highlights, chip hover feedback and perceptible button hover in both themes.
+
 - Reserve separate label checkbox and icon tracks and reveal unchecked subscription boxes on highlight.
 
 - Let filter value menus size to their labels within the shared maximum width.

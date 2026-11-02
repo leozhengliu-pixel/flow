@@ -4,16 +4,6 @@
     border: 0.5px solid var(--pk-border);
     padding: 0;
   }
-  html:root body .agent-chat-options-phone-menu [cmdk-list-sizer] [cmdk-item]:not(#_) {
-    border-radius: 0 !important;
-    background: transparent;
-    color: var(--pk-text);
-    font: 450 13px/15.6px var(--font) !important;
-  }
-  html:root body .agent-chat-options-phone-menu [cmdk-list-sizer] [cmdk-item][data-selected="true"]:not(#_) {
-    background: transparent;
-    color: var(--pk-text);
-  }
   .agent-chat-options-phone-menu [cmdk-item] > svg { color: var(--pk-muted); }
   .agent-chat-options-phone-menu [cmdk-list-sizer] [cmdk-separator] {
     position: relative;

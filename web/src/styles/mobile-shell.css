@@ -104,7 +104,7 @@
 }
 
 .phone-menu-overlay { position: fixed; inset: 0; z-index: 1200; background: transparent; }
-.phone-menu-surface {
+.phone-menu-surface[data-phone-popover] {
   position: fixed;
   top: var(--phone-menu-top);
   left: 16px;
@@ -126,8 +126,11 @@
 }
 .phone-menu-search input::placeholder { color: var(--pk-faint); }
 .phone-menu-surface [cmdk-list] { max-height: min(403px, calc(100dvh - var(--phone-menu-top) - 63px)); padding: 6px; overflow: auto; overscroll-behavior: contain; }
-.phone-menu-surface [cmdk-item]:not(#_) { position: relative; min-width: 0; height: 46px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 8px; font-size: 15px; font-weight: 400; line-height: 22.5px; outline: none; }
-.phone-menu-surface [cmdk-item][data-selected="true"] { background: var(--pk-hover); color: var(--pk-text-strong); }
+.phone-menu-compact-text { --phone-menu-item-font: 450 13px/15.6px var(--font); --phone-menu-item-color: var(--pk-text); --phone-menu-highlight-color: var(--pk-text); }
+.phone-menu-surface [cmdk-item] { position: relative; isolation: isolate; min-width: 0; height: 46px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 0; background: transparent; color: var(--phone-menu-item-color, inherit); font: var(--phone-menu-item-font, 400 15px/22.5px var(--font)); outline: none; }
+.phone-menu-surface [cmdk-item]::before { content: ''; position: absolute; z-index: -1; inset: 2px 0; border-radius: 8px; pointer-events: none; }
+.phone-menu-surface [cmdk-item]:is([data-selected="true"],:focus-visible):not([data-disabled="true"]) { color: var(--phone-menu-highlight-color, var(--pk-text-strong)); }
+.phone-menu-surface [cmdk-item]:is([data-selected="true"],:focus-visible):not([data-disabled="true"])::before { background: var(--pk-hover); }
 .phone-menu-surface [cmdk-item] > svg { width: 16px; height: 16px; flex: none; }
 .phone-menu-surface [cmdk-item] > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .phone-menu-surface [cmdk-separator] { position: relative; height: 12px; }
@@ -135,7 +138,6 @@
 .phone-menu-surface [cmdk-group-heading] { height: 30px; display: flex; align-items: center; padding: 0 12px; color: var(--pk-muted); font-size: 13px; font-weight: 500; }
 .phone-menu-surface .phone-menu-current { margin-left: auto; }
 .phone-menu-check { width: 14px; height: 14px; flex: 0 0 14px; display: grid; place-items: center; }
-.workspace-phone-menu [cmdk-item][data-selected="true"] { background: transparent; color: inherit; }
 .phone-menu-heading { height: 34px; padding: 12px 14px 0; display: flex; align-items: flex-start; font-size: 12px; color: var(--pk-muted); }
 .phone-menu-heading > span { height: 22px; line-height: 22px; }
 .phone-menu-heading > .phone-menu-context { padding: 0 6px; border-radius: 10px; background: var(--command-typed-chip-bg); color: var(--pk-text); }

@@ -19,6 +19,8 @@ a.project-creation-agent__create-skill { text-decoration: none; }
 [role="menu"] [role="menuitemcheckbox"]:focus-visible,
 [role="menu"] [role="menuitemradio"]:focus-visible { outline: var(--menu-item-focus-outline, none); }
 
+[role="listbox"] [role="option"]:focus-visible { outline: none; }
+
 /* Selected rows are intentionally one step deeper than a hover row. */
 .flow-inbox-row[data-selected="true"] { background: var(--theme-surface-active); }
 
