@@ -49,6 +49,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align desktop board identifiers, dates and parent-trail typography with the shared metadata foreground and measured separator size.
 
+- Keep desktop inbox filter triggers transparent away from hover and give selected filter labels and icons the highlighted foreground.
+
 - Align desktop issue activity and comment avatar typography without changing phone avatars or the user colour palette.
 
 - Align desktop saved-view headings, metadata, favorite controls and summary tabs with their measured presentation.
