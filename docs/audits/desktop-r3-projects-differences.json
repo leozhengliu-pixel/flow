@@ -1,0 +1,1116 @@
+{
+  "baselineCommit": "5064f332",
+  "verifiedCommit": "29fe7c0b40536b85b3a0d17bc018411a21ffc4a9",
+  "gateDirectory": "/tmp/codex-desktop-r3-projects/gate",
+  "baseline": "/tmp/codex-desktop-r3-projects/baseline-correct.json",
+  "final": "/tmp/codex-desktop-r3-projects/final.json",
+  "beforeDifferences": 31,
+  "afterDifferences": 20,
+  "screens": [
+    {
+      "screen": "cycles",
+      "status": "INCONCLUSIVE",
+      "route": "/desktop3-projects-cycles/team/DES/cycles",
+      "before": 1,
+      "after": 0,
+      "matched": 28,
+      "bodyMatched": 1,
+      "flags": [
+        "LOW_MATCH_COVERAGE: >=15 total and >=5 body matches required"
+      ],
+      "mutationPassed": true,
+      "differences": []
+    },
+    {
+      "screen": "display-menu",
+      "status": "FAIL",
+      "route": "/desktop3-projects-display-menu/projects/all",
+      "before": 0,
+      "after": 5,
+      "matched": 73,
+      "bodyMatched": 42,
+      "flags": [],
+      "mutationPassed": true,
+      "differences": [
+        {
+          "property": "x",
+          "want": 1017.5,
+          "got": 945.5,
+          "name": "Order by Priority",
+          "kind": "control",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(5) > button",
+          "flowSelector": "html > body > div:nth-of-type(1) > div > main > div > section > div > div > div > div > div:nth-of-type(3) > button",
+          "referenceRect": [
+            1017.5,
+            100,
+            67.27,
+            24
+          ],
+          "flowRect": [
+            945.5,
+            100,
+            67.273,
+            24
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference Lead track is 48px in this capture and 120px in List. The shared rule follows the requested List measurement; one fixed track cannot satisfy both immutable captures. No per-screen override added."
+        },
+        {
+          "property": "x",
+          "want": 1023.5,
+          "got": 951.5,
+          "name": "Priority",
+          "kind": "text",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(5) > button > span",
+          "flowSelector": "html > body > div:nth-of-type(1) > div > main > div > section > div > div > div > div > div:nth-of-type(3) > button > span:nth-of-type(1)",
+          "referenceRect": [
+            1023.5,
+            104.75,
+            41.27,
+            14.5
+          ],
+          "flowRect": [
+            951.5,
+            104.75,
+            41.273,
+            14.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference Lead track is 48px in this capture and 120px in List. The shared rule follows the requested List measurement; one fixed track cannot satisfy both immutable captures. No per-screen override added."
+        },
+        {
+          "property": "x",
+          "want": 881.5,
+          "got": 809.5,
+          "name": "Order by Health",
+          "kind": "control",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(4) > div > button",
+          "flowSelector": "html > body > div:nth-of-type(1) > div > main > div > section > div > div > div > div > div:nth-of-type(2) > button",
+          "referenceRect": [
+            881.5,
+            100.63,
+            63.15,
+            24
+          ],
+          "flowRect": [
+            809.5,
+            100,
+            63.148,
+            24
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference Lead track is 48px in this capture and 120px in List. The shared rule follows the requested List measurement; one fixed track cannot satisfy both immutable captures. No per-screen override added."
+        },
+        {
+          "property": "x",
+          "want": 887.5,
+          "got": 815.5,
+          "name": "Health",
+          "kind": "text",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(4) > div > button > span",
+          "flowSelector": "html > body > div:nth-of-type(1) > div > main > div > section > div > div > div > div > div:nth-of-type(2) > button > span:nth-of-type(1)",
+          "referenceRect": [
+            887.5,
+            105.38,
+            37.15,
+            14.5
+          ],
+          "flowRect": [
+            815.5,
+            104.75,
+            37.148,
+            14.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference Lead track is 48px in this capture and 120px in List. The shared rule follows the requested List measurement; one fixed track cannot satisfy both immutable captures. No per-screen override added."
+        },
+        {
+          "property": "x",
+          "want": 914,
+          "got": 842,
+          "name": "No updates",
+          "kind": "text",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(4) > div > button > div > span",
+          "flowSelector": "html > body > div:nth-of-type(1) > div > main > div > section > div > div > div > section > a > div:nth-of-type(2) > button > span:nth-of-type(2)",
+          "referenceRect": [
+            914,
+            144.75,
+            65.88,
+            14.5
+          ],
+          "flowRect": [
+            842,
+            180.75,
+            65.875,
+            14.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference Lead track is 48px in this capture and 120px in List. The shared rule follows the requested List measurement; one fixed track cannot satisfy both immutable captures. No per-screen override added."
+        }
+      ]
+    },
+    {
+      "screen": "initiative-detail",
+      "status": "PASS",
+      "route": "/desktop3-projects-initiative-detail/initiative/initiative_1793535813802515000_s6fg0m2rcn/overview",
+      "before": 0,
+      "after": 0,
+      "matched": 63,
+      "bodyMatched": 32,
+      "flags": [],
+      "mutationPassed": true,
+      "differences": []
+    },
+    {
+      "screen": "initiatives",
+      "status": "PASS",
+      "route": "/desktop3-projects-initiatives/initiatives",
+      "before": 0,
+      "after": 0,
+      "matched": 43,
+      "bodyMatched": 12,
+      "flags": [],
+      "mutationPassed": true,
+      "differences": []
+    },
+    {
+      "screen": "list",
+      "status": "PASS",
+      "route": "/desktop3-projects-list/projects/all",
+      "before": 5,
+      "after": 0,
+      "matched": 46,
+      "bodyMatched": 16,
+      "flags": [],
+      "mutationPassed": true,
+      "differences": []
+    },
+    {
+      "screen": "milestone-menu",
+      "status": "FAIL",
+      "route": "/desktop3-projects-milestone-menu/project/project_1793535813919008000_b4gzn8mx47/overview",
+      "before": 12,
+      "after": 9,
+      "matched": 104,
+      "bodyMatched": 72,
+      "flags": [],
+      "mutationPassed": true,
+      "differences": [
+        {
+          "property": "x",
+          "want": 1275.21,
+          "got": 1272,
+          "name": "Copy",
+          "kind": "text",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(17) > div > div:nth-of-type(2) > div > div > div > ul > li:nth-of-type(3) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+          "flowSelector": "html > body > div:nth-of-type(3) > div > div:nth-of-type(4) > span:nth-of-type(2)",
+          "referenceRect": [
+            1275.21,
+            625.08,
+            31.83,
+            15.19
+          ],
+          "flowRect": [
+            1272,
+            625.25,
+            32.484,
+            15.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+        },
+        {
+          "property": "x",
+          "want": 1275.21,
+          "got": 1272,
+          "name": "Set target date…",
+          "kind": "text",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(17) > div > div:nth-of-type(2) > div > div > div > ul > li:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+          "flowSelector": "html > body > div:nth-of-type(3) > div > div:nth-of-type(3) > span:nth-of-type(2)",
+          "referenceRect": [
+            1275.21,
+            593.72,
+            100.5,
+            15.19
+          ],
+          "flowRect": [
+            1272,
+            593.25,
+            102.555,
+            15.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+        },
+        {
+          "property": "w",
+          "want": 100.5,
+          "got": 102.555,
+          "name": "Set target date…",
+          "kind": "text",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(17) > div > div:nth-of-type(2) > div > div > div > ul > li:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+          "flowSelector": "html > body > div:nth-of-type(3) > div > div:nth-of-type(3) > span:nth-of-type(2)",
+          "referenceRect": [
+            1275.21,
+            593.72,
+            100.5,
+            15.19
+          ],
+          "flowRect": [
+            1272,
+            593.25,
+            102.555,
+            15.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+        },
+        {
+          "property": "x",
+          "want": 1275.21,
+          "got": 1272,
+          "name": "Move milestone to",
+          "kind": "text",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(17) > div > div:nth-of-type(2) > div > div > div > ul > li:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+          "flowSelector": "html > body > div:nth-of-type(3) > div > div:nth-of-type(6) > span:nth-of-type(2)",
+          "referenceRect": [
+            1275.21,
+            668.2,
+            110.84,
+            15.19
+          ],
+          "flowRect": [
+            1272,
+            669.25,
+            113.102,
+            15.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+        },
+        {
+          "property": "w",
+          "want": 110.84,
+          "got": 113.102,
+          "name": "Move milestone to",
+          "kind": "text",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(17) > div > div:nth-of-type(2) > div > div > div > ul > li:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+          "flowSelector": "html > body > div:nth-of-type(3) > div > div:nth-of-type(6) > span:nth-of-type(2)",
+          "referenceRect": [
+            1275.21,
+            668.2,
+            110.84,
+            15.19
+          ],
+          "flowRect": [
+            1272,
+            669.25,
+            113.102,
+            15.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+        },
+        {
+          "property": "x",
+          "want": 1275.21,
+          "got": 1272,
+          "name": "Edit…",
+          "kind": "text",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(17) > div > div:nth-of-type(2) > div > div > div > ul > li:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+          "flowSelector": "html > body > div:nth-of-type(3) > div > div:nth-of-type(2) > span:nth-of-type(2)",
+          "referenceRect": [
+            1275.21,
+            562.36,
+            34.22,
+            15.19
+          ],
+          "flowRect": [
+            1272,
+            561.25,
+            34.914,
+            15.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+        },
+        {
+          "property": "x",
+          "want": 1275.21,
+          "got": 1272,
+          "name": "Convert to project",
+          "kind": "text",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(17) > div > div:nth-of-type(2) > div > div > div > ul > li:nth-of-type(5) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+          "flowSelector": "html > body > div:nth-of-type(3) > div > div:nth-of-type(7) > span:nth-of-type(2)",
+          "referenceRect": [
+            1275.21,
+            699.56,
+            109.25,
+            15.19
+          ],
+          "flowRect": [
+            1272,
+            701.25,
+            111.477,
+            15.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+        },
+        {
+          "property": "w",
+          "want": 109.25,
+          "got": 111.477,
+          "name": "Convert to project",
+          "kind": "text",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(17) > div > div:nth-of-type(2) > div > div > div > ul > li:nth-of-type(5) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+          "flowSelector": "html > body > div:nth-of-type(3) > div > div:nth-of-type(7) > span:nth-of-type(2)",
+          "referenceRect": [
+            1275.21,
+            699.56,
+            109.25,
+            15.19
+          ],
+          "flowRect": [
+            1272,
+            701.25,
+            111.477,
+            15.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+        },
+        {
+          "property": "x",
+          "want": 1275.21,
+          "got": 1272,
+          "name": "Delete",
+          "kind": "text",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(17) > div > div:nth-of-type(2) > div > div > div > ul > li:nth-of-type(6) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+          "flowSelector": "html > body > div:nth-of-type(3) > div > div:nth-of-type(9) > span:nth-of-type(2)",
+          "referenceRect": [
+            1275.21,
+            742.68,
+            38.83,
+            15.19
+          ],
+          "flowRect": [
+            1272,
+            745.25,
+            39.625,
+            15.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+        }
+      ]
+    },
+    {
+      "screen": "overview",
+      "status": "FAIL",
+      "route": "/desktop3-projects-overview/project/project_1793535813960818000_w73yfrymnh/overview",
+      "before": 5,
+      "after": 3,
+      "matched": 95,
+      "bodyMatched": 63,
+      "flags": [],
+      "mutationPassed": true,
+      "differences": [
+        {
+          "property": "x",
+          "want": 324.5,
+          "got": 366.359,
+          "name": "Expand",
+          "kind": "control",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div > section > div > div:nth-of-type(1) > div > div > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(2) > div",
+          "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div > section:nth-of-type(7) > div > div > article > header > button:nth-of-type(2)",
+          "referenceRect": [
+            324.5,
+            810,
+            16,
+            16
+          ],
+          "flowRect": [
+            366.359,
+            862.5,
+            16,
+            16
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference JSON omits both name/summary editor boxes (32+23px) and the milestone title width, while the screenshot shows the titles. Required names cannot be empty through the API (400). Stable Project overview matches the shared rules. A complete, settled reference capture is needed."
+        },
+        {
+          "property": "y",
+          "want": 526.5,
+          "got": 581.5,
+          "name": "project-description",
+          "kind": "chrome",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div > div:nth-of-type(3) > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div",
+          "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div > section:nth-of-type(6) > div > div > div",
+          "referenceRect": [
+            278.5,
+            526.5,
+            719,
+            226
+          ],
+          "flowRect": [
+            278.5,
+            581.5,
+            719,
+            226
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference JSON omits both name/summary editor boxes (32+23px) and the milestone title width, while the screenshot shows the titles. Required names cannot be empty through the API (400). Stable Project overview matches the shared rules. A complete, settled reference capture is needed."
+        },
+        {
+          "property": "y",
+          "want": 768.5,
+          "got": 823.5,
+          "name": "project-milestones",
+          "kind": "chrome",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div > section",
+          "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div > section:nth-of-type(7)",
+          "referenceRect": [
+            292.5,
+            768.5,
+            691,
+            105.5
+          ],
+          "flowRect": [
+            292.5,
+            823.5,
+            691,
+            100.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference JSON omits both name/summary editor boxes (32+23px) and the milestone title width, while the screenshot shows the titles. Required names cannot be empty through the API (400). Stable Project overview matches the shared rules. A complete, settled reference capture is needed."
+        }
+      ]
+    },
+    {
+      "screen": "project-actions",
+      "status": "FAIL",
+      "route": "/desktop3-projects-project-actions/project/project_1793535814003535000_n7zrzecqjj/overview",
+      "before": 5,
+      "after": 3,
+      "matched": 95,
+      "bodyMatched": 63,
+      "flags": [],
+      "mutationPassed": true,
+      "differences": [
+        {
+          "property": "x",
+          "want": 324.5,
+          "got": 366.359,
+          "name": "Expand",
+          "kind": "control",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div > section > div > div:nth-of-type(1) > div > div > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(2) > div",
+          "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div > section:nth-of-type(7) > div > div > article > header > button:nth-of-type(2)",
+          "referenceRect": [
+            324.5,
+            810,
+            16,
+            16
+          ],
+          "flowRect": [
+            366.359,
+            862.5,
+            16,
+            16
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference JSON omits both name/summary editor boxes (32+23px) and the milestone title width, while the screenshot shows the titles. Required names cannot be empty through the API (400). Stable Project overview matches the shared rules. A complete, settled reference capture is needed."
+        },
+        {
+          "property": "y",
+          "want": 526.5,
+          "got": 581.5,
+          "name": "project-description",
+          "kind": "chrome",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div > div:nth-of-type(3) > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div",
+          "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div > section:nth-of-type(6) > div > div > div",
+          "referenceRect": [
+            278.5,
+            526.5,
+            719,
+            226
+          ],
+          "flowRect": [
+            278.5,
+            581.5,
+            719,
+            226
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference JSON omits both name/summary editor boxes (32+23px) and the milestone title width, while the screenshot shows the titles. Required names cannot be empty through the API (400). Stable Project overview matches the shared rules. A complete, settled reference capture is needed."
+        },
+        {
+          "property": "y",
+          "want": 768.5,
+          "got": 823.5,
+          "name": "project-milestones",
+          "kind": "chrome",
+          "region": "content",
+          "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div > section",
+          "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div > section:nth-of-type(7)",
+          "referenceRect": [
+            292.5,
+            768.5,
+            691,
+            105.5
+          ],
+          "flowRect": [
+            292.5,
+            823.5,
+            691,
+            100.5
+          ],
+          "classification": "reference capture limitation",
+          "reason": "Reference JSON omits both name/summary editor boxes (32+23px) and the milestone title width, while the screenshot shows the titles. Required names cannot be empty through the API (400). Stable Project overview matches the shared rules. A complete, settled reference capture is needed."
+        }
+      ]
+    },
+    {
+      "screen": "project-activity",
+      "status": "PASS",
+      "route": "/desktop3-projects-project-activity/project/project_1793535814043960000_7f7xzga0t9/activity",
+      "before": 0,
+      "after": 0,
+      "matched": 67,
+      "bodyMatched": 34,
+      "flags": [],
+      "mutationPassed": true,
+      "differences": []
+    },
+    {
+      "screen": "project-issues",
+      "status": "PASS",
+      "route": "/desktop3-projects-project-issues/project/project_1793535814082071000_pa4we91phw/issues",
+      "before": 0,
+      "after": 0,
+      "matched": 70,
+      "bodyMatched": 36,
+      "flags": [],
+      "mutationPassed": true,
+      "differences": []
+    },
+    {
+      "screen": "project-overview",
+      "status": "PASS",
+      "route": "/desktop3-projects-project-overview/project/project_1793535814120094000_69ksdsd6v8/overview",
+      "before": 3,
+      "after": 0,
+      "matched": 96,
+      "bodyMatched": 64,
+      "flags": [],
+      "mutationPassed": true,
+      "differences": []
+    },
+    {
+      "screen": "releases",
+      "status": "SKIPPED",
+      "route": "/desktop3-projects-releases/settings/releases",
+      "before": 0,
+      "after": 0,
+      "matched": 0,
+      "bodyMatched": 0,
+      "flags": [
+        "Reference is a paid-plan Releases upsell, not the release workspace."
+      ],
+      "differences": []
+    },
+    {
+      "screen": "timeline",
+      "status": "PASS",
+      "route": "/desktop3-projects-timeline/projects/all",
+      "before": 0,
+      "after": 0,
+      "matched": 47,
+      "bodyMatched": 17,
+      "flags": [],
+      "mutationPassed": true,
+      "differences": []
+    }
+  ],
+  "originalDifferenceRechecks": [
+    {
+      "id": "cycles-1",
+      "screen": "cycles",
+      "name": "topbar",
+      "property": "gap",
+      "want": "12px",
+      "before": "0px",
+      "previousClassification": "fixture cannot match",
+      "outcome": "fixed gate used-gap normalization",
+      "reason": "A header with one in-flow child has zero used inter-child gap; retain the 12px declaration as evidence. Two-child gap mutations still fail."
+    },
+    {
+      "id": "list-1",
+      "screen": "list",
+      "name": "Order by Priority",
+      "property": "x",
+      "want": 945.5,
+      "before": 1017.5,
+      "previousClassification": "product decision needed",
+      "outcome": "fixed shared desktop rule",
+      "reason": "Measured desktop Lead track, team icon gap, natural heading line box and section spacing now match."
+    },
+    {
+      "id": "list-2",
+      "screen": "list",
+      "name": "Priority",
+      "property": "x",
+      "want": 951.5,
+      "before": 1023.5,
+      "previousClassification": "product decision needed",
+      "outcome": "fixed shared desktop rule",
+      "reason": "Measured desktop Lead track, team icon gap, natural heading line box and section spacing now match."
+    },
+    {
+      "id": "list-3",
+      "screen": "list",
+      "name": "Order by Health",
+      "property": "x",
+      "want": 809.5,
+      "before": 881.5,
+      "previousClassification": "product decision needed",
+      "outcome": "fixed shared desktop rule",
+      "reason": "Measured desktop Lead track, team icon gap, natural heading line box and section spacing now match."
+    },
+    {
+      "id": "list-4",
+      "screen": "list",
+      "name": "Health",
+      "property": "x",
+      "want": 815.5,
+      "before": 887.5,
+      "previousClassification": "product decision needed",
+      "outcome": "fixed shared desktop rule",
+      "reason": "Measured desktop Lead track, team icon gap, natural heading line box and section spacing now match."
+    },
+    {
+      "id": "list-5",
+      "screen": "list",
+      "name": "No updates",
+      "property": "x",
+      "want": 842,
+      "before": 914,
+      "previousClassification": "product decision needed",
+      "outcome": "fixed shared desktop rule",
+      "reason": "Measured desktop Lead track, team icon gap, natural heading line box and section spacing now match."
+    },
+    {
+      "id": "milestone-menu-1",
+      "screen": "milestone-menu",
+      "name": "This project is a fixture for comparing Flow with reference.",
+      "property": "w",
+      "want": 383.7,
+      "before": 408.742,
+      "previousClassification": "fixture cannot match",
+      "outcome": "fixed fixture through API",
+      "reason": "Persisted neutral final word layout through PATCH /api/projects/:id. Intrinsic width 383.56px versus captured 383.70px; no CSS typography/width changes."
+    },
+    {
+      "id": "milestone-menu-2",
+      "screen": "milestone-menu",
+      "name": "Flow-app",
+      "property": "x",
+      "want": 874.47,
+      "before": 872.469,
+      "previousClassification": "product decision needed",
+      "outcome": "fixed shared desktop rule",
+      "reason": "Measured desktop Lead track, team icon gap, natural heading line box and section spacing now match."
+    },
+    {
+      "id": "milestone-menu-3",
+      "screen": "milestone-menu",
+      "name": "Copy",
+      "property": "x",
+      "want": 1275.21,
+      "before": 1272,
+      "previousClassification": "fixture cannot match",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+    },
+    {
+      "id": "milestone-menu-4",
+      "screen": "milestone-menu",
+      "name": "Set target date…",
+      "property": "x",
+      "want": 1275.21,
+      "before": 1272,
+      "previousClassification": "fixture cannot match",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+    },
+    {
+      "id": "milestone-menu-5",
+      "screen": "milestone-menu",
+      "name": "Set target date…",
+      "property": "w",
+      "want": 100.5,
+      "before": 102.555,
+      "previousClassification": "fixture cannot match",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+    },
+    {
+      "id": "milestone-menu-6",
+      "screen": "milestone-menu",
+      "name": "Move milestone to",
+      "property": "x",
+      "want": 1275.21,
+      "before": 1272,
+      "previousClassification": "fixture cannot match",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+    },
+    {
+      "id": "milestone-menu-7",
+      "screen": "milestone-menu",
+      "name": "Move milestone to",
+      "property": "w",
+      "want": 110.84,
+      "before": 113.102,
+      "previousClassification": "fixture cannot match",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+    },
+    {
+      "id": "milestone-menu-8",
+      "screen": "milestone-menu",
+      "name": "Edit…",
+      "property": "x",
+      "want": 1275.21,
+      "before": 1272,
+      "previousClassification": "fixture cannot match",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+    },
+    {
+      "id": "milestone-menu-9",
+      "screen": "milestone-menu",
+      "name": "Convert to project",
+      "property": "x",
+      "want": 1275.21,
+      "before": 1272,
+      "previousClassification": "fixture cannot match",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+    },
+    {
+      "id": "milestone-menu-10",
+      "screen": "milestone-menu",
+      "name": "Convert to project",
+      "property": "w",
+      "want": 109.25,
+      "before": 111.477,
+      "previousClassification": "fixture cannot match",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+    },
+    {
+      "id": "milestone-menu-11",
+      "screen": "milestone-menu",
+      "name": "Delete",
+      "property": "x",
+      "want": 1275.21,
+      "before": 1272,
+      "previousClassification": "fixture cannot match",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference menu rows and glyph boxes are uniformly scaled: 31.36/32 and 15.19/15.5. API state and all six menu actions reproduce. No API fixture field controls the transient capture scale; settled production typography is preserved."
+    },
+    {
+      "id": "milestone-menu-12",
+      "screen": "milestone-menu",
+      "name": "project-milestones",
+      "property": "y",
+      "want": 823.5,
+      "before": 816,
+      "previousClassification": "product decision needed",
+      "outcome": "fixed shared desktop rule",
+      "reason": "Measured desktop Lead track, team icon gap, natural heading line box and section spacing now match."
+    },
+    {
+      "id": "overview-1",
+      "screen": "overview",
+      "name": "Flow-app",
+      "property": "x",
+      "want": 874.47,
+      "before": 872.469,
+      "previousClassification": "product decision needed",
+      "outcome": "fixed shared desktop rule",
+      "reason": "Measured desktop Lead track, team icon gap, natural heading line box and section spacing now match."
+    },
+    {
+      "id": "overview-2",
+      "screen": "overview",
+      "name": "This project is a fixture for comparing Flow with reference.",
+      "property": "w",
+      "want": 383.7,
+      "before": 408.742,
+      "previousClassification": "fixture cannot match",
+      "outcome": "fixed fixture through API",
+      "reason": "Persisted neutral final word layout through PATCH /api/projects/:id. Intrinsic width 383.56px versus captured 383.70px; no CSS typography/width changes."
+    },
+    {
+      "id": "overview-3",
+      "screen": "overview",
+      "name": "Expand",
+      "property": "x",
+      "want": 324.5,
+      "before": 366.359,
+      "previousClassification": "product decision needed",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference JSON omits both name/summary editor boxes (32+23px) and the milestone title width, while the screenshot shows the titles. Required names cannot be empty through the API (400). Stable Project overview matches the shared rules. A complete, settled reference capture is needed."
+    },
+    {
+      "id": "overview-4",
+      "screen": "overview",
+      "name": "project-description",
+      "property": "y",
+      "want": 526.5,
+      "before": 582,
+      "previousClassification": "product decision needed",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference JSON omits both name/summary editor boxes (32+23px) and the milestone title width, while the screenshot shows the titles. Required names cannot be empty through the API (400). Stable Project overview matches the shared rules. A complete, settled reference capture is needed."
+    },
+    {
+      "id": "overview-5",
+      "screen": "overview",
+      "name": "project-milestones",
+      "property": "y",
+      "want": 768.5,
+      "before": 816,
+      "previousClassification": "product decision needed",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference JSON omits both name/summary editor boxes (32+23px) and the milestone title width, while the screenshot shows the titles. Required names cannot be empty through the API (400). Stable Project overview matches the shared rules. A complete, settled reference capture is needed."
+    },
+    {
+      "id": "project-actions-1",
+      "screen": "project-actions",
+      "name": "Flow-app",
+      "property": "x",
+      "want": 874.47,
+      "before": 872.469,
+      "previousClassification": "product decision needed",
+      "outcome": "fixed shared desktop rule",
+      "reason": "Measured desktop Lead track, team icon gap, natural heading line box and section spacing now match."
+    },
+    {
+      "id": "project-actions-2",
+      "screen": "project-actions",
+      "name": "This project is a fixture for comparing Flow with reference.",
+      "property": "w",
+      "want": 383.7,
+      "before": 408.742,
+      "previousClassification": "fixture cannot match",
+      "outcome": "fixed fixture through API",
+      "reason": "Persisted neutral final word layout through PATCH /api/projects/:id. Intrinsic width 383.56px versus captured 383.70px; no CSS typography/width changes."
+    },
+    {
+      "id": "project-actions-3",
+      "screen": "project-actions",
+      "name": "Expand",
+      "property": "x",
+      "want": 324.5,
+      "before": 366.359,
+      "previousClassification": "product decision needed",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference JSON omits both name/summary editor boxes (32+23px) and the milestone title width, while the screenshot shows the titles. Required names cannot be empty through the API (400). Stable Project overview matches the shared rules. A complete, settled reference capture is needed."
+    },
+    {
+      "id": "project-actions-4",
+      "screen": "project-actions",
+      "name": "project-description",
+      "property": "y",
+      "want": 526.5,
+      "before": 582,
+      "previousClassification": "product decision needed",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference JSON omits both name/summary editor boxes (32+23px) and the milestone title width, while the screenshot shows the titles. Required names cannot be empty through the API (400). Stable Project overview matches the shared rules. A complete, settled reference capture is needed."
+    },
+    {
+      "id": "project-actions-5",
+      "screen": "project-actions",
+      "name": "project-milestones",
+      "property": "y",
+      "want": 768.5,
+      "before": 816,
+      "previousClassification": "product decision needed",
+      "outcome": "remaining reference capture limitation",
+      "reason": "Reference JSON omits both name/summary editor boxes (32+23px) and the milestone title width, while the screenshot shows the titles. Required names cannot be empty through the API (400). Stable Project overview matches the shared rules. A complete, settled reference capture is needed."
+    },
+    {
+      "id": "project-overview-1",
+      "screen": "project-overview",
+      "name": "This project is a fixture for comparing Flow with reference.",
+      "property": "w",
+      "want": 383.7,
+      "before": 408.742,
+      "previousClassification": "fixture cannot match",
+      "outcome": "fixed fixture through API",
+      "reason": "Persisted neutral final word layout through PATCH /api/projects/:id. Intrinsic width 383.56px versus captured 383.70px; no CSS typography/width changes."
+    },
+    {
+      "id": "project-overview-2",
+      "screen": "project-overview",
+      "name": "Flow-app",
+      "property": "x",
+      "want": 874.47,
+      "before": 872.469,
+      "previousClassification": "product decision needed",
+      "outcome": "fixed shared desktop rule",
+      "reason": "Measured desktop Lead track, team icon gap, natural heading line box and section spacing now match."
+    },
+    {
+      "id": "project-overview-3",
+      "screen": "project-overview",
+      "name": "project-milestones",
+      "property": "y",
+      "want": 823.5,
+      "before": 816,
+      "previousClassification": "product decision needed",
+      "outcome": "fixed shared desktop rule",
+      "reason": "Measured desktop Lead track, team icon gap, natural heading line box and section spacing now match."
+    }
+  ],
+  "fixtureRepairs": [
+    {
+      "screen": "overview",
+      "workspace": "desktop3-projects-overview",
+      "status": 200,
+      "description": "This project is a fixture for comparing Flow with layout.\n\n## Goals\n\n- Match layout\n- Match typography",
+      "summary": "Pixel-level comparison fixture"
+    },
+    {
+      "screen": "project-actions",
+      "workspace": "desktop3-projects-project-actions",
+      "status": 200,
+      "description": "This project is a fixture for comparing Flow with layout.\n\n## Goals\n\n- Match layout\n- Match typography",
+      "summary": "Pixel-level comparison fixture"
+    },
+    {
+      "screen": "project-overview",
+      "workspace": "desktop3-projects-project-overview",
+      "status": 200,
+      "description": "This project is a fixture for comparing Flow with layout.\n\n## Goals\n\n- Match layout\n- Match typography",
+      "summary": "Pixel-level comparison fixture"
+    },
+    {
+      "screen": "milestone-menu",
+      "workspace": "desktop3-projects-milestone-menu",
+      "status": 200,
+      "description": "This project is a fixture for comparing Flow with layout.\n\n## Goals\n\n- Match layout\n- Match typography",
+      "summary": "Pixel-level comparison fixture"
+    }
+  ],
+  "apiChecks": [
+    {
+      "screen": "projects/cycles",
+      "status": 200,
+      "cycles": []
+    },
+    {
+      "screen": "projects/milestone-menu",
+      "status": 200,
+      "project": {
+        "id": "project_1793535813919008000_b4gzn8mx47",
+        "name": "Compare Test",
+        "summary": "Pixel-level comparison fixture",
+        "description": "This project is a fixture for comparing Flow with layout.\n\n## Goals\n\n- Match layout\n- Match typography",
+        "milestones": [
+          {
+            "id": "project_milestone_1793535813930692000_1d5qkk3ed1",
+            "name": "Alpha"
+          }
+        ]
+      }
+    },
+    {
+      "screen": "projects/overview",
+      "status": 200,
+      "project": {
+        "id": "project_1793535813960818000_w73yfrymnh",
+        "name": "Compare Test",
+        "summary": "Pixel-level comparison fixture",
+        "description": "This project is a fixture for comparing Flow with layout.\n\n## Goals\n\n- Match layout\n- Match typography",
+        "milestones": [
+          {
+            "id": "project_milestone_1793535813972322000_fts4cvm1wt",
+            "name": "Alpha"
+          }
+        ]
+      }
+    },
+    {
+      "route": "/api/projects",
+      "status": 400,
+      "error": "name is required"
+    },
+    {
+      "route": "/api/projects/project_1793535813960818000_w73yfrymnh/milestones",
+      "status": 400,
+      "error": "milestone name is required"
+    },
+    {
+      "screen": "projects/project-actions",
+      "status": 200,
+      "project": {
+        "id": "project_1793535814003535000_n7zrzecqjj",
+        "name": "Compare Test",
+        "summary": "Pixel-level comparison fixture",
+        "description": "This project is a fixture for comparing Flow with layout.\n\n## Goals\n\n- Match layout\n- Match typography",
+        "milestones": [
+          {
+            "id": "project_milestone_1793535814015172000_92856r2hhs",
+            "name": "Alpha"
+          }
+        ]
+      }
+    },
+    {
+      "screen": "projects/project-overview",
+      "status": 200,
+      "project": {
+        "id": "project_1793535814120094000_69ksdsd6v8",
+        "name": "Compare Test",
+        "summary": "Pixel-level comparison fixture",
+        "description": "This project is a fixture for comparing Flow with layout.\n\n## Goals\n\n- Match layout\n- Match typography",
+        "milestones": [
+          {
+            "id": "project_milestone_1793535814133036000_dr9dghdrft",
+            "name": "Alpha"
+          }
+        ]
+      }
+    }
+  ],
+  "toolHashes": {
+    "desktop-match.mjs": "a902561c3a1df48284741bc9b118af1d4800d39723a4735fcee390b5f62337e4",
+    "desktop-browser.mjs": "9fbc89c2b56b2adbc9e5b9a6edc1ed8838aa6162a72bae04f556bf5fc133ad42",
+    "desktop-gate.mjs": "b1a257ca58316029cb2d34fc329770ee953652c59945978f1de74c36d57b7e66",
+    "desktop-match.test.mjs": "2734aec03e20f9a7f2a66ccb680b5823c9c02739f3c0b89a27356017428b3a06",
+    "desktop3-policy.mjs": "c136626d35f59263709926438880a7301fa5c4adc1bc5645610f4f28f5727f7e",
+    "desktop3-states.mjs": "6a12f28fe6ffbeae4ff4c2512f6673af44915eb269bc705a45f4ae4ed345521f"
+  }
+}
