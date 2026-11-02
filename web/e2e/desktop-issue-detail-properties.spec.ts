@@ -119,13 +119,20 @@ test('anchors actions to the trigger, loads relation removal on direct navigatio
   expect(moved.identifier).not.toBe(issue.identifier)
 })
 
-test('keeps row action shortcuts aligned and gives the coding submenu its icon and list inset', async ({ page, detail }) => {
+test('keeps row actions ordered, subscription visible, and the coding submenu aligned', async ({ page, request, detail }) => {
   const { key, issue } = detail
+  const headers = { 'X-Workspace-Key': key }
+  expect((await request.patch(`/api/issues/${issue.id}`, { headers, data: { subscriberIds: [] } })).ok()).toBeTruthy()
+  const target = await (await request.post('/api/issues', { headers, data: { title: '[audit] Row relation', teamId: issue.team.id } })).json() as Issue
+  expect((await request.post(`/api/issues/${issue.id}/relations`, { headers, data: { type: 'related', relatedIssueId: target.id } })).status()).toBe(201)
   await page.goto(`/${key}/team/${issue.team.key}/active`)
   await page.locator(`[data-issue-row-id="${issue.id}"]`).click({ button: 'right' })
   const menu = page.getByRole('menu').first()
   await expect(menu).toBeVisible()
   await expect(menu).toHaveCSS('padding', '0px')
+  await expect(menu.getByText('Subscribe', { exact: true })).toBeVisible()
+  const labels = await menu.getByRole('menuitem').evaluateAll(nodes => nodes.map(node => node.querySelector('span:not([aria-hidden])')?.textContent))
+  expect(labels.slice(labels.indexOf('Copy'))).toEqual(['Copy', 'Convert to', 'Make a copy…', 'Move', 'Open in', 'Favorite', 'Subscribe', 'Remind me', 'Remove…', 'Delete'])
   for (const shortcut of await menu.locator('kbd').all()) {
     await expect(shortcut).toHaveCSS('padding-left', '0px')
     await expect(shortcut).toHaveCSS('line-height', '12.1px')
