@@ -829,7 +829,8 @@
   .flow-inbox-list-state--message:has(> .flow-inbox-list-state__ghost-action) > strong { line-height: normal; }
   :root .flow-inbox-list-state--message button.flow-inbox-list-state__ghost-action { margin-top: 16px; background: transparent; font-weight: 500; line-height: normal; }
   .flow-inbox-menu--actions .flow-inbox-menu__item { color: var(--pk-text); }
-  .flow-inbox-menu--actions .flow-inbox-menu__shortcut { flex: 0 0 auto; margin-left: -2.5px; padding-left: 0; }
+  .flow-inbox-menu--actions { width: auto; min-width: 182px; }
+  .flow-inbox-menu--actions .flow-inbox-menu__shortcut { flex: 0 0 auto; margin-left: 0; padding-left: 0; }
   .flow-inbox-snooze-menu { width: 318px; height: auto; min-height: 241.5px; }
   .flow-inbox-snooze-input-wrap { padding-right: 11px; }
   .flow-inbox-row-menu { width: 191px; height: auto; min-height: 0; padding: 0; }
