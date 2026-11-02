@@ -123,15 +123,21 @@ describe('ProjectsDataView project menu', () => {
     expect(onFavoriteChange).toHaveBeenCalledWith('project-1', true)
   })
 
-  it('keeps hidden table columns in the subgrid so later columns do not shift', () => {
-    render(<I18nProvider><ProjectsDataView groups={[{ id: 'status-progress', name: 'In Progress', projects: [project] }]}/></I18nProvider>)
+  it('only reserves an initiative track while the property is displayed', () => {
+    const props = { groups: [{ id: 'status-progress', name: 'In Progress', projects: [{ ...project, initiativeNames: ['Roadmap'] }] }] }
+    const { rerender } = render(<I18nProvider><ProjectsDataView {...props}/></I18nProvider>)
+    expect(document.querySelector('.lp-project-row__initiatives')).toBeNull()
+    expect(screen.queryByRole('columnheader', { name: 'Initiatives' })).not.toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Target date' })).toBeVisible()
 
-    const initiativeColumn = document.querySelector('.lp-project-table__header [role="columnheader"][data-column-hidden="true"]')
-    const targetDateColumn = [...document.querySelectorAll('.lp-project-table__header [role="columnheader"]')].find(column => column.textContent?.includes('Target date'))
-    expect(initiativeColumn).toBeTruthy()
-    expect(initiativeColumn).not.toHaveAttribute('hidden')
-    expect(targetDateColumn).toBeTruthy()
-    expect(targetDateColumn).not.toHaveAttribute('data-column-hidden')
+    rerender(<I18nProvider><ProjectsDataView {...props} visibleProperties={['Initiatives', 'Target date']}/></I18nProvider>)
+    expect(screen.getByRole('columnheader', { name: 'Initiatives' })).toBeVisible()
+    expect(document.querySelector('.lp-project-row__initiatives')).toHaveTextContent('Roadmap')
+
+    rerender(<I18nProvider><ProjectsDataView {...props} visibleProperties={['Target date']}/></I18nProvider>)
+    expect(document.querySelector('.lp-project-row__initiatives')).toBeNull()
+    expect(screen.queryByRole('columnheader', { name: 'Initiatives' })).not.toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Target date' })).toBeVisible()
   })
 
   it('persists favorite, subscription, and reminder actions through the API integration', async () => {
