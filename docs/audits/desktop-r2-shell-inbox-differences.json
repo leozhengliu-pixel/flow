@@ -1,0 +1,2061 @@
+{
+  "scope": [
+    "shell",
+    "inbox"
+  ],
+  "baseline": {
+    "commit": "48085779",
+    "workingChanges": "Carried notification-menu edits were present during the first fresh gate.",
+    "shell": {
+      "screens": 13,
+      "statuses": {
+        "FAIL": 4,
+        "PASS": 7,
+        "INCONCLUSIVE": 2
+      },
+      "differences": 40
+    },
+    "inbox": {
+      "screens": 11,
+      "statuses": {
+        "PASS": 8,
+        "FAIL": 2,
+        "FINDING": 1
+      },
+      "differences": 12
+    }
+  },
+  "final": {
+    "commit": "8c90fd6ce34aaef88c714d90728ac1e2fbf8bd6e",
+    "shell": {
+      "screens": 13,
+      "statuses": {
+        "PASS": 13
+      },
+      "differences": 0
+    },
+    "inbox": {
+      "screens": 11,
+      "statuses": {
+        "PASS": 10,
+        "FINDING": 1
+      },
+      "differences": 0
+    },
+    "mutationProofs": 24
+  },
+  "screens": [
+    {
+      "area": "shell",
+      "screen": "command-menu",
+      "route": "/desktop3-shell-command-menu/agent",
+      "before": {
+        "status": "FAIL",
+        "matched": 48,
+        "bodyMatched": 23,
+        "differences": [
+          {
+            "property": "x",
+            "want": 1042.2675435358065,
+            "got": 1047.469,
+            "name": "C",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              210.58091340386903,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.469,
+              177.945,
+              8.055,
+              13
+            ]
+          },
+          {
+            "property": "w",
+            "want": 1.0047662077894886,
+            "got": 8.055,
+            "name": "C",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              210.58091340386903,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.469,
+              177.945,
+              8.055,
+              13
+            ]
+          },
+          {
+            "property": "fontSize",
+            "want": "13px",
+            "got": "11px",
+            "name": "C",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              210.58091340386903,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.469,
+              177.945,
+              8.055,
+              13
+            ]
+          },
+          {
+            "property": "border",
+            "want": {
+              "invisible": true,
+              "sides": [
+                null,
+                null,
+                null,
+                null
+              ]
+            },
+            "got": {
+              "invisible": false,
+              "sides": [
+                [
+                  0.5,
+                  "solid",
+                  [
+                    48,
+                    49,
+                    52,
+                    1
+                  ]
+                ],
+                [
+                  0.5,
+                  "solid",
+                  [
+                    48,
+                    49,
+                    52,
+                    1
+                  ]
+                ],
+                [
+                  0.5,
+                  "solid",
+                  [
+                    48,
+                    49,
+                    52,
+                    1
+                  ]
+                ],
+                [
+                  0.5,
+                  "solid",
+                  [
+                    48,
+                    49,
+                    52,
+                    1
+                  ]
+                ]
+              ]
+            },
+            "name": "C",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              210.58091340386903,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.469,
+              177.945,
+              8.055,
+              13
+            ]
+          },
+          {
+            "property": "borderRadius",
+            "want": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "got": [
+              3,
+              3,
+              3,
+              3
+            ],
+            "name": "C",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              210.58091340386903,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.469,
+              177.945,
+              8.055,
+              13
+            ]
+          },
+          {
+            "property": "padding",
+            "want": "0px 0px 0px 0px",
+            "got": "4px 4px 4px 4px",
+            "name": "C",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              210.58091340386903,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.469,
+              177.945,
+              8.055,
+              13
+            ]
+          },
+          {
+            "property": "yRelative",
+            "want": 11.474430092955942,
+            "got": 16.444999999999993,
+            "name": "C",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              210.58091340386903,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.469,
+              177.945,
+              8.055,
+              13
+            ]
+          },
+          {
+            "property": "x",
+            "want": 1042.2675435358065,
+            "got": 1047.648,
+            "name": "V",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              256.68963467932866,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.648,
+              223.945,
+              7.695,
+              13
+            ]
+          },
+          {
+            "property": "w",
+            "want": 1.0047662077894886,
+            "got": 7.695,
+            "name": "V",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              256.68963467932866,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.648,
+              223.945,
+              7.695,
+              13
+            ]
+          },
+          {
+            "property": "fontSize",
+            "want": "13px",
+            "got": "11px",
+            "name": "V",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              256.68963467932866,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.648,
+              223.945,
+              7.695,
+              13
+            ]
+          },
+          {
+            "property": "border",
+            "want": {
+              "invisible": true,
+              "sides": [
+                null,
+                null,
+                null,
+                null
+              ]
+            },
+            "got": {
+              "invisible": false,
+              "sides": [
+                [
+                  0.5,
+                  "solid",
+                  [
+                    48,
+                    49,
+                    52,
+                    1
+                  ]
+                ],
+                [
+                  0.5,
+                  "solid",
+                  [
+                    48,
+                    49,
+                    52,
+                    1
+                  ]
+                ],
+                [
+                  0.5,
+                  "solid",
+                  [
+                    48,
+                    49,
+                    52,
+                    1
+                  ]
+                ],
+                [
+                  0.5,
+                  "solid",
+                  [
+                    48,
+                    49,
+                    52,
+                    1
+                  ]
+                ]
+              ]
+            },
+            "name": "V",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              256.68963467932866,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.648,
+              223.945,
+              7.695,
+              13
+            ]
+          },
+          {
+            "property": "borderRadius",
+            "want": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "got": [
+              3,
+              3,
+              3,
+              3
+            ],
+            "name": "V",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              256.68963467932866,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.648,
+              223.945,
+              7.695,
+              13
+            ]
+          },
+          {
+            "property": "padding",
+            "want": "0px 0px 0px 0px",
+            "got": "4px 4px 4px 4px",
+            "name": "V",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              256.68963467932866,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.648,
+              223.945,
+              7.695,
+              13
+            ]
+          },
+          {
+            "property": "yRelative",
+            "want": 11.47443009295597,
+            "got": 16.444999999999993,
+            "name": "V",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span:nth-of-type(3) > kbd",
+            "referenceRect": [
+              1042.2675435358065,
+              256.68963467932866,
+              1.0047662077894886,
+              1.0047662077894886
+            ],
+            "flowRect": [
+              1047.648,
+              223.945,
+              7.695,
+              13
+            ]
+          },
+          {
+            "property": "x",
+            "want": 1016.9675304236671,
+            "got": 1015.266,
+            "name": "then",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(13) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(2) > div > ul > li:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(2) > span > span > span:nth-of-type(2)",
+            "flowSelector": "html > body > div:nth-of-type(4) > div > div:nth-of-type(2) > div > div:nth-of-type(3) > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(3) > small",
+            "referenceRect": [
+              1016.9675304236671,
+              384.4858486480737,
+              23.290480696560344,
+              12.127528128019126
+            ],
+            "flowRect": [
+              1015.266,
+              345.945,
+              23.234,
+              13
+            ]
+          }
+        ]
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 48,
+        "bodyMatched": 23,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 35,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "shell",
+      "screen": "command-menu-search",
+      "route": "/desktop3-shell-command-menu-search/agent",
+      "before": {
+        "status": "PASS",
+        "matched": 48,
+        "bodyMatched": 23,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 49,
+        "bodyMatched": 24,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 32,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "shell",
+      "screen": "create-issue",
+      "route": "/desktop3-shell-create-issue/agent",
+      "before": {
+        "status": "FAIL",
+        "matched": 46,
+        "bodyMatched": 21,
+        "differences": [
+          {
+            "property": "y",
+            "want": 296.5,
+            "got": 315,
+            "name": "agent-composer",
+            "kind": "chrome",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div > div > div:nth-of-type(3) > div > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > section > div > div > div > div",
+            "referenceRect": [
+              482,
+              296.5,
+              712,
+              104
+            ],
+            "flowRect": [
+              482,
+              315,
+              712,
+              104
+            ]
+          }
+        ]
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 54,
+        "bodyMatched": 29,
+        "differences": [],
+        "withheld": 3,
+        "ambiguities": 25,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "shell",
+      "screen": "shortcut-help",
+      "route": "/desktop3-shell-shortcut-help/agent",
+      "before": {
+        "status": "PASS",
+        "matched": 95,
+        "bodyMatched": 66,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 96,
+        "bodyMatched": 67,
+        "differences": [],
+        "withheld": 3,
+        "ambiguities": 109,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "shell",
+      "screen": "sidebar-collapsed",
+      "route": "/desktop3-shell-sidebar-collapsed/agent",
+      "before": {
+        "status": "FAIL",
+        "matched": 33,
+        "bodyMatched": 10,
+        "differences": [
+          {
+            "property": "padding",
+            "want": "0px 9px 0px 8px",
+            "got": "0px 8px 0px 8px",
+            "name": "Initiatives",
+            "kind": "text",
+            "region": "sidebar",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(1) > div > div > div:nth-of-type(1) > nav > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > div > div:nth-of-type(2) > div > div:nth-of-type(1) > div:nth-of-type(1) > div > div > div > div > a > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > div:nth-of-type(1) > aside > nav > section:nth-of-type(1) > div:nth-of-type(2) > span:nth-of-type(1) > span > a > span:nth-of-type(2)",
+            "referenceRect": [
+              12,
+              251.55,
+              220,
+              28
+            ],
+            "flowRect": [
+              40,
+              286.75,
+              59.273,
+              15.5
+            ]
+          }
+        ]
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 33,
+        "bodyMatched": 11,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 14,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "shell",
+      "screen": "sidebar",
+      "route": "/desktop3-shell-sidebar/agent",
+      "before": {
+        "status": "PASS",
+        "matched": 35,
+        "bodyMatched": 10,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 36,
+        "bodyMatched": 11,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 30,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "shell",
+      "screen": "team-collapsed",
+      "route": "/desktop3-shell-team-collapsed/agent",
+      "before": {
+        "status": "PASS",
+        "matched": 35,
+        "bodyMatched": 10,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 36,
+        "bodyMatched": 11,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 25,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "shell",
+      "screen": "team-menu",
+      "route": "/desktop3-shell-team-menu/agent",
+      "before": {
+        "status": "PASS",
+        "matched": 36,
+        "bodyMatched": 10,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 37,
+        "bodyMatched": 11,
+        "differences": [],
+        "withheld": 3,
+        "ambiguities": 25,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "shell",
+      "screen": "tmp",
+      "route": "/desktop3-shell-tmp/agent",
+      "before": {
+        "status": "PASS",
+        "matched": 35,
+        "bodyMatched": 10,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 36,
+        "bodyMatched": 11,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 25,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "shell",
+      "screen": "toast",
+      "route": "/desktop3-shell-toast/issue/PIC-3",
+      "before": {
+        "status": "INCONCLUSIVE",
+        "matched": 26,
+        "bodyMatched": 3,
+        "differences": [
+          {
+            "property": "x",
+            "want": 1040.85,
+            "got": 1063.383,
+            "name": "Todo",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div:nth-of-type(1) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div > div > button > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > section > div > div > aside > div > span",
+            "referenceRect": [
+              1040.85,
+              159.5,
+              31.22,
+              15.5
+            ],
+            "flowRect": [
+              1063.383,
+              161.75,
+              31.078,
+              15.5
+            ]
+          },
+          {
+            "property": "fontWeight",
+            "want": "500",
+            "got": "450",
+            "name": "Todo",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div:nth-of-type(1) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div > div > button > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > section > div > div > aside > div > span",
+            "referenceRect": [
+              1040.85,
+              159.5,
+              31.22,
+              15.5
+            ],
+            "flowRect": [
+              1063.383,
+              161.75,
+              31.078,
+              15.5
+            ]
+          },
+          {
+            "property": "color",
+            "want": [
+              227,
+              228,
+              230,
+              1
+            ],
+            "got": [
+              149,
+              149,
+              151,
+              1
+            ],
+            "name": "Todo",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div:nth-of-type(1) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div > div > button > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > section > div > div > aside > div > span",
+            "referenceRect": [
+              1040.85,
+              159.5,
+              31.22,
+              15.5
+            ],
+            "flowRect": [
+              1063.383,
+              161.75,
+              31.078,
+              15.5
+            ]
+          }
+        ]
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 63,
+        "bodyMatched": 27,
+        "differences": [],
+        "withheld": 5,
+        "ambiguities": 38,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "shell",
+      "screen": "tooltip",
+      "route": "/desktop3-shell-tooltip/issue/PIC-3",
+      "before": {
+        "status": "INCONCLUSIVE",
+        "matched": 28,
+        "bodyMatched": 3,
+        "differences": [
+          {
+            "property": "fontWeight",
+            "want": "450",
+            "got": "400",
+            "name": "Search",
+            "kind": "text",
+            "region": "sidebar",
+            "referenceSelector": "html > body > div:nth-of-type(15) > div > div > div > div > div > div",
+            "flowSelector": "html > body > div:nth-of-type(3) > div > span:nth-of-type(1)",
+            "referenceRect": [
+              156,
+              57.8,
+              36.72,
+              16.5
+            ],
+            "flowRect": [
+              156.5,
+              59,
+              36.508,
+              13
+            ]
+          },
+          {
+            "property": "x",
+            "want": 1040.85,
+            "got": 1063.383,
+            "name": "Todo",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div:nth-of-type(1) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div > div > button > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > section > div > div > aside > div > span",
+            "referenceRect": [
+              1040.85,
+              159.5,
+              31.22,
+              15.5
+            ],
+            "flowRect": [
+              1063.383,
+              161.75,
+              31.078,
+              15.5
+            ]
+          },
+          {
+            "property": "fontWeight",
+            "want": "500",
+            "got": "450",
+            "name": "Todo",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div:nth-of-type(1) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div > div > button > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > section > div > div > aside > div > span",
+            "referenceRect": [
+              1040.85,
+              159.5,
+              31.22,
+              15.5
+            ],
+            "flowRect": [
+              1063.383,
+              161.75,
+              31.078,
+              15.5
+            ]
+          },
+          {
+            "property": "color",
+            "want": [
+              227,
+              228,
+              230,
+              1
+            ],
+            "got": [
+              149,
+              149,
+              151,
+              1
+            ],
+            "name": "Todo",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div:nth-of-type(1) > div > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > div > div:nth-of-type(2) > div > div > div > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div > div > button > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > section > div > div > aside > div > span",
+            "referenceRect": [
+              1040.85,
+              159.5,
+              31.22,
+              15.5
+            ],
+            "flowRect": [
+              1063.383,
+              161.75,
+              31.078,
+              15.5
+            ]
+          }
+        ]
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 64,
+        "bodyMatched": 26,
+        "differences": [],
+        "withheld": 4,
+        "ambiguities": 36,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "shell",
+      "screen": "topbar",
+      "route": "/desktop3-shell-topbar/team/PIC/all",
+      "before": {
+        "status": "FAIL",
+        "matched": 49,
+        "bodyMatched": 17,
+        "differences": [
+          {
+            "property": "color",
+            "want": [
+              227,
+              228,
+              230,
+              1
+            ],
+            "got": [
+              255,
+              255,
+              255,
+              1
+            ],
+            "name": "Picker Test",
+            "kind": "text",
+            "region": "topbar",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(1) > header > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div > a > div > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > header > nav > span:nth-of-type(1) > a > span:nth-of-type(2)",
+            "referenceRect": [
+              284.5,
+              22.5,
+              68.76,
+              15.5
+            ],
+            "flowRect": [
+              284.5,
+              22.5,
+              68.758,
+              15.5
+            ]
+          },
+          {
+            "property": "letterSpacing",
+            "want": "-0.24px",
+            "got": "normal",
+            "name": "PIC-3",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > div > div > div > div:nth-of-type(1) > div > div > div:nth-of-type(1) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(1) > span > span:nth-of-type(1)",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > section:nth-of-type(1) > div:nth-of-type(2) > a:nth-of-type(1) > div > div:nth-of-type(1) > span:nth-of-type(1)",
+            "referenceRect": [
+              273.5,
+              164,
+              34.63,
+              14.5
+            ],
+            "flowRect": [
+              273.5,
+              155,
+              32.602,
+              14.5
+            ]
+          },
+          {
+            "property": "color",
+            "want": [
+              152,
+              153,
+              156,
+              1
+            ],
+            "got": [
+              149,
+              149,
+              151,
+              1
+            ],
+            "name": "PIC-3",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > div > div > div > div:nth-of-type(1) > div > div > div:nth-of-type(1) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(1) > span > span:nth-of-type(1)",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > section:nth-of-type(1) > div:nth-of-type(2) > a:nth-of-type(1) > div > div:nth-of-type(1) > span:nth-of-type(1)",
+            "referenceRect": [
+              273.5,
+              164,
+              34.63,
+              14.5
+            ],
+            "flowRect": [
+              273.5,
+              155,
+              32.602,
+              14.5
+            ]
+          },
+          {
+            "property": "color",
+            "want": [
+              255,
+              255,
+              255,
+              1
+            ],
+            "got": [
+              227,
+              228,
+              230,
+              1
+            ],
+            "name": "Nested child one",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > div > div > div > div:nth-of-type(1) > div > div > div:nth-of-type(1) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(1) > div > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > section:nth-of-type(1) > div:nth-of-type(2) > a:nth-of-type(1) > div > div:nth-of-type(2) > strong",
+            "referenceRect": [
+              293.5,
+              184.5,
+              104.59,
+              16
+            ],
+            "flowRect": [
+              293.5,
+              175.5,
+              104.586,
+              15.5
+            ]
+          },
+          {
+            "property": "color",
+            "want": [
+              152,
+              153,
+              156,
+              1
+            ],
+            "got": [
+              149,
+              149,
+              151,
+              1
+            ],
+            "name": "Created Oct 26",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > div > div > div > div:nth-of-type(1) > div > div > div:nth-of-type(1) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(4) > div > div > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > section:nth-of-type(1) > div:nth-of-type(2) > a:nth-of-type(1) > div > div:nth-of-type(4) > span",
+            "referenceRect": [
+              271,
+              245.25,
+              86.87,
+              14.5
+            ],
+            "flowRect": [
+              270.5,
+              235.5,
+              86.875,
+              14.5
+            ]
+          },
+          {
+            "property": "yRelative",
+            "want": 90.25,
+            "got": 88.5,
+            "name": "Created Oct 26",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > div > div > div > div:nth-of-type(1) > div > div > div:nth-of-type(1) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(4) > div > div > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > section:nth-of-type(1) > div:nth-of-type(2) > a:nth-of-type(1) > div > div:nth-of-type(4) > span",
+            "referenceRect": [
+              271,
+              245.25,
+              86.87,
+              14.5
+            ],
+            "flowRect": [
+              270.5,
+              235.5,
+              86.875,
+              14.5
+            ]
+          },
+          {
+            "property": "color",
+            "want": [
+              152,
+              153,
+              156,
+              1
+            ],
+            "got": [
+              149,
+              149,
+              151,
+              1
+            ],
+            "name": "Created Oct 26",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > div > div > div > div:nth-of-type(1) > div > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(4) > div > div > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > section:nth-of-type(1) > div:nth-of-type(2) > a:nth-of-type(2) > div > div:nth-of-type(4) > span",
+            "referenceRect": [
+              271,
+              369.75,
+              86.87,
+              14.5
+            ],
+            "flowRect": [
+              270.5,
+              360,
+              86.875,
+              14.5
+            ]
+          },
+          {
+            "property": "color",
+            "want": [
+              152,
+              153,
+              156,
+              1
+            ],
+            "got": [
+              149,
+              149,
+              151,
+              1
+            ],
+            "name": "Created Oct 26",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > div > div > div > div:nth-of-type(1) > div > div > div:nth-of-type(3) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(4) > div > div > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > section:nth-of-type(1) > div:nth-of-type(2) > a:nth-of-type(3) > div > div:nth-of-type(4) > span",
+            "referenceRect": [
+              271,
+              494.25,
+              86.87,
+              14.5
+            ],
+            "flowRect": [
+              270.5,
+              484.5,
+              86.875,
+              14.5
+            ]
+          },
+          {
+            "property": "letterSpacing",
+            "want": "-0.24px",
+            "got": "normal",
+            "name": "PIC-2",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > div > div > div > div:nth-of-type(1) > div > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(1) > span > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > section:nth-of-type(1) > div:nth-of-type(2) > a:nth-of-type(3) > div > div:nth-of-type(1) > span",
+            "referenceRect": [
+              273.5,
+              288.5,
+              34.63,
+              14.5
+            ],
+            "flowRect": [
+              273.5,
+              404,
+              32.234,
+              14.5
+            ]
+          },
+          {
+            "property": "color",
+            "want": [
+              152,
+              153,
+              156,
+              1
+            ],
+            "got": [
+              149,
+              149,
+              151,
+              1
+            ],
+            "name": "PIC-2",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > div > div > div > div:nth-of-type(1) > div > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(1) > span > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > section:nth-of-type(1) > div:nth-of-type(2) > a:nth-of-type(3) > div > div:nth-of-type(1) > span",
+            "referenceRect": [
+              273.5,
+              288.5,
+              34.63,
+              14.5
+            ],
+            "flowRect": [
+              273.5,
+              404,
+              32.234,
+              14.5
+            ]
+          },
+          {
+            "property": "color",
+            "want": [
+              255,
+              255,
+              255,
+              1
+            ],
+            "got": [
+              227,
+              228,
+              230,
+              1
+            ],
+            "name": "Estimate test B",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > div > div > div > div:nth-of-type(1) > div > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(1) > div > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > section:nth-of-type(1) > div:nth-of-type(2) > a:nth-of-type(3) > div > div:nth-of-type(2) > strong",
+            "referenceRect": [
+              293.5,
+              309,
+              92.22,
+              16
+            ],
+            "flowRect": [
+              293.5,
+              424.5,
+              92.219,
+              15.5
+            ]
+          },
+          {
+            "property": "letterSpacing",
+            "want": "-0.24px",
+            "got": "normal",
+            "name": "PIC-1",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > div > div > div > div:nth-of-type(1) > div > div > div:nth-of-type(3) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(1) > span > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > section:nth-of-type(1) > div:nth-of-type(2) > a:nth-of-type(2) > div > div:nth-of-type(1) > span",
+            "referenceRect": [
+              273.5,
+              413,
+              34.63,
+              14.5
+            ],
+            "flowRect": [
+              273.5,
+              279.5,
+              30.18,
+              14.5
+            ]
+          },
+          {
+            "property": "color",
+            "want": [
+              152,
+              153,
+              156,
+              1
+            ],
+            "got": [
+              149,
+              149,
+              151,
+              1
+            ],
+            "name": "PIC-1",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > div > div > div > div:nth-of-type(1) > div > div > div:nth-of-type(3) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(1) > span > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > section:nth-of-type(1) > div:nth-of-type(2) > a:nth-of-type(2) > div > div:nth-of-type(1) > span",
+            "referenceRect": [
+              273.5,
+              413,
+              34.63,
+              14.5
+            ],
+            "flowRect": [
+              273.5,
+              279.5,
+              30.18,
+              14.5
+            ]
+          },
+          {
+            "property": "color",
+            "want": [
+              255,
+              255,
+              255,
+              1
+            ],
+            "got": [
+              227,
+              228,
+              230,
+              1
+            ],
+            "name": "Estimate test A",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(2) > div > div > div:nth-of-type(1) > div > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(3) > div > div > div > div:nth-of-type(1) > div > div > div:nth-of-type(3) > div > div:nth-of-type(2) > div > a > div > div:nth-of-type(1) > div > span",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > section:nth-of-type(1) > div:nth-of-type(2) > a:nth-of-type(2) > div > div:nth-of-type(2) > strong",
+            "referenceRect": [
+              293.5,
+              433.5,
+              92.9,
+              16
+            ],
+            "flowRect": [
+              293.5,
+              300,
+              92.898,
+              15.5
+            ]
+          },
+          {
+            "property": "padding",
+            "want": "0px 0px 0px 0px",
+            "got": "0px 7.5px 0px 8px",
+            "name": "topbar",
+            "kind": "chrome",
+            "region": "topbar",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(1) > header",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > header",
+            "referenceRect": [
+              244.5,
+              8.5,
+              1187,
+              87.5
+            ],
+            "flowRect": [
+              244.5,
+              8.5,
+              1187,
+              44
+            ]
+          },
+          {
+            "property": "gap",
+            "want": "12px",
+            "got": "0px",
+            "name": "topbar",
+            "kind": "chrome",
+            "region": "topbar",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div:nth-of-type(1) > header",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > main > header",
+            "referenceRect": [
+              244.5,
+              8.5,
+              1187,
+              87.5
+            ],
+            "flowRect": [
+              244.5,
+              8.5,
+              1187,
+              44
+            ]
+          }
+        ]
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 49,
+        "bodyMatched": 17,
+        "differences": [],
+        "withheld": 7,
+        "ambiguities": 28,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "shell",
+      "screen": "workspace-switcher",
+      "route": "/desktop3-shell-workspace-switcher/agent",
+      "before": {
+        "status": "PASS",
+        "matched": 35,
+        "bodyMatched": 10,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 36,
+        "bodyMatched": 11,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 26,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "inbox",
+      "screen": "command-search-review",
+      "route": "/desktop3-inbox-command-search-review/reviews",
+      "before": {
+        "status": "PASS",
+        "matched": 31,
+        "bodyMatched": 9,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 31,
+        "bodyMatched": 9,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 24,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "inbox",
+      "screen": "inbox-actions",
+      "route": "/desktop3-inbox-inbox-actions/inbox",
+      "before": {
+        "status": "FAIL",
+        "matched": 34,
+        "bodyMatched": 6,
+        "differences": [
+          {
+            "property": "x",
+            "want": 341.64,
+            "got": 343.5,
+            "name": "Delete all",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(12) > div > div:nth-of-type(2) > div > div > div > ul > li:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+            "flowSelector": "html > body > div:nth-of-type(3) > div > div:nth-of-type(3) > span:nth-of-type(2)",
+            "referenceRect": [
+              341.64,
+              105.34489795918367,
+              56.94897959183673,
+              15.499999999999998
+            ],
+            "flowRect": [
+              343.5,
+              104.75,
+              56.953,
+              15.5
+            ]
+          },
+          {
+            "property": "x",
+            "want": 341.64,
+            "got": 343.5,
+            "name": "Mark all as read",
+            "kind": "text",
+            "region": "topbar",
+            "referenceSelector": "html > body > div:nth-of-type(12) > div > div:nth-of-type(2) > div > div > div > ul > li:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+            "flowSelector": "html > body > div:nth-of-type(3) > div > div:nth-of-type(1) > span:nth-of-type(2)",
+            "referenceRect": [
+              341.64,
+              61.34489795918368,
+              98.03061224489794,
+              15.499999999999998
+            ],
+            "flowRect": [
+              343.5,
+              62.75,
+              98.031,
+              15.5
+            ]
+          }
+        ]
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 34,
+        "bodyMatched": 6,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 17,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "inbox",
+      "screen": "inbox-empty-unread",
+      "route": "/desktop3-inbox-inbox-empty-unread/inbox",
+      "before": {
+        "status": "PASS",
+        "matched": 31,
+        "bodyMatched": 6,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 31,
+        "bodyMatched": 6,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 16,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "inbox",
+      "screen": "inbox-filters",
+      "route": "/desktop3-inbox-inbox-filters/inbox",
+      "before": {
+        "status": "FAIL",
+        "matched": 45,
+        "bodyMatched": 19,
+        "differences": [
+          {
+            "property": "backgroundColor",
+            "want": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "got": [
+              45,
+              45,
+              47,
+              1
+            ],
+            "name": "Add filter",
+            "kind": "control",
+            "region": "topbar",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div:nth-of-type(1) > div > div > div:nth-of-type(1) > header > div > div > div > div:nth-of-type(2) > div > div > div > div > div:nth-of-type(2) > div > button",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > div:nth-of-type(2) > main > section:nth-of-type(1) > div:nth-of-type(1) > header > div > div:nth-of-type(3) > div > span > button",
+            "referenceRect": [
+              474,
+              16.25,
+              28,
+              28
+            ],
+            "flowRect": [
+              474,
+              16.25,
+              28,
+              28
+            ]
+          },
+          {
+            "property": "backgroundColor",
+            "want": [
+              35,
+              36,
+              36,
+              1
+            ],
+            "got": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "name": "Notification actions",
+            "kind": "control",
+            "region": "topbar",
+            "referenceSelector": "html > body > div:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(2) > div > div:nth-of-type(2) > div:nth-of-type(1) > div > main > div:nth-of-type(2) > div > div:nth-of-type(1) > div > div > div:nth-of-type(1) > header > div > div > div > div:nth-of-type(1) > div:nth-of-type(3) > button",
+            "flowSelector": "html > body > div:nth-of-type(1) > div > div:nth-of-type(2) > main > section:nth-of-type(1) > div:nth-of-type(1) > header > div > div:nth-of-type(1) > button",
+            "referenceRect": [
+              304.72,
+              16.25,
+              28,
+              28
+            ],
+            "flowRect": [
+              304.719,
+              16.25,
+              28,
+              28
+            ]
+          },
+          {
+            "property": "x",
+            "want": 510.43000000000006,
+            "got": 512.5,
+            "name": "Notification type",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(11) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div > ul > li:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+            "flowSelector": "html > body > div:nth-of-type(3) > div > div > div:nth-of-type(2) > button:nth-of-type(1) > span:nth-of-type(1)",
+            "referenceRect": [
+              510.43000000000006,
+              96.07510204081632,
+              102.5,
+              15.5
+            ],
+            "flowRect": [
+              512.5,
+              99.25,
+              102.5,
+              15.5
+            ]
+          },
+          {
+            "property": "color",
+            "want": [
+              255,
+              255,
+              255,
+              1
+            ],
+            "got": [
+              229,
+              230,
+              232,
+              1
+            ],
+            "name": "Notification type",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(11) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div > ul > li:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+            "flowSelector": "html > body > div:nth-of-type(3) > div > div > div:nth-of-type(2) > button:nth-of-type(1) > span:nth-of-type(1)",
+            "referenceRect": [
+              510.43000000000006,
+              96.07510204081632,
+              102.5,
+              15.5
+            ],
+            "flowRect": [
+              512.5,
+              99.25,
+              102.5,
+              15.5
+            ]
+          },
+          {
+            "property": "x",
+            "want": 510.43000000000006,
+            "got": 512.5,
+            "name": "From",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(11) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div > ul > li:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+            "flowSelector": "html > body > div:nth-of-type(3) > div > div > div:nth-of-type(2) > button:nth-of-type(2) > span:nth-of-type(1)",
+            "referenceRect": [
+              510.43000000000006,
+              128.07510204081632,
+              31.3265306122449,
+              15.5
+            ],
+            "flowRect": [
+              512.5,
+              131.25,
+              31.328,
+              15.5
+            ]
+          },
+          {
+            "property": "x",
+            "want": 510.43000000000006,
+            "got": 512.5,
+            "name": "Team",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(11) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div > ul > li:nth-of-type(3) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+            "flowSelector": "html > body > div:nth-of-type(3) > div > div > div:nth-of-type(2) > button:nth-of-type(3) > span:nth-of-type(2)",
+            "referenceRect": [
+              510.43000000000006,
+              160.07510204081632,
+              33.96938775510204,
+              15.5
+            ],
+            "flowRect": [
+              512.5,
+              163.25,
+              33.969,
+              15.5
+            ]
+          },
+          {
+            "property": "x",
+            "want": 510.43000000000006,
+            "got": 512.5,
+            "name": "Initiative",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(11) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div > ul > li:nth-of-type(5) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+            "flowSelector": "html > body > div:nth-of-type(3) > div > div > div:nth-of-type(2) > button:nth-of-type(5) > span:nth-of-type(1)",
+            "referenceRect": [
+              510.43000000000006,
+              224.07510204081632,
+              51.663265306122454,
+              15.5
+            ],
+            "flowRect": [
+              512.5,
+              227.25,
+              51.664,
+              15.5
+            ]
+          },
+          {
+            "property": "x",
+            "want": 510.43000000000006,
+            "got": 512.5,
+            "name": "Issue priority",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(11) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div > ul > li:nth-of-type(6) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+            "flowSelector": "html > body > div:nth-of-type(3) > div > div > div:nth-of-type(2) > button:nth-of-type(6) > span:nth-of-type(1)",
+            "referenceRect": [
+              510.43000000000006,
+              256.0751020408163,
+              80.6938775510204,
+              15.5
+            ],
+            "flowRect": [
+              512.5,
+              259.25,
+              80.695,
+              15.5
+            ]
+          },
+          {
+            "property": "x",
+            "want": 510.43000000000006,
+            "got": 512.5,
+            "name": "Issue status type",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(11) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div > ul > li:nth-of-type(7) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+            "flowSelector": "html > body > div:nth-of-type(3) > div > div > div:nth-of-type(2) > button:nth-of-type(7) > span:nth-of-type(2)",
+            "referenceRect": [
+              510.43000000000006,
+              288.0751020408163,
+              105.16326530612245,
+              15.5
+            ],
+            "flowRect": [
+              512.5,
+              291.25,
+              105.164,
+              15.5
+            ]
+          },
+          {
+            "property": "x",
+            "want": 510.43000000000006,
+            "got": 512.5,
+            "name": "Project",
+            "kind": "text",
+            "region": "content",
+            "referenceSelector": "html > body > div:nth-of-type(11) > div > div:nth-of-type(2) > div > div:nth-of-type(2) > div > ul > li:nth-of-type(4) > div:nth-of-type(2) > div:nth-of-type(2) > span",
+            "flowSelector": "html > body > div:nth-of-type(3) > div > div > div:nth-of-type(2) > button:nth-of-type(4) > span:nth-of-type(1)",
+            "referenceRect": [
+              510.43000000000006,
+              192.0751020408163,
+              43.5,
+              15.5
+            ],
+            "flowRect": [
+              512.5,
+              195.25,
+              43.5,
+              15.5
+            ]
+          }
+        ]
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 45,
+        "bodyMatched": 19,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 25,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "inbox",
+      "screen": "inbox-list-all",
+      "route": "/desktop3-inbox-inbox-list-all/inbox",
+      "before": {
+        "status": "PASS",
+        "matched": 30,
+        "bodyMatched": 5,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 30,
+        "bodyMatched": 5,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 15,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "inbox",
+      "screen": "inbox-list",
+      "route": "/desktop3-inbox-inbox-list/inbox",
+      "before": {
+        "status": "PASS",
+        "matched": 30,
+        "bodyMatched": 5,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 30,
+        "bodyMatched": 5,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 16,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "inbox",
+      "screen": "notification-actions",
+      "route": "/desktop3-inbox-notification-actions/inbox",
+      "before": {
+        "status": "PASS",
+        "matched": 37,
+        "bodyMatched": 11,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 37,
+        "bodyMatched": 11,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 17,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "inbox",
+      "screen": "notification",
+      "route": "/desktop3-inbox-notification/inbox",
+      "before": {
+        "status": "FINDING",
+        "matched": 30,
+        "bodyMatched": 3,
+        "differences": []
+      },
+      "after": {
+        "status": "FINDING",
+        "matched": 30,
+        "bodyMatched": 3,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 18,
+        "flags": [
+          "LOW_MATCH_COVERAGE: >=15 total and >=5 body matches required"
+        ],
+        "mutation": true
+      }
+    },
+    {
+      "area": "inbox",
+      "screen": "notification-snooze",
+      "route": "/desktop3-inbox-notification-snooze/inbox",
+      "before": {
+        "status": "PASS",
+        "matched": 44,
+        "bodyMatched": 17,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 44,
+        "bodyMatched": 17,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 17,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "inbox",
+      "screen": "pulse",
+      "route": "/desktop3-inbox-pulse/pulse",
+      "before": {
+        "status": "PASS",
+        "matched": 32,
+        "bodyMatched": 5,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 32,
+        "bodyMatched": 5,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 17,
+        "flags": [],
+        "mutation": true
+      }
+    },
+    {
+      "area": "inbox",
+      "screen": "reviews-list",
+      "route": "/desktop3-inbox-reviews-list/reviews",
+      "before": {
+        "status": "PASS",
+        "matched": 30,
+        "bodyMatched": 8,
+        "differences": []
+      },
+      "after": {
+        "status": "PASS",
+        "matched": 30,
+        "bodyMatched": 8,
+        "differences": [],
+        "withheld": 2,
+        "ambiguities": 20,
+        "flags": [],
+        "mutation": true
+      }
+    }
+  ],
+  "gateChanges": [
+    "Retain visibility from the original capture before undoing animation scale, excluding clipped one-pixel accessibility labels.",
+    "Apply the existing one-pixel visibility floor to the intersection of all clipping ancestors in both captures and the live DOM; collapsed rows exposed only through a subpixel sliver are not eligible.",
+    "Undo a declared scale once; do not infer the same scale from its scroll ratio again.",
+    "Normalize implicitly scaled floating menus from their anchored top-left corner.",
+    "Match the first breadcrumb row of the composite shell header to the one-row Flow header; preserve the complete inbox/Pulse header owner."
+  ],
+  "fixtureChanges": [
+    "Include all eight captured recent chats and their relative ages behind shell overlays.",
+    "Initialize Workspace and Your teams as collapsed for the collapsed-sidebar fixture and assert both states before measurement.",
+    "Use the repaired PIC-3 route for toast and tooltip fixtures, with API identifier translation back to owned records.",
+    "Keep board card order and team glyph names consistent with the captured data; team colors were sampled from the immutable reference PNG.",
+    "Reproduce the hovered notification-actions control while the filter menu is open."
+  ],
+  "remaining": [
+    {
+      "area": "inbox",
+      "screen": "notification",
+      "classification": "product decision needed",
+      "detail": "The welcome host needs an owner-approved introductory-video asset. The existing unavailable state remains a finding, with low body-match coverage."
+    },
+    {
+      "area": "shell",
+      "screen": "topbar",
+      "classification": "fixture cannot match",
+      "detail": "Captured icon/count metadata pills and the Todo header value of 9 differ from the three-card fixture. The captures omit the original metadata payload and complete issue projection; their exact state cannot be reconstructed without assumptions about unrecorded entities."
+    },
+    {
+      "area": "shell",
+      "screen": "topbar",
+      "classification": "fixture cannot match",
+      "detail": "The original sidebar includes a third team and cycle entries. The isolated fixture has two teams and lacks the original cycle/membership data; its complete resource tree is not equivalent."
+    },
+    {
+      "area": "shell",
+      "screen": "sidebar-collapsed",
+      "classification": "product decision needed",
+      "detail": "The captured Try section offers Import issues; Flow currently offers Invite people, Cycles and Connect GitHub. Choosing the reference onboarding suggestions or the existing task-based onboarding model requires a product decision."
+    },
+    {
+      "area": "inbox",
+      "screen": "phone context snooze",
+      "classification": "product decision needed",
+      "detail": "A separate 390px probe found the existing cascading snooze submenu at x=-172.64px. Phone rules are unchanged; choosing a responsive cascading menu or a single-layer interaction remains outside the desktop change. The compact phone read action and existing phone list/action gates pass."
+    }
+  ],
+  "validation": {
+    "unitFiles": [
+      "web/src/components/inbox/notification-row.test.tsx",
+      "web/src/components/inbox/inbox-controller.test.tsx",
+      "web/src/components/inbox/inbox-header.test.tsx",
+      "web/src/components/inbox/inbox-filter-builder.test.tsx",
+      "web/src/components/layout/sidebar.test.tsx",
+      "web/src/components/ui/tooltip.test.tsx",
+      "web/src/components/issue/issue-header.test.tsx",
+      "web/src/components/issue/estimate-picker.test.tsx",
+      "web/src/components/issue-explorer/issue-board.test.tsx",
+      "web/src/components/my-issues/my-issues-list.test.tsx",
+      "web/src/components/my-issues/issue-row-actions.test.tsx",
+      "web/src/components/my-issues/my-issues-estimates.test.tsx"
+    ],
+    "typecheckExit": 0,
+    "fullLintExit": 0,
+    "targetedVitestExit": 0,
+    "browserSpecs": [
+      "desktop-inbox-parity.spec.ts",
+      "desktop-settings-inbox-shell.spec.ts -g toast",
+      "desktop-issue-detail-properties.spec.ts",
+      "desktop-issue-board.spec.ts",
+      "desktop-p12-inbox.spec.ts"
+    ],
+    "browserExit": 0,
+    "desktopGateExit": 1,
+    "desktopGateReason": "The approved-asset finding prevents an all-pass exit.",
+    "captureGateExit": 0,
+    "phoneGeometryAndTextExit": 0,
+    "phoneReadInteractionExit": 0,
+    "matcherExit": 0,
+    "matcherTests": 17
+  }
+}
