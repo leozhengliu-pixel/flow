@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Match desktop board column gutters, status-icon sizing and hidden-column typography without changing phone boards.
 
+- Align desktop document metadata, subscriber labels and history surfaces with their shared foreground and border rules, without changing phone layouts.
+
 - Keep desktop personal settings actions transparent and aligned, with a compact Customize label and descriptive accessible name.
 
 - Match desktop issue reply placeholder typography and comment action padding without changing phone controls.
