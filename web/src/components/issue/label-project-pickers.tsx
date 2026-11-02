@@ -77,7 +77,7 @@ export function EstimatePicker({ value, settings, onChange }: { value?: number; 
   const type = settings?.estimateType ?? 'notUsed'
   const hasValue = value !== undefined && value !== null && value >= 0
   const label = hasValue ? estimateLabel(value, type) : 'Set estimate'
-  return <div className="label-project-picker estimate-picker"><PropertyMenu {...estimateMenuProps(value, settings)} value={label} ariaLabel={hasValue ? `Change estimate. Current estimate is ${label}` : 'Set estimate'} triggerClassName="label-project-trigger" trigger={<><EstimateIcon/><span>{label}</span></>} onChange={id => onChange(Number(id))}/></div>
+  return <div className="label-project-picker estimate-picker" data-empty={!hasValue}><PropertyMenu {...estimateMenuProps(value, settings)} value={label} ariaLabel={hasValue ? `Change estimate. Current estimate is ${label}` : 'Set estimate'} triggerClassName="label-project-trigger" trigger={<><EstimateIcon/><span>{label}</span></>} onChange={id => onChange(Number(id))}/></div>
 }
 
 function cycleProgress(issues: Issue[], cycleId: string) { const scoped=issues.filter(issue=>issue.cycleId===cycleId&&!issue.archivedAt);return scoped.length?Math.round(scoped.filter(issue=>issue.state.type==='completed'||issue.state.type==='canceled').length/scoped.length*100):0 }
