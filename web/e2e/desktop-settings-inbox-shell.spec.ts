@@ -43,6 +43,7 @@ test.describe('phone review connection view', () => {
 })
 
 test('keeps desktop inbox insets on the toolbar and its actions usable', async ({ page, workspaceKey }) => {
+  await page.emulateMedia({ colorScheme: 'dark' })
   await page.goto(`/${workspaceKey}/inbox`)
   await expect(page.locator('.flow-inbox__header')).toHaveCSS('padding', '0px')
   await expect(page.locator('.flow-inbox__header-inner')).toHaveCSS('display', 'flex')
@@ -52,6 +53,10 @@ test('keeps desktop inbox insets on the toolbar and its actions usable', async (
   await expect(page.getByRole('button', { name: 'Show read', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await page.getByRole('button', { name: 'Notification actions', exact: true }).click()
   await expect(page.getByRole('menuitem', { name: 'Go to settings', exact: true })).toBeVisible()
+  await expect(page.locator('.flow-inbox-menu__shortcut')).toHaveCSS('line-height', '12.1px')
+  await expect(page.locator('.flow-inbox-menu__shortcut > span').first()).toHaveCSS('line-height', '12.1px')
+  await expect(page.locator('.flow-inbox-page-composition')).toHaveCSS('border-top-color', 'lch(13.08 1.48 272)')
+  await expect(page.getByRole('menu')).toHaveCSS('border-top-color', 'lch(25.68 1.93 272)')
   await page.getByRole('menu').evaluate(async (node) => { await Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.finished)) })
   if (process.env.FLOW_UI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_UI_SHOTS}/desktop-inbox.png` })
   await page.keyboard.press('Escape')

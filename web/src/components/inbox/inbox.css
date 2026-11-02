@@ -819,6 +819,12 @@
 .flow-inbox-snooze-menu { width: 324px; height: 241.5px; box-sizing: border-box; padding-bottom: 7px; }
 .flow-inbox-snooze-menu .flow-inbox-menu__item { line-height: normal; }
 @media (min-width: 1024px) {
+  .flow-inbox-page-composition.flow-framed-workspace { border-color: var(--release-frame-border); }
+  .flow-inbox-menu { border-color: var(--pk-border); }
+  .flow-inbox-menu__shortcut { color: var(--pk-muted); line-height: 12.1px; }
+  .flow-inbox-menu__shortcut > span { line-height: inherit; }
+  .flow-inbox-menu .flow-inbox-menu__item[data-highlighted] { color: var(--pk-text-strong); }
+  :root:not([data-theme="light"]) .flow-inbox-row[data-read="true"]:not([data-active="true"]) .flow-inbox-row__body { color: var(--inbox-read-body); }
   .flow-inbox-list-state--message:has(> .flow-inbox-list-state__ghost-action) { padding-bottom: 11px; }
   .flow-inbox-list-state--message:has(> .flow-inbox-list-state__ghost-action) > strong { line-height: normal; }
   :root .flow-inbox-list-state--message button.flow-inbox-list-state__ghost-action { margin-top: 16px; background: transparent; font-weight: 500; line-height: normal; }

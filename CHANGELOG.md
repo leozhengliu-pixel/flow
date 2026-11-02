@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align desktop document metadata, subscriber labels and history surfaces with their shared foreground and border rules, without changing phone layouts.
 
+- Align desktop inbox frame and menu borders, shortcut labels and read-notification text with the shared surface palette.
+
 - Keep desktop personal settings actions transparent and aligned, with a compact Customize label and descriptive accessible name.
 
 - Match desktop issue reply placeholder typography and comment action padding without changing phone controls.
