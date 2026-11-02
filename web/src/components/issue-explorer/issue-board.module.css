@@ -340,6 +340,10 @@
   line-height:14.5px;
   white-space:nowrap;
 }
+@media(min-width:1024px){
+  .cardTop>[data-board-card-id]{color:var(--board-card-muted);letter-spacing:-.24px}
+  .created{color:var(--board-card-muted)}
+}
 .addIssue{
   width:100%;
   height:32px;
