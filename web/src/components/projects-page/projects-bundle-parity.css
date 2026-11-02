@@ -43,7 +43,7 @@
   .lp-project-row[data-show-summary="false"] .lp-project-row__name small { display: none; }
   .lp-project-row[data-show-milestones="true"] .lp-project-row__milestone {
     display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; max-width: 45%;
-    color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; line-height: normal;
+    padding: 0 4px; color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; line-height: normal;
   }
   .lp-project-row__milestone-icon { width: 16px; height: 16px; flex: none; }
   .lp-project-row__milestone-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

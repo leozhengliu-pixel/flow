@@ -13,7 +13,7 @@ export function ProjectLeadPicker({ emptyTriggerLabel = 'Lead', value, users, te
   const inTeam=(id:string)=>(directory.teamIds.get(id)??[]).some(team=>teamIds.includes(team))
   return <PersonPicker ariaLabel={`Change Lead. Current value is ${value?.displayName ?? 'none'}`} label="Lead" emptyTriggerLabel={emptyTriggerLabel} emptyOptionLabel="No lead" emptyOptionShortcut="0"
     people={users.map(user => ({ ...user, label: user.displayName || user.name, disabled: user.active === false && user.id !== value?.id, end: user.active === false ? 'Inactive' : undefined, searchOnly: scoped && !inTeam(user.id) && user.id!==value?.id, groupLabel: user.id===value?.id || !scoped ? undefined : inTeam(user.id)?'Users from the project team':'Other users' }))}
-    hideSearch searchPlaceholder="Set lead…" searchShortcut="P, then A" selectedId={value?.id} surfaceClassName={surfaceClassName} triggerClassName={triggerClassName} side={side} alignOffset={alignOffset} open={open} onOpenChange={onOpenChange} tooltip={tooltip} tooltipShortcut={tooltipShortcut}
+    hideSearch searchPlaceholder="Set lead…" searchShortcut="P, then A" selectedId={value?.id} surfaceClassName={surfaceClassName} triggerClassName={`${triggerClassName} project-lead-trigger`} side={side} alignOffset={alignOffset} open={open} onOpenChange={onOpenChange} tooltip={tooltip} tooltipShortcut={tooltipShortcut}
     onChange={id => { if (id === '__invite-project-member__') onInvite?.(); else void onChange(id) }}
     extraOptions={onInvite && viewerCanInvite() ? [{id:'__invite-project-member__',label:'Invite and add…',icon:<Send size={14}/>,groupLabel:'New user'}] : []}/>
 }
