@@ -28,60 +28,64 @@ for (const width of [1440, 390]) {
   for (const colorScheme of ['dark', 'light'] as const) {
     test.describe(`${width}px ${colorScheme} workspace menu`, () => {
       test.use({ viewport: { width, height: width === 390 ? 844 : 900 }, colorScheme })
-      test('keeps Chinese and mixed initials contained and all trigger hit areas stable', async ({ page, request, workspaceKey }, testInfo) => {
-        test.skip(testInfo.project.name !== 'chromium', 'The matrix sets both viewport sizes itself')
-        const phone = width === 390
-        const headers = { 'X-Workspace-Key': workspaceKey }
-        let actionPositions: number[] | undefined
-        for (const name of ['中文团队', '中a', 'a中', 'A', '中文团队 with a workspace name long enough to require truncation']) {
-          expect((await request.patch(`/api/workspaces/${workspaceKey}`, { headers, data: { name } })).ok()).toBe(true)
-          await page.goto(`/${workspaceKey}/my-issues/assigned`)
-          await openDrawer(page, phone)
-          await page.evaluate(() => document.fonts.ready)
-          const trigger = page.locator('.workspace-menu-trigger')
-          await initialsFit(trigger.locator('.workspace-avatar'))
-          const actions = await page.locator('.sidebar-top-action').evaluateAll(elements => elements.map(element => {
-            const box = element.getBoundingClientRect()
-            return { x: box.x, width: box.width }
-          }))
-          expect(actions.map(action => action.width)).toEqual(phone ? [32, 32] : [28, 28])
-          if (actionPositions) actions.forEach((action, index) => expect(action.x).toBeCloseTo(actionPositions![index], 1))
-          else actionPositions = actions.map(action => action.x)
-          const chevron = trigger.locator(':scope > svg')
-          await expect(chevron).toBeInViewport({ ratio: 1 })
-          if (!phone) {
-            expect(await chevron.evaluate(element => getComputedStyle(element).color)).toBe(await trigger.locator('strong').evaluate(element => getComputedStyle(element).color))
-            expect(await chevron.evaluate(element => getComputedStyle(element).fill)).toBe(await chevron.evaluate(element => getComputedStyle(element).color))
-          }
-          const triggerBox = (await trigger.boundingBox())!
-          const iconBox = (await chevron.boundingBox())!
-          expect(iconBox.x + iconBox.width).toBeLessThanOrEqual(triggerBox.x + triggerBox.width)
-          const points = [{ x: 1, y: 14 }, { x: 15, y: 14 }, { x: triggerBox.width / 2, y: 14 }, { x: triggerBox.width - 2, y: 14 }, { x: iconBox.x - triggerBox.x + iconBox.width / 2, y: iconBox.y - triggerBox.y + iconBox.height / 2 }]
-          for (const position of points) {
-            await trigger.click({ position })
-            const menu = page.locator(phone ? '.workspace-phone-menu' : '.workspace-primary-menu')
-            await expect(menu).toBeVisible()
+      for (const name of ['中文团队', '中a', 'a中', 'A', '中文团队 with a workspace name long enough to require truncation']) {
+        test(`keeps initials contained and trigger hit areas stable for ${name}`, async ({ page, request, workspaceKey }, testInfo) => {
+          test.skip(testInfo.project.name !== 'chromium', 'The matrix sets both viewport sizes itself')
+          const phone = width === 390
+          const headers = { 'X-Workspace-Key': workspaceKey }
+          let actionPositions: number[] | undefined
+          // Compare each name with the shortest label in this test's own workspace.
+          for (const currentName of name === 'A' ? [name] : ['A', name]) {
+            expect((await request.patch(`/api/workspaces/${workspaceKey}`, { headers, data: { name: currentName } })).ok()).toBe(true)
+            await page.goto(`/${workspaceKey}/my-issues/assigned`)
+            await openDrawer(page, phone)
+            await page.evaluate(() => document.fonts.ready)
+            const trigger = page.locator('.workspace-menu-trigger')
+            await initialsFit(trigger.locator('.workspace-avatar'))
+            const actions = await page.locator('.sidebar-top-action').evaluateAll(elements => elements.map(element => {
+              const box = element.getBoundingClientRect()
+              return { x: box.x, width: box.width }
+            }))
+            expect(actions.map(action => action.width)).toEqual(phone ? [32, 32] : [28, 28])
+            if (actionPositions) actions.forEach((action, index) => expect(action.x).toBeCloseTo(actionPositions![index], 1))
+            else actionPositions = actions.map(action => action.x)
+            if (currentName !== name) continue
+            const chevron = trigger.locator(':scope > svg')
+            await expect(chevron).toBeInViewport({ ratio: 1 })
             if (!phone) {
-              const settings = menu.getByRole('menuitem', { name: /^Settings/ })
-              await settings.hover()
-              await expect(settings).toHaveCSS('border-radius', '8px')
-              await expect(settings).toHaveCSS('height', '32px')
-              const box = (await menu.boundingBox())!
-              const row = (await settings.boundingBox())!
-              expect(row.x - box.x).toBeGreaterThanOrEqual(6)
-              expect(box.x + box.width - row.x - row.width).toBeGreaterThanOrEqual(6)
-              await expect(menu.locator('.workspace-switch-arrow')).toHaveText('▶')
+              expect(await chevron.evaluate(element => getComputedStyle(element).color)).toBe(await trigger.locator('strong').evaluate(element => getComputedStyle(element).color))
+              expect(await chevron.evaluate(element => getComputedStyle(element).fill)).toBe(await chevron.evaluate(element => getComputedStyle(element).color))
             }
-            await page.keyboard.press('Escape')
-            await expect(menu).toBeHidden()
+            const triggerBox = (await trigger.boundingBox())!
+            const iconBox = (await chevron.boundingBox())!
+            expect(iconBox.x + iconBox.width).toBeLessThanOrEqual(triggerBox.x + triggerBox.width)
+            const points = [{ x: 1, y: 14 }, { x: 15, y: 14 }, { x: triggerBox.width / 2, y: 14 }, { x: triggerBox.width - 2, y: 14 }, { x: iconBox.x - triggerBox.x + iconBox.width / 2, y: iconBox.y - triggerBox.y + iconBox.height / 2 }]
+            for (const position of points) {
+              await trigger.click({ position })
+              const menu = page.locator(phone ? '.workspace-phone-menu' : '.workspace-primary-menu')
+              await expect(menu).toBeVisible()
+              if (!phone) {
+                const settings = menu.getByRole('menuitem', { name: /^Settings/ })
+                await settings.hover()
+                await expect(settings).toHaveCSS('border-radius', '8px')
+                await expect(settings).toHaveCSS('height', '32px')
+                const box = (await menu.boundingBox())!
+                const row = (await settings.boundingBox())!
+                expect(row.x - box.x).toBeGreaterThanOrEqual(6)
+                expect(box.x + box.width - row.x - row.width).toBeGreaterThanOrEqual(6)
+                await expect(menu.locator('.workspace-switch-arrow')).toHaveText('▶')
+              }
+              await page.keyboard.press('Escape')
+              await expect(menu).toBeHidden()
+            }
+            expect(await page.locator('.sidebar-top-action').evaluateAll(elements => elements.map(element => {
+              const box = element.getBoundingClientRect()
+              return { x: box.x, width: box.width }
+            }))).toEqual(actions)
+            if (process.env.FLOW_CI_SHOTS && name === '中文团队') await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/cjk-${width}-${colorScheme}.png` })
           }
-          expect(await page.locator('.sidebar-top-action').evaluateAll(elements => elements.map(element => {
-            const box = element.getBoundingClientRect()
-            return { x: box.x, width: box.width }
-          }))).toEqual(actions)
-          if (process.env.FLOW_CI_SHOTS && name === '中文团队') await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/cjk-${width}-${colorScheme}.png` })
-        }
-      })
+        })
+      }
     })
   }
 }
@@ -177,9 +181,9 @@ test('switches real workspaces by click and keyboard, and bounds a long submenu'
   }
 })
 
-test('workspace menu shortcuts and log out work with a collapsed sidebar and phone drawer', async ({ page, workspaceKey }, testInfo) => {
-  test.skip(testInfo.project.name !== 'chromium', 'The matrix sets both viewport sizes itself')
-  for (const width of [1440, 375, 390]) {
+for (const width of [1440, 375, 390]) {
+  test(`workspace menu shortcuts and log out work at ${width}px`, async ({ page, workspaceKey }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium', 'The matrix sets both viewport sizes itself')
     const phone = width !== 1440
     await page.setViewportSize({ width, height: phone ? 844 : 900 })
     await page.goto(`/${workspaceKey}/my-issues/assigned`)
@@ -216,8 +220,8 @@ test('workspace menu shortcuts and log out work with a collapsed sidebar and pho
     const shortcut = page.waitForResponse(response => response.url().endsWith('/api/auth/logout') && response.request().method() === 'POST')
     await page.keyboard.press('Alt+Shift+Q')
     expect((await shortcut).ok()).toBe(true)
-  }
-})
+  })
+}
 
 for (const width of [1440, 390]) {
   test(`workspace menu routes and shared avatars work in Chinese at ${width}px`, async ({ page, request, workspaceKey }, testInfo) => {
