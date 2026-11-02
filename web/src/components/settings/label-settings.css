@@ -457,7 +457,6 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
     grid-column: menu;
     width: 36px;
     height: 36px;
-    opacity: 0;
     color: var(--set-button-text);
     transform: none;
   }
