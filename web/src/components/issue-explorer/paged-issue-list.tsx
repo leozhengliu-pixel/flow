@@ -14,6 +14,7 @@ import styles from '@/components/my-issues/my-issues-list.module.css'
 import boardStyles from './issue-board.module.css'
 import { HiddenBoardColumns, IssueBoardCard, IssueBoardGroupHeader } from './issue-board'
 import { LoadingContainer, LoadingListFooter } from '@/components/ui/loading-caret'
+import { useBoardEstimateTotals } from './use-board-estimate-totals'
 /** The server's customer group for requests whose customer no longer exists. */
 const UNKNOWN_CUSTOMER_GROUP = '__unknown__'
 
@@ -50,7 +51,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
   const requestRefresh = useCallback(() => {
     clearTimeout(refreshTimer.current)
     refreshTimer.current = setTimeout(() => setRetry(value => value + 1), 80)
-  }, [])
+  }, [setRetry])
   useEffect(() => () => clearTimeout(refreshTimer.current), [signature])
   const cachedState = useMemo(() => issueListState(signature, { viewerId, workspaceKey }), [signature, viewerId, workspaceKey])
   const cache = cachedState.cache
@@ -61,6 +62,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
   useEffect(() => { trimPagedIssueListCache() }, [revision, groups])
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(() => cachedState.groups.length === 0)
+  const boardPoints = useBoardEstimateTotals(layout === 'board' && Boolean(rowProps.displayProperties?.has('estimate')) ? query : undefined, groups, data, retry)
   const updateGroups = useCallback((next: Group[] | ((current: Group[]) => Group[])) => {
     setGroups(current => {
       const value = typeof next === 'function' ? next(current) : next
@@ -68,7 +70,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
       cachedState.groups = value
       return value
     })
-  }, [cachedState])
+  }, [cachedState, setGroups])
   const [dragging, setDragging] = useState<{ issue: Issue; group: string }>()
   // Bumped to forget the remembered previous result (see LastContent).
   const [lastContentEpoch, setLastContentEpoch] = useState(0)
@@ -248,7 +250,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
       setRevision(value => value + 1)
     }).catch(error => { if (!request.abort.signal.aborted) setError(String(error.message ?? error)) })
       .finally(() => request.pending.delete(key))
-  }, [cache, signature, updateGroups])
+  }, [cache, signature, updateGroups, setRevision, setError])
   /** Re-fetches a stale page in place (same cursor). Its rows stay on screen meanwhile, so nothing flashes or moves. */
   const revalidate = useCallback((group: string, pageIndex: number) => {
     const request = active.current, key = cache.key(group, pageIndex)
@@ -269,7 +271,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
       setRevision(value => value + 1)
     }).catch(() => undefined)
       .finally(() => request.pending.delete(key))
-  }, [cache, signature, updateGroups])
+  }, [cache, signature, updateGroups, setRevision])
   const descriptor = useCallback((group: Group): MyIssuesGroupData => {
     const field = query.groupBy ?? 'status'
     if (field === 'cases') {
@@ -337,7 +339,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
       }
       return <div className={boardStyles.board} role="list" aria-label="Issue board">
         {groups.filter(group => !hiddenGroupIds.includes(group.value)).map(group => <VisibleIssueColumn key={group.value} label={descriptor(group).label}>
-          <IssueBoardGroupHeader group={descriptor(group)} onCreateIssue={onCreateIssue} onHideGroup={onHideGroup} onSelectIssue={rowProps.onSelectIssue}/>
+          <IssueBoardGroupHeader group={descriptor(group)} estimateSum={boardPoints?.[group.value]} onCreateIssue={onCreateIssue} onHideGroup={onHideGroup} onSelectIssue={rowProps.onSelectIssue}/>
           <div style={{ flex: 1, minHeight: 0 }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); drop(group) }}>
             <Virtuoso style={{ height: '100%' }} totalCount={group.loaded + (group.hasMore ? 1 : 0)} defaultItemHeight={120} context={revision} increaseViewportBy={240} itemContent={index => {
               const pageIndex = cache.pageAt(group.value, index), page = cache.get(group.value, pageIndex), issue = page?.items[index - cache.start(group.value, pageIndex)]

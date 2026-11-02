@@ -16,6 +16,19 @@ export function pagedGroupQuery(query: IssueQueryInput, value: string, data: Sta
   return members.length > 1 ? { ...query, groupValue: undefined, groupValues: members } : { ...query, groupValue: value }
 }
 
+/** The same group constraint as a row query, for aggregations grouped by a different property. */
+export function pagedGroupFilter(query: IssueQueryInput, value: string, data: StatusGroupContext): Record<string, unknown> {
+  const field = query.groupBy ?? 'status'
+  if (field === 'none') return { and: [] }
+  if (field === 'cases') {
+    const cases = query.groupCases ?? []
+    const index = cases.findIndex(item => item.value === value)
+    return { and: [...(index < 0 ? cases : cases.slice(0, index)).map(item => ({ not: item.filter })), ...(index < 0 ? [] : [cases[index].filter])] }
+  }
+  const values = field === 'status' ? statusGroupIndex(data).memberIds(value) : [value]
+  return { field: field === 'label' ? 'firstLabel' : field === 'milestone' ? 'projectMilestoneId' : field === 'customer' ? 'customers' : field, operator: value ? 'in' : 'isEmpty', values }
+}
+
 /** The server's per-status groups merged into the list's status groups (same name and type), in workflow order. */
 export function pagedStatusGroups<T extends { value: string; count: number }>(groups: readonly T[], data: StatusGroupContext): T[] {
   const merged = new Map<string, { group: T; rank: number }>()

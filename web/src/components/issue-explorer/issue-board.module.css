@@ -82,7 +82,9 @@
   color:var(--issue-muted);
 }
 .countValue{flex:none}
-.countEstimate{display:none}
+.countEstimate{display:block;flex:none}
+.estimateValue{display:contents}
+.count:has(.estimateValue) .issueCount{display:none}
 .cardBadge{display:inline-flex;align-items:center}
 .phoneIcon{display:none}
 .desktopIcon{display:contents}
@@ -97,6 +99,9 @@
   color:var(--issue-muted);
 }
 .count{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
   height:24px;
   padding:0;
   font-size:13px;
@@ -122,7 +127,6 @@
   .columnActions{gap:2px}
   .columnActions .headerButton{border-radius:9999px}
   .count{display:flex;align-items:center;gap:4px;line-height:normal}
-  .countEstimate{display:block;flex:none}
 }
 .headerButton:hover{background:var(--bg-active);color:var(--bright)}
 .cards{
@@ -396,7 +400,6 @@
   .columnHeader strong{margin-left:8px;font-size:13px;font-weight:500}
   .columnActions{gap:2px}
   .count{height:24px;display:flex;align-items:center;gap:3px;margin-left:6px;padding:0;font-size:13px;font-weight:450}
-  .countEstimate{display:block;flex:none}
   .headerButton svg{opacity:.64}
   .headerButton{width:28px;height:28px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;color:var(--issue-fg);font-size:12px;font-weight:500;line-height:normal}
   .columnHeader>svg{color:var(--theme-text-primary)}
