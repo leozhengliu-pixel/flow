@@ -38,14 +38,15 @@
   .project-detail-page__toolbar-actions > [data-project-insights] { order: -1; }
   .project-overview__property-section,
   .project-overview__row-section { grid-template-columns: 67.73px minmax(0, 1fr); }
-  .project-overview h3 { line-height: normal; }
+  .project-overview h3 { min-height: 0; line-height: normal; }
   .project-overview__description-editor { padding-block: 0; }
   .project-overview .project-overview__description-editor .description-editor { box-sizing: border-box; width: calc(100% + 28px); margin-inline: -14px; padding: 16px 14px; }
   .project-overview__row-section,
   .project-overview__intro + .project-overview__row-section { margin-top: 12px; }
   :root .project-detail-page .project-overview .project-overview__summary { letter-spacing: -.1px; }
   .project-overview .project-overview__icon { padding: 0 8px; border-radius: 6px !important; background: color-mix(in srgb, var(--view-color) 17.5%, transparent) !important; }
-  .project-overview__team { line-height: normal; }
+  .project-overview__team { gap: 8px; line-height: normal; }
+  .project-overview__milestones { margin-top: 16px; }
   .project-details-sidebar__property-label { line-height: normal; }
   .project-details-sidebar__section > header > button:first-child { line-height: normal; }
   .project-details-sidebar__milestone { height: 36px; flex-basis: 36px; }

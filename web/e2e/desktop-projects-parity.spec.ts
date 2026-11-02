@@ -9,7 +9,7 @@ test('honors row properties, opens an icon-only date picker and keeps the overvi
   const headers = { 'X-Workspace-Key': workspaceKey }
   const bootstrap = await request.get('/api/bootstrap', { headers })
   const data = await bootstrap.json() as BootstrapData
-  const response = await request.post('/api/projects', { headers, data: { name: '[audit] Desktop project', summary: 'Delivery summary', startDate: '2026-09-28', teamIds: [data.teams[0].id] } })
+  const response = await request.post('/api/projects', { headers, data: { name: '[audit] Desktop project', summary: 'Delivery summary', description: 'Delivery scope.\n\n## Goals\n\n- Match layout\n- Match typography', startDate: '2026-09-28', teamIds: [data.teams[0].id] } })
   expect(response.ok()).toBeTruthy()
   const project = await response.json() as Project
   const initiative = await request.post('/api/initiatives', { headers, data: { name: '[audit] Associated initiative', status: 'active', projectIds: [project.id] } })
@@ -86,6 +86,11 @@ test('honors row properties, opens an icon-only date picker and keeps the overvi
   const descriptionBox = await description.boundingBox()
   expect(Math.abs(descriptionBox!.x - (overview!.x - 14))).toBeLessThanOrEqual(1)
   expect(Math.abs(descriptionBox!.width - (overview!.width + 28))).toBeLessThanOrEqual(1)
+  expect(Math.abs(descriptionBox!.height - 226)).toBeLessThanOrEqual(1)
+  const milestonesBox = await page.locator('.project-overview__milestones').boundingBox()
+  expect(Math.abs(milestonesBox!.y - descriptionBox!.y - descriptionBox!.height - 16)).toBeLessThanOrEqual(1)
+  await expect(page.locator('.project-overview__team')).toHaveCSS('gap', '8px')
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-project-overview.png`, animations: 'disabled' })
   await description.click({ position: { x: 4, y: 20 } })
   await expect(description).toBeFocused()
   const projectActions = page.getByRole('button', { name: 'Project actions', exact: true })
