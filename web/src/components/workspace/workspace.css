@@ -50,7 +50,7 @@
   .workspace-phone-menu .phone-menu-search input::placeholder { color: var(--pk-faint); }
   .workspace-phone-menu-row { position: relative; height: 46px; }
   .workspace-phone-menu-row[hidden] { display: none; }
-  .workspace-phone-menu.phone-menu-surface .workspace-phone-menu-row [cmdk-item]:not(#_) { position: absolute; inset: 0; border-radius: 0; }
+  .workspace-phone-menu .workspace-phone-menu-row [cmdk-item] { position: absolute; inset: 0; }
   .workspace-phone-menu-row [cmdk-item] > span {
     font-size: 13px;
     font-weight: 450;
@@ -58,15 +58,6 @@
     color: var(--pk-text);
   }
   .workspace-phone-menu-row [cmdk-item][data-selected="true"] > span { color: var(--pk-text-strong); }
-  .workspace-phone-menu-row [cmdk-item] { isolation: isolate; }
-  .workspace-phone-menu-row [cmdk-item][data-selected="true"]::before {
-    content: '';
-    position: absolute;
-    inset: 2px 0;
-    z-index: -1;
-    border-radius: 8px;
-    background: var(--pk-hover);
-  }
   .workspace-phone-menu [cmdk-separator]::after { display: none; }
   .workspace-phone-menu [cmdk-separator] > span {
     position: absolute;

@@ -15,12 +15,7 @@
 @media(max-width:800px){.popover{max-width:calc(100vw - 16px);max-height:calc(100vh - 92px)}}
 :global(:root[data-theme="light"]) .trigger{background:var(--theme-surface-1);color:var(--theme-text-primary)}
 :global(:root[data-theme="light"]) .trigger:hover,:global(:root[data-theme="light"]) .trigger[aria-pressed=true],:global(:root[data-theme="light"]) .trigger[data-state=open]{background:var(--ui-pill-hover-bg);color:var(--theme-text-primary)}
-:global(:root[data-theme="light"]) .popover,:global(:root[data-theme="light"]) .selectMenu{border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-control)}
-:global(:root[data-theme="light"]) .layoutTabs button,:global(:root[data-theme="light"]) .propertyGrid button{background:var(--theme-surface-1)}
-:global(:root[data-theme="light"]) .layoutTabs button[aria-selected=true],:global(:root[data-theme="light"]) .propertyGrid button[data-active=true]{background:var(--theme-surface-hover);box-shadow:none;color:var(--theme-text-primary)}
-:global(:root[data-theme="light"]) .selectTrigger{background:var(--theme-surface-2);box-shadow:0 0 0 .5px var(--shadow-color-outline),0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft);color:var(--text)}
 .popover,.selectMenu{z-index:600}
-:global(:root[data-theme="light"]) .selectTrigger:hover:not(:disabled),:global(:root[data-theme="light"]) .selectTrigger[data-state=open],:global(:root[data-theme="light"]) .selectItem[data-highlighted],:global(:root[data-theme="light"]) .selectItem[data-state=checked]{background:var(--theme-surface-hover)}
 .layoutTabs button:disabled{opacity:.45;cursor:not-allowed}
 
 /* The issue display popover uses the same 364px surface as the reference app. */
@@ -42,40 +37,41 @@
 .groupToggle[data-hidden]{color:var(--issue-muted)}
 .groupToggle:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
 .groupHint{margin:6px 0 0;color:var(--issue-muted);font-size:11px}
-/* Reference display options (both themes). `:not(#_)` outranks the theme-scoped rules above. */
-.popover:not(#_),.selectMenu:not(#_){border:.5px solid var(--pk-border);background:var(--pk-surface);box-shadow:var(--pk-shadow);color:var(--pk-text)}
-.section:not(#_)+.section{border-top:.5px solid var(--pk-divider)}
-.rowLabel:not(#_),.selectField:not(#_)>span,.switchRow:not(#_){color:var(--pk-muted);font-size:12px;font-weight:500}
-.sectionLabel:not(#_){height:auto;padding:6px 0 7px;color:var(--pk-muted);font-size:12px;font-weight:500}
-.section:not(#_)>.sectionLabel:first-child{color:var(--pk-text)}
-.layoutTabs:not(#_) button{position:relative;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-muted);font-size:12px;font-weight:500}
-.layoutTabs:not(#_) button[aria-selected=true]{background:var(--pk-control-selected);box-shadow:var(--pk-control-ring-selected);color:var(--pk-text-strong)}
-.selectTrigger:not(#_){padding:1px 18px 1px 8px;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-text);font-size:12px;font-weight:400}
-.selectTrigger:not(#_):hover:not(:disabled),.selectTrigger:not(#_)[data-state=open]{background:var(--pk-control-selected)}
-.propertyGrid:not(#_) button{background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-muted);font-size:12px;font-weight:500}
-.propertyGrid:not(#_) button[data-active=true]{background:var(--pk-chip-on);box-shadow:var(--pk-chip-on-ring);color:var(--pk-text-strong)}
-.footer:not(#_){background:var(--pk-surface);border-top:.5px solid var(--pk-divider)}
+/* Shared display controls resolve both themes through the picker tokens. */
+.popover,.selectMenu{border:.5px solid var(--pk-border);background:var(--pk-surface);box-shadow:var(--pk-shadow);color:var(--pk-text)}
+.section+.section{border-top:.5px solid var(--pk-divider)}
+.rowLabel,.selectField>span,.switchRow{color:var(--pk-muted);font-size:12px;font-weight:500}
+.sectionLabel{height:auto;padding:6px 0 7px;color:var(--pk-muted);font-size:12px;font-weight:500}
+.section>.sectionLabel:first-child{color:var(--pk-text)}
+.layoutTabs button{position:relative;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-muted);font-size:12px;font-weight:500}
+.layoutTabs button[aria-selected=true]{background:var(--pk-control-selected);box-shadow:var(--pk-control-ring-selected);color:var(--pk-text-strong)}
+.selectTrigger{padding:1px 18px 1px 8px;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-text);font-size:12px;font-weight:400}
+.selectTrigger:hover:not(:disabled),.selectTrigger[data-state=open]{background:var(--pk-control-selected)}
+.propertyGrid button{background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-muted);font-size:12px;font-weight:500}
+.propertyGrid button[data-active=false]:hover:not(:disabled){background:var(--control-chip-hover-bg);color:var(--pk-text)}
+.propertyGrid button[data-active=true]{background:var(--pk-chip-on);box-shadow:var(--pk-chip-on-ring);color:var(--pk-text-strong)}
+.footer{background:var(--pk-surface);border-top:.5px solid var(--pk-divider)}
 /* The list popover has no leading "List options" label: its single section label reads as a muted caption. */
-.popover[data-list-display]:not(#_) .section>.sectionLabel:first-child{color:var(--pk-muted)}
+.popover[data-list-display] .section>.sectionLabel:first-child{color:var(--pk-muted)}
 /* The reference app's list popover: no top inset, selects hug their value, label 8px below the divider and 12px above the chips. */
-.popover[data-list-display]:not(#_){padding-top:0}
-.popover[data-list-display]:not(#_) .selectTrigger{min-width:0}
-.popover[data-list-display]:not(#_) .sectionLabel{padding:8px 0 12px;line-height:14px}
-.popover[data-list-display]:not(#_) .propertyGrid{padding-bottom:4px}
+.popover[data-list-display]{padding-top:0}
+.popover[data-list-display] .selectTrigger{min-width:0}
+.popover[data-list-display] .sectionLabel{padding:8px 0 12px;line-height:14px}
+.popover[data-list-display] .propertyGrid{padding-bottom:4px}
 /* Select menu: the raised surface, 12px / 35px item padding and the 14px check of the reference app. */
-.selectMenu:not(#_){border:0;background:var(--select-menu-bg);box-shadow:0 0 0 .5px var(--select-menu-ring),var(--pk-shadow)}
-.selectItem:not(#_){padding:0 35px 0 12px;font-weight:400}
-.selectItem[data-state=checked]:not(#_):not([data-highlighted]){background:transparent}
-.selectIndicator:not(#_){position:absolute;top:5px;right:13.5px;margin:0}
-.selectIndicator:not(#_) svg{width:14px;height:14px}
+.selectMenu{border:0;background:var(--select-menu-bg);box-shadow:0 0 0 .5px var(--select-menu-ring),var(--pk-shadow)}
+.selectItem{--menu-highlight-inset:0 4px;--menu-highlight-bg:var(--menu-option-hover-bg);padding:0 35px 0 12px;background:transparent;font-weight:400}
+.selectItem[data-highlighted],.selectItem[data-state=checked]{background:transparent}
+.selectIndicator{position:absolute;top:5px;right:13.5px;margin:0}
+.selectIndicator svg{width:14px;height:14px}
 /* Layout tabs sit 2px inside the field, 129 wide with 6px between them; chips and rows are 5px apart. */
-.layoutTabs:not(#_){padding:0 2px}
-.propertyGrid:not(#_){gap:5px}
+.layoutTabs{padding:0 2px}
+.propertyGrid{gap:5px}
 
 @media (min-width: 1024px) {
-  .layoutTabs:not(#_) button{padding-block:6px}
-  .selectTrigger:not(#_){width:116px;line-height:normal}
-  .popover[data-layout=board] .selectTrigger:not(#_){width:160px}
+  .layoutTabs button{padding-block:6px}
+  .selectTrigger{width:116px;line-height:normal}
+  .popover[data-layout=board] .selectTrigger{width:160px}
   .desktopModeIcon,.desktopSortIcon{display:none}
   .phoneModeIcon,.phoneSortIcon{display:block}
   .popover { max-height: calc(100dvh - 103px); }
@@ -92,20 +88,20 @@
 
   /* Phone: the compact list popover drops in 36px rows, 28px controls and an 8px corner. */
   .popover.popover[data-list-display] { margin-top: 1px; border-radius: 8px; }
-  .popover[data-list-display]:not(#_) .groupingControl,
-  .popover[data-list-display]:not(#_) .switchRow { height: 36px; }
-  .popover[data-list-display]:not(#_) .section { display: flex; flex-direction: column; }
-  .popover[data-list-display]:not(#_) .groupingControl { align-items: stretch; }
-  .popover[data-list-display]:not(#_) .rowLabel { display: flex; align-items: center; line-height: normal; }
-  .popover[data-list-display]:not(#_) .groupingActions { gap: 0; }
-  .popover[data-list-display]:not(#_) .orderButton {
+  .popover[data-list-display] .groupingControl,
+  .popover[data-list-display] .switchRow { height: 36px; }
+  .popover[data-list-display] .section { display: flex; flex-direction: column; }
+  .popover[data-list-display] .groupingControl { align-items: stretch; }
+  .popover[data-list-display] .rowLabel { display: flex; align-items: center; line-height: normal; }
+  .popover[data-list-display] .groupingActions { gap: 0; }
+  .popover[data-list-display] .orderButton {
     width: 28px;
     height: 28px;
     color: var(--pk-text);
     font: 500 12px/normal var(--font);
   }
-  .popover[data-list-display]:not(#_) .orderButton svg { width: 14px; height: 14px; }
-  .popover[data-list-display]:not(#_) .selectTrigger {
+  .popover[data-list-display] .orderButton svg { width: 14px; height: 14px; }
+  .popover[data-list-display] .selectTrigger {
     width: 102px;
     height: 28px;
     padding: 3px 24px 3px 12px;
@@ -114,12 +110,12 @@
     box-shadow: var(--pk-control-inset-ring-phone);
     font: 400 12px/normal var(--font);
   }
-  .popover[data-list-display]:not(#_) .switchRow { align-items: stretch; }
-  .popover[data-list-display]:not(#_) .switchRow > span { display: flex; align-items: center; line-height: normal; }
-  .popover[data-list-display]:not(#_) .switchRow input { align-self: center; background: var(--pk-toggle-off-phone); }
-  .popover[data-list-display]:not(#_) .sectionLabel { height: auto; margin: 8px 0 4px; padding: 0; line-height: normal; }
-  .popover[data-list-display]:not(#_) .propertyGrid { margin-top: 7px; gap: 1px; padding-bottom: 0; }
-  .popover[data-list-display]:not(#_) .propertyGrid button {
+  .popover[data-list-display] .switchRow { align-items: stretch; }
+  .popover[data-list-display] .switchRow > span { display: flex; align-items: center; line-height: normal; }
+  .popover[data-list-display] .switchRow input { align-self: center; background: var(--pk-toggle-off-phone); }
+  .popover[data-list-display] .sectionLabel { height: auto; margin: 8px 0 4px; padding: 0; line-height: normal; }
+  .popover[data-list-display] .propertyGrid { margin-top: 7px; gap: 1px; padding-bottom: 0; }
+  .popover[data-list-display] .propertyGrid button {
     height: 28px;
     margin: 0 4px 4px 0;
     box-shadow: none;
@@ -150,9 +146,9 @@
     padding-top: 0;
     border-radius: 12px;
   }
-  .popover[data-my-issues-display-menu="true"] .layoutTabs:not(#_) { margin-bottom: 6px; }
+  .popover[data-my-issues-display-menu="true"] .layoutTabs { margin-bottom: 6px; }
   .popover[data-my-issues-display-menu="true"] section[aria-label="Visible issues"] > .switchRow:first-of-type { margin-top: 4px; }
-  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) {
+  .popover[data-issue-display-menu="true"] .layoutTabs {
     height: 32px;
     margin: 14px 7.5px 6px;
     padding: 0;
@@ -161,7 +157,7 @@
     font: 400 16px/24px var(--font);
     color: var(--phone-menu-fg-strong);
   }
-  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button {
+  .popover[data-issue-display-menu="true"] .layoutTabs button {
     height: 28px;
     padding: 6px 8px;
     line-height: normal;
@@ -169,7 +165,7 @@
     flex: 1 1 0;
     margin: 0 2px;
   }
-  .popover[data-issue-display-menu="true"] .layoutTabs:not(#_) button + button { margin-left: 2px; }
+  .popover[data-issue-display-menu="true"] .layoutTabs button + button { margin-left: 2px; }
   .popover[data-issue-display-menu="true"] .section {
     padding: 8px 16px;
   }
@@ -196,7 +192,7 @@
     color: var(--pk-text);
     font: 500 12px/normal var(--font);
   }
-  .popover[data-issue-display-menu="true"] .selectTrigger:not(#_) {
+  .popover[data-issue-display-menu="true"] .selectTrigger {
     width: 144px;
     min-width: 144px;
     height: 28px;
@@ -207,19 +203,19 @@
     box-shadow: var(--pk-control-inset-ring-phone);
     font: 400 12px/normal var(--font);
   }
-  .popover[data-issue-display-menu="true"] .selectTrigger:not(#_) > span:last-child svg {
+  .popover[data-issue-display-menu="true"] .selectTrigger > span:last-child svg {
     width: 12px;
     height: 12px;
     stroke-width: 2;
     color: var(--pk-muted);
     transform: translateY(-1px);
   }
-  .popover[data-issue-display-menu="true"] .selectTrigger:not(#_) > span:last-child { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
-  .popover[data-issue-display-menu="true"] .selectTrigger:not(#_) > span:first-child {
+  .popover[data-issue-display-menu="true"] .selectTrigger > span:last-child { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
+  .popover[data-issue-display-menu="true"] .selectTrigger > span:first-child {
     min-width: 0;
     white-space: nowrap;
   }
-  .popover[data-issue-display-menu="true"] button[aria-label="Ordering"]:not(#_) { color: var(--pk-text-strong); }
+  .popover[data-issue-display-menu="true"] button[aria-label="Ordering"] { color: var(--pk-text-strong); }
   .popover[data-issue-display-menu="true"] button[data-ordering="myActivity"] svg { transform: none; }
   .popover[data-issue-display-menu="true"] .desktopModeIcon,
   .popover[data-issue-display-menu="true"] .desktopSortIcon { display: none; }
@@ -259,38 +255,38 @@
   .popover[data-issue-display-menu="true"] section[aria-label="List options"] > .nestedSelectRow {
     display: grid;
   }
-  .popover[data-issue-display-menu="true"] .sectionLabel:not(#_) {
+  .popover[data-issue-display-menu="true"] .sectionLabel {
     margin: 8px 0 4px;
     height: 14.5px;
     padding: 0;
     line-height: normal;
   }
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) {
+  .popover[data-issue-display-menu="true"] .propertyGrid {
     margin-top: 12px;
     gap: 0;
   }
   .popover[data-issue-display-menu="true"] section[aria-label="List options"] {
     padding-top: 3.5px;
   }
-  .popover[data-issue-display-menu="true"] section[aria-label="List options"] > .sectionLabel:first-child:not(#_) {
+  .popover[data-issue-display-menu="true"] section[aria-label="List options"] > .sectionLabel:first-child {
     margin-bottom: 6px;
   }
-  .popover[data-issue-display-menu="true"] section[aria-label="List options"] > .sectionLabel:nth-of-type(2):not(#_) {
+  .popover[data-issue-display-menu="true"] section[aria-label="List options"] > .sectionLabel:nth-of-type(2) {
     margin-top: 4px;
     margin-bottom: 9px;
   }
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button {
+  .popover[data-issue-display-menu="true"] .propertyGrid button {
     height: 28px;
     margin: 0 5px 5px 0;
     box-shadow: none;
     font: 500 12px/normal var(--font);
   }
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-active="true"] {
+  .popover[data-issue-display-menu="true"] .propertyGrid button[data-active="true"] {
     background: var(--pk-chip-on);
     color: var(--pk-text-strong);
     box-shadow: none;
   }
-  .popover[data-issue-display-menu="true"] .propertyGrid:not(#_) button[data-active="false"] {
+  .popover[data-issue-display-menu="true"] .propertyGrid button[data-active="false"]:not(:hover) {
     background: var(--pk-control);
     color: var(--pk-muted);
     box-shadow: none;
@@ -315,10 +311,10 @@
   .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) .subTeamRow { margin-top: 4px; }
   .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] { margin-top: 1px; }
   .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="Grouping options"] { padding-bottom: 4px; }
-  .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] > .sectionLabel:first-child:not(#_) { margin-bottom: 2px; }
+  .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] > .sectionLabel:first-child { margin-bottom: 2px; }
   .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] > .nestedSelectRow + .switchRow { margin-top: 4px; }
   .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] { margin-top: 1px; }
   .popover[data-issue-display-menu="true"] .footer { position: static; }
-  .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] > .sectionLabel:first-child:not(#_) { margin-bottom: 2px; }
-  .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] > .sectionLabel:nth-of-type(2):not(#_) { margin-top: 8px; }
+  .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] > .sectionLabel:first-child { margin-bottom: 2px; }
+  .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] > .sectionLabel:nth-of-type(2) { margin-top: 8px; }
 }

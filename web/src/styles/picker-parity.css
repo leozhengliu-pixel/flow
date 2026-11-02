@@ -935,26 +935,22 @@ html:root body .workspace-shortcut:not(#_) * {
 }
 
 /* ── Sidebar dropdown menus (team menu and friends) ────────────────────── */
-html:root body .sidebar-popover:not(#_) {
+.sidebar-popover {
   border: .5px solid var(--pk-border);
   background: var(--pk-surface);
   box-shadow: var(--pk-shadow);
   color: var(--pk-text);
 }
-html:root body .sidebar-popover [role=menuitem]:not(#_),
-html:root body .sidebar-popover [role=menuitemcheckbox]:not(#_) {
+.sidebar-popover [role=menuitem],
+.sidebar-popover [role=menuitemcheckbox] {
   color: var(--pk-text);
   font-size: 13px;
   font-weight: 450;
 }
-html:root body .sidebar-popover [role=menuitem]:not(#_)[data-highlighted],
-html:root body .sidebar-popover [role=menuitemcheckbox]:not(#_)[data-highlighted] {
-  background: var(--pk-hover);
-}
-html:root body .sidebar-popover [role=menuitem]:not(#_) > svg:first-child {
+.sidebar-popover [role=menuitem] > svg:first-child {
   color: var(--pk-text);
 }
-html:root body .sidebar-popover [role=menuitem]:not(#_) kbd {
+.sidebar-popover [role=menuitem] kbd {
   color: var(--pk-muted);
   font-size: 11px;
   font-weight: 500;
