@@ -1,0 +1,39 @@
+import { expect } from '@playwright/test'
+import { test } from './workspace-fixture'
+
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
+
+test('settings links and row actions retain their text sizing and navigation', async ({ page, workspaceKey }) => {
+  await page.goto(`/${workspaceKey}/settings/api`)
+  const docs = page.locator('.settings-desktop-docs').first()
+  await expect(docs).toHaveCSS('margin-left', '-3px')
+  await expect(docs).toHaveCSS('font-size', '13px')
+  const create = page.getByRole('button', { name: 'New OAuth application', exact: true })
+  await expect(create).toHaveCSS('padding-left', '10px')
+  await expect(create.locator('svg')).toHaveCSS('width', '16px')
+  if (process.env.FLOW_UI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_UI_SHOTS}/desktop-api-controls.png` })
+  await create.click()
+  await expect(page).toHaveURL(new RegExp('/settings/api/applications/new$'))
+  await page.goto(`/${workspaceKey}/settings/workspace`)
+  await expect(page.getByRole('link', { name: 'Read more', exact: true })).toHaveCSS('font-size', '12px')
+  await page.goto(`/${workspaceKey}/settings/security`)
+  const domain = page.getByRole('button', { name: 'Add domain', exact: true }).first()
+  await domain.click()
+  await expect(page.getByRole('textbox', { name: /domain/i }).first()).toBeVisible()
+})
+
+test('security, notifications, template headers and team overview keep their measured copy styles', async ({ page, request, workspaceKey }) => {
+  await page.goto(`/${workspaceKey}/settings/account/security`)
+  await expect(page.locator('.personal-security-current-label')).toHaveCSS('color', 'lch(80 80 141.95)')
+  await expect(page.getByRole('heading', { name: 'No API keys created', exact: true })).toHaveCSS('font-weight', '450')
+  if (process.env.FLOW_UI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_UI_SHOTS}/desktop-account-security.png` })
+  await page.goto(`/${workspaceKey}/settings/account/notifications`)
+  await expect(page.locator('.personal-channel > span:nth-child(2)').first()).toHaveCSS('gap', '3px')
+  await page.goto(`/${workspaceKey}/settings/project-templates`)
+  await expect(page.getByRole('heading', { name: 'No project templates', exact: true })).toHaveCSS('padding', '0px')
+  const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
+  const data = await response.json()
+  await page.goto(`/${workspaceKey}/settings/teams/${data.teams[0].key}`)
+  await expect(page.locator('.team-overview-copy strong').first()).toHaveCSS('color', 'lch(100 0 272)')
+  if (process.env.FLOW_UI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_UI_SHOTS}/desktop-team-overview.png` })
+})

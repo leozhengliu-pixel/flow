@@ -1,7 +1,7 @@
 @media (min-width: 1024px) {
   html:root .settings-app .settings-main .settings-team-actions { grid-column: 4 / -1; display: flex; align-items: center; gap: 8px; }
   html:root .settings-app .settings-main .settings-team-actions > .settings-action { border-width: .5px; }
-  .settings-desktop-docs { display: inline-flex; align-items: center; gap: 2px; padding: 1px 4px; border-radius: 8px; color: var(--set-text); font: 450 13px/15.5px var(--font); text-decoration: none; }
+  .settings-desktop-docs { display: inline-block; margin-left: -3px; padding: 1px 4px; border-radius: 8px; color: var(--set-text); font: inherit; font-weight: 450; line-height: normal; text-decoration: none; }
   .settings-desktop-docs:hover { background: var(--bg-hover); }
   .workspace-announcements-open { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--set-desc); font: 450 12px var(--font); }
   .workspace-announcements-dialog > label { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; font-size: 13px; }
@@ -75,6 +75,9 @@
   html:root .settings-app .team-overview-list .team-overview-copy { gap: 3px; }
   html:root .settings-app .team-overview-list strong { font: 500 13px/15.5px var(--font); }
   html:root .settings-app .team-overview-list small { font: 450 12px/14.5px var(--font); }
+  html:root .settings-app .team-overview-list .team-overview-copy strong { color: var(--set-text); }
+  html:root .settings-app .team-overview-list .team-overview-copy small { color: var(--set-desc); }
+  html:root .settings-app .settings-main .team-settings-header > div > p { color: var(--set-group-desc); }
   html:root .settings-app .team-overview-list .team-overview-summary { flex: none; display: block; max-width: 160px; color: var(--set-desc); font: 450 12px/14.5px var(--font); }
   html:root .settings-app .settings-main .settings-teams-page > .settings-page-header { margin-bottom: 13px; }
   html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar { gap: 6px; margin-bottom: 21px; }
@@ -154,4 +157,17 @@
   .desktop-integration-strip button { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 8px; height: 28px; padding: 0; border: 0; background: transparent; color: var(--set-desc); font: 500 13px var(--font); white-space: nowrap; }
   .desktop-integration-strip button[aria-selected=true], .desktop-integration-strip button:hover { color: var(--set-text); }
   .desktop-integration-catalog { margin-top: 48px; }
+  html:root .settings-app .settings-main .settings-control > .settings-action:last-child { margin-right: -6px; border-width: .5px; }
+  html:root .settings-app .settings-main .settings-row .settings-action:has(> svg) { padding-left: 10px; }
+  html:root .settings-app .settings-main .settings-row .settings-action > svg { width: 16px; height: 16px; }
+  html:root .settings-app .settings-main .settings-row .settings-action:not(.primary):not(:hover):not(:focus-visible) { background: transparent; }
+  html:root .settings-app .settings-main[data-settings-page=workspace] .settings-section > h3 { color: var(--set-button-text); }
+  html:root .settings-app .settings-main .personal-security-section > .settings-section-description { line-height: 22px; }
+  html:root .settings-app .settings-main .personal-security-device-row strong > span { color: var(--set-control-text); }
+  html:root body .settings-app .settings-main .personal-security-device-row .personal-action { margin-right: 0; }
+  html:root .settings-app .settings-main .personal-security-current-label { color: var(--set-session-current) !important; }
+  html:root .settings-app .settings-main .personal-security-current-dot { background: var(--set-session-current); }
+  html:root .settings-app .settings-main .personal-security-api-key-header > h3.is-empty { color: var(--set-desc); font-weight: 450; }
+  html:root .settings-app .settings-main .personal-channel > span:nth-child(2) { gap: 3px; }
+  html:root .settings-app .settings-main .pt-list-card > header h3 { padding: 0; }
 }

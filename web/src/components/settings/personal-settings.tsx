@@ -2200,7 +2200,7 @@ function SecurityOverview({
         description={p("Use Flow’s API to build your own integrations")}
       >
         <header className="personal-security-api-key-header">
-          <h3>
+          <h3 className={apiKeys.length ? undefined : "is-empty"}>
             {apiKeys.length
               ? `${apiKeys.length} ${
                   locale === "zh-CN"
