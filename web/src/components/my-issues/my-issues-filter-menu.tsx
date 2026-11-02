@@ -164,10 +164,11 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
   // The root menu hangs off the window's right edge (11px in) wherever the toolbar button is; shifting a far-right
   // 'end' placement back inside the collision padding gives exactly that.
   const flushEnd = variant === 'root' && align === 'center'
+  const collisionPadding = phone || desktop && layout === 'issues' && variant === 'root' ? 11 : 14
   return <><Popover.Root open={open} onOpenChange={close}>
     <Popover.Trigger asChild>{isValidElement(trigger) ? cloneElement(trigger, { 'aria-expanded': open } as object) : trigger}</Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-layout={layout} data-surface={surface} data-variant={variant} data-submenu-open={activeField ? true : undefined} style={{ zIndex: rootLayer }} side="bottom" align={flushEnd ? 'end' : align} alignOffset={flushEnd ? -4000 : align === 'center' ? -15 : 0} sideOffset={3} collisionPadding={phone ? 11 : 14} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (keepFocus.current) { keepFocus.current = false; event.preventDefault() } }} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
+      <Popover.Content aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-layout={layout} data-surface={surface} data-variant={variant} data-submenu-open={activeField ? true : undefined} style={{ zIndex: rootLayer }} side="bottom" align={flushEnd ? 'end' : align} alignOffset={flushEnd ? -4000 : align === 'center' ? -15 : 0} sideOffset={3} collisionPadding={collisionPadding} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (keepFocus.current) { keepFocus.current = false; event.preventDefault() } }} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
         <Command label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} className={styles.rootCommand} defaultValue={phone && variant === 'root' ? '__none__' : undefined} loop filter={(value, search, keywords) => value.startsWith('__ai__') ? 0.0001 : defaultFilter(value, search, keywords)}>
           <div className={styles.rootSearch}>
             <Command.Input aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} placeholder={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} autoFocus value={query} onValueChange={setQuery}/>
@@ -271,7 +272,7 @@ function ValueMenu({ field, filters, label, layer, minSearchOptions, onClose, on
 }
 
 /** Submenus overlap their parent's edge by 2px and line their first row up with the hovered row. */
-const SUBMENU_SIDE_OFFSET = 0
+const SUBMENU_SIDE_OFFSET = -2
 /** Border + 6px list padding, plus the 36.5px search band when it is shown. */
 function submenuAlignOffset(hideSearch: boolean) { return hideSearch ? -6.5 : -43 }
 
