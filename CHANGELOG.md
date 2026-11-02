@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Suppress repeated chat message shortcuts for a full elapsed minute, including taps across a wall-clock minute boundary.
+
 - Guard phone triage age alignment across the week-to-month text transition.
 
 - Align desktop project team controls and section spacing with the shared overview measurements.

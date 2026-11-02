@@ -484,18 +484,55 @@ func (s *SQLiteStore) ChatMessage(ctx context.Context, workspace, connection, me
 }
 
 func (s *SQLiteStore) EnqueueChatJob(ctx context.Context, item domain.ChatJob) (bool, error) {
+	return enqueueChatJob(ctx, s.db, item)
+}
+
+type chatJobExecer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func enqueueChatJob(ctx context.Context, exec chatJobExecer, item domain.ChatJob) (bool, error) {
 	if !validChatKey(item.ID, item.WorkspaceKey, item.ConnectionID, item.Kind, item.DedupKey) || len(item.Payload) > 1<<20 || !json.Valid(item.Payload) {
 		return false, ErrIssueQuery
 	}
 	if item.RunAt.IsZero() {
 		item.RunAt = time.Now().UTC()
 	}
-	result, err := s.db.ExecContext(ctx, `INSERT INTO chat_jobs(id,workspace_key,connection_id,kind,dedup_key,payload,status,attempts,run_at,lease_until,last_error) SELECT ?,?,?,?,?,?,'pending',0,?,0,'' WHERE EXISTS(SELECT 1 FROM chat_integrations WHERE workspace_key=? AND connection_id=?) ON CONFLICT DO NOTHING`, item.ID, item.WorkspaceKey, item.ConnectionID, item.Kind, item.DedupKey, []byte(item.Payload), item.RunAt.UnixMilli(), item.WorkspaceKey, item.ConnectionID)
+	result, err := exec.ExecContext(ctx, `INSERT INTO chat_jobs(id,workspace_key,connection_id,kind,dedup_key,payload,status,attempts,run_at,lease_until,last_error) SELECT ?,?,?,?,?,?,'pending',0,?,0,'' WHERE EXISTS(SELECT 1 FROM chat_integrations WHERE workspace_key=? AND connection_id=?) ON CONFLICT DO NOTHING`, item.ID, item.WorkspaceKey, item.ConnectionID, item.Kind, item.DedupKey, []byte(item.Payload), item.RunAt.UnixMilli(), item.WorkspaceKey, item.ConnectionID)
 	if err != nil {
 		return false, err
 	}
 	n, err := result.RowsAffected()
 	return n == 1, err
+}
+
+// EnqueueChatJobAfterCooldown admits one job per scope and elapsed interval,
+// atomically with the queue write so a failed enqueue does not consume the slot.
+func (s *SQLiteStore) EnqueueChatJobAfterCooldown(ctx context.Context, item domain.ChatJob, scope string, interval time.Duration) (bool, error) {
+	if !validChatKey(scope) || interval < time.Millisecond || item.RunAt.IsZero() {
+		return false, ErrIssueQuery
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `INSERT INTO chat_request_limits(scope_key,next_at) VALUES(?,0) ON CONFLICT DO NOTHING`, scope); err != nil {
+		return false, err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE chat_request_limits SET next_at=? WHERE scope_key=? AND next_at<=?`, item.RunAt.Add(interval).UnixMilli(), scope, item.RunAt.UnixMilli())
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil || n != 1 {
+		return false, err
+	}
+	inserted, err := enqueueChatJob(ctx, tx, item)
+	if err != nil || !inserted {
+		return false, err
+	}
+	return true, tx.Commit()
 }
 
 func (s *SQLiteStore) ClaimChatJobs(ctx context.Context, workspace, kind string, limit int, now time.Time) ([]domain.ChatJob, error) {

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -77,6 +78,36 @@ func TestChatIntegrationTenantIdentityAndDisclosureIsolation(t *testing.T) {
 	items, err := repo.ChatBindings(t.Context(), record.WorkspaceKey, record.ConnectionID)
 	if err != nil || len(items) != 1 || items[0].ChatID != binding.ChatID {
 		t.Fatalf("binding changed: %#v %v", items, err)
+	}
+}
+
+func TestChatJobCooldownIsAtomicAndDoesNotExtendOnDuplicate(t *testing.T) {
+	repo, record := chatStoreFixture(t)
+	now := time.Date(2026, time.November, 2, 9, 46, 59, 0, time.UTC)
+	job := domain.ChatJob{ID: "cooldown_first", WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Kind: "inbound", DedupKey: "first", Payload: json.RawMessage(`{}`), RunAt: now}
+	const scope = "message_action_scope"
+	// Invalid jobs must not consume the admission window.
+	invalid := job
+	invalid.Payload = json.RawMessage(`invalid`)
+	if _, err := repo.EnqueueChatJobAfterCooldown(t.Context(), invalid, scope, time.Minute); err == nil {
+		t.Fatal("invalid job accepted")
+	}
+	for index, offset := range []time.Duration{0, time.Second, 59 * time.Second, time.Minute} {
+		job.ID, job.DedupKey = fmt.Sprintf("cooldown_%d", index), fmt.Sprintf("tap_%d", index)
+		job.RunAt = now.Add(offset)
+		inserted, err := repo.EnqueueChatJobAfterCooldown(t.Context(), job, scope, time.Minute)
+		want := offset == 0 || offset == time.Minute
+		if err != nil || inserted != want {
+			t.Fatalf("tap after %s: inserted=%v want=%v: %v", offset, inserted, want, err)
+		}
+	}
+	job.ID, job.DedupKey = "other_actor", "other_actor"
+	if inserted, err := repo.EnqueueChatJobAfterCooldown(t.Context(), job, "other_actor_scope", time.Minute); err != nil || !inserted {
+		t.Fatalf("independent actor suppressed: %v %v", inserted, err)
+	}
+	jobs, err := repo.ClaimChatJobs(t.Context(), record.WorkspaceKey, "inbound", 10, now.Add(time.Minute))
+	if err != nil || len(jobs) != 3 {
+		t.Fatalf("admitted jobs: %d %v", len(jobs), err)
 	}
 }
 

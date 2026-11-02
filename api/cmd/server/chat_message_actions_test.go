@@ -140,6 +140,30 @@ func (f *chatWorkflowFixture) formAction(t *testing.T) (string, chatExtendedActi
 	return "", chatExtendedAction{}, ""
 }
 
+func TestChatMessageShortcutDeduplicatesAcrossMinuteBoundary(t *testing.T) {
+	f := newChatWorkflowFixture(t)
+	now := time.Date(2026, time.November, 2, 9, 46, 59, 0, time.UTC)
+	command := chatInboundCommand{Kind: chatMessageActionKind, OpenID: f.identity.OpenID, MessageID: "om_source_message"}
+	for _, offset := range []time.Duration{0, time.Second, 59 * time.Second, time.Minute} {
+		if err := f.s.enqueueChatMessageAction(t.Context(), f.record, command, now.Add(offset)); err != nil {
+			t.Fatal(err)
+		}
+		jobs, err := f.s.store.ClaimChatJobs(t.Context(), f.record.WorkspaceKey, "inbound", 10, now.Add(offset))
+		want := 0
+		if offset == 0 || offset == time.Minute {
+			want = 1
+		}
+		if err != nil || len(jobs) != want {
+			t.Fatalf("tap after %s: queued %d forms, want %d: %v", offset, len(jobs), want, err)
+		}
+		for _, job := range jobs {
+			if err := f.s.store.FinishChatJob(t.Context(), job, "completed", now.Add(offset), ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
 func TestChatMessageShortcutCreatesIssueAsActorAndRepliesInBoundGroup(t *testing.T) {
 	f := newChatWorkflowFixture(t)
 	platform := newChatShortcutPlatform(t, f)

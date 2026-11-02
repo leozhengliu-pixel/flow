@@ -331,10 +331,7 @@ func (s *server) submitChatMessageAction(w http.ResponseWriter, r *http.Request)
 	text := chatMessageText(input.MessageType, input.Content)
 	command := chatInboundCommand{Kind: chatMessageActionKind, OpenID: openID, ChatID: input.ChatID, MessageID: input.MessageID, Values: map[string]json.RawMessage{}}
 	command.Values["text"], _ = json.Marshal(chatTruncateText(text, 8000))
-	payload, _ := json.Marshal(command)
-	// A double tap opens one form; using the shortcut again later opens a new one.
-	dedup := chatKey(record.ConnectionID, "message_action", input.MessageID, openID, strconv.FormatInt(time.Now().Unix()/60, 10))
-	if _, err := s.store.EnqueueChatJob(r.Context(), domain.ChatJob{ID: "chat_job_" + dedup, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Kind: "inbound", DedupKey: dedup, Payload: payload, RunAt: time.Now().UTC()}); err != nil {
+	if err := s.enqueueChatMessageAction(r.Context(), record, command, time.Now().UTC()); err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "chat_busy"})
 		return
 	}
@@ -344,6 +341,15 @@ func (s *server) submitChatMessageAction(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "sent"})
+}
+
+func (s *server) enqueueChatMessageAction(ctx context.Context, record domain.ChatIntegrationRecord, command chatInboundCommand, now time.Time) error {
+	payload, _ := json.Marshal(command)
+	// Suppress repeat taps for a full minute, including across clock boundaries.
+	scope := chatKey(record.ConnectionID, "message_action", command.MessageID, command.OpenID)
+	dedup := chatKey(scope, strconv.FormatInt(now.UnixNano(), 10))
+	_, err := s.store.EnqueueChatJobAfterCooldown(ctx, domain.ChatJob{ID: "chat_job_" + dedup, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Kind: "inbound", DedupKey: dedup, Payload: payload, RunAt: now}, scope, time.Minute)
+	return err
 }
 
 func (s *server) chatConnectionsURL(record domain.ChatIntegrationRecord) string {
