@@ -1,9 +1,16 @@
 @media (min-width: 1024px) {
+  .project-detail-page { --pd-copy: var(--text); --pd-text: var(--text); }
   .project-details-sidebar {
     --pd-label: var(--phone-project-panel-label);
-    --pd-copy: var(--phone-project-panel-text);
-    --pd-text: var(--phone-project-panel-text);
+    --pd-copy: var(--text);
+    --pd-text: var(--text);
   }
+  .project-details-sidebar__section { background: var(--project-sidebar-card-bg); border-color: var(--project-sidebar-card-border); }
+  .project-details-sidebar__property .lp-project-property-trigger:not(.is-empty) { color: var(--text); }
+  .project-details-sidebar__property .lp-project-property-trigger > span:last-child { color: inherit; }
+  .project-details-sidebar__property .project-label-add { color: var(--pd-label); }
+  .project-overview__properties .lp-project-property-trigger > span:last-child { color: inherit; }
+  .project-overview__initiative { color: var(--text); }
   .project-detail-page__header-action,
   .project-detail-page__add-view,
   .project-detail-page__toolbar-button { padding-inline: 2px; }
@@ -44,6 +51,7 @@
   .project-issues__intro > p:nth-of-type(2) { margin-bottom: 24px; }
   .project-issues__intro button { font: 500 12px var(--font); line-height: normal; }
   .project-issues__intro kbd { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: .5px solid color-mix(in srgb, var(--on-accent) 30%, transparent); border-radius: 4px; font: 500 11px var(--font); line-height: normal; }
+  .project-issues__intro kbd { color: var(--on-accent); }
   .project-issues__intro-mark { display: none; }
   .project-issues__intro > .project-issues__intro-mark-phone { display: block; width: 86.5px; height: 80px; margin-bottom: 24px; overflow: visible; }
   .project-issues__intro-phone-body, .project-issues__intro-phone-rim { fill: none; stroke: var(--issue-dim); stroke-width: 1.5; }

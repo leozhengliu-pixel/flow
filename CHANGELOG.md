@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align desktop new-view header actions, icon surface and form foregrounds, and keep the applied-filter hairline at its measured tone.
 
+- Keep desktop project and initiative rail surfaces and project metadata at their intended foreground and border colors while preserving custom theme palettes.
+
 - Align desktop issue row-menu shortcut slots and submenu list insets, and restore the coding tools action icon.
 
 - Align desktop initiative sidebar property columns, empty-value labels, and compact picker typography without changing phone controls.
