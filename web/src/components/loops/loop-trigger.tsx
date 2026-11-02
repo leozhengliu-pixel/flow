@@ -272,6 +272,7 @@ function TriggerMenu({ data, triggerType, config, onChange, readOnly }: { data: 
   return (
     <DropdownMenu phoneSheet={false} onOpenChange={(open) => !open && setQuery("")}>
       <DropdownMenuTrigger className="loops-trigger-button" aria-label={t("Trigger")}>
+        <span className="loops-trigger-button-icon"><TriggerIcon triggerType={triggerType} event={event} /></span>
         <span className="loops-trigger-button-label">
           <TriggerSentence data={data} triggerType={triggerType} config={config} />
         </span>
