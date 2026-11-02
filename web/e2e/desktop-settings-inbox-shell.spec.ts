@@ -2,7 +2,23 @@ import { expect } from '@playwright/test'
 import { test } from './workspace-fixture'
 import type { BootstrapData, Issue } from '../src/types/flow'
 
-test.use({ viewport: { width: 1440, height: 900 } })
+test.use({ viewport: { width: 1440, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] })
+
+test('keeps desktop inbox insets on the toolbar and its actions usable', async ({ page, workspaceKey }) => {
+  await page.goto(`/${workspaceKey}/inbox`)
+  await expect(page.locator('.flow-inbox__header')).toHaveCSS('padding', '0px')
+  await expect(page.locator('.flow-inbox__header-inner')).toHaveCSS('display', 'flex')
+  await expect(page.locator('.flow-inbox__header-inner')).toHaveCSS('margin', '0px 8px')
+  await expect(page.getByRole('heading', { name: 'Inbox', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Show unreads only', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Show read', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('button', { name: 'Notification actions', exact: true }).click()
+  await expect(page.getByRole('menuitem', { name: 'Go to settings', exact: true })).toBeVisible()
+  await page.getByRole('menu').evaluate(async (node) => { await Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.finished)) })
+  if (process.env.FLOW_UI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_UI_SHOTS}/desktop-inbox.png` })
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menuitem', { name: 'Go to settings', exact: true })).toHaveCount(0)
+})
 
 test('keeps the desktop toast dismiss icon inside its padded target', async ({ page, request, workspaceKey }) => {
   const headers = { 'X-Workspace-Key': workspaceKey }
