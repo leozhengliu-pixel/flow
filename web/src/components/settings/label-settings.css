@@ -303,25 +303,32 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
 /* The phone label list is full-bleed below the compact settings breadcrumb. */
 @media (max-width: 760px) {
   html:root .settings-app .settings-main > .settings-content:has(.domain-labels-header) {
+    --settings-crumb-position: static;
+    --settings-crumb-display: flex;
     width: 100%;
     max-width: none;
     margin: 0;
     padding: 0 0 96px;
   }
+  .settings-content:has(.domain-labels-page) > .settings-crumb {
+    width: max-content;
+    max-width: calc(100% - 32px);
+    margin: 0 16px 6px;
+  }
   html:root .settings-app .settings-main .domain-labels-header {
     box-sizing: border-box;
-    height: 36px;
+    height: auto;
     min-height: 36px;
     align-items: center;
     gap: 12px;
     margin: 0 22px 18px;
-    white-space: nowrap;
+    white-space: normal;
   }
   html:root .settings-app .settings-main .domain-labels-header h1 {
     min-width: 0;
     flex: 1;
     overflow: visible;
-    white-space: nowrap;
+    white-space: normal;
     letter-spacing: -.16px;
   }
   html:root .settings-app .settings-main .domain-labels-header .settings-header-actions {

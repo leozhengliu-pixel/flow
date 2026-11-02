@@ -241,12 +241,12 @@ html:root .settings-app .settings-main .personal-channel > svg { transform: rota
 /* Top-left crumb inside the panel ("‹ [icon] Team"), measured at panel +9/+11 */
 html:root .settings-app .settings-main { position: relative; }
 html:root .settings-app .settings-main .settings-crumb {
-  position: absolute;
+  position: var(--settings-crumb-position, absolute);
   z-index: 2;
   top: 10px;
   left: 8px;
   height: 28px;
-  display: inline-flex;
+  display: var(--settings-crumb-display, inline-flex);
   align-items: center;
   gap: 6px;
   padding: 0 8px;

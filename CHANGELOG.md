@@ -20,6 +20,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Let filter value menus size to their labels within the shared maximum width.
 
 - Keep small avatar initials on one line and preserve avatar proportions beside long member names.
+- Let team label headings wrap beside actions and keep their breadcrumb in normal phone layout.
+
 - Place the phone team overview shortcut below wrapping team titles.
 
 - Keep team member CSV export available on phones.
