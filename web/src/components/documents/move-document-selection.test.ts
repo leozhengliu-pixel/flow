@@ -28,6 +28,24 @@ function pendingMove(selection: ReturnType<typeof select>) {
 }
 
 describe('moving the original document selection', () => {
+  it('creates the new document from rich blocks and link targets before awaiting the request', async () => {
+    setup('<blockquote><ul><li><p><strong>Bold</strong> and <a href="https://example.com">link</a></p><ul><li><p>Nested item</p></li></ul></li></ul></blockquote><p>Outside</p>')
+    const original = editor.state.doc
+    const from = 4, to = original.child(0).nodeSize - 3
+    const contentData = original.cut(from, to).toJSON()
+    const create = vi.fn(async (content: { content: string; contentData: Record<string, unknown> }) => content)
+    const result = await moveDocumentSelection(editor, { from, to, text: original.textBetween(from, to) }, create)
+    expect(create).toHaveBeenCalledWith({ content: expect.stringContaining('**Bold**'), contentData })
+    expect(result.created.content).toContain('[link](https://example.com)')
+    expect(result.created.content).toContain('Nested item')
+    expect(result.created.content).not.toContain('Outside')
+    expect(JSON.stringify(result.created.contentData)).toContain('blockquote')
+    expect(JSON.stringify(result.created.contentData)).toContain('bulletList')
+    expect(JSON.stringify(result.created.contentData)).toContain('https://example.com')
+    editor.commands.undo()
+    expect(editor.state.doc.eq(original)).toBe(true)
+  })
+
   it('does not delete a newly selected paragraph while creation is pending, and supports undo', async () => {
     const original = setup('<p>Move me</p><p>Keep me</p>')
     const pending = pendingMove(select('Move me'))
