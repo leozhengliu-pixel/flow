@@ -506,10 +506,13 @@ test.describe('mobile documents filter menu', () => {
     expect((await rows.first().locator('span').nth(1).boundingBox())?.x).toBe(58.5)
 
     const separators = menu.locator('[cmdk-separator]')
+    const listBox = (await menu.locator('[cmdk-list]').boundingBox())!
     expect(await separators.count()).toBe(2)
     for (let index = 0; index < 2; index++) {
-      expect((await separators.nth(index).boundingBox())?.x).toBe(16.5)
-      expect((await separators.nth(index).boundingBox())?.width).toBe(358)
+      await expect(separators.nth(index)).toBeVisible()
+      const separatorBox = (await separators.nth(index).boundingBox())!
+      expect(separatorBox.x).toBeCloseTo(listBox.x, 1)
+      expect(separatorBox.width).toBeCloseTo(listBox.width, 1)
     }
 
     const trigger = page.locator('.team-documents-toolbar button[aria-label="Add filter"]')

@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Separate the property and value in phone inbox filter search results with a chevron.
+
 - Update desktop browser checks for plain board issue counts and the dedicated MCP connector settings route.
 
 - Check numeric filter readability with realistic counts while allowing extreme values to ellipsize, and close only open filter menus in browser state checks.

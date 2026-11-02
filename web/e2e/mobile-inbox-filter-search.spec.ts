@@ -8,7 +8,17 @@ test('packs searched phone filter results directly below the input', async ({ pa
   const menu = page.locator('.inbox-filter-phone-properties')
   await menu.getByRole('combobox').fill('Project')
   const item = menu.getByRole('option', { name: 'Project', exact: true })
-  await expect(menu.locator('[data-inbox-filter-shortcut]').filter({ hasText: 'No project' })).toHaveCount(1)
+  const shortcut = menu.locator('[data-inbox-filter-shortcut]').filter({ hasText: 'No project' })
+  await expect(shortcut).toHaveCount(1)
+  const property = shortcut.locator(':scope > span').filter({ hasText: /^Project$/ })
+  const value = shortcut.locator(':scope > span').filter({ hasText: /^No project$/ })
+  const chevron = shortcut.locator('.lucide-chevron-right')
+  await expect(chevron).toBeVisible()
+  const propertyBox = (await property.boundingBox())!
+  const valueBox = (await value.boundingBox())!
+  const chevronBox = (await chevron.boundingBox())!
+  expect(chevronBox.x).toBeGreaterThanOrEqual(propertyBox.x + propertyBox.width)
+  expect(chevronBox.x + chevronBox.width).toBeLessThanOrEqual(valueBox.x)
   const input = (await menu.getByRole('combobox').boundingBox())!
   const box = (await item.boundingBox())!
   expect(box.y - input.y - input.height).toBeLessThanOrEqual(12)

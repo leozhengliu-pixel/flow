@@ -2,7 +2,7 @@ import { cloneElement, forwardRef, Fragment, isValidElement, useCallback, useEff
 import { createPortal } from 'react-dom'
 import * as Popover from '@radix-ui/react-popover'
 import { Command } from 'cmdk'
-import { Plus, X } from 'lucide-react'
+import { ChevronRight, Plus, X } from 'lucide-react'
 
 import { PriorityIcon, ProjectIcon, ReviewStatusGlyph, ReviewStatusValueGlyph, WorkflowStatusPropertyGlyph } from '@/components/issue/issue-icons'
 import { usePropertyCommand } from '@/components/property/use-property-command'
@@ -322,6 +322,7 @@ function InboxPhoneFilterMenu({ open, onOpenChange, options, onToggle }: {
         >
           <OptionVisual option={option} property={item.id}/>
           <span className={styles.phoneShortcutProperty}>{t(item.label)}</span>
+          <span className={styles.phoneShortcutChevron} aria-hidden="true"><ChevronRight/></span>
           <span data-i18n-ignore={option.i18nIgnore || undefined}>{option.i18nIgnore ? option.label : t(option.label)}</span>
         </Command.Item>)}
       </Command.List>
