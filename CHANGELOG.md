@@ -20,6 +20,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Preserve rich text, hyperlink targets, and nested block structure when moving a document selection to a new document.
 
 - Preserve unrelated document content when a selection changes during a move, track intervening edits safely, and keep the removal undoable.
+- Use light-theme backgrounds and ink throughout the phone settings drawer, including selected navigation and blurred search text.
+
 - Route MCP connectors to a dedicated settings page with connector controls, selected navigation and a phone selector that stays below its label.
 
 - Preserve authored email hyperlinks in Agent messages while leaving bare user email addresses as plain text.
