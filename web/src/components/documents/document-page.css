@@ -267,10 +267,6 @@
 .document-history-action button:hover { background: var(--theme-surface-hover); }
 .document-history-action svg { width: 14px; height: 14px; color: var(--theme-text-secondary); }
 
-/* Keep the document menu aligned with the compact desktop menu while retaining Flow-only actions. */
-.document-actions-menu { width: 258px; min-width: 258px; }
-.document-actions-menu .flow-menu__row { min-height: 31.36px; height: 31.36px; }
-
 /* ---------- subscribers popover ---------- */
 .document-subscribers {
   z-index: 900;
