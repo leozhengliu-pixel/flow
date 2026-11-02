@@ -52,7 +52,7 @@ async function expectContained(page: Page) {
 }
 
 async function closeMenus(page: Page) {
-  for (let i = 0; i < 4 && await page.locator('[data-variant=root]').count(); i++) {
+  for (let i = 0; i < 4 && await page.locator('[data-variant=root][data-state=open]').count(); i++) {
     await page.keyboard.press('Escape')
     await page.waitForTimeout(150)
   }
@@ -227,9 +227,16 @@ for (const viewport of sizes) for (const colorScheme of ['dark', 'light'] as con
       const numberMenu = page.locator('[data-number-input]')
       await expect(numberMenu).toBeVisible()
       await capture(page, `${prefix}-number-empty`, numberMenu)
-      await numberMenu.getByRole('searchbox').fill('9007199254740991')
+      await numberMenu.getByRole('searchbox').fill('1000000')
       await expectLabelsFit(numberMenu)
+      // Extreme values may ellipsize; comparison operators and accessible values must remain complete.
+      await numberMenu.getByRole('searchbox').fill('9007199254740991')
       await expect(numberMenu.getByRole('option')).toHaveCount(4)
+      for (const option of await numberMenu.getByRole('option').all()) await expect(option).toHaveAccessibleName(/9,007,199,254,740,991$/)
+      expect(await numberMenu.locator('[class*="numberComparison"]').evaluateAll(elements => elements.every(element => {
+        const box = element.getBoundingClientRect(), label = element.parentElement!.getBoundingClientRect()
+        return box.x >= label.x && box.right <= label.right
+      }))).toBe(true)
       await expectContained(page)
       await numberMenu.getByRole('searchbox').press('ArrowDown')
       await expect(numberMenu.getByRole('option').nth(1)).toHaveAttribute('aria-selected', 'true')
