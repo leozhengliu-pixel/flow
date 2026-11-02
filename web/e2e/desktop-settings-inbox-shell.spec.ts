@@ -4,6 +4,44 @@ import type { BootstrapData, Issue } from '../src/types/flow'
 
 test.use({ viewport: { width: 1440, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] })
 
+test('offers desktop review onboarding with both code-host connections', async ({ page, workspaceKey }) => {
+  await page.goto(`/${workspaceKey}/reviews`)
+  const onboarding = page.getByRole('region', { name: 'Get started with reviews' })
+  await expect(onboarding).toBeVisible()
+  for (const name of ['Guided reviews', 'Review inbox', 'GitHub sync', 'Iterate']) await expect(onboarding.getByRole('heading', { name, exact: true })).toBeVisible()
+  await expect(onboarding.getByRole('img', { name: 'Review preview' })).toBeVisible()
+  await expect(onboarding.getByRole('link', { name: 'Learn more' })).toHaveAttribute('href', 'https://github.com/leozhengliu-pixel/flow/blob/main/docs/code-scanning-review.md')
+  await page.evaluate(() => document.fonts.ready)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  const preview = onboarding.getByRole('img', { name: 'Review preview' })
+  expect(await preview.evaluate(node => node.scrollHeight <= node.clientHeight && node.scrollWidth <= node.clientWidth)).toBe(true)
+  if (process.env.FLOW_UI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_UI_SHOTS}/desktop-reviews.png` })
+  await page.setViewportSize({ width: 1200, height: 900 })
+  expect(await preview.evaluate(node => node.scrollHeight <= node.clientHeight && node.scrollWidth <= node.clientWidth)).toBe(true)
+  await onboarding.getByRole('button', { name: 'Connect personal GitHub account' }).click()
+  await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/settings/integrations/github$`))
+  await page.goto(`/${workspaceKey}/reviews`)
+  await page.getByRole('button', { name: 'Connect GitLab', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/settings/integrations/gitlab$`))
+})
+
+test.describe('phone review connection view', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+
+  test('keeps the existing compact code-host connection actions', async ({ page, workspaceKey }) => {
+    await page.goto(`/${workspaceKey}/reviews`)
+    await expect(page.getByRole('button', { name: 'Connect GitHub', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Connect GitLab', exact: true })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Get started with reviews' })).toHaveCount(0)
+    await expect(page.locator('.reviews-topbar-inner')).toHaveCSS('display', 'contents')
+    await page.evaluate(() => document.fonts.ready)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    if (process.env.FLOW_UI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_UI_SHOTS}/phone-reviews.png` })
+    await page.getByRole('button', { name: 'Connect GitLab', exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/settings/integrations/gitlab$`))
+  })
+})
+
 test('keeps desktop inbox insets on the toolbar and its actions usable', async ({ page, workspaceKey }) => {
   await page.goto(`/${workspaceKey}/inbox`)
   await expect(page.locator('.flow-inbox__header')).toHaveCSS('padding', '0px')

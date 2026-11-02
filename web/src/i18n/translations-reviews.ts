@@ -3,6 +3,22 @@
  * Merged into zhCN by translations.ts.
  */
 export const reviewsZhCN: Record<string, string> = {
+  'Get started with reviews': '开始代码评审',
+  'Your team is reviewing diffs in Flow': '你的团队正在 Flow 中评审代码变更',
+  'Flow Diffs brings code review into the product development workflow. See pull requests alongside the issues behind them, review and discuss changes, and merge without switching between Flow and GitHub.': 'Flow Diffs 将代码评审融入产品开发流程。将拉取请求与相关事项关联，审阅、讨论并合并代码变更，无需在 Flow 和 GitHub 之间切换。',
+  'Connect personal GitHub account': '连接个人 GitHub 账户',
+  'Guided reviews': '引导式评审',
+  'Review large PRs one meaningful section at a time. Guides show you what a PR changes and why.': '按有意义的章节逐段审阅大型拉取请求。评审指南说明每项变更的内容与原因。',
+  'Review inbox': '评审收件箱',
+  "See a streamlined list of PRs you've authored and PRs that need your review.": '集中查看你创建的拉取请求和需要你评审的拉取请求。',
+  'GitHub sync': 'GitHub 同步',
+  'Every PR comment, approval, and merge in Flow syncs back to GitHub.': 'Flow 中的每条评审评论、批准和合并都会同步回 GitHub。',
+  'Iterate': '持续迭代',
+  'Ask Flow Agent to address comment feedback, and the diff updates in real time.': '让 Flow Agent 处理评审反馈，代码差异会实时更新。',
+  'Review preview': '评审预览',
+  'Refactor notification model': '重构通知模型',
+  'Shared notification model': '共享通知模型',
+  'Separate notification categories from delivery so each change is easier to review.': '将通知分类与投递逻辑分离，让每项变更更易于评审。',
   // --- List
   "Created by you": "由你创建",
   "To review": "待审查",
