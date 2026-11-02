@@ -201,8 +201,8 @@
   .summaryItem{font-size:13px;font-weight:450;line-height:normal}
   .summaryItem b{width:auto;min-width:24px;display:inline-flex;align-items:center;justify-content:flex-end;gap:3px;color:var(--issue-muted);font-variant-numeric:tabular-nums}
   .summaryItem b svg{flex:none;margin-left:-1px;margin-right:1px}
-  .panel.inline .summaryCard{padding:12.5px 14.5px}
-  .tabs{height:28px}
+  .panel.inline .summaryCard{padding:12.5px}
+  .tabs{height:32px;gap:2px;border-radius:5px}
   .summaryList{margin-top:10px;margin-right:-3px}
   .tabs button{flex:1 1 auto;padding-inline:12px;background:var(--my-issues-details-tab-bg);box-shadow:inset 0 0 0 .5px var(--ui-pill-ring);font-family:inherit;font-size:12px;font-weight:500;line-height:normal}
   .tabs button[aria-selected="true"]{background:var(--my-issues-details-tab-active-bg)}
@@ -301,8 +301,13 @@
 @media(min-width:1024px){
   .panel.inline{width:400px;flex-basis:400px;padding-left:4px}
   .panel.inline :is(.identityCard,.metadataCard,.summaryCard){background:var(--board-card-surface);border:0;box-shadow:inset 0 0 0 .5px var(--board-add-issue-border),0 .5px 1px 1px var(--shadow-color-card)}
-  .panel.inline .identityCard{padding:12.5px 10.5px 12.5px 12.5px}
+  .panel.inline .identityCard{grid-template-columns:38px minmax(0,1fr) 28px 28px;padding:12.5px}
+  .panel.inline .iconButton{width:28px;height:28px;padding-inline:2px}
   .panel.inline .metadataCard{padding:12.5px}
   .panel.inline .metadataCard>div{height:30px}
+  .panel.inline .metadataCard>div>span{color:var(--my-issues-details-muted);font-size:12px}
+  .panel.inline .metadataCard strong{gap:10px;padding:3px 6px;color:var(--bright)}
+  .panel.inline .metadataCard strong>svg{width:16px;height:16px}
+  .panel.inline .summaryItem>span:nth-child(2){color:var(--my-issues-details-muted)}
   .panel.inline .avatarMark{font-size:8px}
 }
