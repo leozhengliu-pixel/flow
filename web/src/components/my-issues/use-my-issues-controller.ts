@@ -33,7 +33,7 @@ export interface MyIssuesControllerOptions {
 export function useMyIssuesController({ workspaceSlug, initialView, initialGroups, initialDisplay, initialFilters = [], adapter, drillRows, groupingContext }: MyIssuesControllerOptions) {
   const [view, setView] = useState(initialView)
   const [groups, setGroups] = useState(initialGroups)
-  const [filters, setFilters] = useState(() => readFilters(workspaceSlug, initialView, initialFilters))
+  const [filters, setFilters] = useState(() => readFilters(workspaceSlug, initialView, initialFilters, groupingContext?.data?.teams))
   const [display, setDisplay] = useState(() => readDisplay(workspaceSlug, initialView, initialDisplay))
   const [detailsOpen, setDetailsOpenState] = useState(() => readBoolean(`${workspaceSlug}:my-issues:details-open`, false))
   const [detailsWidth, setDetailsWidthState] = useState(() => readNumber(`${workspaceSlug}:my-issues:details-width`, 350))
@@ -149,10 +149,21 @@ function readDisplay(workspace: string, view: MyIssuesView, fallback: MyIssuesDi
 function writeDisplay(workspace: string, view: MyIssuesView, value: MyIssuesDisplayOptions) {
   writeValue(displayKey(workspace, view), JSON.stringify({ ...value, properties: [...value.properties] }))
 }
-function readFilters(workspace: string, view: MyIssuesView, fallback: MyIssuesAppliedFilter[]): MyIssuesAppliedFilter[] {
+function readFilters(workspace: string, view: MyIssuesView, fallback: MyIssuesAppliedFilter[], teams?: readonly { id: string; name: string }[]): MyIssuesAppliedFilter[] {
   try {
     const value = JSON.parse(globalThis.localStorage?.getItem(filterKey(workspace, view)) ?? 'null')
-    return Array.isArray(value) ? consolidateFilters(normalizeStoredFilters(value.filter(isAppliedFilter))) : fallback
+    if (!Array.isArray(value)) return fallback
+    let repaired = false
+    const filters = value.filter(isAppliedFilter).map(filter => {
+      // The old Teams summary handler stored a team ID as a Priority value.
+      const team = filter.field === 'priority' && !/^[0-4]$/.test(filter.value) ? teams?.find(team => team.id === filter.value) : undefined
+      if (!team) return filter
+      repaired = true
+      return { ...filter, field: 'team' as const, fieldLabel: 'Team', valueLabel: team.name }
+    })
+    const normalized = consolidateFilters(normalizeStoredFilters(filters))
+    if (repaired) writeFilters(workspace, view, normalized)
+    return normalized
   } catch { return fallback }
 }
 function writeFilters(workspace: string, view: MyIssuesView, value: MyIssuesAppliedFilter[]) { writeValue(filterKey(workspace, view), JSON.stringify(value)) }
