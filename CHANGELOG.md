@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Scope the desktop document subscriber badge audit to its named user and measure metadata alignment in one animation frame, avoiding ambiguous badges and transient geometry failures.
+
 - Align desktop project display chips, list foregrounds and table captions with the shared panel surface, leaving phone styles unchanged.
 
 - Match desktop Loop schedule sentence typography without changing phone controls.
