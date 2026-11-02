@@ -19,10 +19,31 @@ test('keeps the desktop issue filter at the window edge and applies a status', a
     const box = await menu.boundingBox()
     return box ? 1440 - box.x - box.width : -1
   }).toBe(11)
+  const search = menu.getByRole('combobox', { name: 'Add Filter…', exact: true })
+  await expect(search).toBeInViewport({ ratio: 1 })
+  await expect(search).toBeEditable()
+  await expect(search).toHaveAttribute('placeholder', 'Add Filter…')
+  await page.evaluate(() => document.fonts.ready)
+  expect(await search.evaluate(input => {
+    const style = getComputedStyle(input)
+    const context = document.createElement('canvas').getContext('2d')!
+    context.font = style.font
+    const availableWidth = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+    return context.measureText(input.getAttribute('placeholder')!).width <= availableWidth
+  })).toBe(true)
+  const hint = menu.locator('kbd')
+  await expect(hint).toBeVisible()
+  const searchBox = (await search.boundingBox())!
+  const hintBox = (await hint.boundingBox())!
+  expect(searchBox.x + searchBox.width).toBeLessThanOrEqual(hintBox.x)
+  // The grid may size the input differently across browsers; its text must fit and filter the menu.
+  await search.fill('Status')
+  expect(await search.evaluate(input => input.scrollWidth <= input.clientWidth)).toBe(true)
+  await expect(menu.locator('[cmdk-item][data-value=Status]')).toBeVisible()
+  await expect(menu.locator('[cmdk-item][data-value=Priority]')).toHaveCount(0)
   await menu.locator('[cmdk-item][data-value=Status]').hover()
   const choices = page.getByRole('listbox', { name: 'Status', exact: true })
   await expect(choices).toBeVisible()
-  await expect(menu.locator('input')).toHaveCSS('width', '148px')
   const rootBox = (await menu.boundingBox())!
   const valueBox = (await page.locator('[data-level="1"]').boundingBox())!
   expect(valueBox.x + valueBox.width - rootBox.x).toBe(3)
