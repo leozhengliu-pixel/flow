@@ -140,7 +140,8 @@ describe('ProjectActivity', () => {
     expect(feed).not.toHaveTextContent(`${props.viewer.displayName} created the project`)
   })
 
-  it('does not group the activity feed under month headings', () => {
+  it('groups property-only history by month in chronological order', () => {
+    const media = vi.spyOn(window, 'matchMedia').mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList)
     const props = activityProps()
     const activities = [
       { id: 'a1', type: 'project.updated', createdAt: '2026-08-02T12:00:00.000Z', actor: props.viewer, metadata: {} },
@@ -149,8 +150,10 @@ describe('ProjectActivity', () => {
     const { container } = render(<I18nProvider><ProjectActivity {...props} activities={activities as never} project={{ ...props.project, createdAt: '2026-07-20T12:00:00.000Z' }} /></I18nProvider>)
     const feed = container.querySelector('.project-activity__feed')!
     expect(feed.querySelectorAll('h2')).toHaveLength(0)
-    expect(feed).not.toHaveTextContent('September')
+    expect([...feed.querySelectorAll('.project-activity__month')].map(node => node.textContent)).toEqual(['September', 'August', 'July'])
+    expect([...feed.children].map(node => node.classList.contains('project-activity__month') ? node.textContent : 'event')).toEqual(['September', 'event', 'August', 'event', 'July', 'event'])
     expect(feed.querySelectorAll('.project-activity__event')).toHaveLength(3)
+    media.mockRestore()
   })
 
   it('uses the framed editor with the reference app placeholders in both modes and no property diff', async () => {
