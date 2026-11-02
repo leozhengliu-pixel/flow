@@ -59,6 +59,8 @@
    toolbar metrics, plus the estimate-only group header. */
 @media(min-width:1024px){
   [data-issue-explorer]:has(section[data-mode="create"]) [data-content-view-breadcrumb] [data-current],.draftPlaceholder{color:var(--text)}
+  [data-issue-explorer] [data-content-view-breadcrumb] [data-current]{color:var(--text)}
+  [data-issue-explorer] [data-content-view-subheader]{gap:6px}
   .resourceTab{--ui-pill-bg:var(--my-issues-details-tab-bg);--ui-pill-active-bg:var(--my-issues-details-tab-active-bg);--ui-pill-fg:var(--issue-muted);--ui-pill-active-fg:var(--text);padding-inline:16px;font-family:inherit;font-size:12px;font-weight:500;line-height:normal}
   .resourceTab::after{box-shadow:none!important}
   .cardDisplay{--ui-pill-bg:var(--my-issues-details-tab-bg)}
@@ -88,6 +90,7 @@
   .insightsButton{order:-1}
 }
 @media(min-width:1024px){
+  [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) .headerNewIssue{padding-right:10px}
   .filterBar [data-filter-chip]{padding:.5px;border:0;box-shadow:inset 0 0 0 .5px var(--theme-border-strong);font-weight:400;background:var(--project-toolbar-bg);color:var(--text)}
   .filterBar [data-filter-chip]>span,.filterBar [data-filter-chip]>button{border:0;box-shadow:inset -.5px 0 0 var(--theme-border-strong)}
   .filterBar [data-filter-chip]>span:first-child{padding:0 6.5px 0 6px}
