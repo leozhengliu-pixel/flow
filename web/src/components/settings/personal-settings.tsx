@@ -825,7 +825,7 @@ function Preferences({
             "Customize sidebar item visibility, ordering, and badge style",
           )}
         >
-          <Action onClick={onCustomizeSidebar}>{desktop ? t('Customize sidebar') : p("Customize")}</Action>
+          <Action label={desktop ? t('Customize sidebar') : undefined} onClick={onCustomizeSidebar}>{p("Customize")}</Action>
         </PersonalRow>
         <PersonalRow
           title={p("Font size")}

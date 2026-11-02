@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Keep desktop personal settings actions transparent and aligned, with a compact Customize label and descriptive accessible name.
+
 - Match desktop issue reply placeholder typography and comment action padding without changing phone controls.
 
 - Restore desktop Reviews onboarding content, preview and integration actions with Chinese translations while keeping the phone connection view.
