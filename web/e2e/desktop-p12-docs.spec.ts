@@ -68,6 +68,8 @@ test('document list aligns its metadata and opens intrinsic metadata and subscri
   await expect(search).toBeVisible()
   await expect(search).toHaveCSS('padding', '10px 0px 9px')
   await expect(page.locator('.document-subscribers__badge')).toHaveCSS('line-height', '16px')
+  await expect(page.locator('.document-subscribers__badge')).toHaveCSS('height', '16px')
+  await expect(page.locator('.document-subscribers__row').first()).toHaveCSS('height', '32px')
   await expect(page.getByText('Other users', { exact: true })).toBeVisible()
   await search.fill('zheng')
   await expect(page.getByRole('checkbox', { name: 'zheng liu', exact: true })).toBeVisible()
@@ -84,6 +86,9 @@ test('document insert and inline comments fit the same article without reflow', 
   const before = (await page.locator('.document-title').boundingBox())!.x
   await editor.locator('p').first().click({ clickCount: 3 })
   await expect(page.getByRole('button', { name: 'Move selection to new document', exact: true })).toBeVisible()
+  const divider = (await page.locator('.selection-toolbar-separator').boundingBox())!
+  const move = (await page.getByRole('button', { name: 'Move selection to new document', exact: true }).boundingBox())!
+  expect(divider.x).toBeLessThan(move.x)
   await page.getByRole('button', { name: 'Comment', exact: true }).click()
   const composer = page.locator('.document-thread-card.is-draft')
   await expect(composer).toBeVisible()
@@ -134,6 +139,7 @@ test('the same non-owner role and one-version history omit inapplicable controls
   await expect(history.getByRole('checkbox', { name: 'Highlight changes', exact: true })).toHaveCount(0)
   await expect(history.getByRole('button', { name: 'Next change', exact: true })).toHaveCount(0)
   await expect(history.locator('.document-history-date')).toBeVisible()
+  await expect(history.locator('.document-history-version-author')).toHaveCSS('gap', '8px')
   await expect(history.locator('.document-history-scroll')).toHaveCSS('padding', '52px 16px 84px 24px')
   await page.waitForTimeout(500)
   const box = (await history.boundingBox())!

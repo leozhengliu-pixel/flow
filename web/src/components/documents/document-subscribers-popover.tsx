@@ -16,6 +16,7 @@ import { useI18n } from '@/i18n/i18n'
 import type { FlowDocument, User } from '@/types/flow'
 import { setDocumentSubscribers, type DocumentActionContext } from './document-actions'
 import { DOCUMENT_PAGE_SHORTCUTS } from './use-document-page-shortcuts'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 
 export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, onToggleViewer, open, onOpenChange, disabled }: {
   ctx: DocumentActionContext
@@ -29,6 +30,7 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
   disabled?: boolean
 }) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const changeLabel = t('Change document subscribers')
   const viewer = ctx.data.viewer
   const [query, setQuery] = useState('')
@@ -51,7 +53,8 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
   }
 
   const isSubscribed = (user: User) => user.id === viewer.id ? subscribed : (document.subscriberIds ?? []).includes(user.id)
-  const groups = [users.filter(isSubscribed), users.filter(user => !isSubscribed(user))]
+  const pinned = (user: User) => isSubscribed(user) || !phone && user.id === viewer.id
+  const groups = [users.filter(pinned).sort((a, b) => Number(isSubscribed(b)) - Number(isSubscribed(a))), users.filter(user => !pinned(user))]
   return <Popover.Root open={open} onOpenChange={next => { onOpenChange(next); if (!next) setQuery('') }}>
     <ScopedFlowTooltip label={changeLabel} shortcut={DOCUMENT_PAGE_SHORTCUTS.subscribers} disabled={open}>
       <Popover.Trigger asChild>

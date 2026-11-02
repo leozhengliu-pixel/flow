@@ -272,11 +272,11 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
       const coords = editor.view.coordsAtPos(position)
       const box = shell.getBoundingClientRect()
       const left = inlineDraft
-        ? Math.max(0, Math.min(coords.left - box.left - POPOVER_INSET, box.width - 360))
+        ? Math.max(narrow === false ? 8 - box.left : 0, Math.min(coords.left - box.left - POPOVER_INSET, box.width - POPOVER_WIDTH))
         : Math.max(0, Math.min(coords.left - box.left - POPOVER_INSET, box.width - POPOVER_WIDTH))
       return { top: coords.bottom - box.top + POPOVER_GAP, left }
     } catch { return { top: 0, left: 0 } }
-  }, [editor, shell, inlineDraft])
+  }, [editor, shell, inlineDraft, narrow])
 
   // A popover shows only the thread being read (or the composer being written); the others wait to be clicked.
   const visibleThreads = visible ? (popover ? open.filter(thread => thread.root.id === active) : open) : []

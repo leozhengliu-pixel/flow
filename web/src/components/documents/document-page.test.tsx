@@ -214,6 +214,17 @@ describe('DocumentPage header', () => {
     await waitFor(() => expect(api.addSubscription).toHaveBeenCalledWith('document', flowDocument.id))
   })
 
+  it('keeps the unsubscribed desktop viewer after subscribers and before other users', async () => {
+    const user = userEvent.setup()
+    renderPage({ document: { ...flowDocument, subscriberIds: [teammate.id] } as FlowDocument })
+    await user.click(screen.getByRole('button', { name: 'Change document subscribers' }))
+    const list = await screen.findByRole('group', { name: 'Document subscribers' })
+    const rows = within(list).getAllByRole('checkbox')
+    expect(rows.slice(0, 2).map(row => row.getAttribute('aria-label'))).toEqual(['Teammate', 'Viewer'])
+    expect(rows[0]).toBeChecked()
+    expect(rows[1]).not.toBeChecked()
+  })
+
   it('lists the "…" menu in the reference app order and keeps People with access for owners', async () => {
     const user = userEvent.setup()
     renderPage()

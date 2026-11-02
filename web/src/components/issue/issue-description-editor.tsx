@@ -590,7 +590,8 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       const caret = current.view.coordsAtPos(next.range.to)
       const width = 227
       const trigger = current.view.coordsAtPos(next.range.from)
-      const left = Math.max(8, Math.min(trigger.left - 3, window.innerWidth - width - 8))
+      const triggerBox = compactInsertMenu ? current.view.dom.querySelector('.description-slash-trigger')?.getBoundingClientRect() : undefined
+      const left = Math.max(8, Math.min(triggerBox?.left ?? trigger.left - 3, window.innerWidth - width - 8))
       const top = caret.bottom + 6
       const caretTop = caret.top
       setMenuPosition(position => position.left === left && position.top === top && position.caretTop === caretTop ? position : { left, top, caretTop })

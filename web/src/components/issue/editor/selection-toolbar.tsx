@@ -10,6 +10,7 @@ import type { DescriptionSelectionActions } from './structured-blocks'
 import { LinkEditor } from './link-editor'
 import { ToolbarGlyph, type ToolbarGlyphName } from './selection-toolbar-glyphs'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import './selection-toolbar.css'
 
 type BlockId = 'paragraph' | 'h1' | 'h2' | 'h3' | 'h4'
@@ -43,6 +44,7 @@ const TOOLBAR_SHORTCUTS = {
  */
 export function SelectionToolbar({ editor, actions }: { editor: Editor; actions?: DescriptionSelectionActions }) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const [open, setOpen] = useState<'block' | 'list' | 'link' | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const state = useEditorState({
@@ -131,8 +133,9 @@ export function SelectionToolbar({ editor, actions }: { editor: Editor; actions?
         </ToolbarMenu>}
       </span>
     </>}
+    {!phone && state.editable && hasActions && <span className="selection-toolbar-separator" role="separator" aria-orientation="vertical"/>}
     {actions?.onMoveToNewDocument && <ToolbarItem label={t('Move selection to new document')} onPress={() => actions.onMoveToNewDocument?.(selection(), editor)}><FilePlus2 size={16}/></ToolbarItem>}
-    {state.editable && hasActions && <span className="selection-toolbar-separator" role="separator" aria-orientation="vertical"/>}
+    {phone && state.editable && hasActions && <span className="selection-toolbar-separator" role="separator" aria-orientation="vertical"/>}
     {actions?.onCreateIssue && <ToolbarItem label={t('Create issue from selection')} shortcut={TOOLBAR_SHORTCUTS['Create issue from selection']} onPress={() => actions.onCreateIssue?.(selection(), editor)}><ToolbarGlyph name="createIssue"/></ToolbarItem>}
     {actions?.onAskAgent && <ToolbarItem label={t('Ask agent')} shortcut={TOOLBAR_SHORTCUTS['Ask agent']} onPress={() => actions.onAskAgent?.(selection(), editor)}><AgentCursorGlyph size={16}/></ToolbarItem>}
     {actions?.onComment && <ToolbarItem label={t('Comment')} shortcut={TOOLBAR_SHORTCUTS.Comment} onPress={() => actions.onComment?.(selection(), editor)}><ToolbarGlyph name="comment"/></ToolbarItem>}

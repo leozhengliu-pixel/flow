@@ -13,7 +13,9 @@ test('uses title padding instead of a fitted inbox offset and keeps the team ico
   const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
   const data = await response.json() as BootstrapData
   await page.goto(`/${workspaceKey}/team/${data.teams[0].key}/documents`)
-  await expect(page.locator('.team-home-topbar')).toHaveCSS('gap', '6px')
+  await expect(page.locator('.team-home-topbar')).toHaveCSS('gap', '12px')
+  await expect(page.locator('.team-home-topbar-row')).toHaveCSS('gap', '8px')
+  await expect(page.locator('.team-home-title-row')).toHaveCSS('gap', '6px')
   const headers = { 'X-Workspace-Key': workspaceKey }
   const issues: Issue[] = []
   for (const title of ['Review target', 'Related target']) {
