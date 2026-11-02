@@ -1106,6 +1106,16 @@ html:root body .agent-skills-trigger:not(#_)[data-state=open] {
 html:root body .agent-skills-trigger:not(#_) svg { width: 14px; height: 14px; }
 
 /* Pickers whose search stays hidden until you type. */
+@media (min-width: 1024px) {
+  .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-checkbox { display: none; }
+  .property-command-surface.issue-labels-menu .property-command-options [role=option][aria-checked=true] .property-command-checkbox {
+    display: grid;
+    grid-column: 1;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+}
 html:root body .property-command-surface .property-command-search.is-visually-hidden:not(#_) {
   position: fixed;
   left: -10000px;
