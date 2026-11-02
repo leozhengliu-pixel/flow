@@ -9,7 +9,7 @@ test('honors row properties, opens an icon-only date picker and keeps the overvi
   const headers = { 'X-Workspace-Key': workspaceKey }
   const bootstrap = await request.get('/api/bootstrap', { headers })
   const data = await bootstrap.json() as BootstrapData
-  const response = await request.post('/api/projects', { headers, data: { name: '[audit] Desktop project', summary: 'Delivery summary', teamIds: [data.teams[0].id] } })
+  const response = await request.post('/api/projects', { headers, data: { name: '[audit] Desktop project', summary: 'Delivery summary', startDate: '2026-09-28', teamIds: [data.teams[0].id] } })
   expect(response.ok()).toBeTruthy()
   const project = await response.json() as Project
   const milestone = await request.post(`/api/projects/${project.id}/milestones`, { headers, data: { name: 'Alpha' } })
@@ -97,6 +97,16 @@ test('honors row properties, opens an icon-only date picker and keeps the overvi
   await expect(timeline.locator('.lp-project-timeline__group')).toHaveCount(0)
   await expect(timeline.locator('.lp-project-timeline__label')).toHaveCSS('width', '320px')
   await expect(timeline.locator('.lp-project-timeline__row')).toHaveCSS('height', '72px')
+  await expect(timeline.locator('.lp-project-timeline__icon')).toHaveCSS('width', '28px')
+  await expect(timeline.locator('.lp-project-timeline__label > button')).toHaveCSS('font-weight', '500')
+  await expect(timeline.locator('.lp-project-timeline__today-chip')).toHaveCSS('font-size', '11px')
+  await expect(timeline.locator('.lp-project-timeline__today-chip')).toHaveCSS('padding', '1px 4px')
+  await expect(timeline.locator('.lp-project-timeline__major > span').first()).toHaveCSS('padding-left', '0px')
+  await expect(timeline.locator('.lp-project-timeline__major > span').first()).toHaveCSS('border-left-width', '0px')
+  await expect(page.getByRole('button', { name: 'Timeline zoom', exact: true })).toHaveCSS('padding', '0px 8px')
+  await expect(page.getByRole('button', { name: 'Timeline zoom', exact: true })).toHaveCSS('background-color', 'lch(10.149 0.689 272)')
+  await expect(page.getByRole('button', { name: 'Timeline zoom', exact: true })).toHaveCSS('color', 'lch(90.451 1.2 272)')
+  await expect(page.getByRole('button', { name: 'Timeline zoom', exact: true }).locator('svg')).toHaveCSS('width', '8px')
   await page.getByRole('button', { name: 'Timeline zoom', exact: true }).click()
   await page.getByRole('menuitemradio', { name: 'Year', exact: true }).click()
   await expect(timeline).toHaveAttribute('data-zoom', 'year')
@@ -104,6 +114,13 @@ test('honors row properties, opens an icon-only date picker and keeps the overvi
   await page.reload()
   await expect(timeline).toHaveAttribute('data-zoom', 'year')
   await page.getByRole('button', { name: 'Center timeline on today', exact: true }).click()
+  await expect.poll(async () => {
+    const line = await timeline.locator('.lp-project-timeline__today-line').boundingBox()
+    const scroller = await timeline.locator('.lp-project-timeline__scroller').boundingBox()
+    return Math.abs(line!.x + line!.width / 2 - scroller!.x - scroller!.width / 2)
+  }).toBeLessThanOrEqual(1)
+  await expect(timeline.locator('.lp-project-timeline__bar')).toBeVisible()
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-project-timeline.png`, animations: 'disabled' })
 })
 
 test('shows persisted initiative updates with a docked, collapsible properties and activity rail', async ({ page, request, workspaceKey }) => {

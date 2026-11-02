@@ -425,7 +425,7 @@ const TimelineProjectRow = memo(function TimelineProjectRow({ project, span, box
   const open = () => { if (!consumeSuppressedClick()) onOpen?.(project) }
   return <div className="lp-project-timeline__row" data-link-target={linkTarget || undefined} data-timeline-project={project.id} onPointerEnter={() => onHover(project.id)} onPointerLeave={() => onHover(undefined)} style={{ top: y, height: desktop ? 72 : ROW_HEIGHT }}>
     <div className="lp-project-timeline__label">
-      <button aria-label={`Open ${project.name}`} onClick={() => onOpen?.(project)} type="button"><ViewGlyph color={project.color ?? 'var(--theme-text-tertiary)'} icon={project.icon || 'Project'}/><span data-i18n-ignore>{project.name}</span></button>
+      <button aria-label={`Open ${project.name}`} onClick={() => onOpen?.(project)} type="button">{desktop ? <span className="lp-project-timeline__icon"><ViewGlyph color={project.color ?? 'var(--theme-text-tertiary)'} icon={project.icon || 'Project'}/></span> : <ViewGlyph color={project.color ?? 'var(--theme-text-tertiary)'} icon={project.icon || 'Project'}/>}<span data-i18n-ignore>{project.name}</span></button>
     </div>
     <div className="lp-project-timeline__track">
       {!span || !box
