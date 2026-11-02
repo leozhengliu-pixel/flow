@@ -17,6 +17,7 @@
   .lp-projects__header { padding-right: 8px; }
   .lp-projects__header h1 { color: var(--text); }
   .lp-projects__toolbar { padding-inline: 8px; }
+  :root .lp-projects .lp-projects__icon-button.is-active { --ui-pill-active-bg: var(--project-toolbar-open-bg); --ui-pill-active-hover-bg: var(--project-toolbar-open-bg); background: var(--project-toolbar-open-bg); }
   .lp-projects-display { width: 331px; right: 12px; padding-top: 16px; border: .5px solid var(--theme-border-strong); background: var(--directory-display-menu-bg); box-shadow: var(--shadow-control); }
   .lp-projects-display__modes { margin: 0 10px 16px; gap: 6px; }
   .lp-projects-display__modes button,
