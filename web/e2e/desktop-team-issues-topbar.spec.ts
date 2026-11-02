@@ -5,6 +5,33 @@ test.skip(({ isMobile }) => isMobile, 'desktop-only top bar parity')
 
 test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
 
+test('keeps the desktop issue filter at the window edge and applies a status', async ({ page, request, workspaceKey }) => {
+  const headers = { 'X-Workspace-Key': workspaceKey }
+  const data = await (await request.get('/api/bootstrap', { headers })).json() as { teams: Array<{ id: string; key: string }> }
+  const team = data.teams[0]
+  await request.post('/api/issues', { headers, data: { title: 'Filter geometry sample', teamId: team.id, stateId: 'state_todo' } })
+  await page.goto(`/${workspaceKey}/team/${team.key}/all`)
+  await page.getByRole('button', { name: 'Add filter', exact: true }).click()
+  const menu = page.locator('[data-layout=issues][data-variant=root]')
+  await expect(menu).toBeVisible()
+  await expect(menu).toHaveCSS('width', '207px')
+  await expect.poll(async () => {
+    const box = await menu.boundingBox()
+    return box ? 1440 - box.x - box.width : -1
+  }).toBe(11)
+  await menu.locator('[cmdk-item][data-value=Status]').hover()
+  const choices = page.getByRole('listbox', { name: 'Status', exact: true })
+  await expect(choices).toBeVisible()
+  await expect(menu.locator('input')).toHaveCSS('width', '148px')
+  const rootBox = (await menu.boundingBox())!
+  const valueBox = (await page.locator('[data-level="1"]').boundingBox())!
+  expect(valueBox.x + valueBox.width - rootBox.x).toBe(3)
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-filter.png`, animations: 'disabled' })
+  await choices.getByRole('option', { name: /Todo/ }).click()
+  await expect(menu).toBeHidden()
+  await expect(page.locator('[data-filter-chip]')).toContainText('Todo')
+})
+
 test('shapes desktop identifiers with capital spacing and tabular digits', async ({ page, request, workspaceKey }) => {
   const headers = { 'X-Workspace-Key': workspaceKey }
   const response = await request.get('/api/bootstrap', { headers })
