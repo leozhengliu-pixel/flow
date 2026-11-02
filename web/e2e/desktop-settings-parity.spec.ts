@@ -128,7 +128,12 @@ test('profile renders the actual email and settings footer controls navigate', a
   await expect(footer.getByRole('button', { name: 'Free plan' })).toHaveCount(0)
   const mcp = page.getByRole('link', { name: 'MCP connectors', exact: true })
   await mcp.click()
-  await expect(page).toHaveURL(new RegExp('/settings/ai$'))
+  await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/settings/mcps$`))
+  await expect(mcp).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByRole('heading', { name: 'MCP connectors', exact: true, level: 1 })).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: 'Enable connectors', exact: true })).toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Manage connectors', exact: true })).toBeVisible()
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-mcp-connectors.png`, animations: 'disabled' })
 })
 
 test('workspace announcements save in the throwaway workspace and reopen after reload', async ({ page, workspaceKey }) => {
