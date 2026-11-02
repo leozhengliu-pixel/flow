@@ -37,6 +37,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Let desktop inbox action menus size to their labels and shortcuts without a negative shortcut offset.
 
+- Align desktop shell navigation insets, issue navigation targets and sidebar search tooltip weight while preserving phone styles.
+
 - Align desktop issue activity and comment avatar typography without changing phone avatars or the user colour palette.
 
 - Align desktop saved-view headings, metadata, favorite controls and summary tabs with their measured presentation.

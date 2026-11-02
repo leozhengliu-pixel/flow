@@ -36,6 +36,9 @@
 .issue-sequence-buttons button > svg { width: 14px; height: 14px; color: var(--issue-header-icon); }
 .issue-sequence-down { margin-right: 1px; padding: 0 0 0 2px; border-radius: 9999px 0 0 9999px; }
 .issue-sequence-up { padding: 0 2px 0 0; border-radius: 0 9999px 9999px 0; }
+@media (min-width: 1024px) {
+  .issue-sequence-buttons button { padding: 0 2px; }
+}
 .issue-sequence-buttons button:hover:not(:disabled) { background: var(--issue-sequence-hover-bg); }
 .issue-sequence-buttons button:hover:not(:disabled) > svg { color: var(--issue-header-icon-hover); }
 .issue-sequence-buttons button:disabled { opacity: .6; }
