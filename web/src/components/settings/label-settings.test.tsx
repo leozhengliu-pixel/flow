@@ -6,7 +6,7 @@ import { makeBootstrap } from '@/test/fixtures'
 import { mergeLabels, updateWorkspaceLabel } from '@/lib/api'
 import type { BootstrapData, LabelResourceType } from '@/types/flow'
 import { DomainLabelsSettings } from './domain-settings'
-import { canMergeLabels, matchesLabelFilters, mergeTarget, visibleLabelColumns } from './label-settings-model'
+import { canMergeLabels, labelGridTemplate, matchesLabelFilters, mergeTarget, visibleLabelColumns } from './label-settings-model'
 
 vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), mergeLabels: vi.fn(), updateWorkspaceLabel: vi.fn() }))
 vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
@@ -41,6 +41,10 @@ describe('label colour picker', () => {
 })
 
 describe('label settings structure', () => {
+  it('keeps the desktop created-date track compact without changing compact tables', () => {
+    expect(labelGridTemplate(['title', 'createdAt'], 'issue', true)).toContain('[createdAt] 82px [menu] 28px [end-padding] 32px')
+    expect(labelGridTemplate(['title', 'createdAt'], 'issue')).toContain('[createdAt] 102px [menu] 28px [end-padding] 32px')
+  })
   it('shows the reference app\'s toolbar and empty state on initiative labels without a scope selector', () => {
     page('initiative')
     expect(screen.getByRole('heading', { name: 'Initiative labels' })).toBeVisible()
@@ -68,6 +72,7 @@ describe('label settings structure', () => {
     page('project', { labels: [{ id: 'p1', name: 'Platform', color: '#123456', resourceType: 'project' }] } as never)
     expect(screen.getByRole('button', { name: 'Order by Name, sorted ascending' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Order by Projects' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Order by Projects' }).querySelector('svg')).toHaveClass('is-unsorted')
     await userEvent.setup().click(screen.getByRole('button', { name: 'Display options' }))
     expect(await screen.findByRole('combobox', { name: 'Grouping' })).toHaveTextContent('No grouping')
     expect(screen.getByRole('switch', { name: 'Show team labels' })).toBeVisible()
