@@ -25,6 +25,25 @@ describe('InboxFilterBuilder', () => {
     }
   })
 
+  it('keeps typing in the phone command input after choosing a property', async () => {
+    const user = userEvent.setup()
+    const media = window.matchMedia
+    const resizeObserver = globalThis.ResizeObserver
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 767px)', media: query, onchange: null, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn() }))
+    try {
+      render(<I18nProvider><InboxFilterBuilder filters={[]} options={{ team: [{ id: 'team-1', label: 'Platform' }] }} onFiltersChange={vi.fn()}/></I18nProvider>)
+      await user.click(screen.getByRole('button', { name: 'Add filter' }))
+      await user.click(screen.getByRole('option', { name: 'Team' }))
+      await waitFor(() => expect(screen.getByLabelText('Command menu')).toHaveFocus())
+      await user.keyboard('zz')
+      expect(screen.getByLabelText('Command menu')).toHaveValue('zz')
+    } finally {
+      vi.stubGlobal('matchMedia', media)
+      vi.stubGlobal('ResizeObserver', resizeObserver)
+    }
+  })
+
   it('offers working team and initiative properties', async () => {
     const user = userEvent.setup()
     const onFiltersChange = vi.fn()
