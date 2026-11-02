@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align desktop initiative sidebar property columns, empty-value labels, and compact picker typography without changing phone controls.
 
+- Match desktop issue-filter highlighted labels, submenu markers, shortcut padding and count insets while preserving phone pickers.
+
 - Match the desktop coding-session copy control foreground to its shared text token.
 
 - Match desktop issue identifier tracking and saved-view directory name contrast while preserving phone typography.

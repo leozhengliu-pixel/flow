@@ -62,6 +62,12 @@
 .deepItem>.count{flex:none;margin-left:auto;color:var(--pk-faint);font-size:12px}
 
 @keyframes filterPopoverIn{from{opacity:0;transform:translateY(-2px) scale(.985)}to{opacity:1;transform:none}}
+@media(min-width:1024px){
+  .rootSearch kbd{padding-inline:2px}
+  .rootItem[data-selected=true],.rootItem[aria-selected=true],.valueItem[aria-selected=true],.valueItem:hover{color:var(--bright)}
+  .rootItem[data-selected=true] .rootChevron,.rootItem[aria-selected=true] .rootChevron{color:var(--pk-muted)}
+  .valueItem .count{padding-left:0}
+}
 @media(max-width:600px){.rootMenu{width:min(var(--filter-root-width),calc(100vw - 22px))}.valueMenu{max-width:calc(100vw - 22px)}}
 
 /* Phone: the reference app's filter menus span the viewport (16px inset) and open at 13vh, with 46px rows, a
