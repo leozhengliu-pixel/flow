@@ -29,3 +29,27 @@ test('aligns label text with its editable hit target and preserves sorting and e
   await expect(page.getByRole('textbox', { name: 'Beta', exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
+
+test('directory search fields own their paint and filter controls retain usable hit targets', async ({ page, workspaceKey }) => {
+  await page.emulateMedia({ colorScheme: 'light' })
+  for (const [route, name] of [['teams', 'Filter by name…'], ['members', 'Search by name or email']]) {
+    await page.goto(`/${workspaceKey}/settings/${route}`)
+    const search = page.getByRole('textbox', { name, exact: true })
+    await expect(search).toHaveCSS('padding', '6px 25px 6px 32px')
+    await expect(search).toHaveCSS('border-radius', '8px')
+    expect((await search.boundingBox())!.width).toBe(300)
+    await search.fill('no matching directory entry')
+    await expect(page.locator('.settings-member-directory-row')).toHaveCount(0)
+    await search.clear()
+    await expect(page.locator('.settings-member-directory-row').first()).toBeVisible()
+    if (route === 'members') {
+      const filter = page.getByRole('button', { name: 'Member filter', exact: true })
+      await expect(filter).toHaveCSS('padding', '1px 28px 1px 10px')
+      await filter.click()
+      await expect(page.getByRole('menuitemradio', { name: 'All', exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('menuitemradio', { name: 'All', exact: true })).toBeHidden()
+    }
+    if (process.env.FLOW_UI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_UI_SHOTS}/desktop-${route}-directory.png` })
+  }
+})

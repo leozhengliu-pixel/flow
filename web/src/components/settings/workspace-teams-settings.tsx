@@ -135,6 +135,16 @@ export function WorkspaceTeamsSettings({
   };
   const count = (value: number) => (value ? value.toLocaleString() : "-");
   const header = (key: TeamSort, label: string) => desktop ? <span role="columnheader" aria-sort={sort === key ? descending ? 'descending' : 'ascending' : 'none'}><button type="button" aria-label={`${t('Order by')} ${t(label)}`} onClick={() => { if (sort === key) setDescending(value => !value); else { setSort(key); setDescending(key === 'members' || key === 'issues'); } }}><span>{t(label)}</span>{sort === key && !descending ? <ArrowUp size={12}/> : <ArrowDown size={12}/>}</button></span> : <span>{t(label)}</span>;
+  const actions = <>
+    {!phone && admin && visibility !== "Recently deleted" && data.teams.length > 0 && (
+      <button className="settings-action" type="button" onClick={exportCsv}>
+        {t("Export CSV")}
+      </button>
+    )}
+    <button className="settings-action primary" type="button" aria-label={phone ? undefined : t("Create new team")} onClick={onCreate}>
+      {t("Create team")}
+    </button>
+  </>;
   return (
     <div className="settings-members-page settings-teams-page" data-i18n-ignore>
       <SettingsPageTitle>{t("Teams")}</SettingsPageTitle>
@@ -155,14 +165,7 @@ export function WorkspaceTeamsSettings({
           onChange={(value) => setVisibility(visibilities.find((item) => t(item) === value) ?? "Active")}
         />
         <span />
-        {!phone && admin && visibility !== "Recently deleted" && data.teams.length > 0 && (
-          <button className="settings-action" type="button" onClick={exportCsv}>
-            {t("Export CSV")}
-          </button>
-        )}
-        <button className="settings-action primary" type="button" aria-label={phone ? undefined : t("Create new team")} onClick={onCreate}>
-          {t("Create team")}
-        </button>
+        {desktop ? <div className="settings-team-actions">{actions}</div> : actions}
       </div>
       {visibility === "Recently deleted" ? (
         <DeletedTeamsTable
