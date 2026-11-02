@@ -13,6 +13,7 @@ test('counts the hidden issues and clears the real filters without changing the 
   const band = page.getByLabel('Applied filters', { exact: true })
   await expect(band).toHaveCSS('border-top-style', 'solid')
   await expect(band).toHaveCSS('box-shadow', 'none')
+  await expect(band).toHaveCSS('border-top-color', 'lch(13.08 1.48 272)')
   await expect(band.getByRole('button', { name: 'Add another filter', exact: true })).toHaveCSS('padding', '0px 2px')
   const card = page.locator('[data-filter-empty-card]')
   await expect(card).toHaveText('3 issueshidden by filtersClear Filters')

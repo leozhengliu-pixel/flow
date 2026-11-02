@@ -118,6 +118,11 @@ test('new-view title stays editable while its bright fallback and full-width des
   await expect(name).toHaveValue('')
   await expect(name).toHaveAttribute('placeholder', 'All issues')
   await expect(page.locator('[data-content-view-breadcrumb] [data-current] span').last()).toHaveCSS('color', 'lch(90.451 1.2 272)')
+  await expect(page.locator('[data-content-view-header]')).toHaveCSS('padding-left', '8px')
+  await expect(page.getByRole('button', { name: 'Choose icon', exact: true })).toHaveCSS('padding', '0px 8px')
+  await expect(page.getByRole('button', { name: 'Create view', exact: true })).toHaveCSS('background-color', 'lch(52.418 61.103 288.421)')
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCSS('color', 'lch(90.451 1.2 272)')
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-new-view.png`, animations: 'disabled' })
   const metrics = await name.evaluate(input => {
     const description = document.querySelector('input[aria-label="Description (optional)"]')!
     const field = input.getBoundingClientRect(), desc = description.getBoundingClientRect()
