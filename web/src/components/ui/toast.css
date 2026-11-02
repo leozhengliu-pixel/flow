@@ -154,6 +154,7 @@ button.flow-toast__chip:focus-visible { outline: 2px solid var(--focus-ring); ou
   }
   .flow-toast[data-clipboard] > .flow-toast__icon { display: none; }
   .flow-toast__copy-icon { display: flex; flex: none; width: 16px; height: 16px; color: var(--toast-muted); }
+  .flow-toast__close { padding: 6px; color: var(--toast-dismiss-fg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
