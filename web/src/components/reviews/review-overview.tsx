@@ -251,6 +251,7 @@ function ReviewMobileProperties({
       </div>
       <div className="review-mobile-row" data-mobile-property="reviewers">
         <span className="review-mobile-label">{t("Reviewers")}</span>
+        <div className="review-mobile-values">
         {reviewers.map((user) => (
           <button type="button" key={user.id} className="review-sidebar-button" onClick={() => onOpenPicker("reviewers")}>
             <UserAvatar className="avatar review-sidebar-avatar" name={user.displayName} avatarUrl={user.avatarUrl} />
@@ -266,6 +267,7 @@ function ReviewMobileProperties({
           <PlusIcon />
           <span>{t("Add reviewers")}</span>
         </button>
+        </div>
       </div>
       <div className="review-mobile-row" data-mobile-property="branch">
         <span className="review-mobile-label">{t("Branch")}</span>
