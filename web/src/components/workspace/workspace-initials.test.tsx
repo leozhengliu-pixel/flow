@@ -7,7 +7,10 @@ describe('workspace initials', () => {
   it.each([
     ['Flow', 'FL'], ['Flow Team', 'FT'], ['中文团队', '中文'],
     ['中a', '中A'], ['a中', 'A中'], ['张三 李四', '张李'],
-    ['équipe', 'ÉQ'], ['', 'W'],
+    ['équipe', 'ÉQ'], ['e\u0301quipe', 'E\u0301Q'], ['', 'W'],
+    ['[mobile] Workspace general', 'MW'], ['...Flow (Team)', 'FT'],
+    ['--- Flow Team', 'FT'], ['[A]', 'A'], ['[中文团队]', '中文'],
+    ['!42 #Test', '4T'], ['... []', 'W'],
   ])('keeps whole initials for %s', (name, expected) => {
     expect(workspaceInitials(name)).toBe(expected);
   });
