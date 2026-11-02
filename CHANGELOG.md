@@ -29,6 +29,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Let filter value menus size to their labels within the shared maximum width.
 
 - Keep small avatar initials on one line and preserve avatar proportions beside long member names.
+- Honor every first-weekday preference in settings and calendar controls.
+
 - Add drafted search date filters with on/before/after comparisons, five date precisions, Cancel and Apply, using existing API range filters.
 
 - Keep phone property submenus above their parent overlay so grouped project labels and Back remain tappable.

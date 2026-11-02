@@ -32,3 +32,12 @@ it('defaults the first weekday by locale until the user explicitly chooses one',
   setRuntimePreferences({})
   expect(firstWeekday(undefined,'en')).toBe(0)
 })
+it.each(['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'])('honors %s in every locale and calendar',day=>{
+  const index=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].indexOf(day)
+  for(const locale of ['en-US','zh-CN']) {
+    expect(resolveFirstDay(day,locale)).toBe(day)
+    expect(firstWeekday(day,locale)).toBe(index)
+    setRuntimePreferences({firstDay:day})
+    expect(firstWeekday(undefined,locale)).toBe(index)
+  }
+})
