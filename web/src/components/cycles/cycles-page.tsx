@@ -1,4 +1,4 @@
-import { ChevronRight, Menu } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import { TeamIcon } from '@/components/issue/issue-icons'
 import { Fragment, useMemo } from 'react'
 import { SidebarLeftIcon } from '@/components/ui/view-action-icons'
@@ -22,7 +22,7 @@ import './cycle-timeline.css'
 export function CyclesPage({cycles,issues,settings,team,estimateSettings,onOpen,onUpdateCycle,onStartCycle,onUpdateSettings,onReload,onOpenSidebar}:{cycles:Cycle[];issues:Issue[];settings:{enabled:boolean;durationWeeks:number;cooldownWeeks:number;upcomingCount:number;favoriteView?:boolean};team:Team;estimateSettings?:TeamSettings;onOpen:(cycle:Cycle)=>void;onUpdateCycle:(cycle:Cycle,input:CycleMutationInput)=>Promise<unknown>;onStartCycle:(cycle:Cycle)=>Promise<unknown>;onUpdateSettings:(input:CycleSettingsMutationInput)=>Promise<unknown>;onReload:()=>Promise<void>;onOpenSidebar:()=>void}){
   const {t}=useI18n()
   const visible=useMemo(()=>cycleListOrder(cycles),[cycles])
-  const teamBreadcrumb=<span className="cycle-team-breadcrumb" data-i18n-ignore><TeamIcon team={team} size={14}/><span>{team.name}</span><ChevronRight size={12}/></span>
+  const teamBreadcrumb=<span className="cycle-team-breadcrumb" data-i18n-ignore><span className="cycle-team-breadcrumb__label"><TeamIcon team={team} size={16}/><span>{team.name}</span></span><span aria-hidden="true" className="cycle-team-breadcrumb__separator">›</span></span>
   const earliestUpcoming=[...visible].filter(item=>item.status==='upcoming').sort((a,b)=>a.startsAt.localeCompare(b.startsAt))[0]?.id
   return <main className="main-panel flow-cycles-page"><header className="flow-cycles-header">
     <button className="cycles-mobile-menu" aria-label={t('Open sidebar')} data-sidebar-trigger onClick={onOpenSidebar}><Menu className="cycle-desktop-glyph"/><SidebarLeftIcon className="cycle-phone-glyph"/></button>

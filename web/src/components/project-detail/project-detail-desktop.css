@@ -1,5 +1,6 @@
 @media (min-width: 1024px) {
   .project-detail-page { --pd-copy: var(--text); --pd-text: var(--text); }
+  .project-detail-page__header { padding-left: 18px; }
   .project-details-sidebar {
     --pd-label: var(--phone-project-panel-label);
     --pd-copy: var(--text);
