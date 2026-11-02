@@ -1086,4 +1086,6 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   :root[data-theme="light"] { --issue-toolbar-open-bg: lch(94.854% .157 282); }
   :root { --issue-filter-band-border: lch(13.08% 1.48 272); --view-editor-icon-bg: lch(78.247% 3.577 260.65 / .175); --view-editor-create-bg: lch(52.418% 61.103 288.421); }
   :root[data-theme="light"] { --issue-filter-band-border: var(--border); --view-editor-icon-bg: color-mix(in srgb,var(--theme-text-tertiary) 12.5%,transparent); --view-editor-create-bg: var(--accent-primary); }
+  :root { --issue-selected-identifier-fg: lch(64.48% 9.896 286.445); --issue-bulk-command-bg: lch(13.861% 1.139 272); }
+  :root[data-theme="light"] { --issue-selected-identifier-fg: var(--issue-muted); --issue-bulk-command-bg: var(--theme-control); }
 }

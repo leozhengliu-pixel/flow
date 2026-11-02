@@ -13,6 +13,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Match desktop issue team-selection groups and compact label-chip insets, and honor subscriber avatar images.
 
+- Match desktop issue selected identifiers, bulk-command surfaces, summary-tab labels and open-picker states, and align view-editor action groups while preserving phone spacing.
+
 - Align desktop triage row hit areas, toolbar gaps and empty-selection action surfaces while preserving phone rows.
 
 - Align desktop project and initiative icon surfaces with the shared page icon radius, padding, and tint.
