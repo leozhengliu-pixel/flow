@@ -773,6 +773,7 @@
 .sidebar-team-subscribe-check {
   width: 14px;
   height: 14px;
+  flex: 0 0 14px;
   display: grid;
   place-items: center;
   border: 1px solid transparent;
@@ -786,6 +787,9 @@
 .sidebar-team-subscribe-check svg {
   width: 10px;
   height: 9px;
+}
+.sidebar-team-subscribe-menu [role="menuitemcheckbox"]:is(:hover,:focus-visible,[data-highlighted]):not([data-disabled]):not([data-state="checked"]) .sidebar-team-subscribe-check {
+  border-color: var(--sub-checkbox-border);
 }
 .sidebar-team-subscribe-menu [role="menuitemcheckbox"][data-state="checked"] .sidebar-team-subscribe-check {
   border-color: var(--accent-primary);
