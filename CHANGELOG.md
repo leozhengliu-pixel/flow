@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Save Loop output contracts in a narrow transaction over the Loop and its versions without loading issue or discussion collections; late model results still fill matching versions without changing the edited Loop or person-chosen contracts, and unchanged saves write nothing.
 
+- Align desktop initiative overview heading insets, property icons, resource and reaction controls, and project toolbar open states while preserving phone controls.
+
 - Keep phone Snooze, issue-row, Move to, and Labels submenus inside the viewport, with nested levels replacing their parent and a Back action; preserve desktop cascades.
 
 - Keep the desktop project timeline grid and today line extended through the viewport when only a few projects are shown.

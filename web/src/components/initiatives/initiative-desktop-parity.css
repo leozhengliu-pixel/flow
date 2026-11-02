@@ -1,7 +1,9 @@
 @media (min-width: 1024px) {
   .li-page { --li-select-width: 20px; --li-column-status: 100px; --li-column-priority: 56px; --li-column-owner: 50px; --li-column-target: 100px; --li-column-projects: 59px; --li-column-health: 52px; --li-column-activeProjects: 98px; }
   .li-detail, .li-page { height: calc(100% - 44px); margin-bottom: 36px; }
-  .li-detail-header { padding: 0 8px 0 17px; }
+  .li-detail-header { gap: 4px; padding: 0 8px 0 17px; }
+  .li-detail-header > button[aria-label] { padding-inline: 2px; }
+  .li-detail-header > .li-detail-copy { width: 24px; height: 24px; }
   .li-detail .li-detail-all, .li-detail .li-detail-separator { display: none; }
   .li-page .li-row { padding-right: 0; }
   .li-page .li-row, .li-page .li-columns { column-gap: 12px; }
@@ -21,14 +23,20 @@
   .li-page .li-health.is-onTrack .li-phone-health { color: var(--project-health-on-track); }
   .li-page .li-health.is-atRisk .li-phone-health { color: var(--project-health-at-risk); }
   .li-page .li-health.is-offTrack .li-phone-health { color: var(--project-health-off-track); }
-  .li-detail-toolbar { height: 43px; flex-basis: 43px; padding: 0 8px; border-bottom-color: transparent; }
+  .li-detail-toolbar { height: 43.5px; flex-basis: 43.5px; padding: 0 8px; border-bottom-color: transparent; }
   .li-detail-toolbar nav { gap: 4px; }
-  .li-detail-toolbar nav > a { box-sizing: border-box; height: 28px; padding: 0 10px; border-radius: 9999px; font: 500 12px var(--font); line-height: normal; }
+  .li-detail-toolbar nav > a { box-sizing: border-box; height: 28px; padding: 0 10px; border: .5px solid transparent; border-radius: 9999px; font: 500 12px var(--font); line-height: normal; }
+  .li-detail .li-detail-toolbar button { height: 28px; padding-inline: 2px; }
+  .li-detail-toolbar > div > button[aria-expanded="true"] { background: var(--project-toolbar-open-bg); color: var(--bright); }
   .li-detail-toolbar nav > button[aria-label="Add new view"] { color: var(--theme-text-primary); background: transparent; }
   .li-detail-toolbar nav > button[aria-label="Add new view"] .li-detail-desktop-icon { fill: var(--issue-dim); }
   .li-detail-toolbar > div > button[aria-label*="initiative updates"] { display: none; }
   .li-detail-body.has-details .li-detail-main { max-width: calc(100% - 400px); }
   .li-detail .li-overview { width: min(805px, calc(100% - 96px)); margin: 0 auto; padding: 64px 0 90px; }
+  .li-overview { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 16px; }
+  .li-overview > * { grid-column: 1 / -1; }
+  .li-overview > section:not(.li-description) { display: grid; grid-template-columns: subgrid; }
+  .li-overview .li-overview-properties { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; margin-right: 32px; }
   .li-overview-title { margin-bottom: 20px; }
   .li-overview-title > .li-overview-icon { box-sizing: border-box; width: 36px; height: 36px; margin: 0 0 12px; padding: 0 8px; transform: none; border-radius: 6px !important; background: color-mix(in srgb, var(--view-color) 17.5%, transparent) !important; }
   .li-overview-icon > svg { width: 24px; height: 24px; }
@@ -39,10 +47,14 @@
   .li-overview .li-resources__content { min-height: 28px; margin: 0; }
   .li-overview .li-resource-add { height: 28px; }
   .li-detail .li-overview > .li-resources { padding: 0; min-height: 28px; }
-  .li-overview h3 { flex: none; width: auto; margin: 0; font: 500 13px var(--font); line-height: 28px; }
+  .li-overview h3 { flex: none; width: auto; margin: 0; padding: 6px 0; font: 500 13px var(--font); line-height: normal; }
   .li-overview .li-properties { flex-wrap: wrap; gap: 4px; }
   .li-overview .li-properties .lp-project-property-trigger,
-  .li-overview .li-properties .project-target-date-picker-trigger { height: 28px; padding: 0 6px; gap: 8px; font: 500 13px var(--font); line-height: normal; }
+  .li-overview .li-properties .project-target-date-picker-trigger { height: 28px; padding: 3px 6px; gap: 8px; font: 500 13px var(--font); line-height: normal; }
+  .li-overview .li-properties .lp-project-property-trigger > svg { width: 16px; height: 16px; }
+  .li-overview .li-properties .lp-project-property-trigger > .li-owner-glyph { width: 18px; height: 18px; }
+  .li-overview .li-target-glyph { width: 16px; height: 16px; }
+  .li-overview .li-resource-add { padding: 3px 6px; font-weight: 500; }
   .li-overview .li-properties .phone-property-trigger:has(button[aria-label="Lead team"]),
   .li-overview .li-properties button[data-property="lead team"],
   .li-overview .li-properties .li-team-picker:not(:has(.li-team-mark)) { display: none; }
@@ -68,14 +80,18 @@
   .li-latest-update:focus-within .li-latest-update__meta > button { opacity: 1; }
   .li-latest-update__body { margin-top: 12px; color: var(--theme-text-primary); font: 450 15px/24px var(--font); }
   .li-latest-update__body p { margin: 0; }
+  .li-latest-update__body p { letter-spacing: -.1px; }
   .li-latest-update footer { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
   .li-latest-update__comments { min-width: 37px; background: var(--ui-pill-bg) !important; }
+  .li-latest-update footer > button:not(.li-latest-update__comments) { width: 28px; padding: 0 2px; }
   .li-detail .li-description { margin: 0; }
   .li-description h3 { width: auto; height: 27.5px; padding: 6px 0; line-height: normal; }
   .li-description .mention-text-field { box-sizing: border-box; min-height: 110px; }
   .li-description .mention-text-field .issue-description-root .description-editor { box-sizing: border-box; width: calc(100% + 28px); margin-inline: -14px; padding: 16px 14px; }
   .li-overview-lists { margin-top: 80px; }
   .li-overview-list > header { min-height: 40px; }
+  .li-overview-list > header > h2 { padding: 6px 0; }
+  .li-detail .li-initiative-projects > header > button { box-sizing: border-box; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; flex: none; padding: 0 2px; border: 0; border-radius: 9999px; background: var(--project-toolbar-bg); }
   .li-detail-sidebar { position: static; display: flex; flex-direction: column; width: 400px; flex: 0 0 400px; min-height: 0; padding: 0 8px 8px 4px; border: 0; background: transparent; box-shadow: none; }
   .li-detail-sidebar > section { flex-shrink: 0; margin: 0 0 8px; padding: 6px 12px 12px; border: .5px solid var(--project-sidebar-card-border); border-radius: 10px; background: var(--project-sidebar-card-bg); }
   .li-detail-sidebar > section + section { margin-top: 0; padding: 6px 12px 12px; }
@@ -89,6 +105,7 @@
   .li-detail-sidebar dt, .li-detail-sidebar dd { min-height: 36px; font: 450 12px var(--font); line-height: normal; }
   .li-detail-sidebar dt { color: var(--phone-project-panel-label); }
   .li-detail-sidebar dd .lp-project-property-trigger { gap: 8px; color: var(--theme-text-primary); font-weight: 450; }
+  .li-detail-sidebar .li-properties--target .lp-project-property-trigger { padding: 3px 6px; }
   .li-detail-sidebar dd .lp-project-property-trigger > span:last-child { color: var(--theme-text-primary); }
   .li-detail-sidebar .li-properties--owner:not(:has(.avatar)) .lp-project-property-trigger,
   .li-detail-sidebar .li-properties--owner:not(:has(.avatar)) .lp-project-property-trigger > span:last-child,
@@ -112,6 +129,7 @@
   .li-overview .li-initiative-projects > .li-initiative-projects__list { margin-inline: 8px; width: calc(100% - 16px); }
   .li-project-columns, .li-detail-project-row { box-sizing: border-box; min-width: 0; width: 100%; padding-inline: 0; }
   .li-project-columns { height: 32px; font-size: 12px; line-height: normal; }
+  .li-project-columns > span { padding: 0 12px 0 0; }
   .li-detail-project-row .li-health { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .li-detail-project-row { font-size: 12px; }
   .li-project-count { white-space: nowrap; gap: 8px; }
