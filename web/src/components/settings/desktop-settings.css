@@ -35,6 +35,9 @@
   html:root .settings-app .settings-main[data-settings-page=profile] .personal-input { border: .5px solid var(--set-input-border); color: var(--set-text); font: 400 13px/normal var(--font); }
   html:root .settings-app .settings-main[data-settings-page=profile] .personal-input:focus { border-color: var(--focus-ring); }
   html:root .settings-app .settings-main[data-settings-page=profile] .personal-action.danger { color: var(--set-danger); }
+  html:root body .settings-app .settings-main .personal-action { font: 500 13px/normal var(--font); }
+  html:root body .settings-app .settings-main .settings-row:not(.personal-security-empty-row) .personal-action { margin-right: -6px; }
+  html:root body .settings-app .settings-main .personal-action:not(.primary):not(:hover):not(:focus-visible) { background: transparent; box-shadow: none; }
   html:root .settings-app .settings-main[data-settings-page=profile] .settings-row:has(.personal-input) { min-height: 64px; }
   html:root .settings-app .settings-main[data-settings-page=profile] .settings-row:has(.personal-input) .settings-row-copy > strong { line-height: 15.5px; }
   html:root .settings-app .settings-main[data-settings-page=profile] .settings-row:has(.personal-input) .settings-row-copy > span { line-height: 14.5px; }

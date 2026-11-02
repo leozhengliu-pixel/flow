@@ -54,6 +54,18 @@ function props(page: SettingsPageId) {
 }
 
 describe('personal settings workflows', () => {
+  it('keeps the desktop sidebar action compact with a descriptive accessible name', async () => {
+    const media = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: query === '(min-width: 1024px)', addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as MediaQueryList)
+    try {
+      const input = props('preferences')
+      render(<I18nProvider><PersonalSettings {...input}/></I18nProvider>)
+      const customize = screen.getByRole('button', { name: 'Customize sidebar' })
+      expect(customize).toHaveTextContent(/^Customize$/)
+      await userEvent.click(customize)
+      expect(input.onCustomizeSidebar).toHaveBeenCalledOnce()
+    } finally { media.mockRestore() }
+  })
+
   it('omits the extra Refresh control only on desktop', async () => {
     const media=vi.spyOn(window,'matchMedia').mockImplementation(query=>({matches:query==='(min-width: 1024px)',addEventListener:vi.fn(),removeEventListener:vi.fn()}) as unknown as MediaQueryList)
     try {
