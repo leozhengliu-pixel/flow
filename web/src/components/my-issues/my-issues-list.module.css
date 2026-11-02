@@ -189,6 +189,7 @@
 }
 
 @media(min-width:1024px){
+  .identifier{letter-spacing:-.26px}
   .groupHeader{gap:8px;padding-left:0}
   .groupState{width:14px;height:14px;margin:0}
   .groupName,.groupText{color:var(--text)}
