@@ -69,7 +69,7 @@ export function visibleLabelColumns({ resourceType, rulesVisible, showTeamColumn
 
 export function labelGridTemplate(columns: LabelColumn[], resourceType: LabelResourceType, desktop = false) {
   const usage = resourceType === 'initiative' ? '85px' : resourceType === 'project' ? '70px' : '75px'
-  return ['[indent] 60px', ...columns.map(column => `[${column}] ${column === 'usage' ? usage : LABEL_COLUMN_WIDTHS[column]}`), '[menu] 28px', `[end-padding] ${desktop ? 5 : 32}px`].join(' ')
+  return ['[indent] 60px', ...columns.map(column => `[${column}] ${column === 'usage' ? usage : desktop && column === 'createdAt' ? '82px' : LABEL_COLUMN_WIDTHS[column]}`), '[menu] 28px', '[end-padding] 32px'].join(' ')
 }
 
 /** The reference app shows the Rules column when SLAs are available or a team triages issues. */

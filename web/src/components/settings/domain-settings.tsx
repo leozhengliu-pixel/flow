@@ -325,7 +325,7 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
 function LabelSortHeader({ column, label, active, descending, onSort }: { column: LabelColumn; label: string; active: boolean; descending: boolean; onSort: () => void }) {
   const { locale } = useI18n()
   const state = active ? (locale === 'zh-CN' ? (descending ? '，降序' : '，升序') : `, sorted ${descending ? 'descending' : 'ascending'}`) : ''
-  return <button style={{ gridColumn: column }} aria-label={locale === 'zh-CN' ? `按${label}排序${state}` : `Order by ${label}${state}`} className={active ? 'active' : ''} onClick={onSort}><span>{label}</span>{active && <SortArrow className={descending ? 'descending' : 'ascending'}/>}</button>
+  return <button style={{ gridColumn: column }} aria-label={locale === 'zh-CN' ? `按${label}排序${state}` : `Order by ${label}${state}`} className={active ? 'active' : ''} onClick={onSort}><span>{label}</span><SortArrow className={!active ? 'is-unsorted' : descending ? 'descending' : 'ascending'}/></button>
 }
 
 function SortArrow({ className }: { className: string }) {

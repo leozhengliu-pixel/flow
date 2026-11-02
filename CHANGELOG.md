@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align desktop issue-list disclosure controls, group and row text, and My issues toolbars while preserving the Insights action and phone layouts.
 
+- Align desktop label table columns, sort affordances, search surfaces and editable label names without changing phone tables.
+
 - Align desktop project display chips, list foregrounds and table captions with the shared panel surface, leaving phone styles unchanged.
 
 - Match desktop Loop schedule sentence typography without changing phone controls.

@@ -278,6 +278,10 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
 .domain-labels-table-header button svg { color: var(--theme-text-secondary); }
 .domain-labels-table-header button svg.ascending { transform: none; }
 .domain-labels-table-header button svg.descending { transform: rotate(180deg); }
+.domain-labels-table-header button svg.is-unsorted { display: none; }
+@media (min-width: 1024px) {
+  .domain-labels-table-header button svg.is-unsorted { display: block; visibility: hidden; }
+}
 .domain-labels-footer {
   grid-column: title / -1;
   height: 44px;
