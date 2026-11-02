@@ -1,0 +1,15 @@
+[data-user-avatar] {
+  container-type: inline-size;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.user-avatar-initials {
+  display: block;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+[data-user-avatar][data-script="cjk"] > .user-avatar-initials {
+  font-size: min(1em, 50cqi);
+}
