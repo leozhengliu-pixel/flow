@@ -59,3 +59,14 @@ it('hosts custom interactive content without an unused command input or listbox'
   await user.click(within(dialog).getByRole('button',{name:'Apply'}))
   expect(apply).toHaveBeenCalledOnce()
 })
+
+it('defaults phone submenu triggers to menu semantics and preserves explicit dialog semantics', async () => {
+  const user = userEvent.setup()
+  render(<I18nProvider><DropdownMenu><DropdownMenuTrigger>Actions</DropdownMenuTrigger><DropdownMenuContent>
+    <DropdownMenuSub><DropdownMenuSubTrigger>Plain submenu</DropdownMenuSubTrigger><DropdownMenuSubContent><DropdownMenuItem>One</DropdownMenuItem></DropdownMenuSubContent></DropdownMenuSub>
+    <DropdownMenuSub><DropdownMenuSubTrigger aria-haspopup="dialog">Dialog submenu</DropdownMenuSubTrigger><DropdownMenuSubContent><DropdownMenuItem>Two</DropdownMenuItem></DropdownMenuSubContent></DropdownMenuSub>
+  </DropdownMenuContent></DropdownMenu></I18nProvider>)
+  await user.click(screen.getByRole('button', { name: 'Actions' }))
+  expect(screen.getByRole('option', { name: 'Plain submenu' })).toHaveAttribute('aria-haspopup', 'menu')
+  expect(screen.getByRole('option', { name: 'Dialog submenu' })).toHaveAttribute('aria-haspopup', 'dialog')
+})
