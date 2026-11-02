@@ -41,6 +41,10 @@
 .propertyPopover,.contextMenu,.contextSubmenu{z-index:600}
 .titleProperties:has(.parentTrail)>.title{max-width:55%;flex:0 1 auto}.titleProperties:has(.subIssueProgress)>.title{flex:0 1 auto}
 .boardParentTrail{max-width:210px;font-size:12px;font-weight:450}.boardParentTrail b{padding:0 4px}
+@media(min-width:1024px){
+  .boardParentTrail{color:var(--board-card-muted);line-height:normal}
+  .boardParentTrail b{padding:0 6px;font-size:13px;line-height:normal}
+}
 .badges{max-width:58%;flex:0 1 auto;justify-content:flex-end;margin-left:auto;overflow:hidden}
 .badges>.propertyTrigger{flex:0 1 auto}
 .badges>.propertyTrigger:last-of-type{flex:0 0 auto}

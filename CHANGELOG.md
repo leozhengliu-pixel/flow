@@ -47,6 +47,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Use the muted desktop estimate placeholder when an issue has no estimate, retaining the selected-value and interactive foregrounds.
 
+- Align desktop board identifiers, dates and parent-trail typography with the shared metadata foreground and measured separator size.
+
 - Align desktop issue activity and comment avatar typography without changing phone avatars or the user colour palette.
 
 - Align desktop saved-view headings, metadata, favorite controls and summary tabs with their measured presentation.
