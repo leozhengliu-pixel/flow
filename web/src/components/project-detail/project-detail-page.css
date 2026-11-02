@@ -1675,10 +1675,10 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   }
   .project-activity__composer[data-mode=update] {
     position: relative;
-    height: 257px;
     min-height: 257px;
+    padding-bottom: 52px;
   }
-  .project-activity__composer[data-mode=update] > .project-activity__editor { flex: 0 1 auto; min-height: 70px; }
+  .project-activity__composer[data-mode=update] > .project-activity__editor { flex: 1 0 auto; min-height: 70px; }
   .project-activity__composer[data-mode=update] > footer { position: absolute; right: 0; bottom: 0; left: 0; justify-content: flex-end; }
   .project-activity__composer > footer { flex-wrap: wrap; gap: 8px; }
   .project-activity__tools { display: flex; flex-wrap: wrap; gap: 8px; }
