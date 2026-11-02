@@ -37,7 +37,7 @@ test('document list aligns its metadata and opens intrinsic metadata and subscri
     const data = await response.json() as BootstrapData
     data.viewer = { ...data.viewer, displayName: 'Skyler Anderson', name: 'Skyler Anderson' }
     data.users = data.users.map(user => user.id === data.viewer.id ? data.viewer : user)
-    data.users.push({ ...data.viewer, id: 'audit-other', name: 'zheng liu', displayName: 'zheng liu' })
+    data.users.push({ ...data.viewer, id: 'audit-other', name: 'zheng liu', displayName: 'zheng liu', app: true })
     data.documents = data.documents.map(item => item.id === doc.id ? { ...item, creator: { ...item.creator, displayName: 'Skyler Anderson', name: 'Skyler Anderson' }, updatedAt: '2026-10-29T06:26:00Z', revisions: [] } : item)
     await route.fulfill({ response, json: data })
   })
@@ -58,12 +58,16 @@ test('document list aligns its metadata and opens intrinsic metadata and subscri
   const editorAvatar = (await metadata.locator('.document-last-edit-row .document-meta-avatar').boundingBox())!
   expect(Math.abs(ownerAvatar.x - editorAvatar.x)).toBeLessThanOrEqual(1)
   await expect(metadata.getByRole('button', { name: 'Show document history', exact: true })).toHaveCSS('height', '28px')
+  await expect(metadata.getByRole('button', { name: 'Show document history', exact: true })).toHaveCSS('padding', '0px 10px 0px 8px')
+  await expect(metadata.getByRole('button', { name: 'Show document history', exact: true })).toHaveCSS('border-top-width', '0px')
   await page.waitForTimeout(500)
   if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/docs-metadata.png`, animations: 'disabled' })
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Change document subscribers' }).click()
   const search = page.getByRole('textbox', { name: 'Change subscribers…', exact: true })
   await expect(search).toBeVisible()
+  await expect(search).toHaveCSS('padding', '10px 0px 9px')
+  await expect(page.locator('.document-subscribers__badge')).toHaveCSS('line-height', '16px')
   await expect(page.getByText('Other users', { exact: true })).toBeVisible()
   await search.fill('zheng')
   await expect(page.getByRole('checkbox', { name: 'zheng liu', exact: true })).toBeVisible()
