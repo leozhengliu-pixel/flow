@@ -1329,9 +1329,6 @@
   .toolCallRow {
     line-height: normal;
   }
-  .toolCallRow > span + span {
-    display: none;
-  }
   .workGroup > summary > svg path {
     d: path("M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z");
   }
