@@ -1,10 +1,19 @@
 @media (min-width: 1024px) {
-  .li-page { --li-select-width: 32px; --li-column-status: 106px; --li-column-priority: 68px; --li-column-owner: 50px; --li-column-target: 112px; --li-column-projects: 59px; --li-column-health: 64px; --li-column-activeProjects: 104px; }
+  .li-page { --li-select-width: 20px; --li-column-status: 100px; --li-column-priority: 56px; --li-column-owner: 50px; --li-column-target: 100px; --li-column-projects: 59px; --li-column-health: 52px; --li-column-activeProjects: 98px; }
   .li-detail, .li-page { height: calc(100% - 44px); margin-bottom: 36px; }
   .li-detail-header { padding: 0 8px 0 17px; }
   .li-detail .li-detail-all, .li-detail .li-detail-separator { display: none; }
   .li-page .li-row { padding-right: 0; }
+  .li-page .li-row, .li-page .li-columns { column-gap: 12px; }
   .li-page .li-columns button { padding-inline: 6px; }
+  .li-page .li-columns button:not([aria-label="Order by Name"]) { margin-inline: -6px; }
+  .li-page .li-columns { color: var(--issue-muted); font-weight: 450; }
+  .li-page .li-columns > span { padding: 0 12px 0 0; }
+  .li-page .li-page-header h2,
+  .li-page .li-name strong,
+  .li-page .li-active-projects { color: var(--text); }
+  .li-page .li-active-projects { min-width: 32px; }
+  .li-page .li-cell--activeProjects { margin-left: -3px; }
   .li-page .li-hierarchy-toggle:not([aria-expanded]),
   .li-page .li-detail-phone-icon,
   .li-page .li-health > i { display: none; }

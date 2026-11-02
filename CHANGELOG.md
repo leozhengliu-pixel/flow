@@ -13,6 +13,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Keep desktop issue project search on screen when a long project menu opens above its trigger, scrolling the options within the available space.
 
+- Match desktop initiative directory column labels, title contrast, and update-count hit areas without changing phone styles.
+
 - Correct desktop workspace-name optical sizing and issue-identifier capital spacing using the existing Inter font.
 
 - Remove the unselected initiative column gutter from project lists and use the standard lead width while keeping display-property toggles aligned.
