@@ -24,7 +24,7 @@ import {
   UserRoundPlus,
   X,
 } from 'lucide-react'
-import { createRef, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { Fragment, createRef, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { toast } from '@/lib/toast'
 
 import { DueDateCommand } from '@/components/issue/due-date-picker'
@@ -48,6 +48,7 @@ import { isMacPlatform } from '@/components/project-detail/project-detail-shortc
 import { RecurrenceDialog } from './recurrence-picker'
 import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
+import { teamHierarchy } from '@/lib/team-hierarchy'
 import { deleteRelation, refreshIssueSuggestions } from '@/lib/api'
 import { issueRemovableLinks, issueEverythingMarkdown, issueMarkdown, type IssueRemovableLink } from './issue-options-model'
 import { useIssuesById } from './use-issues-by-id'
@@ -397,7 +398,7 @@ export function IssueOptionsMenu({
           </Command>
 
           {submenu === 'team' && <SubmenuSurface label="Team" anchor={anchors.team} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
-            {data?.teams.filter(team => mobile || !team.retiredAt && !team.archivedAt).map(team => <Option key={team.id} icon={<TeamIcon team={team}/>} label={team.name} checked={!mobile && team.id === issue.team.id} onSelect={() => { if (team.id === issue.team.id) closeMenu(); else void perform(() => onUpdate({ teamId: team.id }), t('Team changed')) }}/>)}
+            {mobile ? data?.teams.map(team => <Option key={team.id} icon={<TeamIcon team={team}/>} label={team.name} onSelect={() => { if (team.id === issue.team.id) closeMenu(); else void perform(() => onUpdate({ teamId: team.id }), t('Team changed')) }}/>) : data && <IssueTeamChoices data={data} teamId={issue.team.id} onSelect={teamId => { if (teamId === issue.team.id) closeMenu(); else void perform(() => onUpdate({ teamId }), t('Team changed')) }}/>}
           </SubmenuSurface>}
           {submenu === 'release' && (data ? <IssueReleasePicker data={data} issue={issue} externalAnchor={anchors.release} popoverOpen onPopoverOpenChange={next => !next && returnToParent()} onMenuEscape={closeMenu}/> : <SubmenuSurface label="Release" anchor={anchors.release} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}><div className="issue-options-empty">{t('No releases')}</div></SubmenuSurface>)}
           {submenu === 'create' && <SubmenuSurface label="Create related" anchor={anchors.create} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
@@ -508,6 +509,27 @@ export function IssueOptionsMenu({
     if (!actions) return
     void perform(() => actions.setRecurring(value, firstDue), value ? 'Recurring schedule saved' : 'Recurring stopped')
   }
+}
+
+function IssueTeamChoices({ data, teamId, onSelect }: { data: BootstrapData; teamId: string; onSelect: (id: string) => void }) {
+  const hierarchy = teamHierarchy(data.teams, data.teamSettings, data.teamParents)
+  const active = data.teams.filter(team => !team.retiredAt && !team.archivedAt)
+  const joinedIds = new Set((data.teamMembers ?? []).filter(member => member.userId === data.viewer.id).map(member => member.teamId))
+  const joined = active.filter(team => joinedIds.has(team.id) || team.id === teamId)
+  const others = active.filter(team => !joined.includes(team))
+  return [joined, others].map((teams, index) => <Fragment key={index}>
+    {index > 0 && joined.length > 0 && teams.length > 0 && <Command.Separator className="issue-options-separator"><span className="issue-options-separator-line"/></Command.Separator>}
+    <Command.Group className="issue-options-team-group">
+    {hierarchy.rows(teams).map(({ team }) => {
+      const ancestors = hierarchy.ancestors.get(team.id) ?? []
+      return <Command.Item key={team.id} className="issue-options-item issue-options-team" aria-label={hierarchy.path(team.id)} title={hierarchy.path(team.id)} value={hierarchy.path(team.id)} keywords={[team.key]} data-current={team.id === teamId || undefined} onSelect={() => onSelect(team.id)}>
+        <span className="issue-options-icon" aria-hidden="true"><TeamIcon team={team} size={14}/></span>
+        <span className="issue-options-team-path" data-i18n-ignore>{ancestors.map(parent => <span className="issue-options-team-parent" key={parent.id}><span>{parent.name}</span><ChevronRight viewBox="8 5 8 14"/></span>)}<span>{team.name}</span><span className="issue-options-team-key">{team.key}</span></span>
+        {team.id === teamId && <span className="issue-options-detail"><Check size={14}/></span>}
+      </Command.Item>
+    })}
+    </Command.Group>
+  </Fragment>)
 }
 
 function SubmenuSurface({ label, anchor, children, searchable = false, bare = false, autoFocus, onReturn, onCloseAll }: { label: string; anchor: RefObject<HTMLDivElement | null>; children: ReactNode; searchable?: boolean; bare?: boolean; autoFocus: boolean; onReturn: () => void; onCloseAll: () => void }) {

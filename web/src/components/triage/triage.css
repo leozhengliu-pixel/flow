@@ -507,6 +507,7 @@ html:root body .triage-snooze-dialog [cmdk-item]:not(#_) { font-size: 15px; }
   .issue-view--triage .issue-mobile-properties { height: 24px; min-height: 24px; margin: 18px 0 22px 6px; }
   .issue-view--triage .issue-mobile-properties > * { height: 24px; min-height: 24px; }
   .issue-view--triage .issue-mobile-properties .issue-assignee-group { min-height: 24px; }
+  .issue-view--triage .issue-mobile-properties .label-project-picker { padding: 0; }
   .issue-view--triage .issue-mobile-properties .core-property-trigger,
   .issue-view--triage .issue-mobile-properties .label-project-trigger { padding: 0 8px 0 6px; gap: 4px; border-color: transparent; line-height: 12px; }
   .issue-view--triage .issue-mobile-properties .core-property-trigger,

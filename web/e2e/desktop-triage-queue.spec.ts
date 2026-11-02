@@ -47,6 +47,11 @@ test('enables a throwaway team queue, shows its count, and opens a real issue in
   expect(titleBox.x).toBeGreaterThanOrEqual(paneBox.x)
   expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(paneBox.x + paneBox.width)
   await expect(detail.locator('.issue-mobile-properties')).toBeVisible()
+  const properties = detail.locator('.issue-mobile-properties')
+  await expect(properties.locator('.labels-picker')).toHaveCSS('padding', '0px')
+  const projectBox = (await properties.locator('.issue-project-trigger').boundingBox())!
+  const labelsBox = (await properties.getByRole('button', { name: 'Change labels', exact: true }).boundingBox())!
+  expect(labelsBox.x - projectBox.x - projectBox.width).toBeCloseTo(6, 1)
   await expect(detail.locator('.issue-document')).toHaveCSS('padding', '0px 0px 0px 14px')
   expect((await detail.locator('.issue-document').boundingBox())!.y - (await detail.locator('.issue-layout').boundingBox())!.y).toBe(21.75)
   const priority = detail.getByRole('combobox', { name: /Change priority/ })
