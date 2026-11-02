@@ -91,12 +91,14 @@
 }
 
 /* Phone filter sheet: the reference lists the filter fields as 46px rows. */
+.phoneShortcutProperty { color: var(--pk-muted); flex: none; }
+.phoneMenu .avatar { display: inline-grid; place-items: center; flex: none; font-size: 7px; line-height: 1; }
 .phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-list]:not(#_)) {
   position: relative;
   height: auto;
   margin: 0 5px;
-  padding: 0;
-  overflow: visible;
+  padding: 6px 0 5px;
+  overflow-y: auto;
   border-style: none;
   background: var(--inbox-filter-list-bg);
 }
@@ -105,9 +107,7 @@
   padding-left: 5px;
 }
 .phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-item]:not(#_)) {
-  position: absolute;
-  right: 0;
-  left: 0;
+  position: relative;
   height: 46px;
   padding: 0 12px;
   gap: 8px;
@@ -130,7 +130,7 @@
   background: var(--pk-hover);
   content: "";
 }
-.phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-item]:not(#_) > span) {
+.phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-item] > span:not([data-script])) {
   min-width: 0;
   overflow: hidden;
   border-style: none;

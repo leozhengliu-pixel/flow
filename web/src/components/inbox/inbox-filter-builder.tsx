@@ -279,10 +279,14 @@ function InboxPhoneFilterMenu({ open, onOpenChange, options, onToggle }: {
 }) {
   const { t } = useI18n()
   const [property, setProperty] = useState<InboxFilterProperty>()
+  const [query, setQuery] = useState('')
   const propertyItems = availablePhoneProperties(options)
   const values = property ? options[property] ?? [] : []
   const ordered = property === 'notificationType' ? [...values].sort((a, b) => a.label.localeCompare(b.label)) : values
-  const close = (next: boolean) => { if (!next) setProperty(undefined); onOpenChange(next) }
+  const shortcuts = !property && query.trim() ? propertyItems.flatMap(item => (options[item.id] ?? [])
+    .filter(option => matchesSearch(query, [item.label, option.label, option.keywords ?? ''], t))
+    .map(option => ({ item, option }))) : []
+  const close = (next: boolean) => { if (!next) { setProperty(undefined); setQuery('') }; onOpenChange(next) }
   return <PhoneMenu
     open={open}
     onOpenChange={close}
@@ -291,9 +295,9 @@ function InboxPhoneFilterMenu({ open, onOpenChange, options, onToggle }: {
   >
     <Command key={property ?? 'properties'} label={t('Add filter')}>
       <div className="phone-menu-search">
-        <Command.Input aria-label={t('Command menu')} placeholder={t(property ? 'Filter…' : 'Add Filter…')}/>
+        <Command.Input aria-label={t('Command menu')} placeholder={t(property ? 'Filter…' : 'Add Filter…')} value={query} onValueChange={setQuery}/>
       </div>
-      <Command.List style={property ? undefined : { height: propertyItems.length * 46 + 11 }}>
+      <Command.List>
         {property ? ordered.map(option => <Command.Item
           key={option.id}
           value={`${option.label} ${option.keywords ?? ''}`}
@@ -301,14 +305,24 @@ function InboxPhoneFilterMenu({ open, onOpenChange, options, onToggle }: {
         >
           <OptionVisual option={option} property={property}/>
           <span data-i18n-ignore={option.i18nIgnore || undefined}>{option.i18nIgnore ? option.label : t(option.label)}</span>
-        </Command.Item>) : propertyItems.map((item, index) => <Command.Item
+        </Command.Item>) : propertyItems.map(item => <Command.Item
           key={item.id}
           value={`${t(item.label)} ${item.label}`}
-          style={{ top: 6 + index * 46 }}
-          onSelect={() => setProperty(item.id)}
+          onSelect={() => { setQuery(''); setProperty(item.id) }}
         >
           <PhonePropertyIcon property={item.id}/>
           <span>{t(item.label)}</span>
+        </Command.Item>)}
+        {shortcuts.map(({ item, option }) => <Command.Item
+          data-inbox-filter-shortcut
+          aria-label={`${t(item.label)} ${option.i18nIgnore ? option.label : t(option.label)}`}
+          key={`${item.id}:${option.id}`}
+          value={`${t(item.label)} ${item.label} ${t(option.label)} ${option.label} ${option.keywords ?? ''}`}
+          onSelect={() => { onToggle(item.id, option); close(false) }}
+        >
+          <OptionVisual option={option} property={item.id}/>
+          <span className={styles.phoneShortcutProperty}>{t(item.label)}</span>
+          <span data-i18n-ignore={option.i18nIgnore || undefined}>{option.i18nIgnore ? option.label : t(option.label)}</span>
         </Command.Item>)}
       </Command.List>
     </Command>
