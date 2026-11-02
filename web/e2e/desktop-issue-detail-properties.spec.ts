@@ -56,6 +56,8 @@ test('aligns the issue columns and property rhythm, toggles labels, and keeps sh
   await rail.getByRole('button', { name: 'Add label', exact: true }).click()
   const labels = page.getByRole('dialog', { name: 'Change Labels' })
   await expect(labels).toBeVisible()
+  await expect(rail.getByRole('button', { name: 'Add label', exact: true })).toHaveCSS('color', 'lch(61.803 1.2 272)')
+  for (const name of await labels.locator('.property-command-label').all()) await expect(name).toHaveCSS('color', 'lch(100 0 272)')
   const labelBox = (await labels.boundingBox())!
   expect(labelBox.x + labelBox.width).toBeLessThan((await rail.boundingBox())!.x + 5)
   await expect(labels.locator('.property-command-checkbox').first()).toBeHidden()
@@ -68,6 +70,7 @@ test('aligns the issue columns and property rhythm, toggles labels, and keeps sh
   await rail.locator('.issue-project-trigger').click()
   const projects = page.getByRole('dialog', { name: 'Change Project' })
   await expect(projects).toBeVisible()
+  await expect(rail.locator('.issue-project-trigger')).toHaveCSS('color', 'lch(61.803 1.2 272)')
   await expect.poll(async()=>Math.round((await projects.boundingBox())!.width)).toBe(186)
   await page.keyboard.type('Short')
   await expect(projects.locator('.property-command-search')).not.toHaveClass(/is-visually-hidden/)
