@@ -77,10 +77,23 @@ test('keeps issue properties readable, toggles labels, and searches short and lo
   const labelBox = (await labels.boundingBox())!
   expect(labelBox.x + labelBox.width).toBeLessThan((await rail.boundingBox())!.x + 5)
   await expect(labels.locator('.property-command-checkbox').first()).toBeHidden()
-  await labels.getByRole('option', { name: '[audit] Label', exact: true }).click()
+  const uncheckedLabel = labels.getByRole('option', { name: '[audit] Label', exact: true })
+  const uncheckedGeometry = await uncheckedLabel.evaluate(option => {
+    const label = option.querySelector<HTMLElement>('.property-command-label')!
+    const optionBox = option.getBoundingClientRect()
+    const labelBox = label.getBoundingClientRect()
+    return { labelX: labelBox.x - optionBox.x, labelWidth: labelBox.width }
+  })
+  expect(uncheckedGeometry.labelX).toBeCloseTo(59.2, 0)
+  expect(uncheckedGeometry.labelWidth).toBeGreaterThan(100)
+  if (process.env.FLOW_CI_SHOTS) await labels.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/issue-labels-desktop-unchecked.png`, animations: 'disabled' })
+  await uncheckedLabel.hover()
+  if (process.env.FLOW_CI_SHOTS) await uncheckedLabel.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/issue-labels-desktop-hover.png`, animations: 'disabled' })
+  await uncheckedLabel.click()
   const selectedLabel = labels.getByRole('option', { name: '[audit] Label', exact: true })
   await expect(selectedLabel).toHaveAttribute('aria-checked','true')
   await expect(selectedLabel.locator('.property-command-checkbox')).toHaveCSS('border-top-width','0px')
+  if (process.env.FLOW_CI_SHOTS) await labels.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/issue-labels-desktop-checked.png`, animations: 'disabled' })
   await page.keyboard.press('Escape')
   await expect(rail.locator('.issue-label-chip')).toContainText('[audit] Label')
   await rail.locator('.issue-project-trigger').click()

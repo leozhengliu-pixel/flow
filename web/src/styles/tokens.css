@@ -329,8 +329,6 @@
   .issue-description-root .description-editor{margin-top:0}
 }
 .property-command-labels [role=option]:hover .property-command-option-background,.property-command-labels [role=option][aria-selected=true] .property-command-option-background{background:var(--theme-surface-active)}
-
-
 .property-command-label-group-option{position:relative;width:100%;height:32px;display:grid;grid-template-columns:16px minmax(0,1fr) 14px;align-items:center;gap:8px;padding:0 15px;border:0;background:transparent;color:var(--theme-text-primary);font-size:13px;text-align:left;outline:0}
 .property-command-label-group-option>*:not(.property-command-option-background){position:relative;z-index:1}
 .property-command-label-group-option:hover .property-command-option-background,.property-command-label-group-option[aria-expanded=true] .property-command-option-background{background:var(--theme-surface-active)}
