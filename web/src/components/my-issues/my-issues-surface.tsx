@@ -229,6 +229,6 @@ export function MyIssuesSurface({
   </ContentViewContainer>
 }
 
-const ToolbarButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { label: string; pressed?: boolean }>(function ToolbarButton({ children, label, pressed, ...props }, ref) {
-  return <button ref={ref} type="button" className={`${styles.iconButton} ui-pill`} aria-label={label} aria-pressed={pressed} {...props}>{children}</button>
+const ToolbarButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { label: string; pressed?: boolean }>(function ToolbarButton({ children, className, label, pressed, ...props }, ref) {
+  return <button ref={ref} type="button" className={`${styles.iconButton} ui-pill${className ? ` ${className}` : ''}`} aria-label={label} aria-pressed={pressed} {...props}>{children}</button>
 })
