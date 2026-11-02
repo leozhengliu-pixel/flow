@@ -37,11 +37,39 @@ func metadataEventCases() []metadataEventCase {
 			data.ReleasePipelines[0].AccessKeyRevokedAt = &at
 			data.ReleasePipelines[0].UpdatedAt = at
 		}},
+		{"document.attachment_created", "document_metadata", func(data *domain.Bootstrap) {
+			data.Documents[0].Attachments = append(data.Documents[0].Attachments, domain.Attachment{ID: "created", URL: "/uploads/metadata", Creator: data.Viewer, CreatedAt: at})
+		}},
+		{"document.attachment_saved", "document_metadata", func(data *domain.Bootstrap) {
+			data.Documents[0].Attachments[0].Title = "Saved link"
+			data.Documents[0].Attachments[0].UpdatedAt = &at
+		}},
+		{"document.attachment_deleted", "document_metadata", func(data *domain.Bootstrap) { data.Documents[0].Attachments = data.Documents[0].Attachments[:1] }},
+		{"email_intake.updated", "intake_metadata", func(data *domain.Bootstrap) {
+			data.EmailIntakeAddresses[0].SenderName = "Updated intake"
+			data.EmailIntakeAddresses[0].TemplateID = data.IssueTemplates[0].ID
+			data.EmailIntakeAddresses[0].UpdatedAt = at
+		}},
+		{"oauth_application.secret_rotated", "application_metadata", func(data *domain.Bootstrap) {
+			data.OAuthApplications[0].ClientSecret = "rotated-fixture"
+			data.OAuthApplications[0].CredentialsAuthorizedBy = data.Viewer.ID
+			data.OAuthApplications[0].UpdatedAt = at
+		}},
+		{"review.written_back", "review_metadata", func(data *domain.Bootstrap) {
+			data.Reviews[0].Events[0].Remote = &domain.ReviewEventRemote{ID: "remote", Kind: "note"}
+			data.Reviews[0].Events[0].Sync = nil
+			data.Reviews[0].Events[0].UpdatedAt = &at
+		}},
 	}
 }
 
 func seedMetadataEvents(data *domain.Bootstrap) {
 	data.Webhooks = []domain.Webhook{{ID: "webhook_metadata", URL: "https://example.test/events", Enabled: true}}
+	data.Documents = []domain.Document{{ID: "document_metadata", Creator: data.Viewer, InheritedTeamIDs: []string{data.Teams[0].ID}, Attachments: []domain.Attachment{{ID: "saved", URL: "https://example.test/link"}, {ID: "deleted"}}}}
+	data.IssueTemplates = []domain.IssueTemplate{{ID: "template_metadata", TeamID: data.Teams[0].ID}}
+	data.EmailIntakeAddresses = []domain.EmailIntakeAddress{{ID: "intake_metadata", TeamID: data.Teams[0].ID, Enabled: true}}
+	data.OAuthApplications = []domain.OAuthApplication{{ID: "application_metadata", ClientSecret: "seed-fixture"}}
+	data.Reviews = []domain.CodeReview{{ID: "review_metadata", Events: []domain.ReviewEvent{{ID: "review_event_metadata", Sync: &domain.ReviewEventSync{State: "pending", Op: "create"}}}}}
 	data.ReleasePipelines = []domain.ReleasePipeline{{ID: "pipeline_metadata", Name: "Metadata", AccessKeyHash: "fixture", TeamIDs: []string{data.Teams[0].ID}}}
 	data.AgentSessions = []domain.AgentSession{{ID: "session_metadata", UserID: data.Viewer.ID, Messages: []domain.AgentMessage{{ID: "message_metadata", Role: "assistant", Parts: []domain.AgentMessagePart{
 		{ID: "tool", Type: "toolCall", ToolCall: &domain.AgentToolCall{Change: &domain.AgentChange{Undoable: true}}},

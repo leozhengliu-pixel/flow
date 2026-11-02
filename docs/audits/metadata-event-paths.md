@@ -17,6 +17,12 @@ The decisions below follow callback/helper reads, not event prefixes.
 | `agent.message_changes` | Metadata | Owned session message parts; target changes and their events already committed through separate operations | Hot |
 | `agent.approval_resolved` | Metadata | Owned session question/approval decision and already-handled validation; held tools run separately afterwards | Hot |
 | `release_pipeline.access_key_revoked` | Metadata | Pipeline and effective team administration metadata; credential/grace timestamps; unchanged errors and public response | Hot |
+| `document.attachment_created` | Metadata | Document, ACL, viewer role/membership, teams/settings and persisted inherited-team scope; appends attachment/creator | Records |
+| `document.attachment_saved` | Metadata | Same authorization; creates or updates a same-URL link attachment and timestamp | Records |
+| `document.attachment_deleted` | Metadata | Same authorization and missing-attachment validation; removes attachment; object deletion remains outside callback | Records |
+| `email_intake.updated` | Metadata | Address, teams and standard templates; forwarding-address uniqueness/domain verification; identical edits return `ErrNoMutation` | Records |
+| `oauth_application.secret_rotated` | Metadata | Application credentials/authorizer/timestamp; credential audit remains a separate unchanged call | Records |
+| `review.written_back` | Metadata | Review events, remote references, synchronization results and duplicate reconciliation; remote push already finished | Records |
 
 No dedicated narrow transaction is needed for this group: callbacks use the
 existing metadata record delta writer, including its cross-replica rebase and
@@ -46,6 +52,8 @@ The suffix has no event-specific persistence behavior for these callbacks.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Hot / Before Full | 6 | 7,320 | 60 | 0 | 56,684.197 | 56,687.361 | 574.25 |
 | Hot / After Metadata | 6 | 166 | 42 | 0 | 76.160 | 78.509 | 3.38 |
+| Records / Before Full | 6 | 7,328 | 63 | 0 | 54,825.575 | 54,830.220 | 582.95 |
+| Records / After Metadata | 6 | 172 | 48 | 0 | 99.637 | 104.549 | 3.35 |
 
 Observed in `/tmp/codex-metadata-event-paths.NmIpDY` on 2026-11-01. SQL command
 counts include transaction and execute commands for the application account,
@@ -54,6 +62,7 @@ INSERT/UPDATE/DELETE row operations on every application table, including event
 sequencing and cache bookkeeping. Peak heap is Go `HeapAlloc` sampled every
 millisecond, not RSS. Lock time is the existing store trace inside the Redis
 workspace lock. No timeout, threshold or resource limit was increased.
+The records group was measured in `/tmp/codex-metadata-event-paths.vP4T05`.
 
 ## Regression Coverage
 
@@ -68,6 +77,11 @@ Callback errors and `ErrNoMutation` must not write entity or domain-event rows.
 `TestMetadataEventHandlerFullPathParity` runs the production feedback, approval,
 undo and key-rotation/revocation scenarios on both paths, preserving their HTTP,
 authorization and validation assertions. No REST, schema or web change is needed.
+It also runs document upload/link/update/delete and private-team ACL scenarios,
+intake validation/conflict scenarios, credential authentication after rotation,
+and member-attributed review writeback/failure/retry scenarios on both paths.
+Repeated production feedback/intake handlers retain timestamps, write zero
+observed entity/domain-event rows and publish zero realtime/webhook envelopes.
 
 ## Two Processes
 
@@ -86,6 +100,9 @@ Children are stopped by PID and waited for on success or failure.
 | Hot | MySQL (75k) | 168 | 0 | 0 | 9.905 s |
 | Hot | PostgreSQL (small) | 168 | 0 | 0 | 6.634 s |
 | Hot | SQLite (small) | 168 | 0 | 0 | 4.513 s |
+| Hot + Records | MySQL (75k) | 312 | 0 | 0 | 10.105 s |
+| Hot + Records | PostgreSQL (small) | 312 | 0 | 0 | 8.247 s |
+| Hot + Records | SQLite (small) | 312 | 0 | 0 | 9.699 s |
 
 Verification commands, all exit 0:
 

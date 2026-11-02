@@ -51,6 +51,14 @@ func metadataOnlyMutation(event string, payload any) bool {
 	// metadata, never the issues linked to releases in those pipelines.
 	case "release_pipeline.access_key_used", "release_pipeline.access_key_revoked":
 		return true
+	// Attachment authorization uses document ACLs and persisted inherited team
+	// scope. Intake validation reads teams/templates/addresses, not issues.
+	case "document.attachment_created", "document.attachment_saved", "document.attachment_deleted", "email_intake.updated":
+		return true
+	// Credential audit and remote review writes occur separately; these
+	// callbacks only record the credential or review synchronization result.
+	case "oauth_application.secret_rotated", "review.written_back":
+		return true
 	// Team deletion/restoration only stamps the team, detaches sub-teams and
 	// appends an audit entry; issue visibility follows the team's archivedAt at
 	// read time. Development-mode membership edits only touch member lists,

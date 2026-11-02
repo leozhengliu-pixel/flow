@@ -52,7 +52,7 @@ run_gate() {
   rg 'CONTRACT_SEED|METADATA_(MEASURE|REPLICAS)' "$scratch/$label.log" || true
 }
 run_gate seed env FLOW_LOOP_CONTRACT_GATE=seed "$scratch/store.test" -test.run='^TestLoopContractScaleSeed$' -test.v
-for group in ${FLOW_METADATA_GROUPS:-hot}; do
+for group in ${FLOW_METADATA_GROUPS:-hot records}; do
   for mode in full metadata; do
     run_gate "$group-$mode" env FLOW_METADATA_GROUP="$group" FLOW_METADATA_MEASURE="$mode" "$scratch/store.test" -test.run='^TestMetadataEventScaleMeasure$' -test.v
   done
