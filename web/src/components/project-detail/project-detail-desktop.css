@@ -31,7 +31,9 @@
   .project-details-sidebar__section.is-milestones > header { height: 37px; }
   .project-details-sidebar__section > header > .project-details-sidebar__see-all { padding-inline: 2px !important; }
   .project-milestone-menu { margin-top: 3px; padding-block: 4px; font: 450 13px var(--font); line-height: normal; }
-  .project-milestone-menu [role=menuitem] { padding-left: 12px; }
+  .project-milestone-menu [role=menuitem] { padding-left: 12px; font-weight: 450; }
+  .project-milestone-menu [role=menuitem][data-highlighted],
+  .project-milestone-menu [role=menuitem][data-highlighted] > svg { color: var(--action-menu-active-text); }
   .project-issues { min-height: 100%; display: flex; flex-direction: column; padding: 0; }
   .project-issues__intro { box-sizing: border-box; flex: 1; min-height: 0; padding: 0 max(12px, calc((100% - 340px) / 2)); align-items: flex-start; justify-content: center; }
   .project-issues__intro > * { width: 340px; max-width: 100%; }
