@@ -2,7 +2,7 @@ import { test, expect } from './issue-list-fixture'
 import type { BootstrapData, SavedView } from '../src/types/flow'
 
 test.skip(({ isMobile }) => isMobile, 'Desktop issue list metrics')
-test.use({ viewport: { width: 1440, height: 900 } })
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
 
 test('keeps compact rows, a dim disclosure and nested elbow connectors', async ({ page, request, workspaceKey, issueList }) => {
   const child = issueList.issues[1]
@@ -30,6 +30,13 @@ test('keeps compact rows, a dim disclosure and nested elbow connectors', async (
   expect(gap).toBe(9)
   const collapse = page.getByRole('button', { name: 'Collapse group', exact: true }).first()
   await expect(collapse).toHaveCSS('opacity', '1')
+  await expect(collapse).toHaveCSS('width', '20px')
+  await expect(collapse).toHaveCSS('height', '20px')
+  await expect(collapse).toHaveCSS('padding', '2px')
+  const group = page.locator('[data-my-issues-group-header]').first()
+  await expect(group).toHaveCSS('gap', '8px')
+  await expect(group.locator('[class*="groupState"]')).toHaveCSS('width', '14px')
+  await expect(parentRow.locator('[data-row-title]')).toHaveCSS('color', 'lch(100 0 272)')
   await collapse.click()
   await expect(parentRow).not.toBeVisible()
   await page.getByRole('button', { name: 'Expand group', exact: true }).first().click()
@@ -52,6 +59,24 @@ test('keeps compact rows, a dim disclosure and nested elbow connectors', async (
     await page.mouse.move(0, 0)
     await page.screenshot({ path: `${process.env.FLOW_LIST_SHOTS}/desktop-cycle-nesting.png`, animations: 'disabled' })
   }
+})
+
+test('keeps the Insights command styled beside the desktop My issues tools', async ({ page, workspaceKey, issueList }) => {
+  await page.goto(`/${workspaceKey}/my-issues/created`)
+  await expect(page.locator('[data-issue-row-id]').first()).toBeVisible()
+  const header = page.locator('[data-content-view-header]')
+  await expect(header).toHaveCSS('padding', '0px 8px')
+  await expect(page.locator('[data-content-view-subheader]')).toHaveCSS('gap', '6px')
+  const insights = page.getByRole('button', { name: 'Open insights', exact: true })
+  await expect(insights).toHaveCSS('width', '28px')
+  await expect(insights).toHaveCSS('height', '28px')
+  const filter = page.getByRole('button', { name: 'Add filter', exact: true })
+  const boxes = await Promise.all([insights.boundingBox(), filter.boundingBox()])
+  expect(boxes[1]!.x - boxes[0]!.x - boxes[0]!.width).toBe(6)
+  if (process.env.FLOW_LIST_SHOTS) await page.screenshot({ path: `${process.env.FLOW_LIST_SHOTS}/desktop-my-issues.png`, animations: 'disabled' })
+  await insights.click()
+  await expect(page.getByRole('button', { name: 'Close insights', exact: true })).toBeVisible()
+  expect(issueList.issues).toHaveLength(3)
 })
 
 test('creates a filtered view from Save and persists a Teams breakdown filter', async ({ page, request, workspaceKey, issueList }) => {
