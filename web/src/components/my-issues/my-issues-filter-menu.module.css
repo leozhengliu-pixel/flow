@@ -30,7 +30,8 @@
 .rootItem:before,.valueItem:before{content:"";position:absolute;z-index:-1;inset:0 6px;border-radius:8px}
 .rootItem[data-selected=true]:before,.rootItem[aria-selected=true]:before,.valueItem[aria-selected=true]:before,.valueItem[aria-expanded=true]:before,.valueItem:hover:before{background:var(--pk-hover)}
 .rootItem.rootItem:focus-visible,.valueItem.valueItem:focus-visible{outline:0;box-shadow:none}
-.rootItem[data-unavailable]{color:var(--pk-muted)}
+.rootItem[data-unavailable],.rootItem.rootItem[aria-disabled=true]{color:var(--pk-muted)}
+.rootItem.rootItem[aria-disabled=true] .rootIcon{color:var(--pk-muted)}
 .rootItem>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rootIcon,.optionSlot{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center;overflow:visible!important;color:var(--pk-muted)}
 .rootIcon svg,.optionSlot>svg{max-width:16px;max-height:16px;color:currentColor}
@@ -65,6 +66,7 @@
 @media(min-width:1024px){
   .rootMenu[data-layout=issues][data-variant=root]{width:207px}
   .rootSearch{gap:14px}
+  .valueMenu:has(>.valueSearch[data-hidden]),.valueMenu[data-number-input]:has(.valueList){width:max-content}
   .rootSearch kbd{padding-inline:2px}
   .rootItem[data-selected=true],.rootItem[aria-selected=true],.valueItem[aria-selected=true],.valueItem:hover{color:var(--bright)}
   .rootItem[data-selected=true] .rootChevron,.rootItem[aria-selected=true] .rootChevron{color:var(--pk-muted)}
