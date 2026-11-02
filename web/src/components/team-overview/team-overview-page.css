@@ -1346,6 +1346,6 @@
     font: 450 13px/normal var(--font);
   }
   .team-home-tabs-menu-item[data-active] > span { color: var(--bright); }
-  .team-home-tabs-menu-item:hover,
-  .team-home-tabs-menu-item:focus-visible { background: var(--theme-surface-hover); outline: 0; }
+  .team-home-tabs-menu-item:hover { background: var(--theme-surface-hover); }
+  .team-home-tabs-menu-item:focus-visible { --menu-item-focus-outline: 1px solid var(--menu-item-focus-color); outline: var(--menu-item-focus-outline); outline-offset: -1px; }
 }
