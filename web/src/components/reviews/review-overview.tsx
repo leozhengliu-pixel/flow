@@ -4,8 +4,8 @@ import { ArrowUp, ChevronDown, CircleCheck, CircleDashed, CircleX, CornerDownRig
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { MentionBody } from "@/components/editor/mentions/mention-body";
-import { EmojiPicker } from "@/components/reactions/emoji-picker";
 import { AddReactionIcon, AttachmentIcon, StatusIcon } from "@/components/issue/issue-icons";
+import { EmojiPicker, ReactionPills } from "@/components/reactions/emoji-picker";
 import { FlowBranchIcon, FlowOptionsIcon, FlowPreviousIcon } from "@/components/issue/flow-header-icons";
 import { PlusIcon } from "@/components/ui/view-action-icons";
 import { PhoneCommandMenu } from "@/components/ui/phone-menu";
@@ -16,7 +16,7 @@ import { PersonHover } from "@/components/property/person-info";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useI18n } from "@/i18n/i18n";
 import { issuePath, reviewPath } from "@/lib/app-routes";
-import { commentOnReview } from "@/lib/api";
+import { commentOnReview, toggleReviewReaction, uploadReviewCommentAttachment } from "@/lib/api";
 import { targetCommentHash } from "@/lib/review-comment-navigation";
 import { toast } from "@/lib/toast";
 import type { BootstrapData, CodeReview, Issue, ReviewEvent, User } from "@/types/flow";
@@ -57,6 +57,33 @@ export function ReviewOverview({
   const { t } = useI18n();
   const phone = usePhoneLayout();
   const [comment, setComment] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [reacting, setReacting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const react = async (emoji: string) => {
+    if (reacting) return;
+    setReacting(true);
+    try {
+      await toggleReviewReaction(review.id, emoji);
+      await onReload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not add reaction"));
+    } finally { setReacting(false); }
+  };
+  const attach = async (files: File[]) => {
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const attachment = await uploadReviewCommentAttachment(review.id, file);
+        const name = file.name.replace(/[[\]\\]/g, "_");
+        const url = new URL(attachment.url, window.location.origin).href;
+        const markdown = `${file.type.startsWith("image/") ? "!" : ""}[${name}](${url})`;
+        setComment(current => current ? `${current}\n\n${markdown}` : markdown);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not upload file"));
+    } finally { setUploading(false); }
+  };
   const author = review.author.displayName || review.author.name;
   return (
     <div className="review-overview">
@@ -108,9 +135,14 @@ export function ReviewOverview({
           <h3>{t("Description")}</h3>
           {review.description.trim() ? <MentionBody body={review.description} /> : <p className="review-muted">{t("No description provided.")}</p>}
         </section>
-        {phone && <ReviewDocumentActions onReact={(emoji) => setComment((current) => current + emoji)} />}
+        {phone && <div className="review-document-actions">
+          <ReactionPills reactions={review.reactions} viewerId={data.viewer.id} onToggle={react}/>
+          <EmojiPicker onSelect={react}><button type="button" disabled={reacting} aria-label={t("Add reaction")}><AddReactionIcon size={14}/></button></EmojiPicker>
+          <button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} aria-label={t("Attach images, files, or videos")}><AttachmentIcon size={14}/></button>
+        </div>}
+        <input ref={fileRef} hidden type="file" multiple onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void attach(files); }}/>
         <ReviewActivity data={data} review={review} onNavigate={onNavigate} onReload={onReload} phone={phone} />
-        <ReviewCommentComposer data={data} review={review} onReload={onReload} value={comment} onValueChange={setComment} phone={phone} />
+        <ReviewCommentComposer data={data} review={review} onReload={onReload} value={comment} onValueChange={setComment} phone={phone} uploading={uploading} onAttach={() => fileRef.current?.click()} />
       </div>
       <aside aria-label={t("Review details")} className="review-overview-sidebar">
         <SidebarSection label={t("Status")}>
@@ -265,23 +297,6 @@ function ReviewMobileProperties({
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-/** The description's reaction/attachment row: the reference app keeps it under the overview text. */
-function ReviewDocumentActions({ onReact }: { onReact: (emoji: string) => void }) {
-  const { t } = useI18n();
-  return (
-    <div className="review-document-actions">
-      <EmojiPicker onSelect={onReact}>
-        <button type="button" aria-label={t("Add reaction")}>
-          <AddReactionIcon size={14} />
-        </button>
-      </EmojiPicker>
-      <button type="button" aria-label={t("Attach images, files, or videos")}>
-        <AttachmentIcon size={14} />
-      </button>
     </div>
   );
 }
@@ -713,14 +728,14 @@ function activityText(type: string, noun: string) {
           : "updated the review";
 }
 
-function ReviewCommentComposer({ data, review, onReload, value, onValueChange, phone }: { data: BootstrapData; review: CodeReview; onReload: () => Promise<void>; value: string; onValueChange: (value: string) => void; phone: boolean }) {
+function ReviewCommentComposer({ data, review, onReload, value, onValueChange, phone, uploading, onAttach }: { data: BootstrapData; review: CodeReview; onReload: () => Promise<void>; value: string; onValueChange: (value: string) => void; phone: boolean; uploading: boolean; onAttach: () => void }) {
   const { t } = useI18n();
   const comment = value;
   const setComment = onValueChange;
   const [busy, setBusy] = useState(false);
   const sendComments = data.userSettings[data.viewer.id]?.sendComments ?? "Enter";
   const submit = async () => {
-    if (!comment.trim() || busy) return;
+    if (!comment.trim() || busy || uploading) return;
     setBusy(true);
     try {
       await commentOnReview(review.id, comment.trim());
@@ -749,10 +764,10 @@ function ReviewCommentComposer({ data, review, onReload, value, onValueChange, p
           void submit();
         }}
       />
-      <button type="button" className="review-comment-attach" aria-label={t("Attach images, files, or videos")}>
+      <button type="button" className="review-comment-attach" disabled={busy || uploading} onClick={onAttach} aria-label={t("Attach images, files, or videos")}>
         <AttachmentIcon size={14} />
       </button>
-      <button type="button" className="review-round-button" aria-label={t("Submit comment")} disabled={busy || !comment.trim()} onClick={() => void submit()}>
+      <button type="button" className="review-round-button" aria-label={t("Submit comment")} disabled={busy || uploading || !comment.trim()} onClick={() => void submit()}>
         {phone ? <FlowPreviousIcon /> : <ArrowUp />}
       </button>
     </div>

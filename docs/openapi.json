@@ -26610,6 +26610,41 @@
         "x-flow-source": "coding_triggers_api.go"
       }
     },
+    "/api/reviews/{id}/comment-attachments": {
+      "post": {
+        "operationId": "post_reviews_id_comment_attachments",
+        "tags": [
+          "reviews"
+        ],
+        "summary": "POST /api/reviews/{id}/comment-attachments",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/reviews/{id}/comments": {
       "post": {
         "operationId": "post_reviews_id_comments",
@@ -26695,6 +26730,41 @@
           "reviews"
         ],
         "summary": "PUT /api/reviews/{id}/previews",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/reviews/{id}/reactions": {
+      "post": {
+        "operationId": "post_reviews_id_reactions",
+        "tags": [
+          "reviews"
+        ],
+        "summary": "POST /api/reviews/{id}/reactions",
         "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
         "parameters": [
           {
