@@ -295,7 +295,7 @@ function InboxPhoneFilterMenu({ open, onOpenChange, options, onToggle }: {
   >
     <Command key={property ?? 'properties'} label={t('Add filter')}>
       <div className="phone-menu-search">
-        <Command.Input aria-label={t('Command menu')} placeholder={t(property ? 'Filter…' : 'Add Filter…')} value={query} onValueChange={setQuery}/>
+        <Command.Input autoFocus aria-label={t('Command menu')} placeholder={t(property ? 'Filter…' : 'Add Filter…')} value={query} onValueChange={setQuery}/>
       </div>
       <Command.List>
         {property ? ordered.map(option => <Command.Item
