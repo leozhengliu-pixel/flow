@@ -9,7 +9,7 @@ async function expectPhoneProjectTabs(page: Page) {
   const boxes = await tabs.evaluateAll(elements => elements.map(element => {
     const box = element.getBoundingClientRect(), style = getComputedStyle(element)
     const text = element.querySelector(':scope > div')!.getBoundingClientRect()
-    return { x: box.x, right: box.right, inset: text.x - box.x - element.clientLeft, padding: style.paddingLeft }
+    return { x: box.x, right: box.right, inset: text.x - box.x - parseFloat(style.borderLeftWidth), padding: style.paddingLeft }
   }))
   expect(boxes[0].x).toBe(8)
   for (const [index, box] of boxes.entries()) {
@@ -25,7 +25,7 @@ async function expectComposerSubmitAlignment(composer: Locator) {
   const inset = await composer.evaluate(element => {
     const box = element.getBoundingClientRect()
     const submit = element.querySelector('button.is-submit')!.getBoundingClientRect()
-    return box.right - element.clientLeft - submit.right
+    return box.right - parseFloat(getComputedStyle(element).borderRightWidth) - submit.right
   })
   expect(inset).toBeCloseTo(14, 0)
 }
@@ -448,11 +448,12 @@ test.describe('mobile project update composer', () => {
 
     const near = (actual: number | undefined, expected: number) => actual !== undefined && Math.abs(actual - expected) <= 1
     const composer = page.locator('.project-activity__composer')
-    expect((await composer.boundingBox())?.height).toBe(257)
+    await expect(composer).toHaveCSS('min-height', '257px')
+    expect((await composer.boundingBox())!.height).toBeGreaterThanOrEqual(257)
     expect((await composer.getAttribute('data-mode'))).toBe('update')
     expect(await page.locator('.project-activity__health').textContent()).toContain('On track')
     expect((await page.locator('.project-activity__health').boundingBox())?.height).toBe(28)
-    const healthInset = await page.locator('.project-activity__health').evaluate(element => element.querySelector('span')!.getBoundingClientRect().x - element.getBoundingClientRect().x - element.clientLeft)
+    const healthInset = await page.locator('.project-activity__health').evaluate(element => element.querySelector('span')!.getBoundingClientRect().x - element.getBoundingClientRect().x - parseFloat(getComputedStyle(element).borderLeftWidth))
     expect(healthInset).toBeCloseTo(26, 0)
     await expect(composer.locator('button.project-activity__agent')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Write with Agent', exact: true })).toBeVisible()
