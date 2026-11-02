@@ -98,7 +98,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   })
 
   const addFilter = (field: MyIssuesFilterKey, option?: MyIssuesFilterOption) => {
-    const fieldLabel = FILTER_LABELS[field]
+    const fieldLabel = field === 'team' ? 'Team' : FILTER_LABELS[field]
     if (!fieldLabel || !option) return
     controller.addFilter({ id: `${field}-${option.id}-${Date.now()}`, field, fieldLabel, operator: 'is', value: option.id, valueLabel: option.label, color: option.color })
   }
@@ -167,7 +167,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     }).catch(() => controller.replaceGroups(() => snapshot))
   }
   const summaryFilter = (tab: MyIssuesSummaryTab, item: MyIssuesSummaryItem) => {
-    const field = tab === 'labels' ? 'labels' : tab === 'projects' ? 'project' : 'priority'
+    const field = tab === 'labels' ? 'labels' : tab === 'projects' ? 'project' : tab === 'teams' ? 'team' : 'priority'
     addFilter(field, { id: item.id, label: item.label, color: item.color })
   }
   const displayedGroups = controller.visibleGroups
