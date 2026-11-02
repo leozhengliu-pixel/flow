@@ -3,7 +3,7 @@ import { test } from './workspace-fixture'
 
 test.skip(({ isMobile }) => isMobile, 'desktop-only top bar parity')
 
-test.use({ viewport: { width: 1440, height: 900 } })
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
 
 test('keeps the team Issues top bar controls, view pills and tool group at the desktop metrics', async ({ page, request, workspaceKey }) => {
   const response = await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })
@@ -17,6 +17,8 @@ test('keeps the team Issues top bar controls, view pills and tool group at the d
   await expect(header.getByRole('switch', { name: 'Add to favorites' })).toBeVisible()
   await expect(header.getByRole('link', { name: 'Setup team notifications' })).toBeVisible()
   await expect(header.getByRole('button', { name: 'New issue', exact: true })).toBeVisible()
+  await expect(header.locator('[data-current]')).toHaveCSS('color', 'lch(90.451 1.2 272)')
+  await expect(page.locator('[data-content-view-subheader]')).toHaveCSS('gap', '6px')
 
   const geometry = await page.evaluate(() => {
     const rect = (element: Element | null) => {
@@ -54,7 +56,7 @@ test('keeps the team Issues top bar controls, view pills and tool group at the d
   expect(geometry.icon?.height).toBe(16)
   expect(geometry.star).toMatchObject({ width: 28, height: 28 })
   expect(geometry.bell).toMatchObject({ width: 28, height: 28 })
-  expect(geometry.create).toMatchObject({ height: 28, fontSize: '12px', fontWeight: '500', padding: '0px 9px 0px 8px' })
+  expect(geometry.create).toMatchObject({ height: 28, fontSize: '12px', fontWeight: '500', padding: '0px 10px 0px 8px' })
   expect(geometry.create!.width).toBeGreaterThan(90)
 
   for (let index = 1; index < geometry.pills.length; index += 1) {
