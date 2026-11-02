@@ -38,3 +38,12 @@ describe('estimate glyphs', () => {
     expect(container.querySelector('.estimate-chip__value')).toHaveTextContent('L')
   })
 })
+
+it('uses the estimate triangle for board chips without a fabricated cycle progress marker', () => {
+  const { container } = render(<><EstimateIcon/><EstimateChip board value={5} settings={{ estimateType: 'fibonacci' }}/></>)
+  const chip = container.querySelector('.estimate-chip')!
+  expect(chip).toHaveTextContent('5')
+  expect(chip.querySelectorAll('svg')).toHaveLength(1)
+  expect(chip.querySelector('path')?.getAttribute('d')).toBe(container.querySelector('path')?.getAttribute('d'))
+  expect(chip.querySelector('circle')).toBeNull()
+})

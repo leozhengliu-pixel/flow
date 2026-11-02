@@ -20,6 +20,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Preserve rich text, hyperlink targets, and nested block structure when moving a document selection to a new document.
 
 - Preserve unrelated document content when a selection changes during a move, track intervening edits safely, and keep the removal undoable.
+- Use the estimate triangle on phone board cards without fabricated cycle progress.
+
 - Apply team summary selections as Team filters, repair earlier invalid selections, and retain matching issues after reload.
 
 - Skip punctuation in shared workspace initials, preserving readable phone Settings avatars and whole CJK and accented characters.
