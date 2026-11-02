@@ -44,7 +44,7 @@ function ChatConnectionRow({ provider, data }: { provider: ChatIntegrationProvid
     const url = new URL(window.location.href);
     if (url.searchParams.get("chat_provider") !== provider || !url.searchParams.has("chat_auth")) return;
     if (url.searchParams.get("chat_auth") === "success" && next.identity) toast.success(t("Account linked"));
-    else setError(chatErrorCodeMessage(url.searchParams.get("chat_auth_error"), t) ?? t("Could not link account. Please try again."));
+    else setError(chatErrorCodeMessage(url.searchParams.get("chat_auth_error"), source => source) ?? "Could not link account. Please try again.");
     for (const key of ["chat_auth", "chat_provider", "chat_auth_error"]) url.searchParams.delete(key);
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
   }, [provider, t]);
@@ -55,7 +55,7 @@ function ChatConnectionRow({ provider, data }: { provider: ChatIntegrationProvid
     queueMicrotask(() => {
       if (!mounted.current) return;
       void load().catch((cause: unknown) => {
-        if (mounted.current) setError(chatErrorMessage(cause, t, "Could not load connected accounts"));
+        if (mounted.current) setError(chatErrorMessage(cause, source => source, "Could not load connected accounts"));
       }).finally(() => { if (mounted.current) setLoading(false); });
     });
     return () => { mounted.current = false; };
@@ -65,7 +65,7 @@ function ChatConnectionRow({ provider, data }: { provider: ChatIntegrationProvid
     setLoading(true);
     setError("");
     try { await load(); }
-    catch (cause) { setError(chatErrorMessage(cause, t, "Could not load connected accounts")); }
+    catch (cause) { setError(chatErrorMessage(cause, source => source, "Could not load connected accounts")); }
     finally { setLoading(false); }
   };
 
@@ -76,7 +76,7 @@ function ChatConnectionRow({ provider, data }: { provider: ChatIntegrationProvid
       const result = await startChatIdentityBinding(provider);
       window.location.assign(chatIdentityAuthorizationURL(provider, result.authorizeUrl));
     } catch (cause) {
-      setError(chatErrorMessage(cause, t, "Could not link account"));
+      setError(chatErrorMessage(cause, source => source, "Could not link account"));
       setBusy(false);
     }
   };
@@ -91,7 +91,7 @@ function ChatConnectionRow({ provider, data }: { provider: ChatIntegrationProvid
       toast.success(t("Account unlinked"));
       await load();
     } catch (cause) {
-      setError(chatErrorMessage(cause, t, "Could not disconnect the account"));
+      setError(chatErrorMessage(cause, source => source, "Could not disconnect the account"));
     } finally { setBusy(false); }
   };
 
@@ -110,7 +110,7 @@ function ChatConnectionRow({ provider, data }: { provider: ChatIntegrationProvid
   return <>
     <section className="settings-card" aria-label={t("{name} account").replace("{name}", name)} data-testid={`${provider}-account-row`}>
       <SettingsRow icon={<IntegrationBrandIcon provider={provider} size={16} />} title={<>{name}{identity?.name && <span data-i18n-ignore>{` · ${identity.name}`}</span>}</>} description={description}>{control}</SettingsRow>
-      {error && <div className="chat-account-error" role="alert"><span>{error}</span><button type="button" className="personal-action" disabled={busy || loading} onClick={() => void retry()}><RefreshCw size={14} aria-hidden="true" />{t("Retry")}</button></div>}
+      {error && <div className="chat-account-error" role="alert"><span>{t(error)}</span><button type="button" className="personal-action" disabled={busy || loading} onClick={() => void retry()}><RefreshCw size={14} aria-hidden="true" />{t("Retry")}</button></div>}
       {!loading && admin && !ready && !identity && <div className="chat-account-setup-link"><NavLink to={integrationSettingsPath(data.workspace.urlKey, provider)}>{t("Set up workspace integration")}</NavLink></div>}
     </section>
     {confirming && <SettingsConfirmDialog title={t("Disconnect personal {name} account?").replace("{name}", name)} description={t("Link your account again to resume your group actions.")} confirmLabel={t("Disconnect")} busy={busy} onCancel={() => setConfirming(false)} onConfirm={() => void disconnect()} />}

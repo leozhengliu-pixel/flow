@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 
-import { I18nProvider } from "@/i18n/i18n";
+import { I18nProvider, useI18n } from "@/i18n/i18n";
+import { chatIntegrationsZhCN } from "@/i18n/translations-chat-integrations";
 import { ApiError } from "@/lib/api-client";
 import * as api from "@/lib/chat-integrations-api";
 import { toast } from "@/lib/toast";
@@ -33,12 +34,43 @@ function show(overrides: Parameters<typeof makeBootstrap>[0] = {}) {
   return render(<MemoryRouter><I18nProvider><ChatConnectionRows data={makeBootstrap({ integrationConnections: configured, ...overrides })} /></I18nProvider></MemoryRouter>);
 }
 
+function LocaleSwitch() {
+  const { setLocale } = useI18n();
+  return <button type="button" onClick={() => setLocale("zh-CN")}>Chinese</button>;
+}
+
+it("translates the stored callback reason after switching language", async () => {
+  const source = api.CHAT_ERROR_MESSAGES.chat_code_exchange_failed;
+  window.history.replaceState(null, "", "/workspace/settings/account/connections?chat_provider=feishu&chat_auth=error&chat_auth_error=chat_code_exchange_failed");
+  render(<MemoryRouter><I18nProvider><LocaleSwitch /><ChatConnectionRows data={makeBootstrap({ integrationConnections: configured })} /></I18nProvider></MemoryRouter>);
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent(source);
+  expect(window.location.search).toBe("");
+  await userEvent.setup().click(screen.getByRole("button", { name: "Chinese" }));
+  await waitFor(() => expect(alert).toHaveTextContent(chatIntegrationsZhCN[source]));
+});
+
 beforeEach(() => {
   localStorage.setItem("flow:locale", "en-US");
   window.history.replaceState(null, "", "/workspace/settings/account/connections");
   vi.clearAllMocks();
   vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings());
   vi.mocked(api.removeChatIdentity).mockResolvedValue(undefined);
+});
+
+it.each([
+  ["chat_code_exchange_failed", "The platform could not exchange the authorization code. Start linking again. If it fails again, ask your workspace administrator to check the OAuth configuration."],
+  ["chat_identity_read_failed", "Authorization completed, but the platform could not return your account identity. Try linking again."],
+  ["chat_oauth_permission_required", "The platform refused the requested account permissions. Ask your chat platform admin to check the app's user permissions and publish the changes."],
+])("shows the %s callback reason and permits retry", async (code, message) => {
+  window.history.replaceState(null, "", `/workspace/settings/account/connections?chat_provider=feishu&chat_auth=error&chat_auth_error=${code}`);
+  show();
+  const row = screen.getByTestId("feishu-account-row");
+  expect(await within(row).findByRole("alert")).toHaveTextContent(message);
+  expect(window.location.search).toBe("");
+  expect(within(row).getByRole("button", { name: "Connect" })).toBeEnabled();
+  await userEvent.setup().click(within(row).getByRole("button", { name: "Retry" }));
+  await waitFor(() => expect(within(row).queryByRole("alert")).not.toBeInTheDocument());
 });
 
 it("offers both personal chat accounts for members in the current workspace", async () => {

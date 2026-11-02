@@ -1,7 +1,22 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { chatIdentityAuthorizationURL, fetchChatIntegrationChats, removeChatBinding, saveChatIntegration, startChatIdentityBinding } from "./chat-integrations-api";
+import { ApiError } from "./api-client";
+import { chatIntegrationsZhCN } from "@/i18n/translations-chat-integrations";
+import { chatErrorMessage, chatIdentityAuthorizationURL, fetchChatIntegrationChats, removeChatBinding, saveChatIntegration, startChatIdentityBinding } from "./chat-integrations-api";
 
 afterEach(() => vi.unstubAllGlobals());
+
+it.each([
+  ["chat_workspace_permission_required", "Only workspace administrators can change this integration."],
+  ["chat_team_binding_permission_required", "Only the team's owners and workspace administrators can manage this team's group bindings."],
+  ["chat_code_exchange_failed", "The platform could not exchange the authorization code. Start linking again. If it fails again, ask your workspace administrator to check the OAuth configuration."],
+  ["chat_identity_read_failed", "Authorization completed, but the platform could not return your account identity. Try linking again."],
+  ["chat_oauth_permission_required", "The platform refused the requested account permissions. Ask your chat platform admin to check the app's user permissions and publish the changes."],
+])("translates %s without displaying platform error text", (code, source) => {
+  const error = new ApiError("private platform response", 502, code);
+  expect(chatErrorMessage(error, value => value, "fallback")).toBe(source);
+  expect(chatIntegrationsZhCN[source]).toBeTruthy();
+  expect(chatErrorMessage(error, value => chatIntegrationsZhCN[value] ?? value, "fallback")).toBe(chatIntegrationsZhCN[source]);
+});
 
 it("uses dedicated provider endpoints, encoded cursors and JSON credentials", async () => {
   const fetch = vi.fn().mockImplementation(async () => new Response("{}", { headers: { "Content-Type": "application/json" } }));

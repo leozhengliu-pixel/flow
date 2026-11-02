@@ -67,23 +67,13 @@ func TestChatApplicationSetupIdentityOAuthAndInternalGroupBindings(t *testing.T)
 				case "/open-apis/tenant/v2/tenant/query":
 					// The app lacks 「获取企业信息」 (tenant:tenant:readonly).
 					return chatTestResponse(400, `{"code":99991672,"msg":"Access denied. One of the following scopes is required: [tenant:tenant:readonly]"}`), nil
-				case "/oauth/v3/token", "/open-apis/authen/v2/oauth/token":
+				case "/open-apis/authen/v2/oauth/token":
 					tokenExchanges++
 					input := map[string]string{}
-					if provider == "feishu" {
-						if r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
-							t.Fatal("wrong Feishu OAuth encoding")
-						}
-						_ = r.ParseForm()
-						for key := range r.Form {
-							input[key] = r.Form.Get(key)
-						}
-					} else {
-						if r.URL.Host != "open.larksuite.com" {
-							t.Fatal("wrong Lark token host")
-						}
-						_ = json.NewDecoder(r.Body).Decode(&input)
+					if r.Header.Get("Content-Type") != "application/json" || "https://"+r.URL.Host != chatBaseURL(provider) {
+						t.Fatal("wrong OAuth encoding or host")
 					}
+					_ = json.NewDecoder(r.Body).Decode(&input)
 					if len(input["code_verifier"]) < 43 || input["client_id"] != "cli_test" || input["client_secret"] != "app-secret" || input["grant_type"] != "authorization_code" {
 						t.Fatalf("missing OAuth protections: %#v", input)
 					}
@@ -317,7 +307,7 @@ func TestChatIdentityBindingRequiresOwnerSessionAndCurrentTenant(t *testing.T) {
 		t.Fatal("wrong browser consumed another session's OAuth state")
 	}
 	mockChatTransport(t, func(r *http.Request) (*http.Response, error) {
-		if r.URL.Path == "/oauth/v3/token" {
+		if r.URL.Path == "/open-apis/authen/v2/oauth/token" {
 			return chatTestResponse(200, `{"access_token":"cross-tenant-token"}`), nil
 		}
 		return chatTestResponse(200, `{"code":0,"data":{"open_id":"ou_wrong_tenant","tenant_key":"tenant_b"}}`), nil
