@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Keep document names unchanged in subscriber chips when the interface language is Chinese.
+
 - Let document action menus size to their command labels and inherit the shared menu row height.
 
 - Restore People with access in phone document command menus for owners and administrators.

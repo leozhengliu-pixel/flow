@@ -589,7 +589,7 @@ button.document-icon.is-empty:hover,
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .document-subscribers__document > span > span { display: inline; color: inherit; font: 500 12px/18px var(--font); }
+  .document-subscribers__label { display: inline; color: inherit; font: 500 12px/18px var(--font); }
   .document-subscribers__document > span::after { content: ""; }
   .document-subscribers__document { font: 400 12px/18px var(--font); }
   .document-subscribers__search {
