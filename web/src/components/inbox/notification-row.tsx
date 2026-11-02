@@ -21,7 +21,7 @@ import './inbox-date-control.css'
 import { GridLoader } from '@/components/ui/grid-loader'
 import { AvatarImage } from '@/components/ui/user-avatar'
 import { useOptionalTranslate } from '@/i18n/i18n'
-import { parseDate } from 'chrono-node'
+import { parseDate, zh } from 'chrono-node'
 
 export type InboxNotificationKind = 'comment' | 'finished' | 'assignment' | 'mention' | 'status' | 'project' | 'review' | 'pulse' | 'generic'
 export type InboxSnoozePreset = 'hour' | 'threeHours' | 'tomorrow' | 'nextWeek' | 'month' | {
@@ -362,9 +362,17 @@ function RowMenuItem({ children, icon, shortcut, disabled = false, onSelect }: {
   )
 }
 
+function parseSnoozeQuery(query: string, now: Date) {
+  const reference = new Date(now)
+  return /[\u3400-\u9fff]/.test(query)
+    ? zh.hans.parseDate(query.replace(/(\d+)\s*周/g, '$1星期'), reference, { forwardDate: true })
+    : parseDate(query, reference, { forwardDate: true })
+}
+
 function RowSnoozeMenu({ notification, disabled, onSnooze }: { notification: InboxNotificationRowData; disabled: boolean; onSnooze: InboxNotificationRowProps['onSnooze'] }) {
   const [custom, setCustom] = useState(false)
   const [query, setQuery] = useState('')
+  const [invalid, setInvalid] = useState(false)
   const t = useOptionalTranslate()
   const now = useCurrentTime()
   const items: Array<[Exclude<InboxSnoozePreset, { kind: 'custom' }>, string]> = [
@@ -376,8 +384,9 @@ function RowSnoozeMenu({ notification, disabled, onSnooze }: { notification: Inb
   ]
   const optionDate = (preset: Exclude<InboxSnoozePreset, { kind: 'custom' }>) => new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(resolveSnoozeDate(now, preset))
   const submitQuery = () => {
-    const parsed = parseDate(query, new Date(now), { forwardDate: true })
-    if (!parsed || parsed <= now || disabled) return
+    if (disabled) return
+    const parsed = parseSnoozeQuery(query, now)
+    if (!parsed || parsed <= now) { setInvalid(true); return }
     onSnooze(notification, { kind: 'custom', snoozedUntil: parsed.toISOString() })
   }
   if (custom) {
@@ -389,8 +398,9 @@ function RowSnoozeMenu({ notification, disabled, onSnooze }: { notification: Inb
   }
   return <>
     <div className="flow-inbox-menu__search-wrap flow-inbox-snooze-input-wrap">
-      <input aria-label={t('Snooze time')} placeholder={t('Try: 4 pm, 2 days, in 5 weeks…')} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submitQuery() } }}/>
+      <input aria-label={t('Snooze time')} aria-invalid={invalid || undefined} placeholder={t('Try: 4 pm, 2 days, in 5 weeks…')} value={query} onChange={event => { setQuery(event.target.value); setInvalid(false) }} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); submitQuery() } }}/>
     </div>
+    {invalid && <p className="flow-inbox-snooze-custom__error" role="alert">{t('Choose a valid date and time.')}</p>}
     <NotificationMenuOptions divider>
       {items.map(([preset, label]) => <SnoozeItem key={preset} label={t(label)} date={optionDate(preset)} preset={preset} disabled={disabled} onSelect={onSnooze} notification={notification} />)}
       <ContextMenu.Item
@@ -420,6 +430,7 @@ function KeyboardSnoozeMenu({ notification, disabled, onSnooze }: {
 }) {
   const [custom, setCustom] = useState(false)
   const [query, setQuery] = useState('')
+  const [invalid, setInvalid] = useState(false)
   const t = useOptionalTranslate()
   const now = useCurrentTime()
   const presets: Array<[Exclude<InboxSnoozePreset, { kind: 'custom' }>, string]> = [
@@ -439,14 +450,16 @@ function KeyboardSnoozeMenu({ notification, disabled, onSnooze }: {
   }
 
   const submitQuery = () => {
-    const parsed = parseDate(query, new Date(now), { forwardDate: true })
-    if (!parsed || parsed <= now || disabled) return
+    if (disabled) return
+    const parsed = parseSnoozeQuery(query, now)
+    if (!parsed || parsed <= now) { setInvalid(true); return }
     onSnooze({ kind: 'custom', snoozedUntil: parsed.toISOString() })
   }
   return <div role="menu" aria-label={t('Snooze notification')} onKeyDown={moveSnoozeFocus}>
     <div className="flow-inbox-menu__search-wrap flow-inbox-snooze-input-wrap">
-      <input aria-label={t('Snooze time')} placeholder={t('Try: 4 pm, 2 days, in 5 weeks…')} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submitQuery() } }}/>
+      <input aria-label={t('Snooze time')} aria-invalid={invalid || undefined} placeholder={t('Try: 4 pm, 2 days, in 5 weeks…')} value={query} onChange={event => { setQuery(event.target.value); setInvalid(false) }} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); submitQuery() } }}/>
     </div>
+    {invalid && <p className="flow-inbox-snooze-custom__error" role="alert">{t('Choose a valid date and time.')}</p>}
     {presets.map(([preset, label]) => (
       <button
         key={preset}
