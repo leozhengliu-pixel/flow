@@ -67,3 +67,7 @@ Omit area for all areas. Exact completed full run: `/private/tmp/claude-501/-Use
 - `desktop-sweep5-shots.md`: all retained diagnostic screenshots were opened in labelled contact sheets; these earlier captures are not the final numerical sweep and do not independently certify parity. The unavailable-video image and mismatched fixture states are explicitly not verification passes. The 18px avatar fixture image was also opened: white SA initials on a red circular image.
 
 Scratch changes: desktop-sweep.sh, desktop-gate.mjs, desktop-match.mjs and its retained area tests, desktop-browser.mjs, build-desktop-fixtures.mjs, generated expectation/fixture manifests, desktop3-states.mjs, desktop3-data.mjs, desktop3-session.mjs, desktop3-index.mjs, and recovered fixture refresh/avatar/account helpers. Product code, reference captures, production services and databases were untouched.
+
+## Residual Review Follow-up
+
+The subsequent product corrections and live-reference/state review are recorded in [desktop-r4-residual-review.md](desktop-r4-residual-review.md). The original sweep above remains the baseline; the follow-up keeps every remaining numerical difference and does not modify gate matching.

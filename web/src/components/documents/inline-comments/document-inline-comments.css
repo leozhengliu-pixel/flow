@@ -250,6 +250,7 @@
 .document-thread-draft-composer { flex: 1 1 auto; min-width: 0; }
 
 @media (min-width: 1024px) {
+  .document-thread-avatar { font-weight: 400; }
   .document-thread-card .composer-submit { margin-right: -4px; }
   .document-thread-card .composer-submit .composer-send { padding: 0 2px; }
   .document-thread-card .composer.compact { overflow: visible; }
