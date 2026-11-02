@@ -1,0 +1,20 @@
+.search-date-filter{--calendar-weekday-size:13px;--calendar-weekday-weight:400;--calendar-weekday-line-height:19.5px;box-sizing:border-box;display:flex;flex-direction:column;width:358px;max-width:calc(100vw - 32px);max-height:calc(100dvh - var(--phone-menu-top, 110px) - 16px);overflow:auto;border:.5px solid var(--calendar-border);border-radius:12px;background:var(--calendar-surface);color:var(--pk-text);box-shadow:var(--pk-card-shadow);font:400 13px/normal var(--font)}
+.search-date-filter>header{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:32px 32px 0}
+.search-date-filter>header>strong{font-size:15px;font-weight:600;white-space:nowrap}
+.search-date-filter [role=radiogroup]{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.search-date-filter [role=radio],.search-date-filter>footer>button{height:28px;flex:none;padding:0 12px;border:.5px solid var(--theme-border-strong);border-radius:9999px;background:var(--calendar-control);color:var(--theme-text-secondary);font:500 12px/normal var(--font);box-shadow:var(--shadow-control);white-space:nowrap}
+.search-date-filter [role=radio]:hover,.search-date-filter>footer>button:hover{background:var(--calendar-control-selected);color:var(--theme-text-primary)}
+.search-date-filter [role=radio][aria-checked=true]{background:var(--calendar-control-selected);color:var(--theme-text-primary)}
+.search-date-filter button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.search-date-filter>.search-date-modes{padding:22px 32px 16px;gap:6px}
+.search-date-filter>.search-date-modes>button{padding:0 8px}
+.search-date-filter>div:has(>header){width:100%;height:auto;min-height:298px;flex:none;margin:0;padding:8px 40px 12px}
+.search-date-filter>div:has(>header)>div{width:100%;margin:0;padding:0;grid-template-columns:repeat(7,minmax(0,1fr));column-gap:8px}
+.search-date-filter>div:has(>section){width:100%;height:298px;flex:none;margin:0;padding:8px 32px 12px}
+.search-date-filter>footer{display:flex;justify-content:flex-end;gap:10px;padding:16px 32px 32px;border-top:.5px solid var(--pk-divider)}
+.search-date-filter>footer>button{height:36px;font-size:13px}
+.search-date-filter>footer>.search-date-apply{background:var(--accent-primary);border-color:transparent;color:var(--on-accent)}
+.search-date-filter>footer>.search-date-apply:hover{background:var(--accent-primary-hover)}
+.search-date-filter>footer>button:disabled{opacity:.5;cursor:default}
+.workspace-search-value-menu:has(.search-date-filter){padding:0;overflow:visible;background:transparent;border:0;box-shadow:none}
+@media(max-width:767px){.search-date-filter{width:100%;max-width:none}.search-date-filter>header{padding-inline:32px}.search-date-filter>.search-date-modes{flex-wrap:nowrap;justify-content:space-between;padding-inline:32px;gap:4px}.search-date-filter>.search-date-modes>button{padding-inline:8px;min-width:0}.search-date-filter>div:has(>header){padding-inline:40px}}

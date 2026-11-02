@@ -7,7 +7,7 @@ import { Slot } from '@radix-ui/react-slot'
 import { Command } from 'cmdk'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { useOptionalTranslate } from '@/i18n/i18n'
-import { PhoneCommandMenu } from './phone-menu'
+import { PhoneCommandMenu, PhoneMenu } from './phone-menu'
 
 type PhoneMenuState = { open: boolean; setOpen: (open: boolean) => void; close: () => void }
 const PhoneMenuContext = createContext<PhoneMenuState | null>(null)
@@ -38,8 +38,9 @@ export function DropdownMenuContent({ className, sideOffset = 6, children, ...pr
 
 // The translator hook lives in the phone-only branch so desktop menus keep
 // working under the minimal i18n mocks used by isolated unit tests.
-function PhoneDropdownMenuContent({ menu, label, onCloseAutoFocus, children }: { menu: PhoneMenuState; label?: string; onCloseAutoFocus?: P.DropdownMenuContentProps['onCloseAutoFocus']; children: ReactNode }) {
+function PhoneDropdownMenuContent({ menu, label, onCloseAutoFocus, children, custom = false }: { menu: PhoneMenuState; label?: string; onCloseAutoFocus?: P.DropdownMenuContentProps['onCloseAutoFocus']; children: ReactNode; custom?: boolean }) {
   const t = useOptionalTranslate()
+  if (custom) return <PhoneMenu open={menu.open} onOpenChange={menu.setOpen} onCloseAutoFocus={onCloseAutoFocus} label={label ?? t('Command menu')} className="phone-menu-custom">{children}</PhoneMenu>
   return <PhoneCommandMenu open={menu.open} onOpenChange={menu.setOpen} onCloseAutoFocus={onCloseAutoFocus} label={label ?? t('Command menu')} placeholder="Filter...">{children}</PhoneCommandMenu>
 }
 
@@ -83,13 +84,13 @@ export function DropdownMenuSub({ children, open: controlledOpen, onOpenChange, 
 
 export function DropdownMenuSubTrigger({ children, className, disabled, ...props }: P.DropdownMenuSubTriggerProps) {
   const menu = useContext(PhoneMenuContext)
-  if (menu) return <Command.Item disabled={disabled} onSelect={() => menu.setOpen(true)}>{children}<ChevronRight className="phone-menu-current" size={13}/></Command.Item>
+  if (menu) return <Command.Item disabled={disabled} aria-haspopup="dialog" onSelect={() => menu.setOpen(true)}>{children}<ChevronRight className="phone-menu-current" size={13}/></Command.Item>
   return <P.SubTrigger className={cn('menu-item',className)} disabled={disabled} {...props}>{children}<ChevronRight size={13} className="menu-chevron"/></P.SubTrigger>
 }
 
-export function DropdownMenuSubContent({ className, children, onFocusOutside, ...props }: P.DropdownMenuSubContentProps) {
+export function DropdownMenuSubContent({ className, children, onFocusOutside, phoneCustomContent = false, ...props }: P.DropdownMenuSubContentProps & { phoneCustomContent?: boolean }) {
   const menu = useContext(PhoneMenuContext)
-  if (menu) return <PhoneDropdownMenuContent menu={menu} label={props['aria-label']}>{children}</PhoneDropdownMenuContent>
+  if (menu) return <PhoneDropdownMenuContent menu={menu} label={props['aria-label']} custom={phoneCustomContent}>{children}</PhoneDropdownMenuContent>
   return <P.Portal><P.SubContent data-flow-motion="floating" className={cn('menu-content',className)} onFocusOutside={event => {
     // Nested controls (a calendar) keep focus inside this submenu; that focus move is not a dismissal.
     const target = event.detail.originalEvent.target
