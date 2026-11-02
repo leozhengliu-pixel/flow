@@ -1414,6 +1414,9 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 }
 
 func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+	if eventType == "loop.output_contract" && !fullMutationsForced.Load() {
+		return s.mutateLoopContract(ctx, workspaceKey, payload, mutate)
+	}
 	if eventType == "workspace_preferences.updated" && featureFlagsOnly(payload) {
 		return s.mutateFeatureFlags(ctx, workspaceKey, payload, mutate)
 	}
