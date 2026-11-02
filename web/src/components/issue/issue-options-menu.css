@@ -34,7 +34,9 @@
 .issue-options-submenu-search::placeholder{color:var(--theme-text-secondary);opacity:1}
 .issue-options-due-date{z-index:600;outline:0}
 @media(min-width:1024px){
-  .issue-options-due-date .due-date-command{min-width:232px}
+  html:root .issue-options-due-date .due-date-command{min-width:232px}
+  .issue-options-due-date .due-date-shortcut{display:none}
+  .issue-options-submenu .issue-options-then{line-height:1.1}
   .issue-options-submenu[data-menu="Remind me"]{width:318px}
   .issue-options-submenu[data-menu="Remind me"] .issue-options-detail{padding-left:0;font-size:13px}
   .issue-options-submenu[data-menu="Remind me"] .issue-options-item{padding-right:17px}
