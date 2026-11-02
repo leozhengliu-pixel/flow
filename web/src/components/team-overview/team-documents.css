@@ -279,6 +279,9 @@
 .team-docs-caret:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
 @media (min-width: 768px) {
+  .team-documents-toolbar > .team-documents-new { color: var(--issue-header-fg); }
+  .team-docs-group-title { color: var(--issue-header-fg); }
+  .team-docs-group > .team-docs-group-add { padding: 0 2px; }
   .team-docs-header { margin-inline: 0; padding: 0 18px 0 46px; gap: 6px; }
   .team-docs-check-spacer { display: none; }
   .team-docs-heading-cell { display: block; min-width: 0; }

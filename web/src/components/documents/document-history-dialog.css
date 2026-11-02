@@ -73,6 +73,8 @@
   .dialog-content.document-history-dialog { background: var(--document-history-bg); border-color: var(--document-history-border); }
   .document-history-dialog > .dialog-close { padding: 0 2px; }
   .document-history-dialog .document-history-version-time em { background: var(--document-current-bg); border-color: var(--document-current-border); }
+  .document-history-dialog .document-history-version-time em { line-height: normal; }
+  .document-history-dialog .document-history-version-author { align-items: flex-start; gap: 8px; color: var(--document-history-muted); line-height: normal; }
   .document-history-title { padding: 20px 52px 12px 20px; }
   .document-history-scroll { padding: 52px 16px 84px 24px; }
 }

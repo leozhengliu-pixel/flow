@@ -446,7 +446,8 @@ export function TeamOverviewPage({
   );
   return (
     <main className="main-panel team-home-page">
-      <header className="team-home-topbar">
+      <header className={`team-home-topbar${view === "documents" ? " is-documents" : ""}`}>
+        <div className="team-home-topbar-row">
         <button
           className="team-home-mobile"
           aria-label="Open sidebar"
@@ -457,12 +458,14 @@ export function TeamOverviewPage({
             <rect height="6" rx="0.75" width="1.5" x="4" y="5"/>
           </svg>
         </button>
+        <div className="team-home-title-row">
         <ViewGlyph
           className="team-home-top-icon"
           color={team.color}
           icon={team.icon || "Team"}
         />
         <h2 data-i18n-ignore>{team.name}</h2>
+        </div>
         <div className="team-home-top-actions">
           <button
             aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
@@ -523,6 +526,7 @@ export function TeamOverviewPage({
         >
           <CopyLinkIcon />
         </button>
+        </div>
       </header>
       {teamTabs}
       {view === "overview" ? (

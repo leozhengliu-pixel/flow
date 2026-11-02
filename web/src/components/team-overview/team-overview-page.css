@@ -32,6 +32,8 @@
 .team-home-mobile {
   display: none;
 }
+.team-home-topbar-row,
+.team-home-title-row { display: contents; }
 .team-home-top-icon {
   width: 16px;
   height: 16px;
@@ -53,6 +55,10 @@
 }
 @media (min-width: 801px) {
   .team-home-topbar { gap: 6px; }
+  .team-home-topbar.is-documents { gap: 12px; padding: 0; }
+  .team-home-topbar.is-documents .team-home-topbar-row { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 18px; }
+  .team-home-topbar.is-documents .team-home-title-row { min-width: 0; display: flex; align-items: center; gap: 6px; }
+  .team-home-topbar.is-documents h2 { font-weight: 450; }
 }
 .team-home-top-actions > button,
 .team-home-top-actions [data-radix-collection-item],

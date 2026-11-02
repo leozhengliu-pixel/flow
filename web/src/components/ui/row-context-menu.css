@@ -124,6 +124,10 @@ a.flow-menu__row { text-decoration: none; }
   font: 500 11px/normal var(--font);
 }
 
+@media (min-width: 801px) {
+  .flow-menu__shortcut kbd { line-height: 1.1; }
+}
+
 .flow-menu__marker {
   display: grid;
   place-items: center;
