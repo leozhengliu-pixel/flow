@@ -353,6 +353,15 @@ function renderReviewList(reviews: CodeReview[], view: 'for-you' | 'created' = '
   return render(<I18nProvider><ReviewsPage data={makeBootstrap({ viewer, users: [viewer, teammate], reviews, teamMembers: [], userSettings: {}, integrationConnections: [{ id: 'github', provider: 'github' }] as never[] })} view={view} onNavigate={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)} onOpenSidebar={vi.fn()}/></I18nProvider>);
 }
 
+it('keeps the incoming badge stable when the selected view changes', () => {
+  const own = { ...review, author: viewer, reviewerIds: [] };
+  const { unmount } = renderReviewList([own], 'created');
+  expect(document.querySelector('.reviews-tabs a:first-child .reviews-tab-count')).toBeNull();
+  unmount();
+  renderReviewList([own], 'for-you');
+  expect(document.querySelector('.reviews-tabs a:first-child .reviews-tab-count')).toBeNull();
+});
+
 it('imports open pull and merge requests from the list with Sync now', async () => {
   const user = userEvent.setup();
   const onReload = vi.fn().mockResolvedValue(undefined);
