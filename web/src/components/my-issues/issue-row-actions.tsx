@@ -20,6 +20,7 @@ import styles from './my-issues-list.module.css'
 import { ContextMenuIcon } from './context-menu-icon'
 import { SubmenuChevron } from '@/components/ui/submenu-chevron'
 import { useDesktopLayout } from '@/hooks/use-desktop-layout'
+import { FlowCodingToolsIcon } from '@/components/issue/flow-header-icons'
 
 export function IssueRowActionsProvider({ value, children }: { value: IssueRowActionContextValue; children: ReactNode }) {
   return <IssueRowActionContext.Provider value={value}>{children}</IssueRowActionContext.Provider>
@@ -190,7 +191,7 @@ function ActionGroups({ row, onDelete }: { row: MyIssuesRowData; onDelete?: () =
 /** Mounted only while the "Open in" submenu is open, so the menu itself does not need a router. */
 function ConfigureCodingToolsItem({ path }: { path: string }) {
   const navigate = useNavigate()
-  return <Item label="Configure coding tools…" onSelect={() => navigate(path)}/>
+  return <Item label="Configure coding tools…" icon={<FlowCodingToolsIcon/>} onSelect={() => navigate(path)}/>
 }
 
 function AddLink({ issueId }: { issueId: string }) {
@@ -214,7 +215,8 @@ function Item({ label, icon, shortcut, checked, top = false, onSelect }: { label
 }
 
 function Sub({ label, shortcut, issueSearch = false, children }: { label: string; shortcut?: string; issueSearch?: boolean; children: ReactNode }) {
-  return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true"><SubmenuChevron/></span></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={issueSearch ? `${styles.contextSubmenu} ${styles.issueSubmenu}` : styles.contextSubmenu} sideOffset={3} alignOffset={-5}>{children}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
+  const desktop = useDesktopLayout()
+  return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true"><SubmenuChevron/></span></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={issueSearch ? `${styles.contextSubmenu} ${styles.issueSubmenu}` : styles.contextSubmenu} sideOffset={desktop ? 4.5 : 3} alignOffset={desktop ? -6.5 : -5}>{issueSearch ? children : <div className={styles.contextMenuList}>{children}</div>}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
 }
 
 function IssueSearch({ data, exclude, onPick }: { data: BootstrapData; exclude: string; onPick: (issue: Issue) => void }) {
