@@ -68,6 +68,8 @@
   [data-issue-explorer] [data-content-view-header]:has(.headerViewActions) [data-content-view-favorite],.headerViewActions button{padding-inline:2px}
   .headerViewIcon{margin-right:0}
   .iconButton[title]{--ui-pill-active-bg:var(--issue-toolbar-open-bg);--ui-pill-active-hover-bg:var(--issue-toolbar-open-bg)}
+  [data-issue-explorer] [data-content-view-subheader] [data-toolbar-buttons-navigation] button[data-state=open]{--ui-pill-active-bg:var(--ui-pill-bg);--ui-pill-active-hover-bg:var(--ui-pill-bg)}
+  :global(body:has([data-layout=issues][data-variant=root][data-submenu-open])) [data-issue-explorer] .iconButton[data-state=open]{--ui-pill-active-bg:var(--issue-toolbar-open-bg);--ui-pill-active-hover-bg:var(--issue-toolbar-open-bg)}
   .filterBar{border:.5px solid var(--issue-filter-band-border);box-shadow:none}
   .filterBar>div:first-child>button{padding-inline:2px}
   [data-issue-explorer]:has(section[data-mode="create"]) [data-content-view-header][data-compact]{padding-left:8px}

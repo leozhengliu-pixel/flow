@@ -23,6 +23,7 @@ test('defaults the saved view details open, drills into unassigned issues, and r
   await expect(panel.getByText('Personal', { exact: true })).toHaveCSS('color', 'lch(100 0 272)')
   await expect(panel.getByRole('switch', { name: 'Add to favorites', exact: true })).toHaveCSS('width', '28px')
   await expect(panel.getByRole('tablist', { name: 'View summary' })).toHaveCSS('gap', '2px')
+  await expect(panel.getByRole('tab', { name: 'Labels', exact: true })).toHaveCSS('color', 'lch(63.304 1.425 272)')
   await expect(page.locator('[data-content-view-header]')).toHaveCSS('padding-left', '8px')
   await expect(page.locator('[data-content-view-title] h2')).toHaveCSS('color', 'lch(90.451 1.2 272)')
   await expect(page.getByRole('button', { name: 'Close view details', exact: true })).toHaveCSS('background-color', 'lch(18.634 1.075 272)')

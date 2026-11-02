@@ -119,8 +119,10 @@ export function SavedViewEditor({ actions, ariaLabel = 'New view', mode = 'creat
             </DropdownMenuContent>
           </DropdownMenu.Root>
         </div>}
-        <button className={styles.cancel} type="button" onClick={onCancel}>{t('Cancel')}</button>
-        <button className={styles.save} type="button" disabled={saving} onClick={save}>{t(saving ? 'Saving...' : mode === 'edit' ? 'Save' : 'Create view')}</button>
+        <span className={styles.saveActions}>
+          <button className={styles.cancel} type="button" onClick={onCancel}>{t('Cancel')}</button>
+          <button className={styles.save} type="button" disabled={saving} onClick={save}>{t(saving ? 'Saving...' : mode === 'edit' ? 'Save' : 'Create view')}</button>
+        </span>
       </div>
     </div>
     {actions && <div className={styles.actions}>{actions}</div>}
