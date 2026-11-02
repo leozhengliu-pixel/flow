@@ -951,6 +951,7 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
   .loops-section-heading .loops-section-title { line-height: normal; }
   .loops-section-title { margin-bottom: 12px; }
   .loops-trigger-schedule { flex-direction: column; align-items: stretch; gap: 8px; }
+  .loops-trigger-sentence:not(.is-readonly) .loops-sentence-text { font-size: 12px; font-weight: 500; }
   .loops-trigger-type { height: 28px; display: flex; align-items: center; }
   .loops-trigger-button { background: var(--loops-schedule-bg); border-color: var(--loops-schedule-border); }
   .loops-trigger-button-label { font: 450 12px/normal var(--font); }
