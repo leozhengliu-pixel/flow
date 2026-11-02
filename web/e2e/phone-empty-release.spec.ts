@@ -7,6 +7,12 @@ test('opens releases for an unassigned phone issue without adding a property row
   const headers={'X-Workspace-Key':workspaceKey}
   const data=await(await request.get('/api/bootstrap',{headers})).json() as BootstrapData
   const issue=await(await request.post('/api/issues',{headers,data:{teamId:data.teams[0].id,title:'Empty release entry'}})).json() as Issue
+  const pipelineResponse=await request.post('/api/release-pipelines',{headers,data:{name:'Phone pipeline',type:'scheduled',teamIds:[data.teams[0].id],stages:['Planned'],stageStatuses:{Planned:'planned'}}})
+  expect(pipelineResponse.status()).toBe(201)
+  const pipeline=await pipelineResponse.json() as {id:string}
+  const releaseResponse=await request.post('/api/releases',{headers,data:{name:'Phone release',version:'1.0',status:'planned',pipelineId:pipeline.id,stage:'Planned'}})
+  expect(releaseResponse.status()).toBe(201)
+  const release=await releaseResponse.json() as {id:string}
   await page.goto(`/${workspaceKey}/issue/${issue.identifier}`)
   await expect(page.locator('.issue-mobile-properties .issue-release-property')).toHaveCount(0)
   await page.getByRole('button',{name:'Issue options',exact:true}).click()
@@ -22,12 +28,6 @@ test('opens releases for an unassigned phone issue without adding a property row
   await picker.getByRole('button',{name:'Back',exact:true}).tap()
   await expect(page.getByRole('dialog',{name:'Issue options',exact:true})).toBeVisible()
 
-  const pipelineResponse=await request.post('/api/release-pipelines',{headers,data:{name:'Phone pipeline',type:'scheduled',teamIds:[data.teams[0].id],stages:['Planned'],stageStatuses:{Planned:'planned'}}})
-  expect(pipelineResponse.status()).toBe(201)
-  const pipeline=await pipelineResponse.json() as {id:string}
-  const releaseResponse=await request.post('/api/releases',{headers,data:{name:'Phone release',version:'1.0',status:'planned',pipelineId:pipeline.id,stage:'Planned'}})
-  expect(releaseResponse.status()).toBe(201)
-  const release=await releaseResponse.json() as {id:string}
   await page.reload()
   await page.getByRole('button',{name:'Issue options',exact:true}).tap()
   await page.getByRole('option',{name:/^Release/}).tap()

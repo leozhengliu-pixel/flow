@@ -74,7 +74,8 @@ test('shows every display property and footer, persists defaults, and filters su
   expect(geometry.scroll).toBeLessThanOrEqual(1)
   expect(geometry.bottom).toBeLessThan(900)
   expect(geometry.lastChip).toBeLessThan(geometry.footer)
-  for (const property of ['SLA', 'Release', 'My activity date']) await expect(panel.getByRole('button', { name: property, exact: true })).toHaveCount(0)
+  // Flow has no paid plans, so plan-gated properties are available in desktop options.
+  for (const property of ['SLA', 'Release', 'My activity date']) await expect(panel.getByRole('button', { name: property, exact: true })).toBeVisible()
   await panel.getByRole('button', { name: 'Reset', exact: true }).click()
   await expect(panel.getByRole('checkbox', { name: 'Show sub-team issues', exact: true })).toBeChecked()
   await panel.getByRole('tab', { name: 'Board', exact: true }).click()
