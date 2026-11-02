@@ -17,8 +17,8 @@ func metadataEventGroup(event string) string {
 	switch {
 	case strings.HasPrefix(event, "agent."), strings.HasPrefix(event, "release_pipeline."):
 		return "hot"
-	case strings.HasPrefix(event, "migration."):
-		return "migration"
+	case strings.HasPrefix(event, "migration."), strings.HasPrefix(event, "integration.token_"), strings.HasPrefix(event, "oauth_sync_group."):
+		return "bookkeeping"
 	default:
 		return "records"
 	}
@@ -31,7 +31,7 @@ func metadataScaleProbe(t *testing.T) (*sql.DB, func() int64) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { admin.Close() })
-	if _, err := admin.Exec(`CREATE TABLE IF NOT EXISTS metadata_write_probe(table_name VARCHAR(191))`); err != nil {
+	if _, err := admin.Exec(`CREATE TABLE IF NOT EXISTS metadata_write_probe(table_name VARCHAR(191),record_kind VARCHAR(191))`); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := admin.Query(`SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME<>'metadata_write_probe'`)
@@ -56,7 +56,14 @@ func metadataScaleProbe(t *testing.T) (*sql.DB, func() int64) {
 			if _, err := admin.Exec("DROP TRIGGER IF EXISTS " + name); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := admin.Exec(fmt.Sprintf("CREATE TRIGGER %s AFTER %s ON `%s` FOR EACH ROW INSERT INTO metadata_write_probe VALUES('%s')", name, op, table, table)); err != nil {
+			kind := "''"
+			if table == "workspace_content_records" {
+				kind = "NEW.kind"
+				if op == "DELETE" {
+					kind = "OLD.kind"
+				}
+			}
+			if _, err := admin.Exec(fmt.Sprintf("CREATE TRIGGER %s AFTER %s ON `%s` FOR EACH ROW INSERT INTO metadata_write_probe VALUES('%s',%s)", name, op, table, table, kind)); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -93,7 +100,7 @@ func TestMetadataEventScaleMeasure(t *testing.T) {
 	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM issue_records WHERE workspace_key=?`, contractScaleWorkspace).Scan(&issues); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_content_records WHERE workspace_key=?`, contractScaleWorkspace).Scan(&content); err != nil {
+	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_content_records WHERE workspace_key=? AND kind IN ('comment','activity')`, contractScaleWorkspace).Scan(&content); err != nil {
 		t.Fatal(err)
 	}
 	if issues != 75000 || content != 150000 {
@@ -169,7 +176,7 @@ func TestMetadataEventScaleMeasure(t *testing.T) {
 	if err := admin.QueryRow(`SELECT COUNT(*) FROM metadata_write_probe`).Scan(&written); err != nil {
 		t.Fatal(err)
 	}
-	if err := admin.QueryRow(`SELECT COUNT(*) FROM metadata_write_probe WHERE table_name IN ('issue_records','workspace_content_records')`).Scan(&unrelated); err != nil {
+	if err := admin.QueryRow(`SELECT COUNT(*) FROM metadata_write_probe WHERE table_name='issue_records' OR (table_name='workspace_content_records' AND record_kind IN ('comment','activity','notification','delivery'))`).Scan(&unrelated); err != nil {
 		t.Fatal(err)
 	}
 	if unrelated != 0 {

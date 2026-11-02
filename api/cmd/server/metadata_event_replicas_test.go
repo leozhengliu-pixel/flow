@@ -28,10 +28,36 @@ import (
 var metadataReplicaEvents = []string{
 	"release_pipeline.access_key_used", "agent.message_feedback", "agent.session_feedback", "agent.message_changes", "agent.approval_resolved", "release_pipeline.access_key_revoked",
 	"document.attachment_created", "document.attachment_saved", "document.attachment_deleted", "email_intake.updated", "oauth_application.secret_rotated", "review.written_back",
+	"migration.previewed", "migration.mappings_updated", "migration.users_invited", "integration.token_updated", "integration.token_rotated", "integration.token_rotation_failed", "integration.token_rotation_updated", "oauth_sync_group.approved", "oauth_sync_group.denied",
 }
 
 func metadataReplicaID(kind string, replica int) string {
 	return fmt.Sprintf("metadata_%s_%d", kind, replica)
+}
+
+func metadataReplicaAggregate(event string, replica, round int) string {
+	switch {
+	case event == "migration.previewed":
+		return fmt.Sprintf("metadata_preview_%d_%d", replica, round)
+	case strings.HasPrefix(event, "migration."):
+		return metadataReplicaID("job", replica)
+	case strings.HasPrefix(event, "integration."):
+		return metadataReplicaID("integration", replica)
+	case strings.HasPrefix(event, "oauth_sync_group."):
+		return metadataReplicaID("sync_"+strings.TrimPrefix(event, "oauth_sync_group."), replica)
+	case strings.HasPrefix(event, "document."):
+		return metadataReplicaID("document", replica)
+	case strings.HasPrefix(event, "email_intake."):
+		return metadataReplicaID("intake", replica)
+	case strings.HasPrefix(event, "oauth_application."):
+		return metadataReplicaID("application", replica)
+	case strings.HasPrefix(event, "review."):
+		return metadataReplicaID("review", replica)
+	case strings.HasPrefix(event, "release_pipeline."):
+		return metadataReplicaID("pipeline", replica)
+	default:
+		return metadataReplicaID("session", replica)
+	}
 }
 
 func metadataReplicaEdit(data *domain.Bootstrap, event string, replica, round int) error {
@@ -94,6 +120,41 @@ func metadataReplicaEdit(data *domain.Bootstrap, event string, replica, round in
 			return errNotFound
 		}
 		data.Reviews[index].Events[0].Sync = &domain.ReviewEventSync{State: "failed", Error: note, AttemptedAt: stamp}
+	case "migration.previewed":
+		id := metadataReplicaAggregate(event, replica, round)
+		bundle, _ := json.Marshal(map[string]string{"note": note})
+		data.MigrationJobs = append([]domain.MigrationJob{{ID: id, Status: "mapping", Bundle: bundle, UserID: data.Viewer.ID, CreatedAt: stamp}}, data.MigrationJobs...)
+		data.AuditLog = append([]domain.AuditLogEntry{{ID: "audit_" + id, ResourceID: id, ResourceType: "migration", Action: "previewed", Actor: data.Viewer, CreatedAt: stamp}}, data.AuditLog...)
+	case "migration.mappings_updated", "migration.users_invited":
+		job, err := migrationByID(data, metadataReplicaID("job", replica))
+		if err != nil {
+			return err
+		}
+		if event == "migration.mappings_updated" {
+			job.Mappings[0].TargetName = note
+		} else {
+			job.Mappings[0].TargetID, job.Mappings[0].Status = note, "invited"
+		}
+		job.UpdatedAt = stamp
+	case "integration.token_updated", "integration.token_rotated", "integration.token_rotation_failed", "integration.token_rotation_updated":
+		index := slices.IndexFunc(data.IntegrationConnections, func(a domain.IntegrationConnection) bool { return a.ID == metadataReplicaID("integration", replica) })
+		if index < 0 {
+			return errNotFound
+		}
+		key := map[string]string{"integration.token_updated": "tokenName", "integration.token_rotated": "lastRotatedAt", "integration.token_rotation_failed": "rotationFailureReason", "integration.token_rotation_updated": "nextRotationAt"}[event]
+		if data.IntegrationConnections[index].Config == nil {
+			data.IntegrationConnections[index].Config = map[string]string{}
+		}
+		data.IntegrationConnections[index].Config[key] = note
+	case "oauth_sync_group.approved", "oauth_sync_group.denied":
+		index := slices.IndexFunc(data.OAuthSyncGroupRequests, func(a domain.OAuthSyncGroupRequest) bool {
+			return a.ID == metadataReplicaAggregate(event, replica, round)
+		})
+		if index < 0 {
+			return errNotFound
+		}
+		data.OAuthSyncGroupRequests[index].Status = strings.TrimPrefix(event, "oauth_sync_group.")
+		data.OAuthSyncGroupRequests[index].ReviewedBy, data.OAuthSyncGroupRequests[index].ReviewedAt = note, &stamp
 	default:
 		return errInvalid
 	}
@@ -131,10 +192,7 @@ func TestMetadataEventReplicaProcess(t *testing.T) {
 			writeError(w, http.StatusBadRequest, "unknown gate event")
 			return
 		}
-		id := metadataReplicaID("session", input.Replica)
-		if strings.HasPrefix(event, "release_pipeline.") {
-			id = metadataReplicaID("pipeline", input.Replica)
-		}
+		id := metadataReplicaAggregate(event, input.Replica, input.Round)
 		err := repo.MutateWorkspace(r.Context(), contractReplicaWorkspace, event, id, input, func(data *domain.Bootstrap) error {
 			return metadataReplicaEdit(data, event, input.Replica, input.Round)
 		})
@@ -184,6 +242,7 @@ func TestMetadataEventTwoReplicaGate(t *testing.T) {
 		data.AgentSessions, data.ReleasePipelines, data.Drafts = nil, nil, nil
 		data.Webhooks = nil
 		data.Documents, data.EmailIntakeAddresses, data.OAuthApplications, data.Reviews = nil, nil, nil, nil
+		data.MigrationJobs, data.IntegrationConnections, data.OAuthSyncGroupRequests, data.AuditLog = nil, nil, nil, nil
 		for i := range 2 {
 			data.AgentSessions = append(data.AgentSessions, domain.AgentSession{ID: metadataReplicaID("session", i), UserID: data.Viewer.ID, Messages: []domain.AgentMessage{{ID: "reply", Role: "assistant", Parts: []domain.AgentMessagePart{
 				{ID: "tool", ToolCall: &domain.AgentToolCall{Change: &domain.AgentChange{Undoable: true}}},
@@ -199,6 +258,11 @@ func TestMetadataEventTwoReplicaGate(t *testing.T) {
 			data.EmailIntakeAddresses = append(data.EmailIntakeAddresses, domain.EmailIntakeAddress{ID: metadataReplicaID("intake", i), TeamID: data.Teams[0].ID})
 			data.OAuthApplications = append(data.OAuthApplications, domain.OAuthApplication{ID: metadataReplicaID("application", i)})
 			data.Reviews = append(data.Reviews, domain.CodeReview{ID: metadataReplicaID("review", i), Events: []domain.ReviewEvent{{ID: "event"}}})
+			data.MigrationJobs = append(data.MigrationJobs, domain.MigrationJob{ID: metadataReplicaID("job", i), Status: "mapping", Mappings: []domain.MigrationEntityMapping{{ID: "mapping", EntityType: "user", SourceID: "source"}}})
+			data.IntegrationConnections = append(data.IntegrationConnections, domain.IntegrationConnection{ID: metadataReplicaID("integration", i), Config: map[string]string{}})
+			for _, status := range []string{"approved", "denied"} {
+				data.OAuthSyncGroupRequests = append(data.OAuthSyncGroupRequests, domain.OAuthSyncGroupRequest{ID: metadataReplicaID("sync_"+status, i), Status: "pending"})
+			}
 		}
 		return nil
 	})
@@ -218,7 +282,11 @@ func TestMetadataEventTwoReplicaGate(t *testing.T) {
 	digest := func() string {
 		hash := sha256.New()
 		for _, table := range []string{"issue_records", "workspace_content_records"} {
-			rows, err := db.Query("SELECT id,data FROM " + table + " WHERE workspace_key='contract-scale' ORDER BY id")
+			filter := ""
+			if table == "workspace_content_records" {
+				filter = " AND kind IN ('comment','activity','notification','delivery')"
+			}
+			rows, err := db.Query("SELECT id,data FROM " + table + " WHERE workspace_key='contract-scale'" + filter + " ORDER BY id")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -254,7 +322,10 @@ func TestMetadataEventTwoReplicaGate(t *testing.T) {
 	}
 	t.Cleanup(stop)
 	for i := range 2 {
-		dir := t.TempDir()
+		dir, err := os.MkdirTemp(os.Getenv("TMPDIR"), "metadata-replica-")
+		if err != nil {
+			t.Fatal(err)
+		}
 		output, err := os.Create(filepath.Join(dir, "replica.log"))
 		if err != nil {
 			t.Fatal(err)
@@ -391,6 +462,48 @@ func TestMetadataEventTwoReplicaGate(t *testing.T) {
 			return a.ID == metadataReplicaID("review", i) && a.Events[0].Sync != nil && a.Events[0].Sync.Error == note
 		}) {
 			t.Fatalf("replica %d lost writeback", i)
+		}
+		job, err := migrationByID(&data, metadataReplicaID("job", i))
+		if err != nil || job.Mappings[0].TargetName != note || job.Mappings[0].TargetID != note || job.Mappings[0].Status != "invited" {
+			t.Fatalf("replica %d lost mapping/invitation bookkeeping", i)
+		}
+		for round := range rounds {
+			id := metadataReplicaAggregate("migration.previewed", i, round)
+			if _, err := migrationByID(&data, id); err != nil {
+				t.Fatalf("lost preview %s", id)
+			}
+			if !slices.ContainsFunc(data.AuditLog, func(a domain.AuditLogEntry) bool { return a.ResourceID == id && a.Action == "previewed" }) {
+				t.Fatalf("lost preview audit %s", id)
+			}
+			marker := "?"
+			if config.Driver == "postgres" {
+				marker = "$1"
+			}
+			var raw []byte
+			if err := db.QueryRow("SELECT data FROM workspace_content_records WHERE workspace_key='contract-scale' AND kind='migration_input' AND id="+marker, id).Scan(&raw); err != nil {
+				t.Fatal("lost source bundle")
+			}
+			var source struct{ Bundle json.RawMessage }
+			if json.Unmarshal(raw, &source) != nil {
+				t.Fatal("invalid source bundle")
+			}
+			var bundle map[string]string
+			if json.Unmarshal(source.Bundle, &bundle) != nil || bundle["note"] != fmt.Sprintf("replica %d round %d", i, round) {
+				t.Fatal("source bundle changed")
+			}
+		}
+		connection := data.IntegrationConnections[slices.IndexFunc(data.IntegrationConnections, func(a domain.IntegrationConnection) bool { return a.ID == metadataReplicaID("integration", i) })]
+		for _, key := range []string{"tokenName", "lastRotatedAt", "rotationFailureReason", "nextRotationAt"} {
+			if connection.Config[key] != note {
+				t.Fatalf("replica %d lost %s", i, key)
+			}
+		}
+		for _, status := range []string{"approved", "denied"} {
+			if !slices.ContainsFunc(data.OAuthSyncGroupRequests, func(a domain.OAuthSyncGroupRequest) bool {
+				return a.ID == metadataReplicaID("sync_"+status, i) && a.Status == status && a.ReviewedBy == note
+			}) {
+				t.Fatalf("replica %d lost %s sync decision", i, status)
+			}
 		}
 	}
 	t.Logf("METADATA_REPLICAS driver=%s processes=2 events=%d requests=%d busy=0 lost_updates=0 content_sha256=%s elapsed=%s", config.Driver, len(metadataReplicaEvents), rounds*2*(len(metadataReplicaEvents)+1), before, time.Since(started).Round(time.Millisecond))
