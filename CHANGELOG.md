@@ -13,6 +13,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align desktop issue-filter menu width, window-edge spacing, search hint gap, and submenu overlap with the shared menu measurements.
 
+- Keep workspace switches on their selected workspace by resolving home-page redirects only from that workspace's snapshot, with browser coverage for menu actions, shortcuts and Chinese avatars across desktop and phone layouts.
+
 - Restore visible workspace-menu chevrons, inset rounded menu hovers and a bounded workspace switcher; keep Chinese and mixed-script workspace initials centered without clipping across shared avatars.
 
 - Suppress repeated chat message shortcuts for a full elapsed minute, including taps across a wall-clock minute boundary.

@@ -4369,6 +4369,8 @@ function App() {
   useEffect(() => {
     if (!data) return;
     const workspace = data.workspace.urlKey;
+    // A workspace switch can render the new route before its bootstrap replaces the old snapshot.
+    if (!routeBelongsToWorkspace(route, workspace)) return;
     if (route.kind === "root" || route.kind === "workspace-root") {
       const preference = data.userSettings[data.viewer.id]?.homeView;
       const homeView = preference && !preference.includes('(default)') ? preference : data.workspaceSettings.defaultHomeView ?? 'agent';
@@ -4386,7 +4388,6 @@ function App() {
       if (!to.includes("?") && !to.includes("#")) navigateTo(to + location.search + location.hash, { ...options, state: location.state });
       else navigateTo(to, options);
     };
-    if (!routeBelongsToWorkspace(route, workspace)) return;
     if (route.kind === "settings" && /\/settings\/billing\/?$/.test(location.pathname)) {
       canonicalize(settingsPath(workspace, "preferences"), { replace: true });
       return;
