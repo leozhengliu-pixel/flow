@@ -7,6 +7,24 @@ import { I18nProvider } from '@/i18n/i18n'
 import { InboxFilterBuilder } from './inbox-filter-builder'
 
 describe('InboxFilterBuilder', () => {
+  it('applies a phone filter value found directly from the property search', async () => {
+    const user = userEvent.setup()
+    const media = window.matchMedia, resizeObserver = globalThis.ResizeObserver
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 767px)', media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+    const onFiltersChange = vi.fn()
+    try {
+      render(<I18nProvider><InboxFilterBuilder filters={[]} options={{ project: [{ id: 'launch', label: 'International launch' }] }} onFiltersChange={onFiltersChange}/></I18nProvider>)
+      await user.click(screen.getByRole('button', { name: 'Add filter' }))
+      await user.type(screen.getByLabelText('Command menu'), 'International')
+      await user.click(screen.getByRole('option', { name: 'Project International launch' }))
+      expect(onFiltersChange).toHaveBeenCalledWith([expect.objectContaining({ property: 'project', values: [expect.objectContaining({ value: 'launch' })] })])
+    } finally {
+      vi.stubGlobal('matchMedia', media)
+      vi.stubGlobal('ResizeObserver', resizeObserver)
+    }
+  })
+
   it('offers working team and initiative properties', async () => {
     const user = userEvent.setup()
     const onFiltersChange = vi.fn()
