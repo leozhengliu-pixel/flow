@@ -85,6 +85,10 @@
 .propertyItem:not(#_)>svg:first-child{width:14px;height:14px;margin:0 1px;color:var(--pk-text)}
 .propertyItem:not(#_)>span:not(.propertyArrow){color:var(--pk-text)}
 .propertyArrow:not(#_){color:var(--pk-faint)}
+@media(min-width:1024px){
+  .propertyItem:not(#_):is(:hover,[aria-selected=true])>span:not(.propertyArrow),
+  .propertyItem:not(#_):is(:hover,[aria-selected=true])>svg:first-child{color:var(--pk-text-strong)}
+}
 
 /* Phone filter sheet: the reference lists the filter fields as 46px rows. */
 .phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-list]:not(#_)) {

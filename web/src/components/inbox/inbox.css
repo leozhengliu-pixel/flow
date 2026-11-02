@@ -824,6 +824,7 @@
   .flow-inbox-menu__shortcut { color: var(--pk-muted); line-height: 12.1px; }
   .flow-inbox-menu__shortcut > span { line-height: inherit; }
   .flow-inbox-menu .flow-inbox-menu__item[data-highlighted] { color: var(--pk-text-strong); }
+  .flow-inbox__icon-button[data-inbox-filter-trigger][aria-expanded=true]:not(:hover) { background: transparent; color: var(--text); }
   :root:not([data-theme="light"]) .flow-inbox-row[data-read="true"]:not([data-active="true"]) .flow-inbox-row__body { color: var(--inbox-read-body); }
   .flow-inbox-list-state--message:has(> .flow-inbox-list-state__ghost-action) { padding-bottom: 11px; }
   .flow-inbox-list-state--message:has(> .flow-inbox-list-state__ghost-action) > strong { line-height: normal; }
