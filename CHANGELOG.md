@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Keep phone Snooze, issue-row, Move to, and Labels submenus inside the viewport, with nested levels replacing their parent and a Back action; preserve desktop cascades.
 
+- Keep the desktop project timeline grid and today line extended through the viewport when only a few projects are shown.
+
 - Verify desktop text shaping, equal-width digits, and workspace-name containment without platform-specific glyph-width snapshots.
 
 - Check desktop issue picker readability and search behavior across platforms without fitting tests to intrinsic input widths.
