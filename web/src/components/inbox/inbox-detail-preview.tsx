@@ -105,7 +105,7 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
           <DetailSnoozeMenu notification={notification} onSnooze={props.onSnooze} pending={props.pending} open={snoozeOpen} onOpenChange={setSnoozeOpen} phone={phone} />
           <DetailIconButton data-detail-action="delete" disabled={props.pending} label="Delete notification" onClick={() => props.onDelete(notification)}><DeleteInboxIcon /></DetailIconButton>
         </div>
-        {props.issue && !props.minimalHeader ? <IssueDetailCopyStrip issue={props.issue} /> : null}
+        {props.issue && !props.minimalHeader ? <IssueDetailCopyStrip issue={props.issue} href={notification.href} onCopyLink={props.onCopyLink ? () => props.onCopyLink?.(notification) : undefined} /> : null}
       </header>}
       <div className={`flow-inbox-detail__body ${props.fullBleed ? 'flow-inbox-detail__body--full-bleed' : ''}`}>
         {props.fullBleed ? props.children : <div className="flow-inbox-detail__scroll">{props.children}</div>}
@@ -118,10 +118,10 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
 }
 
 /** The reference app's floating copy strip above an issue opened from a notification. */
-function IssueDetailCopyStrip({ issue }: { issue: Issue }) {
+function IssueDetailCopyStrip({ issue, href, onCopyLink }: { issue: Issue; href?: string; onCopyLink?: () => void }) {
   const copy = (text: string) => { void navigator.clipboard.writeText(text).catch(() => undefined) }
   return <div className="issue-command-strip flow-inbox-detail__command-strip"><div className="issue-command-buttons">
-    <button className="issue-command-button" type="button" aria-label="Copy issue URL" onClick={() => copy(window.location.href)}><FlowUrlIcon /></button>
+    <button className="issue-command-button" type="button" aria-label="Copy issue URL" disabled={!onCopyLink && !href} onClick={() => { if (onCopyLink) onCopyLink(); else if (href) copy(new URL(href, window.location.origin).href) }}><FlowUrlIcon /></button>
     <button className="issue-command-button" type="button" aria-label="Copy issue ID" onClick={() => copy(issue.identifier)}><FlowIssueIdIcon /></button>
     <button className="issue-command-button" type="button" aria-label="Copy branch name" onClick={() => copy(configuredIssueBranch(issue))}><FlowBranchIcon /></button>
   </div></div>
