@@ -160,6 +160,9 @@
 .nav-item:focus-visible,
 .try-item:hover .nav-item { color: var(--bright); background: lch(8.445% 1.3 272); }
 .nav-item:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-1px}
+@media (min-width: 1024px) {
+  .nav-item { padding-right: 9px; }
+}
 .nav-item.active { color: var(--bright); background: lch(13.845% 1.3 272); }
 .nav-icon { width: 14px; height: 14px; display: grid; flex: 0 0 14px; place-items: center; color: var(--issue-muted); }
 .nav-icon svg,
