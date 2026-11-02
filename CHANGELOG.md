@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Keep the selected property option highlighted when a picker opens or its options finish loading.
 
+- Give desktop notification menus a separate list inset and snooze separator while preserving phone menus and dated snooze actions.
+
 - Align desktop issue activity and comment avatar typography without changing phone avatars or the user colour palette.
 
 - Align desktop property search-header spacing and shortcut padding while preserving phone pickers.

@@ -832,8 +832,9 @@
   .flow-inbox-menu--actions .flow-inbox-menu__shortcut { flex: 0 0 auto; margin-left: -2.5px; padding-left: 0; }
   .flow-inbox-snooze-menu { width: 318px; height: auto; min-height: 241.5px; }
   .flow-inbox-snooze-input-wrap { padding-right: 11px; }
-  .flow-inbox-row-menu { height: auto; min-height: 108px; padding: 5px 0; }
-  .flow-inbox-row-menu .flow-inbox-menu__item { padding-right: 12px; color: var(--pk-text); }
+  .flow-inbox-row-menu { width: 191px; height: auto; min-height: 0; padding: 0; }
+  .flow-inbox-context-snooze { padding: 0; }
+  .flow-inbox-row-menu .flow-inbox-menu__item { padding-right: 18px; color: var(--pk-text); }
   .flow-inbox-snooze-menu .flow-inbox-menu__item { color: var(--pk-text); }
   .flow-inbox-row-menu .flow-inbox-menu__item-label { flex: 1 0 auto; }
   .flow-inbox-row-menu .flow-inbox-menu__shortcut { flex: 0 0 auto; padding-left: 0; }

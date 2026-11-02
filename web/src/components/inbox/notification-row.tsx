@@ -3,6 +3,7 @@ import * as Popover from '@radix-ui/react-popover'
 import { ChevronRight, GitPullRequest } from 'lucide-react'
 import { useCurrentTime } from '@/hooks/use-current-time'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { useCallback, useRef, useState, type CSSProperties, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 
 import { StatusIcon } from '@/components/issue/issue-icons'
@@ -310,40 +311,48 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
   return (
     <ContextMenu.Portal>
       <ContextMenu.Content data-flow-motion="floating" className="flow-inbox-menu flow-inbox-row-menu" aria-label={t('Notification actions')} onEscapeKeyDown={(event) => event.stopPropagation()}>
-        <RowMenuItem
-          shortcut="U"
-          icon={<UnreadIcon />}
-          disabled={disabled}
-          onSelect={() => props.onReadChange(notification, !notification.read)}
-        >
-          {t(notification.read ? 'Mark as unread' : 'Mark as read')}
-        </RowMenuItem>
-        <RowMenuItem shortcut="⌫" icon={<DeleteIcon />} disabled={disabled} onSelect={() => props.onDelete(notification)}>
-          {t('Delete notification')}
-        </RowMenuItem>
-        <ContextMenu.Sub>
-          <ContextMenu.SubTrigger className="flow-inbox-menu__item" disabled={disabled}>
-            <span className="flow-inbox-menu__item-icon"><SnoozeIcon /></span>
-            <span className="flow-inbox-menu__item-label">{t('Snooze')}</span>
-            <kbd className="flow-inbox-menu__shortcut">H</kbd>
-            <span className="flow-inbox-menu__trailing"><ChevronRight size={14} strokeWidth={1.5} /></span>
-          </ContextMenu.SubTrigger>
-          <ContextMenu.Portal>
-            <ContextMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-snooze-menu" sideOffset={phone ? 4 : -1.5} alignOffset={phone ? -37 : -43}>
-              <RowSnoozeMenu notification={notification} disabled={disabled} onSnooze={props.onSnooze} />
-            </ContextMenu.SubContent>
-          </ContextMenu.Portal>
-        </ContextMenu.Sub>
-        {pulse && props.onPulseFrequencyChange ? (
-          <PulseFrequencyContextSubmenu
-            value={props.pulseFrequency ?? 'daily'}
+        <NotificationMenuOptions>
+          <RowMenuItem
+            shortcut="U"
+            icon={<UnreadIcon />}
             disabled={disabled}
-            onChange={frequency => props.onPulseFrequencyChange?.(notification, frequency)}
-          />
-        ) : null}
+            onSelect={() => props.onReadChange(notification, !notification.read)}
+          >
+            {t(notification.read ? 'Mark as unread' : 'Mark as read')}
+          </RowMenuItem>
+          <RowMenuItem shortcut="⌫" icon={<DeleteIcon />} disabled={disabled} onSelect={() => props.onDelete(notification)}>
+            {t('Delete notification')}
+          </RowMenuItem>
+          <ContextMenu.Sub>
+            <ContextMenu.SubTrigger className="flow-inbox-menu__item" disabled={disabled}>
+              <span className="flow-inbox-menu__item-icon"><SnoozeIcon /></span>
+              <span className="flow-inbox-menu__item-label">{t('Snooze')}</span>
+              <kbd className="flow-inbox-menu__shortcut">H</kbd>
+              <span className="flow-inbox-menu__trailing"><ChevronRight size={14} strokeWidth={1.5} /></span>
+            </ContextMenu.SubTrigger>
+            <ContextMenu.Portal>
+              <ContextMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-snooze-menu flow-inbox-context-snooze" sideOffset={phone ? 4 : -1.5} alignOffset={phone ? -37 : -43}>
+                <RowSnoozeMenu notification={notification} disabled={disabled} onSnooze={props.onSnooze} />
+              </ContextMenu.SubContent>
+            </ContextMenu.Portal>
+          </ContextMenu.Sub>
+          {pulse && props.onPulseFrequencyChange ? (
+            <PulseFrequencyContextSubmenu
+              value={props.pulseFrequency ?? 'daily'}
+              disabled={disabled}
+              onChange={frequency => props.onPulseFrequencyChange?.(notification, frequency)}
+            />
+          ) : null}
+        </NotificationMenuOptions>
       </ContextMenu.Content>
     </ContextMenu.Portal>
   )
+}
+
+function NotificationMenuOptions({ children, divider = false }: { children: ReactNode; divider?: boolean }) {
+  const desktop = useDesktopLayout()
+  if (!desktop) return <>{children}</>
+  return <>{divider && <ContextMenu.Separator className="flow-inbox-menu__separator"/>}<ContextMenu.Group className="flow-inbox-menu__options">{children}</ContextMenu.Group></>
 }
 
 function RowMenuItem({ children, icon, shortcut, disabled = false, onSelect }: { children: ReactNode; icon?: ReactNode; shortcut?: string; disabled?: boolean; onSelect: () => void }) {
@@ -385,17 +394,19 @@ function RowSnoozeMenu({ notification, disabled, onSnooze }: { notification: Inb
     <div className="flow-inbox-menu__search-wrap flow-inbox-snooze-input-wrap">
       <input aria-label={t('Snooze time')} placeholder={t('Try: 4 pm, 2 days, in 5 weeks…')} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submitQuery() } }}/>
     </div>
-    {items.map(([preset, label]) => <SnoozeItem key={preset} label={t(label)} date={optionDate(preset)} preset={preset} disabled={disabled} onSelect={onSnooze} notification={notification} />)}
-    <ContextMenu.Item
-      className="flow-inbox-menu__item"
-      disabled={disabled}
-      onSelect={(event) => {
-        event.preventDefault()
-        setCustom(true)
-      }}
-    >
-      <span className="flow-inbox-menu__item-icon"><SnoozeIcon /></span><span className="flow-inbox-menu__item-label">{t('Custom…')}</span>
-    </ContextMenu.Item>
+    <NotificationMenuOptions divider>
+      {items.map(([preset, label]) => <SnoozeItem key={preset} label={t(label)} date={optionDate(preset)} preset={preset} disabled={disabled} onSelect={onSnooze} notification={notification} />)}
+      <ContextMenu.Item
+        className="flow-inbox-menu__item"
+        disabled={disabled}
+        onSelect={(event) => {
+          event.preventDefault()
+          setCustom(true)
+        }}
+      >
+        <span className="flow-inbox-menu__item-icon"><SnoozeIcon /></span><span className="flow-inbox-menu__item-label">{t('Custom…')}</span>
+      </ContextMenu.Item>
+    </NotificationMenuOptions>
   </>
 }
 
