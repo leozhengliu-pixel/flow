@@ -1,4 +1,6 @@
 @media (min-width: 1024px) {
+  html:root .settings-app .settings-main .settings-team-actions { grid-column: 4 / -1; display: flex; align-items: center; gap: 8px; }
+  html:root .settings-app .settings-main .settings-team-actions > .settings-action { border-width: .5px; }
   .settings-desktop-docs { display: inline-flex; align-items: center; gap: 2px; padding: 1px 4px; border-radius: 8px; color: var(--set-text); font: 450 13px/15.5px var(--font); text-decoration: none; }
   .settings-desktop-docs:hover { background: var(--bg-hover); }
   .workspace-announcements-open { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--set-desc); font: 450 12px var(--font); }
@@ -83,6 +85,11 @@
   html:root .settings-app .settings-main .settings-teams-page .settings-members-columns button > span { font-weight: 450; }
   html:root .settings-app .settings-main .settings-teams-row { height: 44px; }
   html:root .settings-app .settings-main .settings-teams-row small { font-weight: 500; }
+  html:root .settings-app .settings-main .settings-teams-row > span:nth-child(3) { font-weight: 500; }
+  html:root .settings-app .settings-main .settings-teams-page .settings-members-columns button > span { color: var(--set-group-desc); }
+  html:root .settings-app .settings-main .settings-teams-page .settings-members-group { margin-inline: 0; padding-left: 52px; }
+  html:root .settings-app .settings-main .settings-teams-page .settings-members-group strong { margin-left: 2px; color: var(--set-group-desc); }
+  html:root .settings-app .settings-main .settings-members-toolbar > .settings-action { border-width: .5px; }
   html:root .settings-app .settings-team-count { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 5px; color: inherit; text-decoration: none; }
   html:root .settings-app .settings-team-count:hover { background: var(--bg-hover); }
   html:root .settings-app .settings-teams-row .settings-member-more { width: 32px; height: 32px; padding: 0; }
@@ -97,14 +104,20 @@
   html:root .settings-app .settings-main .settings-action.danger { height: 32px; border-radius: 9999px; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns,
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row { grid-template-columns: minmax(0, 408.6fr) minmax(0, 266.4fr) 146px 82px 82px 82px 32px; padding: 0 20px 0 52px; }
-  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button { gap: 2px; margin-left: -6.5px; border: .5px solid transparent; font-weight: 500; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button { gap: 2px; margin-left: -6.5px; border: .5px solid transparent; color: var(--set-button-text); font-weight: 500; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-column-label { font-weight: 450; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button > span { color: var(--set-group-desc); }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=name] { margin-left: -6.5px; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=role] { margin-left: 0; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-more { width: 32px; height: 32px; }
-  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label { position: relative; padding: 0; }
-  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label > svg { position: absolute; left: 11px; pointer-events: none; }
-  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label > input { box-sizing: border-box; width: 100%; height: 32px; padding: 6px 25px 6px 32px; border-radius: 8px; }
+  html:root .settings-app .settings-main .settings-members-page > .settings-members-toolbar > label { position: relative; padding: 0; border: 0; background: transparent; }
+  html:root .settings-app .settings-main .settings-members-page > .settings-members-toolbar > label > svg { position: absolute; left: 11px; pointer-events: none; }
+  html:root .settings-app .settings-main .settings-members-page > .settings-members-toolbar > label > input { box-sizing: border-box; width: 100%; height: 32px; padding: 6px 25px 6px 32px; border: .5px solid var(--settings-members-search-border); border-radius: 8px; background: var(--set-card); }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label > input { font-weight: 500; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-filter { position: relative; padding: 1px 28px 1px 10px; border: .5px solid transparent; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-filter > svg { position: absolute; right: 10px; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-role.is-admin { color: var(--set-admin-fg); }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-status { margin-left: 6px; }
   html:root .settings-app .settings-main[data-settings-page=api] > .settings-content > .settings-page-header { margin-bottom: 32px; }
   html:root .settings-app .settings-main[data-settings-page=api] > .settings-content > .settings-page-header p { margin-top: 4px; line-height: 22px; }
   html:root .settings-app .settings-main[data-settings-page=api] .api-community-link { color: var(--set-text); text-decoration: none; }

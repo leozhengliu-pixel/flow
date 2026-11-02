@@ -453,7 +453,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
           {pill ? (
             <em className={`settings-member-role${isAdminRole(member.role) ? " is-admin" : ""}`}><span>{t(status)}</span></em>
           ) : (
-            t(status)
+            <span className="settings-member-status">{t(status)}</span>
           )}
         </span>
         <span title={teams.map((team) => team.name).join(", ") || undefined}>

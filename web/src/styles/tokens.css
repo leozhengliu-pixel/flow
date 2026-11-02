@@ -1074,4 +1074,6 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 .avatar{background:var(--avatar,var(--avatar-fallback-alt))}
 @media (min-width: 1024px) {
   :root { --inbox-read-body: lch(65.078% 1.425 272); }
+  :root { --set-admin-fg: lch(80 80 288.43); }
+  :root[data-theme="light"] { --set-admin-fg: lch(50 80 288.43); }
 }

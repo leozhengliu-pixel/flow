@@ -15,6 +15,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align desktop saved-view headings, metadata, favorite controls and summary tabs with their measured presentation.
 
+- Align desktop member and team directory search fields, sort labels, role text, and filter spacing without changing phone controls.
+
 - Align desktop property search-header spacing and shortcut padding while preserving phone pickers.
 
 - Match desktop issue-board title contrast and linked team breadcrumb foregrounds without changing phone styles.
