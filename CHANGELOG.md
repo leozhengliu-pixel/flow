@@ -13,6 +13,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align desktop issue-filter menu width, window-edge spacing, search hint gap, and submenu overlap with the shared menu measurements.
 
+- Restore visible workspace-menu chevrons, inset rounded menu hovers and a bounded workspace switcher; keep Chinese and mixed-script workspace initials centered without clipping across shared avatars.
+
 - Suppress repeated chat message shortcuts for a full elapsed minute, including taps across a wall-clock minute boundary.
 
 - Guard phone triage age readability, non-overlap and alignment across the week-to-month text transition without platform-specific glyph widths.

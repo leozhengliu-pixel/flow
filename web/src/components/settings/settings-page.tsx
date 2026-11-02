@@ -13,7 +13,7 @@ import {
   type ReactNode,
 } from "react";
 import { persistUserSettings } from '@/lib/settings-persistence';
-import { avatarInitials } from '@/lib/avatar-initials';
+import { WorkspaceInitials } from '@/components/workspace/workspace-initials';
 import { settingsSidebarTeams } from './settings-sidebar-teams';
 import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
@@ -1790,7 +1790,7 @@ function WorkspaceLogoControl({
         {data.workspace.logoUrl ? (
           <img alt={t("Workspace logo")} src={data.workspace.logoUrl} />
         ) : (
-          <span className="workspace-logo-initials" data-i18n-ignore>{phone ? avatarInitials(data.workspace.name) : initials(data.workspace.name)}</span>
+          <WorkspaceInitials className="workspace-logo-initials" name={data.workspace.name} icon={data.workspace.icon} />
         )}
         {phone ? <WorkspaceEditGlyph /> : <Upload />}
       </button>
