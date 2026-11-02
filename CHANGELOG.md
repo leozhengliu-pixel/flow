@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match the desktop coding-session copy control foreground to its shared text token.
+
 - Keep desktop loop picker entity names at the primary foreground while retaining muted team keys and phone styling.
 
 - Correct desktop issue parent typography, property insets, sub-issue icon sizing, and due-date submenu search presentation.
