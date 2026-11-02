@@ -7,7 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-- Save Loop output contracts in a narrow transaction over the Loop and its versions, skipping unchanged and stale results without loading issue or discussion collections.
+- Save Loop output contracts in a narrow transaction over the Loop and its versions without loading issue or discussion collections; late model results still fill matching versions without changing the edited Loop or person-chosen contracts, and unchanged saves write nothing.
 
 - Keep phone Snooze, issue-row, Move to, and Labels submenus inside the viewport, with nested levels replacing their parent and a Back action; preserve desktop cascades.
 

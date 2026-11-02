@@ -215,7 +215,8 @@ func TestLoopContractScaleMeasure(t *testing.T) {
 	begin := time.Now()
 	apply := func(data *domain.Bootstrap) (string, error) {
 		if mode == "stale" {
-			return "contract_loop", ErrNoMutation
+			// The Loop text changed and matching versions are already cached.
+			return "contract_loop", nil
 		}
 		if mode == "repeat" {
 			// Copying the same stored value exercises the comparison path.
