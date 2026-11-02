@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Align desktop cycle directory contrast and breadcrumb spacing, keep open project action triggers unfilled, and clarify milestone submenu indicators.
+
 - Match desktop project metadata, resource spacing, activity tabs, and issue-intro keycaps without changing phone layouts.
 
 - Keep agent approval, change-state and feedback saves and release access-key bookkeeping off issue and discussion hydration.

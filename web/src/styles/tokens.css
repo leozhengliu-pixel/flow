@@ -1092,4 +1092,6 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   :root[data-theme="light"] { --project-toolbar-open-bg: var(--ui-pill-active-bg); }
   :root { --project-activity-tabs-bg: lch(13.861% 1.043 272); --project-activity-tabs-border: lch(22.193% 1.93 272); --project-activity-tab-selected-bg: lch(20.418% 1.429 272); }
   :root[data-theme="light"] { --project-activity-tabs-bg: var(--theme-surface-2); --project-activity-tabs-border: var(--pd-activity-border); --project-activity-tab-selected-bg: var(--theme-control-hover); }
+  :root { --project-menu-chevron-fg: lch(41.778% 1.425 272); }
+  :root[data-theme="light"] { --project-menu-chevron-fg: var(--issue-dim); }
 }
