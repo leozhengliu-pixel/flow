@@ -98,6 +98,7 @@
   .coding-session-page .coding-session-prompt p,
   .coding-session-page .cs-text{letter-spacing:-.0866667px}
   .coding-session-page .cs-turn-footer:not([data-links]) .cs-composer-spacer{display:none}
+  .coding-session-page .cs-turn-footer .cs-copy{color:var(--cs-label-base)}
 }
 .coding-agent-panel{flex:0 0 clamp(360px,45%,640px);width:clamp(360px,45%,640px);max-width:100%;min-height:0;display:flex;flex-direction:column;margin:12px 8px 8px 4px;border:.5px solid var(--cs-panel-border);border-radius:8px;background:var(--cs-bg-base);overflow:hidden}
 .coding-agent-panel[hidden]{display:none}
