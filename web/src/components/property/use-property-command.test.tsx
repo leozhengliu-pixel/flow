@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, renderHook, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { usePropertyCommand } from './use-property-command'
@@ -22,6 +22,18 @@ function CommandHarness({ onSelect, onOpenChange }: { onSelect: (id: string) => 
 }
 
 describe('property command keyboard behavior', () => {
+  it.each([true, false])('keeps the selected option highlighted when opening from %s', initiallyOpen => {
+    const { result, rerender } = renderHook(({ open, rows }) => usePropertyCommand({ autoFocus: false, open, options: rows, selectedIds: ['two'], onOpenChange: vi.fn(), onSelect: vi.fn() }), { initialProps: { open: initiallyOpen, rows: options } })
+    if (!initiallyOpen) rerender({ open: true, rows: options })
+    expect(result.current.activeId).toBe('two')
+  })
+
+  it('highlights the selected option when a fetched list arrives after opening', () => {
+    const { result, rerender } = renderHook(({ rows }) => usePropertyCommand({ autoFocus: false, open: true, options: rows, selectedIds: ['two'], onOpenChange: vi.fn(), onSelect: vi.fn() }), { initialProps: { rows: [] as typeof options } })
+    rerender({ rows: options })
+    expect(result.current.activeId).toBe('two')
+  })
+
   it('filters, skips disabled options, selects, and closes with keyboard controls', async () => {
     const user = userEvent.setup()
     const onSelect = vi.fn()

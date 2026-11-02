@@ -49,6 +49,7 @@ test('aligns the issue columns and property rhythm, toggles labels, and keeps sh
     const search = page.locator('.property-command-surface .property-command-search:visible')
     await expect(search).toHaveCSS('gap', '14px')
     await expect(search.getByRole('textbox')).toHaveCSS('width', '148px')
+    await expect(page.locator('.property-command-surface [role=option][aria-checked=true]')).toHaveAttribute('aria-selected', 'true')
     for (const keycap of await search.locator('kbd').all()) await expect(keycap).toHaveCSS('padding', '2px')
     await page.keyboard.press('Escape')
   }

@@ -52,7 +52,8 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   // Opening (or re-keying) the picker clears the search and highlights the selected option. Compared during render
   // rather than in an effect; the first render counts as a change.
   const [seenOpening, setSeenOpening] = useState<{ autoFocus: boolean; open: boolean; resetKey?: string }>()
-  if (!seenOpening || seenOpening.autoFocus !== autoFocus || seenOpening.open !== open || seenOpening.resetKey !== resetKey) {
+  const openingChanged = !seenOpening || seenOpening.autoFocus !== autoFocus || seenOpening.open !== open || seenOpening.resetKey !== resetKey
+  if (openingChanged) {
     setSeenOpening({ autoFocus, open, resetKey })
     if (open) {
       setQuery('')
@@ -64,9 +65,9 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
     requestAnimationFrame(() => inputRef.current?.focus())
   }, [autoFocus, inputRef, open, resetKey])
 
-  // Options can arrive after the picker opens (fetched lists); highlight the first one once they do.
-  if (open && activeId === undefined) {
-    const first = filteredOptions.find(option => !option.disabled && !option.searchOnly)
+  // Fetched options can arrive after opening; preserve the opening selection first.
+  if (!openingChanged && open && activeId === undefined) {
+    const first = filteredOptions.find(option => selectedSet.has(option.id) && !option.disabled) ?? filteredOptions.find(option => !option.disabled && !option.searchOnly)
     if (first) setActiveId(first.id)
   }
 

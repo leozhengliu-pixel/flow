@@ -78,6 +78,13 @@ test('long project names stay inside phone issue properties', async ({ page, req
   }
 })
 
+test('phone status picker opens on the current status', async ({ page }) => {
+  await openIssue(page)
+  await page.locator('.issue-mobile-properties .core-property-trigger').first().click()
+  await expect(page.locator('.property-command-surface [role=option][aria-checked=true]')).toHaveAttribute('aria-selected', 'true')
+  await noOverflow(page)
+})
+
 async function geometry(page: Page) {
   return page.evaluate(() => Object.fromEntries(['.issue-header','.title-editor','.issue-mobile-properties','.issue-description-root .description-editor','.document-actions','.flow-sub-issues','.detail-sub-issue-row','.activity-heading','.composer'].map(selector => {
     const element = document.querySelector(selector)!
