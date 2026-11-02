@@ -63,5 +63,7 @@ describe("workspace menu", () => {
 
     fireEvent.keyDown(window, { key: "q", altKey: true, shiftKey: true });
     expect(onLogout).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(window, { key: "Œ", code: "KeyQ", altKey: true, shiftKey: true });
+    expect(onLogout).toHaveBeenCalledTimes(2);
   });
 });

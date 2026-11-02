@@ -1996,6 +1996,8 @@ export const zhCN: Record<string, string> = {
   "Recent searches": "最近搜索",
   "Command menu": "命令菜单",
   "Workspace Menu": "工作区菜单",
+  "G then S": "G 然后 S",
+  "O then W": "O 然后 W",
   "{count} more": "另外 {count} 项",
   "More views": "更多视图",
   "{name} & {count} more": "{name} 及另外 {count} 项",
