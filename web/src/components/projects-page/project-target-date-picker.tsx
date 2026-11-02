@@ -133,7 +133,7 @@ export function DayPanel({ cursor, locale, max, min, onChangeCursor, onChoose, s
   const today = startOfDay(useCurrentTime())
   return <div className={styles.dayPanel}>
     <header><strong>{monthLabel}</strong><span><button aria-label={locale === 'zh-CN' ? '上个月' : 'Previous month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))} type="button"><ChevronLeft size={14}/></button><button aria-label={locale === 'zh-CN' ? '下个月' : 'Next month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} type="button"><ChevronRight size={14}/></button></span></header>
-    <div className={styles.weekdays}>{weekdays.map((day,index) => <span data-weekend={isWeekend((index+weekStart)%7) || undefined} key={day}>{day}</span>)}</div>
+    <div className={styles.weekdays} data-calendar-weekdays="true">{weekdays.map((day,index) => <span data-weekend={isWeekend((index+weekStart)%7) || undefined} key={day}>{day}</span>)}</div>
     <div aria-label={monthLabel} className={styles.days} role="grid">{weekendColumns.map(column => <span aria-hidden="true" className={styles.weekendColumn} key={`weekend-${column}`} style={{gridColumn:`${column+1} / ${column+2}`}}/>)}{days.map(day => <button aria-label={new Intl.DateTimeFormat(locale, { dateStyle: 'full' }).format(day)} aria-selected={sameDay(day, selected)} className={sameDay(day, selected) ? styles.selectedDate : ''} data-outside={day.getMonth() !== cursor.getMonth()} data-today={sameDay(day, today) || undefined} data-weekend={isWeekend(day.getDay()) || undefined} disabled={isDateDisabled(day, min, max)} key={isoDate(day)} onClick={() => onChoose(day)} role="gridcell" type="button">{day.getDate()}</button>)}</div>
   </div>
 }
