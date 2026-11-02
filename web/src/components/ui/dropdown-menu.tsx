@@ -84,7 +84,7 @@ export function DropdownMenuSub({ children, open: controlledOpen, onOpenChange, 
 
 export function DropdownMenuSubTrigger({ children, className, disabled, ...props }: P.DropdownMenuSubTriggerProps) {
   const menu = useContext(PhoneMenuContext)
-  if (menu) return <Command.Item disabled={disabled} aria-haspopup="dialog" onSelect={() => menu.setOpen(true)}>{children}<ChevronRight className="phone-menu-current" size={13}/></Command.Item>
+  if (menu) return <Command.Item {...props} disabled={disabled} aria-haspopup={props['aria-haspopup'] ?? 'menu'} onSelect={() => menu.setOpen(true)}>{children}<ChevronRight className="phone-menu-current" size={13}/></Command.Item>
   return <P.SubTrigger className={cn('menu-item',className)} disabled={disabled} {...props}>{children}<ChevronRight size={13} className="menu-chevron"/></P.SubTrigger>
 }
 
