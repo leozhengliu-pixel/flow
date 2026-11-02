@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Align desktop project timeline month labels, project icon slots, and the today marker while retaining timeline zoom and centering behavior.
+
 - Align desktop triage row hit areas, toolbar gaps and empty-selection action surfaces while preserving phone rows.
 
 - Align desktop project and initiative icon surfaces with the shared page icon radius, padding, and tint.
