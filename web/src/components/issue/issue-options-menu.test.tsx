@@ -23,10 +23,11 @@ function setup(releasePipelines: ReleasePipeline[] = []) {
 describe('issue action menu', () => {
   beforeEach(() => { localStorage.clear(); vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }) })
   afterEach(() => vi.unstubAllGlobals())
-  it('offers the release picker on phones before any releases or pipelines exist',async()=>{
+  it('offers the release picker on phones when a release pipeline exists',async()=>{
     const media=vi.spyOn(window,'matchMedia').mockImplementation(query=>({matches:query==='(max-width: 767px)',addEventListener:vi.fn(),removeEventListener:vi.fn()}) as unknown as MediaQueryList)
     try {
-      setup()
+      const pipeline: ReleasePipeline = { id: 'pipeline_phone', slugId: 'phone', name: 'Phone', teamIds: [], type: 'scheduled', production: true, stages: [], stageStatuses: {}, position: 0, pathFilters: [], autoGenerateReleaseNotes: false, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' }
+      setup([pipeline])
       await userEvent.click(screen.getByRole('button',{name:'Issue options'}))
       await userEvent.click(screen.getByRole('option',{name:/^Release/}))
       expect(await screen.findByRole('searchbox',{name:'Add to release…'})).toBeInTheDocument()
@@ -255,7 +256,8 @@ describe('issue action menu', () => {
   it('lists the reference items in order, with Ctrl spelled out and Find suggestions when Triage Intelligence is on', async () => {
     const user = userEvent.setup()
     const issue = makeIssue()
-    const base = makeBootstrap({customers:[],reviews:[],releases:[],releasePipelines:[]})
+    const pipeline: ReleasePipeline = { id: 'pipeline_items', slugId: 'items', name: 'Items', teamIds: [], type: 'scheduled', production: true, stages: [], stageStatuses: {}, position: 0, pathFilters: [], autoGenerateReleaseNotes: false, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' }
+    const base = makeBootstrap({customers:[],reviews:[],releases:[],releasePipelines:[pipeline]})
     const data = {...base, workspaceSettings:{...base.workspaceSettings, featureFlags:{...base.workspaceSettings.featureFlags, 'triage-intelligence':true}}}
     render(<I18nProvider><IssueOptionsMenu issue={issue} data={data} actions={setupActions()} onRelation={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()}/></I18nProvider>)
     await user.click(screen.getByRole('button',{name:'Issue options'}))
