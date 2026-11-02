@@ -215,7 +215,6 @@ export function IssueOptionsMenu({
   }, [busy, closeMenu])
   const subscribed = Boolean(data?.viewer.id && issue.subscriberIds.includes(data.viewer.id))
   const cycles = data?.cycles.filter(cycle => cycle.teamId === issue.team.id).sort((a,b) => a.startsAt.localeCompare(b.startsAt)) ?? []
-  const hasReleaseSurface = Boolean(data && (data.releases.length > 0 || data.releasePipelines.length > 0))
   const nowMs = useCurrentTimeMs()
   const currentCycle = cycles.find(cycle => new Date(cycle.startsAt).getTime() <= nowMs && new Date(cycle.endsAt).getTime() > nowMs)
   const nextCycle = cycles.find(cycle => new Date(cycle.startsAt).getTime() > nowMs)
@@ -348,7 +347,7 @@ export function IssueOptionsMenu({
                 <Command.Empty className="issue-options-empty">{t('No results')}</Command.Empty>
                 {(mobile || data && data.teams.filter(team => !team.retiredAt && !team.archivedAt).length > 1) && <Option icon={<FlowGlyph name="leadTeam" size={16}/>} label="Team" shortcut={mobile ? undefined : 'Command Shift M'} nested="team" anchor={anchors.team} expanded={submenu === 'team'} onHover={() => openNested('team')} onSelect={() => openNested('team', true)}/>}
                 <Option icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested="due" anchor={anchors.due} expanded={datePickerOpen} onHover={() => openNested('due')} onSelect={() => openNested('due', true)}/>
-                {data?.workspaceSettings.featureFlags.releases !== false && hasReleaseSurface && <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
+                {data && data.workspaceSettings.featureFlags.releases !== false && <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
                 <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
                 {data?.workspaceSettings.featureFlags['customer-requests'] !== false && <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut={isMacPlatform() ? 'Ctrl R' : 'Ctrl Option R'} onSelect={() => {
                   // The issue page shows "Select customer…" and its inline composer; elsewhere the composer opens in a dialog.
