@@ -376,14 +376,15 @@ function InboxPhoneActionsMenu({
   InboxPageShellProps,
   'onDeleteAll' | 'onDeleteAllRead' | 'onDeleteAllReadCompleted' | 'onOpenSettings'
 > & { open: boolean; onOpenChange: (open: boolean) => void; pending?: boolean }) {
+  const { t } = useI18n()
   const [query, setQuery] = useState('')
   const searching = query.trim().toLowerCase()
   const actions = [
     { id: 'delete-all', label: 'Delete all', onSelect: onDeleteAll },
     { id: 'delete-all-read', label: 'Delete all read', onSelect: onDeleteAllRead },
     { id: 'delete-all-completed', label: 'Delete all completed', onSelect: onDeleteAllReadCompleted },
-  ].filter(action => action.label.toLowerCase().includes(searching))
-  const showSettings = 'go to settings'.includes(searching)
+  ].filter(action => `${action.label} ${t(action.label)}`.toLowerCase().includes(searching))
+  const showSettings = `Go to settings ${t('Go to settings')}`.toLowerCase().includes(searching)
   const settingsTop = 6 + actions.length * 46 + (actions.length ? 12 : 0)
   const listHeight = 6 + actions.length * 46 + (actions.length && showSettings ? 12 : 0) + (showSettings ? 46 : 0) + 6 - 2
   return (
