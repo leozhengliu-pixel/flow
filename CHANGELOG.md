@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match desktop issue reply placeholder typography and comment action padding without changing phone controls.
+
 - Keep desktop inbox header insets on its inner toolbar while preserving the title's text bounds and phone layout.
 
 - Match desktop toast dismiss padding and muted foreground without changing phone controls.

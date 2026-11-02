@@ -77,11 +77,13 @@ test('expands event groups without losing comments and posts a reply with deskto
   for (const button of await card.locator('.comment-card__actions button').all()) {
     await expect(button).toHaveCSS('width', '28px')
     await expect(button).toHaveCSS('height', '28px')
+    await expect(button).toHaveCSS('padding', '0px 2px')
     await expect(button).toHaveCSS('border-radius', '9999px')
   }
   const reply = page.locator('.comment-thread__reply')
   await expect(reply).toHaveCSS('font-size', '15px')
   await expect(reply).toHaveCSS('font-weight', '450')
+  await expect(reply.locator('span').last()).toHaveCSS('letter-spacing', '-0.1px')
   await reply.click()
   await page.getByRole('textbox', { name: 'Leave a reply…' }).fill('[audit] Posted reply')
   await page.locator('.comment-thread__composer').getByRole('button', { name: 'Submit comment' }).click()
