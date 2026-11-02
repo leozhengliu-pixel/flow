@@ -2,7 +2,7 @@ import { useEffect, type ComponentPropsWithRef, type ReactElement, type ReactNod
 import { FlowTooltip, ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { Virtuoso } from 'react-virtuoso'
 import { Link2 } from 'lucide-react'
-import { FlowBellIcon, FlowFavoriteIcon } from '@/components/issue/flow-header-icons'
+import { FlowBellIcon, FlowFavoriteFilledIcon, FlowFavoriteIcon } from '@/components/issue/flow-header-icons'
 import { useI18n } from '@/i18n/i18n'
 import { DetailsIcon, FilterIcon } from '@/components/my-issues/my-issues-icons'
 import { DisplayMenuActionRow, MyIssuesDisplayMenu, type MyIssuesDisplayMenuProps } from '@/components/my-issues/my-issues-display-menu'
@@ -173,7 +173,7 @@ export function IssueExplorerSurface({
               { id: 'issues', label: 'Issues', current: true },
             ]}
           />
-          {scopeTeam && onToggleTeamFavorite ? <button type="button" role="switch" aria-checked={teamFavorite} aria-label={t(teamFavorite ? 'Remove from favorites' : 'Add to favorites')} className={styles.phoneTeamFavorite} onClick={onToggleTeamFavorite}><FlowFavoriteIcon /></button> : null}
+          {scopeTeam && onToggleTeamFavorite ? <button type="button" role="switch" aria-checked={teamFavorite} aria-label={t(teamFavorite ? 'Remove from favorites' : 'Add to favorites')} className={styles.phoneTeamFavorite} onClick={onToggleTeamFavorite}>{teamFavorite ? <FlowFavoriteFilledIcon /> : <FlowFavoriteIcon />}</button> : null}
         </>
       )}
       {scopeTeam && !savedView && teamNotificationsHref ? <a className={styles.phoneTeamNotifications} href={teamNotificationsHref} aria-label={t('Setup team notifications')}><FlowBellIcon /></a> : null}
