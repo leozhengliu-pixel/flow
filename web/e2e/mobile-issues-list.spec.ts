@@ -31,19 +31,34 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await page.clock.setFixedTime(new Date(now + 29 * day))
       await page.reload()
       const age = rows.first().locator('.flow-triage-row__date')
+      const expectReadableAge = async () => {
+        await expect(age).toBeVisible()
+        const box = (await age.boundingBox())!
+        const metadata = (await rows.first().locator('.flow-triage-row__line.is-meta').boundingBox())!
+        const creator = (await rows.first().locator('.flow-triage-row__creator').boundingBox())!
+        expect(box.x).toBeGreaterThanOrEqual(creator.x + creator.width)
+        expect(box.x + box.width).toBeCloseTo(metadata.x + metadata.width, 1)
+        expect(box.y).toBeGreaterThanOrEqual(metadata.y)
+        expect(box.y + box.height).toBeLessThanOrEqual(metadata.y + metadata.height)
+        expect(await age.evaluate(element => {
+          const range = document.createRange()
+          range.selectNodeContents(element)
+          const text = range.getBoundingClientRect()
+          const bounds = element.getBoundingClientRect()
+          return range.getClientRects().length === 1 && text.left >= bounds.left - 0.5 && text.right <= bounds.right + 0.5
+        })).toBe(true)
+        return box
+      }
       await expect(age).toHaveText('4w ago')
       await page.evaluate(() => document.fonts.ready)
-      const weeks = (await age.boundingBox())!
-      expect(Math.abs(weeks.width - 42.38)).toBeLessThan(1)
-      expect(weeks.x + weeks.width).toBeCloseTo(viewport.width - 22, 1)
+      const weeks = await expectReadableAge()
       await expect(age).toHaveCSS('font-size', '12px')
       await expect(age).toHaveCSS('font-weight', '450')
       await page.clock.setFixedTime(new Date(now + 31 * day))
       await page.reload()
       await expect(age).toHaveText('1mo ago')
       await page.evaluate(() => document.fonts.ready)
-      const months = (await age.boundingBox())!
-      expect(months.x + months.width).toBeCloseTo(viewport.width - 22, 1)
+      const months = await expectReadableAge()
       expect(months.width).toBeGreaterThan(weeks.width)
       expect(months.x).toBeLessThan(weeks.x)
       await header.getByRole('button', { name: 'Display options', exact: true }).click()
