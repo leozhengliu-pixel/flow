@@ -1362,21 +1362,25 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
     gap: 6px;
   }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-settings-header {
-    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 4px 8px;
     min-height: 72px;
     margin: 0 16px 24px;
   }
-  html:root .settings-app .settings-content:has(.team-overview-page) .team-settings-header > div { gap: 0; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-settings-header > div { display: contents; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-settings-header h1 { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-settings-header > div > p {
-    margin-top: 4px;
+    margin: 0;
     line-height: 18px;
-    width: 200px;
+    min-width: 0;
     color: var(--set-group-desc);
   }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-shortcut {
-    position: absolute;
-    top: 40px;
-    right: -6px;
+    grid-column: 2;
+    align-self: center;
+    margin-right: -6px;
     height: 28px;
     display: inline-flex;
     align-items: center;
