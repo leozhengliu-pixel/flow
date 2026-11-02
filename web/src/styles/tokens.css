@@ -1076,4 +1076,6 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   :root { --inbox-read-body: lch(65.078% 1.425 272); }
   :root { --set-admin-fg: lch(80 80 288.43); }
   :root[data-theme="light"] { --set-admin-fg: lch(50 80 288.43); }
+  :root { --set-session-current: lch(80 80 141.95); }
+  :root[data-theme="light"] { --set-session-current: var(--semantic-success); }
 }
