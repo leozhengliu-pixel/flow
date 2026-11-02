@@ -1187,6 +1187,11 @@ export const zhCN: Record<string, string> = {
   "Number of issues matching the filters": "符合筛选条件的事项数量",
   "Issue estimate points": "事项估算点数",
   "{count} estimate points": "{count} 估算点数",
+  "Manage connector access and connections for your workspace": "管理工作区的连接器访问权限和连接",
+  "Enable connectors": "启用连接器",
+  "Allow connectors to be used in this workspace": "允许在此工作区使用连接器",
+  "Manage connectors": "管理连接器",
+  "Choose which connectors are allowed in this workspace": "选择此工作区允许使用的连接器",
   "Issues that breached their SLA": "已超过 SLA 的事项",
   "Add your first insight": "添加第一个洞察",
   "Choose a metric to start building this dashboard.":

@@ -40,6 +40,7 @@
 .settings-page-header h1,.settings-section>h3{overflow-wrap:anywhere}
 .settings-row>.settings-row-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
 .settings-row-icon{flex:none}
+@media(max-width:767px){.settings-row.settings-row-select{--settings-select-width:100%;flex-direction:column;align-items:stretch}.settings-row-select>.settings-row-copy{flex:none;width:100%}.settings-row-select>.settings-control{width:100%}}
 .settings-notification-back{display:inline-flex;align-items:center;gap:6px;margin:0 16px 20px;padding:0;border:0;background:transparent;color:var(--theme-text-secondary);font:500 13px/20px var(--font)}
 :root[data-theme="light"] .settings-notification-back{height:28px;padding:0 8px;border-radius:9999px;color:var(--theme-text-secondary);font:500 13px inherit}
 .settings-upload-policy{display:flex;flex-direction:column;gap:16px;margin-top:16px}

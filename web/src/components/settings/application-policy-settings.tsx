@@ -12,7 +12,7 @@ import { ConnectorToolAccessDialog } from "./connector-tool-access-dialog";
 
 type Policy = ConnectorPolicy;
 
-export function ApplicationPolicySettings({ admin }: { admin: boolean }) {
+export function ApplicationPolicySettings({ admin, title }: { admin: boolean; title?: string }) {
   const t = useOptionalTranslate();
   const [items, setItems] = useState<Policy[]>([]);
   // The connector whose tool access an admin is editing.
@@ -33,7 +33,7 @@ export function ApplicationPolicySettings({ admin }: { admin: boolean }) {
     try { await request(`/api/application-policies/${encodeURIComponent(item.id)}`, { method: "DELETE" }); await reload(); }
     catch (reason) { toast.error(String(reason)); } finally { setBusy(false); }
   };
-  return <SettingsSection className="connector-settings" title={admin?"Application approvals and Agent connectors":"MCP connectors"} description={admin?undefined:"Add MCP connectors for use with Flow Agent. Workspace admins can manage available connectors in security settings."}>
+  return <SettingsSection className="connector-settings" title={title ?? (admin?"Application approvals and Agent connectors":"MCP connectors")} description={admin?undefined:"Add MCP connectors for use with Flow Agent. Workspace admins can manage available connectors in security settings."}>
     {error && <p role="alert">{error}</p>}
     {items.map(item => <SettingsRow key={item.id} title={item.name} description={`${item.kind === "mcp" ? item.url : item.scopes?.join(", ")} · ${item.status}${item.kind === "mcp" ? item.shared ? " · Workspace" : " · Personal" : ""}${item.kind === "mcp" && item.codingSessions ? " · Coding sessions" : ""}${item.kind === "mcp" && item.toolApproval === "always" ? " · Asks before tools" : ""}${item.kind === "mcp" && Object.keys(item.toolAccess ?? {}).length ? ` · ${toolOverrides(t, Object.keys(item.toolAccess ?? {}).length)}` : ""}`}>
         {admin && item.status !== "approved" && <button className="settings-action" disabled={busy} onClick={() => void save({ ...item, status: "approved" })}>Approve</button>}

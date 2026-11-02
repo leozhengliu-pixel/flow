@@ -391,6 +391,8 @@ describe('settings aliases and deep links', () => {
     expect(parseAppRoute('/acme/settings/account/notifications/priority-filter')).toMatchObject({ kind: 'settings', page: 'notifications', notificationChannel: 'priority-filter' })
     expect(parseAppRoute('/acme/settings/teams/ENG/project-labels')).toMatchObject({ kind: 'settings', page: 'team', teamSection: 'project-labels' })
     expect(settingsPath('acme', 'coding-sessions')).toBe('/acme/settings/ai/coding-sessions')
+    expect(settingsPath('acme', 'mcps')).toBe('/acme/settings/mcps')
+    expect(parseAppRoute('/acme/settings/mcps')).toEqual({ kind: 'settings', workspaceSlug: 'acme', page: 'mcps' })
     expect(parseAppRoute('/acme/settings/teams/ENG/templates/issue/new')).toMatchObject({ page: 'team', teamSection: 'templates', teamSubPath: 'issue/new' })
     expect(parseAppRoute('/acme/settings/teams/ENG/templates/project/tpl_1/edit')).toMatchObject({ teamSection: 'templates', teamSubPath: 'project/tpl_1/edit' })
     expect(parseAppRoute('/acme/settings/teams/ENG/recurring-issues/new')).toMatchObject({ teamSection: 'recurring-issues', teamSubPath: 'new' })
