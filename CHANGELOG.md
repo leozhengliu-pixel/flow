@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Guard phone triage age alignment across the week-to-month text transition.
+
 - Match the shared desktop project Lead column to the measured 120px track.
 
 - Align desktop project header content insets and cycle breadcrumb separators with their visible chrome.
