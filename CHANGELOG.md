@@ -46,6 +46,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Skip punctuation in shared workspace initials, preserving readable phone Settings avatars and whole CJK and accented characters.
 - Keep desktop filter categories and numeric comparisons readable within the existing submenu width limit, expose complete selected filter values through tooltips and accessible descriptions, and distinguish pending disabled filter actions.
+- Fix reviewed phone regressions across Inbox, Reviews, Pulse, projects and team Documents: compact filter searches and keyboard focus, canonical issue links, translated command search, functional review issue menus, persisted reactions and attachment uploads, state-colored icons, stable counts, readable long names and drafts, chronological activity months, light controls, single-line team tabs, visible menu focus and unclipped filter dividers.
 
 - Check desktop issue-filter search visibility, non-overlap and filtering without a platform-specific input width.
 

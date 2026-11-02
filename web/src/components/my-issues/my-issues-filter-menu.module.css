@@ -91,12 +91,14 @@
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSearch input,.valueMenu .valueSearch input{height:40px;padding:11px 12px;border-radius:12px}
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSearch input::placeholder{color:var(--pk-faint)}
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSearch kbd{display:none}
-  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootList{margin:0 4.5px 0 5.5px;padding:6px 0 4px}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootList{margin:0;padding:6px 0 4px}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootGroup{margin:0 4.5px 0 5.5px}
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootItem,.valueMenu .valueItem{height:46px;padding:0 12px;font-size:13px;font-weight:450;line-height:15.6px}
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootChevron{display:none}
-  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSeparator{margin:0 -6px}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSeparator{margin:0}
   .rootMenu[data-surface=my-issues][data-variant=root] .rootCommand{font-size:15px;font-weight:400;line-height:22.5px}
   .rootMenu[data-surface=my-issues][data-variant=root] .rootList{margin:0}
+  .rootMenu[data-surface=my-issues][data-variant=root] .rootGroup{margin:0}
   .rootMenu[data-surface=my-issues] .rootGroup [cmdk-group-items]>.rootItem{width:calc(100% - 10px);margin:0 4.5px 0 5.5px}
   :global([data-radix-popper-content-wrapper]:has(>[data-surface=my-issues][data-variant=root])){transform:translate(16px,round(nearest,13vh,1px))!important}
   .phoneRowSlot{position:relative;height:46px;margin:0 4.5px 0 5.5px}
