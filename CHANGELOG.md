@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Preserve rich text, hyperlink targets, and nested block structure when moving a document selection to a new document.
+
 - Preserve unrelated document content when a selection changes during a move, track intervening edits safely, and keep the removal undoable.
 
 - Skip punctuation in shared workspace initials, preserving readable phone Settings avatars and whole CJK and accented characters.

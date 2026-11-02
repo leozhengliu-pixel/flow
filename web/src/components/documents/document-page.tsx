@@ -152,9 +152,9 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
     if (!editor || !selection.text.trim()) return
     try {
       const firstLine = selection.text.split(/\r?\n/, 1)[0].trim().slice(0, 120)
-      const { created, removed } = await moveDocumentSelection(editor, selection, () => createDocument({
+      const { created, removed } = await moveDocumentSelection(editor, selection, content => createDocument({
         title: firstLine,
-        content: selection.text,
+        ...content,
         projectIds: document.projectIds,
         teamIds: document.teamIds,
       }))
@@ -343,7 +343,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
               readOnly={!canEdit} editorRef={setLiveEditor}
               onPersistReady={persist => { persistEditorRef.current = persist }}
               onUploadFile={async file => (await uploadDocumentAttachment(document.id, file)).url}
-              selectionActions={documentSelectionActions({ data, document, t, onAskAgent: askAgent, onMoveToNewDocument: canEdit ? moveSelectionToNewDocument : undefined, onComment: canComment ? startComment : undefined })}
+              selectionActions={{ ...documentSelectionActions({ data, document, t, onAskAgent: askAgent, onComment: canComment ? startComment : undefined }), onMoveToNewDocument: canEdit ? moveSelectionToNewDocument : undefined }}
               onChange={snapshot => { setBody({ value: snapshot.markdown, state: snapshot.documentJSON }); schedule({ content: snapshot.markdown, contentData: snapshot.document as Record<string, unknown> }) }}
               onPersist={async (snapshot, sync) => { const saved = await updateDocument(document.id, { content: snapshot.markdown, contentState: snapshot.contentState, contentData: snapshot.document as Record<string, unknown>, ...sync }); await onReload(); return saved }}/>}
         </DocumentContentProvider>
