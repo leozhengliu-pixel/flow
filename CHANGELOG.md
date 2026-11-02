@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Let filter value menus size to their labels within the shared maximum width.
+
 - Keep small avatar initials on one line and preserve avatar proportions beside long member names.
 
 - Separate the property and value in phone inbox filter search results with a chevron.
