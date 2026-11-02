@@ -43,6 +43,14 @@ func metadataOnlyMutation(event string, payload any) bool {
 		return ok && input.TemplateID == ""
 	}
 	switch event {
+	// These callbacks only update session message state after tool actions
+	// have committed separately, or feedback checked against workspace settings.
+	case "agent.approval_resolved", "agent.message_changes", "agent.message_feedback", "agent.session_feedback":
+		return true
+	// Credential usage/revocation reads pipelines and team administration
+	// metadata, never the issues linked to releases in those pipelines.
+	case "release_pipeline.access_key_used", "release_pipeline.access_key_revoked":
+		return true
 	// Team deletion/restoration only stamps the team, detaches sub-teams and
 	// appends an audit entry; issue visibility follows the team's archivedAt at
 	// read time. Development-mode membership edits only touch member lists,
