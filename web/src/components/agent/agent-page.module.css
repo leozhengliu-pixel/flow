@@ -67,7 +67,7 @@
   white-space: nowrap;
 }
 @media (min-width: 801px) {
-  .switcher[aria-expanded="true"] { background: var(--theme-control); color: var(--bright); }
+  .switcher[aria-expanded="true"] { background: var(--issue-header-hover-bg); color: var(--bright); }
   .switcher[aria-expanded="true"] h2 { color: var(--bright); }
 }
 .switcher > svg {
@@ -236,7 +236,12 @@
   mask-image: linear-gradient(black, transparent 61.2%);
 }
 @media (min-width: 801px) {
-  .examples { grid-row: 3; }
+  .examples { grid-row: 3; display: grid; gap: 12px; margin-top: 0; padding-top: 12px; }
+  .examples > p { height: 24px; display: flex; align-items: center; margin: 0 16px; }
+  .examplesDismiss { top: 12px; right: 16px; padding: 0 2px; }
+  .exampleCard { gap: 6px; }
+  .exampleIcon { margin-bottom: 28px; }
+  .exampleCard span { margin-top: 0; }
   .composer { row-gap: 8px; }
 }
 .history {
@@ -909,7 +914,9 @@
 }
 @media (min-width: 801px) {
   .historyMenu { background: var(--pk-surface); box-shadow: var(--shadow-control); }
-  .noHistory { justify-items: start; padding-inline: 14px; font: 450 13px/normal var(--font); }
+  .historyMenu:has(.noHistory) { padding: 2px 14px 4px; }
+  .historyMenu:has(.noHistory) [role="listbox"] { padding: 0; }
+  .noHistory { height: 36px; justify-items: start; color: var(--inbox-filter-arrow); font: 450 13px/normal var(--font); }
 }
 @media (max-width: 767px) {
   :global([data-radix-popper-content-wrapper]):has(> .historyMenu) {
@@ -1069,11 +1076,11 @@
 @media (min-width: 801px) {
   /* Desktop keeps the skill picker as the compact single-action menu. The
      searchable command surface remains available on phone layouts. */
-  .skillsMenu { box-sizing: content-box; min-width: 174px; width: max-content; max-width: calc(100vw - 32px); padding: 0; border: 0.5px solid var(--popover-border); border-radius: 12px; background: var(--release-popover-bg); box-shadow: var(--release-popover-shadow); }
+  .skillsMenu { box-sizing: content-box; min-width: 174px; width: max-content; max-width: calc(100vw - 32px); padding: 0; border: 0.5px solid var(--release-popover-border); border-radius: 12px; background: var(--release-popover-bg); box-shadow: var(--release-popover-shadow); }
   .skillsMenuHeader { display: none; }
   .skillsMenu > .menuSearch { position: fixed; left: -99999px; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
   .skillsMenu [role="listbox"] { padding: 6px 0; }
-  .skillsMenu [role="option"] { height: 32px; padding: 0 18px 0 14px; }
+  .skillsMenu [role="option"] { height: 32px; padding: 0 18px 0 14px; color: var(--pk-text); }
   .editorScroll > div > .editor { min-height: 44px; }
   .emptyComposerSlot > .composer .skillsButton { padding-right: 6px; line-height: normal; }
 }
@@ -1487,7 +1494,7 @@
 :global(:root[data-theme="light"]) .danger { color: var(--semantic-danger); }
 :global(:root[data-theme="light"]) .attachments > span { border-color: var(--theme-border); background: var(--theme-surface-hover); }
 @media (min-width: 801px) {
-  :global(:root[data-theme="light"]) .skillsMenu { width: max-content; padding: 0; border: 0.5px solid var(--popover-border); border-radius: 12px; background: var(--release-popover-bg); box-shadow: var(--release-popover-shadow); }
+  :global(:root[data-theme="light"]) .skillsMenu { width: max-content; padding: 0; border: 0.5px solid var(--release-popover-border); border-radius: 12px; background: var(--release-popover-bg); box-shadow: var(--release-popover-shadow); }
   :global(:root[data-theme="light"]) .skillsMenuHeader { display: none; }
   :global(:root[data-theme="light"]) .skillsMenu [role="option"] { height: 32px; padding: 0 18px 0 14px; }
 }

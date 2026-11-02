@@ -37,6 +37,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Group desktop editor selection actions after the formatting divider, align slash-command and comment controls, and match document-list and history-author spacing while preserving phone layouts.
 
+- Match desktop Agent example spacing and skill-menu outlines, and align coding-session prompts, copy controls and typography without changing phones.
+
 - Match desktop board column gutters, status-icon sizing and hidden-column typography without changing phone boards.
 
 - Align desktop document metadata, subscriber labels and history surfaces with their shared foreground and border rules, without changing phone layouts.
