@@ -80,16 +80,10 @@
     height: min(450px,80dvh);
     max-height: min(450px,80dvh);
     border-radius: 12px;
-    background: var(--work-menu-bg) !important;
-    border: 0 !important;
-    outline: .5px solid var(--work-menu-border);
-    box-shadow: var(--shadow-dialog);
-    overflow: hidden;
-  }
-  html:root body .issue-options-popover.issue-options-popover:not(#_) {
-    border: .5px solid var(--pk-border) !important;
     background: var(--pk-surface) !important;
-    outline: 0;
+    border: .5px solid var(--pk-border) !important;
+    overflow: hidden;
+    outline: none;
     box-shadow: var(--pk-card-shadow);
   }
   .issue-options-popover > [cmdk-root] { position: relative; z-index: 1; width: calc(100vw - 32px); }
