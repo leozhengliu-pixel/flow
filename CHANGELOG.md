@@ -20,6 +20,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Preserve rich text, hyperlink targets, and nested block structure when moving a document selection to a new document.
 
 - Preserve unrelated document content when a selection changes during a move, track intervening edits safely, and keep the removal undoable.
+- Preserve authored email hyperlinks in Agent messages while leaving bare user email addresses as plain text.
+
 - Show real board estimate totals, including complete server buckets and each team's unestimated-issue policy, while keeping issue counts distinct.
 
 - Use the estimate triangle on phone board cards without fabricated cycle progress.
