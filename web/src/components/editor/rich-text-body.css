@@ -226,8 +226,9 @@
 :root:not([data-theme="light"]) .comment-card > header > :is(a, time) { color: var(--muted); }
 :root:not([data-theme="light"]) .project-activity__comment-card { border-color: var(--rt-card-border); }
 
-/* ---- Titles above the bodies: 24px / 600 with -0.1px tracking ---- */
-:root .issue-document .title-editor:not(.sub-issue-editor *) { letter-spacing: -0.1px; }
+/* ---- Titles above the bodies ---- */
+.issue-document .title-editor:not(.sub-issue-editor *) { letter-spacing: -.1px; }
+@media (min-width: 1024px) { .issue-document .title-editor:not(.sub-issue-editor *) { letter-spacing: -.16px; } }
 :root .project-overview .project-overview__name { letter-spacing: -0.1px; }
 
 /* ==== Agent answers (Agent page and the floating issue / document chat) ==== */

@@ -20,6 +20,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Let filter value menus size to their labels within the shared maximum width.
 
 - Keep small avatar initials on one line and preserve avatar proportions beside long member names.
+- Share issue title and sub-issue label styling and remove special due-date menu sizing and hidden shortcuts.
+
 - Use the shared phone menu surface for issue options and its submenus.
 
 - Honor every first-weekday preference in settings and calendar controls.
