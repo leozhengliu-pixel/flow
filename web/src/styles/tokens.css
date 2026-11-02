@@ -1078,4 +1078,6 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   :root[data-theme="light"] { --set-admin-fg: lch(50 80 288.43); }
   :root { --set-session-current: lch(80 80 141.95); }
   :root[data-theme="light"] { --set-session-current: var(--semantic-success); }
+  :root { --issue-toolbar-open-bg: lch(18.634% 1.075 272); }
+  :root[data-theme="light"] { --issue-toolbar-open-bg: lch(94.854% .157 282); }
 }
