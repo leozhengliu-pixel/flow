@@ -517,7 +517,7 @@ export function AgentPage({
               />
               <div role="listbox" aria-label={t("Chat history")} ref={historyListRef}>
                 {phone && <div className={styles.historyListSpacer} style={{ height: historyListHeight }} />}
-                {historyFilteredOptions.some(({ id }) => id === "__new__") && <button
+                {(phone || historyGroups.length > 0) && historyFilteredOptions.some(({ id }) => id === "__new__") && <button
                   aria-selected={historyActiveId === "__new__"}
                   className={styles.newChat}
                   onMouseMove={() => setHistoryActiveId("__new__")}
@@ -555,7 +555,7 @@ export function AgentPage({
                   </Fragment>
                 ))}
                 {!historyGroups.length && (
-                  <span className={styles.noHistory}>{t("No history")}</span>
+                  phone ? <span className={styles.noHistory}>{t("No history")}</span> : <div className={styles.noHistory}><span>{t("No history")}</span></div>
                 )}
               </div>
             </Popover.Content>

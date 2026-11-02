@@ -297,6 +297,14 @@ describe('agent page composer', () => {
     expect(screen.getByText('Editing message')).toBeVisible()
   })
 
+  it('shows only the empty message in desktop history when there are no chats', async () => {
+    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Switch agent chat' }))
+    const history = screen.getByRole('listbox', { name: 'Chat history' })
+    expect(within(history).getByText('No history')).toBeVisible()
+    expect(within(history).queryByRole('option')).not.toBeInTheDocument()
+  })
+
   it('groups chat history and supports keyboard navigation to a new chat', async () => {
     const session: AgentSession = {
       id: 'session-history', slugId: 'history', userId: 'user-1', title: 'Workspace review', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [],
