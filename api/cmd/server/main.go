@@ -678,6 +678,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PUT /api/reviews/{id}/previews", s.putReviewPreview)
 	mux.HandleFunc("POST /api/reviews/{id}/submit", s.submitReview)
 	mux.HandleFunc("POST /api/reviews/{id}/comments", s.commentOnReview)
+	mux.HandleFunc("POST /api/reviews/{id}/reactions", s.toggleReviewReaction)
+	mux.HandleFunc("POST /api/reviews/{id}/comment-attachments", s.createReviewCommentAttachment)
 	mux.HandleFunc("PATCH /api/reviews/{id}/comments/{commentId}", s.resolveReviewThread)
 	mux.HandleFunc("POST /api/reviews/{id}/sync", s.syncReviewFromCodeHost)
 	mux.HandleFunc("GET /api/reviews/import", s.getReviewImport)
@@ -5734,6 +5736,11 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 		}
 		for _, initiative := range data.Initiatives {
 			if slices.ContainsFunc(initiative.CommentAttachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
+				return true
+			}
+		}
+		for _, review := range data.Reviews {
+			if slices.ContainsFunc(review.CommentAttachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
 				return true
 			}
 		}

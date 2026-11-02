@@ -1348,6 +1348,14 @@ export function commentOnReview(
     jsonRequest("POST", { body, ...location }),
   );
 }
+export function toggleReviewReaction(id: string, emoji: string): Promise<CodeReview> {
+  return request(`/api/reviews/${id}/reactions`, jsonRequest("POST", { emoji }));
+}
+export function uploadReviewCommentAttachment(id: string, file: File): Promise<Attachment> {
+  const body = new FormData();
+  body.append("file", file);
+  return request(`/api/reviews/${id}/comment-attachments`, { method: "POST", body });
+}
 /** Resolves or reopens the comment thread containing `commentId`. */
 export function resolveReviewThread(id: string, commentId: string, resolved: boolean): Promise<CodeReview> {
   return request(

@@ -18,6 +18,8 @@ const api = vi.hoisted(() => ({
   submitReview: vi.fn(),
   updateReview: vi.fn(),
   updateUserSettings: vi.fn(),
+  toggleReviewReaction: vi.fn(),
+  uploadReviewCommentAttachment: vi.fn(),
 }));
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
@@ -428,6 +430,25 @@ it('opens linked issue actions and removes only the selected issue', async () =>
     expect(screen.getByRole('option', { name: 'Link issues' })).toBeVisible();
     await user.click(screen.getByRole('option', { name: 'Unlink issue from pull request' }));
     await waitFor(() => expect(api.updateReview).toHaveBeenCalledWith(review.id, { issueIds: [] }));
+  } finally {
+    vi.stubGlobal('matchMedia', media);
+    vi.stubGlobal('ResizeObserver', resizeObserver);
+  }
+});
+
+it('adds a persisted review reaction without touching the comment draft', async () => {
+  const media = window.matchMedia, resizeObserver = globalThis.ResizeObserver;
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 767px)', media: query, onchange: null, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  api.toggleReviewReaction.mockResolvedValue({ ...review, reactions: { '👍': [viewer.id] } });
+  try {
+    renderDetail(review);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add reaction' }));
+    await user.click(screen.getAllByRole('button', { name: 'thumbs up +1 like' })[0]);
+    await waitFor(() => expect(api.toggleReviewReaction).toHaveBeenCalledWith(review.id, '👍'));
+    expect(screen.getByRole('textbox', { name: 'Comment' })).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Submit comment' })).toBeDisabled();
   } finally {
     vi.stubGlobal('matchMedia', media);
     vi.stubGlobal('ResizeObserver', resizeObserver);

@@ -2331,31 +2331,33 @@ type ReviewPostedAs struct {
 }
 
 type CodeReview struct {
-	ID              string          `json:"id"`
-	SlugID          string          `json:"slugId"`
-	Provider        string          `json:"provider"`
-	ExternalID      string          `json:"externalId"`
-	Number          int             `json:"number"`
-	Title           string          `json:"title"`
-	Description     string          `json:"description"`
-	Status          string          `json:"status"`
-	RepositoryOwner string          `json:"repositoryOwner"`
-	RepositoryName  string          `json:"repositoryName"`
-	URL             string          `json:"url"`
-	Author          User            `json:"author"`
-	ReviewerIDs     []string        `json:"reviewerIds"`
-	TeamReviewers   []string        `json:"teamReviewers"`
-	IssueIDs        []string        `json:"issueIds"`
-	BaseBranch      string          `json:"baseBranch"`
-	HeadBranch      string          `json:"headBranch"`
-	BranchState     string          `json:"branchState"`
-	Additions       int             `json:"additions"`
-	Deletions       int             `json:"deletions"`
-	CommitCount     int             `json:"commitCount"`
-	Checks          []ReviewCheck   `json:"checks"`
-	Files           []ReviewFile    `json:"files"`
-	Events          []ReviewEvent   `json:"events"`
-	Previews        []DeployPreview `json:"previews,omitempty"`
+	ID                 string              `json:"id"`
+	SlugID             string              `json:"slugId"`
+	Provider           string              `json:"provider"`
+	ExternalID         string              `json:"externalId"`
+	Number             int                 `json:"number"`
+	Title              string              `json:"title"`
+	Description        string              `json:"description"`
+	Status             string              `json:"status"`
+	RepositoryOwner    string              `json:"repositoryOwner"`
+	RepositoryName     string              `json:"repositoryName"`
+	URL                string              `json:"url"`
+	Author             User                `json:"author"`
+	ReviewerIDs        []string            `json:"reviewerIds"`
+	TeamReviewers      []string            `json:"teamReviewers"`
+	IssueIDs           []string            `json:"issueIds"`
+	Reactions          map[string][]string `json:"reactions,omitempty"`
+	CommentAttachments []Attachment        `json:"commentAttachments,omitempty"`
+	BaseBranch         string              `json:"baseBranch"`
+	HeadBranch         string              `json:"headBranch"`
+	BranchState        string              `json:"branchState"`
+	Additions          int                 `json:"additions"`
+	Deletions          int                 `json:"deletions"`
+	CommitCount        int                 `json:"commitCount"`
+	Checks             []ReviewCheck       `json:"checks"`
+	Files              []ReviewFile        `json:"files"`
+	Events             []ReviewEvent       `json:"events"`
+	Previews           []DeployPreview     `json:"previews,omitempty"`
 	// HeadSHA/BaseSHA/StartSHA are the diff refs inline comments are created against.
 	HeadSHA  string `json:"headSha,omitempty"`
 	BaseSHA  string `json:"baseSha,omitempty"`

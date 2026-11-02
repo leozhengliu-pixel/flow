@@ -107,6 +107,7 @@ export const reviewsZhCN: Record<string, string> = {
   "Tests": "测试",
   "a reviewer": "评审者",
   "Could not submit comment": "无法提交评论",
+  "Could not add reaction": "无法添加回应",
   "Suggested focus areas from the files in this review.": "根据本次评审中的文件建议的关注点。",
   // --- Diff
   "All files are reviewed": "所有文件均已评审",

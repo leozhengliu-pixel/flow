@@ -604,6 +604,8 @@ var InternalRoutes = []string{
 	"GET /api/reviews/{id}",
 	"PATCH /api/reviews/{id}",
 	"POST /api/reviews/{id}/comments",
+	"POST /api/reviews/{id}/reactions",
+	"POST /api/reviews/{id}/comment-attachments",
 	"PATCH /api/reviews/{id}/comments/{commentId}",
 	"POST /api/reviews/{id}/sync",
 	"POST /api/reviews/{id}/submit",

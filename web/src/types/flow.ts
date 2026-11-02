@@ -2045,6 +2045,8 @@ export interface CodeReview {
   teamReviewers: string[];
   issueIds: UUID[];
   baseBranch: string;
+  reactions?: Record<string, string[]>;
+  commentAttachments?: Attachment[];
   headBranch: string;
   branchState: "upToDate" | "behind" | "conflicted";
   additions: number;
