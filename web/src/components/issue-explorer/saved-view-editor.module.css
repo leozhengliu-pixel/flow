@@ -27,7 +27,13 @@
   .name{grid-column:2;grid-row:1;margin:1px 0;width:calc(100% + 6px);color:var(--bright)}
   .name::placeholder{color:var(--bright)}
   .description{grid-column:2/4;grid-row:2;margin:5px 0 0 1px;width:calc(100% - 1px)}
-  .commands{grid-column:3;grid-row:1}
+  .commands{grid-column:3;grid-row:1;gap:8px;padding:2px 0}
+  .icon.icon{padding:0 8px;background:var(--view-editor-icon-bg)}
+  .saveTo{gap:6px;margin-right:0;color:var(--my-issues-details-muted)}
+  .saveTo>button{padding-inline:8px}
+  .cancel{color:var(--text)}
+  .editor[data-mode=create] .save{background:var(--view-editor-create-bg)}
+  .editor[data-mode=create] .save:hover{background:var(--accent-primary-hover)}
   .cancel,.save{padding-inline:8px;border:.5px solid transparent}
   .editor[data-mode=create] .actions{padding-bottom:8px}
 }
