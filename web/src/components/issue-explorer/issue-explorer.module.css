@@ -60,6 +60,7 @@
 @media(min-width:1024px){
   [data-issue-explorer]:has(section[data-mode="create"]) [data-content-view-breadcrumb] [data-current],.draftPlaceholder{color:var(--text)}
   [data-issue-explorer] [data-content-view-breadcrumb] [data-current]{color:var(--text)}
+  [data-issue-explorer] [data-content-view-breadcrumb] a>span:last-child{color:var(--text)}
   [data-issue-explorer] [data-content-view-subheader]{gap:6px}
   .resourceTab{--ui-pill-bg:var(--my-issues-details-tab-bg);--ui-pill-active-bg:var(--my-issues-details-tab-active-bg);--ui-pill-fg:var(--issue-muted);--ui-pill-active-fg:var(--text);padding-inline:16px;font-family:inherit;font-size:12px;font-weight:500;line-height:normal}
   .resourceTab::after{box-shadow:none!important}

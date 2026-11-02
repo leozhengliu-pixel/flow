@@ -249,6 +249,7 @@
   -webkit-box-orient:vertical;
   -webkit-line-clamp:2;
 }
+@media(min-width:1024px){.title{color:var(--bright)}}
 .cardMeta{
   display:flex;
   flex-wrap:wrap;
