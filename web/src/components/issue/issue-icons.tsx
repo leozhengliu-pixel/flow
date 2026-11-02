@@ -149,24 +149,24 @@ function projectStatusKind(type?: string, name?: string): ProjectStatusKind {
   return 'planned'
 }
 
-export function StatusIcon({state,size=15}:{state:Pick<WorkflowState,'id'|'name'|'color'|'type'>;size?:number}){
+export function StatusIcon({state,size=15}:{state:Pick<WorkflowState,'id'|'name'|'color'|'type'|'teamId'>;size?:number}){
   const name=state.name.toLowerCase(),id=state.id.toLowerCase(),duplicate=id.includes('duplicate')||name==='duplicate'
   // The reference app draws every status with the same two circles so a status change can animate between them.
-  const color=duplicate?(id==='state_duplicate'||name==='duplicate'?'var(--issue-status-terminal)':state.color)
-    :state.type==='canceled'?(id==='state_canceled'||name==='canceled'?'var(--issue-status-terminal)':state.color)
-    :state.type==='completed'?(id==='state_done'||name==='done'?'var(--issue-status-completed)':state.color)
+  const color=duplicate?(!state.teamId&&(id==='state_duplicate'||name==='duplicate')?'var(--issue-status-terminal)':state.color)
+    :state.type==='canceled'?(!state.teamId&&(id==='state_canceled'||name==='canceled')?'var(--issue-status-terminal)':state.color)
+    :state.type==='completed'?(!state.teamId&&(id==='state_done'||name==='done')?'var(--issue-status-completed)':state.color)
     :state.color
   return <WorkflowStatusGlyph state={{...state,color}} size={size}/>
 }
 
 /** Compact status glyph used by filter/value pickers. */
-export function WorkflowStatusGlyph({ state, size = 14, style }: { state: Pick<WorkflowState, 'id' | 'name' | 'color' | 'type'>; size?: number; style?: CSSProperties }) {
+export function WorkflowStatusGlyph({ state, size = 14, style }: { state: Pick<WorkflowState, 'id' | 'name' | 'color' | 'type' | 'teamId'>; size?: number; style?: CSSProperties }) {
   const id = state.id.toLowerCase()
   const name = state.name.toLowerCase()
   const triage = id.includes('triage') || name === 'triage'
   const duplicate = id.includes('duplicate') || name === 'duplicate'
   const stateType = triage ? 'triage' : duplicate ? 'duplicate' : state.type
-  const stroke = workflowStatusStrokeColor(state.color)
+  const stroke = workflowStatusStrokeColor(state.color, state.teamId)
   const complete = stateType === 'completed' || stateType === 'canceled' || stateType === 'duplicate'
   const progress = stateType === 'started' ? (name.includes('review') ? .75 : .5) : complete ? 1 : 0
   // Motion only after the status changes, never on first paint (set before paint so the mark never flashes in).

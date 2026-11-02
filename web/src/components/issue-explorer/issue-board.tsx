@@ -187,7 +187,7 @@ export function HiddenBoardColumns({ groups, onShowGroup }: { groups: MyIssuesGr
           <strong>{t('Hidden columns')}</strong>
         </button>
       </div>
-      {!hiddenCollapsed&&<div className={styles.hiddenList}>{groups.map(group=><button className={styles.hiddenStatus} key={group.id} type="button" data-board-hidden-status onClick={()=>onShowGroup?.(group.id)}><div className={styles.hiddenStatusCard}><StatusIcon state={{id:group.id,name:group.label,type:group.stateType??'unstarted',color:group.state?.color??'var(--status-neutral)'}} size={14}/><span className={styles.hiddenStatusName} data-i18n-ignore>{group.label}</span><b><span className={styles.desktopIcon}><EstimateIcon size={14}/></span><span className={styles.phoneIcon}><BoardWarningIcon size={14}/></span><span>{group.totalCount ?? group.issues.length}</span></b></div></button>)}</div>}
+      {!hiddenCollapsed&&<div className={styles.hiddenList}>{groups.map(group=><button className={styles.hiddenStatus} key={group.id} type="button" data-board-hidden-status onClick={()=>onShowGroup?.(group.id)}><div className={styles.hiddenStatusCard}><StatusIcon state={{...group.state,id:group.id,name:group.label,type:group.stateType??'unstarted',color:group.state?.color??'var(--status-neutral)'}} size={14}/><span className={styles.hiddenStatusName} data-i18n-ignore>{group.label}</span><b><span className={styles.desktopIcon}><EstimateIcon size={14}/></span><span className={styles.phoneIcon}><BoardWarningIcon size={14}/></span><span>{group.totalCount ?? group.issues.length}</span></b></div></button>)}</div>}
     </section>
 }
 
@@ -261,7 +261,7 @@ export function IssueBoardGroupHeader({group,estimateSum,createIssueLabel='Add n
   return <div className={styles.columnHeaderWrap} data-board-column-header>
       <header className={styles.columnHeader}>
         {group.stateType && <StatusIcon
-          state={{ id: group.id, name: group.label, type: group.stateType, color: group.state?.color ?? 'var(--status-neutral)' }}
+          state={{ id: group.id, teamId: group.state?.teamId, name: group.label, type: group.stateType, color: group.state?.color ?? 'var(--status-neutral)' }}
           size={14}
         />}
         <strong data-board-column-title data-i18n-ignore>{group.label}</strong><button className={styles.count} data-board-column-count type="button" aria-label={[t(`${count} issues`), pointsLabel].filter(Boolean).join(', ')}>{estimateSum !== undefined && <EstimateIcon className={styles.countEstimate} size={14}/>}<span className={styles.countValue}><span className={styles.issueCount}>{count}</span>{estimateSum !== undefined && <span className={styles.estimateValue} aria-label={pointsLabel}>{formatEstimatePoints(estimateSum)}</span>}</span></button>

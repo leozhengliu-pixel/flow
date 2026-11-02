@@ -2,10 +2,24 @@ import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { WorkflowState } from '@/types/flow'
 import { ComposerStatusGlyph } from './composer-status-glyph'
+import { StatusIcon } from '@/components/issue/issue-icons'
 
 const state = (overrides: Partial<WorkflowState> = {}): WorkflowState => ({ id: 'custom', name: 'Ready', type: 'unstarted', color: '#4CB782', position: 0, ...overrides })
 
 describe('ComposerStatusGlyph', () => {
+  it.each([
+    ['unstarted', 'Custom gray', '#6B6F76'],
+    ['started', 'In Progress', '#F2C94C'],
+    ['completed', 'Done', '#5E6AD2'],
+    ['canceled', 'Canceled', '#6B6F76'],
+  ] as const)('preserves the team %s color in both shared glyphs', (type, name, color) => {
+    const selected = state({ teamId: 'team-1', type, name, color })
+    const { container } = render(<><ComposerStatusGlyph state={selected}/><StatusIcon state={selected}/></>)
+    expect(container.querySelector('svg')).toHaveAttribute('fill', color)
+    const strokes = [...container.querySelectorAll('[stroke]')].filter(element => element.getAttribute('stroke') !== 'none')
+    expect(strokes.length).toBeGreaterThan(0)
+    for (const element of strokes) expect(element).toHaveAttribute('stroke', color)
+  })
   it('uses the workflow color and compact command-menu geometry', () => {
     const { container } = render(<ComposerStatusGlyph state={state()}/>)
     const svg = container.querySelector('svg')!

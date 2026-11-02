@@ -24,4 +24,8 @@ describe('workflowStatusStrokeColor', () => {
     expect(workflowStatusStrokeColor('#26b5ce')).toBe('#26b5ce')
     expect(workflowStatusStrokeColor('lch(80% 90 85)')).toBe('lch(80% 90 85)')
   })
+
+  it.each(['#F2C94C', '#6B6F76', '#5E6AD2'])('preserves a team choice of %s even when it matches an old default', color => {
+    expect(workflowStatusStrokeColor(color, 'team-custom')).toBe(color)
+  })
 })

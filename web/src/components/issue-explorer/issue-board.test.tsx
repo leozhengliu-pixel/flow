@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import type { MyIssuesRowData, MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
 import { ApplicationStoreContext, type ApplicationStoreValue } from '@/store/application-store-contexts'
-import { IssueBoard } from './issue-board'
+import { IssueBoard, IssueBoardGroupHeader } from './issue-board'
 import { IssueRowActionsProvider } from '@/components/my-issues/issue-row-actions'
 import { makeBootstrap } from '@/test/fixtures'
 import type { TeamSettings } from '@/types/flow'
@@ -31,6 +31,13 @@ function setup(selected = false, properties = new Set<'status' | 'id' | 'cycle' 
 
 describe('issue board cards', () => {
   beforeEach(() => localStorage.clear())
+
+  it('keeps the owning team on the board header status so a custom gray stays configured', () => {
+    const state = { id: 'custom', teamId: 'team-1', name: 'Ready', type: 'unstarted' as const, color: '#6B6F76', position: 0 }
+    const { container } = render(<I18nProvider><IssueBoardGroupHeader group={{ id: state.id, label: state.name, state, stateType: state.type, issues: [] }}/></I18nProvider>)
+    expect(container.querySelector('[stroke="#6B6F76"]')).not.toBeNull()
+    expect(container.querySelector('[stroke="#bec2c8"]')).toBeNull()
+  })
 
   it.each([true, false])('summarizes real estimate points only for teams using estimates (%s)', enabled => {
     const data = makeBootstrap({ teamSettings: { 'team-1': { teamId: 'team-1', estimateType: enabled ? 'fibonacci' : 'notUsed' } as TeamSettings } })
