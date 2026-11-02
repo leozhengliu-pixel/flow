@@ -118,3 +118,27 @@ test('anchors actions to the trigger, loads relation removal on direct navigatio
   expect(moved.state.type).toBe(issue.state.type)
   expect(moved.identifier).not.toBe(issue.identifier)
 })
+
+test('keeps row action shortcuts aligned and gives the coding submenu its icon and list inset', async ({ page, detail }) => {
+  const { key, issue } = detail
+  await page.goto(`/${key}/team/${issue.team.key}/active`)
+  await page.locator(`[data-issue-row-id="${issue.id}"]`).click({ button: 'right' })
+  const menu = page.getByRole('menu').first()
+  await expect(menu).toBeVisible()
+  await expect(menu).toHaveCSS('padding', '0px')
+  for (const shortcut of await menu.locator('kbd').all()) {
+    await expect(shortcut).toHaveCSS('padding-left', '0px')
+    await expect(shortcut).toHaveCSS('line-height', '12.1px')
+  }
+  const open = menu.getByRole('menuitem', { name: 'Open in', exact: true })
+  await open.hover()
+  await expect(open).toHaveCSS('color', 'lch(100 0 272)')
+  const configure = page.getByRole('menuitem', { name: 'Configure coding tools…', exact: true })
+  await expect(configure.locator('svg')).toBeVisible()
+  const submenu = page.getByRole('menu').filter({ has: configure })
+  await expect(submenu).toHaveCSS('padding', '0px')
+  const rootBox = (await menu.boundingBox())!
+  const subBox = (await submenu.boundingBox())!
+  expect(Math.abs(subBox.x - (rootBox.x + rootBox.width - 2))).toBeLessThanOrEqual(1)
+  expect(await configure.evaluate(node => node.scrollWidth <= node.clientWidth)).toBeTruthy()
+})

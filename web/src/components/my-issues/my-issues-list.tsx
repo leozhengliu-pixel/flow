@@ -497,6 +497,7 @@ export function IssueContextMenu({ editable, issue, options, onPropertyChange, o
   const rowActions = useIssueRowActions()
   const statusOptions = useTeamStatusOptions(options.status, issue.teamId)
   return <ContextMenu.Content data-flow-motion="floating" className={styles.contextMenu} collisionPadding={10}>
+    <div className={styles.contextMenuList}>
     {editable&&<><ContextPropertySub label="Status" shortcut="S" options={statusOptions} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
     <ContextPropertySub label="Priority" shortcut="P" options={options.priority} selectedIds={[String(issue.priority)]} onSelect={id => onPropertyChange('priority', id)}/>
     <ContextPropertySub label="Assignee" shortcut="A" options={options.assignee} selectedIds={[issue.assignee?.id ?? '']} onSelect={id => onPropertyChange('assignee', id)}/>
@@ -508,6 +509,7 @@ export function IssueContextMenu({ editable, issue, options, onPropertyChange, o
     <IssueRowMoreProperties row={issue}/></>}
     {editable && rowActions && <IssueRowActionGroups row={issue} onDelete={onAction ? () => onAction('delete') : undefined}/>}
     {onAction&&!(editable&&rowActions)&&<>{editable&&<ContextMenu.Separator className={styles.menuSeparator}/>}<ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label="Copy"/><span>Copy</span><span className={styles.menuChevron} aria-hidden="true"><SubmenuChevron/></span></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}><MyIssuesMenuItem action="copyUrl" label="Copy issue URL" shortcut="⌘ ⇧ ," onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyId" label="Copy issue ID" onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyTitle" label="Copy issue title" onAction={onAction} submenu={false}/></ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub><ContextMenu.Separator className={styles.menuSeparator}/><MyIssuesMenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/></>}
+    </div>
   </ContextMenu.Content>
 }
 

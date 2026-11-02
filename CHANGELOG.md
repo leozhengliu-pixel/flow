@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Align desktop issue row-menu shortcut slots and submenu list insets, and restore the coding tools action icon.
+
 - Match the desktop coding-session copy control foreground to its shared text token.
 
 - Match desktop issue identifier tracking and saved-view directory name contrast while preserving phone typography.
