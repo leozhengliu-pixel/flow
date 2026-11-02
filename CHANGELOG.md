@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match desktop project metadata, resource spacing, activity tabs, and issue-intro keycaps without changing phone layouts.
+
 - Keep agent approval, change-state and feedback saves and release access-key bookkeeping off issue and discussion hydration.
 
 - Keep migration preview/mapping/invitation bookkeeping, token-rotation results and sync-group decisions on metadata-only writes while preserving source bundles and audit entries.
