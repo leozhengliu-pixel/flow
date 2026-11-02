@@ -54,9 +54,13 @@ test('document list aligns its metadata and opens intrinsic metadata and subscri
   await page.locator('.document-edited').click()
   await expect(metadata).toBeVisible()
   expect((await metadata.boundingBox())!.width).toBeGreaterThan(shortWidth)
-  const ownerAvatar = (await metadata.locator('.document-owner-row .document-meta-avatar').boundingBox())!
-  const editorAvatar = (await metadata.locator('.document-last-edit-row .document-meta-avatar').boundingBox())!
-  expect(Math.abs(ownerAvatar.x - editorAvatar.x)).toBeLessThanOrEqual(1)
+  // Measure both avatars in one frame while the popover animates.
+  const avatarOffset = await metadata.evaluate(popover => {
+    const owner = popover.querySelector('.document-owner-row .document-meta-avatar')!.getBoundingClientRect()
+    const editor = popover.querySelector('.document-last-edit-row .document-meta-avatar')!.getBoundingClientRect()
+    return Math.abs(owner.x - editor.x)
+  })
+  expect(avatarOffset).toBeLessThanOrEqual(1)
   await expect(metadata.getByRole('button', { name: 'Show document history', exact: true })).toHaveCSS('height', '28px')
   await expect(metadata.getByRole('button', { name: 'Show document history', exact: true })).toHaveCSS('padding', '0px 10px 0px 8px')
   await expect(metadata.getByRole('button', { name: 'Show document history', exact: true })).toHaveCSS('border-top-width', '0px')
@@ -67,13 +71,17 @@ test('document list aligns its metadata and opens intrinsic metadata and subscri
   const search = page.getByRole('textbox', { name: 'Change subscribers…', exact: true })
   await expect(search).toBeVisible()
   await expect(search).toHaveCSS('padding', '10px 0px 9px')
-  await expect(page.locator('.document-subscribers__badge')).toHaveCSS('line-height', '16px')
-  await expect(page.locator('.document-subscribers__badge')).toHaveCSS('height', '16px')
+  const otherSubscriber = page.getByRole('checkbox', { name: 'zheng liu', exact: true })
+  const agentBadge = otherSubscriber.getByText('Agent', { exact: true })
+  await expect(agentBadge).toBeVisible()
+  await expect(agentBadge).toHaveCSS('line-height', '16px')
+  await expect(agentBadge).toHaveCSS('height', '16px')
   await expect(page.locator('.document-subscribers__row').first()).toHaveCSS('height', '32px')
   await expect(page.getByText('Other users', { exact: true })).toBeVisible()
   await search.fill('zheng')
-  await expect(page.getByRole('checkbox', { name: 'zheng liu', exact: true })).toBeVisible()
+  await expect(otherSubscriber).toBeVisible()
   await expect(page.getByRole('checkbox', { name: 'Skyler Anderson', exact: true })).toHaveCount(0)
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/docs-subscribers.png`, animations: 'disabled' })
 })
 
 test('document insert and inline comments fit the same article without reflow', async ({ page, request, workspaceKey }) => {
