@@ -346,7 +346,7 @@
   }
   html:root body .app .pulse-page .pulse-post-heading {
     min-width: 0;
-    flex: none;
+    flex: 0 1 auto;
     gap: 6px;
   }
   html:root body .app .pulse-page .pulse-post-title {
