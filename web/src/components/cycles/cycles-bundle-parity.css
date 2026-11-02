@@ -8,7 +8,7 @@
   .flow-cycles-page .flow-cycles-header .cycle-top-icon svg { width: 14px; height: 14px; }
   .cycle-team-breadcrumb { display: inline-flex; align-items: center; gap: 0; color: var(--text); font: 500 13px var(--font); line-height: normal; }
   .cycle-team-breadcrumb__label { display: inline-flex; align-items: center; gap: 6px; }
-  .cycle-team-breadcrumb__separator { margin: -2px 8px 0; }
+  .cycle-team-breadcrumb__separator { margin: -2px 8px 0; color: var(--issue-muted); }
   .flow-cycles-empty strong { color: var(--issue-dim); font: 500 20px var(--font); line-height: normal; letter-spacing: -.16px; }
 }
 .flow-cycles-header {
