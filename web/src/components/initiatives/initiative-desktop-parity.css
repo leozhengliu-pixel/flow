@@ -76,10 +76,22 @@
   .li-detail-sidebar .activity-sidebar-section__teaser li { font: 450 12px/16.8px var(--font); }
   .li-detail-sidebar > section:nth-child(2) { order: 2; }
   .li-detail-sidebar .li-sidebar-heading { height: 28px; font: 500 13px var(--font); line-height: normal; }
-  .li-detail-sidebar dl { grid-template-columns: 98px minmax(0, 1fr); padding: 4px 0 0; }
+  .li-detail-sidebar dl { grid-template-columns: 90px minmax(0, 1fr); padding: 4px 0 0; }
   .li-detail-sidebar dt, .li-detail-sidebar dd { min-height: 36px; font: 450 12px var(--font); line-height: normal; }
-  .li-detail-sidebar dd .lp-project-property-trigger { color: var(--theme-text-primary); font-weight: 450; }
+  .li-detail-sidebar dt { color: var(--phone-project-panel-label); }
+  .li-detail-sidebar dd .lp-project-property-trigger { gap: 8px; color: var(--theme-text-primary); font-weight: 450; }
   .li-detail-sidebar dd .lp-project-property-trigger > span:last-child { color: var(--theme-text-primary); }
+  .li-detail-sidebar .li-properties--owner:not(:has(.avatar)) .lp-project-property-trigger,
+  .li-detail-sidebar .li-properties--owner:not(:has(.avatar)) .lp-project-property-trigger > span:last-child,
+  .li-detail-sidebar .li-properties--target:has(.li-target-glyph.is-empty) .project-target-date-picker-trigger { color: var(--phone-project-panel-label); }
+  .li-detail-sidebar dd .lp-project-property-trigger > svg { width: 16px; height: 16px; }
+  .li-detail-sidebar .li-properties--owner .lp-project-property-trigger > svg { width: 18px; height: 18px; }
+  .li-detail-sidebar .project-target-date-picker-trigger { gap: 8px; }
+  .li-detail-sidebar .li-target-glyph { width: 16px; height: 16px; }
+  .li-detail-sidebar .label-project-picker { padding: 0; }
+  .li-detail-sidebar .labels-picker[data-empty="true"] .issue-label-chips { display: none; }
+  .li-detail-sidebar .label-project-trigger { gap: 6px; color: var(--phone-project-panel-label); font-size: 12px; font-weight: 450; }
+  .li-detail-sidebar .label-project-trigger > svg { width: 16px; height: 16px; }
   .li-detail-sidebar .flow-disclosure-triangle { width: 16px; height: 16px; }
   .li-detail-sidebar > section:first-child dt:has(+ dd .li-properties--leadTeam),
   .li-detail-sidebar > section:first-child dd:has(.li-properties--leadTeam),
