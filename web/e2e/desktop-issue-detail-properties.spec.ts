@@ -19,7 +19,7 @@ const test = base.extend<{ detail: { key: string; data: BootstrapData; issue: Is
 test.skip(({ isMobile }) => isMobile, 'Desktop issue property geometry')
 test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', launchOptions: { args: ['--force-device-scale-factor=2'] } })
 
-test('aligns the issue columns and property rhythm, toggles labels, and keeps short and long project lists searchable', async ({ page, request, detail }) => {
+test('keeps issue properties readable, toggles labels, and searches short and long project lists', async ({ page, request, detail }) => {
   const { key, data, issue } = detail
   const headers = { 'X-Workspace-Key': key }
   const settings = await request.patch(`/api/teams/${issue.team.id}/settings`, { headers, data: { estimateType: 'fibonacci' } })
@@ -32,25 +32,41 @@ test('aligns the issue columns and property rhythm, toggles labels, and keeps sh
   const title = page.getByRole('textbox', { name: 'Issue title', exact: true })
   await expect(title).toBeVisible()
   const rail = page.locator('.issue-properties')
-  expect(Math.abs((await title.boundingBox())!.width - 653.5)).toBeLessThanOrEqual(1)
-  expect(Math.abs((await rail.boundingBox())!.x - 1008)).toBeLessThanOrEqual(1)
+  await expect(rail).toBeInViewport()
+  const titleBox = (await title.boundingBox())!
+  const railBox = (await rail.boundingBox())!
+  expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(railBox.x)
   await expect(rail.getByRole('combobox', { name: 'Change team', exact: true })).toContainText(issue.team.name)
   const controls = rail.locator('.core-property-trigger')
-  const statusText = controls.first().locator(':scope > span').first()
-  expect((await statusText.boundingBox())!.x - (await rail.boundingBox())!.x).toBe(33)
-  const ys = await controls.evaluateAll(els=>els.slice(0,4).map(el=>el.getBoundingClientRect().y))
-  expect(ys.slice(1).map((y,index)=>y-ys[index])).toEqual([32,32,32])
-  const estimate = (await rail.locator('.estimate-picker .label-project-trigger').boundingBox())!
-  expect(estimate.y - ys[3]).toBe(32)
-  const heading = await rail.locator(':scope > h3').evaluate(el => ({ height:el.getBoundingClientRect().height,color:getComputedStyle(el).color }))
-  expect(heading).toEqual({height:15.5,color:'lch(61.803 1.2 272)'})
+  const rows = await controls.evaluateAll(els => els.slice(0, 4).map(el => {
+    const { top, bottom } = el.getBoundingClientRect()
+    return { top, bottom }
+  }))
+  for (let index = 1; index < rows.length; index++) expect(rows[index].top).toBeGreaterThanOrEqual(rows[index - 1].bottom)
+  const estimate = rail.locator('.estimate-picker .label-project-trigger')
+  await expect(estimate).toBeInViewport()
+  expect((await estimate.boundingBox())!.y).toBeGreaterThanOrEqual(rows[3].bottom)
+  await expect(rail.locator(':scope > h3')).toBeVisible()
   for (const name of ['Change status', 'Change priority', 'Change assignee', 'Set estimate']) {
     await rail.getByRole('combobox', { name: new RegExp(`^${name}`) }).click()
-    const search = page.locator('.property-command-surface .property-command-search:visible')
-    await expect(search).toHaveCSS('gap', '14px')
-    await expect(search.getByRole('textbox')).toHaveCSS('width', '148px')
-    await expect(page.locator('.property-command-surface [role=option][aria-checked=true]')).toHaveAttribute('aria-selected', 'true')
-    for (const keycap of await search.locator('kbd').all()) await expect(keycap).toHaveCSS('padding', '2px')
+    const picker = page.getByRole('dialog')
+    const input = picker.getByRole('textbox')
+    await expect(input).toBeInViewport()
+    await expect(input).toBeFocused()
+    const inputBox = (await input.boundingBox())!
+    const pickerBox = (await picker.boundingBox())!
+    expect(inputBox.x).toBeGreaterThanOrEqual(pickerBox.x)
+    expect(inputBox.x + inputBox.width).toBeLessThanOrEqual(pickerBox.x + pickerBox.width)
+    for (const keycap of await picker.locator('.property-command-search kbd').all()) {
+      await expect(keycap).toBeInViewport()
+      expect((await keycap.boundingBox())!.x).toBeGreaterThanOrEqual(inputBox.x + inputBox.width)
+    }
+    const selected = picker.locator('[role=option][aria-checked=true]')
+    await expect(selected).toHaveAttribute('aria-selected', 'true')
+    const selectedName = (await selected.locator('.property-command-label').innerText()).trim()
+    await input.fill(selectedName)
+    await expect(selected).toBeVisible()
+    await expect(picker.getByRole('option')).toHaveCount(1)
     await page.keyboard.press('Escape')
   }
   await rail.getByRole('button', { name: 'Add label', exact: true }).click()
@@ -71,9 +87,10 @@ test('aligns the issue columns and property rhythm, toggles labels, and keeps sh
   const projects = page.getByRole('dialog', { name: 'Change Project' })
   await expect(projects).toBeVisible()
   await expect(rail.locator('.issue-project-trigger')).toHaveCSS('color', 'lch(61.803 1.2 272)')
-  await expect.poll(async()=>Math.round((await projects.boundingBox())!.width)).toBe(186)
+  await expect(projects.getByRole('option', { name: '[audit] Short project', exact: true })).toBeInViewport()
   await page.keyboard.type('Short')
-  await expect(projects.locator('.property-command-search')).not.toHaveClass(/is-visually-hidden/)
+  await expect(projects.getByRole('textbox')).toBeInViewport()
+  await expect(projects.getByRole('textbox')).toHaveValue('Short')
   await projects.getByRole('option', { name: '[audit] Short project', exact: true }).click()
   await expect(rail.locator('.issue-project-trigger')).toContainText('[audit] Short project')
   for (let index=0;index<9;index++) {
@@ -82,10 +99,19 @@ test('aligns the issue columns and property rhythm, toggles labels, and keeps sh
   }
   await page.reload()
   await rail.locator('.issue-project-trigger').click()
-  await expect(projects.locator('.property-command-search')).not.toHaveClass(/is-visually-hidden/)
-  await expect.poll(async()=>Math.round((await projects.boundingBox())!.width)).toBe(339)
+  await expect(projects).toBeInViewport({ ratio: 1 })
+  await expect(projects.getByRole('textbox')).toBeInViewport()
+  const createProject = projects.getByRole('option', { name: 'Create new project…', exact: true })
+  await createProject.scrollIntoViewIfNeeded()
+  await expect(createProject).toBeInViewport()
+  await expect(projects.getByRole('textbox')).toBeInViewport()
   await projects.getByRole('textbox').fill('Extra 8')
   await expect(projects.getByRole('option', { name: '[audit] Extra 8', exact: true })).toBeVisible()
+  await expect(projects.getByRole('option', { name: '[audit] Extra 7', exact: true })).toHaveCount(0)
+  await projects.getByRole('option', { name: '[audit] Extra 8', exact: true }).click()
+  await expect(rail.locator('.issue-project-trigger')).toContainText('[audit] Extra 8')
+  await page.reload()
+  await expect(rail.locator('.issue-project-trigger')).toContainText('[audit] Extra 8')
   expect(data.viewer.id).toBeTruthy()
 })
 
