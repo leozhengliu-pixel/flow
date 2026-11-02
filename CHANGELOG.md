@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align desktop triage row hit areas, toolbar gaps and empty-selection action surfaces while preserving phone rows.
 
+- Align desktop project and initiative icon surfaces with the shared page icon radius, padding, and tint.
+
 - Align desktop new-view header actions, icon surface and form foregrounds, and keep the applied-filter hairline at its measured tone.
 
 - Keep desktop project and initiative rail surfaces and project metadata at their intended foreground and border colors while preserving custom theme palettes.
