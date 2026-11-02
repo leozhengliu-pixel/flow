@@ -29,6 +29,10 @@ test('fits compact project labels, hides redundant child history, and uses plain
   await expect(link).toHaveCSS('font-size', '12px')
   await expect(link).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   await expect(page.locator('.document-actions svg').first()).toHaveCSS('width', '14px')
+  await expect(page.locator('.issue-document')).toHaveCSS('padding-bottom', '0px')
+  await expect(page.locator('.issue-properties')).toHaveCSS('padding-left', '0px')
+  await expect(page.locator('.issue-properties > h3')).toHaveCSS('margin-left', '4px')
+  await expect(page.locator('.issue-relation-section').first()).toHaveCSS('margin-left', '4px')
   const composer = page.locator('.issue-document > .composer')
   expect((await composer.boundingBox())!.x).toBeCloseTo((await page.locator('.title-editor').boundingBox())!.x - 8, 1)
   expect((await composer.boundingBox())!.height).toBe(83)
@@ -99,6 +103,7 @@ test('opens every action submenu and applies desktop date and reminder presets',
   await page.goto(`/${key}/issue/${issue.identifier}`)
   const trigger = page.getByRole('button', { name: 'Issue options', exact: true })
   await trigger.click()
+  await expect(trigger).toHaveCSS('background-color', 'rgb(45, 45, 47)')
   await expect(page.locator('.issue-options-popover [data-submenu="release"]')).toHaveCount(0)
   for (const [key, label, count] of [['create', 'Create related', 5], ['mark', 'Mark as', 6], ['remove', 'Remove', 1], ['copy', 'Copy', 8], ['convert', 'Convert to', 3], ['remind', 'Remind me', 6]] as const) {
     const parent = page.locator(`.issue-options-popover [data-submenu="${key}"]`)
