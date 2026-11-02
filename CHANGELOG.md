@@ -13,6 +13,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Keep desktop Pulse empty-state illustration, copy and actions in separate, consistently spaced groups without changing the phone view.
 
+- Align desktop Loop foregrounds, category tabs, table gutters and run controls with shared surface rules, preserving phone layouts.
+
 - Match desktop board column gutters, status-icon sizing and hidden-column typography without changing phone boards.
 
 - Align desktop document metadata, subscriber labels and history surfaces with their shared foreground and border rules, without changing phone layouts.

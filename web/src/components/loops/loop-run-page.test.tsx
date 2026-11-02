@@ -86,6 +86,15 @@ describe('LoopRunPage', () => {
     expect(screen.getByText('AI credits are not set up').closest('details')).not.toHaveAttribute('open')
   })
 
+  it('keeps the disabled run command compact with a descriptive accessible name', async () => {
+    const disabled = { ...loop, enabled: false }
+    api.getLoop.mockResolvedValue(disabled)
+    render(<I18nProvider><LoopRunPage data={makeBootstrap({ loops: [disabled] })} loopId="loop-1" runId="run-1" onNavigate={vi.fn()} onOpenSidebar={vi.fn()}/></I18nProvider>)
+    const command = await screen.findByRole('button', { name: 'This Loop is disabled' })
+    expect(command).toBeDisabled()
+    expect(command).toHaveTextContent('Run now')
+  })
+
   it('discloses instructions from the title and exposes the loop menu', async () => {
     const user = userEvent.setup()
     renderPage('run-1')

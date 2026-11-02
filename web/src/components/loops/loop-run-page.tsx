@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLatestRef } from "@/hooks/use-latest-ref";
-import { AlertTriangle, ArrowDown, ArrowUp, Ban, CheckCircle2, ChevronDown, CircleAlert, CircleStop, Info, Link2, MoreHorizontal, Paperclip, Pencil, Search, Settings2, SkipForward, ThumbsDown, ThumbsUp, Unplug, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Ban, CheckCircle2, ChevronDown, CircleAlert, CircleStop, Info, Link2, MoreHorizontal, Paperclip, Pencil, Play, Search, Settings2, SkipForward, ThumbsDown, ThumbsUp, Unplug, XCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -396,7 +396,7 @@ export function LoopRunPage({
         <button type="button" onClick={() => onNavigate(loopPath(workspace, loop ?? loopId))}>{t("Overview")}</button>
         <button type="button" className="is-active" aria-current="page">{t("Run history")}</button>
         <span />
-        <button className="loops-primary-button loops-run-now" type="button" disabled={!loop?.enabled || runBusy} onClick={() => void runNow()}>{loop?.enabled ? t("Run now") : t("This Loop is disabled")}</button>
+        <button className="loops-primary-button loops-run-now" type="button" aria-label={!loop?.enabled ? t("This Loop is disabled") : undefined} disabled={!loop?.enabled || runBusy} onClick={() => void runNow()}>{!phone && <Play size={14} aria-hidden="true" />}{phone && !loop?.enabled ? t("This Loop is disabled") : t("Run now")}</button>
       </nav>
       <div className="loops-run-layout">
         <aside className="loops-run-list" aria-label={t("Runs")}>
@@ -460,6 +460,7 @@ export function LoopRunPage({
                     className={`loops-run-row${run.id === activeId ? " is-active" : ""}`}
                     onClick={() => onNavigate(loopRunPath(workspace, loop ?? loopId, run.id))}
                   >
+                    <Play className="loops-run-trigger" size={14} aria-hidden="true" />
                     <span className="loops-run-row-label" data-i18n-ignore>
                       {runTriggerText(run, t)}
                     </span>
