@@ -1,0 +1,2305 @@
+{
+  "scope": "docs only",
+  "verifiedCommit": "f0641d645665b1945fae6e1e40d08865f895ac15",
+  "baselineNote": "The inherited round-two baseline contains 145 comparisons after earlier shared fixes, not the original sweep-three 272. Fixture and matcher corrections contribute to the difference reduction; it is not a pure CSS metric.",
+  "before": [
+    {
+      "screen": "document-comment-composer",
+      "status": "FAIL",
+      "differences": 7
+    },
+    {
+      "screen": "document-history",
+      "status": "FAIL",
+      "differences": 14
+    },
+    {
+      "screen": "document-metadata",
+      "status": "FAIL",
+      "differences": 15
+    },
+    {
+      "screen": "document-options",
+      "status": "FAIL",
+      "differences": 42
+    },
+    {
+      "screen": "document-subscribers",
+      "status": "FAIL",
+      "differences": 12
+    },
+    {
+      "screen": "document-view",
+      "status": "INCONCLUSIVE",
+      "differences": 5
+    },
+    {
+      "screen": "documents-list",
+      "status": "FAIL",
+      "differences": 9
+    },
+    {
+      "screen": "editor-block-menu",
+      "status": "FAIL",
+      "differences": 9
+    },
+    {
+      "screen": "editor-slash-menu",
+      "status": "FAIL",
+      "differences": 24
+    },
+    {
+      "screen": "editor-toolbar",
+      "status": "FAIL",
+      "differences": 8
+    }
+  ],
+  "after": [
+    {
+      "screen": "document-comment-composer",
+      "status": "FAIL",
+      "differences": 1,
+      "withheld": 4
+    },
+    {
+      "screen": "document-history",
+      "status": "PASS",
+      "differences": 0,
+      "withheld": 4
+    },
+    {
+      "screen": "document-metadata",
+      "status": "PASS",
+      "differences": 0,
+      "withheld": 3
+    },
+    {
+      "screen": "document-options",
+      "status": "FAIL",
+      "differences": 16,
+      "withheld": 3
+    },
+    {
+      "screen": "document-subscribers",
+      "status": "FAIL",
+      "differences": 6,
+      "withheld": 5
+    },
+    {
+      "screen": "document-view",
+      "status": "INCONCLUSIVE",
+      "differences": 0,
+      "withheld": 3
+    },
+    {
+      "screen": "documents-list",
+      "status": "PASS",
+      "differences": 0,
+      "withheld": 13
+    },
+    {
+      "screen": "editor-block-menu",
+      "status": "PASS",
+      "differences": 0,
+      "withheld": 4
+    },
+    {
+      "screen": "editor-slash-menu",
+      "status": "PASS",
+      "differences": 0,
+      "withheld": 3
+    },
+    {
+      "screen": "editor-toolbar",
+      "status": "PASS",
+      "differences": 0,
+      "withheld": 3
+    }
+  ],
+  "tolerancesChanged": false,
+  "coverageFloorsChanged": false,
+  "referenceEvidenceChanged": false,
+  "gateChanges": [
+    "Match the document editor wrapper to its counterpart, not the padded article.",
+    "Match the framed history dialog rather than its full-viewport role=dialog overlay.",
+    "Match the selection toolbar framed paint and its effective inner padding.",
+    "Compare padded/wrapped captured text element boxes with the corresponding Flow element boxes, not intrinsic glyph ranges.",
+    "Withhold breadcrumb x only when its preceding fixture name actually differs from the captured name."
+  ],
+  "causes": {
+    "composer": {
+      "classification": "product decision needed",
+      "reason": "Submit comment starts at 750.5px instead of 749px. The captured draft allocates 306px to the editor/action group; the responsive group receives 308px. Captured padding, selection inset, action margin and control dimensions already match. A missing sizing contract cannot be recovered from the capture without a fitted shrink. Supply the source sizing declaration or approve retaining responsive sizing; this remains FAIL."
+    },
+    "menuCapture": {
+      "classification": "fixture cannot match",
+      "reason": "The captured menu geometry is consistent with a 98% scale: Duplicate is 57.15px versus settled 58.313px with identical declared 13px/450 typography; 32px rows measure 31.36px. The capture lacks the scale declaration/origin and animation timing. Reproducing transitional glyph bounds would require a fitted transform. No font-size or geometry tolerance was changed."
+    },
+    "subscriberCapture": {
+      "classification": "fixture cannot match",
+      "reason": "Captured subscriber text is consistent with a 98% scale: Skyler Anderson is 100.25px versus settled 102.297px; zheng liu is 54.96px versus 56.086px. The heading edge is also shifted. The scale declaration/origin and animation timing were not recorded; no fitted transform or smaller font was added."
+    },
+    "subscriberPaint": {
+      "classification": "fixture cannot match",
+      "reason": "The immutable JSON records a filled metadata trigger and transparent bell; its PNG shows a filled bell and unfilled metadata trigger. Those capture states cannot be reproduced together. The fixture preserves the visible PNG state; the computed-style comparison remains FAIL."
+    },
+    "applicationRoster": {
+      "classification": "fixture cannot match",
+      "reason": "Agent follows the application member name. The captured roster includes a different built-in application identity. Flow retains its own identity, so the badge x cannot match by changing fixture human names. Human names, roles, subscriptions and badge styling have been aligned."
+    },
+    "unrecordedInk": {
+      "classification": "fixture cannot match",
+      "reason": "The captured computed foreground does not appear in its PNG crop. Ancestor opacity, hover and timing were not recorded, so the computed value alone cannot establish visible ink. This inherited evidence limit is withheld, not an assertion of parity."
+    },
+    "sparseBody": {
+      "classification": "fixture cannot match",
+      "reason": "The reference has three eligible body controls plus one meaningful editor wrapper, below the unchanged five-body-node coverage floor. Numeric fixture text is not a UI-label match. Adding empty wrappers or counting the editor twice would fabricate coverage."
+    }
+  },
+  "inventory": [
+    {
+      "screen": "document-comment-composer",
+      "status": "measured failure",
+      "classification": "product decision needed",
+      "cause": "composer",
+      "name": "Submit comment",
+      "kind": "control",
+      "region": "content",
+      "property": "x",
+      "want": 749,
+      "got": 750.5,
+      "referenceRect": [
+        749,
+        258,
+        24,
+        24
+      ],
+      "actualRect": [
+        750.5,
+        258,
+        24,
+        24
+      ]
+    },
+    {
+      "screen": "document-comment-composer",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Search",
+      "kind": "control",
+      "region": "sidebar",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "actualRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-comment-composer",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Document icon",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        255,
+        255,
+        255,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "actualRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-comment-composer",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Chat history",
+      "kind": "control",
+      "region": "footer",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "actualRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-comment-composer",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Submit comment",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        229,
+        230,
+        232,
+        1
+      ],
+      "got": [
+        156,
+        157,
+        159,
+        1
+      ],
+      "referenceRect": [
+        749,
+        258,
+        24,
+        24
+      ],
+      "actualRect": [
+        750.5,
+        258,
+        24,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-history",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Search",
+      "kind": "control",
+      "region": "sidebar",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "actualRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-history",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Document icon",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        255,
+        255,
+        255,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "actualRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-history",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Chat history",
+      "kind": "control",
+      "region": "footer",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "actualRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-history",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Close modal dialog",
+      "kind": "control",
+      "region": "topbar",
+      "property": "color",
+      "want": [
+        228,
+        229,
+        231,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        1185.5,
+        70.16,
+        28,
+        28
+      ],
+      "actualRect": [
+        1185.5,
+        70.438,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-metadata",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Search",
+      "kind": "control",
+      "region": "sidebar",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "actualRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-metadata",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Document icon",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        255,
+        255,
+        255,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "actualRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-metadata",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Chat history",
+      "kind": "control",
+      "region": "footer",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "actualRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "New template from document",
+      "kind": "text",
+      "region": "content",
+      "property": "w",
+      "want": 179.66,
+      "got": 183.328,
+      "referenceRect": [
+        513.73,
+        187.82,
+        179.66,
+        15.19
+      ],
+      "actualRect": [
+        514.5,
+        187.867,
+        183.328,
+        15.5
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "Duplicate",
+      "kind": "text",
+      "region": "content",
+      "property": "w",
+      "want": 57.15,
+      "got": 58.313,
+      "referenceRect": [
+        513.73,
+        125.1,
+        57.15,
+        15.19
+      ],
+      "actualRect": [
+        514.5,
+        125.148,
+        58.313,
+        15.5
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "Rename…",
+      "kind": "text",
+      "region": "content",
+      "property": "w",
+      "want": 60.29,
+      "got": 61.516,
+      "referenceRect": [
+        513.73,
+        156.46,
+        60.29,
+        15.19
+      ],
+      "actualRect": [
+        514.5,
+        156.508,
+        61.516,
+        15.5
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "Pin to team",
+      "kind": "text",
+      "region": "content",
+      "property": "w",
+      "want": 67.81,
+      "got": 69.195,
+      "referenceRect": [
+        513.73,
+        93.74,
+        67.81,
+        15.19
+      ],
+      "actualRect": [
+        514.5,
+        93.789,
+        69.195,
+        15.5
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "Download",
+      "kind": "text",
+      "region": "content",
+      "property": "w",
+      "want": 60.71,
+      "got": 61.945,
+      "referenceRect": [
+        513.73,
+        293.66,
+        60.71,
+        15.19
+      ],
+      "actualRect": [
+        514.5,
+        293.945,
+        61.945,
+        15.5
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "Remind me",
+      "kind": "text",
+      "region": "content",
+      "property": "w",
+      "want": 67.51,
+      "got": 68.883,
+      "referenceRect": [
+        513.73,
+        325.02,
+        67.51,
+        15.19
+      ],
+      "actualRect": [
+        514.5,
+        325.305,
+        68.883,
+        15.5
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "Show document history",
+      "kind": "text",
+      "region": "content",
+      "property": "w",
+      "want": 143.33,
+      "got": 146.25,
+      "referenceRect": [
+        513.73,
+        399.5,
+        143.33,
+        15.19
+      ],
+      "actualRect": [
+        514.5,
+        400.023,
+        146.25,
+        15.5
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "Show author names",
+      "kind": "text",
+      "region": "content",
+      "property": "w",
+      "want": 120.18,
+      "got": 122.633,
+      "referenceRect": [
+        513.73,
+        368.14,
+        120.18,
+        15.19
+      ],
+      "actualRect": [
+        514.5,
+        368.664,
+        122.633,
+        15.5
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "F",
+      "kind": "text",
+      "region": "content",
+      "property": "x",
+      "want": 710.24,
+      "got": 709.016,
+      "referenceRect": [
+        710.24,
+        232.6,
+        6.35,
+        11.86
+      ],
+      "actualRect": [
+        709.016,
+        232.43,
+        6.484,
+        13
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "R",
+      "kind": "text",
+      "region": "content",
+      "property": "x",
+      "want": 709.6,
+      "got": 708.367,
+      "referenceRect": [
+        709.6,
+        158.12,
+        6.99,
+        11.86
+      ],
+      "actualRect": [
+        708.367,
+        157.711,
+        7.133,
+        13
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "⌥",
+      "kind": "text",
+      "region": "content",
+      "property": "x",
+      "want": 696.27,
+      "got": 694.766,
+      "referenceRect": [
+        696.27,
+        232.6,
+        11.03,
+        11.86
+      ],
+      "actualRect": [
+        694.766,
+        232.43,
+        11.25,
+        13
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "⇧",
+      "kind": "text",
+      "region": "content",
+      "property": "x",
+      "want": 694.64,
+      "got": 693.102,
+      "referenceRect": [
+        694.64,
+        369.8,
+        11.36,
+        11.86
+      ],
+      "actualRect": [
+        693.102,
+        369.867,
+        11.594,
+        13
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "⇧",
+      "kind": "text",
+      "region": "content",
+      "property": "x",
+      "want": 695.3,
+      "got": 693.773,
+      "referenceRect": [
+        695.3,
+        158.12,
+        11.36,
+        11.86
+      ],
+      "actualRect": [
+        693.773,
+        157.711,
+        11.594,
+        13
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "H",
+      "kind": "text",
+      "region": "content",
+      "property": "x",
+      "want": 687,
+      "got": 685.305,
+      "referenceRect": [
+        687,
+        326.68,
+        8.03,
+        11.86
+      ],
+      "actualRect": [
+        685.305,
+        326.508,
+        8.195,
+        13
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "⇧",
+      "kind": "text",
+      "region": "content",
+      "property": "x",
+      "want": 672.7,
+      "got": 670.711,
+      "referenceRect": [
+        672.7,
+        326.68,
+        11.36,
+        11.86
+      ],
+      "actualRect": [
+        670.711,
+        326.508,
+        11.594,
+        13
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "menuCapture",
+      "name": "⇧",
+      "kind": "text",
+      "region": "topbar",
+      "property": "x",
+      "want": 673.81,
+      "got": 671.844,
+      "referenceRect": [
+        673.81,
+        64.04,
+        11.36,
+        11.86
+      ],
+      "actualRect": [
+        671.844,
+        63.633,
+        11.594,
+        13
+      ]
+    },
+    {
+      "screen": "document-options",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Search",
+      "kind": "control",
+      "region": "sidebar",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "actualRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-options",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Document icon",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        255,
+        255,
+        255,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "actualRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-options",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Chat history",
+      "kind": "control",
+      "region": "footer",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "actualRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-subscribers",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "subscriberPaint",
+      "name": "Document display options and metadata; Edited Oct 28",
+      "kind": "control",
+      "region": "topbar",
+      "property": "backgroundColor",
+      "want": [
+        35,
+        36,
+        36,
+        1
+      ],
+      "got": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "referenceRect": [
+        1242.83,
+        16.25,
+        116.67,
+        28
+      ],
+      "actualRect": [
+        1242.836,
+        16.25,
+        116.664,
+        28
+      ]
+    },
+    {
+      "screen": "document-subscribers",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "subscriberCapture",
+      "name": "Skyler Anderson",
+      "kind": "text",
+      "region": "content",
+      "property": "w",
+      "want": 100.25,
+      "got": 102.297,
+      "referenceRect": [
+        1235.81,
+        98.23,
+        100.25,
+        15.19
+      ],
+      "actualRect": [
+        1235.5,
+        92.75,
+        102.297,
+        15.5
+      ]
+    },
+    {
+      "screen": "document-subscribers",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "applicationRoster",
+      "name": "Agent",
+      "kind": "text",
+      "region": "content",
+      "property": "x",
+      "want": 1281.23,
+      "got": 1272.688,
+      "referenceRect": [
+        1281.23,
+        233.46,
+        43.46,
+        15.68
+      ],
+      "actualRect": [
+        1272.688,
+        219,
+        44.344,
+        16
+      ]
+    },
+    {
+      "screen": "document-subscribers",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "subscriberCapture",
+      "name": "Flow QA OAuth app",
+      "kind": "text",
+      "region": "content",
+      "property": "w",
+      "want": 117.84,
+      "got": 120.242,
+      "referenceRect": [
+        1235.81,
+        201.62,
+        117.84,
+        15.19
+      ],
+      "actualRect": [
+        1235.5,
+        187.25,
+        120.242,
+        15.5
+      ]
+    },
+    {
+      "screen": "document-subscribers",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "subscriberCapture",
+      "name": "zheng liu",
+      "kind": "text",
+      "region": "content",
+      "property": "w",
+      "want": 54.96,
+      "got": 56.086,
+      "referenceRect": [
+        1235.81,
+        141.35,
+        54.96,
+        15.19
+      ],
+      "actualRect": [
+        1235.5,
+        124.75,
+        56.086,
+        15.5
+      ]
+    },
+    {
+      "screen": "document-subscribers",
+      "status": "measured failure",
+      "classification": "fixture cannot match",
+      "cause": "subscriberCapture",
+      "name": "Other users",
+      "kind": "text",
+      "region": "content",
+      "property": "x",
+      "want": 1177.01,
+      "got": 1178.5,
+      "referenceRect": [
+        1177.01,
+        164.62,
+        245.98,
+        29.4
+      ],
+      "actualRect": [
+        1178.5,
+        148.5,
+        245,
+        30.5
+      ]
+    },
+    {
+      "screen": "document-subscribers",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Search",
+      "kind": "control",
+      "region": "sidebar",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "actualRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-subscribers",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Document icon",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        255,
+        255,
+        255,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "actualRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-subscribers",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Chat history",
+      "kind": "control",
+      "region": "footer",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "actualRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-subscribers",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Document display options and metadata; Edited Oct 28",
+      "kind": "control",
+      "region": "topbar",
+      "property": "color",
+      "want": [
+        227,
+        228,
+        230,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        1242.83,
+        16.25,
+        116.67,
+        28
+      ],
+      "actualRect": [
+        1242.836,
+        16.25,
+        116.664,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-subscribers",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Change subscribers…",
+      "kind": "control",
+      "region": "topbar",
+      "property": "color",
+      "want": [
+        229,
+        230,
+        232,
+        1
+      ],
+      "got": [
+        255,
+        255,
+        255,
+        1
+      ],
+      "referenceRect": [
+        1190.73,
+        48.49,
+        147.98,
+        35.28
+      ],
+      "actualRect": [
+        1190.5,
+        48.25,
+        148,
+        36
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-view",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Search",
+      "kind": "control",
+      "region": "sidebar",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "actualRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-view",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Document icon",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        255,
+        255,
+        255,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "actualRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-view",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Chat history",
+      "kind": "control",
+      "region": "footer",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "actualRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "document-view",
+      "status": "coverage limit",
+      "classification": "fixture cannot match",
+      "cause": "sparseBody",
+      "flag": "LOW_MATCH_COVERAGE: >=15 total and >=5 body matches required"
+    },
+    {
+      "screen": "documents-list",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Search",
+      "kind": "control",
+      "region": "sidebar",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "actualRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "documents-list",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Order by Created",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        227,
+        228,
+        230,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        1015.5,
+        100,
+        71.36,
+        24
+      ],
+      "actualRect": [
+        1015.5,
+        100,
+        71.359,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "documents-list",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Order by Last edited",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        227,
+        228,
+        230,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        1141.5,
+        100,
+        88.91,
+        24
+      ],
+      "actualRect": [
+        1141.5,
+        100,
+        88.914,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "documents-list",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Order by Owner",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        227,
+        228,
+        230,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        1267.5,
+        100,
+        63.83,
+        24
+      ],
+      "actualRect": [
+        1267.5,
+        100,
+        63.828,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "documents-list",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Collapse group",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        255,
+        255,
+        255,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        262.5,
+        136,
+        20,
+        20
+      ],
+      "actualRect": [
+        262.5,
+        136,
+        20,
+        20
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "documents-list",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Create document in Team documents",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        228,
+        229,
+        231,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        1389.5,
+        134,
+        24,
+        24
+      ],
+      "actualRect": [
+        1389.5,
+        134,
+        24,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "documents-list",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Document icon",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        255,
+        255,
+        255,
+        1
+      ],
+      "got": [
+        139,
+        139,
+        144,
+        1
+      ],
+      "referenceRect": [
+        286.5,
+        178,
+        24,
+        24
+      ],
+      "actualRect": [
+        286.5,
+        178,
+        24,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "documents-list",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Chat history",
+      "kind": "control",
+      "region": "footer",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "actualRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "documents-list",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Copy team URL",
+      "kind": "control",
+      "region": "topbar",
+      "property": "color",
+      "want": [
+        227,
+        228,
+        230,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        1395.5,
+        16.25,
+        28,
+        28
+      ],
+      "actualRect": [
+        1395.5,
+        16.5,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "documents-list",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Add filter",
+      "kind": "control",
+      "region": "topbar",
+      "property": "color",
+      "want": [
+        227,
+        228,
+        230,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        1361.5,
+        60.25,
+        28,
+        28
+      ],
+      "actualRect": [
+        1361.5,
+        60.5,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "documents-list",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Display options",
+      "kind": "control",
+      "region": "topbar",
+      "property": "color",
+      "want": [
+        227,
+        228,
+        230,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        1395.5,
+        60.25,
+        28,
+        28
+      ],
+      "actualRect": [
+        1395.5,
+        60.5,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "documents-list",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Add to favorites",
+      "kind": "control",
+      "region": "topbar",
+      "property": "color",
+      "want": [
+        227,
+        228,
+        230,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        351.02,
+        16.25,
+        28,
+        28
+      ],
+      "actualRect": [
+        351.023,
+        16.5,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "documents-list",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Team actions",
+      "kind": "control",
+      "region": "topbar",
+      "property": "color",
+      "want": [
+        227,
+        228,
+        230,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        383.02,
+        16.25,
+        28,
+        28
+      ],
+      "actualRect": [
+        383.023,
+        16.5,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "editor-block-menu",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Search",
+      "kind": "control",
+      "region": "sidebar",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "actualRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "editor-block-menu",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Document icon",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        255,
+        255,
+        255,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "actualRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "editor-block-menu",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Regular text",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        156,
+        157,
+        159,
+        1
+      ],
+      "got": [
+        229,
+        230,
+        232,
+        1
+      ],
+      "referenceRect": [
+        261.5,
+        183,
+        42,
+        26
+      ],
+      "actualRect": [
+        261.5,
+        183,
+        42,
+        26
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "editor-block-menu",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Chat history",
+      "kind": "control",
+      "region": "footer",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "actualRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "editor-slash-menu",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Search",
+      "kind": "control",
+      "region": "sidebar",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "actualRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "editor-slash-menu",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Document icon",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        255,
+        255,
+        255,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "actualRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "editor-slash-menu",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Chat history",
+      "kind": "control",
+      "region": "footer",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "actualRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "editor-toolbar",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Search",
+      "kind": "control",
+      "region": "sidebar",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        149,
+        149,
+        151,
+        1
+      ],
+      "referenceRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "actualRect": [
+        172,
+        16,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "editor-toolbar",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Document icon",
+      "kind": "control",
+      "region": "content",
+      "property": "color",
+      "want": [
+        255,
+        255,
+        255,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "actualRect": [
+        439.5,
+        122.5,
+        24,
+        24
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    },
+    {
+      "screen": "editor-toolbar",
+      "status": "withheld by inherited gate",
+      "classification": "fixture cannot match",
+      "cause": "unrecordedInk",
+      "name": "Chat history",
+      "kind": "control",
+      "region": "footer",
+      "property": "color",
+      "want": [
+        226,
+        227,
+        229,
+        1
+      ],
+      "got": [
+        86,
+        87,
+        89,
+        1
+      ],
+      "referenceRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "actualRect": [
+        1402,
+        868,
+        28,
+        28
+      ],
+      "gateReason": "computed colour not found in reference ink; opacity or capture-state ambiguity"
+    }
+  ]
+}
