@@ -20,6 +20,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Preserve rich text, hyperlink targets, and nested block structure when moving a document selection to a new document.
 
 - Preserve unrelated document content when a selection changes during a move, track intervening edits safely, and keep the removal undoable.
+- Restore the shared Display options keyboard focus ring on phones.
+
 - Keep phone search calendars outside the clipped filter menu so every day is visible and clickable as soon as the calendar opens.
 
 - Use light-theme backgrounds and ink throughout the phone settings drawer, including selected navigation and blurred search text.
