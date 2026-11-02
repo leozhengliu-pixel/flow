@@ -29,6 +29,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Let filter value menus size to their labels within the shared maximum width.
 
 - Keep small avatar initials on one line and preserve avatar proportions beside long member names.
+- Reveal label row actions on hover, keyboard focus and while their menu is open.
+
 - Restore desktop display choices for release, SLA and personal activity dates.
 
 - Offer Release in issue options before a workspace has releases or pipelines.
