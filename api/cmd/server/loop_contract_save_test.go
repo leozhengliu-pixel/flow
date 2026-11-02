@@ -1,12 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"reflect"
+	"sync"
 	"testing"
+	"time"
 
+	appconfig "flow/api/internal/config"
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
@@ -115,15 +122,59 @@ func TestLoopContractSaveRegression(t *testing.T) {
 		t.Fatal("fallback downgrade changed the published versions")
 	}
 	assertNoWrite(func() { srv.storeLoopContract(key, loop.ID, hash, fallback) })
-	// The replica still has the old instructions. A late extraction must check
-	// the committed instructions inside its own transaction and write nothing.
+	// Hold the model response while another replica changes the instructions.
+	started, response := make(chan struct{}), make(chan struct{})
+	release := sync.OnceFunc(func() { close(response) })
+	provider := &fakeLoopProvider{contracts: []string{`tool:record_output_contract {"readOnly":true,"outputs":[],"always":false,"skipConditions":[]}`}}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-response
+		provider.serve(w, r)
+	}))
+	t.Cleanup(upstream.Close)
+	t.Cleanup(release)
+	srv.agent = appconfig.AgentConfig{Enabled: true, Protocol: "openai-responses", BaseURL: upstream.URL, Model: "scripted-contract"}
+	srv.agentClient, srv.loopContractLive = upstream.Client(), true
+	completed := make(chan *domain.LoopOutputContract, 1)
+	go func(loop domain.Loop) { completed <- srv.loopContractFor(t.Context(), key, loop) }(loop)
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("extraction did not start")
+	}
 	loop.Instructions = "Newer instructions."
 	loop.OutputContract = person
+	loop.SuggestedOutputContract = model
 	raw, _ := json.Marshal(loop)
 	if _, err := db.Exec(`UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='loops' AND record_key=?`, raw, key, loop.ID); err != nil {
 		t.Fatal(err)
 	}
+	version := data.LoopVersions[1]
+	version.OutputContract = nil
+	versionRaw, _ := json.Marshal(version)
+	if _, err := db.Exec(`UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='loopVersions' AND record_key=?`, versionRaw, key, version.ID); err != nil {
+		t.Fatal(err)
+	}
+	release()
+	select {
+	case model = <-completed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("extraction did not finish")
+	}
+	data = read()
+	if !reflect.DeepEqual(*loopByID(&data, loop.ID), loop) {
+		t.Fatal("late extraction changed the Loop or its contracts")
+	}
+	modelRaw, _ := json.Marshal(model)
+	savedRaw, _ := json.Marshal(data.LoopVersions[1].OutputContract)
+	if model.Source != loopContractModel || !bytes.Equal(savedRaw, modelRaw) {
+		t.Fatal("late extraction did not backfill the version with the old instructions")
+	}
+	if data.LoopVersions[2].OutputContract != nil || !reflect.DeepEqual(data.LoopVersions[3].OutputContract, person) {
+		t.Fatal("late extraction changed a nonmatching or person-owned version")
+	}
 	assertNoWrite(func() { srv.storeLoopContract(key, loop.ID, hash, model) })
+	assertNoWrite(func() { srv.storeLoopContract(key, loop.ID, hash, fallback) })
 	newHash := loopContractHashOf(loop)
 	suggestion := &domain.LoopOutputContract{Source: loopContractModel, InstructionsHash: newHash, Outputs: []domain.LoopContractOutput{{Kind: "document", Operation: loopOpAppend, Target: domain.LoopContractTarget{Mode: "existing", Ambiguous: true}}}}
 	srv.storeLoopContract(key, loop.ID, newHash, suggestion)
