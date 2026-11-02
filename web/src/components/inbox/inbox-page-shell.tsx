@@ -243,7 +243,7 @@ export function InboxHeader({
             </button>
           ) : null}
           <div className="flow-inbox__header-title-actions">
-            <h2>Inbox</h2>
+            <h2><span>Inbox</span></h2>
             <NotificationActionsMenu
               pending={bulkPending}
               onMarkAllRead={onMarkAllRead}

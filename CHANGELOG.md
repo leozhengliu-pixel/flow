@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Keep desktop inbox header insets on its inner toolbar while preserving the title's text bounds and phone layout.
+
 - Match desktop toast dismiss padding and muted foreground without changing phone controls.
 
 - Align desktop issue creation control colours, title and team breadcrumb spacing, and icon-button padding while retaining phone styles.
