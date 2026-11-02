@@ -414,6 +414,26 @@ it('uses Created view defaults and still offers Focus without GitHub team review
   expect(screen.getByRole('option', { name: 'Focus' })).toBeInTheDocument();
 });
 
+it('opens linked issue actions and removes only the selected issue', async () => {
+  const user = userEvent.setup();
+  const issue = makeBootstrap({ viewer }).issues[0];
+  const media = window.matchMedia;
+  const resizeObserver = globalThis.ResizeObserver;
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 767px)', media: query, onchange: null, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn() }));
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  api.updateReview.mockResolvedValue({ ...review, issueIds: [] });
+  try {
+    renderDetail({ ...review, issueIds: [issue.id] });
+    await user.click(screen.getByRole('button', { name: 'Issue actions' }));
+    expect(screen.getByRole('option', { name: 'Link issues' })).toBeVisible();
+    await user.click(screen.getByRole('option', { name: 'Unlink issue from pull request' }));
+    await waitFor(() => expect(api.updateReview).toHaveBeenCalledWith(review.id, { issueIds: [] }));
+  } finally {
+    vi.stubGlobal('matchMedia', media);
+    vi.stubGlobal('ResizeObserver', resizeObserver);
+  }
+});
+
 function renderDetail(item: CodeReview, tab: "overview" | "changes" = "overview") {
   return render(<I18nProvider><ReviewsPage data={makeBootstrap({ viewer, users: [viewer, teammate], reviews: [item], userSettings: {}, integrationConnections: [{ id: 'github', provider: 'github' }] as never[] })} view="for-you" review={item} tab={tab} onNavigate={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)} onOpenSidebar={vi.fn()}/></I18nProvider>);
 }
