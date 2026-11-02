@@ -19,6 +19,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Give desktop notification menus a separate list inset and snooze separator while preserving phone menus and dated snooze actions.
 
+- Align desktop project and initiative description editing areas while keeping their text aligned with the content column.
+
 - Align desktop issue activity and comment avatar typography without changing phone avatars or the user colour palette.
 
 - Align desktop saved-view headings, metadata, favorite controls and summary tabs with their measured presentation.

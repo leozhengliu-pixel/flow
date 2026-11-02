@@ -62,9 +62,9 @@
   .li-latest-update footer { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
   .li-latest-update__comments { min-width: 37px; background: var(--ui-pill-bg) !important; }
   .li-detail .li-description { margin: 0; }
-  .li-description h3 { width: auto; height: 27.5px; line-height: 27.5px; }
+  .li-description h3 { width: auto; height: 27.5px; padding: 6px 0; line-height: normal; }
   .li-description .mention-text-field { box-sizing: border-box; min-height: 110px; }
-  .li-description .mention-text-field .issue-description-root .description-editor { padding-top: 15px; }
+  .li-description .mention-text-field .issue-description-root .description-editor { box-sizing: border-box; width: calc(100% + 28px); margin-inline: -14px; padding: 16px 14px; }
   .li-overview-lists { margin-top: 80px; }
   .li-overview-list > header { min-height: 40px; }
   .li-detail-sidebar { position: static; display: flex; flex-direction: column; width: 400px; flex: 0 0 400px; min-height: 0; padding: 0 8px 8px 4px; border: 0; background: transparent; box-shadow: none; }
