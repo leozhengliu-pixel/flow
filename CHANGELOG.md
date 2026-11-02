@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Use shared phone menu geometry and submenu navigation for issue, team, project and Skills controls.
+
 - Restore shared inset menu highlights, chip hover feedback and perceptible button hover in both themes.
 
 - Reserve separate label checkbox and icon tracks and reveal unchecked subscription boxes on highlight.

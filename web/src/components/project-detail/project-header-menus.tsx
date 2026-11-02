@@ -25,6 +25,7 @@ import { PULSE_EVENT, usePulseSubscription } from '@/lib/pulse-subscriptions'
 import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { ChatPlatformIcon } from '@/components/settings/integration-brand-icon'
 import { chatTeamNotificationsCopy, useChatPlatform } from '@/lib/chat-platform'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 
 const EVENT_OPTIONS = [
   ['issueAdded', 'An issue is added to the project'],
@@ -83,6 +84,7 @@ export function ProjectNotificationMenu({ onOpenChange, open, project, subscript
 
 export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, onRemind, onShowActivity, onShowHistory, onShowNotifications, onSetEvents, subscription, pulseSubscribed, onUpdateSchedule, onShowSlack }: { project: Project; favorited: boolean; onDelete: () => void; onFavorite: () => void; onRemind: (remindAt: string) => Promise<void>; onShowActivity: () => void; onShowHistory: () => void; onShowNotifications: () => void; onSetEvents: (events: string[]) => Promise<void>; subscription?: Subscription; pulseSubscribed?: boolean; onUpdateSchedule?: (schedule: ProjectUpdateSchedule) => Promise<void>; onShowSlack?: () => void }) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const chat = useChatPlatform()
   const notifyLabel = chat.format(t(chatTeamNotificationsCopy(chat.platform).menu))
   const [query, setQuery] = useState('')
@@ -124,8 +126,8 @@ export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, o
   return <>
     <DropdownMenu.Root onOpenChange={open => { setMenuOpen(open); if (!open) setQuery('') }}>
       <DropdownMenu.Trigger asChild><button aria-label={t('Project actions')} className="project-detail-page__header-action" type="button"><FlowOptionsIcon/></button></DropdownMenu.Trigger>
-      <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" aria-label={t('Project actions')} align="start" className="project-action-menu project-action-menu--header" sideOffset={4} collisionPadding={16}>
-        <div className={`project-action-menu__search${query ? '' : ' is-hidden'}`}><input aria-label={t('Filter project actions')} autoFocus onChange={event => setQuery(event.target.value)} onKeyDown={event => {
+      <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" data-phone-menu={phone ? '' : undefined} aria-label={t('Project actions')} align="start" className="project-action-menu project-action-menu--header" sideOffset={4} collisionPadding={16}>
+        <div className={`phone-menu-search project-action-menu__search${query ? '' : ' is-hidden'}`}><input aria-label={t('Filter project actions')} autoFocus onChange={event => setQuery(event.target.value)} onKeyDown={event => {
           event.stopPropagation()
           if (event.key !== 'ArrowDown' && event.key !== 'Enter') return
           const firstItem = event.currentTarget.closest('[role="menu"]')?.querySelector<HTMLElement>('[role="menuitem"]:not([data-disabled])')

@@ -17,6 +17,8 @@ import { teamLeaveDisabledReason } from '@/lib/team-access'
 import type { BootstrapData, Team } from '@/types/flow'
 import { IntegrationBrandIcon } from '@/components/settings/integration-brand-icon'
 import { chatTeamNotificationsCopy, useChatPlatform } from '@/lib/chat-platform'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { MenuSubmenu } from '@/components/ui/menu-submenu'
 
 const notifications = [
   ['issueAdded', 'An issue is added to the team'],
@@ -27,6 +29,7 @@ const notifications = [
 
 export function SidebarTeamMenu({ data, team, onReload, children }: { data: BootstrapData; team: Team; onReload?: (teamId?: string) => Promise<void>; children: ReactNode }) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const [open, setOpen] = useState(false), [query, setQuery] = useState(''), [pending, setPending] = useState(false), [leaving, setLeaving] = useState(false)
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 800)
   useEffect(() => {
@@ -109,11 +112,11 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
       // Wait for the completed click; retain Radix keyboard activation.
       if (event.button === 0) event.preventDefault()
     }} onClick={() => setOpen(value => !value)}>{children}</DropdownMenu.Trigger>
-    <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" ref={content} className="sidebar-popover sidebar-team-menu" side={narrow ? 'bottom' : 'right'} align={narrow ? 'end' : 'start'} sideOffset={narrow ? 4 : -24} collisionPadding={8} onKeyDown={event => {
+    <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" data-phone-menu={phone ? '' : undefined} ref={content} className="sidebar-popover sidebar-team-menu" side={narrow ? 'bottom' : 'right'} align={narrow ? 'end' : 'start'} sideOffset={narrow ? 4 : -24} collisionPadding={8} onKeyDown={event => {
       if (event.defaultPrevented || !content.current?.contains(event.target as Node) || event.target === search.current || event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) return
       event.preventDefault(); event.stopPropagation(); setQuery(value => value + event.key); search.current?.focus()
     }}>
-      <div className="sidebar-team-menu-search" data-searching={Boolean(query)}><input ref={search} autoFocus aria-label={t('Filter…')} placeholder={t('Filter…')} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => {
+      <div className="sidebar-team-menu-search phone-menu-search" data-searching={Boolean(query)}><input ref={search} autoFocus aria-label={t('Filter…')} placeholder={t('Filter…')} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => {
         if (event.key === 'Escape' || event.key === 'Tab') return
         event.stopPropagation()
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter') {
@@ -125,9 +128,9 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
       }}/></div>
       {!groups.length && <div className="sidebar-team-menu-empty" role="status">{t('No results')}</div>}
       {groups.map((group, index) => <div className="sidebar-team-menu-group" key={index}>{index > 0 && <DropdownMenu.Separator/>}{group.map(label => {
-        if (label === 'Subscribe') return <DropdownMenu.Sub key={label}><DropdownMenu.SubTrigger>{icon(label)}<span>{t(label)}</span><ChevronRight className="menu-chevron"/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="sidebar-popover sidebar-team-subscribe-menu" sideOffset={narrow ? -247 : -2} collisionPadding={8}>
+        if (label === 'Subscribe') return <MenuSubmenu key={label} kit={DropdownMenu} label={t(label)} trigger={<>{icon(label)}<span>{t(label)}</span><ChevronRight className="menu-chevron"/></>} contentProps={{ 'data-flow-motion': 'floating', className: 'sidebar-popover sidebar-team-subscribe-menu', sideOffset: -2, collisionPadding: 8 }}>
           {notifications.map(([event, label], index) => <div className="sidebar-team-subscribe-group" key={event}>{index === 0 && <DropdownMenu.Label>{t('Inbox notifications')}</DropdownMenu.Label>}{index === 3 && <DropdownMenu.Label>{t('Pulse updates')}</DropdownMenu.Label>}<DropdownMenu.CheckboxItem disabled={pending} checked={event === PULSE_EVENT ? pulse.subscribed : events.includes(event)} onCheckedChange={checked => void (event === PULSE_EVENT ? updatePulse(checked === true) : updateEvent(event, checked === true))} onSelect={event => event.preventDefault()}><span className="sidebar-team-subscribe-check"><DropdownMenu.ItemIndicator><Check size={10}/></DropdownMenu.ItemIndicator></span><span>{t(label)}</span></DropdownMenu.CheckboxItem></div>)}
-        </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
+        </MenuSubmenu>
         const href = label === 'Team settings' ? settingsPath(data.workspace.urlKey, 'team', team.key) : label === 'Open archive' ? teamArchivePath(data.workspace.urlKey, team.key) : label === notifyLabel ? settingsPath(data.workspace.urlKey, 'team', team.key, 'notifications') : undefined
         const body = <>{icon(label)}<span>{display(label)}</span>{(label === 'Favorite' || label === 'Unfavorite') && <kbd>⌥ F</kbd>}{label === 'Copy URL' && <kbd>⌘ ⇧ ,</kbd>}</>
         return href ? <DropdownMenu.Item key={label} asChild><NavLink to={href}>{body}</NavLink></DropdownMenu.Item> : <DropdownMenu.Item key={label} disabled={label === 'Leave team…' && (Boolean(leaveReason) || leaving)} title={label === 'Leave team…' && leaveReason ? t(leaveReason) : undefined} onSelect={() => select(label)}>{body}</DropdownMenu.Item>
