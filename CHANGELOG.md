@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match the shared desktop project Lead column to the measured 120px track.
+
 - Align desktop project header content insets and cycle breadcrumb separators with their visible chrome.
 
 - Align desktop cycle directory contrast and breadcrumb spacing, keep open project action triggers unfilled, and clarify milestone submenu indicators.
