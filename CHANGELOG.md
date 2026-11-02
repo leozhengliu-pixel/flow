@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Check desktop issue-filter search visibility, non-overlap and filtering without a platform-specific input width.
+
 - Let team owners manage their chat group bindings through workspace authorization, and use the documented Feishu PKCE token exchange with separate OAuth failure reasons, translations that survive dictionary loading, and secret-free stage diagnostics.
 
 - Align desktop issue-filter menu width, window-edge spacing, search hint gap, and submenu overlap with the shared menu measurements.
