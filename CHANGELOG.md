@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Save Loop output contracts in a narrow transaction over the Loop and its versions, skipping unchanged and stale results without loading issue or discussion collections.
+
 - Keep phone Snooze, issue-row, Move to, and Labels submenus inside the viewport, with nested levels replacing their parent and a Back action; preserve desktop cascades.
 
 - Verify desktop text shaping, equal-width digits, and workspace-name containment without platform-specific glyph-width snapshots.

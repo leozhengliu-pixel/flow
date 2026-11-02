@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Output contract extraction: the configured model reads a loop's output
@@ -386,15 +387,16 @@ func (s *server) storeLoopContract(workspace, loopID, hash string, contract *dom
 		if loop == nil {
 			return errNotFound
 		}
-		if loopContractHashOf(*loop) == hash {
-			if loop.OutputContract != nil && loop.OutputContract.Source == loopContractPerson {
-				if loopContractStale(*loop) {
-					loop.SuggestedOutputContract = mergeLoopPersonChoices(loop.OutputContract, contract)
-				}
-			} else {
-				loop.OutputContract = contract
-				loop.SuggestedOutputContract = nil
+		if loopContractHashOf(*loop) != hash {
+			return store.ErrNoMutation
+		}
+		if loop.OutputContract != nil && loop.OutputContract.Source == loopContractPerson {
+			if loopContractStale(*loop) {
+				loop.SuggestedOutputContract = mergeLoopPersonChoices(loop.OutputContract, contract)
 			}
+		} else {
+			loop.OutputContract = contract
+			loop.SuggestedOutputContract = nil
 		}
 		if contract.Source == loopContractModel {
 			for index := range data.LoopVersions {
