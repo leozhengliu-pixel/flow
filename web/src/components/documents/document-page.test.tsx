@@ -247,7 +247,7 @@ describe('DocumentPage header', () => {
     renderPage()
     const trigger = screen.getByRole('button', { name: 'Document options' })
     await user.click(trigger)
-    expect(menuRows()).toEqual(['Move to', 'Pin to team', 'Duplicate', 'Rename…', 'New template from document', 'Favorite', 'Copy', 'Download', 'Remind me', 'Show document history', 'Delete'])
+    expect(menuRows()).toEqual(['Move to', 'Pin to team', 'Duplicate', 'Rename…', 'New template from document', 'Favorite', 'Copy', 'Download', 'Remind me', 'Show document history', 'Delete', 'People with access'])
     const search = screen.getByRole('textbox', { name: 'Command menu' })
     await user.type(search, 'history')
     expect(menuRows()).toEqual(['Show document history'])
@@ -258,10 +258,11 @@ describe('DocumentPage header', () => {
     await user.keyboard('{Escape}')
     await user.click(trigger)
     expect(screen.getByRole('textbox', { name: 'Command menu' })).toHaveValue('')
-    expect(menuRows()).toHaveLength(11)
+    expect(menuRows()).toHaveLength(12)
   })
 
-  it('opens the access dialog from the menu, stages a role and applies it on Save', async () => {
+  it.each([false, true])('opens the access dialog from the menu and saves staged roles (phone: %s)', async phone => {
+    layout.phone = phone
     const user = userEvent.setup()
     api.listDocumentPermissions.mockResolvedValue([{ id: 'owner-grant', documentId: flowDocument.id, subjectType: 'user', subjectId: viewer.id, role: 'owner' }])
     api.replaceDocumentPermissions.mockResolvedValue([{ id: 'owner-grant', documentId: flowDocument.id, subjectType: 'user', subjectId: viewer.id, role: 'owner' }, { id: 'editor-grant', documentId: flowDocument.id, subjectType: 'user', subjectId: teammate.id, role: 'editor' }])

@@ -79,6 +79,7 @@ export function DocumentMenuItems({ ctx, document, variant, team, showAuthorName
   const pinSelected = new Set(teams.filter(item => documentPinnedResource(data, item.id, document.id)).map(item => item.id))
   const pinnedLabel = variant === 'overview' ? 'Unpin from overview' : 'Remove from overview'
   const rename = <FlowMenuItem icon={<IssueActionGlyph label="Rename…" fallback={null}/>} label="Rename…" shortcut="⇧ R" onSelect={() => void renameDocument(ctx, document)}/>
+  const access = variant === 'page' && onOpenAccess && <FlowMenuItem icon={<FlowGlyph name="members"/>} label="People with access" onSelect={onOpenAccess}/>
   const items = <>
     {variant !== 'overview' && <FlowSubmenu icon={<IssueActionGlyph label="Move to" fallback={null}/>} label="Move to" shortcut="⇧ P" search>
       {({ close }) => <FlowMenuOptions options={moveOptions} selected={moveSelected} keepOpen={false} placeholder="Move to…" emptyLabel="No results" onChoose={id => {
@@ -124,9 +125,10 @@ export function DocumentMenuItems({ ctx, document, variant, team, showAuthorName
     <FlowMenuSeparator/>
     {variant === 'page' && !phone && onToggleAuthorNames && <FlowMenuItem icon={<FlowGlyph name="creator"/>} label={showAuthorNames ? 'Hide author names' : 'Show author names'} shortcut="⇧ A" onSelect={onToggleAuthorNames}/>}
     <FlowMenuItem icon={<IssueActionGlyph label="Show document history" fallback={null}/>} label="Show document history" onSelect={() => ui('history')}/>
-    {variant === 'page' && !phone && onOpenAccess && <FlowMenuItem icon={<FlowGlyph name="members"/>} label="People with access" onSelect={onOpenAccess}/>}
+    {!phone && access}
     {!phone && <FlowMenuSeparator/>}
     {canDelete && <FlowMenuItem icon={<FlowGlyph name="delete"/>} label="Delete" onSelect={() => void deleteDocumentWithConfirm(ctx, document, onDeleted)}/>}
+    {phone && access}
   </>
   if (!query.trim()) return items
   const needle = query.trim().toLocaleLowerCase()
