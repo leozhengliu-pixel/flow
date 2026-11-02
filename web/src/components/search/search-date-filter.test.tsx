@@ -16,6 +16,15 @@ describe('search date drafts',()=>{
     expect(onCancel).toHaveBeenCalledOnce()
     expect(onApply).not.toHaveBeenCalled()
   })
+  it('keeps the weekday divider directly above the date grid',()=>{
+    render(<I18nProvider><SearchDateFilter label="Updated date" onApply={vi.fn()} onCancel={vi.fn()}/></I18nProvider>)
+    const grid=screen.getByRole('grid')
+    const weekdays=grid.previousElementSibling
+    expect(weekdays).toBeTruthy()
+    if (!weekdays) return
+    expect(weekdays).toHaveAttribute('data-calendar-weekdays','true')
+    expect(weekdays.nextElementSibling).toHaveAttribute('role','grid')
+  })
   it('applies the suggested current day without changing it while browsing other months',()=>{
     const onApply=vi.fn(),today=new Date()
     render(<I18nProvider><SearchDateFilter label="Updated date" onApply={onApply} onCancel={vi.fn()}/></I18nProvider>)

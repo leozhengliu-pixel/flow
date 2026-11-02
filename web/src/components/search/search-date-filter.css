@@ -12,7 +12,7 @@
 .search-date-filter>div:has(>header)>div{width:100%;margin:0;padding:0;grid-template-columns:repeat(7,minmax(0,1fr));column-gap:8px}
 .search-date-filter>div:has(>section){width:100%;height:298px;flex:none;margin:0;padding:8px 32px 12px}
 .search-date-filter>footer{display:flex;justify-content:flex-end;gap:10px;padding:16px 32px 32px;border-top:.5px solid var(--pk-divider)}
-.search-date-filter>footer>button{height:36px;font-size:13px}
+.search-date-filter>footer>button{height:36px;font-size:13px;color:var(--pk-text)}
 .search-date-filter>footer>.search-date-apply{background:var(--accent-primary);border-color:transparent;color:var(--on-accent)}
 .search-date-filter>footer>.search-date-apply:hover{background:var(--accent-primary-hover)}
 .search-date-filter>footer>button:disabled{opacity:.5;cursor:default}
