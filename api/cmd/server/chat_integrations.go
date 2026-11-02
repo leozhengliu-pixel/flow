@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -83,9 +84,14 @@ func chatHTTPClient() *http.Client {
 // Only fixed provider hosts are reachable; neither connection metadata nor
 // callback payloads can choose an OAuth issuer or API origin.
 func chatRequest(ctx context.Context, endpoint, method, token string, body any, result any) error {
+	_, err := chatRequestStatus(ctx, endpoint, method, token, body, result)
+	return err
+}
+
+func chatRequestStatus(ctx context.Context, endpoint, method, token string, body any, result any) (int, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" || !slices.Contains([]string{"open.feishu.cn", "open.larksuite.com", "accounts.feishu.cn"}, u.Hostname()) {
-		return errInvalid
+		return 0, errInvalid
 	}
 	var data []byte
 	contentType := "application/json"
@@ -95,12 +101,12 @@ func chatRequest(ctx context.Context, endpoint, method, token string, body any, 
 	} else if body != nil {
 		data, err = json.Marshal(body)
 		if err != nil {
-			return err
+			return 0, err
 		}
 	}
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, bytes.NewReader(data))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	req.Header.Set("Content-Type", contentType)
 	if token != "" {
@@ -108,33 +114,55 @@ func chatRequest(ctx context.Context, endpoint, method, token string, body any, 
 	}
 	response, err := chatHTTPClient().Do(req)
 	if err != nil {
-		return &chatPlatformError{Retryable: true}
+		return 0, &chatPlatformError{Retryable: true}
 	}
 	defer response.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
 	if err != nil || len(raw) > 1<<20 {
-		return &chatPlatformError{Status: response.StatusCode, Retryable: true}
+		return response.StatusCode, &chatPlatformError{Status: response.StatusCode, Retryable: true}
 	}
 	var envelope struct {
-		Code  int    `json:"code"`
-		Error string `json:"error"`
+		Code  int             `json:"code"`
+		Error json.RawMessage `json:"error"`
 	}
 	if json.Unmarshal(raw, &envelope) != nil {
-		return &chatPlatformError{Status: response.StatusCode, Retryable: response.StatusCode >= 500}
+		return response.StatusCode, &chatPlatformError{Status: response.StatusCode, Retryable: response.StatusCode >= 500}
 	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 || envelope.Code != 0 || envelope.Error != "" {
+	hasError := len(envelope.Error) > 0 && string(envelope.Error) != `""` && string(envelope.Error) != "null"
+	if response.StatusCode < 200 || response.StatusCode >= 300 || envelope.Code != 0 || hasError {
 		retryAfter, _ := strconv.Atoi(response.Header.Get("Retry-After"))
 		if retryAfter == 0 {
 			if retryAt, e := http.ParseTime(response.Header.Get("Retry-After")); e == nil {
 				retryAfter = int(time.Until(retryAt).Seconds())
 			}
 		}
-		return &chatPlatformError{Code: envelope.Code, Status: response.StatusCode, RetryAfter: time.Duration(max(0, min(retryAfter, 3600))) * time.Second, Retryable: response.StatusCode == 429 || response.StatusCode >= 500 || envelope.Code == 99991400 || envelope.Code == 99991401}
+		return response.StatusCode, &chatPlatformError{Code: envelope.Code, Status: response.StatusCode, RetryAfter: time.Duration(max(0, min(retryAfter, 3600))) * time.Second, Retryable: response.StatusCode == 429 || response.StatusCode >= 500 || envelope.Code == 99991400 || envelope.Code == 99991401}
 	}
 	if result != nil && json.Unmarshal(raw, result) != nil {
-		return errors.New("Invalid chat platform response")
+		return response.StatusCode, errors.New("Invalid chat platform response")
 	}
-	return nil
+	return response.StatusCode, nil
+}
+
+func chatIdentityFailure(provider, stage string, status int, err error) string {
+	var platform *chatPlatformError
+	code := 0
+	if errors.As(err, &platform) {
+		code = platform.Code
+	}
+	// Never log the request, callback, response body or error text: any can
+	// contain credentials, authorization codes or user access tokens.
+	log.Printf("chat_identity_oauth provider=%s stage=%s http_status=%d platform_code=%d invalid_response=%t", provider, stage, status, code, err == nil)
+	switch code {
+	case 99991672, 99991679, 20027, 20067, 20068:
+		return chatOAuthPermissionMessage
+	case 20010:
+		return chatAppUnavailableMessage
+	}
+	if stage == "code_exchange" {
+		return chatCodeExchangeMessage
+	}
+	return chatIdentityReadMessage
 }
 
 func obtainChatTenantToken(ctx context.Context, record domain.ChatIntegrationRecord, credential chatCredentials) (chatCachedToken, error) {
@@ -818,22 +846,15 @@ func (s *server) finishChatIdentityLocked(w http.ResponseWriter, r *http.Request
 		fail("Application credentials unavailable")
 		return
 	}
-	values := url.Values{"grant_type": {"authorization_code"}, "client_id": {record.AppID}, "client_secret": {credential.AppSecret}, "code": {r.URL.Query().Get("code")}, "redirect_uri": {pending.RedirectURI}, "code_verifier": {pending.Verifier}}
-	endpoint := "https://accounts.feishu.cn/oauth/v3/token"
-	var tokenBody any = values
-	if record.Provider == "lark" {
-		endpoint = "https://open.larksuite.com/open-apis/authen/v2/oauth/token"
-		body := map[string]string{}
-		for key := range values {
-			body[key] = values.Get(key)
-		}
-		tokenBody = body
-	}
+	// The v1 authorization endpoint documents v2 token exchange for PKCE.
+	endpoint := chatBaseURL(record.Provider) + "/open-apis/authen/v2/oauth/token"
+	tokenBody := map[string]string{"grant_type": "authorization_code", "client_id": record.AppID, "client_secret": credential.AppSecret, "code": r.URL.Query().Get("code"), "redirect_uri": pending.RedirectURI, "code_verifier": pending.Verifier}
 	var token struct {
 		AccessToken string `json:"access_token"`
 	}
-	if err = chatRequest(r.Context(), endpoint, http.MethodPost, "", tokenBody, &token); err != nil || token.AccessToken == "" {
-		fail("Platform authorization failed; verify application OAuth configuration")
+	status, err := chatRequestStatus(r.Context(), endpoint, http.MethodPost, "", tokenBody, &token)
+	if err != nil || token.AccessToken == "" {
+		failWith(http.StatusBadGateway, chatIdentityFailure(record.Provider, "code_exchange", status, err))
 		return
 	}
 	var profile struct {
@@ -843,16 +864,9 @@ func (s *server) finishChatIdentityLocked(w http.ResponseWriter, r *http.Request
 			Name      string `json:"name"`
 		} `json:"data"`
 	}
-	err = chatRequest(r.Context(), chatBaseURL(record.Provider)+"/open-apis/authen/v1/user_info", http.MethodGet, token.AccessToken, nil, &profile)
-	var platform *chatPlatformError
-	if errors.As(err, &platform) && !platform.Retryable && (platform.Status == http.StatusForbidden || platform.Code != 0) {
-		// The platform refuses the account itself: it is outside the
-		// app's availability range, which the platform admin sets.
-		fail(chatAppUnavailableMessage)
-		return
-	}
+	status, err = chatRequestStatus(r.Context(), chatBaseURL(record.Provider)+"/open-apis/authen/v1/user_info", http.MethodGet, token.AccessToken, nil, &profile)
 	if err != nil || profile.Data.OpenID == "" || profile.Data.TenantKey == "" {
-		fail("Could not verify platform identity")
+		failWith(http.StatusBadGateway, chatIdentityFailure(record.Provider, "identity_read", status, err))
 		return
 	}
 	if record.TenantKey != "" && record.TenantKey != profile.Data.TenantKey {

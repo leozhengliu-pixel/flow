@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -64,14 +63,14 @@ func newChatPermissionFixture(t *testing.T, provider string) *chatPermissionFixt
 	t.Helper()
 	s, handler := chatTestServer(t)
 	s.authDisabled = false
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/auth/login", s.login)
+	mux.Handle("/", handler)
+	handler = s.authenticate(mux)
 	f := &chatPermissionFixture{t: t, s: s, handler: handler, openIDs: map[string]string{}, userTenant: map[string]string{}, groups: map[string]string{}, botIn: map[string]bool{}, outsideRange: map[string]bool{}}
 	metadata, _ := s.store.WorkspaceMetadata("test-workspace")
 	f.workspaceID = metadata.Workspace.ID
-	session, token, err := s.store.Login(t.Context(), "admin@example.test", "test-password")
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.admin = f.activate(chatPermissionActor{session.User, token})
+	f.admin = f.signIn("admin@example.test")
 	f.lead = f.newMember("chat-lead@example.test", "Private lead")
 	f.member = f.newMember("chat-member@example.test", "Private member")
 	f.outsider = f.newMember("chat-outsider@example.test", "Outsider")
@@ -114,25 +113,44 @@ func newChatPermissionFixture(t *testing.T, provider string) *chatPermissionFixt
 	return f
 }
 
-func (f *chatPermissionFixture) activate(actor chatPermissionActor) chatPermissionActor {
-	if err := f.s.store.SetSessionAuthentication(f.t.Context(), actor.token, "password", "", false); err != nil {
-		f.t.Fatal(err)
-	}
-	return actor
-}
-
 func (f *chatPermissionFixture) newMember(email, name string) chatPermissionActor {
-	session, token, err := f.s.store.LoginExternal(f.t.Context(), email, name, "", true)
+	user, verification, err := f.s.store.Register(f.t.Context(), name, email, "test-password")
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	if err = f.s.store.EnsureWorkspaceMembership(f.t.Context(), f.workspaceID, session.User.ID); err != nil {
+	if err = f.s.store.VerifyEmail(f.t.Context(), verification); err != nil {
 		f.t.Fatal(err)
 	}
-	if err = f.s.store.UpdateMemberRole(f.t.Context(), f.workspaceID, session.User.ID, "member"); err != nil {
+	if err = f.s.store.EnsureWorkspaceMembership(f.t.Context(), f.workspaceID, user.ID); err != nil {
 		f.t.Fatal(err)
 	}
-	return f.activate(chatPermissionActor{session.User, token})
+	if err = f.s.store.UpdateMemberRole(f.t.Context(), f.workspaceID, user.ID, "member"); err != nil {
+		f.t.Fatal(err)
+	}
+	return f.signIn(email)
+}
+
+func (f *chatPermissionFixture) signIn(email string) chatPermissionActor {
+	f.t.Helper()
+	raw, _ := json.Marshal(map[string]string{"email": email, "password": "test-password"})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	f.handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		f.t.Fatalf("sign-in status %d", rec.Code)
+	}
+	var session domain.AuthSession
+	if err := json.Unmarshal(rec.Body.Bytes(), &session); err != nil {
+		f.t.Fatal(err)
+	}
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == sessionCookieName {
+			return chatPermissionActor{session.User, cookie.Value}
+		}
+	}
+	f.t.Fatal("sign-in did not set a session cookie")
+	return chatPermissionActor{}
 }
 
 // platform fakes the chat platform. The OAuth code names the session whose
@@ -168,23 +186,17 @@ func (f *chatPermissionFixture) platform(r *http.Request) (*http.Response, error
 			key = "tenant_a"
 		}
 		return chatTestResponse(200, `{"code":0,"msg":"success","data":{"tenant":{"name":"Acme `+key+`","display_id":"F123","tenant_tag":0,"tenant_key":"`+key+`","avatar":{}}}}`), nil
-	case path == "/oauth/v3/token" || path == "/open-apis/authen/v2/oauth/token":
+	case path == "/open-apis/authen/v2/oauth/token":
 		f.userSignIns++
-		code := ""
-		if strings.Contains(r.Header.Get("Content-Type"), "form") {
-			_ = r.ParseForm()
-			code = r.Form.Get("code")
-		} else {
-			var body map[string]string
-			_ = json.NewDecoder(r.Body).Decode(&body)
-			code = body["code"]
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		code := body["code"]
+		if f.outsideRange[code] {
+			return chatTestResponse(400, `{"code":20010,"error":"invalid_grant","error_description":"the user is not in the app's availability range"}`), nil
 		}
 		return chatTestResponse(200, `{"code":0,"access_token":"user:`+code+`"}`), nil
 	case path == "/open-apis/authen/v1/user_info":
 		openID := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer user:")
-		if f.outsideRange[openID] {
-			return chatTestResponse(403, `{"code":20027,"msg":"the user is not in the app's availability range"}`), nil
-		}
 		tenant := f.userTenant[openID]
 		if tenant == "" {
 			tenant = "tenant_a"
@@ -221,7 +233,6 @@ func (f *chatPermissionFixture) do(actor chatPermissionActor, method, path strin
 	}
 	req := httptest.NewRequest(method, path+separator+"workspace=test-workspace", body)
 	req.Header.Set("Content-Type", "application/json")
-	req = req.WithContext(context.WithValue(req.Context(), authUserContextKey{}, actor.user))
 	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: actor.token})
 	rec := httptest.NewRecorder()
 	f.handler.ServeHTTP(rec, req)
@@ -636,8 +647,16 @@ func (f *chatPermissionFixture) authorizeTenant(provider string) {
 // an internal group; nobody else in the team may change it; the binding adds
 // no access to the team.
 func TestChatPrivateTeamBindingNeedsTeamOwnerAuthorization(t *testing.T) {
-	provider := "lark"
+	for _, provider := range []string{"feishu", "lark"} {
+		t.Run(provider, func(t *testing.T) { testChatPrivateTeamBindingNeedsTeamOwnerAuthorization(t, provider) })
+	}
+}
+
+func testChatPrivateTeamBindingNeedsTeamOwnerAuthorization(t *testing.T, provider string) {
 	f := newChatPermissionFixture(t, provider)
+	if err := f.s.store.SetTeamMembership(t.Context(), f.workspaceID, f.publicTeam, f.outsider.user.ID, "owner", true); err != nil {
+		t.Fatal(err)
+	}
 	f.authorizeTenant(provider)
 	base := "/api/integrations/" + provider + "/chat"
 	membersBefore, err := f.s.store.ListTeamMembers(t.Context(), f.workspaceID)
@@ -648,6 +667,10 @@ func TestChatPrivateTeamBindingNeedsTeamOwnerAuthorization(t *testing.T) {
 
 	// (6) The lead sees team binding permission for the private team only.
 	settings := f.expect(f.lead, "GET", base, nil, 200)
+	if settings["permissions"].(map[string]any)["workspace"].(map[string]any)["canManage"] != false {
+		t.Fatal("team owner unexpectedly has workspace integration permission")
+	}
+	f.expect(f.lead, "GET", base+"/chats", nil, 200)
 	teams := settings["permissions"].(map[string]any)["teams"].(map[string]any)
 	if manageable, _ := teams["manageableTeamIds"].([]any); len(manageable) != 1 || manageable[0] != f.privateTeam {
 		t.Fatalf("lead manageable teams: %v", teams)
@@ -666,6 +689,19 @@ func TestChatPrivateTeamBindingNeedsTeamOwnerAuthorization(t *testing.T) {
 		f.refusal(f.lead, "POST", base+"/bindings", chatAuthorizedBinding(refused), 400, code, "")
 	}
 	f.refusal(f.lead, "POST", base+"/bindings", binding, 400, "chat_binding_authorization_required", "team")
+	f.addProjects(domain.Project{ID: "binding_foreign_project", Name: "Other team's project", TeamIDs: []string{f.publicTeam}})
+	if err := f.s.store.MutateWorkspace(t.Context(), "test-workspace", "template.created", "binding_foreign_template", nil, func(data *domain.Bootstrap) error {
+		data.IssueTemplates = append(data.IssueTemplates, domain.IssueTemplate{ID: "binding_foreign_template", Name: "Other team's template", TeamID: f.publicTeam})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	foreignProject, foreignTemplate := binding, binding
+	foreignProject.ProjectIDs = []string{"binding_foreign_project"}
+	foreignTemplate.TemplateID = "binding_foreign_template"
+	for _, refused := range []domain.ChatBinding{foreignProject, foreignTemplate} {
+		f.refusal(f.lead, "POST", base+"/bindings", chatAuthorizedBinding(refused), 400, "chat_binding_scope", "")
+	}
 	// (4) A plain member of the private team and an outsider cannot bind it.
 	f.refusal(f.member, "POST", base+"/bindings", chatAuthorizedBinding(binding), 403, "chat_team_binding_permission_required", "team")
 	f.refusal(f.outsider, "POST", base+"/bindings", chatAuthorizedBinding(binding), 403, "chat_team_binding_permission_required", "team")
@@ -686,10 +722,20 @@ func TestChatPrivateTeamBindingNeedsTeamOwnerAuthorization(t *testing.T) {
 	// (4) Others cannot modify, revoke or delete it, nor see it.
 	edit := created
 	edit.Events = []string{"issue.created", "comment.created", "issue.status_changed"}
+	for _, refused := range []domain.ChatBinding{foreignProject, foreignTemplate} {
+		refused.ID = created.ID
+		f.refusal(f.lead, "POST", base+"/bindings", chatAuthorizedBinding(refused), 400, "chat_binding_scope", "")
+	}
 	f.refusal(f.member, "POST", base+"/bindings", chatAuthorizedBinding(edit), 403, "chat_team_binding_permission_required", "team")
 	f.refusal(f.member, "POST", base+"/bindings/"+created.ID+"/revoke", nil, 403, "chat_team_binding_permission_required", "team")
 	f.refusal(f.member, "DELETE", base+"/bindings/"+created.ID, nil, 403, "chat_team_binding_permission_required", "team")
 	f.refusal(f.outsider, "DELETE", base+"/bindings/"+created.ID, nil, 403, "chat_team_binding_permission_required", "team")
+	f.refusal(f.outsider, "POST", base+"/bindings", chatAuthorizedBinding(edit), 403, "chat_team_binding_permission_required", "team")
+	f.refusal(f.outsider, "POST", base+"/bindings/"+created.ID+"/revoke", nil, 403, "chat_team_binding_permission_required", "team")
+	// A team owner cannot steal an existing binding by changing its team.
+	moved := edit
+	moved.TeamID = f.publicTeam
+	f.refusal(f.outsider, "POST", base+"/bindings", chatAuthorizedBinding(moved), 403, "chat_team_binding_permission_required", "team")
 	for _, viewer := range []chatPermissionActor{f.member, f.outsider} {
 		if bindings, _ := f.expect(viewer, "GET", base, nil, 200)["bindings"].([]any); len(bindings) != 0 {
 			t.Fatalf("%s sees the private team's binding: %v", viewer.user.Email, bindings)
@@ -737,6 +783,8 @@ func TestChatPrivateTeamBindingNeedsTeamOwnerAuthorization(t *testing.T) {
 	if renewed["id"] == created.ID {
 		t.Fatal("revoked binding was reused")
 	}
+	f.expect(f.lead, "DELETE", base+"/bindings/"+renewed["id"].(string), nil, 204)
+	renewed = f.expect(f.lead, "POST", base+"/bindings", chatAuthorizedBinding(binding), 200)
 
 	entries, _ := f.s.store.WorkspaceMetadataFields("test-workspace", "auditLog")
 	for _, action := range []string{"chat_binding.authorized", "chat_binding.updated", "chat_binding.revoked"} {

@@ -412,6 +412,12 @@ func membershipSelfServiceAction(r *http.Request, userID string) (bool, bool) {
 }
 
 func publicAuthPath(path string) bool {
+	for _, provider := range []string{"feishu", "lark"} {
+		base := "/api/integrations/" + provider + "/chat"
+		if path == base || strings.HasPrefix(path, base+"/") {
+			return path == base+"/identity/oauth/callback"
+		}
+	}
 	if strings.HasPrefix(path, "/scim/") {
 		// SCIM uses its own bearer token validator in scim.go; do not require a
 		// browser session for IdP provisioning requests.
@@ -569,7 +575,11 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 	if adminOnlyRequest(r) && !workspaceAdminRole(role) {
-		writeError(w, http.StatusForbidden, "Workspace admin access required")
+		if chatIntegrationRequest(r) {
+			writeChatError(w, http.StatusForbidden, chatWorkspacePermissionMessage)
+		} else {
+			writeError(w, http.StatusForbidden, "Workspace admin access required")
+		}
 		return false
 	}
 	if teamManagementRequest(r) && !workspaceAdminRole(role) && !membershipSelfServiceRequest(r, user.ID) {
@@ -690,6 +700,10 @@ func featureForPath(path string) string {
 
 func adminOnlyRequest(r *http.Request) bool {
 	path := r.URL.Path
+	if chatIntegrationRequest(r) {
+		parts := strings.Split(strings.Trim(path, "/"), "/")
+		return !chatMemberRoute(r.Method, parts[4:])
+	}
 	if strings.HasPrefix(path, "/api/application-installations") {
 		return true
 	}
@@ -776,10 +790,7 @@ func integrationConfigurationRequest(r *http.Request) bool {
 		return false
 	}
 	if len(parts) >= 4 && (parts[2] == "feishu" || parts[2] == "lark") && parts[3] == "chat" {
-		if len(parts) >= 5 && parts[4] == "identity" {
-			return false
-		}
-		return r.Method != http.MethodGet && r.Method != http.MethodHead
+		return !chatMemberRoute(r.Method, parts[4:])
 	}
 	switch len(parts) {
 	case 3:
@@ -792,6 +803,35 @@ func integrationConfigurationRequest(r *http.Request) bool {
 		return r.Method == http.MethodPatch || r.Method == http.MethodDelete
 	case 6:
 		return r.Method == http.MethodDelete && parts[4] == "oauth" && parts[5] == "token"
+	}
+	return false
+}
+
+func chatIntegrationRequest(r *http.Request) bool {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	return len(parts) >= 4 && parts[0] == "api" && parts[1] == "integrations" && chatProvider(parts[2]) && parts[3] == "chat"
+}
+
+// Only these routes delegate authorization to the owning team, initiative
+// or signed-in account. New chat routes remain workspace-admin operations.
+func chatMemberRoute(method string, path []string) bool {
+	if method == http.MethodGet || method == http.MethodHead {
+		return len(path) == 0 ||
+			len(path) == 1 && path[0] == "chats" ||
+			len(path) == 3 && path[0] == "identity" && path[1] == "oauth" && path[2] == "callback" ||
+			len(path) == 3 && path[0] == "initiatives" && path[1] != "" && path[2] == "bindings"
+	}
+	switch {
+	case len(path) == 1 && path[0] == "identity":
+		return method == http.MethodDelete
+	case len(path) == 2 && path[0] == "identity" && path[1] == "start":
+		return method == http.MethodPost
+	case len(path) == 1 && (path[0] == "bindings" || path[0] == "initiative-bindings"):
+		return method == http.MethodPost
+	case len(path) == 2 && (path[0] == "bindings" || path[0] == "initiative-bindings") && path[1] != "":
+		return method == http.MethodDelete
+	case len(path) == 3 && (path[0] == "bindings" || path[0] == "initiative-bindings") && path[1] != "" && path[2] == "revoke":
+		return method == http.MethodPost
 	}
 	return false
 }
