@@ -1308,4 +1308,6 @@ html:root body .property-command-surface.property-command-estimate:not(#_) .prop
   html:root body .property-command-surface .property-command-search { gap: 14px; }
   html:root body .property-command-surface .property-command-search kbd,
   html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-search-shortcut kbd { padding: 2px; }
+  html:root body .issue-properties .label-project-picker:is(.estimate-picker, .cycle-picker):not(#_) { padding-left: 1px; }
+  html:root body .issue-properties .cycle-picker .label-project-trigger:not(#_) { color: var(--issue-fg); }
 }

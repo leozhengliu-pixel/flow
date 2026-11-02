@@ -54,6 +54,11 @@ test('fits compact project labels, hides redundant child history, and uses plain
   await expect(page.getByRole('region', { name: 'Similar issues', exact: true })).toHaveCount(0)
   await page.goto(`/${key}/issue/${child.identifier}`)
   await expect(page.locator('.issue-parent-context')).toBeVisible()
+  await expect(page.locator('.issue-parent-context > a > strong')).toHaveCSS('font-weight', '450')
+  await expect(page.locator('.issue-parent-context > a')).toHaveCSS('gap', '4px')
+  await expect(page.locator('.issue-parent-context > a > span')).toHaveCSS('font-weight', '500')
+  await expect(page.locator('.issue-parent-context > a > span')).toHaveCSS('color', 'lch(100 0 272)')
+  await expect(page.locator('.issue-empty-sub-issue-action > svg')).toHaveCSS('width', '14px')
   await expect(page.getByRole('region', { name: 'Similar issues', exact: true })).toHaveCount(0)
 })
 
@@ -114,6 +119,7 @@ test('opens every action submenu and applies desktop date and reminder presets',
     const menu = page.getByRole('dialog', { name: label, exact: true })
     await expect(menu).toBeVisible()
     await expect(menu.locator('[cmdk-item]')).toHaveCount(count)
+    if (key === 'mark') for (const word of await menu.locator('.issue-options-then').all()) await expect(word).toHaveCSS('line-height', '12.1px')
     for (const label of await menu.locator('.issue-options-label').all()) expect(await label.evaluate(el => el.scrollWidth <= el.clientWidth)).toBeTruthy()
     const root = (await page.locator('.issue-options-popover').boundingBox())!
     const box = (await menu.boundingBox())!
@@ -128,6 +134,8 @@ test('opens every action submenu and applies desktop date and reminder presets',
   await trigger.click()
   await page.locator('.issue-options-popover [data-submenu="due"]').hover()
   const dates = page.locator('.issue-options-due-date')
+  await expect(dates.locator('.due-date-command')).toHaveCSS('min-width', '232px')
+  await expect(dates.locator('.due-date-shortcut')).toBeHidden()
   await expect(dates.getByRole('option', { name: /^End of this week/ })).toBeVisible()
   const update = page.waitForResponse(res => res.request().method() === 'PATCH' && res.url().endsWith(`/api/issues/${issue.id}`))
   await dates.getByRole('option', { name: /^End of this week/ }).click()

@@ -52,9 +52,11 @@
   .issue-view .comment-thread__reply > .avatar { position: absolute; left: 16px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); font-size: 8px; }
   .issue-view .issue-activity-timeline .activity-event-group { min-height: 36.8px; width: 100%; display: flex; align-items: flex-start; gap: 16px; margin-top: 10px; padding: 2px 0 0 8px; border: 0; background: transparent; color: var(--issue-muted); font: 450 12px/16.8px var(--font); text-align: left; }
   .issue-view .activity-event-group[aria-expanded=true] > svg { transform: rotate(90deg); }
+  .issue-view .issue-parent-context { font-size: 13px; font-weight: 450; }
   .issue-view .issue-parent-context > span { line-height: normal; }
-  .issue-view .issue-parent-context > a { height: 26px; padding: 5px 4px; border-radius: 8px; font-weight: 500; line-height: normal; }
-  .issue-view .issue-parent-context > a > strong { color: var(--issue-muted); }
-  .issue-view .issue-parent-context > a > span { color: var(--issue-fg); }
+  .issue-view .issue-parent-context > a { height: 26px; padding: 5px 4px; gap: 4px; border-radius: 8px; font-weight: 450; line-height: normal; }
+  .issue-view .issue-parent-context > a > strong { color: var(--issue-muted); font-weight: inherit; }
+  .issue-view .issue-parent-context > a > span { color: var(--bright); font-weight: 500; }
   .issue-view .issue-empty-sub-issue-action { gap: 3px; font-size: 12px; line-height: normal; }
+  .issue-view .issue-empty-sub-issue-action > svg { width: 14px; height: 14px; }
 }
