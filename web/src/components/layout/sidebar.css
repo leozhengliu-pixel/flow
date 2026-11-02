@@ -78,7 +78,7 @@
 
 @media (min-width: 1024px) {
   .sidebar .workspace-row > button.workspace-menu-trigger { color: var(--text); }
-  .sidebar .workspace-menu-trigger > strong { font-size: 13px; font-weight: 550; line-height: 23px; letter-spacing: -.1px; }
+  .sidebar .workspace-menu-trigger > strong { font-size: 13px; font-weight: 550; line-height: 23px; letter-spacing: -.1px; font-variation-settings: "opsz" 28; }
 }
 
 .sidebar .workspace-row > button.sidebar-top-action {
