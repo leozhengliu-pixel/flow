@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Align desktop issue activity and comment avatar typography without changing phone avatars or the user colour palette.
+
 - Align desktop property search-header spacing and shortcut padding while preserving phone pickers.
 
 - Match desktop issue-board title contrast and linked team breadcrumb foregrounds without changing phone styles.

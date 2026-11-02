@@ -28,6 +28,9 @@
   .issue-view .issue-activity-timeline .timeline-item.event { min-height: 28.8px; padding: 1px 0; }
   .issue-view .detail-pane__activity { padding-top: 6px; }
   .issue-view .issue-activity-timeline .activity-event-icon { position: relative; left: -.5px; height: 18px; min-height: 18px; padding-top: 0; margin-top: 1.5px; }
+  .issue-view .issue-activity-timeline .activity-event-icon .avatar,
+  .issue-view .issue-activity-timeline .comment-card > header > .avatar { font-weight: 400; }
+  .issue-view .issue-activity-timeline .comment-card > header > .avatar { font-size: 9px; }
   .issue-view .activity-blocking-icon { color: var(--relation-ink); }
   .issue-view .activity-blocking-icon svg { width: 14px; height: 14px; }
   .issue-view .issue-activity-timeline .activity-relation-link { padding: 0; border: 0; border-radius: 0; background: transparent; font-size: 12px; font-weight: 450; line-height: normal; }

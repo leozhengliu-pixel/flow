@@ -77,6 +77,9 @@ test('expands event groups without losing comments and posts a reply with deskto
   await toggle.click()
   await expect(page.locator('.timeline-item.event')).toHaveCount(1)
   const card = page.locator('.comment-card').first()
+  await expect(page.locator('.activity-event-icon .avatar').first()).toHaveCSS('font-weight', '400')
+  await expect(card.locator(':scope > header > .avatar')).toHaveCSS('font-weight', '400')
+  await expect(card.locator(':scope > header > .avatar')).toHaveCSS('font-size', '9px')
   await card.hover()
   for (const button of await card.locator('.comment-card__actions button').all()) {
     await expect(button).toHaveCSS('width', '28px')
