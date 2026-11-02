@@ -1,7 +1,7 @@
 import { test, expect } from './issue-list-fixture'
 
 test.skip(({ isMobile }) => isMobile, 'Desktop triage queue')
-test.use({ viewport: { width: 1440, height: 900 } })
+test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
 
 test('enables a throwaway team queue, shows its count, and opens a real issue in the detail pane', async ({ page, request, workspaceKey, issueList }) => {
   const headers = { 'X-Workspace-Key': workspaceKey }
@@ -20,6 +20,19 @@ test('enables a throwaway team queue, shows its count, and opens a real issue in
   const rows = page.locator('[data-triage-row]')
   await expect(rows).toHaveCount(3)
   await expect(page.locator('.flow-triage-list__team svg')).toBeVisible()
+  await expect(rows.first()).toHaveCSS('padding', '0px')
+  await expect(rows.first()).toHaveCSS('margin', '0px')
+  const list = (await page.locator('[data-split-view-list]').boundingBox())!
+  const row = (await rows.first().boundingBox())!
+  expect(row.x).toBe(list.x)
+  expect(list.width - row.width).toBeLessThanOrEqual(1)
+  await expect(page.locator('.flow-triage-list__actions')).toHaveCSS('gap', '4px')
+  const create = page.getByRole('button', { name: 'Create triage issue', exact: true })
+  await expect(create).toHaveCSS('padding', '0px 8px 0px 6px')
+  await expect(create.locator('svg')).toHaveCSS('margin-right', '6px')
+  await expect(create).toHaveCSS('background-color', 'lch(10.149 0.593 272)')
+  await expect(create).toHaveCSS('color', 'lch(90.451 1.2 272)')
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/triage-empty-selection.png`, animations: 'disabled' })
   const selectedTitle = '[audit] Triage check 2'
   const selectedRow = rows.filter({ hasText: selectedTitle })
   await selectedRow.click()
