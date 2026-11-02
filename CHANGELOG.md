@@ -43,6 +43,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Match desktop settings docs links, row actions, security session text, and team overview copy to the shared settings typography and spacing.
 
+- Align desktop integration discovery borders, category badges, feature copy and carousel controls, keeping navigation arrows outside the tab list.
+
 - Align desktop property search-header spacing and shortcut padding while preserving phone pickers.
 
 - Match desktop issue-board title contrast and linked team breadcrumb foregrounds without changing phone styles.

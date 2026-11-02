@@ -33,10 +33,10 @@ export function DesktopIntegrations({ data, onOpen }: { data: BootstrapData; onO
       <button type="button" className="desktop-integration-feature" aria-label={`${t(featured.category)} ${integrationDisplayName(featured, t)} ${t(featured.description)}`} onClick={() => onOpen(featured.slug)}>
         <span className="desktop-integration-category">{t(featured.category)}</span>
         <span className="desktop-integration-preview" aria-hidden="true">{icon(featured.connectProvider, 112)}<ChevronRight size={28}/><img src="/email/flow-mark-128.png" alt="" width="112" height="112"/></span>
-        <span className="desktop-integration-feature-copy">{icon(featured.connectProvider, 48)}<span><strong>{integrationDisplayName(featured, t)}</strong><small>{t(featured.description)}</small></span></span>
+        <span className="desktop-integration-feature-copy">{icon(featured.connectProvider, 56)}<span><strong>{integrationDisplayName(featured, t)}</strong><small>{t(featured.description)}</small></span></span>
       </button>
-      <div className="desktop-integration-strip" role="tablist" aria-label={t('Featured integrations')}>
-        <div>{catalog.map(item => <button type="button" key={item.slug} role="tab" aria-selected={item.slug === featured.slug} onClick={() => setSelected(item.slug)}>{icon(item.connectProvider, 16)}{integrationDisplayName(item, t)}</button>)}</div>
+      <div className="desktop-integration-strip">
+        <div role="tablist" aria-label={t('Featured integrations')}>{catalog.map(item => <button type="button" key={item.slug} role="tab" aria-selected={item.slug === featured.slug} onClick={() => setSelected(item.slug)}>{icon(item.connectProvider, 16)}{integrationDisplayName(item, t)}</button>)}</div>
         <button type="button" aria-label={t('Previous integration')} title={t('Previous integration')} onClick={() => move(-1)}><ChevronLeft size={16}/></button>
         <button type="button" aria-label={t('Next integration')} title={t('Next integration')} onClick={() => move(1)}><ChevronRight size={16}/></button>
       </div>
