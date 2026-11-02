@@ -8,6 +8,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 - Skip punctuation in shared workspace initials, preserving readable phone Settings avatars and whole CJK and accented characters.
+- Keep desktop filter categories and numeric comparisons readable within the existing submenu width limit, expose complete selected filter values through tooltips and accessible descriptions, and distinguish pending disabled filter actions.
 
 - Check desktop issue-filter search visibility, non-overlap and filtering without a platform-specific input width.
 
