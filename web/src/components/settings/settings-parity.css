@@ -1003,7 +1003,7 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
     font: 400 13px/normal var(--font);
   }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > span { display: none; }
-  html:root .settings-app .settings-main .settings-members-page > .settings-members-toolbar > .settings-action:not(.primary) { display: none; }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-action:not(.primary) { display: none; }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-action:not(.primary) { justify-self: start; }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-action.primary {
     height: 36px;
