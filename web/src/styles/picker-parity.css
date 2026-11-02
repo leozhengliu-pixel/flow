@@ -1303,3 +1303,9 @@ html:root body .property-command-surface.property-command-estimate:not(#_) .prop
 html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-search-shortcut { gap: 3px; }
 html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-search-shortcut kbd { width: 18px; min-width: 18px; padding: 2px 0; }
 html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-options [role=option][aria-selected=true] .estimate-icon { color: var(--pk-text-strong); }
+
+@media (min-width: 1024px) {
+  html:root body .property-command-surface .property-command-search { gap: 14px; }
+  html:root body .property-command-surface .property-command-search kbd,
+  html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-search-shortcut kbd { padding: 2px; }
+}

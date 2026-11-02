@@ -44,6 +44,14 @@ test('aligns the issue columns and property rhythm, toggles labels, and keeps sh
   expect(estimate.y - ys[3]).toBe(32)
   const heading = await rail.locator(':scope > h3').evaluate(el => ({ height:el.getBoundingClientRect().height,color:getComputedStyle(el).color }))
   expect(heading).toEqual({height:15.5,color:'lch(61.803 1.2 272)'})
+  for (const name of ['Change status', 'Change priority', 'Change assignee', 'Set estimate']) {
+    await rail.getByRole('combobox', { name: new RegExp(`^${name}`) }).click()
+    const search = page.locator('.property-command-surface .property-command-search:visible')
+    await expect(search).toHaveCSS('gap', '14px')
+    await expect(search.getByRole('textbox')).toHaveCSS('width', '148px')
+    for (const keycap of await search.locator('kbd').all()) await expect(keycap).toHaveCSS('padding', '2px')
+    await page.keyboard.press('Escape')
+  }
   await rail.getByRole('button', { name: 'Add label', exact: true }).click()
   const labels = page.getByRole('dialog', { name: 'Change Labels' })
   await expect(labels).toBeVisible()

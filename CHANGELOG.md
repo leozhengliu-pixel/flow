@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Align desktop property search-header spacing and shortcut padding while preserving phone pickers.
+
 - Scope the desktop document subscriber badge audit to its named user and measure metadata alignment in one animation frame, avoiding ambiguous badges and transient geometry failures.
 
 - Align desktop issue-list disclosure controls, group and row text, and My issues toolbars while preserving the Insights action and phone layouts.
