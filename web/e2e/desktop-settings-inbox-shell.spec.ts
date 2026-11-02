@@ -17,7 +17,15 @@ test('offers desktop review onboarding with both code-host connections', async (
   expect(await preview.evaluate(node => node.scrollHeight <= node.clientHeight && node.scrollWidth <= node.clientWidth)).toBe(true)
   if (process.env.FLOW_UI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_UI_SHOTS}/desktop-reviews.png` })
   await page.setViewportSize({ width: 1200, height: 900 })
-  expect(await preview.evaluate(node => node.scrollHeight <= node.clientHeight && node.scrollWidth <= node.clientWidth)).toBe(true)
+  await expect(preview).toBeInViewport()
+  const copyBox=(await onboarding.locator('.reviews-onboarding-copy').boundingBox())!,previewBox=(await preview.boundingBox())!
+  expect(copyBox.x+copyBox.width).toBeLessThanOrEqual(previewBox.x)
+  await page.locator('.reviews-list-pane').hover()
+  await page.mouse.wheel(0,1600)
+  for (const name of ['Guided reviews', 'Review inbox', 'GitHub sync', 'Iterate']) {
+    const heading = onboarding.getByRole('heading', { name, exact: true })
+    await expect(heading).toBeInViewport()
+  }
   await onboarding.getByRole('button', { name: 'Connect personal GitHub account' }).click()
   await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/settings/integrations/github$`))
   await page.goto(`/${workspaceKey}/reviews`)
