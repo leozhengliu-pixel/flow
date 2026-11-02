@@ -1186,6 +1186,7 @@ export const zhCN: Record<string, string> = {
   "SLA breaches": "SLA 超时",
   "Number of issues matching the filters": "符合筛选条件的事项数量",
   "Issue estimate points": "事项估算点数",
+  "{count} estimate points": "{count} 估算点数",
   "Issues that breached their SLA": "已超过 SLA 的事项",
   "Add your first insight": "添加第一个洞察",
   "Choose a metric to start building this dashboard.":

@@ -5,6 +5,9 @@ import { I18nProvider } from '@/i18n/i18n'
 import type { MyIssuesRowData, MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
 import { ApplicationStoreContext, type ApplicationStoreValue } from '@/store/application-store-contexts'
 import { IssueBoard } from './issue-board'
+import { IssueRowActionsProvider } from '@/components/my-issues/issue-row-actions'
+import { makeBootstrap } from '@/test/fixtures'
+import type { TeamSettings } from '@/types/flow'
 
 const row: MyIssuesRowData = {
   id: 'issue-1', identifier: 'FLOW-1', title: 'Inspect card behavior', teamId: 'team-1', href: '/workspace/issue/FLOW-1/inspect-card-behavior',
@@ -28,6 +31,15 @@ function setup(selected = false, properties = new Set<'status' | 'id' | 'cycle' 
 
 describe('issue board cards', () => {
   beforeEach(() => localStorage.clear())
+
+  it.each([true, false])('summarizes real estimate points only for teams using estimates (%s)', enabled => {
+    const data = makeBootstrap({ teamSettings: { 'team-1': { teamId: 'team-1', estimateType: enabled ? 'fibonacci' : 'notUsed' } as TeamSettings } })
+    const issues = [{ ...row, estimate: 5 }, { ...row, id: 'two', estimate: 3 }, { ...row, id: 'three' }]
+    render(<I18nProvider><IssueRowActionsProvider value={{ data, onUpdateIssue: vi.fn() }}><IssueBoard groups={[{ id: 'started', label: 'In progress', issues }]} properties={new Set(['estimate'])} selectedIds={new Set()} onMove={vi.fn()} onOpenIssue={vi.fn()} onSelectIssue={vi.fn()}/></IssueRowActionsProvider></I18nProvider>)
+    expect(screen.getByRole('button', { name: /^3 issues/ })).toHaveTextContent('3')
+    if (enabled) expect(screen.getByLabelText('9 estimate points')).toHaveTextContent('9')
+    else expect(document.querySelector('[data-board-column-count] svg')).toBeNull()
+  })
 
   it('collapses hidden columns and restores a column through the supplied display action', async () => {
     const user = userEvent.setup(), onShowGroup = vi.fn()

@@ -31,6 +31,14 @@ afterEach(() => clearPagedIssueListCache())
 
 describe('server-backed issue groups', () => {
   beforeEach(() => vi.clearAllMocks())
+  it('uses complete estimate buckets for board totals rather than issue counts or the loaded cards', async () => {
+    vi.mocked(listIssueRecordGroups).mockImplementation(async query => ({ groups: query.groupBy === 'estimate' ? [{ value: '5', count: 100 }, { value: '', count: 1 }] : [{ value: 'state-backlog', count: 101 }] }))
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue({ estimate: 5 })], hasMore: true, nextCursor: 'next', total: -1 })
+    const data = makeBootstrap({ teamSettings: { 'team-1': { teamId: 'team-1', estimateType: 'fibonacci' } } } as never)
+    render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status', teamId: 'team-1' }} layout="board" displayProperties={new Set(['estimate'])} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    expect(await screen.findByLabelText('501 estimate points')).toHaveTextContent('501')
+    expect(listIssueRecordGroups).toHaveBeenCalledWith(expect.objectContaining({ groupBy: 'estimate', filter: { and: [{ and: [] }, { field: 'status', operator: 'in', values: ['state-backlog'] }, { field: 'teamId', values: ['team-1'] }] } }), expect.any(AbortSignal))
+  })
   it('selects all cursor pages in a group, not just the loaded viewport', async () => {
     vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 101 }] })
     vi.mocked(listIssueRecords).mockImplementation(async query => ({ items: Array.from({ length: query?.cursor ? 1 : 100 }, (_, index) => makeIssue({ id: `issue-${query?.cursor ? 100 : index}`, title: `Issue ${query?.cursor ? 100 : index}` })), hasMore: !query?.cursor, nextCursor: query?.cursor ? undefined : 'last-page', total: -1 }))

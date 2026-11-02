@@ -7,7 +7,7 @@ import * as ContextMenu from '@radix-ui/react-context-menu'
 import { Clock3, Ellipsis, Link2, Plus } from 'lucide-react'
 import { EstimateChip, EstimateIcon } from '@/components/issue/estimate-icon'
 import { useIssueRowActions, useTeamEstimateSettings } from '@/components/my-issues/use-issue-row-actions'
-import { teamUsesEstimates } from '@/lib/estimates'
+import { formatEstimatePoints, sumEstimatePoints, teamUsesEstimates } from '@/lib/estimates'
 import { IssueReleaseChip } from '@/components/issue/issue-release-chip'
 import { Virtuoso } from 'react-virtuoso'
 import { toast } from '@/lib/toast'
@@ -211,6 +211,8 @@ function IssueBoardColumn({ group, createIssueLabel, properties, propertyOptions
 }) {
   const { t } = useI18n()
   const virtualizeCards = group.issues.length > CARD_VIRTUALIZATION_THRESHOLD
+  const estimateSettingsFor = useTeamEstimateSettings()
+  const estimateSum = properties.has('estimate') ? sumEstimatePoints(group.issues, estimateSettingsFor) : undefined
   const card = (issue: MyIssuesRowData, index: number) => (
     <IssueBoardCard
       key={issue.id} issue={issue} properties={properties} propertyOptions={propertyOptions} selected={selectedIds.has(issue.id)} dragging={draggingId === issue.id}
@@ -222,7 +224,7 @@ function IssueBoardColumn({ group, createIssueLabel, properties, propertyOptions
     />
   )
   return <section className={styles.column} role="listitem" aria-label={group.label} data-board-column style={virtualizeCards ? { height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 } : undefined}>
-    <IssueBoardGroupHeader group={group} createIssueLabel={createIssueLabel} onCreateIssue={onCreateIssue} onHideGroup={onHideGroup} onSelectIssue={onSelectIssue}/>
+    <IssueBoardGroupHeader group={group} estimateSum={estimateSum} createIssueLabel={createIssueLabel} onCreateIssue={onCreateIssue} onHideGroup={onHideGroup} onSelectIssue={onSelectIssue}/>
     <div className={styles.cards} data-over={over?.groupId === group.id} data-over-end={over?.groupId === group.id && over.index === group.issues.length} data-virtualized={virtualizeCards || undefined} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; if (event.target === event.currentTarget) onSetOver({ groupId: group.id, index: group.issues.length }) }} onDrop={event => { event.stopPropagation(); onDrop(event, group, group.issues.length) }} style={virtualizeCards ? { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } : undefined}>
       {virtualizeCards ? (
         <Virtuoso
@@ -252,16 +254,17 @@ function BoardPlusIcon({ size = 14 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8.75 4C8.75 3.58579 8.41421 3.25 8 3.25C7.58579 3.25 7.25 3.58579 7.25 4V7.25H4C3.58579 7.25 3.25 7.58579 3.25 8C3.25 8.41421 3.58579 8.75 4 8.75H7.25V12C7.25 12.4142 7.58579 12.75 8 12.75C8.41421 12.75 8.75 12.4142 8.75 12V8.75H12C12.4142 8.75 12.75 8.41421 12.75 8C12.75 7.58579 12.4142 7.25 12 7.25H8.75V4Z"/></svg>
 }
 
-export function IssueBoardGroupHeader({group,createIssueLabel='Add new issue',onCreateIssue,onHideGroup,onSelectIssue}:{group:MyIssuesGroupData;createIssueLabel?:string;onCreateIssue?:(group:MyIssuesGroupData)=>void;onHideGroup?:(id:string)=>void;onSelectIssue?:(id:string,selected:boolean,range:boolean)=>void}){
+export function IssueBoardGroupHeader({group,estimateSum,createIssueLabel='Add new issue',onCreateIssue,onHideGroup,onSelectIssue}:{group:MyIssuesGroupData;estimateSum?:number;createIssueLabel?:string;onCreateIssue?:(group:MyIssuesGroupData)=>void;onHideGroup?:(id:string)=>void;onSelectIssue?:(id:string,selected:boolean,range:boolean)=>void}){
   const {t}=useI18n()
   const count=group.totalCount??group.issues.length
+  const pointsLabel=estimateSum === undefined ? undefined : t('{count} estimate points').replace('{count}', formatEstimatePoints(estimateSum))
   return <div className={styles.columnHeaderWrap} data-board-column-header>
       <header className={styles.columnHeader}>
         {group.stateType && <StatusIcon
           state={{ id: group.id, name: group.label, type: group.stateType, color: group.state?.color ?? 'var(--status-neutral)' }}
           size={14}
         />}
-        <strong data-board-column-title data-i18n-ignore>{group.label}</strong><button className={styles.count} data-board-column-count type="button" aria-label={t(`${count} issues`)}><EstimateIcon className={styles.countEstimate} size={14}/><span className={styles.countValue}>{count}</span></button>
+        <strong data-board-column-title data-i18n-ignore>{group.label}</strong><button className={styles.count} data-board-column-count type="button" aria-label={[t(`${count} issues`), pointsLabel].filter(Boolean).join(', ')}>{estimateSum !== undefined && <EstimateIcon className={styles.countEstimate} size={14}/>}<span className={styles.countValue}><span className={styles.issueCount}>{count}</span>{estimateSum !== undefined && <span className={styles.estimateValue} aria-label={pointsLabel}>{formatEstimatePoints(estimateSum)}</span>}</span></button>
         <div className={styles.columnActions}>
         <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.headerButton} type="button" aria-label={t('Open menu')}><span className={styles.desktopIcon}><Ellipsis size={14}/></span><span className={styles.phoneIcon}><BoardEllipsisIcon/></span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" aria-label={t('Open menu')} className={styles.columnMenu} align="end" sideOffset={4}><DropdownMenu.Item className={styles.columnMenuItem} onSelect={()=>group.issues.forEach(issue=>onSelectIssue?.(issue.id,true,false))}>{t(count>group.issues.length?'Select loaded issues':'Select all in column')}</DropdownMenu.Item><DropdownMenu.Item className={styles.columnMenuItem} onSelect={()=>onHideGroup?.(group.id)}>{t('Hide column')}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
         <button className={styles.headerButton} type="button" aria-label={t(createIssueLabel)} onClick={() => onCreateIssue?.(group)}><span className={styles.desktopIcon}><Plus size={15}/></span><span className={styles.phoneIcon}><BoardPlusIcon/></span></button>
