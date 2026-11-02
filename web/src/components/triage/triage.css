@@ -491,20 +491,25 @@ html:root body .triage-snooze-dialog [cmdk-item]:not(#_) { font-size: 15px; }
 .issue-view--triage .issue-mobile-properties .issue-label-chips { display: none; }
 .issue-view--triage .description-editor { width: auto; }
 @media (min-width: 1024px) {
-  .issue-view--triage .issue-document { max-width: none; padding: 21.75px 14px 72px; }
+  .issue-view--triage .issue-layout { display: flow-root; }
+  .issue-view--triage .issue-document { display: flow-root; max-width: none; margin: 21.75px 14px 0 0; padding: 0 0 0 14px; }
   .issue-view--triage .issue-title-field { margin-top: 32px; }
   .issue-view--triage .issue-mobile-properties { margin-top: 16px; margin-bottom: 16px; }
   .issue-view--triage .issue-mobile-properties { height: 24px; min-height: 24px; margin: 18px 0 22px 6px; }
   .issue-view--triage .issue-mobile-properties > * { height: 24px; min-height: 24px; }
   .issue-view--triage .issue-mobile-properties .issue-assignee-group { min-height: 24px; }
   .issue-view--triage .issue-mobile-properties .core-property-trigger,
-  .issue-view--triage .issue-mobile-properties .label-project-trigger { padding: 0 5px; line-height: 12px; }
+  .issue-view--triage .issue-mobile-properties .label-project-trigger { padding: 0 8px 0 6px; gap: 4px; border-color: transparent; line-height: 12px; }
   .issue-view--triage .issue-mobile-properties .core-property-trigger,
-  .issue-view--triage .issue-mobile-properties .label-project-trigger { background: var(--issue-comment-bg); }
-  .issue-view--triage .issue-mobile-properties .label-project-trigger { padding-right: 4.5px; padding-left: 4.5px; }
+  .issue-view--triage .issue-mobile-properties .label-project-trigger { background: var(--sub-button); }
+  .issue-view--triage .issue-mobile-properties .core-property-trigger > span,
+  .issue-view--triage .issue-mobile-properties .label-project-trigger > span { font-weight: 450; }
   .issue-view--triage .issue-mobile-properties .core-property-trigger.muted { color: var(--issue-muted); }
   .issue-view--triage .issue-mobile-properties .core-property-trigger > svg,
   .issue-view--triage .issue-mobile-properties .label-project-trigger > svg { width: 14px; height: 14px; flex-basis: 14px; }
   .issue-view--triage .issue-header--triage { padding-right: 8px; }
   .issue-view--triage .issue-triage-header-actions { padding-left: 0; }
+  .flow-triage-list__title h2 { margin: 0 4px; padding: 0; }
+  .flow-triage-list__header .flow-triage-icon-button,
+  .issue-triage-header-button { padding: 0 2px; }
 }

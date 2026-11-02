@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Match desktop issue identifier tracking and saved-view directory name contrast while preserving phone typography.
 
+- Align desktop triage property chips and document insets, and preserve label and empty project control contrast while their menus are open.
+
 - Keep desktop loop picker entity names at the primary foreground while retaining muted team keys and phone styling.
 
 - Correct desktop issue parent typography, property insets, sub-issue icon sizing, and due-date submenu search presentation.
