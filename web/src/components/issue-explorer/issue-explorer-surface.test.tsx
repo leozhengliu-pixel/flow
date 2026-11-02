@@ -64,3 +64,14 @@ it('renders the team header favorite, notifications, and New issue action', asyn
   await user.click(newIssue)
   expect(onCreateIssue).toHaveBeenCalledOnce()
 })
+
+it('visibly fills a selected team favorite and restores the outline when deselected', () => {
+  const page = (selected: boolean) => <I18nProvider><TooltipProvider><IssueExplorerSurface scopeName="Test team" scopeTeam={{ id: 'team-1', key: 'TST', name: 'Test team' } as never} activeView="all" viewHref={() => '#'} filters={[]} filterOptions={() => []} displayOptions={display} detailsOpen={false} teamFavorite={selected} onToggleTeamFavorite={vi.fn()} onFilterToggle={vi.fn()} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()}>Content</IssueExplorerSurface></TooltipProvider></I18nProvider>
+  const { rerender } = render(page(false))
+  const outline = screen.getByRole('switch').querySelector('path')?.getAttribute('d')
+  rerender(page(true))
+  expect(screen.getByRole('switch', { name: 'Remove from favorites' })).toHaveAttribute('aria-checked', 'true')
+  expect(screen.getByRole('switch').querySelector('path')?.getAttribute('d')).not.toBe(outline)
+  rerender(page(false))
+  expect(screen.getByRole('switch').querySelector('path')?.getAttribute('d')).toBe(outline)
+})

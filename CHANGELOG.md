@@ -20,6 +20,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Preserve rich text, hyperlink targets, and nested block structure when moving a document selection to a new document.
 
 - Preserve unrelated document content when a selection changes during a move, track intervening edits safely, and keep the removal undoable.
+- Fill the team favorite star when its saved selection is active.
+
 - Retain tool targets and search details in expanded Agent work on phones.
 
 - Restore the shared Display options keyboard focus ring on phones.
