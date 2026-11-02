@@ -34,6 +34,15 @@
 .issue-options-submenu-search::placeholder{color:var(--theme-text-secondary);opacity:1}
 .issue-options-due-date{z-index:600;outline:0}
 @media(min-width:1024px){
+  .issue-options-submenu[data-menu="Team"]{width:242px}
+  .issue-options-team .issue-options-icon{width:18px;height:18px;flex-basis:18px}
+  .issue-options-team-path{display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap}
+  .issue-options-team-path>span:not(.issue-options-team-parent):not(.issue-options-team-key),.issue-options-team-parent>span{min-width:0;overflow:hidden}
+  .issue-options-team-path>span:not(.issue-options-team-parent):not(.issue-options-team-key){color:var(--pk-text-strong)}
+  .issue-options-team-parent{display:flex;align-items:center;gap:8px;min-width:0;color:var(--issue-menu-muted)}
+  .issue-options-team-parent>svg{width:5px;height:9px;flex:none}
+  .issue-options-team-key{flex-shrink:0;color:var(--pk-faint)}
+  .issue-options-team[data-current=true]::before{background:var(--issue-menu-active-bg)}
   html:root .issue-options-due-date .due-date-command{min-width:232px}
   .issue-options-due-date .due-date-shortcut{display:none}
   .issue-options-submenu .issue-options-then{line-height:1.1}

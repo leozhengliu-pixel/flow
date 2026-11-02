@@ -6,6 +6,16 @@ import { makeIssue, teammate, viewer } from '@/test/fixtures'
 import { IssueSubscriberPicker } from './issue-subscriber-picker'
 
 describe('issue subscriber picker', () => {
+  it('uses the supplied avatar in the subscription trigger and picker', async () => {
+    const user = userEvent.setup()
+    const member = { ...viewer, avatarUrl: '/uploads/member-avatar.png' }
+    const issue = makeIssue({ subscriberIds: [member.id] })
+    render(<I18nProvider><IssueSubscriberPicker issue={issue} users={[member]} onToggle={vi.fn()}/></I18nProvider>)
+    const trigger = screen.getByRole('button', { name: 'Change subscribers' })
+    expect(trigger.querySelector('img')).toHaveAttribute('src', member.avatarUrl)
+    await user.click(trigger)
+    expect((await screen.findByRole('option', { name: /Viewer/ })).querySelector('img')).toHaveAttribute('src', member.avatarUrl)
+  })
   it('orders selected users, filters options, and keeps the multi-select open', async () => {
     const user = userEvent.setup()
     const onToggle = vi.fn()

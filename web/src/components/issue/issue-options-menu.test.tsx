@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import * as api from '@/lib/api'
 import { makeBootstrap, makeIssue } from '@/test/fixtures'
-import type { ReleasePipeline } from '@/types/flow'
+import type { BootstrapData, ReleasePipeline } from '@/types/flow'
 import { IssueOptionsMenu, type IssueOptionsActions } from './issue-options-menu'
 
 function setupActions(): IssueOptionsActions {
@@ -51,6 +51,26 @@ describe('issue action menu', () => {
     expect(within(menu).getByRole('option',{name:issue.team.name}).querySelector('.issue-options-detail svg')).toBeInTheDocument()
     await user.click(within(menu).getByRole('option',{name:'Next team'}))
     await waitFor(()=>expect(onUpdate).toHaveBeenCalledWith({teamId:target.id}))
+  })
+
+  it('separates other teams and includes the muted ancestor path when filtering', async () => {
+    const user = userEvent.setup()
+    const issue = makeIssue()
+    const child = { ...issue.team, id: 'child', name: 'Child team', key: 'CHD' }
+    const data = makeBootstrap({ teams: [issue.team, child], reviews: [] })
+    data.teamMembers = [{ teamId: issue.team.id, userId: data.viewer.id, role: 'member', joinedAt: '' }]
+    data.teamSettings = { [child.id]: { parentTeamId: issue.team.id } } as BootstrapData['teamSettings']
+    const onUpdate = vi.fn().mockResolvedValue(undefined)
+    render(<I18nProvider><IssueOptionsMenu issue={issue} data={data} onRelation={vi.fn()} onUpdate={onUpdate} onDelete={vi.fn()}/></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Issue options' }))
+    await user.hover(screen.getByRole('option', { name: /^Team/ }))
+    const menu = await screen.findByRole('dialog', { name: 'Team' })
+    const target = within(menu).getByRole('option', { name: `${issue.team.name} › Child team` })
+    expect(target.querySelector('.issue-options-team-parent')).toHaveTextContent(issue.team.name)
+    expect(menu.querySelectorAll('.issue-options-team-group')).toHaveLength(2)
+    await user.type(within(menu).getByRole('combobox'), 'CHD')
+    await user.click(target)
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledWith({ teamId: child.id }))
   })
 
   it('loads a relation target missing from the paged directory before offering removal', async () => {
