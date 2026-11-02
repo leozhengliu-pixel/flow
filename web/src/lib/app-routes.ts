@@ -91,6 +91,7 @@ export type SettingsPageId =
   | "teams"
   | "members"
   | "security"
+  | "mcps"
   | "authentication"
   | "audit-log"
   | "api"
@@ -1932,6 +1933,7 @@ const ACCOUNT_SETTINGS = new Set<SettingsPageId>([
   "agents",
 ]);
 const SETTINGS_PAGES = new Set<SettingsPageId>([
+  "mcps",
   "issue-labels",
   "issue-templates",
   "sla",

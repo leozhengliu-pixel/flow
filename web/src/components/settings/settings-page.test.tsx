@@ -70,6 +70,20 @@ it("localizes settings navigation and keeps the active route announced", () => {
   expect(screen.getByPlaceholderText("搜索…")).toBeVisible();
 });
 
+it('routes MCP connectors to its connector controls and announces the selected entry', async () => {
+  localStorage.setItem('flow:locale', 'en-US');
+  const input = { ...props(), page: 'mcps' as const };
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  const nav = screen.getByRole('button', { name: 'MCP connectors' });
+  expect(nav).toHaveAttribute('aria-current', 'page');
+  await userEvent.click(nav);
+  expect(input.onNavigate).toHaveBeenCalledWith('mcps');
+  expect(screen.getByRole('heading', { name: 'MCP connectors', level: 1 })).toBeVisible();
+  expect(screen.getByRole('checkbox', { name: 'Enable connectors' })).toBeVisible();
+  expect(screen.getByRole('combobox', { name: 'Manage connectors' })).toBeVisible();
+  expect(screen.queryByRole('heading', { name: 'AI & agents' })).not.toBeInTheDocument();
+});
+
 it("draws every settings nav entry with its reference glyph, not lucide icons", () => {
   const { container } = render(
     <I18nProvider>
@@ -237,7 +251,7 @@ it('lists Usage & limits without billing or a plan pill for admins', () => {
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
   const labels = navLabels();
   const admin = labels.slice(labels.indexOf('Workspace'));
-  expect(admin.slice(0, 8)).toEqual(['Workspace', 'Teams', 'Members', 'Security', 'API', 'Applications', 'Usage & limits', 'Import & export']);
+  expect(admin.slice(0, 9)).toEqual(['Workspace', 'Teams', 'Members', 'Security', 'MCP connectors', 'API', 'Applications', 'Usage & limits', 'Import & export']);
   expect(labels).not.toContain('Billing');
   expect(screen.queryByRole('button', { name: 'Free plan' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Open Help menu' })).toBeInTheDocument();

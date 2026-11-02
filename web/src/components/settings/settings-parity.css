@@ -585,7 +585,7 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
   html:root .settings-app .settings-main .settings-select-radix { display: none !important; }
   html:root .settings-app .settings-main .settings-select-native {
     display: inline-block !important;
-    width: auto;
+    width: var(--settings-select-width, auto);
     min-width: 0;
     appearance: none;
     font: 400 13px/normal var(--font);
@@ -594,7 +594,7 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
   html:root .settings-app .settings-main .settings-select-native-wrap {
     position: relative;
     display: inline-block;
-    width: max-content;
+    width: var(--settings-select-width, max-content);
     height: 36px;
   }
   html:root .settings-app .settings-main .settings-select-native-wrap > span {

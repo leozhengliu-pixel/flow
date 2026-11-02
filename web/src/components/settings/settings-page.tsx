@@ -17,6 +17,7 @@ import { WorkspaceInitials } from '@/components/workspace/workspace-initials';
 import { settingsSidebarTeams } from './settings-sidebar-teams';
 import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
+import { McpSettingsPage } from './mcp-settings-page';
 import type { IntegrationProvider, UsageSettingsView } from '@/lib/app-routes';
 import { adminHintsApply, hiddenSettingsMessage, isPersonalSettingsPage, isWorkspaceAdmin, roleAllowed, teamReadOnlyNotice, teamSettingsAccess, workspaceReadOnlyNotice, workspaceSettingsAccess } from '@/lib/settings-access';
 import { AdminOnlyHint } from './admin-only-hint';
@@ -440,6 +441,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
       { id: "teams", label: "Teams", glyph: "teams" },
       { id: "members", label: "Members", glyph: "members" },
       { id: "security", label: "Security", glyph: "security" },
+      { id: "mcps", label: "MCP connectors", glyph: "mcp" },
       { id: "api", label: "API", glyph: "code" },
       { id: "applications", label: "Applications", glyph: "applications" },
       { id: "usage", label: "Usage & limits", glyph: "usage" },
@@ -534,17 +536,9 @@ export function SettingsPage(props: SettingsPageProps) {
           .filter((item) => workspaceSettingsAccess(props.data, item.id) !== "hidden")
           .map((item) => item.id === "integrations" && isWorkspaceAdmin(props.data) ? { ...item, label: "All integrations" } : item),
       })).filter((section) => section.items.length);
-      if (!phoneLayout && !desktop) return sections;
-      // On phones the drawer lists the workspace's MCP connector controls in
-      // Administration, between Security and API, like the reference drawer.
-      return sections.map((section) => section.title !== "Administration" ? section : {
-        ...section,
-        items: section.items.flatMap((item) => item.id === "security"
-          ? [item, { id: "ai", label: "MCP connectors", glyph: "mcp" } as NavItem]
-          : [item]),
-      });
+      return sections;
     },
-    [props.data, phoneLayout, desktop],
+    [props.data],
   );
   const accessiblePageIds = useMemo(
     () => new Set(visible.flatMap(section => section.items.map(item => item.id))),
@@ -753,7 +747,7 @@ export function SettingsPage(props: SettingsPageProps) {
                     key={item.id}
                     href={desktop ? settingsPath(props.data.workspace.urlKey, item.id) : undefined}
                     item={item}
-                    active={settingsNavPage(props.page) === item.id && item.label !== "MCP connectors"}
+                    active={settingsNavPage(props.page) === item.id}
                     onClick={() => {
                       props.onNavigate(item.id);
                       setMobileNav(false);
@@ -1380,6 +1374,7 @@ function SettingsBodyContent(
         <SecurityPage data={props.data} onReload={props.onReload} onNavigate={props.onNavigate} />
       </>
     );
+  if (page === "mcps") return <McpSettingsPage data={props.data} onReload={props.onReload}/>;
   if (page === "authentication")
     return (
       <AuthenticationPage data={props.data} onReload={props.onReload} />
