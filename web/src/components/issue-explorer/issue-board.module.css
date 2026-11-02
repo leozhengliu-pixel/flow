@@ -52,7 +52,7 @@
   .hiddenList{display:flex;flex-direction:column;gap:10px}
   .hiddenStatus{height:37px;display:block;padding:0;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
   .hiddenStatusCard{height:37px;display:flex;align-items:center;gap:12px;padding:4px 12px;border:.5px solid var(--board-add-issue-border);border-radius:8px;background:var(--board-card-surface);box-shadow:var(--shadow)}
-  .hiddenStatusName{margin-left:2px;line-height:normal}
+  .hiddenStatusName{margin-left:2px;line-height:18.2px}
   .hiddenStatus b{margin-left:auto;gap:4px;font-size:13px;font-weight:450;line-height:normal}
   .hiddenStatus b svg{display:block;flex:none}
   .hiddenStatus:hover .hiddenStatusCard{background:var(--theme-surface-hover)}
@@ -113,7 +113,12 @@
 }
 .columnActions{display:flex;align-items:center;gap:8px;margin-left:auto}
 @media(min-width:1024px){
-  .columnHeader{padding-right:12px}
+  .board{padding-left:0}
+  .column{width:356px;min-width:356px}
+  .columnHeaderWrap,.cards{margin-inline:4px}
+  .columnHeader strong{margin-left:2px}
+  .headerButton{padding-inline:2px}
+  .columnHeader{padding:2px 12px 0 18px}
   .columnActions{gap:2px}
   .columnActions .headerButton{border-radius:9999px}
   .count{display:flex;align-items:center;gap:4px;line-height:normal}
