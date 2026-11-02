@@ -495,9 +495,10 @@ function IssueCheckbox({ checked, onChange }: { checked: boolean; onChange: (che
 }
 
 export function IssueContextMenu({ editable, issue, options, onPropertyChange, onAction }: { editable:boolean;issue:MyIssuesRowData;options: MyIssuesRowPropertyOptions; onPropertyChange: (property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onAction?: (action: MyIssuesContextAction) => void }) {
+  const phone = usePhoneLayout()
   const rowActions = useIssueRowActions()
   const statusOptions = useTeamStatusOptions(options.status, issue.teamId)
-  return <ContextMenu.Content data-flow-motion="floating" className={styles.contextMenu} collisionPadding={10}>
+  return <ContextMenu.Content data-flow-motion="floating" data-phone-menu={phone ? '' : undefined} className={styles.contextMenu} collisionPadding={10}>
     <div className={styles.contextMenuList}>
     {editable&&<><ContextPropertySub label="Status" shortcut="S" options={statusOptions} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
     <ContextPropertySub label="Priority" shortcut="P" options={options.priority} selectedIds={[String(issue.priority)]} onSelect={id => onPropertyChange('priority', id)}/>

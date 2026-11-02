@@ -1066,9 +1066,7 @@
   color: inherit;
   text-align: left;
 }
-.skillsMenu [role="option"]:hover {
-  background: var(--theme-surface-hover);
-}
+.skillsMenu [role="option"] > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skillsMenu [role="option"] svg {
   width: 14px;
   height: 14px;
@@ -1484,7 +1482,6 @@
 }
 :global(:root[data-theme="light"]) .historyMenu [role="option"]:hover,
 :global(:root[data-theme="light"]) .historyMenu [role="option"][aria-selected="true"],
-:global(:root[data-theme="light"]) .skillsMenu [role="option"]:hover { background: var(--theme-surface-hover); }
 :global(:root[data-theme="light"]) .historyMenu [role="option"] span { color: var(--theme-text-secondary); }
 :global(:root[data-theme="light"]) .historyMenu time { color: var(--theme-text-tertiary); }
 :global(:root[data-theme="light"]) .historyGroup { color: var(--theme-text-tertiary); }

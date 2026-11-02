@@ -55,13 +55,13 @@
 .groupHeader[data-subgroup]{margin-left:24px}
 .row[data-active]{background:var(--bg-active)}.row[data-active]::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:2px;background:var(--accent-primary)}
 :global(:root[data-theme="light"]) .groupHeader{background:var(--bg-sidebar)}
-:global(html:root[data-theme="light"]) .contextMenu .menuItem,:global(html:root[data-theme="light"]) .contextSubmenu .menuItem{margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--lx-item-text);font-weight:450}
-:global(html:root[data-theme="light"]) .contextMenu .menuItem[data-highlighted],:global(html:root[data-theme="light"]) .contextMenu .menuItem[data-state=open],:global(html:root[data-theme="light"]) .contextSubmenu .menuItem[data-highlighted]{background:var(--lx-item-hover)}
-:global(html:root[data-theme="light"]) .contextMenu .menuItem[data-danger=true]{color:var(--lx-item-text)}
-:global(html:root[data-theme="light"]) .contextMenu .menuSeparator:after,:global(html:root[data-theme="light"]) .contextSubmenu .menuSeparator:after{left:0;right:0;background:var(--lx-popover-border)}
-:global(html:root[data-theme="light"]) .contextMenu,:global(html:root[data-theme="light"]) .contextSubmenu{border-color:var(--lx-popover-border);background:var(--lx-surface);box-shadow:var(--lx-popover-shadow)}
+:global(:where(:root[data-theme="light"])) .contextMenu .menuItem,:global(:where(:root[data-theme="light"])) .contextSubmenu .menuItem{margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--lx-item-text);font-weight:450}
+:global(:where(:root[data-theme="light"])) .contextMenu .menuItem[data-highlighted],:global(:where(:root[data-theme="light"])) .contextMenu .menuItem[data-state=open],:global(:where(:root[data-theme="light"])) .contextSubmenu .menuItem[data-highlighted]{background:var(--lx-item-hover)}
+:global(:where(:root[data-theme="light"])) .contextMenu .menuItem[data-danger=true]{color:var(--lx-item-text)}
+:global(:where(:root[data-theme="light"])) .contextMenu .menuSeparator:after,:global(:where(:root[data-theme="light"])) .contextSubmenu .menuSeparator:after{left:0;right:0;background:var(--lx-popover-border)}
+:global(:where(:root[data-theme="light"])) .contextMenu,:global(:where(:root[data-theme="light"])) .contextSubmenu{border-color:var(--lx-popover-border);background:var(--lx-surface);box-shadow:var(--lx-popover-shadow)}
 .menuItem>.menuIcon{width:16px;height:16px;flex:0 0 16px;margin:0 8px 0 0;color:var(--issue-muted)}
-:global(html:root[data-theme="light"]) .menuItem>.menuIcon{color:var(--lx-item-icon)}
+:global(:where(:root[data-theme="light"])) .menuItem>.menuIcon{color:var(--lx-item-icon)}
 .contextMenu{width:max-content;min-width:180px;max-width:calc(100vw - 20px)}
 .contextMenu .menuItem>span:not(:only-child){white-space:nowrap}
 .contextMenu .menuItem>kbd{padding-left:12px;white-space:nowrap}
@@ -79,13 +79,13 @@
 .menuIcon>svg{width:16px;height:16px;display:block}
 /* Row context menu in both themes: picker surface, inset rows, neutral highlight. */
 .menuItem>span.menuIcon{display:grid;place-items:center}
-.contextMenu:not(#_),.contextSubmenu:not(#_){border:.5px solid var(--pk-border);background:var(--pk-surface);box-shadow:var(--pk-shadow);color:var(--pk-text)}
-.contextMenu:not(#_) .menuItem,.contextSubmenu:not(#_) .menuItem,.contextSubmenu:not(#_) .submenuItem{margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--pk-text);font-weight:450}
-.contextMenu:not(#_) .menuItem[data-highlighted],.contextMenu:not(#_) .menuItem[data-state=open],.contextSubmenu:not(#_) .menuItem[data-highlighted],.contextSubmenu:not(#_) .menuItem[data-state=open],.contextSubmenu:not(#_) .submenuItem[data-highlighted]{background:var(--pk-hover)}
-.contextMenu:not(#_) .menuItem>.menuIcon{color:var(--pk-text)}
-.contextMenu:not(#_) .menuItem>kbd,.contextSubmenu:not(#_) .menuItem>kbd,.contextSubmenu:not(#_) .submenuItem>kbd{color:var(--pk-muted);font-size:11px;font-weight:500}
-.contextMenu:not(#_) .menuSeparator:after,.contextSubmenu:not(#_) .menuSeparator:after{left:0;right:0;background:var(--pk-divider)}
-.menuItem>.menuIcon svg:not(#_){margin:0;color:inherit}
+.contextMenu,.contextSubmenu{border:.5px solid var(--pk-border);background:var(--pk-surface);box-shadow:var(--pk-shadow);color:var(--pk-text)}
+.contextMenu .menuItem,.contextSubmenu .menuItem,.contextSubmenu .submenuItem{margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--pk-text);font-weight:450}
+.contextMenu .menuItem[data-highlighted],.contextMenu .menuItem[data-state=open],.contextSubmenu .menuItem[data-highlighted],.contextSubmenu .menuItem[data-state=open],.contextSubmenu .submenuItem[data-highlighted]{background:var(--pk-hover)}
+.contextMenu .menuItem>.menuIcon{color:var(--pk-text)}
+.contextMenu .menuItem>kbd,.contextSubmenu .menuItem>kbd,.contextSubmenu .submenuItem>kbd{color:var(--pk-muted);font-size:11px;font-weight:500}
+.contextMenu .menuSeparator:after,.contextSubmenu .menuSeparator:after{left:0;right:0;background:var(--pk-divider)}
+.menuItem>.menuIcon svg{margin:0;color:inherit}
 .menuChevron{flex:none;margin-left:auto;padding-left:8px;color:var(--pk-faint);font-size:6px;line-height:1}
 /* The reference app brightens the status icon under the pointer (filter: brightness(1.32) in dark). */
 .statusTrigger svg{transition:filter .15s ease}.statusTrigger:hover svg,.statusTrigger[data-state=open] svg{filter:brightness(1.32)}
@@ -207,7 +207,7 @@
   .menuChevron :global(.flow-submenu-chevron){width:16px;height:16px}
   .menuItem .menuChevron svg{margin:0}
   .menuItem>kbd+.menuChevron{margin-left:6px;padding-left:0}
-  .contextMenu:not(#_) .menuItem:is([data-highlighted],[data-state=open]){color:var(--pk-text-strong)}
+  .contextMenu .menuItem:is([data-highlighted],[data-state=open]){color:var(--pk-text-strong)}
   .contextSubmenu:not(.issueSubmenu) .submenuItem>svg{width:16px;height:16px;flex:0 0 16px}
   .row{--row-status-column:16px}
   .cycleChip{padding-inline:9px;gap:6px;border-radius:48px;background:var(--bg-panel);box-shadow:inset 0 0 0 .5px var(--ui-pill-ring)}

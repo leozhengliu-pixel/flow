@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { Check, Plus, Search } from "lucide-react";
 import { newAgentSkillPath } from "@/lib/app-routes";
@@ -7,6 +7,8 @@ import { useI18n } from "@/i18n/i18n";
 import { usePropertyCommand } from "@/components/property/use-property-command";
 import { AgentChevronDownIcon, AgentSkillsIcon } from "./agent-icons";
 import styles from "./agent-page.module.css";
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
+import { PhoneMenu } from "@/components/ui/phone-menu";
 
 /** The reference app's "Skills" pill in an agent composer: pick the viewer's skills for the next message, or create one. */
 export function AgentSkillsPicker({
@@ -24,6 +26,8 @@ export function AgentSkillsPicker({
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  const phone = usePhoneLayout();
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const options = useMemo(
     () => [...(data.agentSkills ?? []).map((item) => ({ id: item.id, label: item.name })), { id: "__create__", label: t("Create skill") }],
     [data.agentSkills, t],
@@ -42,17 +46,7 @@ export function AgentSkillsPicker({
       onChange(selectedIds.includes(option.id) ? selectedIds.filter((id) => id !== option.id) : [...selectedIds, option.id]);
     },
   });
-  return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>
-        <button aria-expanded={open} aria-label={t("Skills")} data-agent-skills="" className={`${styles.skillsButton}${className ? ` ${className}` : ""}`} type="button">
-          <AgentSkillsIcon />
-          <span>{t("Skills")}</span>
-          <AgentChevronDownIcon />
-        </button>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content data-flow-motion="floating" align="start" className={styles.skillsMenu} side="bottom" sideOffset={4} onKeyDown={onKeyDown}>
+  const content = <>
           <div className={styles.skillsMenuHeader}>{t("Select skill")}</div>
           <div className={styles.menuSearch}>
             <Search />
@@ -65,9 +59,10 @@ export function AgentSkillsPicker({
               onChange={(event) => onQueryChange(event.target.value)}
             />
           </div>
-          <div role="listbox">
+          <div role="listbox" data-phone-menu-options={phone ? '' : undefined}>
             {filteredOptions.map((option) => (
               <button
+                className="menu-option"
                 aria-selected={activeId === option.id}
                 key={option.id}
                 onMouseMove={() => setActiveId(option.id)}
@@ -81,8 +76,16 @@ export function AgentSkillsPicker({
               </button>
             ))}
           </div>
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
-  );
+  </>;
+  const trigger = <button ref={triggerRef} aria-expanded={open} aria-label={t("Skills")} data-agent-skills="" className={`${styles.skillsButton}${className ? ` ${className}` : ""}`} type="button" onClick={phone ? () => setOpen(value => !value) : undefined}>
+    <AgentSkillsIcon /><span>{t("Skills")}</span><AgentChevronDownIcon />
+  </button>;
+  if (phone) return <>
+    {trigger}
+    <PhoneMenu open={open} onOpenChange={setOpen} label={t("Skills")} className={styles.skillsMenu} onCloseAutoFocus={event => { event.preventDefault(); triggerRef.current?.focus({ preventScroll: true }); }}><div onKeyDown={onKeyDown}>{content}</div></PhoneMenu>
+  </>;
+  return <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+    <Popover.Portal><Popover.Content data-flow-motion="floating" align="start" className={styles.skillsMenu} side="bottom" sideOffset={4} onKeyDown={onKeyDown}>{content}</Popover.Content></Popover.Portal>
+  </Popover.Root>;
 }

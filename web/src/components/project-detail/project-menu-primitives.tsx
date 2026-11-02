@@ -4,6 +4,7 @@ import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
 import './project-action-menu.css'
+import { MenuSubmenu } from '@/components/ui/menu-submenu'
 
 export function ProjectMenuItem({ label, icon, shortcut, onSelect }: { label: string; icon: ReactNode; shortcut?: string; onSelect: () => void }) {
   const { t } = useI18n()
@@ -14,16 +15,13 @@ export function ProjectSubmenu({ label, icon, shortcut, children, searchable = f
   const [open, setOpen] = useState(false)
   const [trigger, setTrigger] = useState<HTMLDivElement | null>(null)
   const { t } = useI18n()
-  return <DropdownMenu.Sub open={open} onOpenChange={setOpen}>
-    <DropdownMenu.SubTrigger ref={setTrigger}><span className="project-menu-icon">{label === 'Dependencies' ? <ProjectDependencyIcon/> : label === 'Initiatives' ? <ViewGlyph icon="Initiative" color="currentColor"/> : <IssueActionGlyph label={label === 'Blocked by' || label === 'Blocking' ? `${label}…` : label} fallback={icon}/>}</span><span className="project-menu-label">{t(label)}</span>{shortcut && <ProjectMenuShortcut value={shortcut}/>}<span className="project-menu-chevron" aria-hidden="true">▶</span></DropdownMenu.SubTrigger>
-    <DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`project-action-menu project-action-submenu ${className}`} data-menu={label} aria-label={t(label)} sideOffset={-2} alignOffset={alignOffset ?? (searchable ? -43 : -6.5)} collisionPadding={16} onFocusOutside={event => {
+  return <MenuSubmenu kit={DropdownMenu} open={open} onOpenChange={setOpen} label={t(label)} triggerProps={{ ref: setTrigger }} trigger={<><span className="project-menu-icon">{label === 'Dependencies' ? <ProjectDependencyIcon/> : label === 'Initiatives' ? <ViewGlyph icon="Initiative" color="currentColor"/> : <IssueActionGlyph label={label === 'Blocked by' || label === 'Blocking' ? `${label}…` : label} fallback={icon}/>}</span><span className="project-menu-label">{t(label)}</span>{shortcut && <ProjectMenuShortcut value={shortcut}/>}<span className="project-menu-chevron" aria-hidden="true">▶</span></>} contentProps={{ 'data-flow-motion': 'floating', className: `project-action-menu project-action-submenu ${className}`, 'data-menu': label, 'aria-label': t(label), sideOffset: -2, alignOffset: alignOffset ?? (searchable ? -43 : -6.5), collisionPadding: 16, onFocusOutside: event => {
       // Radix briefly focuses the parent menu when the pointer crosses the gap.
       const target = event.target
       if (target instanceof HTMLElement && target.matches('[role=menu]') && target.contains(trigger)) event.preventDefault()
-    }} onKeyDown={event => { if ((event.target as HTMLElement).closest('input,[cmdk-root]') && !['ArrowLeft','Escape'].includes(event.key)) event.stopPropagation() }}>
+    }, onKeyDown: event => { if ((event.target as HTMLElement).closest('input,[cmdk-root]') && !['ArrowLeft','Escape'].includes(event.key)) event.stopPropagation() } }}>
       {typeof children === 'function' ? children(() => { setOpen(false); trigger?.focus() }) : children}
-    </DropdownMenu.SubContent></DropdownMenu.Portal>
-  </DropdownMenu.Sub>
+  </MenuSubmenu>
 }
 
 export function ProjectMenuShortcut({ value }: { value: string }) {
