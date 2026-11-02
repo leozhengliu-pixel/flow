@@ -76,6 +76,11 @@
 .workspace-menu-trigger > svg { width: 8px; height: 8px; flex: 0 0 8px; color: #69696d; stroke-width: 1.8; }
 .workspace-menu-trigger + .sidebar-top-action { margin-left: auto; }
 
+@media (min-width: 1024px) {
+  .sidebar .workspace-row > button.workspace-menu-trigger { color: var(--text); }
+  .sidebar .workspace-menu-trigger > strong { font-size: 13px; font-weight: 550; line-height: 23px; letter-spacing: -.1px; }
+}
+
 .sidebar .workspace-row > button.sidebar-top-action {
   width: 28px;
   height: 28px;
