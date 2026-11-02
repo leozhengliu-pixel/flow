@@ -16,10 +16,14 @@ transaction and existing busy-write retries. Only changed records are upserted.
 An identical save returns before any write, event, cache revision, or publish.
 
 The callback checks the instruction hash against the freshly locked Loop. A
-stale extraction returns without updating either the current Loop or versions.
-Person contracts remain authoritative; stale person contracts get merged
-suggestions, including chosen targets. Model contracts update matching versions
-except person-owned versions. Fallback contracts update the current Loop only.
+stale extraction leaves the current Loop and both of its contract fields alone,
+but still caches a model contract on versions whose text matches the extracted
+hash, except person-owned versions. Both the shared model flight and forced
+analysis can finish after an instructions edit; neither the migration nor
+version creation independently backfills older versions. Person contracts remain
+authoritative; stale person contracts get merged suggestions, including chosen
+targets, only when the extracted hash matches the current Loop. Fallback
+contracts update the current Loop only, and only when its hash matches.
 
 The path retains the existing Redis workspace lock when configured, plus the
 process-local `writeMu`; it does not hold the snapshot reader mutex during SQL.
@@ -53,14 +57,17 @@ metadata records in both paths.
 
 | Save Path | SQL Commands | Row Operations | Issue/Content Rows Written | Lock Held (ms) | Elapsed (ms) | Peak Heap (MiB) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Before: full | 1,226 | 13 | 0 | 15,359.182 | 15,360.303 | 564.50 |
-| After: narrow | 26 | 10 | 0 | 13.698 | 14.578 | 2.13 |
-| After: repeated | 4 | 0 | 0 | 4.420 | 5.418 | 1.79 |
-| After: stale | 4 | 0 | 0 | 8.124 | 10.582 | 1.71 |
+| Before: full | 1,225 | 13 | 0 | 12,982.159 | 12,983.800 | 573.06 |
+| After: narrow | 25 | 10 | 0 | 14.473 | 15.211 | 2.12 |
+| After: repeated | 4 | 0 | 0 | 4.043 | 4.902 | 1.76 |
+| After: stale, versions cached | 4 | 0 | 0 | 2.366 | 3.135 | 1.71 |
 
-Observed on 2026-11-01 in `/tmp/codex-loop-contract-write.u3j3Mw`.
+Observed on 2026-11-01 in `/tmp/codex-loop-contract-write.2pqVGh`.
 The row-operation totals include event sequencing and cache bookkeeping, not
 only entity rows. Both changed paths left every issue/content row unwritten.
+The stale measurement exercises the unchanged-record diff, not an early return
+from the callback. A stale model save with missing matching version contracts
+does write those versions and an event, without rewriting the edited Loop.
 
 Query counts come from the throwaway MySQL general log for the application
 account, including transaction commands and executed prepared statements but
@@ -82,14 +89,14 @@ record before and after. Child processes are stopped by PID.
 
 | Database | Processes | Successful Requests | Busy Errors | Lost Updates | Run Time |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| MySQL | 2 | 48 | 0 | 0 | 3.875 s |
-| PostgreSQL | 2 | 48 | 0 | 0 | 1.930 s |
-| SQLite | 2 | 48 | 0 | 0 | 0.778 s |
+| MySQL | 2 | 48 | 0 | 0 | 2.148 s |
+| PostgreSQL | 2 | 48 | 0 | 0 | 1.521 s |
+| SQLite | 2 | 48 | 0 | 0 | 0.796 s |
 
 The MySQL run uses the 75k workspace; PostgreSQL and SQLite runs use small
 independently created workspaces to check the shared path, not to claim
 equivalent scale benchmarks. The MySQL before/after content digest was
-`b01b565f5ac82d7ab05beaa053b0e24d2d3e16a0fa7f80ac77744d679af627f2`.
+`d4ec56a3e67d9a3dafbfe493f5549a551ce8eff6f0e6200b84a12235596c17a7`.
 The gate exited 0 and removed all three of its containers and their volumes.
 
 ## Draft Lock And Other Events
@@ -134,7 +141,10 @@ or already use a mutation scope. None of those are changed here.
 multiple matching versions, nonmatching versions, person-owned versions,
 fallback downgrade, repeated saves with zero observed writes, stale hashes
 against a deliberately stale replica snapshot, person suggestions, chosen
-target merging, and already-reviewed person contracts.
+target merging, and already-reviewed person contracts. Its scripted extraction
+is blocked while the committed Loop instructions change: the old-hash version
+still gets its model contract, the entire edited Loop stays unchanged, and
+repeating the model save or saving a fallback writes zero rows or events.
 `TestLoopContractMutationUsesFreshNarrowRecords` checks scoped callback inputs,
 fresh transactional data, two changed rows, zero repeat rows/events, and the
 explicit `loop_contract` dispatch trace instead of `mutateFull`.
