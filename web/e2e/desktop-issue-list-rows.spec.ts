@@ -22,6 +22,7 @@ test('keeps compact rows, a dim disclosure and nested elbow connectors', async (
   await page.goto(issueList.route)
   const parentRow = page.locator(`[data-issue-row-id="${issueList.issues[0].id}"]`)
   await expect(parentRow).toBeVisible()
+  await expect(parentRow.locator('[class*="identifier"]')).toHaveCSS('letter-spacing', '-0.26px')
   const gap = await parentRow.evaluate(row => {
     const title = row.querySelector('[data-row-title]')!.getBoundingClientRect()
     const status = row.querySelector('[class*="statusTrigger"] svg')!.getBoundingClientRect()

@@ -143,5 +143,7 @@ test('views directory keeps its compact filled group and single-line name', asyn
   await expect(group.locator('strong')).toHaveCSS('font-size', '13px')
   const name = page.getByText('[audit] Menu review', { exact: true })
   await expect(name).toBeVisible()
+  await expect(name).toHaveCSS('color', 'lch(100 0 272)')
   await expect(name.locator('..').locator('small')).not.toBeVisible()
+  if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-views-directory.png`, animations: 'disabled' })
 })
