@@ -49,17 +49,16 @@ run_gate() {
     printf 'Gate failed: %s\n' "$scratch/$label.log" >&2
     return 1
   fi
-  rg 'CONTRACT_SEED|METADATA_(MEASURE|REPLICAS)' "$scratch/$label.log" || true
+  rg 'CONTRACT_SEED|METADATA_(MEASURE|REPLICAS)' "$scratch/$label.log"
 }
 run_gate seed env FLOW_LOOP_CONTRACT_GATE=seed "$scratch/store.test" -test.run='^TestLoopContractScaleSeed$' -test.v
-for group in ${FLOW_METADATA_GROUPS:-hot records}; do
+for group in ${FLOW_METADATA_GROUPS:-hot records bookkeeping}; do
   for mode in full metadata; do
     run_gate "$group-$mode" env FLOW_METADATA_GROUP="$group" FLOW_METADATA_MEASURE="$mode" "$scratch/store.test" -test.run='^TestMetadataEventScaleMeasure$' -test.v
   done
 done
 export FLOW_METADATA_REPLICAS=${FLOW_METADATA_REPLICAS:-1}
 if [[ "$FLOW_METADATA_REPLICAS" == 1 ]]; then
-  "$heavy" go test -p 1 -c -o "$scratch/server.test" ./cmd/server >"$scratch/server-build.log" 2>&1
   run_gate mysql-replicas "$scratch/server.test" -test.run='^TestMetadataEventTwoReplicaGate$' -test.v
   export FLOW_TEST_DATABASE_DRIVER=postgres
   export FLOW_TEST_DATABASE_URL="postgres://postgres:$password@127.0.0.1:$postgres_port/flow_metadata?sslmode=disable"

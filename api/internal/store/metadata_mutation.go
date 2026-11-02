@@ -59,6 +59,16 @@ func metadataOnlyMutation(event string, payload any) bool {
 	// callbacks only record the credential or review synchronization result.
 	case "oauth_application.secret_rotated", "review.written_back":
 		return true
+	// Preview also appends its audit and stores its source bundle through
+	// writeImportInputs. Mapping/invitation bookkeeping never imports issues;
+	// invitations and mail have already happened outside these callbacks.
+	case "migration.previewed", "migration.mappings_updated", "migration.users_invited":
+		return true
+	// These event names are chosen dynamically by audited helpers. Token
+	// probes/secret storage occur separately; sync decisions only stamp a request.
+	case "integration.token_updated", "integration.token_rotated", "integration.token_rotation_failed", "integration.token_rotation_updated",
+		"oauth_sync_group.approved", "oauth_sync_group.denied":
+		return true
 	// Team deletion/restoration only stamps the team, detaches sub-teams and
 	// appends an audit entry; issue visibility follows the team's archivedAt at
 	// read time. Development-mode membership edits only touch member lists,

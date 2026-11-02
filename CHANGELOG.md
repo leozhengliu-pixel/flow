@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Keep agent approval, change-state and feedback saves and release access-key bookkeeping off issue and discussion hydration.
 
+- Keep migration preview/mapping/invitation bookkeeping, token-rotation results and sync-group decisions on metadata-only writes while preserving source bundles and audit entries.
+
 - Save document attachments, intake address edits, application secret rotations and review writeback results without hydrating unrelated issue records.
 
 - Save Loop output contracts in a narrow transaction over the Loop and its versions without loading issue or discussion collections; late model results still fill matching versions without changing the edited Loop or person-chosen contracts, and unchanged saves write nothing.
