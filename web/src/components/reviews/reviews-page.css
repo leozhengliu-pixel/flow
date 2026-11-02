@@ -25,10 +25,10 @@
 .review-icon-danger{color:var(--review-state-closed)}
 
 /* State icons. */
-.review-state-icon{width:14px;height:14px;flex:none;color:var(--review-state-open)}
-.review-state-icon[data-review-state=draft]{color:var(--review-state-draft)}
-.review-state-icon[data-review-state=merged]{color:var(--review-state-merged)}
-.review-state-icon[data-review-state=closed]{color:var(--review-state-closed)}
+.review-state-icon{--review-icon-color:var(--review-state-open);width:14px;height:14px;flex:none;color:var(--review-icon-color)}
+.review-state-icon[data-review-state=draft]{--review-icon-color:var(--review-state-draft)}
+.review-state-icon[data-review-state=merged]{--review-icon-color:var(--review-state-merged)}
+.review-state-icon[data-review-state=closed]{--review-icon-color:var(--review-state-closed)}
 .review-title-code{padding:0 3px;border-radius:3px;background:var(--review-inline-code-bg);box-shadow:inset 0 0 0 1px var(--review-inline-code-ring);font:inherit;font-family:var(--font-monospace);font-size:.94em}
 
 /* ---- List ---- */
@@ -641,10 +641,11 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
     margin: 0 8px;
     padding: 0 8px;
   }
-  html:root body .app .review-row .review-row-icon--phone { display: block; width: 14px; height: 14px; flex: none; border-style: none; color: inherit; }
+  html:root body .app .review-row .review-row-icon--phone { display: block; width: 14px; height: 14px; flex: none; border-style: none; color: var(--review-icon-color, inherit); }
   html:root body .app .review-row .review-row-icon:not(.review-row-icon--phone) { display: none; }
-  html:root body .app .review-row .review-row-icon--phone path { fill: var(--review-row-state-open); }
+  html:root body .app .review-row .review-row-icon--phone[data-review-state=open] path { fill: var(--review-row-state-open); }
   html:root body .app .review-row .review-row-icon--phone[data-review-state=draft] path { fill: var(--review-state-draft); }
+  html:root body .app .review-row .review-row-icon--phone[data-review-state=draft] { color: var(--review-state-draft); }
   html:root body .app .review-row .review-list-row__title { border-style: none; }
   html:root body .app .review-row time { min-width: 30px; border-style: none; text-align: right; }
   .reviews-tab-label--phone { display: inline; }
@@ -760,7 +761,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-mobile-row .review-sidebar-button>span{font:450 12px/normal var(--font);color:var(--text)}
   html:root body .app .review-mobile-row .review-sidebar-button.is-strong>span{font-weight:500}
   html:root body .app .review-mobile-row .review-sidebar-button.is-strong svg{color:var(--issue-muted)}
-  html:root body .app .review-mobile-row .review-sidebar-button.is-strong svg path{fill:var(--issue-muted)}
+  html:root body .app .review-mobile-row .review-sidebar-button.is-strong svg:is([data-review-state=open],[data-review-state=draft]) path{fill:var(--issue-muted)}
   html:root body .app .review-mobile-row .review-sidebar-text{min-height:24px;margin:0;padding:0 6px 0 4px;border:0;border-radius:9999px;background:transparent;color:var(--text);font:500 12px/normal var(--font);gap:0}
   html:root body .app .review-mobile-row .review-sidebar-text svg{width:14px;height:14px;flex:none;margin:0 8px 0 2px;color:var(--review-phone-branch-fg)}
   html:root body .app .review-mobile-row .review-sidebar-text>span{font:500 12px/normal var(--font);color:var(--text)}
@@ -792,8 +793,8 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-activity ol{margin:0}
   html:root body .app .review-activity-event{min-height:47px;padding:16px 0 0 4px}
   html:root body .app .review-activity-event p{padding:4px;color:var(--issue-muted);font:450 12px/16.8px var(--font)}
-  html:root body .app .review-activity-state-phone{color:var(--review-state-open)}
-  html:root body .app .review-activity-state-phone path{fill:currentColor}
+  html:root body .app .review-activity-state-phone{color:var(--review-icon-color, var(--review-state-open))}
+  html:root body .app .review-activity-state-phone:is([data-review-state=open],[data-review-state=draft]) path{fill:currentColor}
   html:root body .app .review-comment{margin:0 -4px;padding:8px;border-radius:8px;background:var(--review-card-bg);box-shadow:0 0 0 1px var(--review-card-border-faint),var(--ui-pill-shadow)}
   html:root body .app .review-comment-avatar{width:18px;height:18px;flex:0 0 18px;margin-top:5px;border-radius:50%;background:var(--review-phone-avatar-bg);box-shadow:none;color:var(--review-phone-avatar-fg);font-size:9px;line-height:normal}
   html:root body .app .review-comment textarea{font:450 15px/24px var(--font);color:var(--review-fg);height:24px;min-height:24px}
