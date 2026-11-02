@@ -10,15 +10,18 @@ vi.mock('@/hooks/use-desktop-layout',()=>({useDesktopLayout:()=>layout.desktop})
 
 describe('display options: nested sub-issues', () => {
   beforeEach(()=>{layout.desktop=false})
-  it('uses the desktop property inventory without trapping saved extra selections', async () => {
+  it('lets desktop users enable every supported property from a new view', async () => {
     layout.desktop=true
     const options=createIssueDisplayOptions({properties:['id','sla']})
     const onChange=vi.fn()
     render(<I18nProvider><MyIssuesDisplayMenu open onOpenChange={vi.fn()} options={options} onChange={onChange}/></I18nProvider>)
-    expect(screen.queryByRole('button',{name:'Release'})).toBeNull()
-    expect(screen.queryByRole('button',{name:'My activity date'})).toBeNull()
+    for(const name of ['Release','My activity date']) {
+      await userEvent.click(screen.getByRole('button',{name}))
+      expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({properties:expect.any(Set)}))
+      expect(onChange.mock.lastCall?.[0].properties.has(name==='Release'?'release':'myActivity')).toBe(true)
+    }
     await userEvent.click(screen.getByRole('button',{name:'SLA'}))
-    expect(onChange.mock.calls[0][0].properties.has('sla')).toBe(false)
+    expect(onChange.mock.lastCall?.[0].properties.has('sla')).toBe(false)
   })
   it('retains the additional property choices off desktop', () => {
     render(<I18nProvider><MyIssuesDisplayMenu open onOpenChange={vi.fn()} options={createIssueDisplayOptions()} onChange={vi.fn()}/></I18nProvider>)
