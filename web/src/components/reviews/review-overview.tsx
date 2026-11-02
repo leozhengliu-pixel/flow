@@ -1,5 +1,6 @@
 import * as RadixMenu from "@radix-ui/react-dropdown-menu";
-import { ArrowUp, ChevronDown, CircleCheck, CircleDashed, CircleX, CornerDownRight, FileCode2, GitBranch, MessageSquare, Plus } from "lucide-react";
+import { Command } from "cmdk";
+import { ArrowUp, ChevronDown, CircleCheck, CircleDashed, CircleX, CornerDownRight, FileCode2, GitBranch, Link2, MessageSquare, Plus, X } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { MentionBody } from "@/components/editor/mentions/mention-body";
@@ -7,6 +8,7 @@ import { EmojiPicker } from "@/components/reactions/emoji-picker";
 import { AddReactionIcon, AttachmentIcon, StatusIcon } from "@/components/issue/issue-icons";
 import { FlowBranchIcon, FlowOptionsIcon, FlowPreviousIcon } from "@/components/issue/flow-header-icons";
 import { PlusIcon } from "@/components/ui/view-action-icons";
+import { PhoneCommandMenu } from "@/components/ui/phone-menu";
 import { ReviewPhoneStateIcon } from "./review-row-icons";
 import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import { middleTruncate } from "@/lib/middle-truncate";
@@ -28,7 +30,7 @@ import { PostedAsCaption } from "./posted-as-caption";
 import { ReviewStateIcon, ReviewTitle } from "./review-state-icon";
 import "@/components/project-detail/project-action-menu.css";
 
-type Mutation = { draft?: boolean; status?: CodeReview["status"]; branchState?: CodeReview["branchState"] };
+type Mutation = { draft?: boolean; status?: CodeReview["status"]; branchState?: CodeReview["branchState"]; issueIds?: string[] };
 
 /** Overview tab: title, byline, description and activity, with the properties sidebar. */
 export function ReviewOverview({
@@ -259,9 +261,7 @@ function ReviewMobileProperties({
                 {issue.title}
               </span>
             </a>
-            <button type="button" className="review-mobile-icon-button" aria-label={t("Issue actions")}>
-              <FlowOptionsIcon />
-            </button>
+            <ReviewLinkedIssueActions busy={busy} onManage={() => onOpenPicker("issues")} onUnlink={() => onMutate({ issueIds: review.issueIds.filter(id => id !== issue.id) })}/>
           </div>
         ))}
       </div>
@@ -284,6 +284,19 @@ function ReviewDocumentActions({ onReact }: { onReact: (emoji: string) => void }
       </button>
     </div>
   );
+}
+
+function ReviewLinkedIssueActions({ busy, onManage, onUnlink }: { busy: boolean; onManage: () => void; onUnlink: () => Promise<void> }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  return <>
+    <button type="button" className="review-mobile-icon-button" disabled={busy} aria-label={t("Issue actions")} aria-expanded={open} onClick={() => setOpen(true)}><FlowOptionsIcon/></button>
+    <PhoneCommandMenu open={open} onOpenChange={setOpen} label={t("Issue actions")} placeholder="Filter…">
+      <Command.Item onSelect={() => { setOpen(false); onManage(); }}><Link2 aria-hidden="true" color="var(--pk-muted)"/><span>{t("Link issues")}</span></Command.Item>
+      <Command.Separator/>
+      <Command.Item disabled={busy} onSelect={() => { setOpen(false); void onUnlink(); }}><X aria-hidden="true" color="var(--pk-muted)"/><span>{t("Unlink issue from pull request")}</span></Command.Item>
+    </PhoneCommandMenu>
+  </>;
 }
 
 function SidebarSection({ label, children }: { label: string; children: ReactNode }) {
