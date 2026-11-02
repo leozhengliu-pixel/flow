@@ -10,7 +10,7 @@ const canceledPath = "M7 14C10.866 14 14 10.866 14 7C14 3.13401 10.866 0 7 0C3.1
 export function ComposerStatusGlyph({ state }: { state: WorkflowState }) {
   const name = state.name.toLowerCase()
   if (state.reserved || name === 'triage') return <StatusIcon state={state} size={14}/>
-  const color = workflowStatusStrokeColor(state.color)
+  const color = workflowStatusStrokeColor(state.color, state.teamId)
   const path = state.type === 'backlog' ? backlogPath : state.type === 'completed' ? completedPath : state.type === 'canceled' ? canceledPath : undefined
   const progressPath = state.type === 'started'
     ? name.includes('review') ? 'M 3.5,3.5 L3.5,0 A3.5,3.5 0 1,1 0, 3.5 z' : 'M 3.5,3.5 L3.5,0 A3.5,3.5 0 0,1 3.5, 7 z'

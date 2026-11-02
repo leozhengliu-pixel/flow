@@ -17,7 +17,9 @@ const WORKFLOW_STROKE_OVERRIDES: Record<string, string> = {
   '#5e6ad2': 'lch(48% 59.31 288.43)',
 }
 
-export function workflowStatusStrokeColor(color: string): string {
+export function workflowStatusStrokeColor(color: string, teamId?: string): string {
+  // Team colors are saved choices, even when they match a legacy global default.
+  if (teamId) return color
   const hex = normalizeHexColor(color)
   return hex ? WORKFLOW_STROKE_OVERRIDES[hex] ?? color : color
 }

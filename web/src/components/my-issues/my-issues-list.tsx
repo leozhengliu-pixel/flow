@@ -96,7 +96,7 @@ export interface MyIssuesRowData {
   description?: string
   href?: string
   priority: 0 | 1 | 2 | 3 | 4
-  state: { id: string; name: string; type: MyIssuesStateType; color: string }
+  state: { id: string; teamId?: string; name: string; type: MyIssuesStateType; color: string }
   labels?: { id: string; name: string; color: string; description?:string; issueCount?:number; scope?:string; groupId?: string }[]
   project?: { id: string; name: string; color: string }
   assignee?: { id: string; name: string; avatarUrl?: string; color?: string }
