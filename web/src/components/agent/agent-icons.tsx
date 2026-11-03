@@ -1,15 +1,39 @@
 import type { SVGProps } from "react";
+import { useId } from "react";
 import { AttachmentIcon } from "@/components/issue/issue-icons";
 import { AgentCursorGlyph, AgentWriteGlyph } from "@/components/ui/agent-glyph";
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
 export function AgentWatermarkIcon(props: IconProps) {
-  return <svg {...props} viewBox="0 0 336 336" aria-hidden="true" style={{ fill: 'var(--flow-logo-outline-fill)', stroke: 'var(--flow-logo-outline-stroke)' }} strokeWidth="0.5">
+  const id = useId().replace(/:/g, '');
+  return <svg {...props} viewBox="0 0 336 336" aria-hidden="true" strokeWidth="0.5">
+    <defs>
+      <linearGradient id={`${id}-stroke`} x1="336" y1="168" x2="0" y2="168" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="var(--agent-empty-logo-gradient-low)"/>
+        <stop offset="50%" stopColor="var(--agent-empty-logo-gradient-low)"/>
+        <stop offset="100%" stopColor="var(--agent-empty-logo-gradient-high)"/>
+      </linearGradient>
+      <linearGradient id={`${id}-fade`} x1="168" y1="0" x2="168" y2="336" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="white" stopOpacity="0"/>
+        <stop offset="60%" stopColor="white"/>
+      </linearGradient>
+      <mask id={`${id}-mask`} maskUnits="userSpaceOnUse" x="0" y="0" width="336" height="336">
+        <rect width="336" height="336" fill={`url(#${id}-fade)`}/>
+      </mask>
+      <filter id={`${id}-blur`} x="-50%" y="-50%" width="200%" height="200%" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+        <feGaussianBlur stdDeviation="2"/>
+      </filter>
+      <g id={`${id}-shape`}>
     <path d="M6.06836 206.256C5.32965 203.107 9.0812 201.123 11.3683 203.41L132.59 324.632C134.877 326.919 132.893 330.67 129.744 329.932C68.5709 315.581 20.4187 267.429 6.06836 206.256Z" />
     <path d="M2.00628 157.672C1.9477 158.612 2.30133 159.531 2.96766 160.197L175.803 333.032C176.469 333.699 177.388 334.052 178.328 333.994C186.194 333.504 193.912 332.467 201.443 330.92C203.981 330.399 204.863 327.28 203.031 325.448L10.5521 132.969C8.71999 131.137 5.60148 132.019 5.08022 134.557C3.53338 142.088 2.49619 149.806 2.00628 157.672Z" />
     <path d="M15.9803 100.622C15.4276 101.863 15.7091 103.313 16.6697 104.274L231.726 319.33C232.687 320.291 234.137 320.572 235.378 320.02C241.308 317.378 247.055 314.4 252.594 311.109C254.427 310.02 254.71 307.501 253.202 305.994L30.0064 82.7979C28.4988 81.2903 25.9802 81.5732 24.8911 83.4061C21.6 88.9453 18.6216 94.692 15.9803 100.622Z" />
     <path d="M44.027 62.0058C42.7982 60.777 42.722 58.806 43.8797 57.51C74.3081 23.4449 118.57 2 167.84 2C259.608 2 334 76.3922 334 168.16C334 217.43 312.555 261.692 278.49 292.12C277.194 293.278 275.223 293.202 273.994 291.973L44.027 62.0058Z" />
+      </g>
+    </defs>
+    <use href={`#${id}-shape`} fill="var(--agent-watermark-fill)" stroke="var(--agent-watermark-stroke)"/>
+    <use href={`#${id}-shape`} fill="none" stroke={`url(#${id}-stroke)`} filter={`url(#${id}-blur)`} mask={`url(#${id}-mask)`}/>
+    <use href={`#${id}-shape`} fill="none" stroke={`url(#${id}-stroke)`} opacity="0.8"/>
   </svg>;
 }
 
