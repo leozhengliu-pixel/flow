@@ -27,7 +27,8 @@ for (const width of [1440, 390, 375]) for (const theme of ['dark', 'light']) {
       const box = element.getBoundingClientRect()
       return box.left >= 0 && box.right <= innerWidth && box.bottom <= innerHeight
     })).toBe(true)
-    if (width === 1440) await expect.poll(() => panel.evaluate(element => element.scrollHeight <= element.clientHeight)).toBe(true)
+    // Half-pixel borders round up on 1x displays; retain the 430px reference layout.
+    if (width === 1440) await expect.poll(() => panel.evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(await page.evaluate(() => devicePixelRatio === 1 ? 1 : 0))
     const lastDay = panel.getByRole('gridcell').last()
     if (width < 768) await lastDay.scrollIntoViewIfNeeded()
     await expect.poll(() => lastDay.evaluate(element => {
