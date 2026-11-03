@@ -10,6 +10,7 @@ import { Fragment, useMemo, useState } from 'react'
 import { FlowBellCheckIcon, FlowBellIcon } from '@/components/issue/flow-header-icons'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
+import { tooltipShortcutKeys } from '@/components/ui/tooltip-shortcut'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { avatarColor } from '@/components/issue/avatar-color'
 import { useI18n } from '@/i18n/i18n'
@@ -54,7 +55,14 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
 
   const isSubscribed = (user: User) => user.id === viewer.id ? subscribed : (document.subscriberIds ?? []).includes(user.id)
   const pinned = (user: User) => isSubscribed(user) || !phone && user.id === viewer.id
-  const groups = [users.filter(pinned).sort((a, b) => Number(isSubscribed(b)) - Number(isSubscribed(a))), users.filter(user => !pinned(user))]
+  const pinnedUsers = users.filter(pinned).sort((a, b) => Number(isSubscribed(b)) - Number(isSubscribed(a)))
+  const rest = users.filter(user => !pinned(user))
+  // A phone lists everyone else under one "Other users" heading. The desktop popover lists the remaining members
+  // first and puts only applications and agents under the heading, with a rule after the subscribed rows.
+  const sections: Array<{ heading?: boolean; users: User[] }> = phone
+    ? [{ users: pinnedUsers }, { heading: true, users: rest }]
+    : [{ users: pinnedUsers }, { users: rest.filter(user => !user.app && !user.builtinAgent) }, { heading: true, users: rest.filter(user => user.app || user.builtinAgent) }]
+  const visible = sections.filter(section => section.users.length > 0)
   return <Popover.Root open={open} onOpenChange={next => { onOpenChange(next); if (!next) setQuery('') }}>
     <ScopedFlowTooltip label={changeLabel} shortcut={DOCUMENT_PAGE_SHORTCUTS.subscribers} disabled={open}>
       <Popover.Trigger asChild>
@@ -73,12 +81,13 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
         </div>
         <div className="document-subscribers__search">
           <input aria-label={t('Change subscribers…')} autoComplete="off" className="document-subscribers__filter" onChange={event => setQuery(event.target.value)} placeholder={t('Change subscribers…')} spellCheck={false} value={query}/>
-          <kbd aria-hidden="true">{DOCUMENT_PAGE_SHORTCUTS.subscribers}</kbd>
+          {phone ? <kbd aria-hidden="true">{DOCUMENT_PAGE_SHORTCUTS.subscribers}</kbd> : <span aria-hidden="true" className="document-subscribers__keys">{tooltipShortcutKeys(DOCUMENT_PAGE_SHORTCUTS.subscribers).flat().map((key, index) => <kbd key={index}>{key}</kbd>)}</span>}
         </div>
         <div className="document-subscribers__list" role="group" aria-label={t('Document subscribers')}>
-          {groups.map((group, index) => <Fragment key={index}>
-          {index === 1 && group.length > 0 && <div className="document-subscribers__group">{t('Other users')}</div>}
-          {group.map(user => {
+          {visible.map((section, index) => <Fragment key={index}>
+          {index === 1 && !section.heading && <div aria-hidden="true" className="document-subscribers__rule"><div/></div>}
+          {section.heading && <div className="document-subscribers__group">{t('Other users')}</div>}
+          {section.users.map(user => {
             const checked = isSubscribed(user)
             const name = user.displayName || user.name
             const kind = user.builtinAgent ? 'agent' : user.app ? 'oauth' : 'member'

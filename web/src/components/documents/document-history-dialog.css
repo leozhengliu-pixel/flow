@@ -153,7 +153,8 @@
 
 .document-history-versions { min-height: 0; border-left: .5px solid var(--theme-border-strong); }
 .document-history-list { height: 100%; box-sizing: border-box; padding: 14px 6px 12px; overflow: auto; outline: 0; scrollbar-width: thin; }
-.document-history-list:focus-visible .document-history-version[aria-selected="true"] { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent-primary) 55%, transparent); }
+/* The selected revision is a filled item; keyboard focus adds the reference's 1px accent outline (it is a focus state, not the resting look). */
+.document-history-list:focus-visible .document-history-version[aria-selected="true"] { outline: 1px solid var(--accent-primary); outline-offset: 0; }
 .document-history-day + .document-history-day { margin-top: 12px; }
 .document-history-day h3 { margin: 0; padding: 0 6px 5px; color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; line-height: 15px; }
 .document-history-version {
@@ -167,7 +168,7 @@
 }
 .document-history-version + .document-history-version { margin-top: 2px; }
 .document-history-version:hover,
-.document-history-version[aria-selected="true"] { background: var(--theme-surface-hover); }
+.document-history-version[aria-selected="true"] { background: var(--document-current-bg); }
 .document-history-version-time { display: flex; align-items: center; gap: 6px; min-height: 18px; font-size: 12px; line-height: 18px; color: var(--theme-text-secondary); white-space: nowrap; }
 .document-history-version-time b { color: var(--theme-text-primary); font-weight: 500; }
 .document-history-version-time span { font-weight: 450; }
