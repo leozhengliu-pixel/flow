@@ -93,10 +93,10 @@ Final continuation checks also passed: full `npm run lint` (exit 0), targeted Vi
 
 The new association field is on the internal review API/domain JSON; the public generated contract does not expose it. No new route or schema migration is required. Persistence tests use SQLite and local fake providers; no real model request or external repository mutation was needed. MySQL/Postgres were not separately exercised.
 
-The branch was pushed as `review/fix-review-1` at `1782a07a` (the full SHA is available from the branch tip). No GitHub Actions run or pull request existed for this review branch at push time (`gh run list --branch review/fix-review-1` returned no runs), so there is no branch CI run ID or result to report; the local checks above are the available validation. Main is unchanged by this task.
+The branch was pushed as `review/fix-review-1`; report checkpoints are `1782a07a` and `ae365153`. The final delivery message records the branch tip including this cleanup record. No GitHub Actions run or pull request existed for this review branch at push time (`gh run list --branch review/fix-review-1` returned no runs), so there is no branch CI run ID or result to report; the local checks above are the available validation. Main is unchanged by this task.
 
 ## Limits and Cleanup
 
 Implementation work covers all nine findings. Exact whole-screen parity, a live light/Chinese reference comparison, and the additional states explicitly omitted above are not claimed. Link types are local workspace metadata and do not rewrite external pull-request descriptions. No search-date filter, DayPanel, issue-options menu or weekday-preference edits are included.
 
-Scratch servers are stopped by their recorded PIDs and worktree `web/node_modules` is removed before delivery. Evidence and test logs remain in `/tmp/codex-fix-review-1/` for the reviewer.
+The delivery audit reopened all 20 evidence sheets and checked the earlier session's final lint/vet output and saved test logs. This continuation changes only the report; implementation checks were retained from the earlier session, not rerun. Scratch servers were stopped using their recorded PIDs, `22833` (API) and `3042` (Vite); a follow-up process check found neither running. Worktree `web/node_modules` is removed. Evidence and test logs remain in `/tmp/codex-fix-review-1/` for the reviewer.
