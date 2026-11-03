@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Align keyboard shortcut rows and the search caret with the shared panel typography.
+
 - Align settings directory groups, resting sort arrows, search icons and search placeholder colors.
 
 - Keep directory sorting on supported columns with consistent ascending and descending indicators.
