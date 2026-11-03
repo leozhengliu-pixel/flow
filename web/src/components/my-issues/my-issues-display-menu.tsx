@@ -203,8 +203,10 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
           <div className={styles.groupList}>
             {groups.map(group => {
               const hidden = options.hiddenGroupIds.includes(group.id)
-              return <button key={group.id} type="button" className={styles.groupToggle} data-hidden={hidden || undefined} aria-pressed={!hidden} aria-label={`${hidden ? t('Show group') : t('Hide group')} ${group.label}`} onClick={() => change({ hiddenGroupIds: hidden ? options.hiddenGroupIds.filter(id => id !== group.id) : [...options.hiddenGroupIds, group.id] })}>
-                {hidden ? <EyeOff size={13}/> : <Eye size={13}/>}<span data-i18n-ignore>{group.label}</span><small>{group.count}</small>
+              // Generated group names (Focus buckets, default statuses) translate like the list headers; other names are data.
+              const groupLabel = t(group.label)
+              return <button key={group.id} type="button" className={styles.groupToggle} data-hidden={hidden || undefined} aria-pressed={!hidden} aria-label={`${hidden ? t('Show group') : t('Hide group')} ${groupLabel}`} onClick={() => change({ hiddenGroupIds: hidden ? options.hiddenGroupIds.filter(id => id !== group.id) : [...options.hiddenGroupIds, group.id] })}>
+                {hidden ? <EyeOff size={13}/> : <Eye size={13}/>}<span data-i18n-ignore>{groupLabel}</span><small>{group.count}</small>
               </button>
             })}
           </div>

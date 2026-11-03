@@ -393,7 +393,7 @@ function groupIssues(issues: Issue[], workspaceSlug: string, data: BootstrapData
   const groups = new Map<string, MyIssuesGroupData>()
   for (const issue of issues) {
     const id = issue.state.type === 'started' ? 'other-active' : issue.state.id
-    const group = groups.get(id) ?? { id, label: issue.state.type === 'started' ? 'Other active' : issue.state.name, stateType: issue.state.type, state: issue.state, createContext: issue.state.type === 'started' ? undefined : { stateId: issue.state.id }, issues: [] }
+    const group = groups.get(id) ?? { id, label: issue.state.type === 'started' ? 'Other active' : issue.state.name, translatableLabel: issue.state.type === 'started' || undefined, stateType: issue.state.type, state: issue.state, createContext: issue.state.type === 'started' ? undefined : { stateId: issue.state.id }, issues: [] }
     group.issues.push(toRow(issue, workspaceSlug, data, viewMatches.has(issue.id))); groups.set(id, group)
   }
   return [...groups.values()]

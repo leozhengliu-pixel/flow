@@ -95,7 +95,8 @@ function LineMenuItems({ editor, line }: { editor: Editor; line: TableLine }) {
     {available.moveAfter ? item(after.Move, after.move, act(() => moveLine(editor, line, 'after')), `⌘ ⌥ ⇧ ${after.key}`, after.moveRotate) : null}
     {available.separateDuplicate ? <DropdownMenuSeparator/> : null}
     {available.duplicate ? <>
-      {item(DuplicateIcon, 'Duplicate', act(() => duplicateLine(editor, line)))}
+      {/* The shared "Duplicate" entry is the workflow status (重复); the copy action has its own key. */}
+      {item(DuplicateIcon, locale === 'zh-CN' ? t('Duplicate (copy)') : 'Duplicate', act(() => duplicateLine(editor, line)))}
       <DropdownMenuSeparator/>
     </> : null}
     {available.sort ? <>
