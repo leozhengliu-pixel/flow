@@ -1675,10 +1675,11 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-activity__composer[data-mode=update] {
     position: relative;
     min-height: 257px;
-    padding-bottom: 52px;
+    padding-bottom: 0;
   }
   .project-activity__composer[data-mode=update] > .project-activity__editor { flex: 1 0 auto; min-height: 70px; }
-  .project-activity__composer[data-mode=update] > footer { position: absolute; right: 0; bottom: 0; left: 0; justify-content: flex-end; }
+  /* The reference footer sits in flow and overlaps the 13.5px bottom padding of the status diff by 4.5px. */
+  .project-activity__composer[data-mode=update] > footer { justify-content: flex-end; margin-top: -4.5px; }
   .project-activity__composer > footer { flex-wrap: wrap; gap: 8px; }
   .project-activity__tools { display: flex; flex-wrap: wrap; gap: 8px; }
   .project-activity__tools > button { min-height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border: 0; border-radius: 9999px; background: var(--pd-composer-control); color: var(--theme-text-primary); font-size: 12px; font-weight: 500; }
