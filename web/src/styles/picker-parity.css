@@ -840,21 +840,6 @@ html:root body .pulse-filter-builder .pulse-filter-chevron:not(#_) {
 }
 
 /* ── Issue options (…) menu ────────────────────────────────────────────── */
-html:root body .issue-options-popover:not(#_),
-html:root body .issue-options-submenu:not(#_) {
-  border: .5px solid var(--pk-border);
-  background: var(--pk-surface);
-  box-shadow: var(--pk-shadow);
-  color: var(--pk-text);
-}
-html:root body .issue-options-popover:not(#_) {
-  width: max-content;
-  min-width: 242px;
-}
-/* Submenus float above the menu with the reference's heavier card shadow. */
-html:root body .issue-options-submenu:not(#_) {
-  box-shadow: var(--pk-card-shadow);
-}
 html:root body .issue-options-popover .issue-options-item:not(#_),
 html:root body .issue-options-submenu .issue-options-item:not(#_) {
   color: var(--pk-text);

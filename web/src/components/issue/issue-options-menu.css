@@ -1,5 +1,5 @@
-.issue-options-popover,.issue-options-submenu{z-index:600;box-sizing:border-box;width:max-content;max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);padding:0;border:.5px solid var(--popover-border);border-radius:12px;background:var(--theme-surface-2);box-shadow:var(--shadow-control);outline:0;color:var(--theme-text-primary);font-family:var(--font)}
-.issue-options-popover{width:242px;min-width:242px;overflow:hidden}
+.issue-options-popover,.issue-options-submenu{z-index:600;box-sizing:border-box;width:max-content;max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);padding:0;border:.5px solid var(--pk-border);border-radius:12px;background:var(--pk-surface);box-shadow:var(--pk-shadow);outline:0;color:var(--pk-text);font-family:var(--font)}
+.issue-options-popover{min-width:242px;overflow:hidden}
 .issue-options-popover>[cmdk-root],.issue-options-submenu>[cmdk-root]{display:flex;flex-direction:column;max-height:inherit;min-height:0}
 .issue-options-popover [cmdk-list],.issue-options-submenu [cmdk-list]{padding:6px 0;overflow:auto;min-height:0;scrollbar-width:none}
 .issue-options-filter{position:absolute;left:-99999px;width:1px;height:1px;padding:0;opacity:0}
@@ -24,7 +24,7 @@
 .issue-options-separator-line{position:absolute;top:5.5px;left:0;right:0;height:0;border-top:.5px solid var(--theme-border-strong);background:transparent}
 .issue-options-list-surface{display:contents}
 .issue-options-empty{height:42px;display:grid;place-items:center;padding:0 14px;color:var(--theme-text-secondary);font-size:12px}
-.issue-options-submenu{min-width:175px;box-shadow:var(--shadow-dialog);overflow:hidden}
+.issue-options-submenu{min-width:175px;box-shadow:var(--pk-card-shadow);overflow:hidden}
 :root:not([data-theme=light]) .issue-options-submenu{box-shadow:var(--shadow-dialog),0 1px 1px var(--shadow-color-heavy)}
 .issue-options-submenu[data-menu="Create related"]{min-width:176px}
 .issue-options-submenu[data-menu="Mark as"]{min-width:200px}

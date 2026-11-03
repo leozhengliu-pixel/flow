@@ -98,6 +98,8 @@
     padding: 0 14px;
     border: 0;
     border-bottom: .5px solid var(--pk-divider);
+    border-start-start-radius: inherit;
+    border-start-end-radius: inherit;
     background: var(--pk-surface);
     color: var(--pk-muted);
     font: 450 13px/normal var(--font);
