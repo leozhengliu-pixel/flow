@@ -117,7 +117,7 @@
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row { grid-template-columns: minmax(0, 408.6fr) minmax(0, 266.4fr) 146px 82px 82px 82px 32px; padding: 0 20px 0 52px; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button { gap: 2px; margin-left: -6.5px; border: .5px solid transparent; color: var(--set-button-text); font-weight: 500; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-column-label { font-weight: 450; }
-  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button > span { color: var(--set-group-desc); }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button > .settings-members-column-label { color: var(--set-group-desc); }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=name] { margin-left: -6.5px; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=role] { margin-left: 0; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-more { width: 32px; height: 32px; }
