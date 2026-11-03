@@ -25,7 +25,7 @@ it('uses the existing Chinese create-team action and keeps its callback', async 
   expect(create).toHaveBeenCalledOnce()
 })
 
-it('sorts every team column in both directions using the displayed data', async () => {
+it('sorts the available team columns in both directions using the displayed data', async () => {
   const a = { id: 'a', name: 'Alpha', key: 'ALP', color: 'currentColor', createdAt: '2026-01-01' }
   const z = { id: 'z', name: 'Zulu', key: 'ZUL', color: 'currentColor', private: true, createdAt: '2026-02-01' }
   const data = makeBootstrap({ teams: [z, a], viewerRole: 'admin', teamSettings: { a: { description: 'Zebra' }, z: { description: 'Apple' } } as never, teamMembers: [{ teamId: 'a', userId: viewer.id }] as never, issues: [{ team: z }] as never })
@@ -33,10 +33,11 @@ it('sorts every team column in both directions using the displayed data', async 
   expect(screen.getByRole('button', { name: 'Create new team' })).toHaveTextContent('Create team')
   const first = () => container.querySelector('.settings-teams-row strong')?.textContent
   expect(first()).toBe('Alpha')
-  for (const label of ['Name', 'Description', 'Visibility', 'Members', 'Issues', 'Created']) {
+  expect(screen.queryByRole('button', { name: 'Order by Description' })).not.toBeInTheDocument()
+  for (const label of ['Name', 'Visibility', 'Members', 'Issues', 'Created']) {
     expect(screen.getByRole('button', { name: `Order by ${label}` }).querySelector('svg')).toHaveAttribute('width', '12')
   }
-  for (const [column, expected] of [['Description', 'Zulu'], ['Visibility', 'Zulu'], ['Members', 'Alpha'], ['Issues', 'Zulu'], ['Created', 'Alpha'], ['Name', 'Alpha']]) {
+  for (const [column, expected] of [['Visibility', 'Zulu'], ['Members', 'Alpha'], ['Issues', 'Zulu'], ['Created', 'Alpha'], ['Name', 'Alpha']]) {
     await userEvent.click(screen.getByRole('button', { name: `Order by ${column}` }))
     expect(first()).toBe(expected)
     await userEvent.click(screen.getByRole('button', { name: `Order by ${column}` }))
