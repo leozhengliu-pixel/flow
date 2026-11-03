@@ -402,7 +402,6 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
 .project-details-sidebar__property-dates button[aria-expanded=true] { background: var(--project-property-hover); }
 .project-details-sidebar__property-dates button:focus-visible { outline: 0; box-shadow: inset 0 0 0 1px lch(53% 52.26 286.91); }
 .project-details-sidebar__property-dates button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.project-details-sidebar__date-menu { box-sizing: border-box; width: 304px; height: 427px; padding: 16px 16px 0; overflow: hidden; }
 .project-details-sidebar__property-menu.is-standard { width: 252px; }
 .project-details-sidebar__property-menu.is-labels { width: 252px; }
 .project-details-sidebar__property-menu.is-members { width: max-content; min-width: 181px; max-width: min(320px, calc(100vw - 20px)); }
