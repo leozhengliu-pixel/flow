@@ -338,12 +338,13 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
     <button
       type="button"
       data-sort={key}
+      data-sorted={sort === key}
       aria-label={`${t("Order by")} ${t(label)}${sort === key ? `, ${t(descending ? "sorted descending" : "sorted ascending")}` : ""}`}
       onClick={() => order(key)}
     >
       <span className="settings-members-column-label">{t(label)}</span>
       {(desktop || sort === key) && <>
-        <span className="settings-members-desktop-sort">{descending ? <ArrowUp aria-hidden size={12} /> : <ArrowDown aria-hidden size={12} />}</span>
+        <span className="settings-members-desktop-sort">{sort === key && descending ? <ArrowUp aria-hidden size={12} /> : <ArrowDown aria-hidden size={12} />}</span>
         <MembersSortGlyph descending={descending} />
       </>}
     </button>
