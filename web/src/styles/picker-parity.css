@@ -895,22 +895,20 @@ html:root body .issue-options-submenu .issue-options-item[data-selected=true]:no
 }
 
 /* ── Workspace menu ────────────────────────────────────────────────────── */
-html:root body .workspace-primary-menu:not(#_),
-html:root body .workspace-switch-menu:not(#_) {
+.menu-content:is(.workspace-primary-menu,.workspace-switch-menu) {
   border: .5px solid var(--pk-border);
   background: var(--pk-surface);
   box-shadow: var(--pk-shadow);
   color: var(--pk-text);
 }
-html:root body .workspace-primary-menu [role=menuitem]:not(#_),
-html:root body .workspace-switch-menu [role=menuitem]:not(#_) {
+.menu-content:is(.workspace-primary-menu,.workspace-switch-menu) [role=menuitem] {
   color: var(--pk-text);
   font-size: 13px;
   font-weight: 450;
 }
-html:root body .workspace-primary-menu [role=menuitem]:not(#_)[data-highlighted],
-html:root body .workspace-switch-menu [role=menuitem]:not(#_)[data-highlighted] {
+.menu-content:is(.workspace-primary-menu,.workspace-switch-menu) [role=menuitem][data-highlighted] {
   background: var(--pk-hover);
+  color: var(--pk-text-strong);
 }
 html:root body .workspace-shortcut:not(#_),
 html:root body .workspace-shortcut:not(#_) * {

@@ -96,6 +96,23 @@ for (const width of [1440, 390]) {
   }
 }
 
+test('closes the workspace cascade when the pointer returns to a sibling command', async ({ page, workspaceKey }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', 'desktop interaction coverage')
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto(`/${workspaceKey}/agent`)
+  await page.locator('.workspace-menu-trigger').click()
+  const menu = page.locator('.workspace-primary-menu')
+  const switcher = menu.locator('[data-workspace-switch-trigger]')
+  await switcher.hover()
+  await expect(page.locator('.workspace-switch-menu')).toBeVisible()
+  const logout = menu.getByRole('menuitem', { name: /Log out/ })
+  await logout.hover()
+  await expect(page.locator('.workspace-switch-menu')).toBeHidden()
+  await expect(switcher).toHaveAttribute('data-state', 'closed')
+  await expect(menu.locator('[data-highlighted]')).toHaveCount(1)
+  await expect(logout).toHaveAttribute('data-highlighted')
+})
+
 test('switches real workspaces by click and keyboard, and bounds a long submenu', async ({ page, request, workspaceKey }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'desktop interaction coverage')
   await page.setViewportSize({ width: 1440, height: 900 })

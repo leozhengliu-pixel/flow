@@ -138,14 +138,18 @@ export function WorkspaceMenu({
           align="start"
           sideOffset={4}
           className="workspace-primary-menu"
+          onPointerMove={event => {
+            const item = (event.target as Element).closest<HTMLElement>('[role="menuitem"]')
+            if (switching && item && !item.hasAttribute('data-workspace-switch-trigger') && !item.hasAttribute('data-disabled')) { setSwitching(false); item.focus({ preventScroll: true }) }
+          }}
         >
           <div className="workspace-menu-list">
-            <DropdownMenuItem onSelect={() => onSettings("workspace")}>
+            <DropdownMenuItem onFocus={() => setSwitching(false)} onSelect={() => onSettings("workspace")}>
               {t('Settings')}<WorkspaceMenuShortcut>{t('G then S')}</WorkspaceMenuShortcut>
             </DropdownMenuItem>
             {/* Settings › Members is an administration page: the reference app only lists it for admins. */}
             {(data.viewerRole === "admin" || data.viewerRole === "owner") && (
-              <DropdownMenuItem onSelect={() => onSettings("members")}>
+              <DropdownMenuItem onFocus={() => setSwitching(false)} onSelect={() => onSettings("members")}>
                 {t('Invite and manage members')}
               </DropdownMenuItem>
             )}
@@ -185,7 +189,7 @@ export function WorkspaceMenu({
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
-            <DropdownMenuItem onSelect={() => void onLogout()}>
+            <DropdownMenuItem onFocus={() => setSwitching(false)} onSelect={() => void onLogout()}>
               {t('Log out')}<WorkspaceMenuShortcut>⌥ ⇧ Q</WorkspaceMenuShortcut>
             </DropdownMenuItem>
           </div>
