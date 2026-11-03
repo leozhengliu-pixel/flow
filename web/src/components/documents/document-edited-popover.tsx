@@ -67,6 +67,7 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot
               ? <span className="document-person">{ownerValue}</span>
               : <DocumentOwnerPicker ctx={ctx} document={document} trigger={ownerValue} triggerClassName="document-person document-person--button" open={ownerOpen} onOpenChange={onOwnerOpenChange}/>}
           </div>
+          <div aria-hidden="true" className="document-metadata-divider"/>
           <div className="document-last-edit-row">
             <span>{t('Last edit by')}</span>
             <span className="document-person"><UserAvatar avatarUrl={attributedActorAvatar(lastEditor, editorBot)} className="document-meta-avatar" color={avatarColor(lastEditor.id)} name={editorName}/><strong data-i18n-ignore>{editorName}</strong><ViaApp user={lastEditor} botActor={editorBot}/></span>
