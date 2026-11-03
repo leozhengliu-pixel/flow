@@ -72,6 +72,7 @@
 .propertyGrid{gap:5px}
 
 @media (min-width: 1024px) {
+  .popover[data-my-issues-display-menu="true"] .nestedSelectRow { display: none; }
   .layoutTabs button{padding-block:6px}
   .selectTrigger{width:116px;line-height:normal}
   .popover[data-layout=board] .selectTrigger{width:160px}
