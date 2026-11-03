@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Use the shared settings search magnifier and match its visible icon fill in both themes.
+
 - Keep the shortcut search's neutral border and restore its accent focus outline.
 
 - Match the desktop chat history icon to the sidebar navigation foreground.

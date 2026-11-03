@@ -671,7 +671,7 @@ export function SettingsPage(props: SettingsPageProps) {
             {t("Back to app")}
           </button>}
           <label className="settings-search">
-            {phoneLayout ? <SettingsSearchGlyph size={16} /> : <Search size={16} />}
+            <SettingsSearchGlyph size={16} />
             <input
               aria-label="Search settings"
               aria-controls="settings-search-results"
