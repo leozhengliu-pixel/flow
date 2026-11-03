@@ -14,11 +14,9 @@ import {
   Inbox,
   Layers3,
   Lightbulb,
-  Maximize2,
   Plus,
   Search,
   SquareDot,
-  Tag,
   Trash2,
   UserRound,
 } from 'lucide-react'
@@ -49,6 +47,7 @@ import { GLOBAL_RELEASE_PAGES, releaseCommands, type ReleaseCommandHost } from '
 import { contextChip, useContextCommands, type CommandPage, type ContextCommandHandlers, type PageOption } from './context-commands'
 import './command-menu.css'
 import { AgentCursorGlyph, AgentHistoryGlyph } from '@/components/ui/agent-glyph'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { NAVIGATION_PAGES, navigationOptions, navigationPageLabels } from './navigation-commands'
 
@@ -239,8 +238,8 @@ export function CommandMenu({
   }
   const actions: CommandAction[] = [
     { id: 'create-issue', group: 'Issues', label: 'Create new issue…', icon: <Plus/>, shortcut: ['C'], keywords: 'new ticket task', run: closeAnd(onCreateIssue) },
-    ...(onCreateIssueFullscreen ? [{ id: 'create-issue-fullscreen', group: 'Issues', label: 'Create issue in fullscreen…', icon: <Maximize2/>, shortcut: ['V'], keywords: 'new ticket task expanded', run: closeAnd(onCreateIssueFullscreen) }] : []),
-    ...(onCreateLabel ? [{ id: 'create-label', group: 'Issues', label: 'Create new label…', icon: <Tag/>, keywords: 'new tag label', run: closeAnd(onCreateLabel) }] : []),
+    ...(onCreateIssueFullscreen ? [{ id: 'create-issue-fullscreen', group: 'Issues', label: 'Create issue in fullscreen…', icon: <Plus/>, shortcut: ['V'], keywords: 'new ticket task expanded', run: closeAnd(onCreateIssueFullscreen) }] : []),
+    ...(onCreateLabel ? [{ id: 'create-label', group: 'Issues', label: 'Create new label…', icon: <FlowGlyph name="labels"/>, keywords: 'new tag label', run: closeAnd(onCreateLabel) }] : []),
     { id: 'create-project', group: 'Projects', label: 'Create new project…', icon: <Box/>, shortcut: ['N', 'then', 'P'], run: closeAnd(onCreateProject) },
     ...(onCreateProjectTemplate ? [{ id: 'create-project-template', group: 'Projects', label: 'Create new project template…', icon: <FileText/>, run: closeAnd(onCreateProjectTemplate) }] : []),
     { id: 'create-view', group: 'Views', label: 'Create view…', icon: <Layers3/>, run: closeAnd(onCreateView) },
