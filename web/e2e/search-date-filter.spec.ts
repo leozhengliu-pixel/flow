@@ -84,6 +84,25 @@ async function applyDateFilter(page: Page, workspaceKey: string, phone = false) 
 test.describe('workspace search date filter', () => {
   test.describe('desktop', () => {
     test.use({ viewport: { width: 1440, height: 900 } })
+    for (const width of [1024, 1280]) for (const theme of ['dark', 'light']) {
+      test(`keeps the date panel and precision row inside the viewport at ${width}px in ${theme}`, async ({ page, workspaceKey }, testInfo) => {
+        test.skip(testInfo.project.name !== 'chromium', 'Desktop geometry runs once')
+        await page.setViewportSize({ width, height: 900 })
+        await page.goto(`${base}/${workspaceKey}/search`)
+        await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme)
+        await page.getByRole('button', { name: 'Add filter', exact: true }).click()
+        await page.getByRole('menuitem', { name: 'Updated date', exact: true }).click()
+        const panel = page.locator('.search-date-filter')
+        await expect(panel).toBeVisible()
+        await expect.poll(() => panel.evaluate(element => {
+          const box = element.getBoundingClientRect()
+          const wrapper = element.closest('.workspace-search-value-menu')!.getBoundingClientRect()
+          const buttons = Array.from(element.querySelectorAll('.search-date-modes button'), button => button.getBoundingClientRect())
+          return box.left >= 0 && box.right <= innerWidth && wrapper.left <= box.left && wrapper.right >= box.right
+            && buttons.length === 5 && buttons.every(button => Math.abs(button.top - buttons[0].top) < 1 && button.right <= box.right)
+        })).toBe(true)
+      })
+    }
     test('picks a date and applies the filter', async ({ page, request, workspaceKey }, testInfo) => {
       test.skip(testInfo.project.name !== 'chromium', 'Desktop geometry runs once')
       await seedWorkspace(request, workspaceKey)
