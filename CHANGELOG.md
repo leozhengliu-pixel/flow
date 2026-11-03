@@ -15,6 +15,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Draw each weekend of a cycle chart as one hatched band in the track colour instead of one thin, bright stripe set per day, and put the phone cycle dates against the rail.
 
 - Align the document metadata and subscribers popovers, the document history selection, the submenu triangle and row icons of the inbox and document menus, the snooze field, the inbox filter icons, review descriptions and phone review tabs, and the project update composer tab ring with the measured reference.
+- Keep issue display selects on one line, show supported nesting choices, and hide unchanged view-default actions.
+- Match issue filter and row-menu glyphs, restore the sub-issue activity divider, and keep pale status rings visible in light themes.
+- Retain empty issue-board columns in the collapsible hidden-column panel, including server-backed boards.
+- Restore project row hover and selection paint, respect ungrouped project displays on desktop, and reveal empty target-date controls on interaction.
+- Match document heading interaction states and tinted groups, and use natural actor spacing and property-row geometry in initiative details.
 
 - Match subscribed document rows to the shared menu highlight color and phone inset in pointer and keyboard states.
 
