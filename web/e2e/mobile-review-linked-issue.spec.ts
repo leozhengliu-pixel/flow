@@ -30,11 +30,26 @@ for (const width of [375, 390]) for (const theme of ['Light', 'Dark'] as const) 
   const types = page.getByRole('dialog', { name: typeLabel })
   await expect(types.getByRole('option')).toHaveCount(3)
   await capture(types, `flow-review-link-types-${suffix}`)
-  await types.getByRole('option', { name: zh ? '相关' : 'Related', exact: true }).click()
+  let releaseSave!: () => void
+  const saveHeld = new Promise<void>(resolve => { releaseSave = resolve })
+  await page.route(`**/api/reviews/${id}`, async route => {
+    if (route.request().method() === 'PATCH') await saveHeld
+    await route.continue()
+  })
+  try {
+    await types.getByRole('option', { name: zh ? '相关' : 'Related', exact: true }).click()
+    await expect(page.getByRole('button', { name: actionLabel, exact: true })).toBeDisabled()
+    await capture(page.locator('.review-mobile-properties'), `flow-review-link-pending-${suffix}`)
+  } finally { releaseSave() }
   await expect(page.locator('[data-mobile-property=related]')).toContainText('Linked review issue')
   await page.reload()
   await expect(page.locator('[data-mobile-property=related]')).toContainText('Linked review issue')
   expect((await (await request.get(`/api/reviews/${id}`, { headers })).json()).issueLinkTypes).toEqual({ [issue.id]: 'related' })
+  await page.getByRole('button', { name: actionLabel, exact: true }).click()
+  await menu.getByRole('option', { name: typeLabel }).click()
+  await expect(types.getByRole('option', { name: zh ? '相关' : 'Related', exact: true }).locator('svg')).toHaveCount(2)
+  await capture(types, `flow-review-link-selected-${suffix}`)
+  await page.keyboard.press('Escape')
   await page.getByRole('button', { name: actionLabel, exact: true }).click()
   await menu.getByRole('option', { name: zh ? '取消事项与拉取请求的关联' : 'Unlink issue from pull request' }).click()
   await expect(page.locator('.review-mobile-issue')).toHaveCount(0)

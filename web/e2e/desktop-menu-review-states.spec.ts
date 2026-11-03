@@ -20,6 +20,7 @@ for (const width of [1440, 375, 390]) for (const theme of ['dark', 'light'] as c
   test(`shared menu states ${width} ${theme} ${locale}`, async ({ page, request, workspaceKey }) => {
     if (process.env.FLOW_REVIEW_SHOTS) test.setTimeout(90_000)
     const phone = width < 768, zh = locale === 'zh-CN', key = `${width}-${theme}-${locale}`
+    const longLabel = zh ? '跨团队基础设施可靠性与国际发布准备工作' : 'Cross-team infrastructure reliability and international launch readiness'
     await page.setViewportSize({ width, height: width === 1440 ? 900 : width === 375 ? 667 : 844 })
     await page.emulateMedia({ colorScheme: theme })
     await page.addInitScript(({ theme, locale }) => {
@@ -28,6 +29,9 @@ for (const width of [1440, 375, 390]) for (const theme of ['dark', 'light'] as c
     }, { theme, locale })
     const headers = { 'X-Workspace-Key': workspaceKey }
     expect((await request.patch('/api/account/settings', { headers, data: { interfaceTheme: theme === 'dark' ? 'Dark' : 'Light', language: locale } })).ok()).toBe(true)
+    for (const name of [longLabel, 'A']) {
+      expect((await request.post('/api/labels', { headers, data: { name, resourceType: 'issue' } })).status()).toBe(201)
+    }
     const boot = await (await request.get('/api/bootstrap', { headers })).json()
     await page.route('**/api/bootstrap*', async route => {
       const response = await route.fetch(), data = await response.json()
@@ -48,6 +52,7 @@ for (const width of [1440, 375, 390]) for (const theme of ['dark', 'light'] as c
     const trigger = page.locator('.workspace-menu-trigger')
     await capture(page.locator('.workspace-row'), `workspace-rest-${key}`)
     await trigger.hover()
+    await capture(page.locator('.workspace-row'), `workspace-hover-${key}`)
     await page.keyboard.press('Tab')
     await trigger.focus()
     expect(await trigger.evaluate(element => element.matches(':focus-visible'))).toBe(true)
@@ -113,6 +118,8 @@ for (const width of [1440, 375, 390]) for (const theme of ['dark', 'light'] as c
     await expect(longSkill).toHaveCSS('color', strong)
     expect(await longSkill.locator('span').evaluate(element => element.getBoundingClientRect().width <= element.parentElement!.getBoundingClientRect().width)).toBe(true)
     await capture(skills, `skills-hover-${key}`)
+    await page.mouse.move(0, 0)
+    await page.keyboard.press('Home')
     await page.keyboard.press('ArrowDown')
     await longSkill.focus()
     expect(await longSkill.evaluate(element => element.matches(':focus-visible'))).toBe(true)
@@ -128,8 +135,10 @@ for (const width of [1440, 375, 390]) for (const theme of ['dark', 'light'] as c
     await page.getByRole('button', { name: phone ? /Change labels|更改标签/ : /Add label|添加标签/ }).first().click()
     const labels = page.locator(phone ? '.phone-menu-surface.property-command-labels' : '.issue-labels-menu')
     await expect(labels).toBeVisible()
-    const option = labels.getByRole('option').first(), mark = option.locator('.property-command-checkbox')
+    const option = labels.getByRole('option', { name: longLabel, exact: true }), mark = option.locator('.property-command-checkbox')
     await option.hover()
+    await expect(labels.getByRole('option', { name: 'A', exact: true })).toBeVisible()
+    expect(await option.locator('.property-command-label').evaluate(element => element.getBoundingClientRect().right <= element.parentElement!.getBoundingClientRect().right)).toBe(true)
     await expect(mark).toBeVisible()
     await expect(mark).toHaveCSS('opacity', '1')
     expect((await mark.boundingBox())!.width).toBe(14)
