@@ -149,7 +149,7 @@
   .flow-cycles-page .cycle-timeline-card.is-upcoming { height: 70px; }
   .flow-cycles-page .cycle-timeline-card > :is(.cycle-row-menu, .cycle-timeline-status, .cycle-timeline-capacity, .cycle-timeline-scope) { display: none; }
   .flow-cycles-page .cycle-timeline-heading { position: absolute; top: 27px; left: 80px; right: 32px; }
-  .flow-cycles-page .flow-cycle-cooldown { --cycle-rail-start: 4px; --cycle-rail-end: -.5px; height: 48px; margin-bottom: 2px; padding: 0; color: var(--issue-dim); }
+  .flow-cycles-page .flow-cycle-cooldown { --cycle-rail-start: 4px; --cycle-rail-end: -.5px; display: flex; align-items: center; height: 48px; margin-bottom: 2px; padding: 0; color: var(--issue-dim); }
   .flow-cycles-page .flow-cycle-cooldown::after { left: 128px; }
   .flow-cycles-page .flow-cycle-cooldown > span:first-of-type { margin-left: 96px; }
   .flow-cycles-page .flow-cycle-cooldown > .cycle-timeline-date { bottom: -16.5px; }

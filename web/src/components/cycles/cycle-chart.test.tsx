@@ -28,8 +28,9 @@ describe('cycle chart geometry', () => {
     const wide = cycleAxisTicks(days, 399)
     expect(wide.map(tick => [tick.date, tick.kind])).toEqual([['2026-10-28', 'start'], ['2026-11-02', 'week'], ['2026-11-09', 'week'], ['2026-11-16', 'end']])
     expect(wide[1].fraction).toBeCloseTo(5 / 19)
-    // At 274px the first Monday is only 72px from the start.
+    // At 274px the first Monday is only 72px from the start; at 259px the second is 95px from the end and stays.
     expect(cycleAxisTicks(days, 274).map(tick => tick.date)).toEqual(['2026-10-28', '2026-11-09', '2026-11-16'])
+    expect(cycleAxisTicks(days, 259).map(tick => tick.date)).toEqual(['2026-10-28', '2026-11-09', '2026-11-16'])
     expect(cycleAxisTicks([], 400)).toEqual([])
   })
 })
@@ -58,7 +59,7 @@ describe('cycle chart axis', () => {
   it('renders the week ticks and a hover date', () => {
     const { container, rerender } = render(<I18nProvider><CycleChart measure="issues" startsAt="2026-10-28T00:00:00Z" endsAt="2026-11-15T00:00:00Z" height={200} label="chart"/></I18nProvider>)
     // Without a measured width only the start and the end are kept.
-    expect([...container.querySelectorAll('.cycle-chart__tick b')].map(label => label.textContent)).toEqual(['Oct 28', 'Nov 16'])
+    expect([...container.querySelectorAll('.cycle-chart__axis > span')].map(label => label.textContent)).toEqual(['Oct 28', 'Nov 16'])
     expect(container.querySelector('.cycle-chart__tooltip')).toBeNull()
     rerender(<I18nProvider><CycleChart measure="issues" startsAt="2026-10-28T00:00:00Z" endsAt="2026-11-15T00:00:00Z" height={200} label="chart" hover={9}/></I18nProvider>)
     expect(container.querySelector('.cycle-chart__tooltip')?.textContent).toBe('Nov 6')

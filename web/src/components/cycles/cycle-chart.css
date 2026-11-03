@@ -3,12 +3,11 @@
 .cycle-chart__fill { position: absolute; left: 0; width: calc(100% - 4px); background: linear-gradient(var(--cycle-chart-fill), transparent); pointer-events: none; }
 .cycle-chart__canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; }
 .cycle-chart__axis { position: absolute; left: 0; right: 0; height: 24px; pointer-events: none; }
-.cycle-chart__tick { --tick: 0; position: absolute; top: 0; left: calc((100% - 4px) * var(--tick)); width: 0; height: 24px; }
-.cycle-chart__tick > i { position: absolute; top: -3px; left: 0; width: 1px; height: 5px; background: var(--issue-muted); }
-.cycle-chart__tick > b { position: absolute; top: 0; font-weight: inherit; white-space: nowrap; }
-.cycle-chart__tick.is-start > b { left: 0; }
-.cycle-chart__tick.is-week > b { left: 0; transform: translateX(-50%); }
-.cycle-chart__tick.is-end > b { right: 0; }
+.cycle-chart__marks { position: absolute; left: 0; right: 0; height: 0; pointer-events: none; }
+.cycle-chart__marks > i { --tick: 0; position: absolute; top: -3px; left: calc((100% - 4px) * var(--tick)); width: 1px; height: 5px; background: var(--issue-muted); }
+.cycle-chart__label { --tick: 0; position: absolute; top: 0; left: calc((100% - 4px) * var(--tick)); height: 24px; white-space: nowrap; }
+.cycle-chart__label.is-week { transform: translateX(-50%); }
+.cycle-chart__label.is-end { transform: translateX(-100%); }
 .cycle-chart__tooltip {
   --tick: 0;
   position: absolute;

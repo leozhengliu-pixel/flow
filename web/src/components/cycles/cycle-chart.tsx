@@ -18,10 +18,10 @@ const HATCH_RUN = 2.35
 /** The scope fill fades out over this share of the plot height. */
 const FILL_SHARE = .45
 
-type Props = { graph?: CycleGraphData; measure: CycleGraphMeasure; startsAt: string; endsAt: string; height: number; label: string; className?: string; hover?: number | null; onHover?: (day: number | null) => void; onOpen?: () => void }
+type Props = { graph?: CycleGraphData; measure: CycleGraphMeasure; startsAt: string; endsAt: string; height: number; label: string; className?: string; axisClassName?: string; hover?: number | null; onHover?: (day: number | null) => void; onOpen?: () => void }
 
 /** The cycle chart: weekend bands, the Target, Scope, Started and Completed lines, a "now" marker and the week axis. */
-export function CycleChart({ graph, measure, startsAt, endsAt, height, label, className, hover = null, onHover, onOpen }: Props) {
+export function CycleChart({ graph, measure, startsAt, endsAt, height, label, className, axisClassName, hover = null, onHover, onOpen }: Props) {
   const { formatDate } = useI18n()
   const ref = useRef<HTMLCanvasElement>(null)
   const days = useMemo(() => cycleChartDays(startsAt, endsAt), [startsAt, endsAt])
@@ -138,10 +138,11 @@ export function CycleChart({ graph, measure, startsAt, endsAt, height, label, cl
       onPointerMove={onHover && (event => { if (event.pointerType === 'touch' || !days.length) return; const box = event.currentTarget.getBoundingClientRect(); onHover(Math.max(0, Math.min(days.length - 1, Math.floor((event.clientX - box.left) / box.width * days.length)))) })}
       onPointerLeave={onHover && (() => onHover(null))}/>
     {hover !== null && hover >= 0 && hover < days.length && <div className="cycle-chart__tooltip" style={{ '--tick': hover / days.length, top: height - BOTTOM } as CSSProperties}>{formatDate(new Date(`${days[hover]}T12:00:00.000Z`), { month: 'short', day: 'numeric', timeZone: 'UTC' })}</div>}
-    <div className="cycle-chart__axis" style={{ top: height - BOTTOM + 4 }} aria-hidden="true">
-      {ticks.map(tick => <span key={tick.boundary} className={`cycle-chart__tick is-${tick.kind}`} style={{ '--tick': tick.fraction } as CSSProperties}>
-        <i/><b>{formatDate(new Date(`${tick.date}T12:00:00.000Z`), { month: 'short', day: 'numeric', timeZone: 'UTC' })}</b>
-      </span>)}
+    <div className="cycle-chart__marks" style={{ top: height - BOTTOM + 4 }} aria-hidden="true">
+      {ticks.map(tick => <i key={tick.boundary} style={{ '--tick': tick.fraction } as CSSProperties}/>)}
+    </div>
+    <div className={`cycle-chart__axis${axisClassName ? ` ${axisClassName}` : ''}`} style={{ top: height - BOTTOM + 4 }} aria-hidden="true">
+      {ticks.map(tick => <span key={tick.boundary} className={`cycle-chart__label is-${tick.kind}`} style={{ '--tick': tick.fraction } as CSSProperties}>{formatDate(new Date(`${tick.date}T12:00:00.000Z`), { month: 'short', day: 'numeric', timeZone: 'UTC' })}</span>)}
     </div>
   </div>
 }
