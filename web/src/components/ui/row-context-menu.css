@@ -98,7 +98,6 @@ a.flow-menu__row { text-decoration: none; }
   gap: 6px;
   flex: none;
   margin-left: auto;
-  padding-left: 4px;
 }
 
 .flow-menu__shortcut {
@@ -129,14 +128,15 @@ a.flow-menu__row { text-decoration: none; }
 }
 
 .flow-menu__marker {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
   width: 16px;
-  height: 16px;
   flex: 0 0 16px;
   color: var(--pk-faint);
-  font: 450 6px/1 var(--font);
+  font: 450 6px/normal var(--font);
 }
+/* The triangle brightens with the highlighted row (the reference: lch 41.8 at rest, 64.7 highlighted). */
+.flow-menu__row:is([data-highlighted], [data-state="open"]) .flow-menu__marker { color: var(--pk-muted); }
 
 .flow-menu__separator {
   position: relative;

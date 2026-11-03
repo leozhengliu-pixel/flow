@@ -911,7 +911,7 @@ function PhonePropertyIcon({ property }: { property: InboxFilterProperty }) {
   return <PropertyIcon property={property} />
 }
 
-/** Reference glyphs used by the phone filter sheet (the desktop picker keeps its compact set). */
+/** The reference's team glyph (a person on a card), used by the phone filter sheet and the desktop picker. */
 function TeamFilterGlyph() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
     <path d="M12.5 13.5V15H3.5V13.5H12.5ZM13.5 12.5V3.5C13.5 2.94771 13.0523 2.5 12.5 2.5H3.5C2.94771 2.5 2.5 2.94772 2.5 3.5V12.5C2.5 13.0523 2.94772 13.5 3.5 13.5V15L3.24414 14.9873C2.06772 14.8677 1.13227 13.9323 1.0127 12.7559L1 12.5V3.5C1 2.20566 1.98361 1.14082 3.24414 1.0127L3.5 1H12.5L12.7559 1.0127C14.0164 1.14082 15 2.20566 15 3.5V12.5L14.9873 12.7559C14.8677 13.9323 13.9323 14.8677 12.7559 14.9873L12.5 15V13.5C13.0523 13.5 13.5 13.0523 13.5 12.5Z"/>
@@ -937,6 +937,7 @@ function PhoneStatusTypeGlyph() {
 function PropertyIcon({ property }: { property: InboxFilterProperty }) {
   if (property === 'notificationType') return <InboxFilterPropertyGlyph property={property} />
   if (property === 'from') return <InboxFilterPropertyGlyph property={property} />
+  if (property === 'team') return <TeamFilterGlyph />
   if (property === 'project') return <ProjectIcon aria-hidden="true" />
   if (property === 'initiative') return <InboxFilterPropertyGlyph property={property} />
   if (property === 'issuePriority') return <PriorityIcon priority={2} aria-hidden="true" />

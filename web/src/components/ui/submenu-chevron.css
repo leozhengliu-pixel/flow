@@ -1,6 +1,2 @@
-.flow-submenu-chevron > svg { display: none; }
-@media (min-width: 1024px) {
-  .flow-submenu-chevron { display: grid; place-items: center; }
-  .flow-submenu-chevron > span { display: none; }
-  .flow-submenu-chevron > svg { display: block; }
-}
+/* A 16px box with a 6px triangle on its right edge (the reference's measured glyph box is 16x7.5); the colour is the host row's. */
+.flow-submenu-chevron { display: block; width: 16px; flex: none; text-align: right; font: 450 6px/normal var(--font); }

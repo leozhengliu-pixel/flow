@@ -1,6 +1,4 @@
-import { ChevronRight } from 'lucide-react'
-import './submenu-chevron.css'
-
+/** The submenu marker: the reference app's small solid triangle, right-aligned in a 16px box at every width. */
 export function SubmenuChevron() {
-  return <span className="flow-submenu-chevron" aria-hidden="true"><span>▶</span><ChevronRight size={14} strokeWidth={1.5}/></span>
+  return <span className="flow-submenu-chevron" aria-hidden="true">▶</span>
 }

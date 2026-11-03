@@ -1,6 +1,6 @@
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { ChevronRight, GitPullRequest } from 'lucide-react'
+import { GitPullRequest } from 'lucide-react'
 import { useCurrentTime } from '@/hooks/use-current-time'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { useDesktopLayout } from '@/hooks/use-desktop-layout'
@@ -15,6 +15,7 @@ import type { WorkflowState } from '@/types/flow'
 
 import { PulseFrequencyContextSubmenu } from './pulse-frequency-menu'
 import type { PulseFrequency } from './pulse-summary-model'
+import { DeleteInboxIcon, MarkAllReadIcon, UnreadFilterIcon } from './inbox-icons'
 import styles from './notification-row.module.css'
 import './inbox-date-control.css'
 import { GridLoader } from '@/components/ui/grid-loader'
@@ -315,20 +316,20 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
         <NotificationMenuOptions>
           <RowMenuItem
             shortcut="U"
-            icon={<UnreadIcon />}
+            icon={notification.read ? <UnreadFilterIcon /> : <MarkAllReadIcon />}
             disabled={disabled}
             onSelect={() => props.onReadChange(notification, !notification.read)}
           >
             {t(notification.read ? 'Mark as unread' : 'Mark as read')}
           </RowMenuItem>
-          <RowMenuItem shortcut="⌫" icon={<DeleteIcon />} disabled={disabled} onSelect={() => props.onDelete(notification)}>
+          <RowMenuItem shortcut="⌫" icon={<DeleteInboxIcon />} disabled={disabled} onSelect={() => props.onDelete(notification)}>
             {t('Delete notification')}
           </RowMenuItem>
           <MenuSubmenu label={t('Snooze')} triggerProps={{ className: 'flow-inbox-menu__item', disabled }} trigger={<>
             <span className="flow-inbox-menu__item-icon"><SnoozeIcon /></span>
             <span className="flow-inbox-menu__item-label">{t('Snooze')}</span>
             <kbd className="flow-inbox-menu__shortcut">H</kbd>
-            <span className="flow-inbox-menu__trailing"><ChevronRight size={14} strokeWidth={1.5} /></span>
+            <span className="flow-inbox-menu__trailing flow-inbox-menu__trailing--submenu">▶</span>
           </>} contentProps={{ 'data-flow-motion': 'floating', className: 'flow-inbox-menu flow-inbox-snooze-menu flow-inbox-context-snooze', sideOffset: phone ? 4 : -1.5, alignOffset: phone ? -37 : -43 }}>
             <RowSnoozeMenu notification={notification} disabled={disabled} onSnooze={props.onSnooze} />
           </MenuSubmenu>
@@ -573,6 +574,4 @@ function ReviewStatusIcon({ status }: { status: string }) {
   return <GitPullRequest aria-hidden="true" size={14} strokeWidth={1.7} style={{ color }} />
 }
 
-function UnreadIcon() { return <svg viewBox="0 0 16 16"><path d="M5 2.5h6v1h1.5v10H3.5v-10H5v-1Zm0 3.5 1.7 1.7L10.5 4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg> }
-function DeleteIcon() { return <svg viewBox="0 0 16 16"><path d="M5 2.5h6v1h1.5v10H3.5v-10H5v-1Zm2 4 2 2m0-2-2 2" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg> }
-function SnoozeIcon() { return <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M8 4.8v3.4l2.2 1.3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg> }
+function SnoozeIcon() { return <svg viewBox="0 0 16 16"><path d="M8.75 5a.75.75 0 0 0-1.5 0v3c0 .414.336.75.75.75h3a.75.75 0 0 0 0-1.5H8.75z" /><path fillRule="evenodd" d="M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-1.5 0a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0" clipRule="evenodd" /></svg> }

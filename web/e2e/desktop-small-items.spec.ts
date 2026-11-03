@@ -66,9 +66,11 @@ test('dims the issue placeholder, updates event disclosure and fits project crea
   await page.keyboard.press('Escape')
   await page.goto(`/${workspaceKey}/team/${issue.team.key}/all`)
   await page.locator(`[data-issue-row-id="${issue.id}"]`).click({ button: 'right' })
-  const rowArrow = page.locator('[role=menu] .flow-submenu-chevron > svg').first()
+  // The reference's row menus use a 6px solid triangle, not a chevron icon.
+  const rowArrow = page.locator('[role=menu] .flow-submenu-chevron').first()
   await expect(rowArrow).toBeVisible()
-  await expect(rowArrow).toHaveAttribute('stroke-width', '1.5')
+  await expect(rowArrow).toHaveText('▶')
+  await expect(rowArrow).toHaveCSS('font-size', '6px')
 })
 
 test('uses the tray-delete glyph in the notification preview', async ({ page, request, workspaceKey }) => {

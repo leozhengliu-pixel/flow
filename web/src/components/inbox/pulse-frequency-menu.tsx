@@ -21,7 +21,7 @@ export function PulseFrequencyContextSubmenu({ value, disabled, onChange }: Prop
       <ContextMenu.SubTrigger className="flow-inbox-menu__item" disabled={disabled}>
         <span className="flow-inbox-menu__item-icon"><PulseIcon /></span>
         <span className="flow-inbox-menu__item-label">{t('Pulse frequency')}</span>
-        <span className="flow-inbox-menu__trailing">▶</span>
+        <span className="flow-inbox-menu__trailing flow-inbox-menu__trailing--submenu">▶</span>
       </ContextMenu.SubTrigger>
       <ContextMenu.Portal>
         <ContextMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-pulse-frequency-menu" sideOffset={4} aria-label={t('Pulse frequency')}>
@@ -47,7 +47,7 @@ export function PulseFrequencyDropdownSubmenu({ value, disabled, onChange }: Pro
       <DropdownMenu.SubTrigger className="flow-inbox-menu__item" disabled={disabled}>
         <span className="flow-inbox-menu__item-icon"><PulseIcon /></span>
         <span className="flow-inbox-menu__item-label">{t('Pulse frequency')}</span>
-        <span className="flow-inbox-menu__trailing">▶</span>
+        <span className="flow-inbox-menu__trailing flow-inbox-menu__trailing--submenu">▶</span>
       </DropdownMenu.SubTrigger>
       <DropdownMenu.Portal>
         <DropdownMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-pulse-frequency-menu" sideOffset={4} aria-label={t('Pulse frequency')}>

@@ -33,7 +33,7 @@
   .project-activity__composer > footer button.is-submit { padding-inline: 8px; }
   .project-activity__composer > header > div { background: var(--project-activity-tabs-bg); border-color: var(--project-activity-tabs-border); }
   .project-activity__composer > header > div button { color: var(--phone-project-panel-label); }
-  .project-activity__composer > header > div button[aria-selected="true"] { background: var(--project-activity-tab-selected-bg); color: var(--phone-project-panel-text); }
+  .project-activity__composer > header > div button[aria-selected="true"] { background: var(--project-activity-tab-selected-bg); box-shadow: var(--project-activity-tab-selected-shadow); color: var(--phone-project-panel-text); }
   .project-activity__composer > footer > div button.project-activity__attach { padding: 0 2px; }
   .project-detail-page__toolbar-actions > [data-project-insights] { order: -1; }
   .project-overview__property-section,
@@ -55,7 +55,8 @@
   .project-details-sidebar__see-all > span { font-size: 12px; line-height: normal; }
   .project-milestone-menu { margin-top: 3px; padding-block: 4px; font: 450 13px var(--font); line-height: normal; }
   .project-milestone-menu [role=menuitem] { padding-left: 14px; font-weight: 450; }
-  :root .project-milestone-menu [role=menuitem] > span.project-milestone-menu__submenu-arrow { color: var(--project-menu-chevron-fg); }
+  :root .project-milestone-menu [role=menuitem] > span.project-milestone-menu__submenu-arrow { color: var(--project-menu-chevron-fg); text-align: right; }
+  :root .project-milestone-menu [role=menuitem]:is([data-highlighted], [data-state="open"]) > span.project-milestone-menu__submenu-arrow { color: var(--pk-muted); }
   .project-milestone-menu [role=menuitem][data-highlighted],
   .project-milestone-menu [role=menuitem][data-highlighted] > svg { color: var(--action-menu-active-text); }
   .project-issues { min-height: 100%; display: flex; flex-direction: column; padding: 0; }

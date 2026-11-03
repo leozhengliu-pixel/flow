@@ -44,7 +44,8 @@ test('row menu fits its labels and typed snooze persists the chosen time', async
   expect(Math.abs(snoozeRect.y - parentRect.y - 27)).toBeLessThanOrEqual(1)
   await expect(snooze.locator('time')).toHaveCount(5)
   expect(Math.abs((await snooze.getByRole('textbox', { name: 'Snooze time' }).boundingBox())!.width - 291)).toBeLessThanOrEqual(1)
-  expect(await snooze.locator('time').first().evaluate(e => getComputedStyle(e.parentElement!).paddingRight)).toBe('12px')
+  // The reference's snooze rows are padded 0 18 0 14 like every other menu row.
+  expect(await snooze.locator('time').first().evaluate(e => getComputedStyle(e.parentElement!).paddingRight)).toBe('18px')
   await expect(snooze.getByRole('menuitem', { name: 'Custom…' }).locator('svg')).toHaveCount(1)
   await snooze.evaluate(async node => { await Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.finished)) })
   if (process.env.FLOW_UI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_UI_SHOTS}/desktop-notification-snooze.png` })
