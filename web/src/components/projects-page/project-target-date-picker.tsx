@@ -6,6 +6,7 @@ import styles from './project-row-menus.module.css'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { useCurrentTime, useCurrentTimeMs } from '@/hooks/use-current-time'
 import { firstWeekday, useUserPreferences, useWorkspacePreferences, fiscalMonth, fiscalYear, fiscalMonthOffset } from '@/lib/runtime-preferences'
+import { parseNaturalDateInput } from '@/lib/natural-date'
 
 export type DateMode = 'day' | 'month' | 'quarter' | 'half-year' | 'year'
 export type DateResolution = 'halfYear' | 'month' | 'quarter' | 'year'
@@ -111,7 +112,7 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
   }
 
   const content = <Popover.Content data-flow-motion="floating" align={align} className={`${styles.datePicker}${compactPeriods && mode !== 'day' ? ` ${styles.compactPeriods}` : ''}${compactCalendar ? ` ${styles.compactCalendar}` : ''}${contentClassName ? ` ${contentClassName}` : ''}`} collisionPadding={8} onClick={event => event.stopPropagation()} onCloseAutoFocus={event => event.preventDefault()} side={side ?? (portalled ? 'bottom' : 'right')} sideOffset={4}>
-    {!compactCalendar && <label className={styles.dateLabel}>{t(label)}<input autoFocus aria-label={t('Try: May 2027, Q4, 05/20/2027')} onFocus={event => event.currentTarget.select()} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void submit() } }} placeholder={t('Try: May 2027, Q4, 05/20/2027')} value={query}/>{value && <button aria-label={t('Clear date')} className={styles.dateClear} onClick={clear} type="button"><X size={14}/></button>}</label>}
+    {!compactCalendar && <label className={styles.dateLabel}>{t(label)}<input autoFocus aria-label={t('Try: May 2027, Q4, 05/20/2027')} onFocus={event => event.currentTarget.select()} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); void submit() } }} placeholder={t('Try: May 2027, Q4, 05/20/2027')} value={query}/>{value && <button aria-label={t('Clear date')} className={styles.dateClear} onClick={clear} type="button"><X size={14}/></button>}</label>}
     {!compactCalendar && <div aria-label={t('Date precision')} className={styles.dateModes} onKeyDown={onModeKeyDown} role="tablist">{MODES.map(item => <button aria-selected={mode === item.id} key={item.id} onClick={() => selectMode(item.id)} role="tab" tabIndex={mode === item.id ? 0 : -1} type="button">{t(item.label)}</button>)}</div>}
     {compactCalendar || mode === 'day' ? <DayPanel cursor={cursor} locale={locale} max={maxDate} min={minDate} onChangeCursor={setCursor} onChoose={date => choose(date)} selected={selected}/> : <PeriodPanel cursor={cursor} label={label} locale={locale} max={maxDate} min={minDate} mode={mode} onChoose={(date, nextResolution) => choose(date, nextResolution)} selected={selected}/>}
   </Popover.Content>
@@ -185,22 +186,13 @@ function calendarDays(cursor: Date, weekStart = 1) {
 async function parseNaturalTarget(input: string, mode: DateMode, label: 'Start date' | 'Target date') {
   const value = input.trim()
   if (!value) return undefined
-  const slash = value.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/)
-  if (slash) return new Date(Number(slash[1]), Number(slash[2]) - 1, Number(slash[3]))
-  const us = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
-  if (us) return new Date(Number(us[3]), Number(us[1]) - 1, Number(us[2]))
   const quarter = value.match(/^Q([1-4])(?:\s+(\d{4}))?$/i)
   if (quarter) return dateForPeriod(Number(quarter[2] ?? new Date().getFullYear()), 'quarter', Number(quarter[1]) - 1, label)
   const half = value.match(/^H([12])(?:\s+(\d{4}))?$/i)
   if (half) return dateForPeriod(Number(half[2] ?? new Date().getFullYear()), 'half-year', Number(half[1]) - 1, label)
   if (/^\d{4}$/.test(value)) return dateForPeriod(Number(value), 'year', 0, label)
-  const parsed = new Date(value)
-  let natural = parsed
-  if (Number.isNaN(natural.getTime())) {
-    const { parseDate } = await import('chrono-node')
-    natural = parseDate(value, new Date(), { forwardDate: true }) ?? new Date(Number.NaN)
-  }
-  if (Number.isNaN(natural.getTime())) return undefined
+  const natural = parseNaturalDateInput(value)
+  if (!natural) return undefined
   if (mode !== 'day') return dateForPeriod(mode === 'month' ? natural.getFullYear() : fiscalYear(natural), mode, mode === 'month' ? natural.getMonth() : mode === 'quarter' ? Math.floor(fiscalMonthOffset(natural) / 3) : mode === 'half-year' ? Math.floor(fiscalMonthOffset(natural) / 6) : 0, label)
   return startOfDay(natural)
 }
