@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match the desktop chat history icon to the sidebar navigation foreground.
+
 - Restore the layered gradient outline on the phone agent watermark.
 
 - Balance agent starter descriptions and use the shared Loops glyph.
