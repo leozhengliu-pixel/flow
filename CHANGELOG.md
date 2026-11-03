@@ -13,7 +13,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Recompute shared search date ranges when fiscal settings arrive and discard invalid date chips with their requests.
 
-- Keep the project date picker at its full calendar height and fit all seven weekday columns inside its padding.
+- Keep the project date picker at its full calendar height, fit all seven weekday columns inside its padding, and keep phone popovers within the viewport.
 
 - Share English and Chinese typed-date parsing across snooze, reminders, due dates and command pages, preserving IME confirmation.
 
