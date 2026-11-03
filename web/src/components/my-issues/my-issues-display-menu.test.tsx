@@ -45,6 +45,14 @@ describe('display options: nested sub-issues', () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ nestedSubIssues: true, showSubIssues: true }))
   })
 
+  it('preserves the desktop My issues nesting toggle and its inclusion of context rows', async () => {
+    layout.desktop = true
+    const onChange = vi.fn()
+    render(<I18nProvider><MyIssuesDisplayMenu open phoneIssueMenu myIssuesPhoneMenu onOpenChange={vi.fn()} options={createIssueDisplayOptions({ showSubIssues: false })} onChange={onChange}/></I18nProvider>)
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Nested sub-issues' }))
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ nestedSubIssues: true, showSubIssues: true }))
+  })
+
   it('has no nesting option in board layout', () => {
     render(<I18nProvider><MyIssuesDisplayMenu open onOpenChange={vi.fn()} options={createIssueDisplayOptions({ layout: 'board' })} onChange={vi.fn()}/></I18nProvider>)
     expect(screen.queryByRole('combobox', { name: 'Nested sub-issues' })).not.toBeInTheDocument()
