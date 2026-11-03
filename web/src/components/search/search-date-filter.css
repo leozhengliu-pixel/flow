@@ -1,20 +1,47 @@
-.search-date-filter{--calendar-weekday-size:13px;--calendar-weekday-weight:400;--calendar-weekday-line-height:19.5px;box-sizing:border-box;display:flex;flex-direction:column;width:358px;max-width:calc(100vw - 32px);max-height:calc(100dvh - var(--phone-menu-top, 110px) - 16px);overflow:auto;border:.5px solid var(--calendar-border);border-radius:12px;background:var(--calendar-surface);color:var(--pk-text);box-shadow:var(--pk-card-shadow);font:400 13px/normal var(--font)}
-.search-date-filter>header{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:32px 32px 0}
+.dialog-content.search-date-dialog{box-sizing:border-box;top:calc((100dvh - 550.5px)/3);width:min(562px,calc(100vw - 32px));max-width:none;padding:0;transform:translateX(-50%);border:0;border-radius:12px;background:transparent;box-shadow:none}
+.search-date-dialog>.dialog-close{display:none}
+.search-date-filter{--calendar-weekday-size:13px;--calendar-weekday-weight:400;--calendar-weekday-line-height:19.5px;box-sizing:border-box;display:flex;flex-direction:column;width:100%;max-height:calc(100dvh - 32px);overflow:auto;border:.5px solid var(--calendar-border);border-radius:12px;background:var(--calendar-surface);color:var(--pk-text);box-shadow:var(--pk-card-shadow);font:400 13px/normal var(--font)}
+.search-date-filter>header{display:flex;align-items:center;gap:12px;min-height:60px;padding:32px 32px 0}
 .search-date-filter>header>strong{font-size:15px;font-weight:600;white-space:nowrap}
-.search-date-filter [role=radiogroup]{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.search-date-filter [role=radiogroup]{display:flex;align-items:center;gap:6px}
 .search-date-filter [role=radio],.search-date-filter>footer>button{height:28px;flex:none;padding:0 12px;border:.5px solid var(--theme-border-strong);border-radius:9999px;background:var(--calendar-control);color:var(--theme-text-secondary);font:500 12px/normal var(--font);box-shadow:var(--shadow-control);white-space:nowrap}
 .search-date-filter [role=radio]:hover,.search-date-filter>footer>button:hover{background:var(--calendar-control-selected);color:var(--theme-text-primary)}
 .search-date-filter [role=radio][aria-checked=true]{background:var(--calendar-control-selected);color:var(--theme-text-primary)}
 .search-date-filter button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-.search-date-filter>.search-date-modes{padding:22px 32px 16px;gap:6px;flex-wrap:nowrap}
-.search-date-filter>.search-date-modes>button{min-width:0;flex-shrink:1;padding:0 8px}
-.search-date-filter>div:has(>header){width:100%;height:auto;min-height:298px;flex:none;margin:0;padding:8px 40px 12px}
-.search-date-filter>div:has(>header)>div{width:100%;margin:0;padding:0;grid-template-columns:repeat(7,minmax(0,1fr));column-gap:8px}
-.search-date-filter>div:has(>section){width:100%;height:298px;flex:none;margin:0;padding:8px 32px 12px}
+.search-date-input{box-sizing:border-box;height:32px;flex:none;min-width:0;margin:14px 32px 0;padding:6px 12px;border:.5px solid var(--calendar-border);border-radius:8px;background:var(--calendar-surface);color:var(--theme-text-primary);font:400 13px/normal var(--font)}
+.search-date-input:focus-visible{outline:1px solid var(--focus-ring);outline-offset:-1px}
+.search-date-input[aria-invalid=true]{border-color:var(--semantic-danger)}
+.search-date-filter>.search-date-modes{padding:14px 30px;gap:2px;flex-wrap:nowrap}
+.search-date-filter>.search-date-modes>button{min-width:0;flex-shrink:1;margin:2px;padding:0 12px}
+.search-date-months{position:relative;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;height:298.5px;flex:none;padding:8px 32px 20px;border-top:.5px solid var(--calendar-border)}
+.search-date-months>nav{position:absolute;top:8px;right:32px;display:flex;gap:2px;z-index:2}
+.search-date-months>nav button{display:grid;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--theme-text-secondary)}
+.search-date-months>nav button:hover{background:var(--calendar-control-selected)}
+.search-date-months>div{width:100%;height:269.5px;min-width:0;margin:0;padding:0;border:0}
+.search-date-months>div header{height:36px}
+.search-date-months>div>div{width:100%;margin:0;padding-inline:0;grid-template-columns:repeat(7,minmax(0,1fr));column-gap:8px}
+.search-date-months [data-calendar-weekdays],.search-date-months [data-calendar-weekdays]>span{height:27.5px}
+.search-date-months [role=grid]{grid-auto-rows:26px;row-gap:8px}
+.search-date-filter>div:has(>section){box-sizing:border-box;width:100%;height:298.5px;flex:none;margin:0;padding:16px 32px 12px}
+.search-date-filter>div:has(>section) section>div{gap:8px}
+.search-date-filter>div:has(>section) section>div[data-mode=quarter]{grid-template-columns:repeat(4,minmax(0,1fr))}
+.search-date-filter>div:has(>section) button{height:24px;border-color:var(--calendar-border);background:transparent}
+.search-date-filter>div:has(>section) button:hover{background:var(--calendar-control-selected)}
+.search-date-filter>div:has(>section) button[data-selected=true]{border-color:transparent;background:var(--accent-primary);color:var(--on-accent)}
 .search-date-filter>footer{display:flex;justify-content:flex-end;gap:10px;padding:16px 32px 32px;border-top:.5px solid var(--pk-divider)}
 .search-date-filter>footer>button{height:36px;font-size:13px;color:var(--pk-text)}
 .search-date-filter>footer>.search-date-apply{background:var(--accent-primary);border-color:transparent;color:var(--on-accent)}
 .search-date-filter>footer>.search-date-apply:hover{background:var(--accent-primary-hover)}
 .search-date-filter>footer>button:disabled{opacity:.5;cursor:default}
-.workspace-search-value-menu:has(.search-date-filter){width:max-content;max-width:calc(100vw - 32px);padding:0;overflow:visible;background:transparent;border:0;box-shadow:none}
-@media(max-width:767px){.search-date-filter{width:100%;max-width:none}.search-date-filter>header{padding-inline:32px}.search-date-filter>.search-date-modes{flex-wrap:nowrap;justify-content:space-between;padding-inline:32px;gap:4px}.search-date-filter>.search-date-modes>button{padding-inline:8px;min-width:0}.search-date-filter>div:has(>header){padding-inline:40px}}
+@media(max-width:767px){
+  .dialog-content.search-date-dialog{top:min(110px,13.04dvh)}
+  .search-date-filter{max-height:calc(100dvh - min(110px,13.04dvh) - 16px)}
+  .search-date-filter>header{flex-wrap:wrap;gap:8px;padding-top:32px}
+  .search-date-filter>.search-date-modes{gap:4px;justify-content:space-between}
+  .search-date-filter>.search-date-modes>button{padding-inline:8px}
+  .search-date-months{grid-template-columns:minmax(0,1fr);padding:8px 40px 12px}
+  .search-date-months>div{height:285.5px}
+  .search-date-months [data-calendar-weekdays],.search-date-months [data-calendar-weekdays]>span{height:43.5px}
+  .search-date-months>nav{top:8px;right:40px}
+  .search-date-filter>div:has(>section) section>div[data-mode=quarter]{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

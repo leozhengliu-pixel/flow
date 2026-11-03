@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Open search date presets before a custom date dialog, with two desktop calendars, typed periods, all five precisions and draft Apply or Cancel actions.
+
 - Apply issue-menu surface tokens at the shared component rule so phone shadows and rounded submenu headers remain intact.
 
 - Recompute shared search date ranges when fiscal settings arrive and discard invalid date chips with their requests.

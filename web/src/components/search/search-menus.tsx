@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { subDays, subMonths, subYears } from 'date-fns'
 import type { User } from '@/types/flow'
 import { Calendar, Check, Filter, SlidersHorizontal, UserRound, X } from 'lucide-react'
 import { PropertyMenu } from '@/components/property/property-menu'
@@ -14,7 +15,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { DisplayIcon, FilterIcon } from '@/components/ui/view-action-icons'
 import { useI18n } from '@/i18n/i18n'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
-import { searchFields, searchDateLabel, type SearchPageState, type SearchFilterField, type SearchCondition, type SearchOrder } from './search-state'
+import { searchFields, searchDateLabel, isSearchConditionValid, type SearchPageState, type SearchFilterField, type SearchCondition, type SearchOrder } from './search-state'
 
 const searchStatuses = [{id:'backlog',label:'Backlog'},{id:'unstarted',label:'Unstarted'},{id:'started',label:'Started'},{id:'completed',label:'Completed'},{id:'canceled',label:'Canceled'}] as const
 const orderOptions: Array<{id:SearchOrder;label:string}> = [{id:'relevance',label:'Most relevant'},{id:'updatedAt',label:'Last updated'},{id:'createdAt',label:'Last created'},{id:'title',label:'Title'}]
@@ -24,6 +25,7 @@ export function SearchMenus({state,onChange,users}:{state:SearchPageState;onChan
   const [filterOpen,setFilterOpen]=useState(false)
   const [filterField,setFilterField]=useState<SearchFilterField>()
   const [advancedOpen,setAdvancedOpen]=useState(false)
+  const [dateField,setDateField]=useState<SearchFilterField>()
   const [advanced,setAdvanced]=useState(state)
   const closeFilters=()=>{setFilterField(undefined);setFilterOpen(false)}
   const add=(field:SearchFilterField,value:string,operator:SearchCondition['operator']='is',granularity?:DateMode)=>{
@@ -37,13 +39,21 @@ export function SearchMenus({state,onChange,users}:{state:SearchPageState;onChan
         <DropdownMenuItem className="workspace-search-advanced-option" onSelect={()=>{setAdvanced(state);setAdvancedOpen(true)}}><SlidersHorizontal size={15}/>{t('Advanced filter')}</DropdownMenuItem>
         <DropdownMenuSeparator/>
         {searchFields.map(field=><DropdownMenuSub key={field.id} open={filterField===field.id} onOpenChange={open=>setFilterField(open?field.id:undefined)}>
-          <DropdownMenuSubTrigger aria-haspopup={field.id.endsWith('At')?'dialog':'menu'}>{field.id.endsWith('At')?<Calendar size={15}/>:field.id==='statusType'?<Filter size={15}/>:<UserRound size={15}/>}<span>{t(field.label)}</span></DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="workspace-search-value-menu" role={field.id.endsWith('At')?'dialog':'menu'} aria-label={t(field.label)} phoneCustomContent={field.id.endsWith('At')} onKeyDown={event=>event.stopPropagation()}>
-            <div className="workspace-search-filter-values"><SearchFilterValue users={users} field={field.id} value="" onCancel={closeFilters} onChange={(value,operator,granularity)=>add(field.id,value,operator,granularity)}/></div>
+          <DropdownMenuSubTrigger>{field.id.endsWith('At')?<Calendar size={15}/>:field.id==='statusType'?<Filter size={15}/>:<UserRound size={15}/>}<span>{t(field.label)}</span></DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="workspace-search-value-menu" aria-label={t(field.label)} onKeyDown={event=>event.stopPropagation()}>
+            {field.id.endsWith('At') ? <>
+              {searchDatePresets().map(preset=><DropdownMenuItem key={preset.label} onSelect={()=>add(field.id,preset.value,'after','day')}>{t(preset.label)}</DropdownMenuItem>)}
+              <DropdownMenuSeparator/>
+              <DropdownMenuItem onSelect={()=>{closeFilters();setDateField(field.id)}}>{t('Custom date or timeframe…')}</DropdownMenuItem>
+            </> : <div className="workspace-search-filter-values"><SearchFilterValue users={users} field={field.id} value="" onCancel={closeFilters} onChange={(value,operator,granularity)=>add(field.id,value,operator,granularity)}/></div>}
           </DropdownMenuSubContent>
         </DropdownMenuSub>)}
       </DropdownMenuContent>
     </DropdownMenu>
+    <Dialog open={Boolean(dateField)} onOpenChange={open=>{if(!open)setDateField(undefined)}}><DialogContent className="search-date-dialog" data-dialog-placement="window" aria-describedby={undefined} closeLabel={t('Close')}>
+      <DialogTitle className="sr-only">{t(searchFields.find(field=>field.id===dateField)?.label??'Updated date')}</DialogTitle>
+      {dateField && <SearchDateFilter label={t(searchFields.find(field=>field.id===dateField)!.label)} onCancel={()=>setDateField(undefined)} onApply={(value,operator,granularity)=>{add(dateField,value,operator,granularity);setDateField(undefined)}}/>}
+    </DialogContent></Dialog>
     <DropdownMenu>
       <DropdownMenuTrigger asChild><button className="workspace-search-tool" type="button" aria-label={t('Display options')} title={t('Display options')}><DisplayIcon/></button></DropdownMenuTrigger>
       <DropdownMenuContent className="workspace-search-menu" align="end" aria-label={t('Search display options')}>
@@ -62,9 +72,17 @@ export function SearchMenus({state,onChange,users}:{state:SearchPageState;onChan
         <SearchFilterValue users={users} field={condition.field} value={condition.value} compact onChange={(value,_operator,granularity)=>setAdvanced({...advanced,filters:advanced.filters.map(item=>item.id===condition.id?{...item,value,...(granularity?{granularity}:{})}:item)})}/>
         <button type="button" aria-label={t('Remove filter')} onClick={()=>setAdvanced({...advanced,filters:advanced.filters.filter(item=>item.id!==condition.id)})}><X size={14}/></button>
       </div>)}</div>
-      <footer><button type="button" onClick={()=>setAdvanced({...advanced,filters:[...advanced.filters,{id:crypto.randomUUID(),field:'statusType',operator:'is',value:''}]})}>{t('Add filter')}</button><button type="button" onClick={()=>{onChange({...state,match:advanced.match,filters:advanced.filters.filter(item=>item.value)});setAdvancedOpen(false)}}>{t('Apply filters')}</button></footer>
+      <footer><button type="button" onClick={()=>setAdvanced({...advanced,filters:[...advanced.filters,{id:crypto.randomUUID(),field:'statusType',operator:'is',value:''}]})}>{t('Add filter')}</button><button type="button" onClick={()=>{onChange({...state,match:advanced.match,filters:advanced.filters.filter(isSearchConditionValid)});setAdvancedOpen(false)}}>{t('Apply filters')}</button></footer>
     </DialogContent></Dialog>
   </>
+}
+
+function searchDatePresets(now = new Date()) {
+  const presets: Array<[string,Date]> = [
+    ['1 day ago', subDays(now, 1)], ['3 days ago', subDays(now, 3)], ['1 week ago', subDays(now, 7)],
+    ['1 month ago', subMonths(now, 1)], ['3 months ago', subMonths(now, 3)], ['6 months ago', subMonths(now, 6)], ['1 year ago', subYears(now, 1)],
+  ]
+  return presets.map(([label,date])=>({label,value:`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}))
 }
 
 function SearchFilterValue({field,value,onChange,onCancel,compact=false,users}:{field:SearchFilterField;value:string;onChange:(value:string,operator?:SearchCondition['operator'],granularity?:DateMode)=>void;onCancel?:()=>void;compact?:boolean;users?:User[]}) {

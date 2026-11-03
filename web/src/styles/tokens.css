@@ -101,7 +101,7 @@
 :root[data-theme="light"]{--surface-page:lch(97.94% .5 282);--surface-card:lch(100% 0 282);--surface-elevated:lch(100% 0 282);--border-card:lch(89.84% 0 282);--border-subtle:lch(92.8% 0 282);--text-strong:lch(9.794% 0 282);--text-body:lch(19.588% 1.25 282);--text-label:lch(40% 1 282);--text-placeholder:lch(64.64% 1.25 282)}
 :root[data-theme="light"] .menu-content{border-color:var(--border-card);background:var(--surface-elevated);box-shadow:var(--menu-shadow)}
 :root[data-theme="light"] .menu-separator{background:var(--border-subtle)}
-:root[data-theme="light"] .dialog-content{border-color:var(--dialog-border);background:var(--dialog-bg);box-shadow:var(--dialog-shadow)}
+:root[data-theme="light"] .dialog-content:not(.search-date-dialog){border-color:var(--dialog-border);background:var(--dialog-bg);box-shadow:var(--dialog-shadow)}
 :root[data-theme="light"] .command-dialog{background:var(--theme-surface-2)}
 :root[data-theme="light"] .command-input{height:44px}
 :root[data-theme="light"] .command-input input{color:var(--theme-text-primary)}

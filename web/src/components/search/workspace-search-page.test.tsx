@@ -185,11 +185,13 @@ describe('workspace search',()=>{
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({filters:[expect.objectContaining({field:'assigneeId',value:viewer.id})]}))
   })
 
-  it('applies a drafted date from the shared calendar inside a filter submenu',async()=>{
+  it('opens presets before drafting a date in the custom dialog',async()=>{
     const onChange=vi.fn()
     render(<I18nProvider><SearchMenus state={readSearchState(new URLSearchParams())} onChange={onChange}/></I18nProvider>)
     fireEvent.pointerDown(screen.getByRole('button',{name:'Add filter'}),{button:0,ctrlKey:false})
     fireEvent.click(await screen.findByRole('menuitem',{name:'Updated date'}))
+    expect(await screen.findByRole('menuitem',{name:'1 day ago'})).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem',{name:'Custom date or timeframe…'}))
     const today=new Date()
     const day=[...document.querySelectorAll('[role=gridcell]')].find(button=>button.textContent===String(today.getDate())&&button.getAttribute('data-outside')==='false')
     fireEvent.click(day!)
@@ -235,6 +237,7 @@ describe('workspace search',()=>{
     fireEvent.pointerDown(screen.getByRole('button',{name:'添加筛选条件'}),{button:0,ctrlKey:false})
     expect(await screen.findByRole('menu')).toHaveAttribute('aria-label','搜索筛选条件')
     fireEvent.click(screen.getByRole('menuitem',{name:'更新日期'}))
+    fireEvent.click(await screen.findByRole('menuitem',{name:'自定义日期或时间范围…'}))
     expect(await screen.findByRole('radiogroup',{name:'筛选运算符'})).toHaveTextContent('晚于')
     expect(await screen.findByRole('button',{name:'上个月'})).toBeInTheDocument()
     expect(screen.getByRole('button',{name:'下个月'})).toBeInTheDocument()
