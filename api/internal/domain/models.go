@@ -2346,6 +2346,7 @@ type CodeReview struct {
 	ReviewerIDs        []string            `json:"reviewerIds"`
 	TeamReviewers      []string            `json:"teamReviewers"`
 	IssueIDs           []string            `json:"issueIds"`
+	IssueLinkTypes     map[string]string   `json:"issueLinkTypes,omitempty"`
 	Reactions          map[string][]string `json:"reactions,omitempty"`
 	CommentAttachments []Attachment        `json:"commentAttachments,omitempty"`
 	BaseBranch         string              `json:"baseBranch"`

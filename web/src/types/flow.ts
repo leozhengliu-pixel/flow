@@ -2044,6 +2044,7 @@ export interface CodeReview {
   reviewerIds: UUID[];
   teamReviewers: string[];
   issueIds: UUID[];
+  issueLinkTypes?: Record<UUID, "resolves" | "contributes" | "related">;
   baseBranch: string;
   reactions?: Record<string, string[]>;
   commentAttachments?: Attachment[];

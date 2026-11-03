@@ -72,6 +72,37 @@ func TestReviewLifecycleAndCodeConnections(t *testing.T) {
 	}
 }
 
+func TestReviewIssueLinkTypes(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	review, issue := bootstrap.Reviews[0], bootstrap.Issues[0]
+	endpoint := "/api/reviews/" + review.ID
+	requestJSON[domain.CodeReview](t, handler, http.MethodPatch, endpoint, map[string]any{"issueIds": []string{issue.ID}}, http.StatusOK)
+	for _, linkType := range []string{"related", "contributes", "resolves"} {
+		requestJSON[domain.CodeReview](t, handler, http.MethodPatch, endpoint, map[string]any{"issueLinkTypes": map[string]string{issue.ID: linkType}}, http.StatusOK)
+		persisted := requestJSON[domain.CodeReview](t, handler, http.MethodGet, endpoint, nil, http.StatusOK)
+		if persisted.IssueLinkTypes[issue.ID] != linkType {
+			t.Fatalf("link type did not persist: %#v", persisted.IssueLinkTypes)
+		}
+	}
+	for _, types := range []map[string]string{{issue.ID: "unknown"}, {bootstrap.Issues[1].ID: "related"}, {"missing": "related"}} {
+		requestJSON[any](t, handler, http.MethodPatch, endpoint, map[string]any{"issueLinkTypes": types}, http.StatusBadRequest)
+	}
+	unchanged := requestJSON[domain.CodeReview](t, handler, http.MethodGet, endpoint, nil, http.StatusOK)
+	if unchanged.IssueLinkTypes[issue.ID] != "resolves" {
+		t.Fatalf("invalid edit changed the persisted type: %#v", unchanged.IssueLinkTypes)
+	}
+	unlinked := requestJSON[domain.CodeReview](t, handler, http.MethodPatch, endpoint, map[string]any{"issueIds": []string{}}, http.StatusOK)
+	if len(unlinked.IssueLinkTypes) != 0 {
+		t.Fatalf("unlink retained type metadata: %#v", unlinked.IssueLinkTypes)
+	}
+}
+
 func TestReviewCommentRepliesAndThreadResolution(t *testing.T) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

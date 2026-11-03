@@ -26,6 +26,8 @@ export const reviewsZhCN: Record<string, string> = {
   "Needs review from your GitHub team": "需要你的 GitHub 团队评审",
   "No open reviews": "没有打开的评审",
   "Issue actions": "事项操作",
+  "Change link type": "更改关联类型",
+  "Contributes": "贡献",
   "Unlink issue from pull request": "取消事项与拉取请求的关联",
   "Toggle group": "展开/收起分组",
   "Yes": "是",
