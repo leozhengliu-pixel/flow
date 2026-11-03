@@ -167,8 +167,7 @@ export function ActivitySidebarSection({
               {visible.map(item => (
                 <li key={item.id}>
                   {item.icon && <span className="activity-sidebar-section__icon">{item.icon}</span>}
-                  <strong>{item.actorLabel ?? item.userNames?.[0] ?? 'Someone'}</strong>
-                  <span>{item.text}{item.date && <> · <time>{item.date}</time></>}</span>
+                  <span><strong>{item.actorLabel ?? item.userNames?.[0] ?? 'Someone'}</strong>{' '}{item.text}{item.date && <> · <time>{item.date}</time></>}</span>
                 </li>
               ))}
             </ul>
