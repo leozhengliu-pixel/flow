@@ -2,7 +2,7 @@
  * Rendering model for the server-built cycle graph (GET /api/cycles/{id}/graph).
  * The server replays issue history into per-day Scope / Started / Completed
  * values; this module derives the reference app's Target line, the active-cycle
- * projection, chart geometry and the list sparkline.
+ * projection and chart geometry.
  */
 import type { CycleGraphData, CycleGraphTotals } from '@/lib/api'
 
@@ -123,49 +123,7 @@ export function cycleGraphIndexAt(x: number, count: number, width: number) {
   return Math.max(0, Math.min(count - 1, Math.round(x / width * (count - 1))))
 }
 
-/** Evenly spaced samples that always keep the first and last value. */
-export function downsample<T>(values: T[], size: number): T[] {
-  if (size < 2 || values.length <= size) return values.slice()
-  const step = (values.length - 1) / (size - 1)
-  return Array.from({ length: size }, (_, index) => values[Math.round(index * step)])
-}
-
 export function isWeekend(date: string) {
   const day = new Date(`${date}T12:00:00.000Z`).getUTCDay()
   return day === 0 || day === 6
-}
-
-export type CycleSparkline = {
-  scopePath: string
-  startedPath: string
-  completedPath: string
-  completedPercent: number
-  scope: number
-  started: number
-  completed: number
-  startedPercent: number
-}
-
-/**
- * Compact list summary: the same series, downsampled, drawn only through the
- * days that have happened. X positions stay relative to the whole cycle.
- */
-export function cycleSparkline(graph: CycleGraphData, width: number, height: number, size = 24, measure: CycleGraphMeasure = 'issues'): CycleSparkline {
-  const series = cycleGraphSeries(graph, measure)
-  const sampled = downsample(series.points, size)
-  const max = Math.max(1, ...sampled.map(point => point.scope ?? 0))
-  const path = (key: 'scope' | 'started' | 'completed') => {
-    const values: (number | null)[] = sampled.map(point => point[key])
-    return cycleGraphPath(values, max, width, height)
-  }
-  return {
-    scopePath: path('scope'),
-    startedPath: path('started'),
-    completedPath: path('completed'),
-    completedPercent: series.completedPercent,
-    startedPercent: series.startedPercent,
-    scope: series.scope,
-    started: series.started,
-    completed: series.completed,
-  }
 }

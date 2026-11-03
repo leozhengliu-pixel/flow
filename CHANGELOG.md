@@ -8,6 +8,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 - Keep Chinese phrases whole: verb catch-alls no longer leave an untranslated noun in a translated sentence, and picker labels, retire-team copy, row dates and status group names read in Chinese. A coverage test now fails when a `t()` key has no Chinese entry.
+- List cycles on a timeline on desktop, as on the phone: dates and dots on a rail, a Current/Upcoming status pill, a capacity ring and the scope in aligned columns, and the started cycle opened with its chart and the Scope, Started and Completed legend. Hovering the chart reads a day's figures.
+
+- Rebuild the cycle details card around a Progress section (legend, chart, one set of breakdown tabs with how much of each row is done) and a Planning section, and show the cycle icon and a switcher chevron in the breadcrumb.
+
+- Draw each weekend of a cycle chart as one hatched band in the track colour instead of one thin, bright stripe set per day, and put the phone cycle dates against the rail.
 
 - Align the document metadata and subscribers popovers, the document history selection, the submenu triangle and row icons of the inbox and document menus, the snooze field, the inbox filter icons, review descriptions and phone review tabs, and the project update composer tab ring with the measured reference.
 

@@ -1,9 +1,108 @@
 .flow-cycles-page .cycle-desktop-glyph { display: contents; }
 .cycle-top-icon { padding: 0 2px; }
-.flow-cycles-page .cycle-phone-glyph,
+.flow-cycles-page .cycle-phone-glyph { display: none; }
+
+/*
+ * The cycles timeline: every cycle and every cooldown is a row on a rail. The date sits on the rail
+ * at the bottom of its row, the cycle opens from a button laid over the whole card, and the chart
+ * and the Scope / Started / Completed legend open under the heading of a started cycle.
+ */
 .flow-cycles-page .cycle-timeline-card,
-.flow-cycles-page .cycle-cooldown-icon,
-.flow-cycles-page .flow-cycle-cooldown > .cycle-timeline-date { display: none; }
+.flow-cycles-page .flow-cycle-cooldown {
+  --cycle-rail-start: 4.5px;
+  position: relative;
+  box-sizing: border-box;
+  border-radius: 8px;
+  color: var(--bright);
+  text-align: left;
+  font: 450 13px/normal var(--font);
+}
+.flow-cycles-page .flow-cycle-list > :first-child { --cycle-rail-start: 0px; }
+.flow-cycles-page .cycle-timeline-card::before,
+.flow-cycles-page .flow-cycle-cooldown::before { content: ""; position: absolute; left: var(--cycle-rail); top: var(--cycle-rail-start); bottom: var(--cycle-rail-end); width: 1px; background: var(--cycle-completed); }
+.flow-cycles-page .cycle-timeline-card.is-upcoming::before,
+.flow-cycles-page .flow-cycle-cooldown::before { background: var(--cycle-track); }
+.flow-cycles-page .cycle-timeline-card::after,
+.flow-cycles-page .flow-cycle-cooldown::after { content: ""; position: absolute; left: calc(var(--cycle-content) + 2px); right: 0; bottom: 0; height: .5px; background: var(--theme-border); }
+.flow-cycles-page .cycle-timeline-open { position: absolute; inset: 0; z-index: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
+.flow-cycles-page .cycle-timeline-open:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.flow-cycles-page .cycle-timeline-card > :not(.cycle-timeline-open, .cycle-row-menu, .cycle-chart) { pointer-events: none; }
+.flow-cycles-page .cycle-timeline-card > .cycle-chart { z-index: 1; }
+
+.flow-cycles-page .cycle-timeline-date {
+  z-index: 1;
+  position: absolute;
+  left: 0;
+  bottom: -16px;
+  box-sizing: border-box;
+  width: calc(var(--cycle-rail) - var(--cycle-date-gap));
+  height: 29px;
+  padding-right: var(--cycle-date-pad);
+  text-align: right;
+  color: var(--issue-dim);
+  font: 450 12px/normal var(--font);
+}
+.flow-cycles-page .cycle-timeline-date::after { content: ""; position: absolute; left: calc(var(--cycle-rail) - 4px); top: 8.5px; width: 9px; height: 9px; box-sizing: border-box; border: 1px solid var(--issue-dim); border-radius: 50%; background: var(--theme-background); }
+.flow-cycles-page .cycle-timeline-card:not(.is-upcoming) .cycle-timeline-date::after { background: var(--cycle-completed); border-color: var(--cycle-completed); }
+
+.flow-cycles-page .cycle-timeline-heading { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.flow-cycles-page .cycle-timeline-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; display: flex; gap: 4px; font: 500 13px/normal var(--font); }
+.flow-cycles-page .is-upcoming .cycle-timeline-title { color: var(--text); }
+.flow-cycles-page .cycle-timeline-icon { width: 16px; height: 16px; flex: none; }
+.flow-cycles-page .cycle-timeline-icon circle { transform-box: fill-box; }
+.flow-cycles-page .cycle-timeline-icon__track { stroke: var(--issue-dim); }
+.flow-cycles-page .cycle-timeline-icon__value { stroke: var(--cycle-completed); }
+.flow-cycles-page .is-upcoming .cycle-timeline-icon { color: var(--issue-dim); }
+.flow-cycles-page .flow-cycle-cooldown .cycle-cooldown-icon { flex: none; width: 16px; height: 16px; color: var(--issue-dim); }
+
+.flow-cycles-page .cycle-timeline-status { box-sizing: border-box; padding: 0 6px; border-radius: 2px; background: var(--cycle-status-bg); color: var(--issue-muted); font: 450 13px/19.5px var(--font); white-space: nowrap; }
+.flow-cycles-page .cycle-timeline-capacity,
+.flow-cycles-page .cycle-timeline-scope { display: flex; align-items: center; white-space: nowrap; }
+.flow-cycles-page .cycle-timeline-capacity > b { margin-right: 5px; color: var(--text); font-weight: 500; }
+.flow-cycles-page .cycle-timeline-scope > b { margin-right: 5px; color: var(--bright); font-weight: 500; }
+.flow-cycles-page .cycle-timeline-capacity > em,
+.flow-cycles-page .cycle-timeline-scope > em { color: var(--issue-muted); font-style: normal; }
+.flow-cycles-page .cycle-timeline-scope > svg { margin: 1px 4px 0 0; color: var(--issue-muted); }
+.flow-cycles-page .cycle-timeline-capacity .cycle-capacity-ring { margin-right: 8px; }
+
+.flow-cycles-page .cycle-timeline-metric { height: 44.5px; display: flex; align-items: center; gap: 14px; border-bottom: .5px solid var(--theme-border); }
+.flow-cycles-page .cycle-timeline-metric:last-child { border: 0; }
+.flow-cycles-page .cycle-timeline-metric > i { width: 6px; height: 6px; flex: none; border-radius: 1px; background: var(--issue-dim); }
+.flow-cycles-page .cycle-timeline-metric.is-started > i { background: var(--cycle-started); }
+.flow-cycles-page .cycle-timeline-metric.is-completed > i { background: var(--cycle-completed); }
+.flow-cycles-page .cycle-timeline-metric-label { color: var(--issue-muted); font: 450 13px/normal var(--font); }
+.flow-cycles-page .cycle-timeline-metric-value { display: flex; align-items: center; margin-left: auto; font: 500 12px/normal var(--font); }
+.flow-cycles-page .cycle-timeline-metric-value svg { margin: 0 5px 0 -1px; color: var(--issue-muted); }
+.flow-cycles-page .cycle-timeline-metric-value strong { font: inherit; }
+.flow-cycles-page .cycle-timeline-percent { margin-left: 3px; color: var(--issue-muted); font-weight: 450; white-space: nowrap; }
+.flow-cycles-page .cycle-timeline-percent > b { margin-right: 3px; font-weight: inherit; }
+
+@media (min-width: 768px) {
+  .flow-cycles-page .flow-cycle-list {
+    --cycle-rail: 73.5px;
+    --cycle-rail-end: 4.5px;
+    --cycle-date-gap: 10.9px;
+    --cycle-date-pad: 12px;
+    --cycle-content: 126px;
+    display: grid;
+    grid-template-columns: 114px minmax(0, 1fr) auto auto auto 44px;
+    column-gap: 12px;
+    align-content: start;
+    padding: 0;
+  }
+  .flow-cycles-page .cycle-timeline-card { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; grid-template-rows: 70px; align-items: center; height: 70px; }
+  .flow-cycles-page .cycle-timeline-card:not(.is-upcoming) { height: 288px; }
+  .flow-cycles-page .cycle-timeline-card:is(:hover, :focus-within) { background: var(--cycle-row-hover); }
+  .flow-cycles-page .cycle-timeline-heading { grid-column: 2; }
+  .flow-cycles-page .cycle-timeline-status { grid-column: 3; justify-self: start; }
+  .flow-cycles-page .cycle-timeline-capacity { grid-column: 4; }
+  .flow-cycles-page .cycle-timeline-scope { grid-column: 5; }
+  .flow-cycles-page .cycle-timeline-chart { position: absolute; left: 136px; right: 380px; top: 58px; }
+  .flow-cycles-page .cycle-timeline-metrics { position: absolute; top: 96.75px; right: 60px; width: 300px; }
+  .flow-cycles-page .cycle-timeline-metric:first-child { height: 43.5px; }
+  .flow-cycles-page .flow-cycle-cooldown { --cycle-rail-start: 4px; grid-column: 1 / -1; display: flex; align-items: center; height: 48.5px; margin-bottom: 1.5px; padding-left: var(--cycle-content); color: var(--issue-dim); }
+  .flow-cycles-page .flow-cycle-cooldown .cycle-cooldown-icon { margin-right: 16px; }
+}
 
 @media (max-width: 767px) {
   .flow-cycles-page .cycle-desktop-glyph { display: none; }
@@ -38,69 +137,23 @@
   html:root body .app .flow-cycles-page [data-sidebar-trigger] > .cycle-phone-glyph { display: block; }
   .flow-cycles-page .flow-cycles-header .cycle-top-icon { margin-left: -6px; transform: none; }
   .flow-cycles-page .flow-cycles-header button svg { width: 14px; height: 14px; color: var(--issue-muted); }
-  .flow-cycles-page .flow-cycle-list { padding: 0 0 24px; }
-  .flow-cycles-page .flow-cycle-row { height: 419px; }
-  .flow-cycles-page .flow-cycle-row[data-status="upcoming"] { height: 70px; }
-  .flow-cycles-page .flow-cycle-row > :is(.flow-cycle-row-link, .cycle-row-menu, .flow-cycle-current-summary) { display: none; }
-  .flow-cycles-page .cycle-timeline-card {
-    position: relative;
-    display: block;
-    width: 100%;
-    height: 419px;
-    padding: 0;
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
-    box-shadow: none;
-    color: var(--bright);
-    text-align: left;
-    font: 450 13px/normal var(--font);
+  .flow-cycles-page .flow-cycle-list {
+    --cycle-rail: 51.5px;
+    --cycle-rail-end: 0px;
+    --cycle-date-gap: 7.3px;
+    --cycle-date-pad: 6px;
+    --cycle-content: 80px;
+    padding: 0 0 24px;
   }
+  .flow-cycles-page .cycle-timeline-card { display: block; width: 100%; height: 419px; }
   .flow-cycles-page .cycle-timeline-card.is-upcoming { height: 70px; }
-  .flow-cycles-page .cycle-timeline-card::before,
-  .flow-cycles-page .flow-cycle-cooldown::before { display: block; content: ""; position: absolute; left: 51.5px; top: 0; width: 1px; height: 100%; background: var(--accent-primary); }
-  .flow-cycles-page .cycle-timeline-card.is-upcoming::before,
-  .flow-cycles-page .flow-cycle-cooldown::before { background: var(--border); }
-  .flow-cycles-page .cycle-timeline-card::after,
-  .flow-cycles-page .flow-cycle-cooldown::after { content: ""; position: absolute; left: 82px; right: 0; bottom: 0; height: .5px; background: var(--theme-border); }
-  .flow-cycles-page .cycle-timeline-date {
-    position: absolute;
-    left: 0;
-    bottom: -16px;
-    height: 29px;
-    padding: 0 6px 0 0;
-    text-align: right;
-    color: var(--issue-dim);
-    font: 450 12px/normal var(--font);
-  }
-  .flow-cycles-page .cycle-timeline-date::after { content: ""; position: absolute; left: 47.5px; top: 8.5px; width: 9px; height: 9px; border: 1px solid var(--issue-dim); border-radius: 50%; background: var(--theme-background); }
-  .flow-cycles-page .cycle-timeline-card:not(.is-upcoming) .cycle-timeline-date::after { background: var(--accent-primary); border-color: var(--accent-primary); }
-  .flow-cycles-page .cycle-timeline-heading { position: absolute; top: 27px; left: 80px; right: 32px; display: flex; align-items: center; gap: 16px; }
-  .flow-cycles-page .cycle-timeline-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; display: flex; gap: 4px; font: 500 13px/normal var(--font); }
-  .flow-cycles-page .is-upcoming .cycle-timeline-title { color: var(--text); }
-  .flow-cycles-page .cycle-timeline-icon { width: 16px; height: 16px; flex: none; }
-  .flow-cycles-page .cycle-timeline-icon__track { stroke: var(--issue-dim); }
-  .flow-cycles-page .cycle-timeline-icon__value { stroke: var(--accent-primary); }
-  .flow-cycles-page .is-upcoming .cycle-timeline-icon { color: var(--issue-dim); }
-  .flow-cycles-page .flow-cycle-cooldown { height: 48px; margin-bottom: 2px; padding: 0; border-radius: 8px; font: 450 13px/normal var(--font); color: var(--issue-dim); }
+  .flow-cycles-page .cycle-timeline-card > :is(.cycle-row-menu, .cycle-timeline-status, .cycle-timeline-capacity, .cycle-timeline-scope) { display: none; }
+  .flow-cycles-page .cycle-timeline-heading { position: absolute; top: 27px; left: 80px; right: 32px; }
+  .flow-cycles-page .flow-cycle-cooldown { --cycle-rail-start: 4px; --cycle-rail-end: -.5px; height: 48px; margin-bottom: 2px; padding: 0; color: var(--issue-dim); }
   .flow-cycles-page .flow-cycle-cooldown::after { left: 128px; }
   .flow-cycles-page .flow-cycle-cooldown > span:first-of-type { margin-left: 96px; }
-  .flow-cycles-page .flow-cycle-cooldown > .cycle-timeline-date { display: block; bottom: -16.5px; }
-  .flow-cycles-page .cycle-cooldown-icon { position: absolute; display: block; left: 64px; width: 16px; height: 16px; color: var(--issue-dim); }
-  .flow-cycles-page .cycle-timeline-chart { position: absolute; left: 80px; top: 57.25px; width: calc(100% - 112px); height: 210px; }
-  .flow-cycles-page .cycle-timeline-axis { position: absolute; top: 239.25px; left: 80px; right: 36px; height: 24px; color: var(--issue-muted); font: 450 12px/24px var(--font); }
-  .flow-cycles-page .cycle-timeline-axis > span { position: absolute; }
-  .flow-cycles-page .cycle-timeline-axis > span:nth-child(2) { left: calc(60% + 8px); transform: translateX(-50%); }
-  .flow-cycles-page .cycle-timeline-axis > span:last-child { right: 0; }
+  .flow-cycles-page .flow-cycle-cooldown > .cycle-timeline-date { bottom: -16.5px; }
+  .flow-cycles-page .flow-cycle-cooldown .cycle-cooldown-icon { position: absolute; left: 64px; }
+  .flow-cycles-page .cycle-timeline-chart { position: absolute; left: 80px; top: 57.25px; width: calc(100% - 112px); }
   .flow-cycles-page .cycle-timeline-metrics { position: absolute; top: 267.25px; left: 80px; right: 32px; }
-  .flow-cycles-page .cycle-timeline-metric { height: 44.5px; display: flex; align-items: center; gap: 14px; border-bottom: .5px solid var(--theme-border); }
-  .flow-cycles-page .cycle-timeline-metric:last-child { border: 0; }
-  .flow-cycles-page .cycle-timeline-metric > i { width: 6px; height: 6px; flex: none; border-radius: 1px; background: var(--issue-dim); }
-  .flow-cycles-page .cycle-timeline-metric.is-started > i { background: var(--priority-medium); }
-  .flow-cycles-page .cycle-timeline-metric.is-completed > i { background: var(--accent-primary); }
-  .flow-cycles-page .cycle-timeline-metric-label { color: var(--issue-muted); font: 450 13px/normal var(--font); }
-  .flow-cycles-page .cycle-timeline-metric-value { display: flex; align-items: center; gap: 4px; margin-left: auto; font: 500 12px/normal var(--font); }
-  .flow-cycles-page .cycle-timeline-metric-value svg { color: var(--issue-muted); }
-  .flow-cycles-page .cycle-timeline-metric-value strong { font: inherit; }
-  .flow-cycles-page .cycle-timeline-percent { color: var(--issue-muted); font-weight: 450; white-space: pre; }
 }

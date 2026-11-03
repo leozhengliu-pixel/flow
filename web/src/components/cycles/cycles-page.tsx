@@ -7,12 +7,8 @@ import { CycleTimelineCard, CycleCooldownIcon } from './cycle-timeline'
 
 import type { Cycle, CycleMutationInput, CycleSettingsMutationInput, Issue, Team, TeamSettings } from '@/types/flow'
 import { useI18n } from '@/i18n/i18n'
-import { EstimateIcon } from '@/components/issue/estimate-icon'
-import { formatEstimatePoints } from '@/lib/estimates'
 import { CycleActions } from './cycle-menus'
 import { cooldownWeeksBetween, cycleListOrder, cycleStats, formatCycleDay } from './cycle-model'
-import { cycleSparkline } from './cycle-graph-model'
-import { useCycleGraph } from './use-cycle-graph'
 
 import './cycles.css'
 import './cycles-bundle-parity.css'
@@ -39,29 +35,8 @@ export function CyclesPage({cycles,issues,settings,team,estimateSettings,onOpen,
 function CycleEmptyMark(){return <svg className="cycle-empty-mark" viewBox="0 0 123 108" aria-hidden="true"><path className="cycle-empty-shadow" d="M52 36.19 83.47 50.5c.87.4 2.33-2.65 2.82-2v5.75a3.5 3.5 0 0 1-.79 2.13c-.5.65-1.24 1.2-2.11 1.58l-31.46 13.8a7.77 7.77 0 0 1-6.03.06 5.51 5.51 0 0 1-2.22-1.6 3.52 3.52 0 0 1-.8-2.2V39.9c0-.78.28-1.55.82-2.22a5.54 5.54 0 0 1 2.25-1.6 7.8 7.8 0 0 1 6.07.1Z"/><path className="cycle-empty-play" d="M52 30.19 83.47 44.5c.87.4 1.59.95 2.08 1.6.5.66.75 1.4.74 2.15a3.5 3.5 0 0 1-.79 2.13c-.5.65-1.24 1.2-2.11 1.58l-31.46 13.8a7.77 7.77 0 0 1-6.03.06 5.51 5.51 0 0 1-2.22-1.6 3.52 3.52 0 0 1-.8-2.2V33.9c0-.78.28-1.55.82-2.22a5.54 5.54 0 0 1 2.25-1.6 7.8 7.8 0 0 1 6.07.1Z"/><circle className="cycle-empty-orbit" cx="61.5" cy="54" r="53"/></svg>}
 
 function CycleDirectoryRow({cycle,cycles,issues,estimateSettings,derivedStatus,onOpen,onUpdate,onStart,onReload}:{cycle:Cycle;cycles:Cycle[];issues:Issue[];estimateSettings?:TeamSettings;derivedStatus:string;onOpen:()=>void;onUpdate:(input:CycleMutationInput)=>Promise<unknown>;onStart:()=>Promise<unknown>;onReload:()=>Promise<void>}){
-  const {t}=useI18n(),start=formatCycleDay(cycle.startsAt),stats=cycleStats(cycle,issues,estimateSettings)
-  // The directory row rounds capacity down ("26% of capacity" for 8 of 30 points); the sidebar rounds to nearest.
-  const capacityPercent=Math.floor(stats.capacityRatio*100)
-  const metric=cycle.status==='current'?`${weekdays(cycle.endsAt)} ${t('weekdays left')}`:cycle.status==='completed'?`${stats.successPercent}% ${t('success')}`:<>{stats.estimates&&<EstimateIcon size={14}/>}<span>{formatEstimatePoints(stats.scope)} {t('scope')}</span></>
-  return <div className="flow-cycle-row" data-current={cycle.status==='current'} data-status={cycle.status}><button className="flow-cycle-row-link" onClick={onOpen}><span className="flow-cycle-date"><b>{start.month}</b><strong>{start.day}</strong></span><span className="flow-cycle-arrow"><CycleChevronIcon/></span><strong className="flow-cycle-name" data-i18n-ignore>{cycle.name}</strong><span className={`flow-cycle-status is-${derivedStatus}`}>{t(statusText(derivedStatus))}</span><span className="flow-cycle-capacity"><i style={{'--capacity':`${Math.min(100,capacityPercent)*3.6}deg`} as React.CSSProperties}/><b>{capacityPercent}%</b><em>{t('of capacity')}</em></span><span className="flow-cycle-scope">{metric}</span></button><CycleActions cycle={cycle} cycles={cycles} onUpdate={onUpdate} onStart={onStart} onReload={onReload} canonicalPath={location.pathname.replace(/\/cycles$/,`/cycle/${cycle.number}`)} capacityUnit={stats.estimates?'points':'issues'}/>{cycle.status==='current'&&<CycleDirectorySummary cycle={cycle} issues={issues} stats={stats}/>}<CycleTimelineCard cycle={cycle} issues={issues} stats={stats} onOpen={onOpen}/></div>
+  const stats=cycleStats(cycle,issues,estimateSettings)
+  return <CycleTimelineCard cycle={cycle} issues={issues} stats={stats} derivedStatus={derivedStatus} onOpen={onOpen} className="flow-cycle-row" actions={<CycleActions cycle={cycle} cycles={cycles} onUpdate={onUpdate} onStart={onStart} onReload={onReload} canonicalPath={location.pathname.replace(/\/cycles$/,`/cycle/${cycle.number}`)} capacityUnit={stats.estimates?'points':'issues'}/>}/>
 }
 
-function CycleChevronIcon(){return <svg aria-hidden="true" viewBox="0 0 16 16"><path d="M6.25 4.5 9.75 8l-3.5 3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.35"/></svg>}
 function CycleFavoriteIcon({filled=false}:{filled?:boolean}){return <svg aria-hidden="true" viewBox="0 0 16 16"><path fill={filled?'currentColor':'none'} d="M10.5193 4.98997 9.46118 2.01693A1.55 1.55 0 0 0 8.00081 1c-.684 0-1.27.4-1.45553 1.00374L5.48248 4.98997H2.55536c-.668 0-1.252.405-1.46122 1.0174-.2.595-.012 1.24.46605 1.6376l2.52526 2.07761-1.06174 3.15629c-.225.67.02 1.39.561 1.782.54.39 1.27.388 1.81-.005L8.00053 12.8223l2.58457 1.8791c.54.393 1.27.395 1.8102.004.541-.392.786-1.112.5619-1.782l-1.0616-3.1573 2.5284-2.07807c.477-.4.662-.944.476-1.533a1.55 1.55 0 0 0-1.4521-1.1641l-2.9286-.00003Z"/><path d="M10.5193 4.98997 9.46118 2.01693A1.55 1.55 0 0 0 8.00081 1c-.684 0-1.27.4-1.45553 1.00374L5.48248 4.98997H2.55536c-.668 0-1.252.405-1.46122 1.0174-.2.595-.012 1.24.46605 1.6376l2.52526 2.07761-1.06174 3.15629c-.225.67.02 1.39.561 1.782.54.39 1.27.388 1.8102-.005L8.00053 12.8223l2.58457 1.8791c.54.393 1.27.395 1.8102.004.541-.392.786-1.112.5619-1.782l-1.0616-3.1573 2.5284-2.07807c.477-.4.662-.944.476-1.533a1.55 1.55 0 0 0-1.4521-1.1641l-2.9286-.00003Z" fill="none" stroke="currentColor" strokeWidth=".9"/></svg>}
-
-function CycleDirectorySummary({cycle,issues,stats}:{cycle:Cycle;issues:Issue[];stats:ReturnType<typeof cycleStats>}){
-  const{t,formatDate}=useI18n(),start=new Date(cycle.startsAt),end=new Date(cycle.endsAt),middle=new Date((start.getTime()+end.getTime())/2)
-  const refreshKey=useMemo(()=>issues.filter(issue=>issue.cycleId===cycle.id).map(issue=>`${issue.id}:${issue.state.id}:${issue.estimate??''}:${issue.updatedAt??''}`).join('|'),[issues,cycle.id])
-  const {graph}=useCycleGraph(cycle.id,refreshKey)
-  // Real per-day history from the server; fall back to current counts while it loads.
-  // Estimate points when the team uses estimates, issue counts otherwise (the same unit as scope and capacity).
-  const measure=stats.estimates?'points':'issues'
-  const line=graph?cycleSparkline(graph,600,64,24,measure):undefined
-  const scope=line?.scope??stats.scope,started=line?.started??stats.started,completed=line?.completed??stats.completed
-  const added=graph?(measure==='points'?graph.summary.addedPoints:graph.summary.added):0,removed=graph?(measure==='points'?graph.summary.removedPoints:graph.summary.removed):0
-  const startedPercent=line?.startedPercent??stats.startedPercent,completedPercent=line?.completedPercent??stats.completedPercent
-  return <div className="flow-cycle-current-summary"><div className="flow-cycle-current-metrics"><span><small>{t('Scope')}</small><strong>{formatEstimatePoints(scope)}</strong>{added||removed?<em>{[added?`+${formatEstimatePoints(added)}`:'',removed?`−${formatEstimatePoints(removed)}`:''].filter(Boolean).join(' ')}</em>:null}</span><span><small>{t('Started')}</small><strong>{formatEstimatePoints(started)}</strong><em>• {startedPercent}%</em></span><span><small>{t('Completed')}</small><strong>{formatEstimatePoints(completed)}</strong><em>• {completedPercent}%</em></span></div><div className="flow-cycle-current-chart" aria-label={`${t('Cycle progress')}: ${completedPercent}%`} role="img"><svg className="flow-cycle-sparkline" viewBox="0 0 600 92" preserveAspectRatio="none" aria-hidden="true"><g transform="translate(0 6)"><path className="baseline" d="M0 64H600"/>{line&&<><path className="scope" d={line.scopePath}/><path className="started" d={line.startedPath}/><path className="completed" d={line.completedPath}/></>}</g></svg><div><time>{formatDate(start,{month:'short',day:'numeric',timeZone:'UTC'})}</time><time>{formatDate(middle,{month:'short',day:'numeric',timeZone:'UTC'})}</time><time>{formatDate(end,{month:'short',day:'numeric',timeZone:'UTC'})}</time></div></div></div>
-}
-
-function statusText(status:string){return status==='current'?'Active':status==='completed'?'Completed':status==='planned'?'Planned':'Upcoming'}
-function weekdays(end:string){const cursor=new Date(),last=new Date(end);let count=0;cursor.setHours(0,0,0,0);while(cursor<=last){if(cursor.getDay()!==0&&cursor.getDay()!==6)count++;cursor.setDate(cursor.getDate()+1)}return Math.max(0,count)}

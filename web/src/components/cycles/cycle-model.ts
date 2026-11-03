@@ -158,6 +158,11 @@ export function cycleDateMoveAffects<T extends ScheduledCycle>(cycles: T[], cycl
   return previous && previous.status !== 'completed' && value <= previous.endsAt.slice(0, 10) ? previous : undefined
 }
 
+/** The status of a cycle in the directory and the details card: Planned is an upcoming cycle that is not the next one. */
+export function cycleStatusText(status: string) {
+  return status === 'current' ? 'Current' : status === 'completed' ? 'Completed' : status === 'planned' ? 'Planned' : 'Upcoming'
+}
+
 export function cycleStatusLabel(status: Cycle['status']) {
   return status[0].toUpperCase() + status.slice(1)
 }
