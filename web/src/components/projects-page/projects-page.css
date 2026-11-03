@@ -692,6 +692,7 @@
   position: relative;
   text-decoration: none;
 }
+.lp-project-row { isolation: isolate; }
 .lp-project-row::before { background: transparent; border-radius: 6px; content: ""; inset: 1px 0; pointer-events: none; position: absolute; z-index: -1; }
 .lp-project-row:hover::before,
 .lp-project-row:focus-visible::before { background: var(--project-row-hover-bg); }
