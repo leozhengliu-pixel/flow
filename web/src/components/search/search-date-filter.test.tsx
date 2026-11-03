@@ -2,6 +2,7 @@ import { render,screen,fireEvent } from '@testing-library/react'
 import { describe,it,expect,vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { SearchDateFilter } from './search-date-filter'
+import { parseSearchDateInput } from './search-date-input'
 import { searchDateRange,searchDateLabel,searchFilterAST,readSearchState,writeSearchState } from './search-state'
 import { setWorkspaceRuntimePreferences } from '@/lib/runtime-preferences'
 
@@ -18,7 +19,7 @@ describe('search date drafts',()=>{
   })
   it('keeps the weekday divider directly above the date grid',()=>{
     render(<I18nProvider><SearchDateFilter label="Updated date" onApply={vi.fn()} onCancel={vi.fn()}/></I18nProvider>)
-    const grid=screen.getByRole('grid')
+    const grid=screen.getAllByRole('grid')[0]
     const weekdays=grid.previousElementSibling
     expect(weekdays).toBeTruthy()
     if (!weekdays) return
@@ -40,7 +41,28 @@ describe('search date drafts',()=>{
     fireEvent.click(screen.getByRole('radio',{name:'Quarter'}))
     expect(onApply).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button',{name:'Apply'}))
-    expect(onApply).toHaveBeenCalledWith('2026-11-02',operator,'quarter')
+    expect(onApply).toHaveBeenCalledWith('2026-11-02','on','quarter')
+    expect(screen.queryByRole('radiogroup',{name:'Filter operator'})).not.toBeInTheDocument()
+    expect(screen.getByText('in')).toBeInTheDocument()
+  })
+  it.each([['May 2027','month',2027,4],['Q4 2027','quarter',2027,9],['H2 2027','half-year',2027,6],['2027','year',2027,0],['05/20/2027','day',2027,4]] as const)('parses the precision of %s', (text,mode,year,month)=>{
+    setWorkspaceRuntimePreferences({fiscalMonth:'January'})
+    const parsed=parseSearchDateInput(text)
+    expect(parsed?.mode).toBe(mode)
+    expect(parsed?.date.getFullYear()).toBe(year)
+    expect(parsed?.date.getMonth()).toBe(month)
+  })
+  it('disables invalid input and ignores an IME confirmation',()=>{
+    const onApply=vi.fn()
+    render(<I18nProvider><SearchDateFilter label="Updated date" onApply={onApply} onCancel={vi.fn()}/></I18nProvider>)
+    const input=screen.getByRole('textbox')
+    fireEvent.change(input,{target:{value:'garbage'}})
+    expect(screen.getByRole('button',{name:'Apply'})).toBeDisabled()
+    fireEvent.change(input,{target:{value:'两周后'}})
+    fireEvent.keyDown(input,{key:'Enter',isComposing:true})
+    expect(onApply).not.toHaveBeenCalled()
+    fireEvent.keyDown(input,{key:'Enter'})
+    expect(onApply).toHaveBeenCalledOnce()
   })
 })
 

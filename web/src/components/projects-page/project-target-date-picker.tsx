@@ -123,7 +123,7 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
   </Popover.Root>
 }
 
-export function DayPanel({ cursor, locale, max, min, onChangeCursor, onChoose, selected }: { cursor: Date; locale: AppLocale; max?: Date; min?: Date; onChangeCursor: (date: Date) => void; onChoose: (date: Date) => void; selected?: Date }) {
+export function DayPanel({ cursor, locale, max, min, onChangeCursor, onChoose, selected, navigation = true, outsideDays = true }: { cursor: Date; locale: AppLocale; max?: Date; min?: Date; onChangeCursor: (date: Date) => void; onChoose: (date: Date) => void; selected?: Date; navigation?: boolean; outsideDays?: boolean }) {
   const preferences = useUserPreferences()
   const weekStart = firstWeekday(preferences.firstDay, locale)
   const days = useMemo(() => calendarDays(cursor,weekStart), [cursor,weekStart])
@@ -133,13 +133,13 @@ export function DayPanel({ cursor, locale, max, min, onChangeCursor, onChoose, s
   const weekendColumns = Array.from({length:7},(_,index)=>index).filter(index => isWeekend((index+weekStart)%7))
   const today = startOfDay(useCurrentTime())
   return <div className={styles.dayPanel}>
-    <header><strong>{monthLabel}</strong><span><button aria-label={locale === 'zh-CN' ? '上个月' : 'Previous month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))} type="button"><ChevronLeft size={14}/></button><button aria-label={locale === 'zh-CN' ? '下个月' : 'Next month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} type="button"><ChevronRight size={14}/></button></span></header>
+    <header><strong>{monthLabel}</strong>{navigation && <span><button aria-label={locale === 'zh-CN' ? '上个月' : 'Previous month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))} type="button"><ChevronLeft size={14}/></button><button aria-label={locale === 'zh-CN' ? '下个月' : 'Next month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} type="button"><ChevronRight size={14}/></button></span>}</header>
     <div className={styles.weekdays} data-calendar-weekdays="true">{weekdays.map((day,index) => <span data-weekend={isWeekend((index+weekStart)%7) || undefined} key={day}>{day}</span>)}</div>
-    <div aria-label={monthLabel} className={styles.days} role="grid">{weekendColumns.map(column => <span aria-hidden="true" className={styles.weekendColumn} key={`weekend-${column}`} style={{gridColumn:`${column+1} / ${column+2}`}}/>)}{days.map(day => <button aria-label={new Intl.DateTimeFormat(locale, { dateStyle: 'full' }).format(day)} aria-selected={sameDay(day, selected)} className={sameDay(day, selected) ? styles.selectedDate : ''} data-outside={day.getMonth() !== cursor.getMonth()} data-today={sameDay(day, today) || undefined} data-weekend={isWeekend(day.getDay()) || undefined} disabled={isDateDisabled(day, min, max)} key={isoDate(day)} onClick={() => onChoose(day)} role="gridcell" type="button">{day.getDate()}</button>)}</div>
+    <div aria-label={monthLabel} className={styles.days} role="grid">{weekendColumns.map(column => <span aria-hidden="true" className={styles.weekendColumn} key={`weekend-${column}`} style={{gridColumn:`${column+1} / ${column+2}`}}/>)}{days.map(day => !outsideDays && day.getMonth() !== cursor.getMonth() ? <span aria-hidden="true" key={isoDate(day)}/> : <button aria-label={new Intl.DateTimeFormat(locale, { dateStyle: 'full' }).format(day)} aria-selected={sameDay(day, selected)} className={sameDay(day, selected) ? styles.selectedDate : ''} data-outside={day.getMonth() !== cursor.getMonth()} data-today={sameDay(day, today) || undefined} data-weekend={isWeekend(day.getDay()) || undefined} disabled={isDateDisabled(day, min, max)} key={isoDate(day)} onClick={() => onChoose(day)} role="gridcell" type="button">{day.getDate()}</button>)}</div>
   </div>
 }
 
-export function PeriodPanel({ cursor: _cursor, label, locale, max, min, mode, onChoose, selected }: { cursor: Date; label: 'Start date' | 'Target date'; locale: AppLocale; max?: Date; min?: Date; mode: Exclude<DateMode, 'day'>; onChoose: (date: Date, resolution: DateResolution) => void; selected?: Date }) {
+export function PeriodPanel({ cursor, label, locale, max, min, mode, onChoose, selected, yearLabels = false }: { cursor: Date; label: 'Start date' | 'Target date'; locale: AppLocale; max?: Date; min?: Date; mode: Exclude<DateMode, 'day'>; onChoose: (date: Date, resolution: DateResolution) => void; selected?: Date; yearLabels?: boolean }) {
   useWorkspacePreferences()
   const scrollerRef = useRef<HTMLDivElement>(null)
   const now = useCurrentTime()
@@ -147,10 +147,18 @@ export function PeriodPanel({ cursor: _cursor, label, locale, max, min, mode, on
   const years = Array.from({ length: 10 }, (_, index) => currentYear - 4 + index)
   useEffect(() => {
     const scroller = scrollerRef.current
-    const active = scroller?.querySelector<HTMLElement>('[data-selected="true"]')
-    if (scroller && active) scroller.scrollTop = Math.max(0, active.offsetTop - scroller.clientHeight / 2)
-  }, [mode, selected])
-  return <div className={styles.periodScroller} ref={scrollerRef}>{years.map(year => <section key={year}><h3>{year}</h3><div className={styles.periodGrid} data-mode={mode}>{periodsFor(mode, locale).map((periodLabel, index) => {
+    const anchor = selected ?? cursor
+    const year = mode === 'month' ? anchor.getFullYear() : fiscalYear(anchor)
+    const active = scroller?.querySelector<HTMLElement>('[data-selected="true"]') ?? scroller?.querySelector<HTMLElement>(`[data-period-year="${year}"]`)
+    if (scroller && active) {
+      const section = active.closest<HTMLElement>('section')!
+      const target = yearLabels ? section : active
+      const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop
+      const offset = yearLabels ? mode === 'year' ? section.getBoundingClientRect().height * 2 : 0 : scroller.clientHeight / 2
+      scroller.scrollTop = Math.max(0, top - offset)
+    }
+  }, [cursor, mode, selected, yearLabels])
+  return <div className={styles.periodScroller} ref={scrollerRef}>{years.map(year => <section data-period-year={year} key={year}>{!(yearLabels && mode === 'year') && <h3>{year}</h3>}<div className={styles.periodGrid} data-mode={mode}>{(yearLabels && mode === 'year' ? [String(year)] : periodsFor(mode, locale)).map((periodLabel, index) => {
     const date = dateForPeriod(year, mode, index, label)
     const isSelected = periodSelected(selected, year, mode, index)
     return <button className={isSelected ? styles.selectedDate : ''} data-selected={isSelected} disabled={isDateDisabled(date, min, max)} key={periodLabel} onClick={() => onChoose(date, modeToResolution(mode)!)} type="button">{periodLabel}</button>

@@ -131,7 +131,7 @@ html:root[data-theme="light"] body .settings-select-option[data-highlighted]:bef
 }
 
 /* ── Dialogs ───────────────────────────────────────────────────────────── */
-html:root[data-theme="light"] body .dialog-content {
+html:root[data-theme="light"] body .dialog-content:not(.search-date-dialog) {
   border: .5px solid var(--lx-popover-border);
   border-radius: 12px;
   background: var(--lx-surface);
