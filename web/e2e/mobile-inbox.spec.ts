@@ -564,7 +564,10 @@ test.describe('mobile inbox list', () => {
     await expect(tabs.locator('[data-review-tab="changes"]')).toBeVisible()
     await expect(tabs.locator('nav a')).toHaveText(['Overview', 'Diff', 'Guide'])
     await expect(tabs.locator('[data-review-tab="review"]')).toBeAttached()
-    near((await tabs.locator('[data-review-tab="changes"]').boundingBox())?.x, 95.45)
+    // The tab is its text, 10px of padding and the shared 0.5px hairline border on each side; Chrome snaps that border to whole device pixels, so the reference's 95.45 moves with it.
+    const tabBorder = await tabs.locator('[data-review-tab="overview"]').evaluate(el => parseFloat(getComputedStyle(el).borderLeftWidth))
+    near((await tabs.locator('[data-review-tab="changes"]').boundingBox())?.x, 95.45 + 2 * (tabBorder - 0.5))
+    near((await tabs.locator('[data-review-tab="overview"]').boundingBox())?.width, 75.45 + 2 * (tabBorder - 0.5))
     await expect(tabs.locator('[data-review-tab="overview"]')).toHaveCSS('background-color', 'lch(16.706 0.979 272)')
     const ready = page.locator('.review-detail-tab-actions .review-pill-button.is-primary')
     await expect(ready).toHaveText('Mark as ready')
