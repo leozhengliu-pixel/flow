@@ -132,5 +132,4 @@ export const coverageGapsZhCN: Record<string, string> = {
   "Open view details": "打开视图详情",
   "Open initiative updates": "打开目标更新",
   "Close initiative updates": "关闭目标更新",
-  "Review issue views": "审阅事项视图",
 }
