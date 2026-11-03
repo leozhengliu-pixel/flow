@@ -651,6 +651,8 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         data={data}
         query={pagedQuery}
         layout={display.layout === 'board' ? 'board' : 'list'}
+        emptyGroups={groups.filter(group => !group.issues.length)}
+        showEmptyGroups={display.showEmptyGroups}
         hiddenGroupIds={display.hiddenGroupIds}
         onHideGroup={id => changeDisplay({ ...display, hiddenGroupIds: [...display.hiddenGroupIds, id] })}
         onShowGroup={id => changeDisplay({ ...display, hiddenGroupIds: display.hiddenGroupIds.filter(value => value !== id) })}
@@ -691,6 +693,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         onContextAction={(row, action) => { void contextAction(row, action) }}
       /> : <IssueBoard
         groups={groups}
+        showEmptyGroups={display.showEmptyGroups}
         hiddenGroupIds={display.hiddenGroupIds}
         properties={display.properties}
         propertyOptions={rowOptions}

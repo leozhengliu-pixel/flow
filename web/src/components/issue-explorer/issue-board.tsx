@@ -83,9 +83,10 @@ function SwimlaneMenu({ collapsed, onSelectAll, onToggle, onExpandAll, onCollaps
   </DropdownMenu.Root>
 }
 
-function IssueBoardColumns({ groups, hiddenGroupIds = [], properties, propertyOptions = EMPTY_OPTIONS, selectedIds, createIssueLabel = 'Add new issue', canDrop, onCreateIssue, onHideGroup, onShowGroup, onMove, onOpenIssue, onPropertyChange, onSelectIssue }: {
+function IssueBoardColumns({ groups, hiddenGroupIds = [], showEmptyGroups = true, properties, propertyOptions = EMPTY_OPTIONS, selectedIds, createIssueLabel = 'Add new issue', canDrop, onCreateIssue, onHideGroup, onShowGroup, onMove, onOpenIssue, onPropertyChange, onSelectIssue }: {
   groups: MyIssuesGroupData[]
   hiddenGroupIds?: string[]
+  showEmptyGroups?: boolean
   properties: ReadonlySet<MyIssuesProperty>
   propertyOptions?: MyIssuesRowPropertyOptions
   selectedIds: ReadonlySet<string>
@@ -103,8 +104,12 @@ function IssueBoardColumns({ groups, hiddenGroupIds = [], properties, propertyOp
   const { t } = useI18n()
   const [draggingId, setDraggingId] = useState<string>()
   const [over, setOver] = useState<{ groupId: string; index: number }>()
-  const visibleGroups = useMemo(() => groups.filter(group => !hiddenGroupIds.includes(group.id)), [groups, hiddenGroupIds])
-  const hiddenGroups = useMemo(() => groups.filter(group => hiddenGroupIds.includes(group.id)), [groups, hiddenGroupIds])
+  const [revealed, setRevealed] = useState<{ setting: boolean; ids: string[] }>({ setting: showEmptyGroups, ids: [] })
+  const revealedIds = revealed.setting === showEmptyGroups ? revealed.ids : []
+  if (revealed.setting !== showEmptyGroups) setRevealed({ setting: showEmptyGroups, ids: [] })
+  const isHidden = (group: MyIssuesGroupData) => hiddenGroupIds.includes(group.id) || (!showEmptyGroups && !(group.totalCount ?? group.issues.length) && !revealedIds.includes(group.id))
+  const visibleGroups = groups.filter(group => !isHidden(group))
+  const hiddenGroups = groups.filter(isHidden)
   const sourceGroup = groups.find(group => group.issues.some(issue => issue.id === draggingId))
   const rejectMove = (issue: MyIssuesRowData, sourceId: string, targetId: string) => {
     const reason = canDrop?.(issue, sourceId, targetId)
@@ -167,7 +172,7 @@ function IssueBoardColumns({ groups, hiddenGroupIds = [], properties, propertyOp
         style={{ height: '100%', width: '100%' }}
       />
     ) : visibleGroups.map(group => renderColumn(group))}
-    <HiddenBoardColumns groups={hiddenGroups} onShowGroup={onShowGroup}/>
+    <HiddenBoardColumns groups={hiddenGroups} onShowGroup={id => { setRevealed(current => ({ setting: showEmptyGroups, ids: [...current.ids, id] })); onShowGroup?.(id) }}/>
   </div>
 }
 

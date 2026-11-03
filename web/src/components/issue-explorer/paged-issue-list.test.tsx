@@ -31,6 +31,16 @@ afterEach(() => clearPagedIssueListCache())
 
 describe('server-backed issue groups', () => {
   beforeEach(() => vi.clearAllMocks())
+  it('retains absent empty columns in the hidden panel on paged boards', async () => {
+    vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 1 }] })
+    vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue()], hasMore: false, total: 1 })
+    const data = makeBootstrap(), show = vi.fn()
+    render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} layout="board" showEmptyGroups={false} emptyGroups={[{ id: started.id, label: started.name, state: started, issues: [] }]} onShowGroup={show} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
+    const restore = await screen.findByRole('button', { name: /In Progress\s*0/i })
+    await userEvent.click(restore)
+    expect(show).toHaveBeenCalledWith(started.id)
+    expect(screen.queryByRole('region', { name: 'Hidden columns' })).not.toBeInTheDocument()
+  })
   it('uses complete estimate buckets for board totals rather than issue counts or the loaded cards', async () => {
     vi.mocked(listIssueRecordGroups).mockImplementation(async query => ({ groups: query.groupBy === 'estimate' ? [{ value: '5', count: 100 }, { value: '', count: 1 }] : [{ value: 'state-backlog', count: 101 }] }))
     vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue({ estimate: 5 })], hasMore: true, nextCursor: 'next', total: -1 })
