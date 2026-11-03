@@ -53,6 +53,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align the document metadata and subscribers popovers, the document history selection, the submenu triangle and row icons of the inbox and document menus, the snooze field, the inbox filter icons, review descriptions and phone review tabs, and the project update composer tab ring with the measured reference.
 
+- Restore avatar sizes and fit initials using measured text bounds, including wide Latin and CJK pairs.
+
+- Match workspace, team, label and phone context menu interaction states, and complete Chinese navigation labels.
+
+- Preserve phone issue breadcrumbs, wrapped project activity and composer spacing, and muted reviewer prompts.
+
+- Restore review issue link-type choices and persist Resolves, Contributes and Related associations with each linked issue.
+
 - Match subscribed document rows to the shared menu highlight color and phone inset in pointer and keyboard states.
 
 - Translate command navigation and saved-chat feedback labels into Chinese.
