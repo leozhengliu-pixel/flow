@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import { AlertCircle, Box, Plus, Search, Workflow, X, type LucideIcon } from "lucide-react";
+import { AlertCircle, Box, Plus, Search, X } from "lucide-react";
 import { useLatestRef } from "@/hooks/use-latest-ref";
 import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import {
@@ -63,7 +63,7 @@ import { buildChatHistory } from './agent-chat-history-model';
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { ScopedFlowTooltip as FlowTooltip } from '@/components/ui/tooltip'
 import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
-import { AgentToolbarGlyph } from '@/components/ui/agent-glyph'
+import { AgentToolbarGlyph, LoopsGlyph } from '@/components/ui/agent-glyph'
 import { AgentReplyActions, AgentSessionFeedbackDialog, AgentUserMessageActions } from './agent-message-actions'
 import { toast } from '@/lib/toast'
 import { AgentChatMenu, AgentRenamePalette } from './agent-chat-actions'
@@ -807,8 +807,8 @@ export function AgentPage({
             {([
               { Icon: Box, title: "Create a new project", description: "Turn an idea into a well-scoped project" },
               { Icon: Search, title: "Research a topic", description: "Research a topic across the issue backlog" },
-              { Icon: Workflow, title: "Create automated loop", description: "Learn what loops can do and create your first one" },
-            ] satisfies { Icon: LucideIcon; title: string; description: string }[]).map(({ Icon, title, description }) => <button className={styles.exampleCard} key={title} type="button" onClick={() => writeInput(t(title))}>
+              { Icon: LoopsGlyph, title: "Create automated loop", description: "Learn what loops can do and create your first one" },
+            ]).map(({ Icon, title, description }) => <button className={styles.exampleCard} key={title} type="button" onClick={() => writeInput(t(title))}>
               <Icon className={styles.exampleIcon} aria-hidden="true" size={14} />
               <strong>{t(title)}</strong>
               <span>{t(description)}</span>

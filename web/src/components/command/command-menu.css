@@ -164,7 +164,7 @@ html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
   }
   html:root body .command-dialog .command-input > button {
     position: absolute;
-    top: 50%;
+    top: calc(50% + 3px);
     right: 18px;
     transform: translateY(-50%);
   }

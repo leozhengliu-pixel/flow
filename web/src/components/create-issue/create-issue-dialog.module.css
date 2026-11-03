@@ -213,6 +213,7 @@
   .properties :global(.mini-property-trigger) > span:not(:global(.avatar)) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .properties :global(button[data-property="status"]) > span { color: var(--project-status-more-fg); }
   .properties :global(button[data-property="assignee"]) > span:not(:global(.avatar)) { color: var(--project-status-more-fg); }
+  .properties :global(button[data-property="assignee"][data-empty="true"]) > span { color: var(--create-issue-icon-fg); }
   .properties :global(.mini-property-trigger), .moreButton { padding-right: 8px; padding-left: 6px; }
   .properties .cycleChip { padding: 0 2px; }
   .properties :global(.mini-property-trigger) { box-sizing: border-box; min-width: 0; }
@@ -288,7 +289,7 @@
   .properties :global(.mini-property-trigger[data-property="status"] span) { color: var(--create-issue-fg); }
   .properties .cycleChip, .moreButton, .attachButton { padding: 0 2px; }
   .properties .cycleChip { color: var(--create-issue-icon-fg); }
-  .titleField :global(.title-editor) { padding-top: 0; }
+  .titleField :global(.title-editor) { padding-top: 3.5px; }
   .footer .submit { letter-spacing: normal; }
   .iconButton .compactGlyph, .attachButton .compactGlyph { display: none; }
   .iconButton .desktopGlyph { display: block; width: 16px; height: 16px; }

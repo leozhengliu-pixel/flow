@@ -392,6 +392,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(page.locator('.workspace-menu-trigger')).toHaveAttribute('aria-expanded', 'true')
       await expect(page.locator('.workspace-menu-trigger')).toHaveCSS('background-color', 'lch(11.37 1.3 272)')
       const settings = menu.getByRole('option', { name: 'Settings', exact: true })
+      await expect(menu.locator('[data-selected="true"]')).toHaveCount(0)
+      await page.keyboard.press('ArrowDown')
       await expect(settings).toHaveAttribute('data-selected', 'true')
       await expect.poll(() => settings.evaluate(e => getComputedStyle(e, '::before').backgroundColor)).toBe('lch(20.82 1.3 272)')
       await page.keyboard.press('ArrowDown')

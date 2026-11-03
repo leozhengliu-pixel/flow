@@ -7,6 +7,28 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Use the shared settings search magnifier and match its visible icon fill in both themes.
+
+- Keep the shortcut search's neutral border and restore its accent focus outline.
+
+- Match the desktop chat history icon to the sidebar navigation foreground.
+
+- Restore the layered gradient outline on the phone agent watermark.
+
+- Balance agent starter descriptions and use the shared Loops glyph.
+
+- Restore the issue title baseline and dim the empty phone assignee chip.
+
+- Align the command input hint and use the matching issue and label command glyphs.
+
+- Align keyboard shortcut rows and the search caret with the shared panel typography.
+
+- Align settings directory groups, resting sort arrows, search icons and search placeholder colors.
+
+- Keep directory sorting on supported columns with consistent ascending and descending indicators.
+
+- Match regular dark toggle thumbs to the shared 14px geometry without a shadow.
+
 - Keep Chinese phrases whole: verb catch-alls no longer leave an untranslated noun in a translated sentence, and picker labels, retire-team copy, row dates and status group names read in Chinese. A coverage test now fails when a `t()` key has no Chinese entry.
 - List cycles on a timeline on desktop, as on the phone: dates and dots on a rail, a Current/Upcoming status pill, a capacity ring and the scope in aligned columns, and the started cycle opened with its chart and the Scope, Started and Completed legend. Hovering the chart reads a day's figures.
 

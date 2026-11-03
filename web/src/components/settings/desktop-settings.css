@@ -1,4 +1,10 @@
 @media (min-width: 1024px) {
+  .settings-members-columns button[data-sorted="false"] > svg,
+  .settings-members-columns button[data-sorted="false"] .settings-members-desktop-sort > svg { opacity: 0; }
+  .settings-members-columns button[data-sorted="false"]:is(:hover, :focus-visible) > svg,
+  .settings-members-columns button[data-sorted="false"]:is(:hover, :focus-visible) .settings-members-desktop-sort > svg { opacity: 1; color: var(--set-group-desc); }
+  .settings-teams-page .settings-members-toolbar input::placeholder { color: var(--set-group-desc); opacity: 1; }
+  .domain-labels-search input::placeholder { color: var(--issue-dim); opacity: 1; }
   html:root .settings-app .settings-main .settings-team-actions { grid-column: 4 / -1; display: flex; align-items: center; gap: 8px; }
   html:root .settings-app .settings-main .settings-team-actions > .settings-action { border-width: .5px; }
   .settings-desktop-docs { display: inline-block; margin-left: -3px; padding: 1px 4px; border-radius: 8px; color: var(--set-text); font: inherit; font-weight: 450; line-height: normal; text-decoration: none; }
@@ -14,6 +20,8 @@
   html:root .settings-app .settings-sidebar { padding: 0; }
   html:root .settings-app .settings-back { gap: 5px; margin: 16.5px 0 12px 16px; text-decoration: none; }
   html:root .settings-app .settings-search { margin: 0 12px; }
+  .settings-search > svg { color: var(--sidebar-nav-fg); }
+  .settings-members-group + .settings-member-directory-row { margin-top: 2px; }
   html:root .settings-app .settings-search input { color: var(--set-text); }
   html:root .settings-app .settings-search input::placeholder { color: var(--set-nav); opacity: 1; }
   html:root .settings-app .settings-sidebar nav { margin: 0; padding-top: 29px; }
@@ -84,13 +92,13 @@
   html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar > .settings-select { height: 32px; }
   html:root .settings-app .settings-main .settings-teams-page .settings-members-columns,
   html:root .settings-app .settings-main .settings-teams-page .settings-member-directory-row { grid-template-columns: minmax(240px, 320fr) minmax(250px, 371fr) 108px 80px 70px 70px 32px; column-gap: 12px; padding: 0 20px 0 52px; }
-  html:root .settings-app .settings-main .settings-teams-page .settings-members-columns button { display: inline-flex; align-items: center; gap: 2px; margin-left: -6.5px; border: .5px solid transparent; font: 500 12px/normal var(--font); }
+  html:root .settings-app .settings-main .settings-teams-page .settings-members-columns button { display: inline-flex; align-items: center; gap: 2px; margin-left: -6.5px; border: .5px solid transparent; color: var(--set-button-text); font: 500 12px/normal var(--font); }
   html:root .settings-app .settings-main .settings-teams-page .settings-members-columns button > span { font-weight: 450; }
   html:root .settings-app .settings-main .settings-teams-row { height: 44px; }
   html:root .settings-app .settings-main .settings-teams-row small { font-weight: 500; }
   html:root .settings-app .settings-main .settings-teams-row > span:nth-child(3) { font-weight: 500; }
   html:root .settings-app .settings-main .settings-teams-page .settings-members-columns button > span { color: var(--set-group-desc); }
-  html:root .settings-app .settings-main .settings-teams-page .settings-members-group { margin-inline: 0; padding-left: 52px; }
+  html:root .settings-app .settings-main .settings-teams-page .settings-members-group { margin-inline: 0; padding-left: 52px; border-radius: 8px; }
   html:root .settings-app .settings-main .settings-teams-page .settings-members-group strong { margin-left: 2px; color: var(--set-group-desc); }
   html:root .settings-app .settings-main .settings-members-toolbar > .settings-action { border-width: .5px; }
   html:root .settings-app .settings-team-count { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 5px; color: inherit; text-decoration: none; }
@@ -109,7 +117,7 @@
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row { grid-template-columns: minmax(0, 408.6fr) minmax(0, 266.4fr) 146px 82px 82px 82px 32px; padding: 0 20px 0 52px; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button { gap: 2px; margin-left: -6.5px; border: .5px solid transparent; color: var(--set-button-text); font-weight: 500; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-column-label { font-weight: 450; }
-  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button > span { color: var(--set-group-desc); }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button > .settings-members-column-label { color: var(--set-group-desc); }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=name] { margin-left: -6.5px; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=role] { margin-left: 0; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-more { width: 32px; height: 32px; }
@@ -132,6 +140,7 @@
   .desktop-integration-search { position: relative; box-sizing: border-box; height: 44px; display: flex; align-items: center; border: 1px solid var(--set-integration-search-border); border-radius: 8px; color: var(--set-desc); }
   .desktop-integration-search > svg { position: absolute; left: 16px; pointer-events: none; }
   .desktop-integration-search input { box-sizing: border-box; width: 100%; height: 42px; padding: 12px 12px 12px 40px; border: 0; outline: none; background: transparent; color: var(--set-text); font: 400 15px var(--font); }
+  .desktop-integration-search input::placeholder { color: var(--set-group-desc); opacity: 1; }
   .desktop-enabled { margin-top: 48px; }
   .desktop-enabled h2, .desktop-integration-catalog h2 { margin: 0 16px 16px; color: var(--set-group-desc); font: 500 11px/normal var(--font); text-transform: uppercase; }
   .desktop-enabled h2 button { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-transform: inherit; }
