@@ -28,6 +28,40 @@ describe('lazy Chinese dictionary', () => {
     expect(translate.translateToChinese('12 documents')).toBe('12 篇文档')
   })
 
+  it('never mixes languages in catch-all phrases', async () => {
+    vi.resetModules()
+    const { translateToChinese, loadChineseDictionary } = await import('./translate')
+    await loadChineseDictionary()
+    // A verb with a noun that has no entry stays whole English; it is not "更改foo bar".
+    for (const phrase of ['Change frobnicate', 'Open sub-issues thing', 'Add widgets of doom', 'Create quux', 'New zzyzx', 'Search flarp', 'No flibbertigibbet', 'Remove blorp', 'Add to flarp']) {
+      expect(translateToChinese(phrase)).toBe(phrase)
+    }
+    // A known noun is translated, with the ellipsis normalised.
+    expect(translateToChinese('Change status...')).toBe('更改状态…')
+    expect(translateToChinese('Search projects…')).toBe('搜索项目…')
+    expect(translateToChinese('No labels')).toBe('没有标签')
+    expect(translateToChinese('Open RVI-1')).toBe('打开 RVI-1')
+  })
+
+  it('translates property picker phrases as whole sentences', async () => {
+    vi.resetModules()
+    const { translateToChinese, loadChineseDictionary } = await import('./translate')
+    await loadChineseDictionary()
+    const latin = (text: string) => /[A-Za-z]{3,}/.test(text)
+    for (const phrase of [
+      'Change or add labels...', 'Change or add labels. Bug selected', 'Change Status. Current value is Backlog', 'Change priority. Urgent is selected',
+      'Open sub-issues of RVI-1', 'Open initiative updates', 'Open details (⌘I)', 'Select issue Urgent Priority RVI-23 Fix it', 'Select issue No Priority RVI-2 Fix it',
+      'Group ordering: ascending', 'Ordering direction: descending', 'Created Nov 2, 5:56:12 PM', '3 issues will be moved to selected team', 'Canceled 2 issues, 1 failed',
+      '0% of', 'Backlog 0% of 3', 'Project actions for Mobile app',
+    ]) {
+      const translated = translateToChinese(phrase)
+      expect(translated, phrase).not.toBe(phrase)
+      expect(latin(translated.replace(/RVI-\d+|Fix it|Bug|Mobile app|Backlog/g, '')), `${phrase} → ${translated}`).toBe(false)
+    }
+    expect(translateToChinese('Select issue Urgent Priority RVI-23 Fix it')).toBe('选择事项：紧急优先级 RVI-23 Fix it')
+    expect(translateToChinese('Created Nov 2, 5:56:12 PM')).toBe('创建于 11月2日 下午5:56:12')
+  })
+
   it('prepares the saved locale before the first render', async () => {
     vi.resetModules()
     localStorage.setItem('flow:locale', 'zh-CN')
