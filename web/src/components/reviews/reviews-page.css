@@ -131,6 +131,8 @@
 .review-description h3,.review-activity h3{margin:0;padding:6px 0;color:var(--review-fg-muted);font:450 12px/15px var(--font)}
 .review-description [data-mention-body]{color:var(--review-fg);font:450 15px/24px var(--font)}
 .review-description [data-mention-body] p{margin:0 0 16px}
+.review-description [data-mention-body] :is(ul,ol){margin:0 0 16px;padding-left:24px}
+.review-description [data-mention-body] li>p{margin:0}
 .review-description [data-mention-body] code{padding:0 3.5px;border-radius:2.8px;background:var(--review-inline-code-bg);box-shadow:inset 0 0 0 1px var(--review-inline-code-ring);font-size:.94em}
 .review-description [data-mention-body] a{color:var(--review-link-fg)}
 .review-muted{margin:0;color:var(--review-fg-faint);font:450 15px/24px var(--font)}
@@ -692,7 +694,9 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-detail-top .review-menu-button svg.review-menu-glyph--desktop,html:root body .app .review-actions-glyph--desktop{display:none}
   html:root body .app .review-detail-top .review-menu-button svg.review-menu-glyph--phone,html:root body .app .review-actions-glyph--phone{display:block}
   html:root body .app .review-breadcrumb{min-width:0;flex:1;display:flex;align-items:center;margin-left:-1px;overflow:visible}
-  html:root body .app .review-breadcrumb-issue{box-sizing:border-box;height:24px;flex:none;display:flex;align-items:center;margin:0 -5px;padding:0 5px;border-radius:8px;background:transparent;color:var(--bright);font:400 16px/24px var(--font);text-decoration:none;overflow:visible}
+  .review-breadcrumb-issue{box-sizing:border-box;height:24px;flex:none;display:flex;align-items:center;margin:0 -5px;padding:0 5px;border-radius:8px;background:transparent;text-decoration:none;overflow:visible}
+  /* The linked issue is an icon link; the unlinked "No issue" crumb is text like its neighbours (13px/500). */
+  a.review-breadcrumb-issue{color:var(--bright);font:400 16px/24px var(--font)}
   html:root body .app .reviews-workspace.has-agent-panel button.review-breadcrumb-issue{font:500 13px/normal var(--font);color:var(--issue-muted)}
   html:root body .app .review-breadcrumb-issue-label{display:none}
   html:root body .app .review-breadcrumb-issue-icon{display:grid;place-items:center;width:14px;height:14px;flex:none}
@@ -716,7 +720,6 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-detail-tabs nav{min-width:0;flex:1;display:flex;align-items:center;gap:6px;margin-right:auto;overflow-x:auto;scrollbar-width:none}
   html:root body .app .review-detail-tabs nav a{box-sizing:border-box;height:32px;flex:none;display:flex;align-items:center;padding:0 10px;border:.5px solid transparent;border-radius:9999px;font:500 12px/normal var(--font);text-decoration:none}
   html:root body .app .review-detail-tabs nav a[data-review-tab=changes]{color:var(--review-fg-muted)}
-  html:root body .app .review-tab-label{margin-right:-1px}
   html:root body .app .review-detail-tab-actions{display:flex;flex:none;align-items:center;gap:6px;margin-left:0}
   html:root body .app .review-detail-tab-actions>.review-pill-button{height:32px;padding:0 10px;border:.5px solid transparent}
   html:root body .app .review-ready-label--desktop{display:none}
