@@ -161,8 +161,7 @@ export function RetireTeamForm({
     const chunkSize = 25;
     let success = 0;
     let failed = 0;
-    const label =
-      issueAction === "cancel" ? t("canceled") : t("moved");
+    const verb = issueAction === "cancel" ? "Canceled" : "Moved";
     setProgress({
       total: ids.length,
       done: 0,
@@ -211,7 +210,7 @@ export function RetireTeamForm({
         t(`Failed to process issues`),
         {
           description: t(
-            `${label.charAt(0).toUpperCase()}${label.slice(1)} ${success} issue${success === 1 ? "" : "s"}, ${failed} failed`,
+            `${verb} ${success} issue${success === 1 ? "" : "s"}, ${failed} failed`,
           ),
         },
       );

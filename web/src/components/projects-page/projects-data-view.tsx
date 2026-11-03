@@ -342,7 +342,7 @@ export function ProjectsDataView({
       increaseViewportBy={{ top: 192, bottom: 480 }}
       itemContent={(_index, entry) => {
         if (entry.kind === 'project') return renderProject(entry.project)
-        if (entry.kind === 'subgroup') return <div className="lp-project-subgroup"><div className="lp-project-subgroup__header"><ProjectGroupStatus color={entry.group.color} compact name={entry.group.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{entry.group.name}</span><small>{projectCount(entry.group)}</small></div></div>
+        if (entry.kind === 'subgroup') return <div className="lp-project-subgroup"><div className="lp-project-subgroup__header"><ProjectGroupStatus color={entry.group.color} compact name={entry.group.name} propertyOptions={propertyOptions}/><ProjectGroupName name={entry.group.name} propertyOptions={propertyOptions}/><small>{projectCount(entry.group)}</small></div></div>
         return <ProjectGroupHeader
           collapsed={entry.collapsed}
           color={entry.group.color}
@@ -426,7 +426,7 @@ function ProjectSubgroup({ group, manualOrdering, onOpen, onOpenIssues, onOpenUp
   visible: Set<string>
 }) {
   return <div className="lp-project-subgroup">
-    <div className="lp-project-subgroup__header"><ProjectGroupStatus color={group.color} compact name={group.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{group.name}</span><small>{projectCount(group)}</small></div>
+    <div className="lp-project-subgroup__header"><ProjectGroupStatus color={group.color} compact name={group.name} propertyOptions={propertyOptions}/><ProjectGroupName name={group.name} propertyOptions={propertyOptions}/><small>{projectCount(group)}</small></div>
     {group.projects.map(project => <ProjectListRow
       key={project.id}
       onOpen={onOpen}
@@ -484,7 +484,7 @@ function ProjectGroupHeader({ collapsed, color = '#d6b326', count, name, onCreat
   return <div className="lp-project-group__header" data-group-status={projectGroupStatusType(name, propertyOptions) || undefined} role="row">
     <span />
     <button aria-expanded={!collapsed} aria-label={collapsed ? 'Expand group' : 'Collapse group'} className="lp-project-group__toggle" onClick={onToggle} type="button"><ChevronRightIcon /></button>
-    <span className="lp-project-group__title"><ProjectGroupStatus color={color} name={name} propertyOptions={propertyOptions}/><strong data-i18n-ignore>{name}</strong><span aria-label="Project count" className="lp-project-group__count">{count}</span></span>
+    <span className="lp-project-group__title"><ProjectGroupStatus color={color} name={name} propertyOptions={propertyOptions}/><ProjectGroupName as="strong" name={name} propertyOptions={propertyOptions}/><span aria-label="Project count" className="lp-project-group__count">{count}</span></span>
     <button aria-label="Create new project" className="lp-project-group__create" onClick={onCreate} type="button"><PlusIcon /></button>
   </div>
 }
@@ -579,14 +579,14 @@ function ProjectBoardColumn({ group, manualOrdering, onCreateProject, onDropProj
   const card = (project: ProjectPageItem) => <ProjectBoardCard key={project.id} manualOrdering={manualOrdering} onKeyboardMove={direction => onKeyboardMove(project, direction)} onOpen={onOpenProject} onOpenIssues={onOpenProjectIssues} onOpenUpdates={onOpenProjectUpdates} onProjectAction={onProjectAction} onProjectVisualChange={onProjectVisualChange} onPropertyChange={onPropertyChange} project={project} projectMenu={projectMenu} propertyOptions={propertyOptions} labelGroupProperties={labelGroupProperties} selected={selectedIds.includes(project.id)} showStatus={showStatus} visible={visible} />
   return <section aria-label={group.name} className="lp-project-board__column" data-drop-target={dragOver || undefined} onDragEnter={event => { if (event.dataTransfer.types.includes(PROJECT_DRAG_TYPE)) setDragOver(true) }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOver(false) }} onDragOver={event => { if (event.dataTransfer.types.includes(PROJECT_DRAG_TYPE)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move' } }} onDrop={event => { const projectId = event.dataTransfer.getData(PROJECT_DRAG_TYPE); if (projectId) { event.preventDefault(); onDropProject(projectId) } setDragOver(false) }}>
     <header>
-      <span className="lp-project-board__heading"><ProjectGroupStatus color={group.color} name={group.name} propertyOptions={propertyOptions}/><strong data-i18n-ignore>{group.name}</strong><span aria-label="Project count" className="lp-project-board__count">{projectCount(group)}</span></span>
+      <span className="lp-project-board__heading"><ProjectGroupStatus color={group.color} name={group.name} propertyOptions={propertyOptions}/><ProjectGroupName as="strong" name={group.name} propertyOptions={propertyOptions}/><span aria-label="Project count" className="lp-project-board__count">{projectCount(group)}</span></span>
       <span className="lp-project-board__actions">
         <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className="lp-project-board__menu" type="button"><MoreHorizontal size={16}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="lp-project-board__group-menu" sideOffset={4}><DropdownMenu.Item onSelect={onSelectAll}>Select all in column</DropdownMenu.Item><DropdownMenu.Item onSelect={onHide}>Hide column</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
         <button aria-label="Create new project" className="lp-project-board__create" onClick={() => onCreateProject?.(projectCreateStatus(group.name, !showStatus, propertyOptions))} type="button"><PlusIcon height={14} width={14} /></button>
       </span>
     </header>
     <div className="lp-project-board__cards">
-      {group.subgroups?.map(subgroup => <section className="lp-project-board__subgroup" key={subgroup.id}><header><ProjectGroupStatus color={subgroup.color} compact name={subgroup.name} propertyOptions={propertyOptions}/><span data-i18n-ignore>{subgroup.name}</span><small>{projectCount(subgroup)}</small></header>{subgroup.projects.map(card)}</section>)}
+      {group.subgroups?.map(subgroup => <section className="lp-project-board__subgroup" key={subgroup.id}><header><ProjectGroupStatus color={subgroup.color} compact name={subgroup.name} propertyOptions={propertyOptions}/><ProjectGroupName name={subgroup.name} propertyOptions={propertyOptions}/><small>{projectCount(subgroup)}</small></header>{subgroup.projects.map(card)}</section>)}
       {!group.subgroups?.length && group.projects.map(card)}
       <button aria-label="Add new project" className="lp-project-board__add" onClick={() => onCreateProject?.(projectCreateStatus(group.name, !showStatus, propertyOptions))} type="button"><PlusIcon /></button>
     </div>
@@ -727,6 +727,13 @@ function ProjectGroupStatus({ color = '#77777c', compact = false, name, property
   const status = (propertyOptions?.status ?? PROPERTY_OPTIONS.status).find(option => option.value.toLocaleLowerCase() === name.toLocaleLowerCase())
   if (status) return <span aria-hidden="true" className={`lp-project-group__status-icon${compact ? ' is-compact' : ''}`}><ProjectStatusGlyph color={status.color ?? color} name={status.label} type={status.statusType}/></span>
   return <span aria-hidden="true" className={`lp-project-group__status${compact ? ' is-compact' : ''}`} style={{ '--project-status-color': color } as CSSProperties}/>
+}
+
+/** A group named after a project status reads like the status picker (default names have a Chinese entry); leads, labels and the like are data. */
+function ProjectGroupName({ as: Tag = 'span', name, propertyOptions }: { as?: 'span' | 'strong', name: string, propertyOptions?: ProjectPropertyOptions }) {
+  const { t } = useI18n()
+  const isStatus = (propertyOptions?.status ?? PROPERTY_OPTIONS.status).some(option => option.value.toLocaleLowerCase() === name.toLocaleLowerCase())
+  return <Tag data-i18n-ignore={isStatus ? undefined : true}>{isStatus ? t(name) : name}</Tag>
 }
 
 function projectGroupStatusType(name: string, propertyOptions?: ProjectPropertyOptions) {

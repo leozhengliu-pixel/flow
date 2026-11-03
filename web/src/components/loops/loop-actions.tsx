@@ -81,7 +81,7 @@ export function LoopActionsMenu({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const workspace = data.workspace.urlKey;
   const draft = isLoopDraft(loop);
   const favorite = findFavorite(data.favorites, data.viewer.id, "loop", loop.id);
@@ -152,7 +152,7 @@ export function LoopActionsMenu({
         )}
         <DropdownMenuItem onSelect={() => void duplicate()}>
           <Copy size={14} />
-          {t("Duplicate")}
+          {locale === "zh-CN" ? t("Duplicate (copy)") : "Duplicate"}
         </DropdownMenuItem>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>

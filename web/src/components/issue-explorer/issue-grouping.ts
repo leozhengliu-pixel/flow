@@ -200,12 +200,12 @@ const FOCUS_GROUPS: Record<string, Omit<GroupDescriptor, 'id'>> = {
 /** A Focus bucket's group (label, order, what "+" creates) from its id, for in-memory and server-paged lists alike. */
 export function focusGroupDescriptor(id: string, data?: Pick<BootstrapData, 'cycles'>): GroupDescriptor {
   const fixed = FOCUS_GROUPS[id]
-  if (fixed) return { id, ...fixed }
+  if (fixed) return { id, ...fixed, translatableLabel: true }
   if (id.startsWith('focus-cycle-')) {
     const cycleId = id.slice(12)
     return { id, label: data?.cycles.find(item => item.id === cycleId)?.name ?? 'Current cycle', rank: 30, createContext: { cycleId } }
   }
-  return { id, label: 'Other active', stateType: 'started', rank: 50 }
+  return { id, label: 'Other active', stateType: 'started', rank: 50, translatableLabel: true }
 }
 
 export type FocusCaseData = Pick<BootstrapData, 'cycles'> & Partial<Pick<BootstrapData, 'teamSettings' | 'issueSlas'>>
