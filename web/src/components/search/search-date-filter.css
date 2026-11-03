@@ -5,7 +5,7 @@
 .search-date-filter>header>strong{font-size:15px;font-weight:600;white-space:nowrap}
 .search-date-filter [role=radiogroup]{display:flex;align-items:center;gap:6px}
 .search-date-filter [role=radio],.search-date-filter>footer>button{height:28px;flex:none;padding:0 12px;border:.5px solid var(--theme-border-strong);border-radius:9999px;background:var(--calendar-control);color:var(--theme-text-secondary);font:500 12px/normal var(--font);box-shadow:var(--shadow-control);white-space:nowrap}
-.search-date-filter [role=radio]:hover,.search-date-filter>footer>button:hover{background:var(--calendar-control-selected);color:var(--theme-text-primary)}
+.search-date-filter [role=radio]:hover,.search-date-filter>footer>button:enabled:hover{background:var(--calendar-control-selected);color:var(--theme-text-primary)}
 .search-date-filter [role=radio][aria-checked=true]{background:var(--calendar-control-selected);color:var(--theme-text-primary)}
 .search-date-filter button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
 .search-date-input{box-sizing:border-box;height:32px;flex:none;min-width:0;margin:14px 32px 0;padding:6px 12px;border:.5px solid var(--calendar-border);border-radius:8px;background:var(--calendar-surface);color:var(--theme-text-primary);font:400 13px/normal var(--font)}
@@ -31,7 +31,7 @@
 .search-date-filter>footer{display:flex;justify-content:flex-end;gap:10px;padding:16px 32px 32px;border-top:.5px solid var(--pk-divider)}
 .search-date-filter>footer>button{height:36px;font-size:13px;color:var(--pk-text)}
 .search-date-filter>footer>.search-date-apply{background:var(--accent-primary);border-color:transparent;color:var(--on-accent)}
-.search-date-filter>footer>.search-date-apply:hover{background:var(--accent-primary-hover)}
+.search-date-filter>footer>button.search-date-apply:enabled:hover{background:var(--accent-primary-hover);color:var(--on-accent)}
 .search-date-filter>footer>button:disabled{opacity:.5;cursor:default}
 @media(max-width:767px){
   .dialog-content.search-date-dialog{top:min(110px,13.04dvh)}
