@@ -70,9 +70,10 @@ describe('team documents list', () => {
     for (const mock of Object.values(api)) mock.mockReset().mockResolvedValue(undefined)
   })
 
-  it('keeps every desktop sort target content-sized with a direction glyph', () => {
+  it('keeps desktop sort targets content-sized with glyph tracks and marks the sorted heading', () => {
     setup([makeDocument()])
     const headers = ['Name', 'Created', 'Last edited', 'Owner'].map(label => screen.getByRole('button', { name: `Order by ${label}` }))
+    expect(headers.filter(header => header.hasAttribute('data-active'))).toEqual([headers[0]])
     for (const header of headers) {
       expect(header.querySelector('svg')).toHaveAttribute('width', '12')
       expect(header.parentElement).toHaveClass('team-docs-heading-cell')

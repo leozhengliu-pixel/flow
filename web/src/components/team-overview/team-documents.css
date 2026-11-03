@@ -12,6 +12,7 @@
   width: max-content;
   max-width: calc(100% - 260px);
   background: transparent;
+  border-bottom: 0;
 }
 :root[data-theme="light"] .team-documents-toolbar { background: transparent; }
 .team-documents-toolbar > .team-documents-new { gap: 4px; font-size: 12px; padding: 0 10px 0 8px; }
@@ -292,7 +293,10 @@
   .team-docs-heading.is-owner { width: auto; margin-left: -6px; padding-inline: 6px; }
   .team-docs-heading { gap: 2px; }
   .team-docs-heading-label { font-weight: 450; }
-  .team-docs-group { margin: 0 8px 2px; padding-left: 2px; background: var(--theme-surface-1); }
+  .team-docs-group { margin: 0 8px 2px; padding-left: 2px; }
+  .team-docs-heading svg { opacity: 0; }
+  .team-docs-heading:is(:hover, :focus-visible, [data-active]) svg { opacity: 1; }
+  .team-docs-heading[data-active] svg { color: var(--project-toolbar-icon-fg); }
   .team-docs-caret { width: 20px; flex-basis: 20px; margin: 4px -2px 4px 8px; padding: 2px; border-radius: 9999px; }
   .team-docs-caret svg { width: 16px; height: 16px; }
   .team-docs-group-title { line-height: normal; }
