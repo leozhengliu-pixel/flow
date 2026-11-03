@@ -3,16 +3,21 @@ import { test } from './workspace-fixture'
 
 async function initialsFit(avatar: Locator) {
   await expect(avatar).toBeVisible()
-  expect(await avatar.evaluate(element => {
+  const bounds = await avatar.evaluate(element => {
     const initials = element.matches('.workspace-initials') ? element : element.querySelector('.workspace-initials')
-    if (!initials) return false
+    if (!initials) throw new Error('Workspace initials missing')
     const range = document.createRange()
     range.selectNodeContents(initials)
     const text = range.getBoundingClientRect()
     const box = element.getBoundingClientRect()
-    return text.left >= box.left && text.right <= box.right && text.top >= box.top && text.bottom <= box.bottom
-      && Math.abs((text.left + text.right - box.left - box.right) / 2) <= 1
-  })).toBe(true)
+    return { text: text.toJSON(), box: box.toJSON() }
+  })
+  const rounding = 1 / 64
+  expect(bounds.text.left).toBeGreaterThanOrEqual(bounds.box.left - rounding)
+  expect(bounds.text.right).toBeLessThanOrEqual(bounds.box.right + rounding)
+  expect(bounds.text.top).toBeGreaterThanOrEqual(bounds.box.top - rounding)
+  expect(bounds.text.bottom).toBeLessThanOrEqual(bounds.box.bottom + rounding)
+  expect(Math.abs((bounds.text.left + bounds.text.right - bounds.box.left - bounds.box.right) / 2)).toBeLessThanOrEqual(rounding)
 }
 
 async function openDrawer(page: Page, phone: boolean) {
@@ -28,7 +33,7 @@ for (const width of [1440, 390]) {
   for (const colorScheme of ['dark', 'light'] as const) {
     test.describe(`${width}px ${colorScheme} workspace menu`, () => {
       test.use({ viewport: { width, height: width === 390 ? 844 : 900 }, colorScheme })
-      for (const name of ['中文团队', '中a', 'a中', 'A', '中文团队 with a workspace name long enough to require truncation']) {
+      for (const name of ['中文团队', '中a', 'a中', 'WW', 'MM', 'A', '中文团队 with a workspace name long enough to require truncation']) {
         test(`keeps initials contained and trigger hit areas stable for ${name}`, async ({ page, request, workspaceKey }, testInfo) => {
           test.skip(testInfo.project.name !== 'chromium', 'The matrix sets both viewport sizes itself')
           const phone = width === 390
@@ -38,6 +43,7 @@ for (const width of [1440, 390]) {
           for (const currentName of name === 'A' ? [name] : ['A', name]) {
             expect((await request.patch(`/api/workspaces/${workspaceKey}`, { headers, data: { name: currentName } })).ok()).toBe(true)
             await page.goto(`/${workspaceKey}/my-issues/assigned`)
+            await expect(page.locator('.workspace-menu-trigger strong')).toHaveText(currentName)
             await openDrawer(page, phone)
             await page.evaluate(() => document.fonts.ready)
             const trigger = page.locator('.workspace-menu-trigger')

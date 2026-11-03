@@ -1,15 +1,33 @@
+:where([data-user-avatar]) {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--avatar, var(--avatar-fallback));
+  color: var(--on-accent);
+  font-size: 9px;
+  line-height: 1;
+}
+
 [data-user-avatar] {
-  container-type: inline-size;
+  justify-content: center;
+  align-content: center;
   flex-shrink: 0;
   white-space: nowrap;
 }
 
-.user-avatar-initials {
+.user-avatar-initials,
+.workspace-initials {
   display: block;
+  width: max-content;
   line-height: 1;
   white-space: nowrap;
 }
 
-[data-user-avatar][data-script="cjk"] > .user-avatar-initials {
-  font-size: min(1em, 50cqi);
+:where([data-user-avatar]) > img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }

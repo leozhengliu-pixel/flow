@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from 'react'
 import { AgentAvatarMark } from '@/components/ui/agent-glyph'
 import { isBuiltinAgentAvatarUrl } from '@/components/ui/agent-avatar-url'
 import { avatarInitials } from '@/lib/avatar-initials'
+import { FittedInitials } from './fitted-initials'
 import './user-avatar.css'
 
 /**
@@ -25,5 +26,5 @@ export function UserAvatar({ avatarUrl, className, color, name, title }: { avata
     setImageFailed(false)
   }
   const showImage = Boolean(avatarUrl) && !imageFailed
-  return <span aria-label={name} className={className} data-user-avatar="" data-agent-avatar-slot={agent ? '' : undefined} data-avatar-fallback={imageFailed ? '' : undefined} data-script={script} data-i18n-ignore style={style} title={title}>{agent ? <AgentAvatarMark/> : showImage ? <img alt="" src={avatarUrl} onError={() => setImageFailed(true)}/> : <span className="user-avatar-initials">{initials}</span>}</span>
+  return <span aria-label={name} className={`user-avatar${className ? ` ${className}` : ''}`} data-user-avatar="" data-agent-avatar-slot={agent ? '' : undefined} data-avatar-fallback={imageFailed ? '' : undefined} data-script={script} data-i18n-ignore style={style} title={title}>{agent ? <AgentAvatarMark/> : showImage ? <img alt="" src={avatarUrl} onError={() => setImageFailed(true)}/> : <FittedInitials className="user-avatar-initials">{initials}</FittedInitials>}</span>
 }
