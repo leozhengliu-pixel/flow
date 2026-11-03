@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Apply issue-menu surface tokens at the shared component rule so phone shadows and rounded submenu headers remain intact.
+
 - Recompute shared search date ranges when fiscal settings arrive and discard invalid date chips with their requests.
 
 - Keep the project date picker at its full calendar height and fit all seven weekday columns inside its padding.
