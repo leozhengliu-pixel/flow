@@ -2,7 +2,8 @@ import { cloneElement, Fragment, isValidElement, useInsertionEffect, useMemo, us
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
 import { Command, defaultFilter } from 'cmdk'
-import { Diamond, ExternalLink, Link2, Rocket } from 'lucide-react'
+import { Diamond, Link2, Rocket } from 'lucide-react'
+import { EstimateIcon } from '@/components/issue/estimate-icon'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surface'
@@ -456,11 +457,13 @@ export function FilterFieldIcon({field}:{field:MyIssuesFilterKey}){
   if(field==='project')return <ViewGlyph icon="Project" color="currentColor" style={{width:16,height:16}}/>
   if(field==='initiative')return <ViewGlyph icon="Initiative" color="currentColor" style={{width:16,height:16}}/>
   if(field==='cycle')return <CycleIcon noCycle size={16}/>
+  if(field==='team')return <ViewGlyph icon="Team" color="currentColor" style={{width:16,height:16}}/>
+  if(field==='estimate')return <EstimateIcon size={16}/>
   if(field==='releases')return <IssueActionGlyph label="Release" fallback={<Rocket size={16}/>}/>
   if(field==='customers')return <CustomerGlyph/>
   if(field==='subscribers')return <SubscriptionIcon/>
   if(field==='template')return <IssueActionGlyph label="Template…" fallback={<Diamond size={16}/>}/>
-  if(field==='externalSource')return <ExternalLink size={16}/>
+  if(field==='externalSource')return <FlowGlyph name="externalSource"/>
   return <Link2 size={16}/>
 }
 
