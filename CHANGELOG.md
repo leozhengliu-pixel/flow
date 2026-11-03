@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Open phone command sheets without selecting the first row until pointer, keyboard or search input.
+
 - Keep Chinese phrases whole: verb catch-alls no longer leave an untranslated noun in a translated sentence, and picker labels, retire-team copy, row dates and status group names read in Chinese. A coverage test now fails when a `t()` key has no Chinese entry.
 
 - Align the document metadata and subscribers popovers, the document history selection, the submenu triangle and row icons of the inbox and document menus, the snooze field, the inbox filter icons, review descriptions and phone review tabs, and the project update composer tab ring with the measured reference.
