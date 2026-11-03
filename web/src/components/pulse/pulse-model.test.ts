@@ -17,6 +17,12 @@ function pulseData() {
 const item = (id: string, createdAt: string) => ({ id, update: { createdAt } }) as unknown as PulseItem
 
 describe('pulse model', () => {
+  it.each(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'])('uses the shared %s week boundary', day => {
+    const index = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].indexOf(day)
+    expect(weekStartsOnFromSetting(day)).toBe(index)
+    expect(weekStartsOnFromSetting(day.toLowerCase())).toBe(index)
+    expect(weekStartsOnFromSetting(String(index))).toBe(index)
+  })
   it('normalizes saved view configuration and serializes mutations', () => {
     const validFilter = { id: 'author', field: 'author', operator: 'is', values: ['user-1'] }
     const view = { filters: [validFilter, { id: 4 }], display: { match: 'any' } } as unknown as SavedView
