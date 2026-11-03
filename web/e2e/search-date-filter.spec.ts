@@ -53,6 +53,8 @@ async function applyDateFilter(page: Page, workspaceKey: string, phone = false) 
   await page.getByRole('button', { name: 'Next month', exact: true }).click()
   await page.getByRole('gridcell', { name: nextMonth.toLocaleDateString('en-US',{dateStyle:'full'}), exact: true }).click()
   await expect(page.locator('.workspace-search-filter-chips')).toHaveCount(0)
+  await page.getByRole('button',{name:'Apply',exact:true}).hover()
+  await expect(page.getByRole('button',{name:'Apply',exact:true})).toHaveCSS('color','rgb(255, 255, 255)')
   await page.getByRole('button',{name:'Apply',exact:true}).click()
   await expect(page.locator('.search-date-filter')).toHaveCount(0)
 
