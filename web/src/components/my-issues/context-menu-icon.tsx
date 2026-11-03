@@ -36,7 +36,8 @@ import {
 } from "lucide-react";
 
 import { IssueActionGlyph } from "@/components/issue/issue-action-glyphs";
-import { CycleIcon, NoAssigneeIcon, PriorityIcon } from "@/components/issue/issue-icons";
+import { CycleIcon, PriorityIcon } from "@/components/issue/issue-icons";
+import { FlowGlyph } from "@/components/ui/menu-glyphs";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import styles from "./my-issues-list.module.css";
 
@@ -108,7 +109,9 @@ export function ContextMenuIcon({ label }: { label: string }) {
   const glyph = GLYPHS[label];
   if (glyph) return <span className={styles.menuIcon} aria-hidden="true"><ViewGlyph icon={glyph} color="currentColor" style={{ width: 16, height: 16 }} /></span>;
   if (label === "Priority") return <span className={styles.menuIcon} aria-hidden="true"><PriorityIcon priority={2} size={16} aria-hidden aria-label={undefined} role={undefined}/></span>;
-  if (label === "Assignee") return <span className={styles.menuIcon} aria-hidden="true"><NoAssigneeIcon size={16} aria-hidden/></span>;
+  if (label === "Assignee") return <span className={styles.menuIcon} aria-hidden="true"><FlowGlyph name="assignee"/></span>;
+  if (label === "More properties") return <span className={styles.menuIcon} aria-hidden="true"><FlowGlyph name="moreProperties"/></span>;
+  if (label === "Open in") return <span className={styles.menuIcon} aria-hidden="true"><FlowGlyph name="openIn"/></span>;
   if (label === "Cycle") return <span className={styles.menuIcon} aria-hidden="true"><CycleIcon noCycle size={16} aria-hidden/></span>;
   const Icon = ICONS[label];
   const fallback = Icon ? <Icon className={styles.menuIcon} size={16} aria-hidden="true" /> : null;

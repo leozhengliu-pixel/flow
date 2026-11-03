@@ -502,7 +502,7 @@ export function IssueContextMenu({ editable, issue, options, onPropertyChange, o
   const statusOptions = useTeamStatusOptions(options.status, issue.teamId)
   return <ContextMenu.Content data-flow-motion="floating" data-phone-menu={phone ? '' : undefined} className={styles.contextMenu} collisionPadding={10}>
     <div className={styles.contextMenuList}>
-    {editable&&<><ContextPropertySub label="Status" shortcut="S" options={statusOptions} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
+    {editable&&<><ContextPropertySub label="Status" icon={<StatusIcon state={issue.state} size={16}/>} shortcut="S" options={statusOptions} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
     <ContextPropertySub label="Priority" shortcut="P" options={options.priority} selectedIds={[String(issue.priority)]} onSelect={id => onPropertyChange('priority', id)}/>
     <ContextPropertySub label="Assignee" shortcut="A" options={options.assignee} selectedIds={[issue.assignee?.id ?? '']} onSelect={id => onPropertyChange('assignee', id)}/>
     <ContextPropertySub label="Due date" shortcut="⇧ D" options={options.dueDate} selectedIds={[issue.dueDate ?? '']} onSelect={id => onPropertyChange('dueDate', id)}/>
@@ -517,7 +517,7 @@ export function IssueContextMenu({ editable, issue, options, onPropertyChange, o
   </ContextMenu.Content>
 }
 
-function ContextPropertySub({ label, multi = false, onSelect, options, selectedIds, shortcut }: { label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; selectedIds: string[]; shortcut?: string }) {
+function ContextPropertySub({ label, icon, multi = false, onSelect, options, selectedIds, shortcut }: { label: string; icon?: ReactNode; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; selectedIds: string[]; shortcut?: string }) {
   const [open, setOpen] = useState(false)
   const people = isPeopleProperty(label)
   const assignee = label === 'Assignee'
@@ -534,7 +534,7 @@ function ContextPropertySub({ label, multi = false, onSelect, options, selectedI
     if (option.agent) return <AgentHover key={option.id} agent={{ id: option.id, name: option.handle ?? option.label, displayName: option.label, avatarUrl: option.avatarUrl }}>{content}</AgentHover>
     return <PersonHover key={option.id || 'none'} userId={people && option.id !== ASSIGNEE_INVITE_ID ? option.id : undefined}>{content}</PersonHover>
   }
-  return <MenuSubmenu label={label} open={open} onOpenChange={setOpen} triggerProps={{ className: styles.menuItem }} trigger={<><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true"><SubmenuChevron/></span></>} contentProps={{ 'data-flow-motion': 'floating', className: styles.contextSubmenu, sideOffset: 3, alignOffset: -5,
+  return <MenuSubmenu label={label} open={open} onOpenChange={setOpen} triggerProps={{ className: styles.menuItem }} trigger={<>{icon ? <span className={styles.menuIcon} aria-hidden="true">{icon}</span> : <ContextMenuIcon label={label}/>}<span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true"><SubmenuChevron/></span></>} contentProps={{ 'data-flow-motion': 'floating', className: styles.contextSubmenu, sideOffset: 3, alignOffset: -5,
     onKeyDown: assignee ? event => { if (!event.metaKey && !event.ctrlKey && !event.altKey && /^\d$/.test(event.key)) { const match = items.find(option => option.shortcut === event.key); if (match) { event.preventDefault(); setOpen(false); void choose(match.id) } } } : undefined }}>
     {people && <div className="property-command-search"><input ref={commandInputRef} aria-label={assignee ? 'Assign to…' : 'Search people'} placeholder={assignee ? 'Assign to…' : 'Search people…'} value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event => { event.stopPropagation(); command.onKeyDown(event) }}/></div>}
     {sections.map(section => <ContextMenu.Group key={section.id}>{section.label && <ContextMenu.Label className={styles.groupLabel}>{section.label}</ContextMenu.Label>}{section.options.map(row)}</ContextMenu.Group>)}
