@@ -6,6 +6,8 @@
 :root[data-theme="light"]{--calendar-surface:var(--theme-surface-2);--calendar-border:var(--theme-border-strong);--calendar-control:var(--theme-control-hover);--calendar-control-selected:var(--theme-control-active)}
 :root{--workspace-trigger-fg:lch(90.155% 1.2 272);--workspace-trigger-hover-bg:lch(8.445% 1.3 272);--workspace-trigger-chevron:lch(60.621% 1.2 272)}
 :root[data-theme="light"]{--workspace-trigger-fg:var(--text);--workspace-trigger-hover-bg:var(--bg-hover);--workspace-trigger-chevron:lch(40% 1 282)}
+:root{--menu-checkbox-hover-border:lch(55.92% 1.48 272)}
+:root[data-theme="light"]{--menu-checkbox-hover-border:var(--sub-checkbox-border)}
 :root{--shortcut-muted:lch(63.304% 1.425 272)}
 :root[data-theme="light"]{--shortcut-muted:lch(40% 1 282)}
 :root{--document-desktop-send-bg:lch(17.349 1.139 272);--document-desktop-avatar-bg:lch(70 60 30)}
