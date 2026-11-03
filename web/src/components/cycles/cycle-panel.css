@@ -1,0 +1,93 @@
+/*
+ * The cycle details card. A head (status and dates, title, documents) over collapsible sections:
+ * Progress for a started cycle, Planning for any cycle. Both sections read their figures in the
+ * same three columns.
+ */
+.cycle-details-card {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: .5px solid var(--my-issues-details-border);
+  border-radius: 10px;
+  background: var(--my-issues-details-bg);
+  box-shadow: 0 3px 6px -2px var(--shadow-color-faint), 0 1px 1px var(--shadow-color-soft);
+  color: var(--cycle-panel-text);
+}
+.cycle-panel-head { padding: 10px 16px 20px; }
+.cycle-panel-chips { display: flex; align-items: center; gap: 8px; height: 28px; margin: 0 -6px 16px; color: var(--cycle-panel-text); font: 400 13px/19.5px var(--font); }
+.cycle-panel-status,
+.cycle-panel-dates { display: flex; align-items: center; box-sizing: border-box; border-radius: 4px; background: var(--cycle-chip-bg); }
+.cycle-panel-status { padding: 2px 6px; }
+.cycle-panel-dates { height: 28px; padding: 2px 2px 2px 10px; }
+.cycle-panel-dates > svg { flex: none; width: 14px; height: 14px; margin: 0 1.5px 0 9.5px; }
+.cycle-panel-date-end { box-sizing: border-box; padding: 0 8px; border-radius: 9999px; font: 500 12px/24px var(--font); }
+
+.cycle-panel-heading { display: flex; align-items: center; height: 28px; margin-bottom: 12px; }
+.cycle-panel-heading > .cycle-icon { margin-right: 10px; }
+.cycle-panel-heading h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; color: var(--cycle-panel-text); font: 600 15px/23px var(--font); text-overflow: ellipsis; white-space: nowrap; }
+.cycle-panel-favorite { display: grid; place-items: center; flex: none; width: 28px; height: 28px; margin-right: 4px; padding: 0; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--cycle-panel-muted); }
+.cycle-panel-heading > .cycle-row-menu { flex: none; position: static; width: 24px; height: 24px; }
+.cycle-panel-favorite svg,
+.cycle-panel-heading > .cycle-row-menu svg { width: 14px; height: 14px; }
+.cycle-panel-favorite:hover,
+.cycle-panel-favorite[aria-checked=true] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+
+.cycle-resources { display: flex; flex-direction: column; gap: 4px; margin: 0 -6px; }
+.cycle-resources > button,
+.cycle-resources [data-radix-popper-content-wrapper] + button { box-sizing: border-box; width: max-content; height: 28px; display: flex; align-items: center; gap: 4px; padding: 0 6px; border: 0; border-radius: 9999px; background: transparent; color: var(--cycle-panel-dim); font: 500 13px/normal var(--font); }
+.cycle-resources > button:hover { background: var(--theme-surface-hover); }
+.cycle-resources > button svg { width: 16px; height: 16px; }
+
+.cycle-panel-section { padding: 12px; }
+.cycle-panel-section__title { box-sizing: border-box; display: flex; align-items: center; gap: 6px; width: 100%; height: 28px; margin: -6px 0 -6px -8px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--cycle-panel-muted); font: 500 13px/normal var(--font); text-align: left; }
+.cycle-panel-section__title svg { width: 16px; height: 16px; fill: currentColor; }
+.cycle-panel-section__title:hover { background: var(--theme-surface-hover); }
+.cycle-panel-section__body { padding-top: 12px; }
+
+/* The three columns: a marker, a label and the figure below it. */
+.cycle-stat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 24px; margin: 0; padding: 0 20px 0 0; }
+.cycle-stat { position: relative; min-width: 0; margin: 0; padding-left: 20px; }
+.cycle-stat > i,
+.cycle-stat > dt > i { position: absolute; left: 5px; top: 10px; width: 6px; height: 6px; border-radius: 1px; background: var(--issue-dim); }
+.cycle-stat.is-started > i { background: var(--cycle-started); }
+.cycle-stat.is-completed > i,
+.cycle-stat.is-capacity > dt > i { background: var(--cycle-completed); }
+.cycle-stat > dt > svg { position: absolute; left: 0; top: 5px; width: 16px; height: 16px; color: var(--cycle-panel-muted); }
+.cycle-stat-label,
+.cycle-stat > dt { box-sizing: border-box; display: block; height: 26px; margin: 0; padding-top: 6px; color: var(--cycle-panel-muted); font: 500 12px/normal var(--font); }
+.cycle-stat-value,
+.cycle-stat > dd { display: flex; align-items: center; margin: 0; color: var(--bright); font: 500 12px/normal var(--font); }
+.cycle-stat > dd { color: var(--bright); font-size: 13px; }
+.cycle-stat.is-capacity > dd { color: var(--cycle-panel-text); }
+.cycle-stat > dd.cycle-planning-scope { height: 15.5px; font-size: 12px; }
+.cycle-stat-value > svg,
+.cycle-stat > dd > svg { flex: none; margin: 0 4px 0 -1px; color: var(--cycle-panel-muted); }
+.cycle-stat-value strong { font: inherit; }
+.cycle-stat-percent { margin-left: 3px; color: var(--cycle-panel-muted); font-weight: 450; white-space: nowrap; }
+.cycle-stat-percent > b { margin-right: 3px; font-weight: inherit; }
+
+.cycle-progress-chart { margin-top: 2px; }
+
+/* Breakdown: a strip of tabs and a row per assignee, label, priority, project or team. */
+.cycle-breakdown { margin-top: 14px; }
+.cycle-breakdown-tabs { display: flex; gap: 2px; height: 32px; box-sizing: border-box; border-radius: 5px; background: var(--my-issues-details-bg); }
+.cycle-breakdown-tabs button { box-sizing: border-box; flex: 1 1 auto; margin: 2px; padding: 4px 12px; border: .5px solid transparent; border-radius: 9999px; background: var(--my-issues-details-tab-bg); color: var(--my-issues-details-muted); font: 500 12px/normal var(--font); white-space: nowrap; }
+.cycle-breakdown-tabs button[aria-selected="true"] { background: var(--my-issues-details-tab-active-bg); color: var(--bright); }
+.cycle-breakdown-rows { margin-top: 8px; }
+.cycle-breakdown-row { box-sizing: border-box; display: flex; align-items: center; height: 42px; padding: 0 10px 0 9px; border-radius: 8px; background: var(--my-issues-details-bg); color: var(--cycle-panel-muted); font: 450 13px/normal var(--font); }
+.cycle-breakdown-name { display: flex; align-items: center; flex: 1; gap: 7px; min-width: 0; }
+.cycle-breakdown-name > svg,
+.cycle-breakdown-name > .option-dot,
+.cycle-breakdown-name > .cycle-planning-avatar { flex: none; }
+.cycle-breakdown-name > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cycle-breakdown-done { display: flex; align-items: center; gap: 8px; margin-right: 4px; font: 450 12px/normal var(--font); white-space: nowrap; }
+.cycle-planning-value { display: flex; align-items: center; gap: 4px; font: 450 12px/normal var(--font); white-space: nowrap; }
+.cycle-planning-value > svg { flex: none; }
+.cycle-planning-avatar { display: grid; place-items: center; width: 20px; height: 20px; flex: 0 0 20px; overflow: hidden; border-radius: 50%; background: var(--avatar, var(--avatar-fallback)); color: var(--on-accent); font: 500 9px/1 var(--font); }
+.cycle-planning-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.cycle-breakdown .cycle-capacity-ring { margin: 0; }
+
+@media (max-width: 900px) {
+  .cycle-details-card { max-height: 100%; overflow: auto; }
+}

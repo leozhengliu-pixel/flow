@@ -7,7 +7,8 @@ import { estimatePoints, teamUsesEstimates } from '@/lib/estimates'
 
 export type CyclePlanningTab = 'assignees' | 'labels' | 'priority' | 'projects' | 'teams'
 
-export interface CyclePlanningRow { id: string; name: string; value: number; icon: ReactNode }
+/** `value` is the scope of the row; `completed` the part of it that is done. */
+export interface CyclePlanningRow { id: string; name: string; value: number; completed: number; icon: ReactNode }
 
 export type CyclePlanningSettings = (teamId: string) => Partial<Pick<TeamSettings, 'estimateType' | 'estimateAllowZero' | 'estimateCountUnestimated'>> | undefined
 
@@ -19,27 +20,29 @@ const PRIORITY_NAMES = ['No priority', 'Urgent', 'High', 'Medium', 'Low']
  */
 export function cyclePlanningRows(issues: readonly Issue[], tab: CyclePlanningTab, settingsFor: CyclePlanningSettings): CyclePlanningRow[] {
   const rows = new Map<string, CyclePlanningRow>()
+  let done = 0
   const add = (id: string, name: string, icon: ReactNode, value: number) => {
     const row = rows.get(id)
-    if (row) row.value += value
-    else rows.set(id, { id, name, icon, value })
+    if (row) { row.value += value; row.completed += done }
+    else rows.set(id, { id, name, icon, value, completed: done })
   }
   for (const issue of issues) {
     const settings = settingsFor(issue.team.id)
     const value = teamUsesEstimates(settings) ? estimatePoints(issue.estimate, settings) : 1
+    done = issue.state.type === 'completed' ? value : 0
     if (tab === 'assignees') {
       if (issue.assignee) add(issue.assignee.id, issue.assignee.displayName || issue.assignee.name, <UserAvatar className="cycle-planning-avatar" avatarUrl={issue.assignee.avatarUrl} name={issue.assignee.displayName || issue.assignee.name}/>, value)
-      else add('', 'No assignee', <NoAssigneeIcon size={14}/>, value)
+      else add('', 'No assignee', <NoAssigneeIcon size={20}/>, value)
     } else if (tab === 'labels') {
-      if (!issue.labels.length) add('', 'No label', <LabelIcon size={14}/>, value)
+      if (!issue.labels.length) add('', 'No label', <LabelIcon size={20}/>, value)
       for (const label of issue.labels) add(label.id, label.name, <i className="option-dot" style={{ background: label.color }}/>, value)
     } else if (tab === 'priority') {
-      add(String(issue.priority), PRIORITY_NAMES[issue.priority] ?? 'No priority', <PriorityIcon priority={issue.priority} size={14}/>, value)
+      add(String(issue.priority), PRIORITY_NAMES[issue.priority] ?? 'No priority', <PriorityIcon priority={issue.priority} size={20}/>, value)
     } else if (tab === 'projects') {
-      if (issue.project) add(issue.project.id, issue.project.name, <ProjectIcon size={14} style={{ color: issue.project.color }}/>, value)
-      else add('', 'No project', <NoProjectIcon size={14}/>, value)
+      if (issue.project) add(issue.project.id, issue.project.name, <ProjectIcon size={20} style={{ color: issue.project.color }}/>, value)
+      else add('', 'No project', <NoProjectIcon size={20}/>, value)
     } else {
-      add(issue.team.id, issue.team.name, <TeamIcon team={issue.team} size={14}/>, value)
+      add(issue.team.id, issue.team.name, <TeamIcon team={issue.team} size={20}/>, value)
     }
   }
   // Priority rows follow the priority order (Urgent → Low, then No priority); the others are largest first.

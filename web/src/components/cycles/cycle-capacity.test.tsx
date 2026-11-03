@@ -30,31 +30,31 @@ describe('cycle capacity and scope', () => {
     render(<I18nProvider><CyclesPage cycles={[completed, cycle2]} issues={issues} team={team} estimateSettings={fibonacci} settings={{ enabled: true, durationWeeks: 2, cooldownWeeks: 2, upcomingCount: 1 }} onOpen={onOpen} onUpdateCycle={vi.fn()} onStartCycle={vi.fn()} onUpdateSettings={vi.fn()} onReload={vi.fn()} onOpenSidebar={vi.fn()}/></I18nProvider>)
     const card = screen.getByTestId('cycle-timeline-1')
     expect(card.querySelector('.cycle-timeline-date')).toHaveTextContent('Nov2')
-    expect(card.querySelector('.cycle-timeline-axis')).toHaveTextContent('Nov 16')
-    expect(card.querySelector('.is-scope strong')).toHaveTextContent('8')
+    expect(card.querySelector('.cycle-chart__axis')).toHaveTextContent('Nov 16')
+    expect(card.querySelector('.cycle-timeline-metric.is-scope strong')).toHaveTextContent('8')
     expect(card.querySelectorAll('.estimate-icon')).toHaveLength(3)
     expect(within(card).getByRole('img', { name: 'Cycle progress: 0%' })).toBeInTheDocument()
-    await userEvent.setup().click(card)
+    await userEvent.setup().click(within(card).getByRole('button', { name: 'Cycle 1' }))
     expect(onOpen).toHaveBeenCalledWith(completed)
   })
 
   it('lists "26% of capacity" and "△ 8 scope" for 8 of 30 points, "0%" for an empty cycle, and the cooldown between cycles', () => {
     const { container } = page(fibonacci)
     const rows = [...container.querySelectorAll('.flow-cycle-row')] as HTMLElement[]
-    expect(rows.map(row => row.querySelector('.flow-cycle-name')?.textContent)).toEqual(['Cycle 2', 'Cycle 1'])
-    expect(rows[1].querySelector('.flow-cycle-capacity')).toHaveTextContent('26%of capacity')
-    expect(rows[1].querySelector('.flow-cycle-scope')).toHaveTextContent('8 scope')
-    expect(rows[1].querySelector('.flow-cycle-scope .estimate-icon')).not.toBeNull()
-    expect(rows[0].querySelector('.flow-cycle-capacity')).toHaveTextContent('0%of capacity')
-    expect(rows[0].querySelector('.flow-cycle-scope')).toHaveTextContent('0 scope')
+    expect(rows.map(row => row.querySelector('.cycle-timeline-title')?.textContent)).toEqual(['Cycle 2', 'Cycle 1'])
+    expect(rows[1].querySelector('.cycle-timeline-capacity')).toHaveTextContent('26% of capacity')
+    expect(rows[1].querySelector('.cycle-timeline-scope')).toHaveTextContent('8 scope')
+    expect(rows[1].querySelector('.cycle-timeline-scope .estimate-icon')).not.toBeNull()
+    expect(rows[0].querySelector('.cycle-timeline-capacity')).toHaveTextContent('0% of capacity')
+    expect(rows[0].querySelector('.cycle-timeline-scope')).toHaveTextContent('0 scope')
     expect(screen.getByText('2 weeks cooldown')).toBeInTheDocument()
   })
 
   it('counts issues instead of points for teams without estimates', () => {
     const { container } = page({ ...fibonacci, estimateType: 'notUsed' })
     const row = [...container.querySelectorAll('.flow-cycle-row')].at(-1) as HTMLElement
-    expect(row.querySelector('.flow-cycle-scope')).toHaveTextContent('2 scope')
-    expect(row.querySelector('.flow-cycle-scope .estimate-icon')).toBeNull()
+    expect(row.querySelector('.cycle-timeline-scope')).toHaveTextContent('2 scope')
+    expect(row.querySelector('.cycle-timeline-scope .estimate-icon')).toBeNull()
   })
 
   it('shows Planning with Capacity, Days to start, Scope and per-tab estimate sums', async () => {
@@ -77,7 +77,7 @@ describe('cycle capacity and scope', () => {
     expect(within(screen.getByRole('tabpanel')).getByText('Test team').closest('.cycle-planning-row')?.querySelector('.estimate-icon')).not.toBeNull()
   })
 
-  it('draws the current cycle summary in estimate points, or issue counts without estimates', () => {
+  it('draws the current cycle legend in estimate points, or issue counts without estimates', () => {
     const totals = (scope: number, started: number, completed: number, points: number) => ({ scope, started, completed, scopePoints: scope * points, startedPoints: started * points, completedPoints: completed * points })
     graphState.graph = {
       cycleId: 'c1', timezone: 'UTC', startDate: '2026-11-02', endDate: '2026-11-15', today: '2026-11-03', estimates: true,
@@ -89,12 +89,12 @@ describe('cycle capacity and scope', () => {
       const current = { ...cycle1, status: 'current' as const }
       const metrics = (settings: TeamSettings) => {
         const { container, unmount } = render(<I18nProvider><CyclesPage cycles={[current]} issues={issues} team={team} estimateSettings={settings} settings={{ enabled: true, durationWeeks: 2, cooldownWeeks: 0, upcomingCount: 2 }} onOpen={vi.fn()} onUpdateCycle={vi.fn()} onStartCycle={vi.fn()} onUpdateSettings={vi.fn()} onReload={vi.fn()} onOpenSidebar={vi.fn()}/></I18nProvider>)
-        const values = [...container.querySelectorAll('.flow-cycle-current-metrics > span')].map(item => `${item.querySelector('small')?.textContent}=${item.querySelector('strong')?.textContent}${item.querySelector('em')?.textContent ?? ''}`)
+        const values = [...container.querySelectorAll('.cycle-timeline-metric')].map(item => `${item.querySelector('.cycle-timeline-metric-label')?.textContent}=${item.querySelector('strong')?.textContent}${item.querySelector('.cycle-timeline-percent')?.textContent ?? ''}`)
         unmount()
         return values
       }
-      expect(metrics(fibonacci)).toEqual(['Scope=8+5', 'Started=4• 50%', 'Completed=4• 50%'])
-      expect(metrics({ ...fibonacci, estimateType: 'notUsed' })).toEqual(['Scope=2+1', 'Started=1• 50%', 'Completed=1• 50%'])
+      expect(metrics(fibonacci)).toEqual(['Scope=8', 'Started=4•50%', 'Completed=4•50%'])
+      expect(metrics({ ...fibonacci, estimateType: 'notUsed' })).toEqual(['Scope=2', 'Started=1•50%', 'Completed=1•50%'])
     } finally {
       graphState.graph = undefined
     }
