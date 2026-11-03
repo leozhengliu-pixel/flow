@@ -19,6 +19,7 @@ test('persists Tuesday and starts the calendar on the saved weekday',async({page
     await page.goto(`/${workspaceKey}/search`)
     await page.getByRole('button',{name:'Add filter',exact:true}).click()
     await page.getByRole('option',{name:'Updated date',exact:true}).click()
+    await page.getByRole('option',{name:'Custom date or timeframe…',exact:true}).click()
     await expect(page.locator('.search-date-filter [class*="weekdays"] > span').first()).toHaveText('Tu')
   } finally {
     expect((await request.patch('/api/account/settings',{headers,data:{firstDay:original.firstDay,language:original.language}})).ok()).toBe(true)
