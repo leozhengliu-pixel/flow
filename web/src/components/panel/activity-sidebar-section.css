@@ -86,7 +86,6 @@
 .activity-sidebar-section__group header strong {
   color: var(--theme-text-primary, #f7f8f8);
   font-weight: 500;
-  margin-right: 4px;
 }
 
 .activity-sidebar-section__group {
