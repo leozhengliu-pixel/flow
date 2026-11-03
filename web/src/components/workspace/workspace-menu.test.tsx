@@ -30,8 +30,6 @@ describe("workspace menu", () => {
     await user.click(screen.getByRole('button', { name: /Workspace Menu/ }));
     expect(screen.getAllByRole('option')).toHaveLength(4);
     expect(screen.queryByText('Download desktop app')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('option').every(item => item.getAttribute('data-selected') === 'false')).toBe(true);
-    await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('option', { name: 'Settings' })).toHaveAttribute('data-selected', 'true');
     await user.keyboard('{ArrowDown}');
     expect(screen.getByRole('option', { name: 'Invite and manage members' })).toHaveAttribute('data-selected', 'true');

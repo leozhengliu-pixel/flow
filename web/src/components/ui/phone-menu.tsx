@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { Command } from 'cmdk'
-import { useRef, useState, type ComponentProps, type ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { useI18n } from '@/i18n/i18n'
 
 export function PhoneMenu({ open, onOpenChange, label, children, className = '', heading = false, onCloseAutoFocus }: {
@@ -35,17 +35,8 @@ export function PhoneMenu({ open, onOpenChange, label, children, className = '',
 
 export function PhoneCommandMenu({ children, placeholder = 'Type a command or search...', ...props }: Parameters<typeof PhoneMenu>[0] & { placeholder?: string }) {
   const { t } = useI18n()
-  return <PhoneMenu {...props}><PhoneMenuCommand label={props.label}>
+  return <PhoneMenu {...props}><Command label={props.label}>
     <div className="phone-menu-search"><Command.Input aria-label={t('Command menu')} placeholder={t(placeholder)}/></div>
     <Command.List>{children}</Command.List>
-  </PhoneMenuCommand></PhoneMenu>
-}
-
-export function PhoneMenuCommand(props: ComponentProps<typeof Command>) {
-  const [value, setValue] = useState('')
-  const interacting = useRef(false)
-  // cmdk requests its first item on mount; phone sheets wait for input.
-  return <Command {...props} value={value} onValueChange={next => {
-    if (interacting.current) setValue(next)
-  }} onKeyDownCapture={() => { interacting.current = true }} onPointerMoveCapture={() => { interacting.current = true }} onInputCapture={() => { interacting.current = true }}/>
+  </Command></PhoneMenu>
 }
