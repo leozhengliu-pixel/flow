@@ -22,9 +22,14 @@ for (const width of [1440, 390, 375]) for (const theme of ['dark', 'light']) {
     }
     const panel = page.locator('[data-radix-popper-content-wrapper] > div').filter({ has: page.getByRole('tablist', { name: 'Date precision' }) })
     await expect(panel).toBeVisible()
-    await expect(panel).toHaveCSS('height', '430px')
-    await expect.poll(() => panel.evaluate(element => element.scrollHeight <= element.clientHeight)).toBe(true)
+    if (width === 1440) await expect(panel).toHaveCSS('height', '430px')
+    await expect.poll(() => panel.evaluate(element => {
+      const box = element.getBoundingClientRect()
+      return box.left >= 0 && box.right <= innerWidth && box.bottom <= innerHeight
+    })).toBe(true)
+    if (width === 1440) await expect.poll(() => panel.evaluate(element => element.scrollHeight <= element.clientHeight)).toBe(true)
     const lastDay = panel.getByRole('gridcell').last()
+    if (width < 768) await lastDay.scrollIntoViewIfNeeded()
     await expect.poll(() => lastDay.evaluate(element => {
       const box = element.getBoundingClientRect()
       return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2))

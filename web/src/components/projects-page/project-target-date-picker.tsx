@@ -7,6 +7,7 @@ import { FlowTooltip } from '@/components/ui/tooltip'
 import { useCurrentTime, useCurrentTimeMs } from '@/hooks/use-current-time'
 import { firstWeekday, useUserPreferences, useWorkspacePreferences, fiscalMonth, fiscalYear, fiscalMonthOffset } from '@/lib/runtime-preferences'
 import { parseNaturalDateInput } from '@/lib/natural-date'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 
 export type DateMode = 'day' | 'month' | 'quarter' | 'half-year' | 'year'
 export type DateResolution = 'halfYear' | 'month' | 'quarter' | 'year'
@@ -56,6 +57,7 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
   tooltipShortcut?: string
 }) {
   const { locale, t } = useI18n()
+  const phone = usePhoneLayout()
   const [internalOpen, setOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
   const [mode, setMode] = useState<DateMode>('day')
@@ -111,7 +113,7 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
     requestAnimationFrame(() => event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=tab]')[next]?.focus())
   }
 
-  const content = <Popover.Content data-flow-motion="floating" align={align} className={`${styles.datePicker}${compactPeriods && mode !== 'day' ? ` ${styles.compactPeriods}` : ''}${compactCalendar ? ` ${styles.compactCalendar}` : ''}${contentClassName ? ` ${contentClassName}` : ''}`} collisionPadding={8} onClick={event => event.stopPropagation()} onCloseAutoFocus={event => event.preventDefault()} side={side ?? (portalled ? 'bottom' : 'right')} sideOffset={4}>
+  const content = <Popover.Content data-flow-motion="floating" align={align} className={`${styles.datePicker}${compactPeriods && mode !== 'day' ? ` ${styles.compactPeriods}` : ''}${compactCalendar ? ` ${styles.compactCalendar}` : ''}${contentClassName ? ` ${contentClassName}` : ''}`} collisionPadding={8} onClick={event => event.stopPropagation()} onCloseAutoFocus={event => event.preventDefault()} side={phone ? 'bottom' : side ?? (portalled ? 'bottom' : 'right')} sideOffset={4}>
     {!compactCalendar && <label className={styles.dateLabel}>{t(label)}<input autoFocus aria-label={t('Try: May 2027, Q4, 05/20/2027')} onFocus={event => event.currentTarget.select()} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); void submit() } }} placeholder={t('Try: May 2027, Q4, 05/20/2027')} value={query}/>{value && <button aria-label={t('Clear date')} className={styles.dateClear} onClick={clear} type="button"><X size={14}/></button>}</label>}
     {!compactCalendar && <div aria-label={t('Date precision')} className={styles.dateModes} onKeyDown={onModeKeyDown} role="tablist">{MODES.map(item => <button aria-selected={mode === item.id} key={item.id} onClick={() => selectMode(item.id)} role="tab" tabIndex={mode === item.id ? 0 : -1} type="button">{t(item.label)}</button>)}</div>}
     {compactCalendar || mode === 'day' ? <DayPanel cursor={cursor} locale={locale} max={maxDate} min={minDate} onChangeCursor={setCursor} onChoose={date => choose(date)} selected={selected}/> : <PeriodPanel cursor={cursor} label={label} locale={locale} max={maxDate} min={minDate} mode={mode} onChoose={(date, nextResolution) => choose(date, nextResolution)} selected={selected}/>}
