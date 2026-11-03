@@ -203,11 +203,19 @@ geometry, and fixed by `764c1aaa`; the scale-1 and scale-2 checks pass. The prio
 weekday spec now opens Custom date (`4440eea1`), and the Apply assertion accepts
 the shared white color serialization (`3de97001`). The complete changed-spec
 run above includes those fixes. Cancelled runs `41578621320`/`41579531542` are
-also not passes. The latest branch run is reported with publication; the user
-explicitly requested no wait for branch CI, so final branch CI is unverified.
+also not passes. Review-branch pushes do not automatically trigger CI: the
+workflow listens for main pushes, pull requests, and manual dispatch. The final
+continuation explicitly dispatched [41604671516](https://github.com/leozhengliu-pixel/flow/actions/runs/41604671516)
+against published revision `208d6b67`. The user explicitly requested no wait for
+branch CI, so its result is unverified. The subsequent commit only updates this
+report; it changes no implementation or test files.
 
-Owned scratch API/Vite processes are stopped by PID at final cleanup and
-`web/node_modules` is removed. Other agents' processes, shared browser daemon,
+Final cleanup stopped owned scratch API/Vite PIDs `68320`, `68364`, and `68333`;
+ports 5442 and 5443 have no remaining listeners. `web/node_modules` was removed.
+The clean published revision and retained test logs were checked, and all twelve
+crop sheets plus both scale captures were reopened in the final continuation.
+No product changes or additional test runs were needed after those passing runs.
+Other agents' processes, shared browser daemon,
 model proxy, production hosts, and production databases remain untouched.
 
 Team filtering remains deferred as described above. Reference light/Chinese
