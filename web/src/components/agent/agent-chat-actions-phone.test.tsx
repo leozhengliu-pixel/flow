@@ -18,6 +18,7 @@ describe('phone chat actions', () => {
     render(<I18nProvider><AgentChatMenu onCopy={onCopy} onDelete={vi.fn()} onFeedback={onFeedback} onRename={vi.fn()} onMoveToToolbar={onMoveToToolbar}/></I18nProvider>)
     await user.click(screen.getByRole('button', { name: 'Chat options' }))
     expect(screen.getAllByRole('option').map(row => row.textContent)).toEqual(['Rename…', 'Copy as markdown', 'Delete', 'Leave feedback…', 'Move to toolbar'])
+    expect(screen.getAllByRole('option').every(row => row.getAttribute('data-selected') === 'false')).toBe(true)
     await user.click(screen.getByRole('option', { name: 'Leave feedback…' }))
     expect(onFeedback).toHaveBeenCalledOnce()
     expect(screen.queryByRole('dialog', { name: 'Chat options' })).not.toBeInTheDocument()
