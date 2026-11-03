@@ -11,7 +11,8 @@
   :root .issue-view .title-editor p { letter-spacing: -.16px; }
   .issue-view .document-actions .issue-document-action { padding: 0 2px; color: var(--issue-fg); }
   .issue-view .document-actions .issue-document-action svg { width: 14px; height: 14px; }
-  .issue-view .flow-sub-issues { margin-top: 9px; padding-bottom: 16px; border-bottom: .5px solid var(--border); }
+  .issue-view .flow-sub-issues { margin-top: 9px; }
+  .issue-view .flow-sub-issues::after { content: ""; display: block; margin: 16px 0 0 6px; border-bottom: .5px solid var(--border); }
   .issue-view .flow-sub-issues > header span { font-size: 12px; line-height: normal; }
   html:root body .issue-view .sub-issues-collapse:not(#_) > span { color: var(--issue-muted); }
   .issue-view :is(.sub-issues-display, .sub-issues-create) { padding: 0 2px; }
