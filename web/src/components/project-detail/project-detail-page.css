@@ -1781,8 +1781,8 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   }
   .project-activity__event {
     box-sizing: content-box;
-    height: 17px;
-    min-height: 0;
+    height: auto;
+    min-height: 17px;
     padding: 36px 8px 0;
     color: var(--issue-muted);
   }
