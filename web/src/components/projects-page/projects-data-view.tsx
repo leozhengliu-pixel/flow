@@ -25,7 +25,6 @@ import { ProjectTimeline } from './project-timeline'
 import type { TimelineZoom } from './project-timeline-model'
 import { AvatarImage } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
-import { useDesktopSettings } from '@/hooks/use-desktop-settings'
 
 export type ProjectPageItem = {
   id: string
@@ -223,8 +222,7 @@ export function ProjectsDataView({
   }
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
-  const desktop = useDesktopSettings()
-  const showGroupHeaders = !desktop || grouping !== 'No grouping'
+  const showGroupHeaders = grouping !== 'No grouping'
   const listEntries = useMemo<ProjectListEntry[]>(() => groups.flatMap(group => {
     const isCollapsed = showGroupHeaders && collapsed.includes(group.id)
     const entries: ProjectListEntry[] = showGroupHeaders ? [{ key: `group:${group.id}`, kind: 'group', group, collapsed: isCollapsed }] : []
