@@ -62,6 +62,13 @@ describe('display options: nested sub-issues', () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ nestedSubIssues: true, showSubIssues: true }))
   })
 
+  it('keeps only the existing nesting select in the compact phone My issues menu', () => {
+    layout.phone = true
+    render(<I18nProvider><MyIssuesDisplayMenu open phoneIssueMenu myIssuesPhoneMenu onOpenChange={vi.fn()} options={createIssueDisplayOptions()} onChange={vi.fn()}/></I18nProvider>)
+    expect(screen.queryByRole('checkbox', { name: 'Nested sub-issues' })).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Nested sub-issues' })).toBeInTheDocument()
+  })
+
   it('has no nesting option in board layout', () => {
     render(<I18nProvider><MyIssuesDisplayMenu open onOpenChange={vi.fn()} options={createIssueDisplayOptions({ layout: 'board' })} onChange={vi.fn()}/></I18nProvider>)
     expect(screen.queryByRole('combobox', { name: 'Nested sub-issues' })).not.toBeInTheDocument()
