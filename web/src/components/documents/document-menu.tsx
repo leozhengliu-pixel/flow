@@ -58,7 +58,7 @@ export interface DocumentMenuItemsProps {
 }
 
 export function DocumentMenuItems({ ctx, document, variant, team, showAuthorNames, onToggleAuthorNames, onOpenAccess, onUiAction, canDelete = true, onDeleted, query = '', phone = false }: DocumentMenuItemsProps) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const { data } = ctx
   const favorited = data.favorites.some(item => item.userId === data.viewer.id && item.resourceType === 'document' && item.resourceId === document.id) || document.favorite
   const teams = viewerTeams(data)
@@ -93,7 +93,7 @@ export function DocumentMenuItems({ ctx, document, variant, team, showAuthorName
       : <FlowSubmenu icon={<IssueActionGlyph label="Pin to team" fallback={null}/>} label="Pin to team">
         <FlowMenuOptions options={teams.map(item => ({ id: item.id, label: item.name, translate: false, icon: <TeamIcon team={item} size={14}/> }))} selected={pinSelected} multiple emptyLabel="No teams" onChoose={id => { const target = teams.find(item => item.id === id); if (target) void toggleDocumentPinnedToTeam(ctx, document, target) }}/>
       </FlowSubmenu>}
-    <FlowMenuItem icon={<IssueActionGlyph label="Duplicate" fallback={null}/>} label="Duplicate" onSelect={() => void duplicateDocument(ctx, document).then(created => { if (created && variant === 'page') ctx.navigate(documentPath(data.workspace.urlKey, created)) })}/>
+    <FlowMenuItem icon={<IssueActionGlyph label="Duplicate" fallback={null}/>} label={locale === 'zh-CN' ? 'Duplicate (copy)' : 'Duplicate'} onSelect={() => void duplicateDocument(ctx, document).then(created => { if (created && variant === 'page') ctx.navigate(documentPath(data.workspace.urlKey, created)) })}/>
     {rename}
     <FlowSubmenu icon={<IssueActionGlyph label="New template from document" fallback={null}/>} label="New template from document">
       <FlowMenuItem icon={<Building2 size={14}/>} label="Workspace" onSelect={() => void createTemplateFromDocument(ctx, document, '')}/>

@@ -103,7 +103,7 @@ export function LanguageSelect({ className }: { className?: string }) {
 type TextState = { source: string; rendered: string }
 const textStates = new WeakMap<Text, TextState>()
 const attributeStates = new WeakMap<Element, Map<string, TextState>>()
-const attributes = ['aria-label', 'placeholder', 'title', 'data-placeholder'] as const
+const attributes = ['aria-label', 'placeholder', 'title', 'data-placeholder', 'aria-roledescription', 'aria-description'] as const
 
 function LegacyUiTranslator({ locale, dictionaryReady }: { locale: AppLocale; dictionaryReady: boolean }) {
   useLayoutEffect(() => {

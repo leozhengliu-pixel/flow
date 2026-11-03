@@ -26,10 +26,12 @@ export function translateToChinese(source: string): string {
   const leading = source.match(/^\s*/)?.[0] ?? ''
   const trailing = source.match(/\s*$/)?.[0] ?? ''
   const text = source.trim()
-  const exact = zhCN[text]
+  const exact = lookup(text)
   if (exact) return `${leading}${exact}${trailing}`
 
-  const patterns: Array<[RegExp, (...groups: string[]) => string]> = [
+  // A renderer returns null when it cannot translate the whole phrase: the next pattern is tried and, failing
+  // all of them, the English phrase stays whole instead of turning into a mix of both languages.
+  const patterns: Array<[RegExp, (...groups: string[]) => string | null]> = [
     [/^(\d+) issues?$/, count => `${count} 个事项`],
     // Typed date filter durations ("10 days", "2 weeks ago", "3 months from now").
     [/^(\d+) (day|week|month|year)s?( ago| from now)?$/, (count, unit, suffix) => { const amount = `${count} ${({ day: '天', week: '周', month: '个月', year: '年' } as Record<string, string>)[unit]}`; return suffix === ' ago' ? `${amount}前` : suffix ? `从现在起 ${amount}` : amount }],
@@ -93,7 +95,9 @@ export function translateToChinese(source: string): string {
     [/^(\d+) of (\d+) projects? completed\. Click to view projects\.$/, (completed, total) => `已完成 ${completed}/${total} 个项目。点击查看项目。`],
     [/^(\d+) projects? need an update\. Click to open updates\.$/, count => `${count} 个项目需要更新。点击打开更新。`],
     [/^(\d+)% project progress$/, count => `项目进度 ${count}%`],
-    [/^(\d+)% of$/, count => `已完成 ${count}%，共`],
+    // Sits in a 51px column in front of the count button, so it stays as short as "100% of".
+    [/^(\d+)% of$/, count => `${count}% 共`],
+    [/^(.+) (\d+)% of (\d+)$/, (label, percent, count) => `${label} 已完成 ${percent}%，共 ${count}`],
     [/^No milestone (\d+) issues?$/, count => `无里程碑，${count} 个事项`],
     [/^View (\d+) issues in (.+)$/, (count, milestone) => `查看 ${milestone} 中的 ${count} 个事项`],
     [/^Delete (\d+) selected projects?\?$/, count => `删除已选择的 ${count} 个项目吗？`],
@@ -107,15 +111,21 @@ export function translateToChinese(source: string): string {
     [/^Change labels\. (.+) selected$/, labels => `更改标签。已选择 ${labels}`],
     [/^Change labels\. (.+)$/, labels => `更改标签。${labels}`],
     [/^Change project\. Current project is (.+)$/, project => `更改项目。当前项目为 ${project}`],
-    [/^(No Priority|Urgent|High|Medium|Low) Priority$/, priority => `${translateNoun(priority)}优先级`],
+    [/^(No|No Priority|Urgent|High|Medium|Low) Priority$/, priorityPhrase],
     [/^Assign to\. Current assignee is (.+)$/, name => `指派负责人。当前负责人是 ${name}`],
     [/^Change priority\. No priority is selected$/, () => '更改优先级。当前未设置优先级'],
     [/^Change assignee\. (.+) is assigned$/, name => `更改负责人。当前负责人是 ${name}`],
     [/^Change assignee\. (.+) is delegated$/, name => `更改负责人。已委托给 ${name}`],
     [/^Change project target date$/, () => '更改项目目标日期'],
+    // Property pickers name their field and current value: "Change Status. Current value is Backlog".
+    [/^Change (.+)\. Current value is (.+)$/, (field, value) => withNoun(field, noun => `更改${noun}。当前值为${value === 'none' ? '无' : translateNoun(value)}`)],
+    [/^Change (.+)\. (.+) is selected$/, (field, value) => withNoun(field, noun => `更改${noun}。已选择${translateNoun(value)}`)],
+    [/^Change or add labels\. (.+) selected$/, labels => `更改或添加标签。已选择 ${labels}`],
+    [/^Change (.+)\. (.+) selected$/, (field, value) => withNoun(field, noun => `更改${noun}。已选择 ${value}`)],
+    [/^Open sub-issues of (.+)$/, identifier => `打开 ${identifier} 的子事项`],
     [/^Create (issue|project) view in (.+)$/, (resource, name) => `在 ${name} 中创建${resource === 'issue' ? '事项' : '项目'}视图`],
     [/^Save to (.+)$/, name => `保存到 ${name}`],
-    [/^Add to (.+)$/, resource => `添加到${translateNoun(resource)}`],
+    [/^Add to (.+)$/, resource => withNoun(resource, noun => `添加到${noun}`)],
     [/^Open (\d+) comments?$/, count => `打开 ${count} 条评论`],
     [/^Open (.+) menu$/, name => `打开 ${name} 菜单`],
     [/^Open (.+) issues$/, name => `打开 ${name} 的事项`],
@@ -136,21 +146,38 @@ export function translateToChinese(source: string): string {
     [/^Delete (.+)\?$/, name => `删除 ${name} 吗？`],
     [/^Leave (.+)\?$/, name => `离开 ${name}？`],
     [/^Retire (.+)\?$/, name => `停用 ${name}？`],
+    [/^(.+) retired$/, name => `${name} 已停用`],
+    // Retire team form summaries and results.
+    [/^(\d+) issues? will be canceled$/, count => `${count} 个事项将被取消`],
+    [/^(\d+) issues? will be moved to selected team$/, count => `${count} 个事项将被移至所选团队`],
+    [/^(\d+) issues? will be moved to (.+)$/, (count, team) => `${count} 个事项将被移至 ${team}`],
+    [/^(\d+) sub-teams? will be retired$/, count => `${count} 个子团队将被停用`],
+    [/^(\d+) direct sub-teams? will be removed from parent$/, count => `${count} 个直属子团队将从上级团队中移除`],
+    [/^(Canceled|Moved) (\d+) issues?, (\d+) failed$/, (verb, success, failed) => `${verb === 'Canceled' ? '已取消' : '已移动'} ${success} 个事项，${failed} 个失败`],
+    // Row and picker aria-labels built from data.
+    [/^Project actions for (.+)$/, name => `${name} 的项目操作`],
+    [/^(Group ordering|Ordering direction): (ascending|descending)$/, (field, direction) => `${field === 'Group ordering' ? '分组排序' : '排序方向'}：${direction === 'ascending' ? '升序' : '降序'}`],
+    [/^(Created|Updated|My activity|Joined) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2}), (\d{1,2}):(\d{2}):(\d{2}) (AM|PM)$/, (kind, month, day, hour, minute, second, meridiem) => `${({ Created: '创建于', Updated: '更新于', 'My activity': '我的活动：', Joined: '加入于' } as Record<string, string>)[kind]} ${shortMonth(month)}月${day}日 ${meridiem === 'AM' ? '上午' : '下午'}${hour}:${minute}:${second}`],
+    [/^Open team (.+)$/, name => `打开团队 ${name}`],
+    [/^(.+) issue views$/, name => `${name} 事项视图`],
+    [/^Sub-issue of (.+)$/, identifier => `子事项隶属于 ${identifier}`],
+    [/^Order by (.+), sorted (ascending|descending)$/, (field, direction) => withNoun(field, noun => `按${noun}排序，${direction === 'ascending' ? '升序' : '降序'}`)],
     [/^Restore (.+)\?$/, name => `恢复 ${name}？`],
     [/^Connected as (.+)$/, name => `连接身份：${name}`],
     [/^Next (.+)$/, value => `下次：${value}`],
     [/^(.+) cadence$/, () => '更改重复频率'],
     [/^This permanently deletes (.+) and all of its data\.$/, name => `这将永久删除 ${name} 及其所有数据。`],
-    [/^Open (.+)$/, name => `打开 ${name}`],
-    [/^Search (.+)$/, resource => `搜索${translateNoun(resource)}`],
-    [/^Search (.+)…$/, resource => `搜索${translateNoun(resource)}…`],
-    [/^New (.+)$/, resource => `新建${translateNoun(resource)}`],
-    [/^Create (.+)$/, resource => `创建${translateNoun(resource)}`],
-    [/^Create (.+)…$/, resource => `创建${translateNoun(resource)}…`],
-    [/^Add (.+)$/, resource => `添加${translateNoun(resource)}`],
-    [/^Remove (.+)$/, resource => `移除${translateNoun(resource)}`],
-    [/^Change (.+)$/, resource => `更改${translateNoun(resource)}`],
-    [/^No (.+)$/, resource => `没有${translateNoun(resource)}`],
+    // A keyboard hint after a phrase ("Open details (⌘I)") keeps the hint and translates the phrase.
+    [/^(.+?) (\([⌘⇧⌥⌃][^)]*\)|\((?:Ctrl|Alt|Shift|Cmd|Esc)[^)]*\))$/, (phrase, hint) => { const rendered = translateToChinese(phrase); return rendered === phrase ? null : `${rendered} ${hint}` }],
+    // Catch-all verb phrases: only a noun with its own entry is translated, anything else stays whole English.
+    [/^Open (.+)$/, name => withNoun(name, noun => `打开 ${noun}`)],
+    [/^Search (.+)$/, resource => withNoun(resource, noun => `搜索${noun}`)],
+    [/^New (.+)$/, resource => withNoun(resource, noun => `新建${noun}`)],
+    [/^Create (.+)$/, resource => withNoun(resource, noun => `创建${noun}`)],
+    [/^Add (.+)$/, resource => withNoun(resource, noun => `添加${noun}`)],
+    [/^Remove (.+)$/, resource => withNoun(resource, noun => `移除${noun}`)],
+    [/^Change (.+)$/, resource => withNoun(resource, noun => `更改${noun}`)],
+    [/^No (.+)$/, resource => withNoun(resource, noun => `没有${noun}`)],
     [/^Role for (.+)$/, name => `${name} 的角色`],
     [/^(.+) mapping action$/, name => `${name} 的映射操作`],
     [/^Select target for (.+)$/, name => `为 ${name} 选择目标`],
@@ -165,23 +192,48 @@ export function translateToChinese(source: string): string {
   ]
   for (const [pattern, render] of patterns) {
     const match = text.match(pattern)
-    if (match) return `${leading}${render(...match.slice(1))}${trailing}`
+    if (!match) continue
+    const rendered = render(...match.slice(1))
+    if (rendered != null) return `${leading}${rendered}${trailing}`
   }
   return source
 }
 
+/** Exact dictionary lookup that treats `...` and `…` as the same ending. */
+function lookup(text: string) {
+  if (Object.hasOwn(zhCN, text)) return zhCN[text]
+  const swapped = text.endsWith('...') ? `${text.slice(0, -3)}…` : text.endsWith('…') ? `${text.slice(0, -1)}...` : ''
+  return swapped && Object.hasOwn(zhCN, swapped) ? zhCN[swapped] : undefined
+}
+
+/** A noun phrase ("status", "Sub-issues", "labels…") with a zh-CN entry, or null. Issue identifiers stay as they are. */
+function knownNoun(value: string): string | null {
+  const ellipsis = /\s*(?:\.\.\.|…)$/.exec(value)
+  const base = ellipsis ? value.slice(0, ellipsis.index) : value
+  const normalized = base ? base[0].toUpperCase() + base.slice(1) : base
+  const found = [base, normalized, normalized.replace(/s$/, '')].map(lookup).find(Boolean) ?? (/^[A-Z][A-Z0-9]*-\d+$/.test(base) ? base : undefined)
+  return found == null ? null : `${found}${ellipsis ? '…' : ''}`
+}
+
+/** Renders a catch-all phrase around a known noun. An unknown noun gives null so the phrase is never half translated. */
+function withNoun(value: string, render: (noun: string) => string): string | null {
+  const noun = knownNoun(value)
+  return noun == null ? null : render(noun)
+}
+
 function translateNoun(value: string) {
   const normalized = value ? value[0].toUpperCase() + value.slice(1) : value
-  return zhCN[value] ?? zhCN[normalized] ?? zhCN[normalized.replace(/s$/, '')] ?? value
+  return lookup(value) ?? lookup(normalized) ?? lookup(normalized.replace(/s$/, '')) ?? value
 }
 
 function translateEmbedded(value: string) {
-  return value
-    .replace(/\bNo Priority\b/g, '无优先级')
-    .replace(/\bUrgent\b/g, '紧急')
-    .replace(/\bHigh\b/g, '高')
-    .replace(/\bMedium\b/g, '中')
-    .replace(/\bLow\b/g, '低')
+  // "Urgent Priority RVI-23 Title": only the leading priority label is translated, as one phrase; the title is data.
+  return value.replace(/^(No Priority|No|Urgent|High|Medium|Low) Priority\b/, (_, priority: string) => priorityPhrase(priority))
+}
+
+/** The label rows build as `${name} Priority`: "No Priority" arrives as "No" + "Priority". */
+function priorityPhrase(priority: string) {
+  return priority === 'No' || priority === 'No Priority' ? '无优先级' : `${translateNoun(priority)}优先级`
 }
 
 function translateDuration(value: string) {

@@ -20,6 +20,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Use the same first-weekday preference for Pulse groups and calendars, including Tuesday through Friday.
 
 - Restore the desktop issue-options due-date submenu width and hidden shortcut, and size search date filter menus to their content with date precisions on one row.
+- Keep Chinese phrases whole: verb catch-alls no longer leave an untranslated noun in a translated sentence, and picker labels, retire-team copy, row dates and status group names read in Chinese. A coverage test now fails when a `t()` key has no Chinese entry.
 
 - Match subscribed document rows to the shared menu highlight color and phone inset in pointer and keyboard states.
 

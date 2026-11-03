@@ -66,6 +66,7 @@ import { workspaceMembersZhCN } from './translations-workspace-members';
 import { pdfViewerZhCN } from './translations-pdf-viewer';
 import { createIssueZhCN } from './translations-create-issue';
 import { chatIntegrationsZhCN } from './translations-chat-integrations';
+import { coverageGapsZhCN } from './translations-coverage-gaps';
 
 export const zhCN: Record<string, string> = {
   "Assigned users": "已分配用户",
@@ -6147,3 +6148,5 @@ for (const [source, translation] of Object.entries(pdfViewerZhCN)) zhCN[source] 
 // New issue dialog (status checks, upload results, quick suggestions) fills gaps only.
 for (const [source, translation] of Object.entries(createIssueZhCN)) zhCN[source] ??= translation;
 for (const [source, translation] of Object.entries(chatIntegrationsZhCN)) zhCN[source] ??= translation;
+// Keys the t() coverage test found without an entry (fills gaps only).
+for (const [source, translation] of Object.entries(coverageGapsZhCN)) zhCN[source] ??= translation;
