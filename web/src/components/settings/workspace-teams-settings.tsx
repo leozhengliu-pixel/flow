@@ -134,7 +134,7 @@ export function WorkspaceTeamsSettings({
     URL.revokeObjectURL(url);
   };
   const count = (value: number) => (value ? value.toLocaleString() : "-");
-  const header = (key: TeamSort, label: string) => desktop ? <span role="columnheader" aria-sort={sort === key ? descending ? 'descending' : 'ascending' : 'none'}><button type="button" aria-label={`${t('Order by')} ${t(label)}`} onClick={() => { if (sort === key) setDescending(value => !value); else { setSort(key); setDescending(key === 'members' || key === 'issues'); } }}><span>{t(label)}</span>{sort === key && !descending ? <ArrowUp size={12}/> : <ArrowDown size={12}/>}</button></span> : <span>{t(label)}</span>;
+  const header = (key: TeamSort, label: string) => desktop ? <span role="columnheader" aria-sort={sort === key ? descending ? 'descending' : 'ascending' : 'none'}><button type="button" data-sorted={sort === key} aria-label={`${t('Order by')} ${t(label)}`} onClick={() => { if (sort === key) setDescending(value => !value); else { setSort(key); setDescending(key === 'members' || key === 'issues'); } }}><span>{t(label)}</span>{sort === key && descending ? <ArrowUp size={12}/> : <ArrowDown size={12}/>}</button></span> : <span>{t(label)}</span>;
   const actions = <>
     {!phone && admin && visibility !== "Recently deleted" && data.teams.length > 0 && (
       <button className="settings-action" type="button" onClick={exportCsv}>
@@ -185,7 +185,7 @@ export function WorkspaceTeamsSettings({
       <div className="settings-members-directory">
         <div className="settings-members-columns">
           {header('name', 'Name')}
-          {header('description', 'Description')}
+          <span>{t('Description')}</span>
           {header('visibility', visibility === 'Retired' ? 'Retired' : 'Visibility')}
           {header('members', 'Members')}
           {header('issues', 'Issues')}
