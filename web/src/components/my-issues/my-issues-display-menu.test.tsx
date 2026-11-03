@@ -3,13 +3,22 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { MyIssuesDisplayMenu } from './my-issues-display-menu'
-import { createIssueDisplayOptions } from './my-issues-display-defaults'
+import { createIssueDisplayOptions, issueDisplayEqual } from './my-issues-display-defaults'
 import { PAGED_GROUPINGS, PAGED_ORDERINGS } from '@/components/issue-explorer/issue-grouping'
 const layout=vi.hoisted(()=>({desktop:false}))
 vi.mock('@/hooks/use-desktop-layout',()=>({useDesktopLayout:()=>layout.desktop}))
 
 describe('display options: nested sub-issues', () => {
   beforeEach(()=>{layout.desktop=false})
+  it('compares saved defaults independently of property insertion order and absent optional values', () => {
+    const left = createIssueDisplayOptions({ properties: ['id', 'status'] })
+    expect(issueDisplayEqual(left, createIssueDisplayOptions({ properties: ['status', 'id'], showArchived: undefined }))).toBe(true)
+    expect(issueDisplayEqual(left, { ...left, ordering: 'priority' })).toBe(false)
+  })
+  it('omits completed issues for a scoped active view', () => {
+    render(<I18nProvider><MyIssuesDisplayMenu open hideCompletedIssues onOpenChange={vi.fn()} options={createIssueDisplayOptions()} onChange={vi.fn()}/></I18nProvider>)
+    expect(screen.queryByRole('combobox', { name: 'Completed issues' })).not.toBeInTheDocument()
+  })
   it('uses the desktop property inventory without trapping saved extra selections', async () => {
     layout.desktop=true
     const options=createIssueDisplayOptions({properties:['id','sla']})
@@ -27,17 +36,18 @@ describe('display options: nested sub-issues', () => {
   it('offers Nested sub-issues in list layout, also for server-backed lists, and turns sub-issues on with it', async () => {
     const onChange = vi.fn()
     const options = createIssueDisplayOptions({ showSubIssues: false })
-    render(<I18nProvider><MyIssuesDisplayMenu open onOpenChange={vi.fn()} options={options} onChange={onChange} availableGroupings={PAGED_GROUPINGS} availableOrderings={PAGED_ORDERINGS}/></I18nProvider>)
+    render(<I18nProvider><MyIssuesDisplayMenu open phoneIssueMenu onOpenChange={vi.fn()} options={options} onChange={onChange} availableGroupings={PAGED_GROUPINGS} availableOrderings={PAGED_ORDERINGS}/></I18nProvider>)
     expect(screen.getByRole('dialog', { name: 'Display options' })).toHaveAttribute('data-phone-popover')
-    const toggle = screen.getByRole('checkbox', { name: 'Nested sub-issues' })
-    expect(toggle).not.toBeChecked()
-    await userEvent.click(toggle)
+    const select = screen.getByRole('combobox', { name: 'Nested sub-issues' })
+    expect(select).toHaveTextContent('Hide')
+    await userEvent.click(select)
+    await userEvent.click(screen.getByRole('option', { name: 'Show matching' }))
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ nestedSubIssues: true, showSubIssues: true }))
   })
 
   it('has no nesting option in board layout', () => {
     render(<I18nProvider><MyIssuesDisplayMenu open onOpenChange={vi.fn()} options={createIssueDisplayOptions({ layout: 'board' })} onChange={vi.fn()}/></I18nProvider>)
-    expect(screen.queryByRole('checkbox', { name: 'Nested sub-issues' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Nested sub-issues' })).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Show empty columns' })).toBeInTheDocument()
   })
 
