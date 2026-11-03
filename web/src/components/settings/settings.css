@@ -80,7 +80,7 @@
 :root[data-theme="light"] .settings-back{box-sizing:border-box;width:max-content;min-height:28px;height:28px;display:inline-flex;align-items:center;margin:0 0 12px 4px;padding:0 12px 0 6px;border:0.5px solid transparent;border-radius:9999px;color:var(--theme-text-secondary);font:500 13px/28px inherit}
 :root[data-theme="light"] .settings-back:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
 :root[data-theme="light"] .settings-search input{border-color:var(--border);background:var(--theme-surface-2);color:var(--text);box-shadow:0 1px 2px #0000000a}
-:root[data-theme="light"] .settings-search>svg{color:var(--set-text)}
+:root[data-theme="light"] .settings-search>svg{color:var(--sidebar-nav-fg)}
 :root[data-theme="light"] .settings-search button{color:var(--faint)}
 :root[data-theme="light"] .settings-search:focus-within input{border-color:var(--border-strong);background:white}
 :root[data-theme="light"] .settings-sidebar nav h2{color:var(--muted)}
