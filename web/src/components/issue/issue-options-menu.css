@@ -81,7 +81,7 @@
     max-height: min(450px,80dvh);
     border-radius: 12px;
     background: var(--pk-surface) !important;
-    border: .5px solid var(--pk-border) !important;
+    border: .5px solid var(--pk-border);
     outline: none;
     box-shadow: var(--pk-card-shadow);
     overflow: hidden;
