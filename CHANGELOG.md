@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Balance agent starter descriptions and use the shared Loops glyph.
+
 - Restore the issue title baseline and dim the empty phone assignee chip.
 
 - Align the command input hint and use the matching issue and label command glyphs.

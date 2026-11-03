@@ -218,7 +218,7 @@
 .exampleCard:hover { background: var(--theme-surface-hover); }
 .exampleIcon { flex: none; margin-bottom: 32px; color: var(--theme-text-primary); }
 .exampleCard strong { font-size: 13px; font-weight: 500; line-height: 15.5px; }
-.exampleCard span { margin-top: 6px; color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; line-height: 18px; }
+.exampleCard span { margin-top: 6px; color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; line-height: 18px; text-wrap: balance; }
 /* The mark sits 208px above the composer and is fully faded 205.5px down (the reference app's mask runs over its 342.5px box),
    so it dissolves right where the composer starts. */
 .emptyLogo {
