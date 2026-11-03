@@ -1,5 +1,5 @@
 import type { WorkflowStateType } from '@/types/flow'
-import { normalizeHexColor } from './project-status-color'
+import { lightSurfaceStatusColor, normalizeHexColor } from './project-status-color'
 
 /** Default colour per workflow status type for a newly created status (reference app palette). */
 export const ISSUE_STATUS_COLORS: Record<WorkflowStateType, string> = {
@@ -17,9 +17,9 @@ const WORKFLOW_STROKE_OVERRIDES: Record<string, string> = {
   '#5e6ad2': 'lch(48% 59.31 288.43)',
 }
 
-export function workflowStatusStrokeColor(color: string, teamId?: string): string {
+export function workflowStatusStrokeColor(color: string, teamId?: string, theme: 'light' | 'dark' = 'dark'): string {
   // Team colors are saved choices, even when they match a legacy global default.
-  if (teamId) return color
   const hex = normalizeHexColor(color)
-  return hex ? WORKFLOW_STROKE_OVERRIDES[hex] ?? color : color
+  const stroke = !teamId && hex ? WORKFLOW_STROKE_OVERRIDES[hex] ?? color : color
+  return theme === 'light' ? lightSurfaceStatusColor(stroke) : stroke
 }

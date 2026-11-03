@@ -5,6 +5,7 @@ import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { workflowStatusStrokeColor } from '@/lib/status-default-colors'
 import { projectStatusStrokeColor } from '@/lib/project-status-color'
 import { getResolvedTheme } from '@/lib/theme'
+import { useResolvedTheme } from '@/hooks/use-resolved-theme'
 
 export type FlowIconProps = Omit<SVGProps<SVGSVGElement>, 'width' | 'height'> & { size?: number }
 
@@ -161,12 +162,13 @@ export function StatusIcon({state,size=15}:{state:Pick<WorkflowState,'id'|'name'
 
 /** Compact status glyph used by filter/value pickers. */
 export function WorkflowStatusGlyph({ state, size = 14, style }: { state: Pick<WorkflowState, 'id' | 'name' | 'color' | 'type' | 'teamId'>; size?: number; style?: CSSProperties }) {
+  const theme = useResolvedTheme()
   const id = state.id.toLowerCase()
   const name = state.name.toLowerCase()
   const triage = id.includes('triage') || name === 'triage'
   const duplicate = id.includes('duplicate') || name === 'duplicate'
   const stateType = triage ? 'triage' : duplicate ? 'duplicate' : state.type
-  const stroke = workflowStatusStrokeColor(state.color, state.teamId)
+  const stroke = workflowStatusStrokeColor(state.color, state.teamId, theme)
   const complete = stateType === 'completed' || stateType === 'canceled' || stateType === 'duplicate'
   const progress = stateType === 'started' ? (name.includes('review') ? .75 : .5) : complete ? 1 : 0
   // Motion only after the status changes, never on first paint (set before paint so the mark never flashes in).
