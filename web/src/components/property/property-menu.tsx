@@ -182,7 +182,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     command.onKeyDown(event)
   }
   const placeholder = searchPlaceholder ?? (kind === 'labels' ? 'Change or add labels…' : kind === 'project' ? 'Add to project…' : `Change ${label.toLowerCase()}…`)
-  const triggerButton = <button type="button" data-property={label.toLowerCase()} role={triggerRole === 'combobox' ? 'combobox' : undefined} className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open} data-state={open ? 'open' : 'closed'}>
+  const triggerButton = <button type="button" data-property={label.toLowerCase()} data-empty={selected.every(id => !id)} role={triggerRole === 'combobox' ? 'combobox' : undefined} className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open} data-state={open ? 'open' : 'closed'}>
         {trigger ?? (compact ? <>{icon ?? iconFor(label)}<span data-i18n-ignore={valueIsEntityName || undefined}>{value || label}</span></> : <><span>{icon ?? iconFor(label)}</span><span className="property-label">{label}</span><span className="property-value" data-i18n-ignore={valueIsEntityName || undefined}>{value || `Add ${label.toLowerCase()}`}</span></>)}
       </button>
   const popoverTrigger = <Popover.Trigger asChild>{triggerButton}</Popover.Trigger>
