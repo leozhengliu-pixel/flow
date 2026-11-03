@@ -32,6 +32,14 @@ function setup(selected = false, properties = new Set<'status' | 'id' | 'cycle' 
 describe('issue board cards', () => {
   beforeEach(() => localStorage.clear())
 
+  it('keeps empty columns in the hidden panel and reveals them on request', async () => {
+    render(<I18nProvider><IssueBoard groups={[{ id: 'started', label: 'In progress', issues: [row] }, { id: 'backlog', label: 'Backlog', issues: [] }]} showEmptyGroups={false} properties={new Set()} selectedIds={new Set()} onMove={vi.fn()} onOpenIssue={vi.fn()} onSelectIssue={vi.fn()}/></I18nProvider>)
+    const panel = screen.getByRole('region', { name: 'Hidden columns' })
+    await userEvent.click(within(panel).getByRole('button', { name: /Backlog\s*0/ }))
+    expect(screen.queryByRole('region', { name: 'Hidden columns' })).not.toBeInTheDocument()
+    expect(screen.getByRole('listitem', { name: 'Backlog' })).toBeInTheDocument()
+  })
+
   it('keeps the owning team on the board header status so a custom gray stays configured', () => {
     const state = { id: 'custom', teamId: 'team-1', name: 'Ready', type: 'unstarted' as const, color: '#6B6F76', position: 0 }
     const { container } = render(<I18nProvider><IssueBoardGroupHeader group={{ id: state.id, label: state.name, state, stateType: state.type, issues: [] }}/></I18nProvider>)

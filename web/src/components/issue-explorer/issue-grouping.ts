@@ -356,19 +356,20 @@ export function buildIssueGroups(rows: MyIssuesRowData[], display: MyIssuesDispl
   const grouping = display.grouping
   options = { ...options, labelGroupId: display.labelGroupId ?? options.labelGroupId }
   const primary = collect(projected, row => groupDescriptors(rootOf(row), grouping, options))
-  if (display.showEmptyGroups && grouping === 'labelGroup' && options.labelGroupId) {
+  const includeEmptyGroups = display.showEmptyGroups || display.layout === 'board'
+  if (includeEmptyGroups && grouping === 'labelGroup' && options.labelGroupId) {
     for (const label of options.data?.labels?.filter(item => item.groupId === options.labelGroupId && !item.archivedAt) ?? []) {
       const descriptor: GroupDescriptor = { id: `labelgroup-${label.id}`, label: label.name, rank: `0${label.name.toLocaleLowerCase()}`, createContext: { labelIds: [label.id] } }
       if (!primary.has(descriptor.id)) primary.set(descriptor.id, { descriptor, issues: [] })
     }
   }
-  if (display.showEmptyGroups && grouping === 'status') {
+  if (includeEmptyGroups && grouping === 'status') {
     for (const state of options.states ?? options.data?.states ?? []) {
       const descriptor = statusDescriptor(state, options)
       if (!primary.has(descriptor.id) && withinCompletedWindow({ state } as MyIssuesRowData, display.completedWindow === 'none' ? 'none' : 'all')) primary.set(descriptor.id, { descriptor, issues: [] })
     }
   }
-  if (display.showEmptyGroups && grouping === 'priority') for (const priority of [1, 2, 3, 4, 0] as const) {
+  if (includeEmptyGroups && grouping === 'priority') for (const priority of [1, 2, 3, 4, 0] as const) {
     const [descriptor] = groupDescriptors({ priority } as MyIssuesRowData, 'priority')
     if (!primary.has(descriptor.id)) primary.set(descriptor.id, { descriptor, issues: [] })
   }

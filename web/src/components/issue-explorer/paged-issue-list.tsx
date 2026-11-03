@@ -26,7 +26,7 @@ function fetchIssuePage(query: IssueQueryInput, signal: AbortSignal) {
   return listIssueRecords(query, signal).then(page => query.nested ? nestedIssuePage(page) : page)
 }
 
-export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGroupCollapsedChange, onCreateIssue, onOpenIssueRecord, onTotalChange, onLoadedIssuesChange, layout = 'list', onMoveIssueRecord, hiddenGroupIds = [], onHideGroup, onShowGroup, nestedSubIssues = false, ...rowProps }: Omit<MyIssuesListProps, 'groups' | 'onOpenIssue'> & {
+export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGroupCollapsedChange, onCreateIssue, onOpenIssueRecord, onTotalChange, onLoadedIssuesChange, layout = 'list', onMoveIssueRecord, hiddenGroupIds = [], emptyGroups = [], showEmptyGroups = true, onHideGroup, onShowGroup, nestedSubIssues = false, ...rowProps }: Omit<MyIssuesListProps, 'groups' | 'onOpenIssue'> & {
   data: BootstrapData
   query: IssueQueryInput
   onOpenIssueRecord: (issue: Issue, sequence?: string[]) => void
@@ -34,6 +34,8 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
   onLoadedIssuesChange?: (issues: Issue[]) => void
   layout?: 'list' | 'board'
   hiddenGroupIds?: string[]
+  emptyGroups?: MyIssuesGroupData[]
+  showEmptyGroups?: boolean
   onHideGroup?: (id: string) => void
   onShowGroup?: (id: string) => void
   onMoveIssueRecord?: (issue: Issue, input: IssueUpdateInput) => Promise<unknown>
@@ -72,6 +74,9 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
     })
   }, [cachedState, setGroups])
   const [dragging, setDragging] = useState<{ issue: Issue; group: string }>()
+  const [revealed, setRevealed] = useState({ setting: showEmptyGroups, ids: [] as string[] })
+  const revealedIds = revealed.setting === showEmptyGroups ? revealed.ids : []
+  if (revealed.setting !== showEmptyGroups) setRevealed({ setting: showEmptyGroups, ids: [] })
   // Bumped to forget the remembered previous result (see LastContent).
   const [lastContentEpoch, setLastContentEpoch] = useState(0)
   const active = useRef<{ signature: string; abort: AbortController; pending: Set<string>; ready: boolean } | undefined>(undefined)
@@ -318,9 +323,12 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
   for (const count of counts) { offsets.push(offset); offset += count }
   const renderList = (): ReactNode => {
     if (error && !cache.retainedEntities) return <div className={styles.state} role="alert"><p>{error}</p><button onClick={() => { active.current?.abort.abort(); setRetry(value => value + 1) }}>Retry</button></div>
-    if (rowProps.emptyState && groups.every(group => !group.count)) return rowProps.emptyState
-    if (!groups.length) return <div className={styles.state}>No issues</div>
+    const emptyBoard = layout === 'board' && emptyGroups.length > 0
+    if (rowProps.emptyState && groups.every(group => !group.count) && !emptyBoard) return rowProps.emptyState
+    if (!groups.length && !emptyBoard) return <div className={styles.state}>No issues</div>
     if (layout === 'board') {
+      const boardGroups = [...groups, ...emptyGroups.filter(group => !groups.some(item => item.value === group.id)).map(group => ({ value: group.id, count: 0, loaded: 0, hasMore: false }))]
+      const isHidden = (group: Group) => hiddenGroupIds.includes(group.value) || (!showEmptyGroups && !group.count && !revealedIds.includes(group.value))
       const drop = (group: Group, before?: Issue) => {
         if (!dragging || !onMoveIssueRecord) return
         const property = query.groupBy === 'status' ? 'stateId' : query.groupBy === 'priority' ? 'priority' : query.groupBy === 'assignee' ? 'assigneeId' : query.groupBy === 'project' ? 'projectId' : query.groupBy === 'cycle' ? 'cycleId' : undefined
@@ -338,7 +346,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
         void onMoveIssueRecord(issue, input).then(() => setRetry(value => value + 1)).catch(error => setError(String(error.message ?? error)))
       }
       return <div className={boardStyles.board} role="list" aria-label="Issue board">
-        {groups.filter(group => !hiddenGroupIds.includes(group.value)).map(group => <VisibleIssueColumn key={group.value} label={descriptor(group).label}>
+        {boardGroups.filter(group => !isHidden(group)).map(group => <VisibleIssueColumn key={group.value} label={descriptor(group).label}>
           <IssueBoardGroupHeader group={descriptor(group)} estimateSum={boardPoints?.[group.value]} onCreateIssue={onCreateIssue} onHideGroup={onHideGroup} onSelectIssue={rowProps.onSelectIssue}/>
           <div style={{ flex: 1, minHeight: 0 }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); drop(group) }}>
             <Virtuoso style={{ height: '100%' }} totalCount={group.loaded + (group.hasMore ? 1 : 0)} defaultItemHeight={120} context={revision} increaseViewportBy={240} itemContent={index => {
@@ -349,7 +357,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
             }}/>
           </div>
         </VisibleIssueColumn>)}
-        <HiddenBoardColumns groups={groups.filter(group => hiddenGroupIds.includes(group.value)).map(descriptor)} onShowGroup={onShowGroup}/>
+        <HiddenBoardColumns groups={boardGroups.filter(isHidden).map(descriptor)} onShowGroup={id => { setRevealed(current => ({ setting: showEmptyGroups, ids: [...current.ids, id] })); onShowGroup?.(id) }}/>
       </div>
     }
     return <GroupedVirtuoso className={styles.virtualList} role="list" aria-label="Issues" style={listStyle} groupCounts={counts} context={revision} defaultItemHeight={44} increaseViewportBy={{ top: 176, bottom: 264 }}
