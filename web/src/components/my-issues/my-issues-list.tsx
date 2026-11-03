@@ -49,6 +49,7 @@ import { nestedLinesByIssue } from '@/components/issue-explorer/issue-grouping'
 import { CODING_STATE_LABELS } from '@/components/coding-sessions/coding-session-model'
 import { useOptionalTranslate } from '@/i18n/i18n'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { MenuFilter } from '@/components/ui/menu-filter'
 import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { IssueGroupContextMenu, type IssueGroupMenuActions } from './issue-group-context-menu'
 
@@ -501,6 +502,7 @@ export function IssueContextMenu({ editable, issue, options, onPropertyChange, o
   const rowActions = useIssueRowActions()
   const statusOptions = useTeamStatusOptions(options.status, issue.teamId)
   return <ContextMenu.Content data-flow-motion="floating" data-phone-menu={phone ? '' : undefined} className={styles.contextMenu} collisionPadding={10}>
+    {phone && <MenuFilter/>}
     <div className={styles.contextMenuList}>
     {editable&&<><ContextPropertySub label="Status" shortcut="S" options={statusOptions} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
     <ContextPropertySub label="Priority" shortcut="P" options={options.priority} selectedIds={[String(issue.priority)]} onSelect={id => onPropertyChange('priority', id)}/>

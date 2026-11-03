@@ -1067,6 +1067,7 @@
   text-align: left;
 }
 .skillsMenu [role="option"] > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skillsMenu [role="option"]:is(:hover,:focus-visible,[aria-selected="true"]) { color: var(--pk-text-strong); }
 .skillsMenu [role="option"] svg {
   width: 14px;
   height: 14px;
@@ -1078,7 +1079,7 @@
   .skillsMenuHeader { display: none; }
   .skillsMenu > .menuSearch { position: fixed; left: -99999px; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
   .skillsMenu [role="listbox"] { padding: 6px 0; }
-  .skillsMenu [role="option"] { height: 32px; padding: 0 18px 0 14px; color: var(--pk-text); }
+  .skillsMenu [role="option"] { height: 32px; padding: 0 18px 0 14px; }
   .editorScroll > div > .editor { min-height: 44px; }
   .emptyComposerSlot > .composer .skillsButton { padding-right: 6px; line-height: normal; }
 }
@@ -1472,8 +1473,7 @@
 }
 :global(:root[data-theme="light"]) .menuSearch { color: var(--theme-text-secondary); }
 :global(:root[data-theme="light"]) .menuSearch input { color: var(--theme-text-primary); }
-:global(:root[data-theme="light"]) .historyMenu [role="option"],
-:global(:root[data-theme="light"]) .skillsMenu [role="option"] {
+:global(:root[data-theme="light"]) .historyMenu [role="option"] {
   height: 32px;
   padding: 0 18px 0 14px;
   color: var(--theme-text-primary);
