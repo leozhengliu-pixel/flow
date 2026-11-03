@@ -698,7 +698,7 @@ html:root .settings-app .settings-main .settings-workspace-members > .settings-m
   color: var(--settings-members-control-text);
   font-weight: 400;
 }
-html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label input::placeholder { color: var(--theme-text-tertiary); }
+html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label input::placeholder { color: var(--set-group-desc); }
 html:root .settings-app .settings-main .settings-workspace-members .settings-members-filter {
   box-sizing: border-box;
   height: 32px;
