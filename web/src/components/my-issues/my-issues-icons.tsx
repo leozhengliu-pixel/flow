@@ -16,3 +16,7 @@ export function SearchIcon(props: IconProps) {
 export function TabsOverflowIcon(props: IconProps) {
   return <svg width="13" height="9" viewBox="0 0 13 9" aria-hidden="true" fill="currentColor" {...props}><path d="M10.1611 0.314094L5.99463 4.48054L1.82819 0.314094C1.4094 -0.104698 0.732886 -0.104698 0.314094 0.314094C-0.104698 0.732886 -0.104698 1.4094 0.314094 1.82819L5.24295 6.75705C5.66175 7.17584 6.33825 7.17584 6.75705 6.75705L11.6859 1.82819C12.1047 1.4094 12.1047 0.732886 11.6859 0.314094C11.2671 -0.0939598 10.5799 -0.104698 10.1611 0.314094Z"/></svg>
 }
+
+export function CompactSelectChevron(props: IconProps) {
+  return <svg width="9" height="5" viewBox="0 0 9 5" aria-hidden="true" fill="currentColor" {...props}><path d="M1.915.557a.667.667 0 0 0-.943.943l2.862 2.862a.942.942 0 0 0 1.333 0L8.028 1.5a.667.667 0 0 0-.943-.943L4.5 3.14 1.915.557Z"/></svg>
+}

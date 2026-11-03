@@ -21,3 +21,11 @@ export function createIssueDisplayOptions(overrides: Partial<Omit<MyIssuesDispla
 }
 
 export const defaultMyIssuesDisplayOptions = createIssueDisplayOptions()
+
+export function issueDisplayEqual(left: MyIssuesDisplayOptions, right: MyIssuesDisplayOptions) {
+  const snapshot = (value: MyIssuesDisplayOptions) => Object.fromEntries(Object.entries(value)
+    .filter(([, item]) => item !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => [key, item instanceof Set || Array.isArray(item) ? [...item].sort() : item]))
+  return JSON.stringify(snapshot(left)) === JSON.stringify(snapshot(right))
+}

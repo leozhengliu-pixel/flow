@@ -4,8 +4,9 @@
 .popover{width:301px;height:min(531px,calc(100vh - 103px));padding:8px 0 0;overflow:auto;border-radius:12px;scrollbar-width:none;animation:popoverIn 120ms ease-out}.popover::-webkit-scrollbar{display:none}
 .layoutTabs{height:32px;margin:6px 16px 8px;display:flex;align-items:center;gap:6px;border-radius:5px}.layoutTabs button{height:28px;flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 8px;border:.5px solid transparent;border-radius:9999px;background:var(--control-muted-bg);color:var(--theme-text-secondary);font:500 12px/20px inherit;cursor:pointer}.layoutTabs button[aria-selected=true]{background:var(--theme-surface-active);box-shadow:0 1px 2px var(--shadow-color-deep);color:var(--bright)}.layoutTabs button:disabled{opacity:1;cursor:not-allowed}
 .desktopModeIcon,.desktopSortIcon{display:none}.phoneModeIcon,.phoneSortIcon{display:block;width:14px;height:14px;flex:0 0 14px;fill:currentColor}.desktopSelectChevron{display:block}.phoneSelectChevron{display:none}
+.popover .nestedSelectRow{display:none}.popover[data-issue-display-menu="true"] .nestedSelectRow{display:grid}
 .section{padding:8px 16px}.section+.section{border-top:.5px solid var(--theme-border)}
-.groupingControl,.selectField,.nestedSelectRow{height:32px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}.nestedSelectRow{display:none}.rowLabel,.selectField>span,.sectionLabel{color:var(--theme-text-secondary);font-size:12px;font-weight:500;white-space:nowrap}.groupingActions{display:flex;align-items:center;justify-content:flex-end;gap:4px}.orderButton{width:24px;height:24px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--theme-text-primary);cursor:pointer}.orderButton:hover{background:var(--theme-border)}.orderButton[data-order=desc] svg{transform:scaleY(-1)}
+.groupingControl,.selectField,.nestedSelectRow{height:32px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}.rowLabel,.selectField>span,.sectionLabel{color:var(--theme-text-secondary);font-size:12px;font-weight:500;white-space:nowrap}.groupingActions{display:flex;align-items:center;justify-content:flex-end;gap:4px}.orderButton{width:24px;height:24px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--theme-text-primary);cursor:pointer}.orderButton:hover{background:var(--theme-border)}.orderButton[data-order=desc] svg{transform:scaleY(-1)}
 .selectField>.selectTrigger{justify-self:end}.selectTrigger{width:auto;min-width:99px;height:24px;display:flex;align-items:center;justify-content:space-between;gap:5px;padding:1px 8px;border:.5px solid transparent;border-radius:8px;background:var(--control-muted-hover);color:var(--bright);font:400 12px/20px inherit;text-align:left;cursor:pointer}.selectTrigger:hover:not(:disabled),.selectTrigger[data-state=open]{background:var(--control-muted-active)}.selectTrigger:disabled{background:var(--control-muted-bg);color:var(--theme-text-tertiary);cursor:not-allowed}.selectTrigger svg{color:var(--issue-muted)}
 .selectMenu{min-width:118px;max-height:min(360px,calc(100vh - 20px));overflow:hidden;border-radius:12px;scrollbar-width:none;animation:menuIn 100ms ease-out}.selectViewport{padding:4px 0}.selectItem{position:relative;height:24px;display:flex;align-items:center;gap:14px;justify-content:space-between;padding:0 8px;outline:0;color:var(--theme-text-primary);font-size:12px;white-space:nowrap;cursor:default}.selectItem[data-highlighted],.selectItem[data-state=checked]{background:var(--theme-surface-hover)}.selectIndicator{display:flex;margin-left:auto;color:var(--theme-text-primary)}
 .switchRow{height:32px;display:flex;align-items:center;justify-content:space-between;color:var(--theme-text-secondary);font-size:12px;font-weight:500}
@@ -45,7 +46,9 @@
 .section>.sectionLabel:first-child{color:var(--pk-text)}
 .layoutTabs button{position:relative;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-muted);font-size:12px;font-weight:500}
 .layoutTabs button[aria-selected=true]{background:var(--pk-control-selected);box-shadow:var(--pk-control-ring-selected);color:var(--pk-text-strong)}
-.selectTrigger{padding:1px 18px 1px 8px;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-text);font-size:12px;font-weight:400}
+.selectTrigger{position:relative;padding:1px 18px 1px 8px;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-text);font-size:12px;font-weight:400}
+.selectTrigger>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.selectTrigger>span:last-child{position:absolute;right:6px;top:50%;transform:translateY(-50%)}
 .selectTrigger:hover:not(:disabled),.selectTrigger[data-state=open]{background:var(--pk-control-selected)}
 .propertyGrid button{background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-muted);font-size:12px;font-weight:500}
 .propertyGrid button[data-active=false]:hover:not(:disabled){background:var(--control-chip-hover-bg);color:var(--pk-text)}
@@ -246,14 +249,8 @@
     background: var(--toggle-compact-on);
   }
   .popover[data-issue-display-menu="true"] .nestedSelectRow {
-    display: none;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .popover[data-issue-display-menu="true"] section[aria-label="List options"] > .switchRow:first-of-type {
-    display: none;
-  }
-  .popover[data-issue-display-menu="true"] section[aria-label="List options"] > .nestedSelectRow {
     display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
   .popover[data-issue-display-menu="true"] .sectionLabel {
     margin: 8px 0 4px;
@@ -312,7 +309,7 @@
   .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] { margin-top: 1px; }
   .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="Grouping options"] { padding-bottom: 4px; }
   .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] > .sectionLabel:first-child { margin-bottom: 2px; }
-  .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) section[aria-label="List options"] > .nestedSelectRow + .switchRow { margin-top: 4px; }
+  .popover[data-issue-display-menu="true"]:not([data-my-issues-display-menu="true"]) .nestedSelectRow + .switchRow { margin-top: 4px; }
   .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] { margin-top: 1px; }
   .popover[data-issue-display-menu="true"] .footer { position: static; }
   .popover[data-my-issues-display-menu="true"] section[aria-label="List options"] > .sectionLabel:first-child { margin-bottom: 2px; }

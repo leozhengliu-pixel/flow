@@ -1,7 +1,7 @@
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
 import { ArrowDownUp, Check, ChevronDown, Columns2, Eye, EyeOff, LayoutGrid, List } from 'lucide-react'
-import { DisplayIcon, TabsOverflowIcon } from './my-issues-icons'
+import { CompactSelectChevron, DisplayIcon } from './my-issues-icons'
 import { useI18n } from '@/i18n/i18n'
 import { useRef, type ReactNode } from 'react'
 import { Toggle } from '@/components/ui/toggle'
@@ -37,6 +37,7 @@ export interface MyIssuesDisplayMenuProps {
   /** The issue explorer uses the compact phone parity sheet. */
   phoneIssueMenu?: boolean
   desktopIssueMenu?: boolean
+  hideCompletedIssues?: boolean
   /** My issues has a shorter phone sheet than team issue explorer. */
   myIssuesPhoneMenu?: boolean
   /** Flow-only actions that live at the bottom of the phone sheet. */
@@ -69,9 +70,9 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'creator', label: 'Creator' },
   { value: 'priority', label: 'Priority' },
   { value: 'project', label: 'Project' },
-  { value: 'cycle', label: 'Cycle' },
   { value: 'dueDate', label: 'Due date' },
   { value: 'milestone', label: 'Milestone' },
+  { value: 'cycle', label: 'Cycle' },
   { value: 'sla', label: 'SLA' },
   { value: 'estimate', label: 'Estimate' },
   { value: 'release', label: 'Release' },
@@ -86,7 +87,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'pullRequests', label: 'Pull requests' },
 ]
 
-export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false, desktopIssueMenu = false, myIssuesPhoneMenu = false, phoneExtraActions, extraActions }: MyIssuesDisplayMenuProps) {
+export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, hideCompletedIssues = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false, desktopIssueMenu = false, myIssuesPhoneMenu = false, phoneExtraActions, extraActions }: MyIssuesDisplayMenuProps) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
   const desktop = useDesktopLayout()
@@ -106,6 +107,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
   const visibleOrderingOptions = availableOrderings ? orderingOptions.filter(option => availableOrderings.includes(option.value)) : orderingOptions
   const direction = options.orderDirection ?? defaultOrderDirection(options.ordering)
   const GroupsSection = desktopIssueMenu ? 'details' : 'section'
+  const issueNesting = desktopIssueMenu || phoneIssueMenu
 
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>
@@ -160,7 +162,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
         {extraActions && <section className={styles.section} aria-label={t('Additional options')}>{extraActions}</section>}
 
         <section className={styles.section} aria-label={t('Visible issues')}>
-          <SelectField label="Completed issues" value={options.completedWindow} options={completedOptions} onChange={completedWindow => change({ completedWindow })} />
+          {!hideCompletedIssues && <SelectField label="Completed issues" value={options.completedWindow} options={completedOptions} onChange={completedWindow => change({ completedWindow })} />}
           {toggles.includes('triage') && <SwitchRow label="Show sub-issues" checked={options.showSubIssues} onChange={showSubIssues => change({ showSubIssues, nestedSubIssues: showSubIssues ? options.nestedSubIssues : false })} />}
           {toggles.includes('triage') && <SwitchRow label="Show triage issues" checked={options.showTriageIssues !== false} onChange={showTriageIssues => change({ showTriageIssues })} />}
           {toggles.includes('archived') && <SwitchRow label="Show archived issues" checked={Boolean(options.showArchived)} onChange={showArchived => change({ showArchived })} />}
@@ -172,14 +174,14 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
           <span className={styles.sectionLabel}>{t(options.layout === 'board' ? 'Board options' : 'List options')}</span>
           {options.layout === 'board' && <SwitchRow label="Show empty columns" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
           {options.layout === 'list' && <>
-            <SwitchRow label="Nested sub-issues" checked={options.nestedSubIssues} onChange={nestedSubIssues => change({ nestedSubIssues, showSubIssues: nestedSubIssues || options.showSubIssues })} />
+            {!issueNesting && <SwitchRow label="Nested sub-issues" checked={options.nestedSubIssues} onChange={nestedSubIssues => change({ nestedSubIssues, showSubIssues: nestedSubIssues || options.showSubIssues })} />}
             <div className={styles.nestedSelectRow}>
               <span className={styles.rowLabel}>{t('Nested sub-issues')}</span>
               <SelectControl
                 ariaLabel="Nested sub-issues"
-                value={options.showSubIssues ? (options.nestedSubIssues ? 'all' : 'matching') : 'none'}
-                options={[{ value: 'matching', label: 'Show matching' }, { value: 'all', label: 'Show all' }, { value: 'none', label: 'Hide all' }]}
-                onChange={value => change({ nestedSubIssues: value === 'all', showSubIssues: value !== 'none' })}
+                value={issueNesting ? options.nestedSubIssues ? 'matching' : 'none' : options.showSubIssues ? options.nestedSubIssues ? 'all' : 'matching' : 'none'}
+                options={issueNesting ? [{ value: 'matching', label: 'Show matching' }, { value: 'none', label: 'Hide' }] : [{ value: 'matching', label: 'Show matching' }, { value: 'all', label: 'Show all' }, { value: 'none', label: 'Hide all' }]}
+                onChange={value => change(issueNesting ? { nestedSubIssues: value === 'matching', showSubIssues: value === 'matching' || options.showSubIssues } : { nestedSubIssues: value === 'all', showSubIssues: value !== 'none' })}
               />
             </div>
           </>}
@@ -258,7 +260,7 @@ function SelectControl<T extends string>({ ariaLabel, disabled = false, onChange
   const { t } = useI18n()
   return <Select.Root disabled={disabled} value={value} onValueChange={onChange}>
     <Select.Trigger className={styles.selectTrigger} aria-label={t(ariaLabel)}>
-      <Select.Value /><Select.Icon><span className={styles.desktopSelectChevron}><TabsOverflowIcon aria-hidden="true" /></span><span className={styles.phoneSelectChevron}><ChevronDown size={12} aria-hidden="true" /></span></Select.Icon>
+      <Select.Value /><Select.Icon><span className={styles.desktopSelectChevron}><CompactSelectChevron /></span><span className={styles.phoneSelectChevron}><ChevronDown size={12} aria-hidden="true" /></span></Select.Icon>
     </Select.Trigger>
     <Select.Portal>
       <Select.Content data-flow-motion="floating" className={styles.selectMenu} position="popper" side="bottom" align="end" sideOffset={5} collisionPadding={10}>

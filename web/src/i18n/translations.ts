@@ -675,6 +675,7 @@ export const zhCN: Record<string, string> = {
   "Completed issues": "已完成事项",
   "Show sub-issues": "显示子事项",
   "Nested sub-issues": "嵌套子事项",
+  "Show matching": "显示匹配项",
   "Cycles are time-based intervals to help your team focus on a predefined set of work.":
     "周期是基于时间的区间，帮助团队专注于预先定义的工作范围。",
   "Track capacity, scope, and progress as issues are added, and as the cycle progresses.":

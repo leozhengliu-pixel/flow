@@ -12,7 +12,7 @@ import { MyIssuesBulkActionBar } from '@/components/my-issues/my-issues-bulk-act
 import { MyIssuesDetailsPane, type MyIssuesDetailsSummary, type MyIssuesSummaryItem, type MyIssuesSummaryTab } from '@/components/my-issues/my-issues-details-pane'
 import { MyIssuesFilterBar, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-bar'
 import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from '@/components/my-issues/my-issues-list'
-import { defaultMyIssuesDisplayOptions } from '@/components/my-issues/my-issues-display-defaults'
+import { defaultMyIssuesDisplayOptions, issueDisplayEqual } from '@/components/my-issues/my-issues-display-defaults'
 import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { useMyIssuesSelection } from '@/components/my-issues/use-my-issues-state'
 import { issueFiltersToQueryAst, toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
@@ -319,17 +319,20 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   } : undefined
   const menuGroups = groupSummaries(groups)
   const listGroups = groups.filter(group => !display.hiddenGroupIds.includes(group.id) && !display.hiddenGroupIds.includes(group.parentGroupId ?? ''))
+  const viewDefault = savedView ? displayFromSavedView(savedView, savedView.view) : withTeamDefault({ ...defaultDisplay(view, defaultDisplayOverrides), ...(boardRoute ? { layout: 'board' as const, showEmptyGroups: true } : {}) }, teamDefault)
+  const displayModified = !issueDisplayEqual(display, viewDefault)
   const displayMenuProps = {
     phoneIssueMenu: true,
     desktopIssueMenu: desktop,
+    hideCompletedIssues: view !== 'all',
     groups: menuGroups,
     labelGroupOptions: labelGroups(data.labels),
     availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
     availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
-    toggles: displayToggles(scope.kind === 'team' ? scope.team.id : undefined, data, desktop),
-    onReset: resetDisplay,
+    toggles: displayToggles(scope.kind === 'team' ? scope.team.id : undefined, data),
+    onReset: displayModified ? resetDisplay : undefined,
     resetLabel: desktop ? 'Reset' : savedView ? 'Reset to view default' : teamDefault ? 'Reset to team default' : 'Reset to default',
-    onSaveDefault: saveDisplayAsViewDefault,
+    onSaveDefault: displayModified ? saveDisplayAsViewDefault : undefined,
     saveDefaultLabel: desktop && scope.kind === 'team' && !savedView ? 'Set default for everyone' : savedView ? 'Save as default for view' : 'Save as team default',
   }
   // ⌘K: the reference app's customer display commands (Grouping › Customer, View ordering › By customer count…).
@@ -873,11 +876,11 @@ function withTeamDefault(display: MyIssuesDisplayOptions, teamDefault?: Record<s
 function displaySnapshot(display: MyIssuesDisplayOptions): Record<string, unknown> { return { ...display, properties: [...display.properties] } }
 
 /** Display toggles the reference offers: triage when a team in scope uses triage, sub-teams when the team has any. */
-function displayToggles(teamId: string | undefined, data: BootstrapData, desktop = false): ('triage' | 'subTeam')[] {
+function displayToggles(teamId: string | undefined, data: BootstrapData): ('triage' | 'subTeam')[] {
   const settings = data.teamSettings ?? {}
   const teamIds = teamId ? [teamId] : data.teams.map(team => team.id)
   const toggles: ('triage' | 'subTeam')[] = []
   if (teamIds.some(id => settings[id]?.triageEnabled)) toggles.push('triage')
-  if (teamId && (desktop || Object.values(settings).some(item => item?.parentTeamId === teamId))) toggles.push('subTeam')
+  if (teamId && Object.values(settings).some(item => item?.parentTeamId === teamId)) toggles.push('subTeam')
   return toggles
 }
