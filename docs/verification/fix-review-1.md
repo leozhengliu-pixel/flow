@@ -93,7 +93,7 @@ Final continuation checks also passed: full `npm run lint` (exit 0), targeted Vi
 
 The new association field is on the internal review API/domain JSON; the public generated contract does not expose it. No new route or schema migration is required. Persistence tests use SQLite and local fake providers; no real model request or external repository mutation was needed. MySQL/Postgres were not separately exercised.
 
-Branch CI is recorded after push without waiting for completion. The report's final delivery includes the pushed SHA and the observed run IDs/statuses. Main is unchanged by this task.
+The branch was pushed as `review/fix-review-1` at `1782a07a` (the full SHA is available from the branch tip). No GitHub Actions run or pull request existed for this review branch at push time (`gh run list --branch review/fix-review-1` returned no runs), so there is no branch CI run ID or result to report; the local checks above are the available validation. Main is unchanged by this task.
 
 ## Limits and Cleanup
 
