@@ -76,12 +76,13 @@ test('desktop integrations separate installed services, discover, search, and re
   await expect(page).toHaveURL(new RegExp(`/settings/integrations/feishu$`))
 })
 
-test('teams sort by every column, expose member links, and show live overview values', async ({ page, request, workspaceKey }) => {
+test('teams sort by supported columns, expose member links, and show live overview values', async ({ page, request, workspaceKey }) => {
   const response = await request.post(`/api/workspaces/${workspaceKey}/teams`, { data: { name: '[audit] Zulu', key: 'ZUL' } })
   expect(response.status()).toBe(201)
   await page.goto(`/${workspaceKey}/settings/teams`)
   await expect(page.getByRole('button', { name: 'Create new team', exact: true })).toBeVisible()
-  for (const column of ['Description', 'Visibility', 'Members', 'Issues', 'Created', 'Name']) {
+  await expect(page.getByRole('button', { name: 'Order by Description', exact: true })).toHaveCount(0)
+  for (const column of ['Visibility', 'Members', 'Issues', 'Created', 'Name']) {
     const button = page.getByRole('button', { name: `Order by ${column}`, exact: true })
     await button.click()
     const before = await button.locator('..').getAttribute('aria-sort')
