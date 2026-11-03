@@ -21,6 +21,7 @@ import { readSearchState, writeSearchState, searchFilterAST, type SearchTab, typ
 import { SearchMenus, SearchFilterChips } from './search-menus'
 
 import { markdownPlainText } from '@/lib/markdown-plain-text'
+import { fiscalMonth, useWorkspacePreferences } from '@/lib/runtime-preferences'
 import './workspace-search-page.css'
 import phoneSearchArtwork from '@/assets/search-empty-mobile.svg?raw'
 
@@ -38,6 +39,8 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
   users?: User[]
 }) {
   const {t,locale}=useI18n()
+  useWorkspacePreferences()
+  const firstFiscalMonth=fiscalMonth()
   const phone = usePhoneLayout()
   const [params,setParams]=useSearchParams()
   const state=useMemo(()=>readSearchState(params),[params])
@@ -59,7 +62,7 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
   const [moreError,setMoreError]=useState<string>()
   const moreController=useRef<AbortController | null>(null)
   const resultListRef=useRef<HTMLDivElement>(null)
-  const options=useMemo(()=>({sort:state.order,includeArchived:state.includeArchived,filter:searchFilterAST(state),limit:40}),[state])
+  const options=useMemo(()=>({sort:state.order,includeArchived:state.includeArchived,filter:searchFilterAST(state,firstFiscalMonth),limit:40}),[state,firstFiscalMonth])
   const requestKey=JSON.stringify([normalizedQuery,tab,options])
   const currentResults=completedRequest===requestKey&&!loading&&!error
   const inputPending=draft!==query

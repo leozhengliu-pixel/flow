@@ -8,6 +8,7 @@ import { readSearchState, searchFilterAST, writeSearchState } from './search-sta
 import { semanticSearch, searchWorkspace } from '@/lib/api'
 import type { SearchResult, SemanticSearchResponse } from '@/types/flow'
 import { viewer } from '@/test/fixtures'
+import { setWorkspaceRuntimePreferences } from '@/lib/runtime-preferences'
 
 vi.mock('@/lib/api',()=>({searchWorkspace:vi.fn(),semanticSearch:vi.fn(),clearSearchHistory:vi.fn()}))
 const result:SearchResult={id:'issue-1',type:'issue',identifier:'FLOW-1',title:'General',score:1,state:{id:'state_review',name:'Review',type:'started',color:'#ffcc00',position:1}}
@@ -20,6 +21,20 @@ function setup(url='/test/search',onOpenResult=vi.fn()) {
 beforeEach(()=>{vi.clearAllMocks();localStorage.clear();vi.mocked(searchWorkspace).mockResolvedValue({results:[result],history:[],recent:[]});vi.mocked(semanticSearch).mockResolvedValue(semantic([result]))})
 
 describe('workspace search',()=>{
+  it('rebuilds shared fiscal year and half-year requests when workspace settings arrive',async()=>{
+    setWorkspaceRuntimePreferences({fiscalMonth:'January'})
+    const filters=[{id:'year',field:'createdAt',operator:'on',value:'2026-02-01',granularity:'year'},{id:'half',field:'updatedAt',operator:'on',value:'2026-02-01',granularity:'half-year'}]
+    setup(`/test/search?q=flow&filters=${encodeURIComponent(JSON.stringify(filters))}`)
+    await screen.findByRole('link')
+    await act(async()=>setWorkspaceRuntimePreferences({fiscalMonth:'April'}))
+    await waitFor(()=>expect(semanticSearch).toHaveBeenLastCalledWith('flow',[],expect.objectContaining({filter:{and:[
+      {and:[{field:'createdAt',operator:'gte',values:[new Date(2025,3,1).toISOString()]},{field:'createdAt',operator:'before',values:[new Date(2026,3,1).toISOString()]}]},
+      {and:[{field:'updatedAt',operator:'gte',values:[new Date(2025,9,1).toISOString()]},{field:'updatedAt',operator:'before',values:[new Date(2026,3,1).toISOString()]}]},
+    ]}}),expect.any(AbortSignal)))
+    expect(await screen.findByRole('heading',{name:'Search results'})).toBeInTheDocument()
+    expect(screen.getByLabelText('Active filters')).toHaveTextContent('2025')
+    setWorkspaceRuntimePreferences({fiscalMonth:'January'})
+  })
   it('treats whitespace as recents and ignores aborted in-flight search errors',async()=>{
     setup('/test/search?q=%20%20')
     await waitFor(()=>expect(searchWorkspace).toHaveBeenCalled())
