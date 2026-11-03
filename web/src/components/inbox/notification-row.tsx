@@ -20,7 +20,7 @@ import './inbox-date-control.css'
 import { GridLoader } from '@/components/ui/grid-loader'
 import { AvatarImage } from '@/components/ui/user-avatar'
 import { useOptionalTranslate } from '@/i18n/i18n'
-import { parseDate, zh } from 'chrono-node'
+import { parseNaturalDateInput } from '@/lib/natural-date'
 
 export type InboxNotificationKind = 'comment' | 'finished' | 'assignment' | 'mention' | 'status' | 'project' | 'review' | 'pulse' | 'generic'
 export type InboxSnoozePreset = 'hour' | 'threeHours' | 'tomorrow' | 'nextWeek' | 'month' | {
@@ -361,13 +361,6 @@ function RowMenuItem({ children, icon, shortcut, disabled = false, onSelect }: {
   )
 }
 
-function parseSnoozeQuery(query: string, now: Date) {
-  const reference = new Date(now)
-  return /[\u3400-\u9fff]/.test(query)
-    ? zh.hans.parseDate(query.replace(/(\d+)\s*周/g, '$1星期'), reference, { forwardDate: true })
-    : parseDate(query, reference, { forwardDate: true })
-}
-
 function RowSnoozeMenu({ notification, disabled, onSnooze }: { notification: InboxNotificationRowData; disabled: boolean; onSnooze: InboxNotificationRowProps['onSnooze'] }) {
   const [custom, setCustom] = useState(false)
   const [query, setQuery] = useState('')
@@ -384,7 +377,7 @@ function RowSnoozeMenu({ notification, disabled, onSnooze }: { notification: Inb
   const optionDate = (preset: Exclude<InboxSnoozePreset, { kind: 'custom' }>) => new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(resolveSnoozeDate(now, preset))
   const submitQuery = () => {
     if (disabled) return
-    const parsed = parseSnoozeQuery(query, now)
+    const parsed = parseNaturalDateInput(query, now)
     if (!parsed || parsed <= now) { setInvalid(true); return }
     onSnooze(notification, { kind: 'custom', snoozedUntil: parsed.toISOString() })
   }
@@ -450,7 +443,7 @@ function KeyboardSnoozeMenu({ notification, disabled, onSnooze }: {
 
   const submitQuery = () => {
     if (disabled) return
-    const parsed = parseSnoozeQuery(query, now)
+    const parsed = parseNaturalDateInput(query, now)
     if (!parsed || parsed <= now) { setInvalid(true); return }
     onSnooze({ kind: 'custom', snoozedUntil: parsed.toISOString() })
   }

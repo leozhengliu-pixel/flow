@@ -4,7 +4,7 @@
  * options inside the same menu. Project and document pages get a smaller set.
  */
 import { useState, type ReactNode } from 'react'
-import { parseDate } from 'chrono-node'
+import { parseNaturalDateInput } from '@/lib/natural-date'
 import {
   Archive, ArrowDown, ArrowUp, Bell, BellOff, CalendarRange, Clipboard, Copy, CopyPlus, GitBranch, Layers3,
   Lightbulb, Link2, ListTree, Trash2, UserRound, Users, X,
@@ -384,7 +384,7 @@ export function datePageOptions(query: string, current: string | undefined, hasV
   const presets = projectDates
     ? [{ label: 'End of this week', date: endOfWorkWeek(today) }, { label: 'End of this month', date: new Date(today.getFullYear(), today.getMonth() + 1, 0) }, { label: 'End of this quarter', date: new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3 + 3, 0) }, { label: 'End of next quarter', date: new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3 + 6, 0) }]
     : [{ label: 'Tomorrow', date: addDays(today, 1) }, { label: 'End of this week', date: endOfWorkWeek(today) }, { label: 'In one week', date: addDays(today, 7) }, { label: 'In two weeks', date: addDays(today, 14) }]
-  const typed = query.trim() ? parseDate(query.trim(), today, { forwardDate: true }) : null
+  const typed = parseNaturalDateInput(query, today)
   const options: PageOption[] = presets.map(preset => { const value = isoDate(preset.date); return { id: preset.label, label: preset.label, icon: <CalendarIcon/>, detail: formatShortDate(value), current: current === value, select: select(value) } })
   if (typed) { const value = isoDate(typed); options.unshift({ id: `custom-${value}`, label: `${t('Set to')} ${formatShortDate(value)}`, icon: <CalendarRange/>, forceMount: true, select: select(value) }) }
   if (hasValue) options.push({ id: 'remove', label: removeLabel ?? (projectDates ? 'Remove target date' : 'Remove due date'), icon: <X/>, keywords: 'clear none', select: select('') })

@@ -44,7 +44,7 @@ describe('inbox row hover actions', () => {
     expect(Math.abs(chosen - start - 3 * 60 * 60 * 1000)).toBeLessThan(5000)
   })
 
-  it.each(['下午 4 点','2 天后','5 周后'])('accepts the advertised Chinese snooze example %s',async query=>{
+  it.each(['下午 4 点','2 天后','5 周后','两周后','下周','明年','下个月'])('accepts the Chinese snooze input %s',async query=>{
     const user=userEvent.setup()
     const onSnooze=vi.fn()
     render(<InboxNotificationRow notification={notification} onOpen={vi.fn()} onReadChange={vi.fn()} onDelete={vi.fn()} onSnooze={onSnooze}/>)

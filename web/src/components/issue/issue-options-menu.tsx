@@ -2,7 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
 import { createPortal } from 'react-dom'
 import { Command } from 'cmdk'
-import { parseDate } from 'chrono-node'
+import { parseNaturalDateInput } from '@/lib/natural-date'
 import { addMonths } from 'date-fns'
 import {
   AlarmClock,
@@ -633,7 +633,7 @@ export function ReminderChoices({ data, teamId, onChoose, onCustom }: { data?: B
     ...(nextCycle ? [{label:'Next cycle',date:new Date(nextCycle.startsAt)}] : []),
   ]
   const matches = options.filter(option => `${option.label} ${t(option.label)}`.toLowerCase().includes(query.toLowerCase()))
-  const parsed = query.trim() && !matches.length ? parseDate(query, now, {forwardDate:true}) : null
+  const parsed = query.trim() && !matches.length ? parseNaturalDateInput(query, now) : undefined
   const format = (date: Date) => {
     if (!desktop || !locale.startsWith('en')) return date.toLocaleString(locale, {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
     const parts = new Intl.DateTimeFormat('en-GB', {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).formatToParts(date)

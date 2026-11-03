@@ -47,7 +47,7 @@ export function DueDateDialog({ value, onSave, onCancel }: { value?: string; onS
       <label className="flow-due-dialog__field">
         <span className="flow-due-dialog__label">{t('Due date')}</span>
         <span className="flow-due-dialog__hint">{t('Issue needs to be completed by this date')}</span>
-        <input aria-label={t('Due date')} autoComplete="off" onChange={event => setText(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); save() } }} ref={input} spellCheck={false} value={text}/>
+        <input aria-label={t('Due date')} autoComplete="off" onChange={event => setText(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); save() } }} ref={input} spellCheck={false} value={text}/>
       </label>
       <div className="flow-due-dialog__months">
         {months.map((first, position) => <div className="flow-due-dialog__month" key={first.toISOString()}>
