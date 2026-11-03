@@ -429,7 +429,7 @@
 .sidebar-more-menu [role="menuitem"] > svg { width: 14px; height: 14px; flex-basis: 14px; }
 .sidebar-more-menu [role="separator"] { margin: 5.75px 6px; }
 @media (min-width: 1024px) {
-  .sidebar-shortcuts-dialog .sidebar-shortcuts-search input:focus { border-color: var(--release-input-border); }
+  .sidebar-shortcuts-dialog .sidebar-shortcuts-search input:focus { border-color: var(--release-input-border); outline: 1px solid var(--menu-item-focus-color); }
   :root[data-theme-variant="dark"] .app > main { border-color: var(--release-frame-border); }
 }
 :root[data-theme="light"] .workspace-primary-menu{border-color:lch(90.55% 0 282);background:var(--theme-surface-2)}
