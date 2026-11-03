@@ -29,7 +29,9 @@ export const editorTableZhCN: Record<string, string> = {
   "Insert after": "在后面插入",
   "Move left": "左移",
   "Move right": "右移",
-  "Duplicate": "复制一份",
+  // The workflow status named Duplicate (this issue repeats another); the copy action is "Duplicate (copy)".
+  "Duplicate": "重复",
+  "Duplicate (copy)": "复制一份",
   "Format": "格式",
   "Copy text": "复制文本",
   "Row copied": "行已复制",
