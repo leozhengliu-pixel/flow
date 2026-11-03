@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FocusEvent } from "react";
 import { Check } from "lucide-react";
 import { Command } from 'cmdk';
 import { PhoneMenu, PhoneMenuCommand } from '@/components/ui/phone-menu';
@@ -123,6 +123,9 @@ export function WorkspaceMenu({
       </PhoneMenuCommand>
     </PhoneMenu>
   </>;
+  const closeCascadeFromSibling = (event: FocusEvent<HTMLDivElement>) => {
+    if (event.relatedTarget instanceof Element && event.relatedTarget.closest('.workspace-primary-menu,.workspace-switch-menu')) setSwitching(false)
+  };
   return (
     <>
       <DropdownMenu open={open} onOpenChange={next => { setOpen(next); if (!next) { window.cancelAnimationFrame(switchFrame.current ?? 0); setSwitching(false) } }}>
@@ -144,12 +147,12 @@ export function WorkspaceMenu({
           }}
         >
           <div className="workspace-menu-list">
-            <DropdownMenuItem onFocus={() => setSwitching(false)} onSelect={() => onSettings("workspace")}>
+            <DropdownMenuItem onFocus={closeCascadeFromSibling} onSelect={() => onSettings("workspace")}>
               {t('Settings')}<WorkspaceMenuShortcut>{t('G then S')}</WorkspaceMenuShortcut>
             </DropdownMenuItem>
             {/* Settings › Members is an administration page: the reference app only lists it for admins. */}
             {(data.viewerRole === "admin" || data.viewerRole === "owner") && (
-              <DropdownMenuItem onFocus={() => setSwitching(false)} onSelect={() => onSettings("members")}>
+              <DropdownMenuItem onFocus={closeCascadeFromSibling} onSelect={() => onSettings("members")}>
                 {t('Invite and manage members')}
               </DropdownMenuItem>
             )}
@@ -189,7 +192,7 @@ export function WorkspaceMenu({
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
-            <DropdownMenuItem onFocus={() => setSwitching(false)} onSelect={() => void onLogout()}>
+            <DropdownMenuItem onFocus={closeCascadeFromSibling} onSelect={() => void onLogout()}>
               {t('Log out')}<WorkspaceMenuShortcut>⌥ ⇧ Q</WorkspaceMenuShortcut>
             </DropdownMenuItem>
           </div>

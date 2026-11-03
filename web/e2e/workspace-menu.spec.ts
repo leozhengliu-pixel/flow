@@ -111,6 +111,14 @@ test('closes the workspace cascade when the pointer returns to a sibling command
   await expect(switcher).toHaveAttribute('data-state', 'closed')
   await expect(menu.locator('[data-highlighted]')).toHaveCount(1)
   await expect(logout).toHaveAttribute('data-highlighted')
+  await page.keyboard.press('Escape')
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await page.keyboard.press('o')
+    await page.keyboard.press('w')
+    await expect(page.locator('.workspace-switch-menu')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(menu).toBeHidden()
+  }
 })
 
 test('switches real workspaces by click and keyboard, and bounds a long submenu', async ({ page, request, workspaceKey }, testInfo) => {
