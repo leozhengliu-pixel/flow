@@ -69,7 +69,7 @@ test('lists cycles on a timeline: rail, status pill, capacity ring, and the curr
   expect((await card.boundingBox())!.width - legend.x - legend.width).toBe(60)
   expect(await card.locator('.cycle-timeline-metric').evaluateAll(items => items.map(item => item.getBoundingClientRect().height))).toEqual([43.5, 44.5, 44.5])
   // The axis starts with the cycle's first day and ends the day after its last.
-  const axis = card.locator('.cycle-chart__tick b')
+  const axis = card.locator('.cycle-timeline-axis > span')
   expect(await axis.count()).toBeGreaterThanOrEqual(2)
   // Hovering a day reads its figures; a day that has not happened shows a dash.
   const canvas = card.locator('.cycle-chart__canvas')

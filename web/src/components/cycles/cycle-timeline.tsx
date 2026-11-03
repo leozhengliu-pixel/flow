@@ -81,7 +81,7 @@ export function CycleTimelineCard({ cycle, issues, stats, derivedStatus = cycle.
       : <>{stats.estimates && <EstimateIcon size={14}/>}<b>{formatEstimatePoints(stats.scope)}</b>{' '}<em>{t('scope')}</em></>}</span>
     {actions}
     {!upcoming && <>
-      <CycleChart graph={graph} measure={measure} startsAt={cycle.startsAt} endsAt={cycle.endsAt} height={210} label={`${t('Cycle progress')}: ${completedPercent}%`} className="cycle-timeline-chart" hover={hover} onHover={setHover} onOpen={onOpen}/>
+      <CycleChart graph={graph} measure={measure} startsAt={cycle.startsAt} endsAt={cycle.endsAt} height={210} label={`${t('Cycle progress')}: ${completedPercent}%`} className="cycle-timeline-chart" axisClassName="cycle-timeline-axis" hover={hover} onHover={setHover} onOpen={onOpen}/>
       <span className="cycle-timeline-metrics">{metrics.map(metric => <span className={`cycle-timeline-metric is-${metric.key}`} key={metric.key}>
         <i/><span className="cycle-timeline-metric-label">{metric.label}</span><span className="cycle-timeline-metric-value">{stats.estimates && <EstimateIcon size={14}/>}<strong>{metric.count === null ? '-' : formatEstimatePoints(metric.count)}</strong>{metric.percent !== undefined && metric.count !== null && <span className="cycle-timeline-percent"><b>•</b>{metric.percent}%</span>}</span>
       </span>)}</span>

@@ -57,6 +57,11 @@ test.describe('mobile cycles timeline', () => {
       expect((await completed.boundingBox())?.y).toBe(164)
       expect((await completed.boundingBox())?.height).toBe(419)
       await expect(page.locator('.flow-cycle-cooldown')).toContainText('2 weeks cooldown')
+      // The cooldown text is centred in its 48px row (a 15.5px line starting 16.25px down), and the axis labels are the spans of .cycle-timeline-axis.
+      const cooldownBox = (await page.locator('.flow-cycle-cooldown').boundingBox())!
+      const cooldownLabel = (await page.locator('.flow-cycle-cooldown > span:first-of-type').boundingBox())!
+      expect(cooldownLabel.y - cooldownBox.y).toBeCloseTo(16.25, 0)
+      expect(await completed.locator('.cycle-timeline-axis > span').count()).toBeGreaterThanOrEqual(2)
       // The date sits right-aligned against the rail: its label box ends 7.3px before the rail (x 51.5) and its text 6px further in.
       const dateBox = (await completed.locator('.cycle-timeline-date').boundingBox())!
       expect(dateBox.x).toBe(0)

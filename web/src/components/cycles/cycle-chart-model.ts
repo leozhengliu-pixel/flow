@@ -3,7 +3,7 @@ import { measureValue, type CycleGraphMeasure } from './cycle-graph-model'
 
 const DAY = 86_400_000
 /** Ticks closer than this to the previous one are dropped, so narrow charts show fewer weeks. */
-const MIN_TICK_GAP = 96
+const MIN_TICK_GAP = 80
 
 const isoDay = (time: number) => new Date(time).toISOString().slice(0, 10)
 
