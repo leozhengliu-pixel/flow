@@ -204,8 +204,6 @@
   .contextSubmenu:not(.issueSubmenu){width:max-content;min-width:175px;padding:0}
   .contextMenu .menuItem>kbd{padding-left:0;font-size:11px;line-height:12.1px}
   .menuChevron{box-sizing:content-box;display:grid;place-items:center;width:16px;height:16px}
-  .menuChevron :global(.flow-submenu-chevron){width:16px;height:16px}
-  .menuItem .menuChevron svg{margin:0}
   .menuItem>kbd+.menuChevron{margin-left:6px;padding-left:0}
   .contextMenu .menuItem:is([data-highlighted],[data-state=open]){color:var(--pk-text-strong)}
   .contextSubmenu:not(.issueSubmenu) .submenuItem>svg{width:16px;height:16px;flex:0 0 16px}
