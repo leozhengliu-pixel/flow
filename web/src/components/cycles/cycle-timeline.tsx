@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { Cycle, Issue } from '@/types/flow'
-import type { CycleGraphData } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
 import { EstimateIcon } from '@/components/issue/estimate-icon'
 import { formatEstimatePoints } from '@/lib/estimates'
-import { cycleStats, formatCycleDay } from './cycle-model'
-import { cycleGraphSeries, isWeekend, type CycleGraphMeasure } from './cycle-graph-model'
+import { cycleStats, cycleStatusText, formatCycleDay } from './cycle-model'
+import { cycleGraphSeries } from './cycle-graph-model'
+import { cycleChartDays, cycleLegendMetrics } from './cycle-chart-model'
+import { CycleChart } from './cycle-chart'
+import './cycle-chart.css'
 import { useCycleGraph } from './use-cycle-graph'
-import { THEME_CHANGE_EVENT } from '@/lib/theme'
 
 const PLAY_PATH = 'M6.95588 5.28329L10.6901 7.43926C11.0235 7.63171 11.0235 8.11283 10.6901 8.30528L6.95588 10.4612C6.62255 10.6537 6.20588 10.4131 6.20588 10.0282L6.20588 5.71631C6.20588 5.33141 6.62255 5.09084 6.95588 5.28329Z'
 
@@ -24,8 +25,37 @@ function TimelineCycleIcon({ upcoming, progress }: { upcoming: boolean; progress
   </svg>
 }
 
-export function CycleTimelineCard({ cycle, issues, stats, onOpen }: { cycle: Cycle; issues: Issue[]; stats: ReturnType<typeof cycleStats>; onOpen: () => void }) {
-  const { t, formatDate } = useI18n()
+/** Capacity ring: the share of the capacity the scope fills, as an arc that always leaves a small gap. */
+const RING_RADIUS = 7
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS
+/** The arc is a round-capped dash: 0.483 long when empty, 40.29 longer when full. */
+const RING_EMPTY = .483
+const RING_SPAN = 40.29
+const RING_START = -76
+const RING_GAP = 24.7
+const RING_GAP_END = 24.4
+
+export function CycleCapacityRing({ ratio }: { ratio: number }) {
+  const share = Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0))
+  const arc = RING_EMPTY + share * RING_SPAN
+  const arcDegrees = arc / RING_LENGTH * 360
+  const trackDegrees = 360 - arcDegrees - RING_GAP - RING_GAP_END
+  const common = { cx: 8, cy: 8, r: RING_RADIUS, fill: 'none', strokeWidth: 2, strokeLinecap: 'round' as const, strokeDasharray: RING_LENGTH }
+  return <svg className="cycle-capacity-ring" aria-hidden="true" viewBox="0 0 16 16">
+    <circle {...common} className="cycle-capacity-ring__track" transform={`rotate(${RING_START + arcDegrees + RING_GAP} 8 8)`} strokeDashoffset={RING_LENGTH - trackDegrees / 360 * RING_LENGTH}/>
+    <circle {...common} className="cycle-capacity-ring__value" transform={`rotate(${RING_START} 8 8)`} strokeDashoffset={RING_LENGTH - arc}/>
+  </svg>
+}
+
+type CardProps = { cycle: Cycle; issues: Issue[]; stats: ReturnType<typeof cycleStats>; derivedStatus?: string; onOpen: () => void; actions?: ReactNode; className?: string }
+
+/**
+ * One cycle on the timeline: its start date on the rail, the cycle and its status, capacity and
+ * scope, and, once it has started, the chart with the Scope / Started / Completed legend.
+ * The whole card opens the cycle; the options menu is a sibling control above it.
+ */
+export function CycleTimelineCard({ cycle, issues, stats, derivedStatus = cycle.status, onOpen, actions, className }: CardProps) {
+  const { t } = useI18n()
   const upcoming = cycle.status === 'upcoming'
   const refreshKey = useMemo(() => issues.filter(issue => issue.cycleId === cycle.id).map(issue => `${issue.id}:${issue.state.id}:${issue.estimate ?? ''}:${issue.updatedAt}`).join('|'), [issues, cycle.id])
   const { graph } = useCycleGraph(upcoming ? undefined : cycle.id, refreshKey)
@@ -34,111 +64,27 @@ export function CycleTimelineCard({ cycle, issues, stats, onOpen }: { cycle: Cyc
   const scope = series?.scope ?? stats.scope
   const completedPercent = series?.completedPercent ?? stats.completedPercent
   const date = formatCycleDay(cycle.startsAt)
-  const end = new Date(cycle.endsAt)
-  end.setUTCDate(end.getUTCDate() + 1)
-  const start = new Date(cycle.startsAt)
-  const middle = new Date(start.getTime() + (end.getTime() - start.getTime()) * .6)
-  const label = (value: Date) => formatDate(value, { month: 'short', day: 'numeric', timeZone: 'UTC' })
-  const metrics = [
-    { key: 'scope', label: t('Scope'), count: scope },
-    { key: 'started', label: t('Started'), count: series?.started ?? stats.started, percent: series?.startedPercent ?? stats.startedPercent },
-    { key: 'completed', label: t('Completed'), count: series?.completed ?? stats.completed, percent: completedPercent },
-  ]
-  return <button type="button" className={`cycle-timeline-card${upcoming ? ' is-upcoming' : ''}`} data-testid={`cycle-timeline-${cycle.number}`} onClick={onOpen}>
+  // The directory row rounds capacity down ("26% of capacity" for 8 of 30 points).
+  const capacityPercent = Math.floor(stats.capacityRatio * 100)
+  const [hover, setHover] = useState<number | null>(null)
+  const days = useMemo(() => cycleChartDays(cycle.startsAt, cycle.endsAt), [cycle.startsAt, cycle.endsAt])
+  const metrics = cycleLegendMetrics({ graph, measure, hoveredDate: hover === null ? undefined : days[hover], scope, started: series?.started ?? stats.started, startedPercent: series?.startedPercent ?? stats.startedPercent, completed: series?.completed ?? stats.completed, completedPercent })
+    .map(metric => ({ ...metric, label: t(metric.label) }))
+  return <div className={`cycle-timeline-card${upcoming ? ' is-upcoming' : ''}${className ? ` ${className}` : ''}`} data-testid={`cycle-timeline-${cycle.number}`} data-status={cycle.status} data-current={cycle.status === 'current'}>
+    <button type="button" className="cycle-timeline-open" aria-label={cycle.name} data-i18n-ignore onClick={onOpen}/>
     <span className="cycle-timeline-date">{date.month}<br/>{date.day}</span>
     <span className="cycle-timeline-heading"><TimelineCycleIcon upcoming={upcoming} progress={completedPercent}/><span className="cycle-timeline-title" data-i18n-ignore>{cycle.name}</span></span>
+    <span className={`cycle-timeline-status is-${derivedStatus}`}>{t(cycleStatusText(derivedStatus))}</span>
+    <span className="cycle-timeline-capacity"><CycleCapacityRing ratio={stats.capacityRatio}/><b>{capacityPercent}%</b>{' '}<em>{t('of capacity')}</em></span>
+    <span className="cycle-timeline-scope">{cycle.status === 'completed'
+      ? <><b>{stats.successPercent}%</b>{' '}<em>{t('success')}</em></>
+      : <>{stats.estimates && <EstimateIcon size={14}/>}<b>{formatEstimatePoints(stats.scope)}</b>{' '}<em>{t('scope')}</em></>}</span>
+    {actions}
     {!upcoming && <>
-      <TimelineChart graph={graph} measure={measure} label={`${t('Cycle progress')}: ${completedPercent}%`}/>
-      <span className="cycle-timeline-axis"><span>{label(start)}</span><span>{label(middle)}</span><span>{label(end)}</span></span>
+      <CycleChart graph={graph} measure={measure} startsAt={cycle.startsAt} endsAt={cycle.endsAt} height={210} label={`${t('Cycle progress')}: ${completedPercent}%`} className="cycle-timeline-chart" hover={hover} onHover={setHover} onOpen={onOpen}/>
       <span className="cycle-timeline-metrics">{metrics.map(metric => <span className={`cycle-timeline-metric is-${metric.key}`} key={metric.key}>
-        <i/><span className="cycle-timeline-metric-label">{metric.label}</span><span className="cycle-timeline-metric-value">{stats.estimates && <EstimateIcon size={14}/>}<strong>{formatEstimatePoints(metric.count)}</strong>{metric.percent !== undefined && <span className="cycle-timeline-percent">{` • ${metric.percent}%`}</span>}</span>
+        <i/><span className="cycle-timeline-metric-label">{metric.label}</span><span className="cycle-timeline-metric-value">{stats.estimates && <EstimateIcon size={14}/>}<strong>{metric.count === null ? '-' : formatEstimatePoints(metric.count)}</strong>{metric.percent !== undefined && metric.count !== null && <span className="cycle-timeline-percent"><b>•</b>{metric.percent}%</span>}</span>
       </span>)}</span>
     </>}
-  </button>
-}
-
-function TimelineChart({ graph, measure, label }: { graph?: CycleGraphData; measure: CycleGraphMeasure; label: string }) {
-  const ref = useRef<HTMLCanvasElement>(null)
-  useEffect(() => {
-    const canvas = ref.current
-    if (!canvas) return
-    const draw = () => {
-      const width = canvas.clientWidth
-      if (!width) return
-      const ratio = window.devicePixelRatio || 1
-      canvas.width = width * ratio
-      canvas.height = 210 * ratio
-      const ctx = canvas.getContext('2d')
-      if (!ctx || !graph) return
-      ctx.scale(ratio, ratio)
-      const style = getComputedStyle(canvas)
-      const color = (token: string) => style.getPropertyValue(token).trim()
-      const series = cycleGraphSeries(graph, measure)
-      const plotWidth = width - 4
-      const x = (index: number) => index / Math.max(1, series.points.length - 1) * plotWidth
-      const y = (value: number) => 178 - value / series.maxValue * 172
-      ctx.save()
-      ctx.beginPath()
-      ctx.rect(0, 6, plotWidth, 172)
-      ctx.clip()
-      ctx.strokeStyle = color('--issue-dim')
-      ctx.lineWidth = 1
-      for (const day of series.points.filter(point => isWeekend(point.date))) {
-        const left = x(day.index - .5), right = x(day.index + .5)
-        ctx.save()
-        ctx.beginPath()
-        ctx.rect(left, 6, right - left, 172)
-        ctx.clip()
-        for (let at = left - 172; at < right; at += 6) {
-          ctx.beginPath(); ctx.moveTo(at, 178); ctx.lineTo(at + 100, 6); ctx.stroke()
-        }
-        ctx.restore()
-      }
-      const drawLine = (values: (number | null)[], tone: string, dashed = false) => {
-        ctx.strokeStyle = color(tone)
-        ctx.lineWidth = 1.5
-        ctx.setLineDash(dashed ? [3, 3] : [])
-        ctx.beginPath()
-        let pen = false
-        values.forEach((value, index) => {
-          if (value === null) { pen = false; return }
-          if (pen) ctx.lineTo(x(index), y(value)); else ctx.moveTo(x(index), y(value))
-          pen = true
-        })
-        ctx.stroke()
-      }
-      const workdays = series.points.filter(point => !isWeekend(point.date)).length
-      let elapsedWorkdays = 0
-      const target = series.points.map(point => {
-        const value = series.scope * elapsedWorkdays / Math.max(1, workdays - 1)
-        if (!isWeekend(point.date)) elapsedWorkdays++
-        return Math.min(series.scope, value)
-      })
-      drawLine(target, '--accent-primary', true)
-      drawLine(series.points.map(point => point.scope ?? series.scope), '--issue-dim')
-      drawLine(series.points.map(point => point.started), '--priority-medium')
-      drawLine(series.points.map(point => point.completed), '--accent-primary')
-      ctx.restore()
-      ctx.setLineDash([])
-      ctx.fillStyle = color('--accent-primary')
-      if (series.lastActualIndex >= 0) {
-        const point = series.points[series.lastActualIndex]
-        ctx.beginPath(); ctx.arc(x(point.index), y(point.completed ?? 0), 3.5, 0, Math.PI * 2); ctx.fill()
-      }
-      ctx.strokeStyle = color('--issue-muted')
-      ctx.lineWidth = 1
-      for (const at of [0, plotWidth * .6, plotWidth]) {
-        ctx.beginPath(); ctx.moveTo(at, 179); ctx.lineTo(at, 184); ctx.stroke()
-      }
-    }
-    draw()
-    window.addEventListener(THEME_CHANGE_EVENT, draw)
-    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(draw)
-    observer?.observe(canvas)
-    return () => {
-      window.removeEventListener(THEME_CHANGE_EVENT, draw)
-      observer?.disconnect()
-    }
-  }, [graph, measure])
-  return <canvas ref={ref} className="cycle-timeline-chart" role="img" aria-label={label}/>
+  </div>
 }

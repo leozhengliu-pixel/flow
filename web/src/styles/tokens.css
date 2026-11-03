@@ -1100,3 +1100,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   :root { --project-menu-chevron-fg: lch(41.778% 1.425 272); }
   :root[data-theme="light"] { --project-menu-chevron-fg: var(--issue-dim); }
 }
+
+/* Cycle timeline and charts: the rail, the capacity ring track and the weekend hatch share one track colour. */
+:root { --cycle-track: lch(14.16% 1.48 272); --cycle-chart-fill: #ffffff06; --cycle-started: lch(80% 90 85); --cycle-completed: lch(48% 59.31 288.43); --cycle-status-bg: lch(7.32% .85 272); --cycle-chip-bg: lch(11.033% 1.3 272); --cycle-row-hover: lch(9.232% .85 272); --cycle-panel-text: lch(90.826% 1.425 272); --cycle-panel-muted: lch(63.304% 1.425 272); --cycle-panel-dim: lch(39.452% 1.425 272); --cycle-tooltip-border: lch(27.12% 1.48 272); --cycle-tooltip-shadow: 0 4px 40px lch(0 0 0 / .1), 0 3px 20px lch(0 0 0 / .125), 0 3px 12px lch(0 0 0 / .125), 0 2px 8px lch(0 0 0 / .125), 0 1px 1px lch(0 0 0 / .125); }
+:root[data-theme="light"] { --cycle-track: lch(91.9% 0 282); --cycle-chart-fill: #00000006; --cycle-status-bg: var(--bg-subtle); --cycle-chip-bg: var(--theme-surface-hover); --cycle-row-hover: var(--theme-surface-hover); --cycle-panel-text: var(--theme-text-primary); --cycle-panel-muted: var(--issue-muted); --cycle-panel-dim: var(--theme-text-tertiary); --cycle-tooltip-border: var(--border-strong); --cycle-tooltip-shadow: var(--menu-shadow); }

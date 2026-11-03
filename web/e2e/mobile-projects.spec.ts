@@ -57,6 +57,11 @@ test.describe('mobile cycles timeline', () => {
       expect((await completed.boundingBox())?.y).toBe(164)
       expect((await completed.boundingBox())?.height).toBe(419)
       await expect(page.locator('.flow-cycle-cooldown')).toContainText('2 weeks cooldown')
+      // The date sits right-aligned against the rail: its label box ends 7.3px before the rail (x 51.5) and its text 6px further in.
+      const dateBox = (await completed.locator('.cycle-timeline-date').boundingBox())!
+      expect(dateBox.x).toBe(0)
+      expect(dateBox.width).toBeCloseTo(44.2, 1)
+      await expect(completed.locator('.cycle-timeline-date')).toHaveCSS('padding-right', '6px')
       await expect(completed.locator('.is-scope strong')).toHaveText('1')
       await expect(completed.locator('.cycle-timeline-metric-label')).toHaveText(['Scope', 'Started', 'Completed'])
       await expect(completed.locator('.estimate-icon')).toHaveCount(0)

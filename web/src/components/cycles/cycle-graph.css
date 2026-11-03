@@ -86,7 +86,15 @@
   height: 100%;
   overflow: visible;
 }
-.flow-cycle-graph__weekend-line { stroke: var(--theme-soft-overlay); stroke-width: 3; }
+/* A weekend: stripes that rise two for every one across, 2.1px wide and 5.05px apart, in the track colour. */
+.flow-cycle-graph__weekend {
+  --top: 0;
+  position: absolute;
+  top: var(--top);
+  bottom: 0;
+  background: repeating-linear-gradient(116.57deg, var(--cycle-track) 0 2.1px, transparent 2.1px 5.05px);
+  pointer-events: none;
+}
 .flow-cycle-graph__axis { stroke: var(--theme-border-strong); vector-effect: non-scaling-stroke; }
 .flow-cycle-graph__line {
   fill: none;
@@ -130,58 +138,3 @@
   transform: translateX(-50%);
   color: var(--theme-text-secondary);
 }
-
-/* Cycle list: real sparkline for the active cycle. */
-.flow-cycle-sparkline path {
-  fill: none;
-  vector-effect: non-scaling-stroke;
-}
-.flow-cycle-sparkline .scope { stroke: var(--data-vis-neutral); stroke-width: 1.5; }
-.flow-cycle-sparkline .started { stroke: var(--data-vis-3); stroke-width: 1.5; }
-.flow-cycle-sparkline .completed { stroke: var(--data-vis-1); stroke-width: 2; }
-.flow-cycle-sparkline .baseline { stroke: var(--theme-border-strong); stroke-width: 1; }
-
-/* Cycle details sidebar progress + breakdown. */
-.cycle-progress-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin: 4px 0 12px;
-}
-.cycle-progress-stats > div { display: grid; gap: 2px; min-width: 0; }
-.cycle-progress-stats small { color: var(--theme-text-secondary); font-size: 11px; }
-.cycle-progress-stats strong { color: var(--theme-text-primary); font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.cycle-progress-stats em { color: var(--theme-text-tertiary); font-size: 11px; font-style: normal; font-variant-numeric: tabular-nums; }
-.cycle-breakdown-tabs {
-  display: flex;
-  gap: 2px;
-  margin: 14px 0 6px;
-}
-.cycle-breakdown-tabs button {
-  height: 24px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--theme-text-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-.cycle-breakdown-tabs button[aria-selected="true"] { background: var(--theme-control-active); color: var(--theme-text-primary); }
-.cycle-breakdown-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  font-size: 12px;
-}
-.cycle-breakdown-row > span:first-child {
-  overflow: hidden;
-  color: var(--theme-text-primary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cycle-breakdown-row > span:last-child { color: var(--theme-text-secondary); font-variant-numeric: tabular-nums; }
-.cycle-breakdown-empty { color: var(--theme-text-tertiary); font-size: 12px; }

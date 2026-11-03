@@ -23,7 +23,7 @@ describe('timeline canvas theme changes', () => {
     const strokes: string[] = []
     const context = {
       strokeStyle: '', fillStyle: '', lineWidth: 1,
-      scale: vi.fn(), save: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(), restore: vi.fn(),
+      scale: vi.fn(), save: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(), restore: vi.fn(), fillRect: vi.fn(),
       setLineDash: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), arc: vi.fn(), fill: vi.fn(),
       stroke() { strokes.push(this.strokeStyle) },
     }

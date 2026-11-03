@@ -3,7 +3,7 @@
  * server-built history, a Target line and, for the active cycle, a projection
  * of completion from recent velocity. Hover (or arrow keys) inspects a day.
  */
-import { useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
 
 import type { CycleGraphData } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
@@ -33,7 +33,6 @@ export function CycleGraph({
   compact?: boolean
 }) {
   const { t, formatDate } = useI18n()
-  const patternId = `cycle-graph-weekend-${useId().replace(/:/g, '')}`
   const plotRef = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<number | null>(null)
   const effectiveMeasure: CycleGraphMeasure = graph.estimates ? measure : 'issues'
@@ -43,6 +42,15 @@ export function CycleGraph({
   const index = hover ?? fallback
   const point = series.points[index]
   const plotHeight = HEIGHT - TOP
+  // One hatched band per weekend (Saturday and Sunday together): a band spans from half a day before its first day to half a day after its last.
+  const weekends: [number, number][] = []
+  series.points.forEach(day => {
+    if (!isWeekend(day.date)) return
+    const last = weekends[weekends.length - 1]
+    if (last && last[1] === day.index - .5) last[1] = day.index + .5
+    else weekends.push([day.index - .5, day.index + .5])
+  })
+  if (count > 1) for (const band of weekends) { band[0] = Math.max(0, band[0]); band[1] = Math.min(count - 1, band[1]) }
   const path = (values: (number | null)[]) => cycleGraphPath(values, series.maxValue, WIDTH, plotHeight, TOP)
   const x = (value: number) => cycleGraphX(value, count, WIDTH)
   const y = (value: number) => TOP + plotHeight - Math.min(value, series.maxValue) / series.maxValue * plotHeight
@@ -90,15 +98,8 @@ export function CycleGraph({
         onBlur={() => setHover(null)}
         onKeyDown={key}
       >
+        {weekends.map(([from, to]) => <i key={from} className="flow-cycle-graph__weekend" style={{ left: `${x(from) / WIDTH * 100}%`, width: `${(x(to) - x(from)) / WIDTH * 100}%`, '--top': `${TOP / HEIGHT * 100}%` } as CSSProperties}/>)}
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="none" aria-hidden="true">
-          <defs>
-            <pattern id={patternId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <line x1="0" x2="0" y1="0" y2="6" className="flow-cycle-graph__weekend-line"/>
-            </pattern>
-          </defs>
-          {count > 1 && series.points.map(day => isWeekend(day.date) && (
-            <rect key={day.date} x={x(Math.max(0, day.index - .5))} y={TOP} width={x(Math.min(count - 1, day.index + .5)) - x(Math.max(0, day.index - .5))} height={plotHeight} fill={`url(#${patternId})`}/>
-          ))}
           <line className="flow-cycle-graph__axis" x1="0" x2={WIDTH} y1={TOP + plotHeight} y2={TOP + plotHeight}/>
           <path className="flow-cycle-graph__line is-target" d={path(series.points.map(item => item.target))}/>
           <path className="flow-cycle-graph__line is-scope" d={path(series.points.map(item => item.scope))}/>
