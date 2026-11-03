@@ -88,7 +88,7 @@
   html:root .settings-app .settings-main .team-settings-header > div > p { color: var(--set-group-desc); }
   html:root .settings-app .team-overview-list .team-overview-summary { flex: none; display: block; max-width: 160px; color: var(--set-desc); font: 450 12px/14.5px var(--font); }
   html:root .settings-app .settings-main .settings-teams-page > .settings-page-header { margin-bottom: 13px; }
-  html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar { gap: 6px; margin-bottom: 20.5px; }
+  html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar { gap: 6px; margin-bottom: 21px; }
   html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar > .settings-select { height: 32px; }
   html:root .settings-app .settings-main .settings-teams-page .settings-members-columns,
   html:root .settings-app .settings-main .settings-teams-page .settings-member-directory-row { grid-template-columns: minmax(240px, 320fr) minmax(250px, 371fr) 108px 80px 70px 70px 32px; column-gap: 12px; padding: 0 20px 0 52px; }
