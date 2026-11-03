@@ -174,7 +174,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
           <span className={styles.sectionLabel}>{t(options.layout === 'board' ? 'Board options' : 'List options')}</span>
           {options.layout === 'board' && <SwitchRow label="Show empty columns" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
           {options.layout === 'list' && <>
-            {!issueNesting && !phone && <SwitchRow label="Nested sub-issues" checked={options.nestedSubIssues} onChange={nestedSubIssues => change({ nestedSubIssues, showSubIssues: nestedSubIssues || options.showSubIssues })} />}
+            {!issueNesting && <SwitchRow label="Nested sub-issues" checked={options.nestedSubIssues} onChange={nestedSubIssues => change({ nestedSubIssues, showSubIssues: nestedSubIssues || options.showSubIssues })} />}
             <div className={styles.nestedSelectRow}>
               <span className={styles.rowLabel}>{t('Nested sub-issues')}</span>
               <SelectControl

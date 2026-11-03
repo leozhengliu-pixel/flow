@@ -5,11 +5,12 @@ import { I18nProvider } from '@/i18n/i18n'
 import { MyIssuesDisplayMenu } from './my-issues-display-menu'
 import { createIssueDisplayOptions, issueDisplayEqual } from './my-issues-display-defaults'
 import { PAGED_GROUPINGS, PAGED_ORDERINGS } from '@/components/issue-explorer/issue-grouping'
-const layout=vi.hoisted(()=>({desktop:false}))
+const layout=vi.hoisted(()=>({desktop:false,phone:false}))
 vi.mock('@/hooks/use-desktop-layout',()=>({useDesktopLayout:()=>layout.desktop}))
+vi.mock('@/hooks/use-phone-layout',()=>({usePhoneLayout:()=>layout.phone}))
 
 describe('display options: nested sub-issues', () => {
-  beforeEach(()=>{layout.desktop=false})
+  beforeEach(()=>{layout.desktop=false;layout.phone=false})
   it('compares saved defaults independently of property insertion order and absent optional values', () => {
     const left = createIssueDisplayOptions({ properties: ['id', 'status'] })
     expect(issueDisplayEqual(left, createIssueDisplayOptions({ properties: ['status', 'id'], showArchived: undefined }))).toBe(true)
@@ -49,6 +50,14 @@ describe('display options: nested sub-issues', () => {
     layout.desktop = true
     const onChange = vi.fn()
     render(<I18nProvider><MyIssuesDisplayMenu open phoneIssueMenu myIssuesPhoneMenu onOpenChange={vi.fn()} options={createIssueDisplayOptions({ showSubIssues: false })} onChange={onChange}/></I18nProvider>)
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Nested sub-issues' }))
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ nestedSubIssues: true, showSubIssues: true }))
+  })
+
+  it('keeps the generic phone nesting toggle when the explorer select is not enabled', async () => {
+    layout.phone = true
+    const onChange = vi.fn()
+    render(<I18nProvider><MyIssuesDisplayMenu open onOpenChange={vi.fn()} options={createIssueDisplayOptions({ showSubIssues: false })} onChange={onChange}/></I18nProvider>)
     await userEvent.click(screen.getByRole('checkbox', { name: 'Nested sub-issues' }))
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ nestedSubIssues: true, showSubIssues: true }))
   })

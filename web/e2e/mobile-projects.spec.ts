@@ -112,7 +112,7 @@ test.describe('mobile cycle detail', () => {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 667 })
       await page.goto(`/${workspaceKey}/team/${team.key}/cycle/1`)
       await page.getByRole('button', { name: 'Display options', exact: true }).click()
-      await page.locator('input[aria-label="Nested sub-issues"]').click()
+      await page.getByRole('checkbox', { name: 'Nested sub-issues', exact: true }).check()
       await page.keyboard.press('Escape')
       await expect(page.locator('[data-cycle-detail-header]')).toHaveCSS('height', '87.5px')
       await expect(page.locator('.cycle-switcher-play')).toHaveCSS('margin-right', '8px')
