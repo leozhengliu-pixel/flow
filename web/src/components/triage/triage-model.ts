@@ -1,5 +1,6 @@
 import type { Issue, WorkflowState } from '@/types/flow'
 import { teamWorkflowStates, type WorkflowData } from '@/lib/team-workflow'
+import { parseNaturalDateInput } from '@/lib/natural-date'
 
 /** The team's status a declined issue moves to: its canceled status that is not a Duplicate one, else any canceled status. */
 export function canceledState(data: WorkflowData, teamId: string) {
@@ -38,62 +39,13 @@ export function snoozePresets(now = new Date()) {
   ]
 }
 
-const UNIT_MS: Record<string, number> = { minute: 60_000, hour: 3_600_000, day: 86_400_000, week: 604_800_000 }
-const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-
-function unitOf(word: string) {
-  const value = word.toLowerCase()
-  if (/^(m|min|mins|minute|minutes)$/.test(value)) return 'minute'
-  if (/^(h|hr|hrs|hour|hours)$/.test(value)) return 'hour'
-  if (/^(d|day|days)$/.test(value)) return 'day'
-  if (/^(w|wk|wks|week|weeks)$/.test(value)) return 'week'
-  if (/^(mo|month|months)$/.test(value)) return 'month'
-  if (/^(y|yr|year|years)$/.test(value)) return 'year'
-  return undefined
-}
-
 /**
  * Parses the reference app's snooze input ("4 pm", "2 days", "in 5 weeks", "tomorrow", "next week", "friday", "16:30").
  * Returns a future date, or undefined when the text is not understood.
  */
 export function parseSnoozeInput(text: string, now = new Date()): Date | undefined {
-  const value = text.trim().toLowerCase().replace(/\s+/g, ' ')
-  if (!value) return
-  if (value === 'tomorrow') return atHour(addDays(now, 1))
-  if (value === 'next week') return snoozePresets(now)[2].until
-  if (value === 'next month') return snoozePresets(now)[3].until
-  const weekday = WEEKDAYS.findIndex(day => value === day || value === day.slice(0, 3) || value === `next ${day}`)
-  if (weekday >= 0) return atHour(addDays(now, ((weekday - now.getDay() + 7) % 7) || 7))
-  const relative = value.match(/^(?:in )?(\d+|an?|one) ?([a-z]+)(?: from now)?$/)
-  if (relative) {
-    const amount = /^\d+$/.test(relative[1]) ? Number(relative[1]) : 1
-    const unit = unitOf(relative[2])
-    if (unit && amount > 0 && amount <= 1000) {
-      if (unit === 'month' || unit === 'year') {
-        const date = new Date(now)
-        if (unit === 'month') date.setMonth(date.getMonth() + amount)
-        else date.setFullYear(date.getFullYear() + amount)
-        return date
-      }
-      return new Date(now.getTime() + amount * UNIT_MS[unit])
-    }
-  }
-  const clock = value.match(/^(?:(today|tomorrow) )?(?:at )?(\d{1,2})(?::(\d{2}))? ?(am|pm|a|p)?$/)
-  if (clock && (clock[3] || clock[4] || clock[1])) {
-    let hour = Number(clock[2])
-    const minute = Number(clock[3] ?? 0)
-    const meridiem = clock[4]?.[0]
-    if (meridiem && (hour < 1 || hour > 12)) return
-    if (meridiem === 'p' && hour < 12) hour += 12
-    if (meridiem === 'a' && hour === 12) hour = 0
-    if (hour > 23 || minute > 59) return
-    let date = new Date(now)
-    if (clock[1] === 'tomorrow') date = addDays(date, 1)
-    date.setHours(hour, minute, 0, 0)
-    if (!clock[1] && date.getTime() <= now.getTime()) date = addDays(date, 1)
-    return date.getTime() > now.getTime() ? date : undefined
-  }
-  return
+  const parsed = parseNaturalDateInput(text, now, { defaultHour: SNOOZE_HOUR })
+  return parsed && parsed > now ? parsed : undefined
 }
 
 export function isSnoozed(issue: Pick<Issue, 'snoozedUntil'>, now = Date.now()) {

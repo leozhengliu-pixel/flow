@@ -1,4 +1,4 @@
-import { parseDate } from 'chrono-node'
+import { parseNaturalDateInput } from '@/lib/natural-date'
 import { useState } from 'react'
 import { useCurrentTime } from '@/hooks/use-current-time'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
@@ -17,7 +17,7 @@ export function FlowReminderOptions({ onChoose, onCustom, now: nowProp }: { onCh
   const normalized = query.trim().toLocaleLowerCase()
   const format = (date: Date) => date.toLocaleString(locale, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
   const presets = PRESETS.filter(preset => presetApplies(preset.id, now)).map(preset => ({ ...preset, date: reminderPresetDate(preset.id, now) })).filter(preset => !normalized || `${preset.label} ${t(preset.label)}`.toLocaleLowerCase().includes(normalized))
-  const parsed = normalized && !presets.length ? parseDate(query, now, { forwardDate: true }) : null
+  const parsed = normalized && !presets.length ? parseNaturalDateInput(query, now) : undefined
   const showCustom = !normalized || `custom ${t('Custom…')}`.toLocaleLowerCase().includes(normalized)
   return <>
     <FlowMenuSearch value={query} onChange={setQuery} placeholder="Try: 4 pm, 2 days, in 5 weeks…"/>

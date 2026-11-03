@@ -5,7 +5,7 @@
  * subscribers, rename, delete). Every write goes through the shared
  * document-actions so wording, toasts and behaviour match the menus.
  */
-import { parseDate } from 'chrono-node'
+import { parseNaturalDateInput } from '@/lib/natural-date'
 import {
   AlarmClock, BellOff, Bell, Building2, CopyPlus, FilePlus2, FileText, FolderInput, History, LayoutTemplate, Lightbulb, Link2, Pencil, Pin,
   Star, Trash2, Type, User, UserPlus, Users,
@@ -236,7 +236,7 @@ function pageOptions({ ctx, data, docs, page: current, query, t, open, choose }:
     case 'documentRemind': {
       const now = new Date()
       const format = (date: Date) => date.toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-      const typed = query.trim() ? parseDate(query.trim(), now, { forwardDate: true }) : null
+      const typed = parseNaturalDateInput(query, now)
       return [
         ...(typed && typed.getTime() > now.getTime() ? [{ id: 'typed', label: format(typed), entity: true, forceMount: true, icon: <AlarmClock/>, select: each(item => remindAboutDocument(ctx, item, typed.toISOString())) }] : []),
         ...reminderPresetOptions(now).map(preset => ({ id: preset.id, label: preset.label, icon: <AlarmClock/>, detail: format(preset.date), select: each(item => remindAboutDocument(ctx, item, preset.date.toISOString())) })),

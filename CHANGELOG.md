@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Share English and Chinese typed-date parsing across snooze, reminders, due dates and command pages, preserving IME confirmation.
+
 - Use the same first-weekday preference for Pulse groups and calendars, including Tuesday through Friday.
 
 - Restore the desktop issue-options due-date submenu width and hidden shortcut, and size search date filter menus to their content with date precisions on one row.
