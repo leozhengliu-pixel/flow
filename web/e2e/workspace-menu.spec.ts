@@ -60,7 +60,7 @@ for (const width of [1440, 390]) {
             await expect(chevron).toBeInViewport({ ratio: 1 })
             if (!phone) {
               expect(await chevron.evaluate(element => getComputedStyle(element).color)).toBe(await trigger.locator('strong').evaluate(element => getComputedStyle(element).color))
-              expect(await chevron.evaluate(element => getComputedStyle(element).fill)).toBe(await chevron.evaluate(element => getComputedStyle(element).color))
+              expect(await chevron.evaluate(element => getComputedStyle(element).fill)).toBe(await chevron.evaluate(element => getComputedStyle(element).getPropertyValue('--workspace-trigger-chevron').trim().replaceAll('%', '')))
             }
             const triggerBox = (await trigger.boundingBox())!
             const iconBox = (await chevron.boundingBox())!
