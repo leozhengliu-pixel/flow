@@ -1,4 +1,5 @@
 import type { BootstrapData, PulseItem, SavedView } from '@/types/flow'
+import { firstWeekday } from '@/lib/runtime-preferences'
 
 export type PulseFilterField = 'author'|'team'|'createdDate'|'updateType'|'health'|'initiative'|'project'|'projectMember'|'projectStatus'|'projectStatusType'|'projectLabel'
 export type PulseFilterOperator = 'is'|'isNot'
@@ -133,9 +134,4 @@ export function nextPulseSeen(previous: string | number | undefined, candidate: 
   return Number.isFinite(after) && after > (Number.isFinite(before) ? before : 0) ? after : undefined
 }
 
-export function weekStartsOnFromSetting(firstDay?: string) {
-  const value = (firstDay ?? '').toLowerCase()
-  if (value === 'sunday' || value === '0') return 0
-  if (value === 'saturday' || value === '6') return 6
-  return 1
-}
+export const weekStartsOnFromSetting = firstWeekday
