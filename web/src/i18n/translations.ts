@@ -650,6 +650,8 @@ export const zhCN: Record<string, string> = {
   "Open cycle…": "打开周期…",
   "Collapse planning section": "收起规划部分",
   "Expand planning section": "展开规划部分",
+  "Collapse progress section": "收起进度部分",
+  "Expand progress section": "展开进度部分",
   "Agent Session": "Agent 会话",
   "Suggested label": "建议标签",
   "Project properties": "项目属性",

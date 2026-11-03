@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
 import type { CycleGraphData, CycleGraphDay } from '@/lib/api'
-import { makeBootstrap } from '@/test/fixtures'
+import type { Cycle } from '@/types/flow'
+import { cycleStats } from './cycle-model'
 import { CycleGraph } from './cycle-graph'
-import { cycleGraphIndexAt, cycleGraphPath, cycleGraphSeries, cycleSparkline, downsample, PROJECTION_WINDOW } from './cycle-graph-model'
+import { cycleGraphIndexAt, cycleGraphPath, cycleGraphSeries, PROJECTION_WINDOW } from './cycle-graph-model'
 import { CycleProgress } from './cycle-progress'
 
 function day(date: string, scope: number, started: number, completed: number, future = false): CycleGraphDay {
@@ -72,16 +73,6 @@ describe('cycle graph model', () => {
     expect(cycleGraphIndexAt(60, 5, 100)).toBe(2)
     expect(cycleGraphIndexAt(500, 5, 100)).toBe(4)
   })
-
-  it('downsamples the list sparkline while keeping the first and last day', () => {
-    expect(downsample([1, 2, 3, 4, 5, 6, 7, 8, 9], 3)).toEqual([1, 5, 9])
-    expect(downsample([1, 2], 5)).toEqual([1, 2])
-    const line = cycleSparkline(activeGraph, 100, 50, 24)
-    expect(line).toMatchObject({ scope: 6, started: 4, completed: 2, completedPercent: 33, startedPercent: 67 })
-    expect(line.scopePath.startsWith('M0.00')).toBe(true)
-    // Future days are not drawn: the line stops at today (x = 50 of 100).
-    expect(line.completedPath.split(' L').at(-1)).toMatch(/^50\.00 /)
-  })
 })
 
 describe('cycle graph rendering', () => {
@@ -108,12 +99,23 @@ describe('cycle graph rendering', () => {
     expect(screen.getAllByRole('listitem').map(item => item.textContent)).toContain('Scope6')
   })
 
-  it('summarises scope changes and breakdowns in the details sidebar', () => {
-    const data = makeBootstrap()
-    render(<I18nProvider><CycleProgress graph={activeGraph} data={data} measure="issues" onMeasureChange={vi.fn()}/></I18nProvider>)
-    expect(screen.getByLabelText('Scope changes').textContent).toBe('+2 −1')
-    expect(screen.getByText('No assignee')).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: 'Labels' }))
-    expect(screen.getByText('No matching issues')).toBeTruthy()
+  it('shows the weekend as one band per weekend, not one per day', () => {
+    const weekendGraph: CycleGraphData = { ...activeGraph, startDate: '2026-09-04', endDate: '2026-09-08', today: '2026-09-04', days: [day('2026-09-04', 1, 0, 0), day('2026-09-05', 1, 0, 0), day('2026-09-06', 1, 0, 0), day('2026-09-07', 1, 0, 0), day('2026-09-08', 1, 0, 0)] }
+    const { container } = render(<I18nProvider><CycleGraph graph={weekendGraph} measure="issues"/></I18nProvider>)
+    const bands = container.querySelectorAll('.flow-cycle-graph__weekend')
+    expect(bands).toHaveLength(1)
+    // Saturday and Sunday (indexes 1 and 2 of 5): from half a day before the first to half a day after the last.
+    expect((bands[0] as HTMLElement).style.left).toBe('12.5%')
+    expect((bands[0] as HTMLElement).style.width).toBe('50%')
+  })
+
+  it('reads Scope, Started and Completed in the details card and breaks them down by tab', () => {
+    const cycle = { id: 'cycle-1', number: 1, name: 'Cycle 1', status: 'current', startsAt: '2026-09-01', endsAt: '2026-09-05', capacity: 30 } as Cycle
+    const stats = cycleStats(cycle, [])
+    render(<I18nProvider><CycleProgress cycle={cycle} graph={activeGraph} issues={[]} stats={stats} settingsFor={() => undefined}/></I18nProvider>)
+    expect(screen.getAllByRole('listitem').map(item => item.textContent)).toEqual(['Scope12', 'Started8•67%', 'Completed4•33%'])
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Assignees', 'Labels', 'Priority', 'Projects', 'Teams'])
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse progress section' }))
+    expect(screen.queryByRole('tab')).toBeNull()
   })
 })
