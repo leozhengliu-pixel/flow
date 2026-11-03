@@ -45,6 +45,11 @@ describe('search date drafts',()=>{
 })
 
 describe('search date ranges',()=>{
+  it.each(['not-a-date','2026-02-30','2026-13-01','2026-01-01T10:00:00'])('drops invalid shared date chips and requests together: %s',value=>{
+    const state=readSearchState(new URLSearchParams({filters:JSON.stringify([{id:'invalid',field:'updatedAt',operator:'on',value}])}))
+    expect(state.filters).toEqual([])
+    expect(searchFilterAST(state)).toBeUndefined()
+  })
   it('labels date chips with the chosen precision and locale',()=>{
     setWorkspaceRuntimePreferences({fiscalMonth:'January'})
     expect(searchDateLabel('2026-11-02','month','en-US')).toBe('November 2026')

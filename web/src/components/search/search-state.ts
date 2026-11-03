@@ -15,7 +15,7 @@ export function readSearchState(params: URLSearchParams): SearchPageState {
   let filters: SearchCondition[] = []
   try {
     const parsed: unknown = JSON.parse(params.get('filters') ?? '[]')
-    if (Array.isArray(parsed)) filters = parsed.filter((item): item is SearchCondition => item && typeof item.id === 'string' && searchFields.some(field => field.id === item.field) && ['is','isNot','on','before','after'].includes(item.operator) && typeof item.value === 'string' && (item.granularity===undefined||['day','month','quarter','half-year','year'].includes(item.granularity))).slice(0, 20)
+    if (Array.isArray(parsed)) filters = parsed.filter((item): item is SearchCondition => item && typeof item.id === 'string' && searchFields.some(field => field.id === item.field) && ['is','isNot','on','before','after'].includes(item.operator) && typeof item.value === 'string' && (item.granularity===undefined||['day','month','quarter','half-year','year'].includes(item.granularity))).filter(isSearchConditionValid).slice(0, 20)
   } catch { /* Invalid shared filters do not prevent opening search. */ }
   const tab = params.get('type') ?? params.get('tab') ?? 'all'
   const order = params.get('sort') ?? 'relevance'
@@ -33,10 +33,10 @@ export function writeSearchState(state: SearchPageState) {
   return params
 }
 
-export function searchFilterAST(state: Pick<SearchPageState,'filters'|'match'>): Record<string,unknown> | undefined {
-  const conditions = state.filters.filter(filter=>filter.value&&(!filter.field.endsWith('At')||!Number.isNaN(parseISO(filter.value).getTime()))).map(filter=>{
+export function searchFilterAST(state: Pick<SearchPageState,'filters'|'match'>, firstFiscalMonth = fiscalMonth()): Record<string,unknown> | undefined {
+  const conditions = state.filters.filter(isSearchConditionValid).map(filter=>{
     if(!filter.field.endsWith('At')||!filter.granularity&&filter.operator!=='on')return {field:filter.field,operator:filter.operator,values:[filter.value]}
-    const [start,end]=searchDateRange(filter.value,filter.granularity??'day')
+    const [start,end]=searchDateRange(filter.value,filter.granularity??'day',firstFiscalMonth)
     if(filter.operator==='before')return {field:filter.field,operator:'before',values:[start.toISOString()]}
     if(filter.operator==='after')return {field:filter.field,operator:'gte',values:[end.toISOString()]}
     return {and:[{field:filter.field,operator:'gte',values:[start.toISOString()]},{field:filter.field,operator:'before',values:[end.toISOString()]}]}
@@ -44,11 +44,15 @@ export function searchFilterAST(state: Pick<SearchPageState,'filters'|'match'>):
   return conditions.length ? {[state.match]:conditions} : undefined
 }
 
-export function searchDateRange(value:string,mode:DateMode):[Date,Date] {
+export function isSearchConditionValid(filter: SearchCondition) {
+  return Boolean(filter.value && (!filter.field.endsWith('At') || /^\d{4}-\d{2}-\d{2}$/.test(filter.value) && !Number.isNaN(parseISO(filter.value).getTime())))
+}
+
+export function searchDateRange(value:string,mode:DateMode,firstFiscalMonth = fiscalMonth()):[Date,Date] {
   const date=startOfDay(parseISO(value))
   if(mode==='day')return [date,addDays(date,1)]
   const months=mode==='month'?1:mode==='quarter'?3:mode==='half-year'?6:12
-  const offset=mode==='month'?0:fiscalMonth()
+  const offset=mode==='month'?0:firstFiscalMonth
   const month=date.getMonth()-((date.getMonth()-offset+12)%months)
   const start=startOfMonth(new Date(date.getFullYear(),month,1))
   return [start,addMonths(start,months)]
