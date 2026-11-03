@@ -37,8 +37,8 @@
   .dialog-content.search-date-dialog{top:min(110px,13.04dvh)}
   .search-date-filter{max-height:calc(100dvh - min(110px,13.04dvh) - 16px)}
   .search-date-filter>header{flex-wrap:wrap;gap:8px;padding-top:32px}
-  .search-date-filter>.search-date-modes{gap:4px;justify-content:space-between}
-  .search-date-filter>.search-date-modes>button{padding-inline:8px}
+  .search-date-filter>.search-date-modes{padding-inline:32px;gap:4px;justify-content:space-between}
+  .search-date-filter>.search-date-modes>button{margin:0;padding-inline:8px}
   .search-date-months{grid-template-columns:minmax(0,1fr);padding:8px 40px 12px}
   .search-date-months>div{height:285.5px}
   .search-date-months [data-calendar-weekdays],.search-date-months [data-calendar-weekdays]>span{height:43.5px}
