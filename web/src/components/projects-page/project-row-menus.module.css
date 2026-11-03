@@ -15,7 +15,7 @@
 .dateModes{box-sizing:border-box;width:271px;height:32px;flex:0 0 32px;display:flex;align-items:center;gap:2px;margin-top:14px;padding:0;border:0;border-radius:5px;background:var(--theme-surface-2)}
 .dateModes button{box-sizing:border-box;height:28px;display:flex;align-items:center;justify-content:center;gap:6px;margin:2px;padding:4px;border:.5px solid transparent;border-radius:9999px;background:var(--theme-control-hover);color:var(--theme-text-secondary);font-size:12px;font-weight:500;white-space:nowrap}
 .dateModes button[aria-selected=true]{background:var(--theme-control-active);color:var(--theme-text-primary)}
-.dayPanel{box-sizing:border-box;width:301px;height:298px;flex:0 0 298px;margin:15px -15px 0;padding:8px 15px 0;border-top:.5px solid var(--theme-border)}
+.dayPanel{box-sizing:border-box;width:301px;height:298px;min-height:0;flex:1 1 298px;margin:15px -15px 0;padding:8px 15px 0;border-top:.5px solid var(--theme-border)}
 .dayPanel header{height:36px;display:flex;align-items:center;justify-content:space-between;padding:0}
 .dayPanel header strong{font-size:12px;font-weight:400;line-height:18px}
 .dayPanel header span{display:flex;gap:2px}
