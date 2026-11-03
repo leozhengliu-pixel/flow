@@ -9,6 +9,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Keep Chinese phrases whole: verb catch-alls no longer leave an untranslated noun in a translated sentence, and picker labels, retire-team copy, row dates and status group names read in Chinese. A coverage test now fails when a `t()` key has no Chinese entry.
 
+- Keep issue display selects on one line, show supported nesting choices, and hide unchanged view-default actions.
+- Match issue filter and row-menu glyphs, restore the sub-issue activity divider, and keep pale status rings visible in light themes.
+- Retain empty issue-board columns in the collapsible hidden-column panel, including server-backed boards.
+- Restore project row hover and selection paint, respect ungrouped project displays on desktop, and reveal empty target-date controls on interaction.
+- Match document heading interaction states and tinted groups, and use natural actor spacing and property-row geometry in initiative details.
+
 - Match subscribed document rows to the shared menu highlight color and phone inset in pointer and keyboard states.
 
 - Translate command navigation and saved-chat feedback labels into Chinese.
