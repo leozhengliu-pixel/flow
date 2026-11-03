@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Align the command input hint and use the matching issue and label command glyphs.
+
 - Align keyboard shortcut rows and the search caret with the shared panel typography.
 
 - Align settings directory groups, resting sort arrows, search icons and search placeholder colors.
