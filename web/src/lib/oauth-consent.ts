@@ -75,7 +75,7 @@ export function oauthErrorMessage(value: unknown, t: Translate = source => sourc
   const message = value instanceof Error && value.message ? value.message : t('This authorization request could not be loaded.')
   for (const [pattern, template] of OAUTH_ERRORS) {
     const match = message.match(pattern)
-    if (match) return t(template).replace('{value}', match[1])
+    if (match) return t(template).replace('{value}', () => match[1])
   }
   return t(message)
 }

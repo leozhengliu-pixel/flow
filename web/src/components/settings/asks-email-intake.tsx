@@ -464,7 +464,7 @@ export function AsksEmailIntakeDetailPage({
   const remove = async () => {
     if (!address) return;
     const description = intakeDescription(address);
-    const confirmed = await confirmAction(t("Delete {name}?").replace("{name}", description ? `${intakeTitle(address)} (${description})` : intakeTitle(address)), { description: t("You cannot undo this action."), confirmLabel: t("Delete"), danger: true });
+    const confirmed = await confirmAction(t("Delete {name}?").replace("{name}", () => description ? `${intakeTitle(address)} (${description})` : intakeTitle(address)), { description: t("You cannot undo this action."), confirmLabel: t("Delete"), danger: true });
     if (!confirmed) return;
     try {
       if (asksEmails.includes(address.address))

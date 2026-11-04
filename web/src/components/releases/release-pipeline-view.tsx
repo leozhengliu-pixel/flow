@@ -35,6 +35,7 @@ import { absoluteUrl, copyToClipboard, isFavorite } from './release-actions-mode
 import { useReleaseActions } from './use-release-actions'
 import { PipelineTabContextMenu } from './pipeline-tab-context-menu'
 import { trashRetentionDays } from '@/lib/trash-retention'
+import { asIs } from '@/lib/as-is'
 
 type Props = {
   data: BootstrapData
@@ -197,7 +198,7 @@ const ReleaseRow = forwardRef<HTMLAnchorElement, ReleaseRowProps>(function Relea
         {scheduled && properties.description && release.description && <small className="flow-release-row__description" data-i18n-ignore>{release.description.replace(/[#*_`>[\]()]/g, '').slice(0, 280)}</small>}
       </span>
     </span>
-    {!scheduled && <span className="flow-release-row__issues">{release.issueIds.length ? <span className="flow-release-chip">{t(release.issueIds.length === 1 ? '1 issue' : '{count} issues').replace('{count}', String(release.issueIds.length))}</span> : <span className="flow-release-row__muted">-</span>}</span>}
+    {!scheduled && <span className="flow-release-row__issues">{release.issueIds.length ? <span className="flow-release-chip">{t(release.issueIds.length === 1 ? '1 issue' : '{count} issues').replace('{count}', () => String(release.issueIds.length))}</span> : <span className="flow-release-row__muted">-</span>}</span>}
     {properties.notes && <span className="flow-release-row__notes">{releaseHasNotes(data, release)
       ? <ScopedFlowTooltip label={t('Open release notes')}><button aria-label={t('Open release notes')} className="flow-release-cell-button" onClick={event => { stop(event); onOpen('release-notes') }} type="button"><FlowGlyph name="document" className="flow-release-cell-button__icon"/><span>{t('Release notes')}</span></button></ScopedFlowTooltip>
       : canManage && <ScopedFlowTooltip label={t('Create release notes')}><button aria-label={t('Create release notes')} className="flow-release-cell-button is-new" onClick={event => { stop(event); onOpen('release-notes') }} type="button"><FlowGlyph name="plus"/><span>{t('New')}</span></button></ScopedFlowTooltip>}</span>}
@@ -211,10 +212,10 @@ function CompletionCell({ data, release }: { data: BootstrapData; release: Relea
   const { t } = useI18n()
   const completion = releaseCompletion(data, release)
   if (!completion) return null
-  const parts = [t('{count} done').replace('{count}', String(completion.done))]
-  if (completion.started) parts.push(t('{count} started').replace('{count}', String(completion.started)))
-  if (completion.notStarted) parts.push(t('{count} not started').replace('{count}', String(completion.notStarted)))
-  const tooltip = !completion.total ? t('No scoped issues') : release.status === 'released' ? t('{done} of {total} completed').replace('{done}', String(completion.done)).replace('{total}', String(completion.total)) : parts.join(t(', '))
+  const parts = [t('{count} done').replace('{count}', () => String(completion.done))]
+  if (completion.started) parts.push(t('{count} started').replace('{count}', () => String(completion.started)))
+  if (completion.notStarted) parts.push(t('{count} not started').replace('{count}', () => String(completion.notStarted)))
+  const tooltip = !completion.total ? t('No scoped issues') : release.status === 'released' ? t('{done} of {total} completed').replace('{done}', () => String(completion.done)).replace('{total}', () => String(completion.total)) : parts.join(t(', '))
   return <ScopedFlowTooltip label={tooltip}><span className="flow-release-completion"><ProgressRing progress={completion.progress}/><span>{completion.summary}</span></span></ScopedFlowTooltip>
 }
 
@@ -253,7 +254,7 @@ export function ReleaseDateCell({ release, scheduled, canManage, onReload, long 
     return <span className="flow-release-date is-muted" title={full(value)}>{formatRelative(value)}</span>
   }
   if (release.status === 'released' && release.releasedAt) {
-    const title = release.targetDate ? t('Released {date} (Initial target: {target})').replace('{date}', full(release.releasedAt)).replace('{target}', short(release.targetDate)) : t('Released {date}').replace('{date}', full(release.releasedAt))
+    const title = release.targetDate ? t('Released {date} (Initial target: {target})').replace('{date}', asIs(full(release.releasedAt))).replace('{target}', asIs(short(release.targetDate))) : t('Released {date}').replace('{date}', asIs(full(release.releasedAt)))
     return <ScopedFlowTooltip label={title}><span className="flow-release-date"><ReleaseDateIcon tone="released"/><span>{short(release.releasedAt)}</span></span></ScopedFlowTooltip>
   }
   if (release.status === 'canceled') return <span className="flow-release-date">{release.updatedAt ? short(release.updatedAt) : ''}</span>
@@ -270,7 +271,7 @@ function SelectionBar({ data, pipeline, ids, actions, onClear, onReload }: { dat
   useReleaseSelectionCommands({ data, pipeline, releases, actions, onReload })
   return <div className="flow-release-selection-slot">
     <div className="flow-release-selection" role="toolbar" aria-label={t('Selected releases')}>
-      <span className="flow-release-selection__count">{t('{count} selected').replace('{count}', String(ids.length))}</span>
+      <span className="flow-release-selection__count">{t('{count} selected').replace('{count}', () => String(ids.length))}</span>
       <div className="flow-release-selection__actions">
         <button className="flow-release-selection__button is-actions" onClick={() => openCommandMenu()} type="button"><FlowGlyph name="command" width={14} height={14}/><span>{t('Actions')}</span></button>
         <ScopedFlowTooltip label={t('Ask agent')}><button aria-label={t('Ask agent')} className="flow-release-selection__button is-icon" onClick={() => setAgentOpen(true)} type="button"><AgentCursorGlyph size={14}/></button></ScopedFlowTooltip>
@@ -283,7 +284,7 @@ function SelectionBar({ data, pipeline, ids, actions, onClear, onReload }: { dat
 
 function DeletedReleasesList({ items, retentionDays, onReload }: { items: TrashEntry[]; retentionDays: number; onReload: () => Promise<void> }) {
   const { t, formatDate } = useI18n()
-  if (!items.length) return <ReleaseEmptyState title={t('No recently deleted releases')} paragraphs={[t('Deleted releases will appear here for {days} days before being permanently removed.').replace('{days}', String(retentionDays))]}/>
+  if (!items.length) return <ReleaseEmptyState title={t('No recently deleted releases')} paragraphs={[t('Deleted releases will appear here for {days} days before being permanently removed.').replace('{days}', () => String(retentionDays))]}/>
   return <div className="flow-releases-list is-deleted" aria-label={t('Recently deleted releases')}>
     {items.map(item => <DropdownMenu.Root key={item.id}>
       <div className="flow-releases-row flow-release-deleted-row">

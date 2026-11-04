@@ -12,6 +12,7 @@ import { FeatureButton, FeatureCard, FeatureRow, FeatureSection, Toggle } from "
 
 import "./feature-settings.css";
 import "./review-import-settings.css";
+import { asIs } from '@/lib/as-is'
 
 /**
  * Importing open pull/merge requests without webhooks: off until a workspace
@@ -78,7 +79,7 @@ export function ReviewImportSettings({ provider, data }: { provider: "github" | 
         const detail = failure ? `${failure.target}: ${reviewImportErrorText(t, failure)}` : result.errors[0];
         toast.error(`${t("Some repositories could not be synced")}: ${detail}`);
       }
-      else toast.success(t("Synced: {count} new reviews").replace("{count}", String(result.imported)));
+      else toast.success(t("Synced: {count} new reviews").replace("{count}", () => String(result.imported)));
     } catch (error) {
       toast.error(requestErrorText(error, t("Could not sync with the code host")));
     } finally {
@@ -104,7 +105,7 @@ export function ReviewImportSettings({ provider, data }: { provider: "github" | 
         <FeatureCard>
           <FeatureRow
             title="Import approved repositories"
-            description={t("Runs every {minutes} minutes and with Sync now; nothing outside the approved list is read.").replace("{minutes}", String(Math.round(status.interval / 60)))}
+            description={t("Runs every {minutes} minutes and with Sync now; nothing outside the approved list is read.").replace("{minutes}", () => String(Math.round(status.interval / 60)))}
           >
             <Toggle checked={status.enabled} disabled={!admin || busy || !status.available} label="Import approved repositories" onChange={(enabled) => void save({ enabled })} />
           </FeatureRow>
@@ -202,7 +203,7 @@ export function ReviewImportSettings({ provider, data }: { provider: "github" | 
                     <div>
                       <strong data-i18n-ignore>{item.target.replace(/^(github|gitlab):/, "")}</strong>
                       <span title={item.message}>{reviewImportErrorText(t, item)}</span>
-                      {item.backoffUntil && <span>{t("Retry after: {time}").replace("{time}", dateTime(item.backoffUntil))}</span>}
+                      {item.backoffUntil && <span>{t("Retry after: {time}").replace("{time}", asIs(dateTime(item.backoffUntil)))}</span>}
                     </div>
                   </li>
                 ))}
@@ -212,9 +213,9 @@ export function ReviewImportSettings({ provider, data }: { provider: "github" | 
               <div>
                 <span>
                   {t("Each run reads up to {repositories} repositories and {requests} requests and makes at most {writes} changes.")
-                    .replace("{repositories}", String(status.limits.repositoriesPerRun))
-                    .replace("{requests}", String(status.limits.requestsPerRun))
-                    .replace("{writes}", String(status.limits.writesPerRun))}
+                    .replace("{repositories}", () => String(status.limits.repositoriesPerRun))
+                    .replace("{requests}", () => String(status.limits.requestsPerRun))
+                    .replace("{writes}", () => String(status.limits.writesPerRun))}
                 </span>
               </div>
             </div>

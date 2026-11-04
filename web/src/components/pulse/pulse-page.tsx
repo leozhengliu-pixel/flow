@@ -293,7 +293,7 @@ function usePulseCardHandlers(props: Props, feed: PulseFeedState, tab: PulseRout
     onToggleTeam: async (teamId, subscribed) => {
       await run(() => changePulseSubscription('team', teamId, subscribed), 'Could not update subscription')
       const team = props.data.teams.find(entry => entry.id === teamId)
-      toast(subscribed ? t('Subscribed to team project updates') : t('Unsubscribed from team project updates'), { description: (subscribed ? t('You will now receive all project updates for {name}') : t('You will no longer receive all project updates for {name}')).replace('{name}', team?.name ?? t('this team')) })
+      toast(subscribed ? t('Subscribed to team project updates') : t('Unsubscribed from team project updates'), { description: (subscribed ? t('You will now receive all project updates for {name}') : t('You will no longer receive all project updates for {name}')).replace('{name}', () => team?.name ?? t('this team')) })
       pulseUnread.schedule(props.data.workspace.urlKey)
     },
     onNavigate: navigate,
@@ -427,7 +427,7 @@ function PulseViewTabs({ activeId, views, workspaceKey, onOpen, onEdit, onDuplic
         title={shortcut ? `${saved.name} (${shortcut})` : saved.name}
       ><ViewGlyph color={saved.color ?? '#8a8f98'} icon={saved.icon ?? 'CustomView'}/><span data-i18n-ignore>{saved.name}</span></a>)
     })}
-    {overflow.length > 0 && <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="ui-pill pulse-more-views" type="button">{t('{count} more').replace('{count}', String(overflow.length))}<ChevronDown size={12}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="start" className="pulse-menu" data-flow-motion="floating" sideOffset={4}>
+    {overflow.length > 0 && <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="ui-pill pulse-more-views" type="button">{t('{count} more').replace('{count}', () => String(overflow.length))}<ChevronDown size={12}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content align="start" className="pulse-menu" data-flow-motion="floating" sideOffset={4}>
       <DropdownMenu.Label className="pulse-menu-label">{t('All views')}</DropdownMenu.Label>
       {views.map(saved => <DropdownMenu.Item key={saved.id} onSelect={() => onOpen(saved.id)}><ViewGlyph color={saved.color ?? '#8a8f98'} icon={saved.icon ?? 'CustomView'}/><span data-i18n-ignore>{saved.name}</span>{activeId === saved.id && <Check className="pulse-menu-end" size={13}/>}</DropdownMenu.Item>)}
     </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}

@@ -33,7 +33,7 @@ export function PipelineDeleteDialog({ pipelines, onClose, onDeleted, onViewDele
     try {
       for (const pipeline of pipelines) await deleteReleasePipeline(pipeline.id)
       await onDeleted()
-      const message = single ? t('Pipeline deleted') : t('{count} pipelines deleted').replace('{count}', String(pipelines.length))
+      const message = single ? t('Pipeline deleted') : t('{count} pipelines deleted').replace('{count}', () => String(pipelines.length))
       // Long enough to reach the toast's link's undo toasts.
       toast.success(message, { duration: 8000, ...(onViewDeleted ? { action: { label: t('View recently deleted pipelines'), onClick: onViewDeleted } } : {}) })
       onClose()
@@ -44,7 +44,7 @@ export function PipelineDeleteDialog({ pipelines, onClose, onDeleted, onViewDele
   }
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}>
     <DialogContent className="flow-pipeline-confirm-dialog" closeLabel={t('Close')} aria-describedby="flow-pipeline-delete-description">
-      <DialogTitle>{single ? withName(t('Delete the pipeline "{name}"?'), <span data-i18n-ignore>{single.name}</span>) : t('Delete {count} pipelines?').replace('{count}', String(pipelines.length))}</DialogTitle>
+      <DialogTitle>{single ? withName(t('Delete the pipeline "{name}"?'), <span data-i18n-ignore>{single.name}</span>) : t('Delete {count} pipelines?').replace('{count}', () => String(pipelines.length))}</DialogTitle>
       <p id="flow-pipeline-delete-description">{withTrashRetention(t('Deleted pipelines are available in the "Recently deleted pipelines" view for {days} days, before being permanently deleted along with all their releases.'))}</p>
       <label className="flow-pipeline-confirm-field">
         <span>{withName(t('Type {name} to confirm'), <strong data-i18n-ignore>{prompt}</strong>)}</span>

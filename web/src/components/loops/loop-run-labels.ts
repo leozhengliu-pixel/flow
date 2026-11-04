@@ -160,7 +160,7 @@ export function describeRunFailure(run: FailedRun | LoopRunReply, t: Translate, 
     case "no_output": {
       const outputs = missing();
       if (!outputs.length) break;
-      let message = t("The loop's instructions call for {outputs}, but the run made none.").replace("{outputs}", list(outputs));
+      let message = t("The loop's instructions call for {outputs}, but the run made none.").replace("{outputs}", () => list(outputs));
       for (const [note, key] of DOCUMENT_OUTPUT_NOTES) if (raw.includes(note)) message += space + t(key);
       const skipped = raw.match(/\(the agent skipped the run — (.*) — but the instructions name no skip condition\)/);
       if (full.summary?.status === "skipped" || skipped) {
@@ -179,7 +179,7 @@ export function describeRunFailure(run: FailedRun | LoopRunReply, t: Translate, 
       const failed = [...(full.toolCalls ?? [])].reverse().find((call) => (call.status === "error" || call.status === "blocked") && writeTool(call.name));
       if (!outputs.length || !failed) break;
       const tool = translateToolTitle(failed.label || failed.name, t, failed);
-      let message = t("Expected {outputs}, but {tool} failed.").replace("{outputs}", list(outputs)).replace("{tool}", tool);
+      let message = t("Expected {outputs}, but {tool} failed.").replace("{outputs}", () => list(outputs)).replace("{tool}", () => tool);
       if (raw.includes(DONE_CLAIM_NOTE[0])) message += space + t(DONE_CLAIM_NOTE[1]);
       return { message, detail: failed.error || undefined };
     }

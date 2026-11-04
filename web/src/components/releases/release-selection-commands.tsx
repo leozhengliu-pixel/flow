@@ -46,7 +46,7 @@ export function useReleaseSelectionCommands({ data, pipeline, releases, actions,
   useRegisterCommandContext(releases.length ? {
     kind: 'release',
     ids: releases.map(item => item.id),
-    label: release ? release.name : t('{count} releases').replace('{count}', String(releases.length)),
+    label: release ? release.name : t('{count} releases').replace('{count}', () => String(releases.length)),
     actions: list,
     pageOptions: (page, query) => {
       if (page.id === 'releaseDate' && release) return datePageOptions(query, release.targetDate ?? '', Boolean(release.targetDate), setDate, t, false, 'Remove target date')

@@ -129,7 +129,7 @@ export function RecurrencePicker({ value, dueDate, nextOccurrenceAt, timeZone, b
         </>}
       </div>
     </div>}
-    <p className="recurrence-picker__summary" aria-live="polite"><Repeat2 aria-hidden="true"/><span>{describeRepeats(serialized, { t, locale, anchor: startDate })}</span><small>{t('Next due {date}').replace('{date}', formatDate(next.toISOString(), { month: 'short', day: 'numeric', year: next.getFullYear() === today.getFullYear() ? undefined : 'numeric' }))}</small></p>
+    <p className="recurrence-picker__summary" aria-live="polite"><Repeat2 aria-hidden="true"/><span>{describeRepeats(serialized, { t, locale, anchor: startDate })}</span><small>{t('Next due {date}').replace('{date}', () => formatDate(next.toISOString(), { month: 'short', day: 'numeric', year: next.getFullYear() === today.getFullYear() ? undefined : 'numeric' }))}</small></p>
     <footer>
       {onStop && value && <button type="button" className="recurrence-picker__stop" disabled={busy} onClick={() => void onStop()}>{t('Stop recurring')}</button>}
       <button type="button" onClick={onCancel}>{t('Cancel')}</button>

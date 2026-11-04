@@ -170,8 +170,8 @@ export function MyIssuesSurface({
   const activeHidden = showOverflow && activeIndex >= visibleCount
   const menuViews = activeHidden ? overflowViews.filter(view => view.id !== activeView) : overflowViews
   const overflowLabel = activeHidden
-    ? (menuViews.length ? t('{name} & {count} more').replace('{name}', views[activeIndex].label).replace('{count}', String(menuViews.length)) : views[activeIndex].label)
-    : t('{count} more').replace('{count}', String(overflowViews.length))
+    ? (menuViews.length ? t('{name} & {count} more').replace('{name}', () => views[activeIndex].label).replace('{count}', () => String(menuViews.length)) : views[activeIndex].label)
+    : t('{count} more').replace('{count}', () => String(overflowViews.length))
   const overflowVisibleLabel = activeHidden ? views[activeIndex].label : overflowLabel
   useEffect(() => { if (!overflowOpen) itemRefs.current = [] }, [overflowOpen])
   return <ContentViewContainer framed inset="tall" data-my-issues-surface="true">
@@ -211,7 +211,7 @@ export function MyIssuesSurface({
           </Popover.Root>}
           {phone && <div ref={measureRef} className={styles.tabMeasure} aria-hidden="true">
             {views.map(view => <span key={view.id} data-tab-measure className={`${styles.tab} ui-pill`}>{view.label}</span>)}
-            {views.map((_, index) => <span key={index} data-tab-measure-count={index + 1} className={`${styles.tab} ${styles.tabsOverflow} ${styles.tabsOverflowCount} ui-pill`}><span>{t('{count} more').replace('{count}', String(index + 1))}</span><TabsOverflowIcon/></span>)}
+            {views.map((_, index) => <span key={index} data-tab-measure-count={index + 1} className={`${styles.tab} ${styles.tabsOverflow} ${styles.tabsOverflowCount} ui-pill`}><span>{t('{count} more').replace('{count}', () => String(index + 1))}</span><TabsOverflowIcon/></span>)}
             <span data-tab-measure-active className={`${styles.tab} ${styles.tabsOverflow} ${styles.tabsOverflowActive} ui-pill`} data-active="true"><span>{views[activeIndex].label}</span><TabsOverflowIcon/></span>
           </div>}
         </nav>

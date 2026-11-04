@@ -226,7 +226,7 @@ function CustomerButton({ customers, selected, pendingName, onPick }: { customer
           else onPick(id === selected?.id ? undefined : id)
         }}
         footer={query => query && !looksLikeUrl(query) && query.toLocaleLowerCase() !== pendingName.toLocaleLowerCase()
-          ? <FlowMenuItem icon={<RequestPlusIcon/>} label={t('Create new customer: "{name}"').replace('{name}', query)} translate={false} onSelect={() => onPick(undefined, query)}/>
+          ? <FlowMenuItem icon={<RequestPlusIcon/>} label={t('Create new customer: "{name}"').replace('{name}', () => query)} translate={false} onSelect={() => onPick(undefined, query)}/>
           : null}
       />
     </FlowDropdownMenuContent>

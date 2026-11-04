@@ -28,7 +28,7 @@ export function CodingUsageBlock({ users, loopNames = {} }: { users: User[]; loo
       <header className="usage-section-header">
         <div>
           <h3>{t("Coding sessions spend")}</h3>
-          <p>{t("Since {date}").replace("{date}", Number.isNaN(since.getTime()) ? usage.since : since.toLocaleDateString())}</p>
+          <p>{t("Since {date}").replace("{date}", () => Number.isNaN(since.getTime()) ? usage.since : since.toLocaleDateString())}</p>
         </div>
       </header>
       <div className="usage-card usage-row usage-row-short">
@@ -36,7 +36,7 @@ export function CodingUsageBlock({ users, loopNames = {} }: { users: User[]; loo
         <strong>{formatMicros(usage.totalCostMicros)}</strong>
       </div>
       <div className="usage-card usage-row usage-row-short">
-        <span>{t("Model usage")} · {t("Sandbox runtime")} · {t("{count} sessions").replace("{count}", String(usage.sessions))}</span>
+        <span>{t("Model usage")} · {t("Sandbox runtime")} · {t("{count} sessions").replace("{count}", () => String(usage.sessions))}</span>
         <span data-i18n-ignore>{formatMicros(usage.llmCostMicros)} · {formatMicros(usage.runtimeCostMicros)}</span>
       </div>
       {byUser.length > 0 && (

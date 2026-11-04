@@ -100,7 +100,7 @@ function ChatConnectionRow({ provider, data }: { provider: ChatIntegrationProvid
   // Linking only maps the member's chat account; it needs a healthy connection (the tenant is authorized automatically).
   const tenantAuthorized = settings?.permissions ? settings.permissions.tenant.status === "authorized" : settings?.connection?.status === "connected";
   const ready = Boolean(settings?.credentialsConfigured && tenantAuthorized);
-  const description = t("Create and update issues from group chats in {workspace}").replace("{workspace}", data.workspace.name);
+  const description = t("Create and update issues from group chats in {workspace}").replace("{workspace}", () => data.workspace.name);
   let control: ReactNode;
   if (loading) control = <span role="status" aria-label={`${t("Loading account")}: ${name}`}><GridLoader size={14} /></span>;
   else if (identity) control = <ConnectionStatusMenu name={name} reconnect={Boolean(settings?.identityExpired)} disabled={busy} onReconnect={() => void connect()} onDisconnect={() => setConfirming(true)} />;
@@ -108,11 +108,11 @@ function ChatConnectionRow({ provider, data }: { provider: ChatIntegrationProvid
   else control = <span className="personal-connection-soon">{t(settings?.connection ? "Waiting for the app to be approved" : "Not configured")}</span>;
 
   return <>
-    <section className="settings-card" aria-label={t("{name} account").replace("{name}", name)} data-testid={`${provider}-account-row`}>
+    <section className="settings-card" aria-label={t("{name} account").replace("{name}", () => name)} data-testid={`${provider}-account-row`}>
       <SettingsRow icon={<IntegrationBrandIcon provider={provider} size={16} />} title={<>{name}{identity?.name && <span data-i18n-ignore>{` · ${identity.name}`}</span>}</>} description={description}>{control}</SettingsRow>
       {error && <div className="chat-account-error" role="alert"><span>{t(error)}</span><button type="button" className="personal-action" disabled={busy || loading} onClick={() => void retry()}><RefreshCw size={14} aria-hidden="true" />{t("Retry")}</button></div>}
       {!loading && admin && !ready && !identity && <div className="chat-account-setup-link"><NavLink to={integrationSettingsPath(data.workspace.urlKey, provider)}>{t("Set up workspace integration")}</NavLink></div>}
     </section>
-    {confirming && <SettingsConfirmDialog title={t("Disconnect personal {name} account?").replace("{name}", name)} description={t("Link your account again to resume your group actions.")} confirmLabel={t("Disconnect")} busy={busy} onCancel={() => setConfirming(false)} onConfirm={() => void disconnect()} />}
+    {confirming && <SettingsConfirmDialog title={t("Disconnect personal {name} account?").replace("{name}", () => name)} description={t("Link your account again to resume your group actions.")} confirmLabel={t("Disconnect")} busy={busy} onCancel={() => setConfirming(false)} onConfirm={() => void disconnect()} />}
   </>;
 }

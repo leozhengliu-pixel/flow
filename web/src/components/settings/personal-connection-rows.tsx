@@ -95,7 +95,7 @@ export function ConnectionStatusMenu({
         <button
           type="button"
           className={`personal-action code-host-status${reconnect ? " reconnect" : ""}`}
-          aria-label={t("{name} account options").replace("{name}", name)}
+          aria-label={t("{name} account options").replace("{name}", () => name)}
           disabled={disabled}
         >
           <span className="code-host-status-dot" aria-hidden="true" />
@@ -202,7 +202,7 @@ export function PersonalConnectionRows() {
   };
   const disconnect = async (provider: "google-calendar" | "notion") => {
     const name = provider === "google-calendar" ? "Google Calendar" : "Notion";
-    const confirmed = await confirmAction(t("Disconnect {name}?").replace("{name}", name), {
+    const confirmed = await confirmAction(t("Disconnect {name}?").replace("{name}", () => name), {
       confirmLabel: t("Disconnect"),
       danger: true,
     });

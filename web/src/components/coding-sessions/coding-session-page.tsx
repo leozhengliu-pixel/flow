@@ -75,7 +75,7 @@ export function CodingSessionPage({ data, sessionId, onNavigate, onOpenSidebar }
       <span className="coding-session-page-title">
         {pr ? <GitPullRequest size={14} aria-hidden="true" className="coding-diff-glyph"/> : <CodingDiffGlyph/>}
         <h2 data-i18n-ignore={Boolean(session) || undefined}>{session ? codingSessionTitle(session, data) : t('Coding session')}</h2>
-        {additions > 0 && <span className="coding-session-page-additions" aria-label={t('{count} lines added').replace('{count}', String(additions))}>+{additions}</span>}
+        {additions > 0 && <span className="coding-session-page-additions" aria-label={t('{count} lines added').replace('{count}', () => String(additions))}>+{additions}</span>}
       </span>
       {pr && <ScopedFlowTooltip label={`${pr.repository}${pullRequestNumberLabel(pr)}`}><a className="coding-session-page-pr" href={prHref} target={review ? undefined : '_blank'} rel={review ? undefined : 'noreferrer'} aria-label={`${pr.repository}${pullRequestNumberLabel(pr)}`} onClick={event => {
         if (!review || !prHref || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return

@@ -1,4 +1,5 @@
 import type { ActorBot } from "@/types/flow";
+import { asIs } from '@/lib/as-is'
 
 type ActorUser = { id?: string; displayName?: string; name?: string; avatarUrl?: string; app?: boolean } | null | undefined;
 
@@ -119,5 +120,5 @@ export function sameActivityActor(
 export function attributedActionText(actor: ActivityActor, action: string, t: (text: string) => string = (text) => text): string {
   if (!actor.onBehalfOf) return action;
   const template = t("{actor} {action} on behalf of {user}").replace(/^\{actor\}\s*/, "");
-  return template.replace("{action}", action).replace("{user}", actor.onBehalfOf);
+  return template.replace("{action}", () => action).replace("{user}", asIs(actor.onBehalfOf));
 }

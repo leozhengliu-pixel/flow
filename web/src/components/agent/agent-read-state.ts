@@ -19,7 +19,7 @@ export function formatAgentHistoryTime(value: string, t: (source: string) => str
     ? `${Math.floor(days / 7)}w`
     : shortRelativeTime(value, now);
   const match = /^(\d+)(\D+)$/.exec(short);
-  return match ? t(`{count}${match[2]}`).replace("{count}", match[1]) : t(short);
+  return match ? t(`{count}${match[2]}`).replace("{count}", () => match[1]) : t(short);
 }
 
 /** The reference app's chat history groups (Today, Yesterday, Last week, Older), newest chats first within each. */

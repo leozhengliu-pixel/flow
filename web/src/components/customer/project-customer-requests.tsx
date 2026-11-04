@@ -132,7 +132,7 @@ export function ProjectCustomerRequestsPage({ data, project, issues }: { data: B
       <div className="project-customer-requests__title">
         <span>{t('Customers')}</span>
         <span className="project-customer-requests__count">{groups.length}</span>
-        {importantCount > 0 && <FlowTooltip label={t('Important to {count} customers').replace('{count}', String(importantCount))}>
+        {importantCount > 0 && <FlowTooltip label={t('Important to {count} customers').replace('{count}', () => String(importantCount))}>
           <span className="project-customer-requests__important"><ImportantIcon size={16}/>{importantCount}</span>
         </FlowTooltip>}
       </div>

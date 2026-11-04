@@ -7,6 +7,7 @@ import { useI18n } from '@/i18n/i18n'
 import type { PulseDiff, PulseDiffChange, PulseDiffValue } from '@/types/flow'
 import { pulseDiffHasChanges } from './pulse-diff'
 import './pulse-diff.css'
+import { asIs } from '@/lib/as-is'
 
 const PRIORITY_LABELS = ['No priority', 'Urgent', 'High', 'Medium', 'Low']
 
@@ -101,7 +102,7 @@ export function PulseDiffBlock({ diff, kind, title }: { diff?: PulseDiff; kind: 
     {title}
     {fields.map(field => diff[field] ? <ChangeRow change={diff[field]!} field={field} key={field} kind={kind}/> : null)}
     {diff.progressSince && <div className="pulse-diff-row" data-field="progress">
-      <span className="pulse-diff-label">{t('Progress since {date}').replace('{date}', formatDay(diff.progressSince.date))}</span>
+      <span className="pulse-diff-label">{t('Progress since {date}').replace('{date}', asIs(formatDay(diff.progressSince.date)))}</span>
       <span className="pulse-diff-change"><ProgressBar value={diff.progressSince.to}/><span>{percent(diff.progressSince.from)}</span><ArrowRight aria-hidden="true" className="pulse-diff-arrow" size={12}/><strong>{percent(diff.progressSince.to)}</strong></span>
     </div>}
     {diff.milestones?.length ? <ul className="pulse-diff-milestones">

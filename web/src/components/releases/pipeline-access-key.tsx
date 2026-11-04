@@ -16,6 +16,7 @@ import type { ReleasePipeline } from '@/types/flow'
 import { Subsection } from './pipeline-settings-subsection'
 
 import { accessKeyState } from './pipeline-settings-model'
+import { asIs } from '@/lib/as-is'
 
 async function copyText(text: string) {
   await navigator.clipboard.writeText(text)
@@ -100,10 +101,10 @@ export function PipelineAccessKeySection({ pipeline, disabled, onChanged }: { pi
         <CopyButton text={secret} label={t('Copy to clipboard')} onCopied={() => toast.info(t('Access key copied to clipboard'))}/>
       </SettingsRow>}
       <div className="settings-row pipeline-settings-key-status">
-        <span className="pipeline-settings-key-state"><i data-state={expiring ? 'expiring' : 'active'}/>{expiring ? t('Expiring {date}').replace('{date}', shortDate(expiring)) : activeLabel}</span>
+        <span className="pipeline-settings-key-state"><i data-state={expiring ? 'expiring' : 'active'}/>{expiring ? t('Expiring {date}').replace('{date}', () => shortDate(expiring)) : activeLabel}</span>
         <span className="pipeline-settings-key-meta">
-          {pipeline.accessKeyCreatedAt && <FlowTooltip label={t('Created {time}').replace('{time}', fullDate(pipeline.accessKeyCreatedAt))}><span>{t('Created {time}').replace('{time}', shortDate(pipeline.accessKeyCreatedAt))}</span></FlowTooltip>}
-          {pipeline.accessKeyLastUsedAt && <FlowTooltip label={t('Last used {time}').replace('{time}', fullDate(pipeline.accessKeyLastUsedAt))}><span>{t('Last used {time}').replace('{time}', formatRelative(pipeline.accessKeyLastUsedAt))}</span></FlowTooltip>}
+          {pipeline.accessKeyCreatedAt && <FlowTooltip label={t('Created {time}').replace('{time}', asIs(fullDate(pipeline.accessKeyCreatedAt)))}><span>{t('Created {time}').replace('{time}', asIs(shortDate(pipeline.accessKeyCreatedAt)))}</span></FlowTooltip>}
+          {pipeline.accessKeyLastUsedAt && <FlowTooltip label={t('Last used {time}').replace('{time}', asIs(fullDate(pipeline.accessKeyLastUsedAt)))}><span>{t('Last used {time}').replace('{time}', asIs(formatRelative(pipeline.accessKeyLastUsedAt)))}</span></FlowTooltip>}
         </span>
         {!disabled && <DropdownMenu>
           <DropdownMenuTrigger asChild><button type="button" className="pipeline-settings-icon-button" aria-label={t('Access key actions')} disabled={busy}><FlowGlyph name="ellipsis" size={16}/></button></DropdownMenuTrigger>
@@ -116,8 +117,8 @@ export function PipelineAccessKeySection({ pipeline, disabled, onChanged }: { pi
     </div>
     {dialog === 'rotate' && <KeyConfirmDialog
       title={t('Rotate access key?')}
-      body={expiring ? t('A new access key will be generated. The current key is already scheduled for revocation at {date} and will continue working until then.').replace('{date}', fullDate(expiring)) : t('A new access key will be generated. The current key will continue working for 1 hour to allow you to update your CI configuration.')}
-      option={expiring ? t('Revoke old key now instead of at {date}').replace('{date}', fullDate(expiring)) : t('Revoke old key immediately (no grace period)')}
+      body={expiring ? t('A new access key will be generated. The current key is already scheduled for revocation at {date} and will continue working until then.').replace('{date}', () => fullDate(expiring)) : t('A new access key will be generated. The current key will continue working for 1 hour to allow you to update your CI configuration.')}
+      option={expiring ? t('Revoke old key now instead of at {date}').replace('{date}', () => fullDate(expiring)) : t('Revoke old key immediately (no grace period)')}
       confirm={t('Rotate')}
       onClose={() => setDialog(undefined)}
       onConfirm={immediate => void rotate(immediate)}

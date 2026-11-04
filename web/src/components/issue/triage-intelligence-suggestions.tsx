@@ -407,7 +407,7 @@ function RelationRow({
         {collapsible && (
           <button type="button" className="triage-intelligence-show-more" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
             {expanded ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
-            {expanded ? t('Show less') : t('Show {count} more').replace('{count}', String(hidden))}
+            {expanded ? t('Show less') : t('Show {count} more').replace('{count}', () => String(hidden))}
           </button>
         )}
       </div>
@@ -419,9 +419,9 @@ function createdAgo(value: string, t: (text: string) => string) {
   const days = Math.floor(Math.max(0, Date.now() - Date.parse(value)) / 86_400_000)
   if (days < 1) return t('Created today')
   // The reference app counts days up to a month ("Created 11d ago"), then months.
-  if (days < 30) return t('Created {count}d ago').replace('{count}', String(days))
-  if (days < 365) return t('Created {count}mo ago').replace('{count}', String(Math.floor(days / 30)))
-  return t('Created {count}y ago').replace('{count}', String(Math.floor(days / 365)))
+  if (days < 30) return t('Created {count}d ago').replace('{count}', () => String(days))
+  if (days < 365) return t('Created {count}mo ago').replace('{count}', () => String(Math.floor(days / 30)))
+  return t('Created {count}y ago').replace('{count}', () => String(Math.floor(days / 365)))
 }
 
 /** The reference app's 321px hover card for a suggested duplicate / related issue: when, what, why, and accept / dismiss. */

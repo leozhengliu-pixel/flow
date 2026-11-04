@@ -91,14 +91,14 @@ export function LoopFilterBar({
               {group.label}
             </strong>
             <SelectControl
-              label={t("{field} operator").replace("{field}", group.label)}
+              label={t("{field} operator").replace("{field}", () => group.label)}
               value={filters.operators[field] ?? (field === "runs" ? "gte" : "is")}
               options={operators}
               onChange={(operator) => onChange({ ...filters, operators: { ...filters.operators, [field]: operator } })}
             />
             {menu(
               field,
-              <button type="button" className="workspace-team-filter-value" aria-label={t("{field} values").replace("{field}", group.label)} data-i18n-ignore={field === "owner" || undefined}>
+              <button type="button" className="workspace-team-filter-value" aria-label={t("{field} values").replace("{field}", () => group.label)} data-i18n-ignore={field === "owner" || undefined}>
                 {label}
               </button>,
             )}
@@ -107,7 +107,7 @@ export function LoopFilterBar({
                 {t("Edit date")}
               </button>
             )}
-            <button type="button" aria-label={t("Remove {field} filter").replace("{field}", group.label)} onClick={() => onChange({ ...filters, [field]: [] })}>
+            <button type="button" aria-label={t("Remove {field} filter").replace("{field}", () => group.label)} onClick={() => onChange({ ...filters, [field]: [] })}>
               <X />
             </button>
           </span>

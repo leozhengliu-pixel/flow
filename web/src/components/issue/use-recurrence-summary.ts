@@ -13,9 +13,9 @@ export function useRecurrenceSummary(issue: { recurrence?: string; dueDate?: str
   const repeats = describeRepeats(issue.recurrence, { t, locale, anchor: due })
   const dateLabel = (date: Date) => formatDate(date.toISOString(), { month: 'short', day: 'numeric' })
   // While composing, the first due date is the useful anchor ("Repeats every week · Due Oct 10").
-  if (options.firstDue) return [repeats, due ? t('Due {date}').replace('{date}', dateLabel(due)) : ''].filter(Boolean).join(' · ')
+  if (options.firstDue) return [repeats, due ? t('Due {date}').replace('{date}', () => dateLabel(due)) : ''].filter(Boolean).join(' · ')
   const schedule = due ? parseRecurrence(issue.recurrence, due) : null
   const next = due && schedule ? nextRecurrenceDue(schedule, due) : undefined
-  const nextLabel = next ? t('Next due {date}').replace('{date}', dateLabel(next)) : ''
+  const nextLabel = next ? t('Next due {date}').replace('{date}', () => dateLabel(next)) : ''
   return [repeats, nextLabel].filter(Boolean).join(' · ')
 }

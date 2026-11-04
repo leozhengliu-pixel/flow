@@ -132,7 +132,7 @@ export function CodingChanges({ session, commitsOnly }: { session: CodingSession
   const deletions = diffs.reduce((sum, diff) => sum + diff.deletions, 0)
   return <section className="coding-changes" aria-label={t('Changes')}>
     {diffs.length > 0 && <details>
-      <summary>{t('{count} files changed').replace('{count}', String(diffs.length))} <span className="coding-additions">+{additions}</span> <span className="coding-deletions">−{deletions}</span></summary>
+      <summary>{t('{count} files changed').replace('{count}', () => String(diffs.length))} <span className="coding-additions">+{additions}</span> <span className="coding-deletions">−{deletions}</span></summary>
       <ul>{diffs.map(diff => <li key={diff.path} data-status={diff.status}><code data-i18n-ignore>{diff.path}</code><span className="coding-additions">+{diff.additions}</span><span className="coding-deletions">−{diff.deletions}</span></li>)}</ul>
     </details>}
     {commits.length > 0 && <ul className="coding-commits" aria-label={t('Commits')}>

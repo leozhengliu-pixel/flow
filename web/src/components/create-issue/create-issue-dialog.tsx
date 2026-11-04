@@ -430,7 +430,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialExpand
       setError(!data.states.length
         ? t('Statuses are still loading. Try again in a moment.')
         : !teamName ? t(availableStates.length ? 'Choose a status from the team workflow' : 'This team has no status for new issues')
-        : t(availableStates.length ? 'Choose a status from the {team} workflow' : '{team} has no status for new issues').replace('{team}', teamName))
+        : t(availableStates.length ? 'Choose a status from the {team} workflow' : '{team} has no status for new issues').replace('{team}', () => teamName))
       return
     }
     setSaving(true)
@@ -466,7 +466,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialExpand
         await onDraftDeleted?.(serverDraftId)
       }
       resetBody()
-      if (failedUploads) setError(t(failedUploads === 1 ? 'Issue created, but 1 attachment failed to upload' : 'Issue created, but {count} attachments failed to upload').replace('{count}', String(failedUploads)))
+      if (failedUploads) setError(t(failedUploads === 1 ? 'Issue created, but 1 attachment failed to upload' : 'Issue created, but {count} attachments failed to upload').replace('{count}', () => String(failedUploads)))
       if (!createMore) onOpenChange(false)
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : t('Could not create issue'))
@@ -536,19 +536,19 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialExpand
               {quickSuggestions.map(suggestion => {
                 if (suggestion.type === 'assignee') {
                   const user = data.users.find(item => item.id === suggestion.id)
-                  return user ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><Avatar id={user.id} name={user.displayName}/><span data-i18n-ignore>{t('Assign {name}').replace('{name}', user.displayName)}</span></button> : null
+                  return user ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><Avatar id={user.id} name={user.displayName}/><span data-i18n-ignore>{t('Assign {name}').replace('{name}', () => user.displayName)}</span></button> : null
                 }
                 if (suggestion.type === 'project') {
                   const item = data.projects.find(project => project.id === suggestion.id)
-                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><ProjectGlyph project={item}/><span data-i18n-ignore>{t('Add to {name}').replace('{name}', item.name)}</span></button> : null
+                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><ProjectGlyph project={item}/><span data-i18n-ignore>{t('Add to {name}').replace('{name}', () => item.name)}</span></button> : null
                 }
                 if (suggestion.type === 'label') {
                   const item = availableLabels.find(label => label.id === suggestion.id)
-                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><LabelIcon/><span data-i18n-ignore>{t('Add {name}').replace('{name}', item.name)}</span></button> : null
+                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><LabelIcon/><span data-i18n-ignore>{t('Add {name}').replace('{name}', () => item.name)}</span></button> : null
                 }
                 if (suggestion.type === 'team') {
                   const item = data.teams.find(team => team.id === suggestion.id)
-                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><TeamIcon team={item}/><span data-i18n-ignore>{t('Move to {name}').replace('{name}', item.name)}</span></button> : null
+                  return item ? <button key={`${suggestion.type}-${suggestion.id}`} type="button" onClick={() => applyQuickSuggestion(suggestion)}><TeamIcon team={item}/><span data-i18n-ignore>{t('Move to {name}').replace('{name}', () => item.name)}</span></button> : null
                 }
                 return null
               })}
@@ -641,7 +641,7 @@ function MoreActions({ active, dueDate, recurrence, onDueDateChange, onRecurrenc
 
 function AddLinkDialog({ issueLabel, onAdd, onOpenChange, open }: { issueLabel: string; onAdd: (url: string, label: string) => void; onOpenChange: (open: boolean) => void; open: boolean }) {
   const { t } = useI18n()
-  const title = t('Add link to {name}').replace('{name}', t(issueLabel))
+  const title = t('Add link to {name}').replace('{name}', () => t(issueLabel))
   const [url, setUrl] = useState('')
   const [label, setLabel] = useState('')
   const submitLink = () => {

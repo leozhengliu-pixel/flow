@@ -716,7 +716,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
             </label>
           ))}
           {teamsTarget?.mode === "manage" && teamDraft.length > 0 && (
-            <p className="settings-member-dialog-note">{t("{name} has full access to these teams").replace("{name}", teamsTarget.members[0].user.displayName)}</p>
+            <p className="settings-member-dialog-note">{t("{name} has full access to these teams").replace("{name}", () => teamsTarget.members[0].user.displayName)}</p>
           )}
           <footer>
             <button type="button" className="settings-action" onClick={() => setTeamsTarget(undefined)}>
@@ -730,7 +730,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
       </Dialog>
       <Dialog open={Boolean(confirmTarget)} onOpenChange={(open) => !open && setConfirmTarget(undefined)}>
         <DialogContent className="settings-confirm">
-          <DialogTitle>{confirmText ? t(confirmText.title).replace("{name}", confirmSubject) : ""}</DialogTitle>
+          <DialogTitle>{confirmText ? t(confirmText.title).replace("{name}", () => confirmSubject) : ""}</DialogTitle>
           <p>{confirmText ? t(confirmText.description) : ""}</p>
           <footer>
             <button type="button" className="settings-action" onClick={() => setConfirmTarget(undefined)}>

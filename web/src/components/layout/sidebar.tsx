@@ -542,7 +542,7 @@ export function Sidebar({
         badgeStyle={itemBadge("pulse")}
         accessory={<PulseAudioMiniPlayer />}
         badge={pulseUnreadCount}
-        badgeLabel={translate(pulseUnreadCount === 1 ? "{count} new pulse item" : "{count} new pulse items").replace("{count}", String(pulseUnreadCount))}
+        badgeLabel={translate(pulseUnreadCount === 1 ? "{count} new pulse item" : "{count} new pulse items").replace("{count}", () => String(pulseUnreadCount))}
         icon={<PulseIcon />}
         label="Pulse"
         matchPath={pulsePath(workspaceSlug)}

@@ -49,7 +49,7 @@ function PipelineBulkBar({ count, actions, onClear }: { count: number; actions: 
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   if (!count) return null
-  const title = t('{count} selected').replace('{count}', String(count))
+  const title = t('{count} selected').replace('{count}', () => String(count))
   return <>
     <div aria-label={title} className="flow-pipelines-bulk-bar" role="toolbar">
       <span className="flow-pipelines-bulk-bar__count">{title}</span>
@@ -125,7 +125,7 @@ export function PipelineSettingsRows({ data, pipelines, onOpen, onOpenReleases, 
       ...(canCreate ? [{ id: 'duplicate', label: t('Duplicate pipeline…'), run: () => onDuplicate(selectedPipelines[0]) }] : []),
     ] : []),
     ...(selectedPipelines.length && selectedPipelines.every(pipeline => canAdministerReleasePipeline(data, pipeline))
-      ? [{ id: 'delete', label: selectedPipelines.length === 1 ? t('Delete pipeline') : t('Delete {count} pipelines').replace('{count}', String(selectedPipelines.length)), run: () => setDeleting(selectedPipelines) }] : []),
+      ? [{ id: 'delete', label: selectedPipelines.length === 1 ? t('Delete pipeline') : t('Delete {count} pipelines').replace('{count}', () => String(selectedPipelines.length)), run: () => setDeleting(selectedPipelines) }] : []),
   ]
   const rowActions = (pipeline: ReleasePipeline, Item: typeof DropdownMenuItem | typeof ContextMenuItem, Separator: typeof DropdownMenuSeparator | typeof ContextMenuSeparator) => <>
     <Item onSelect={() => onOpenReleases(pipeline)}><ReleasesIcon size={14}/><span>{t('View releases')}</span></Item>
@@ -139,7 +139,7 @@ export function PipelineSettingsRows({ data, pipelines, onOpen, onOpenReleases, 
     {sorted.map(pipeline => {
       const summary = summaries.get(pipeline.id) ?? { releaseCount: 0 }
       const count = summary.releaseCount
-      const countLabel = t(count === 1 ? 'View 1 release' : 'View {count} releases').replace('{count}', String(count))
+      const countLabel = t(count === 1 ? 'View 1 release' : 'View {count} releases').replace('{count}', () => String(count))
       const selected = selection.selected.includes(pipeline.id)
       return <ContextMenu key={pipeline.id}>
         <ContextMenuTrigger asChild>
@@ -184,13 +184,13 @@ export function DeletedPipelineRows({ data, entries, filtering, onRestored }: { 
       for (const entry of items) await restoreTrashEntry(entry.id)
       selection.clear()
       await onRestored()
-      toast.success(items.length === 1 ? t('Pipeline restored') : t('{count} pipelines restored').replace('{count}', String(items.length)))
+      toast.success(items.length === 1 ? t('Pipeline restored') : t('{count} pipelines restored').replace('{count}', () => String(items.length)))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('Could not restore release pipeline'))
     }
   }
   const selected = entries.filter(entry => selection.selected.includes(entry.id))
-  const restoreLabel = (count: number) => count === 1 ? t('Restore pipeline') : t('Restore {count} pipelines').replace('{count}', String(count))
+  const restoreLabel = (count: number) => count === 1 ? t('Restore pipeline') : t('Restore {count} pipelines').replace('{count}', () => String(count))
   return <div className={`flow-pipelines-settings-table is-deleted${selection.selected.length ? ' has-selection' : ''}`} role="table" aria-label={t('Recently deleted pipelines')}>
     <div className="flow-pipelines-settings-head" role="row"><span/><span>{t('Pipeline name')}</span><span>{t('Teams')}</span><span>{t('Type')}</span><span>{t('Deleted')}</span><span/></div>
     {[...entries].sort((left, right) => right.deletedAt.localeCompare(left.deletedAt)).map(entry => {

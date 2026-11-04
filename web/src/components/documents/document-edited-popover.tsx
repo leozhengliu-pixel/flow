@@ -39,7 +39,7 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot
   const { t, formatDate } = useI18n()
   const phone = usePhoneLayout()
   const owner = documentOwner(document, ctx.data.users)
-  const editedLabel = t('Edited {date}').replace('{date}', documentEditedDate(lastEditedAt, formatDate))
+  const editedLabel = t('Edited {date}').replace('{date}', () => documentEditedDate(lastEditedAt, formatDate))
   const ownerName = owner ? owner.displayName || owner.name : t('No owner')
   const ownerValue = <>
     {owner ? <UserAvatar avatarUrl={owner.avatarUrl} className="document-meta-avatar" color={avatarColor(owner.id)} name={ownerName}/> : null}
@@ -50,7 +50,7 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot
   const editorName = attributedActorName(lastEditor, editorBot)
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>
-      <button aria-label={t('Document display options and metadata; {edited}').replace('{edited}', editedLabel)} className="document-edited" type="button">
+      <button aria-label={t('Document display options and metadata; {edited}').replace('{edited}', () => editedLabel)} className="document-edited" type="button">
         <FlowSlidersIcon/><span className="document-edited__label document-edited__label--desktop">{editedLabel}</span><span className="document-edited__label document-edited__label--phone">{documentEditedDate(lastEditedAt, formatDate)}</span>
       </button>
     </Popover.Trigger>

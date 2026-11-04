@@ -19,6 +19,7 @@ import type { ChatInitiativeBinding, ChatInitiativeBindings, ChatIntegrationProv
 import type { Initiative, User } from '@/types/flow'
 import '@/components/settings/feature-settings.css'
 import '@/components/settings/chat-integration-settings.css'
+import { asIs } from '@/lib/as-is'
 
 const NO_SELECTION = '__none__'
 
@@ -32,8 +33,8 @@ export function InitiativeChatGroupDialog({ open, onOpenChange, provider, initia
   const name = chatProviderName(provider, t)
   return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay"/>
     <Dialog.Content data-flow-motion="dialog" className="project-detail-page__form-dialog project-slack-dialog project-chat-group-dialog initiative-chat-group-dialog">
-      <Dialog.Title><IntegrationBrandIcon provider={provider} size={16}/>{t('{name} notifications for').replace('{name}', name)} <span data-i18n-ignore>{initiative.name}</span></Dialog.Title>
-      <Dialog.Description>{t("Connect a {name} group to receive this initiative's updates.").replace('{name}', name)}</Dialog.Description>
+      <Dialog.Title><IntegrationBrandIcon provider={provider} size={16}/>{t('{name} notifications for').replace('{name}', () => name)} <span data-i18n-ignore>{initiative.name}</span></Dialog.Title>
+      <Dialog.Description>{t("Connect a {name} group to receive this initiative's updates.").replace('{name}', () => name)}</Dialog.Description>
       {open && <InitiativeChatGroups provider={provider} initiative={initiative} users={users}/>}
       <footer><Dialog.Close asChild><button type="button">{t('Close')}</button></Dialog.Close></footer>
     </Dialog.Content>
@@ -78,7 +79,7 @@ function InitiativeChatGroups({ provider, initiative, users }: { provider: ChatI
     finally { setBusy('') }
   }
   const revoke = async (binding: ChatInitiativeBinding) => {
-    const confirmed = await confirmAction(t('Revoke group binding?'), { description: t("{group} stops receiving this initiative's updates. The binding stays listed as revoked.").replace('{group}', binding.chatName), confirmLabel: t('Revoke'), danger: true })
+    const confirmed = await confirmAction(t('Revoke group binding?'), { description: t("{group} stops receiving this initiative's updates. The binding stays listed as revoked.").replace('{group}', () => binding.chatName), confirmLabel: t('Revoke'), danger: true })
     if (confirmed) await mutate(`revoke:${binding.id}`, () => revokeChatInitiativeBinding(provider, binding.id), 'Group binding revoked')
   }
   const remove = async (binding: ChatInitiativeBinding) => {
@@ -86,7 +87,7 @@ function InitiativeChatGroups({ provider, initiative, users }: { provider: ChatI
   }
 
   if (loading && !state && !missing) return <p className="chat-muted" role="status">{t('Loading integration…')}</p>
-  if (missing || state && !state.tenantAuthorized) return <AppLink className="project-slack-dialog__connect" href={integrationSettingsPath(workspace, provider)}>{t('Connect {name}').replace('{name}', name)}</AppLink>
+  if (missing || state && !state.tenantAuthorized) return <AppLink className="project-slack-dialog__connect" href={integrationSettingsPath(workspace, provider)}>{t('Connect {name}').replace('{name}', () => name)}</AppLink>
   return <div className="chat-integration-settings project-chat-groups initiative-chat-groups">
     {error && <p className="chat-integration-alert" role="alert">{error}</p>}
     {state && state.bindings.length > 0 && <div className="feature-card">{state.bindings.map(binding => {
@@ -99,8 +100,8 @@ function InitiativeChatGroups({ provider, initiative, users }: { provider: ChatI
             {revoked ? <small className="chat-binding-badge is-revoked">{t('Revoked')}</small> : !binding.enabled && <small>{t('Paused')}</small>}
           </strong>
           {binding.authorization && <span className="chat-binding-authorization">
-            {t('Authorized by {name} on {date}').replace('{name}', authorizer?.displayName || authorizer?.name || t('a member')).replace('{date}', formatDate(binding.authorization.authorizedAt, { dateStyle: 'medium' }))}
-            {revoked && binding.revokedAt && ` · ${t('Revoked on {date}').replace('{date}', formatDate(binding.revokedAt, { dateStyle: 'medium' }))}`}
+            {t('Authorized by {name} on {date}').replace('{name}', () => authorizer?.displayName || authorizer?.name || t('a member')).replace('{date}', asIs(formatDate(binding.authorization.authorizedAt, { dateStyle: 'medium' })))}
+            {revoked && binding.revokedAt && ` · ${t('Revoked on {date}').replace('{date}', asIs(formatDate(binding.revokedAt, { dateStyle: 'medium' })))}`}
           </span>}
         </div>
         {state.canManage && <aside>
@@ -115,7 +116,7 @@ function InitiativeChatGroups({ provider, initiative, users }: { provider: ChatI
         ? <p className="chat-muted">{t("Initiatives led by a private team can't be connected to a group.")}</p>
         : adding
           ? <InitiativeChatBindingEditor provider={provider} initiative={initiative} busy={Boolean(busy)} onCancel={() => setAdding(false)} onSave={(chatId, chatName) => mutate('binding', () => saveChatInitiativeBinding(provider, { initiativeId: initiative.id, chatId, chatName, enabled: true, authorize: true }), 'Group binding saved', () => setAdding(false))}/>
-          : <button type="button" className="feature-button" disabled={Boolean(busy)} onClick={() => setAdding(true)}>{t('Connect {name} group').replace('{name}', name)}</button>}
+          : <button type="button" className="feature-button" disabled={Boolean(busy)} onClick={() => setAdding(true)}>{t('Connect {name} group').replace('{name}', () => name)}</button>}
   </div>
 }
 

@@ -90,7 +90,7 @@ export function CustomerPageRequests({ data, customer, groups, archivedCount, sh
       <div className="customer-needs__heading">
         <span className="customer-needs__title">{t('Requests')}</span>
         <span className="customer-needs__count">{visible.length}</span>
-        {importantCount > 0 && <FlowTooltip label={t(importantCount === 1 ? '1 important request' : '{count} important requests').replace('{count}', String(importantCount))}>
+        {importantCount > 0 && <FlowTooltip label={t(importantCount === 1 ? '1 important request' : '{count} important requests').replace('{count}', () => String(importantCount))}>
           <span className="customer-needs__important"><ImportantIcon size={16}/>{importantCount}</span>
         </FlowTooltip>}
       </div>
@@ -131,11 +131,11 @@ export function CustomerPageRequests({ data, customer, groups, archivedCount, sh
         </div>
       </div>}
     {hiddenByDisplayOptions > 0 && <div className="customer-needs__hidden" data-has-rows={ordered.length > 0 || undefined}>
-      <span>{t(hiddenByDisplayOptions === 1 ? '1 request hidden by display options' : '{count} requests hidden by display options').replace('{count}', String(hiddenByDisplayOptions))}</span>
+      <span>{t(hiddenByDisplayOptions === 1 ? '1 request hidden by display options' : '{count} requests hidden by display options').replace('{count}', () => String(hiddenByDisplayOptions))}</span>
       <button type="button" onClick={() => setOptionsOpen(true)}>{t('Show options')}</button>
     </div>}
     {archivedCount > 0 && !showArchived && <div className="customer-needs__archived" data-after-hidden={hiddenByDisplayOptions > 0 || undefined}>
-      <button type="button" onClick={onToggleShowArchived}><ArchiveBoxIcon size={14}/>{t(archivedCount === 1 ? 'Show 1 archived request' : 'Show {count} archived requests').replace('{count}', String(archivedCount))}</button>
+      <button type="button" onClick={onToggleShowArchived}><ArchiveBoxIcon size={14}/>{t(archivedCount === 1 ? 'Show 1 archived request' : 'Show {count} archived requests').replace('{count}', () => String(archivedCount))}</button>
     </div>}
   </section>
 }
@@ -204,7 +204,7 @@ function CustomerNeedRow({ data, customer, group, view, expanded, onToggle, onRe
       {hasAdditional && <FlowTooltip label={t('Number of requests')}><span className="customer-need__badge-slot"><span className="customer-need__count">{needs.length}</span></span></FlowTooltip>}
       {groupHasImportant(group) && <FlowTooltip label={t('Important')}><span className="customer-need__badge-slot customer-need__important"><ImportantIcon size={16}/></span></FlowTooltip>}
       <span className="customer-need__end" data-expanded={expanded || undefined}>
-        <FlowTooltip label={t('Created at {date}').replace('{date}', fullTimestamp(primary.createdAt, locale))}>
+        <FlowTooltip label={t('Created at {date}').replace('{date}', () => fullTimestamp(primary.createdAt, locale))}>
           <span className="customer-need__time">{localizedShortTime(primary.createdAt, t)}</span>
         </FlowTooltip>
         <span className="customer-need__menu-slot">
@@ -237,13 +237,13 @@ function CustomerNeedRow({ data, customer, group, view, expanded, onToggle, onRe
 function localizedShortTime(value: string, t: (source: string) => string) {
   const short = shortRelativeTime(value)
   const match = /^(\d+)(\D+)$/.exec(short)
-  return match ? t(`{count}${match[2]}`).replace('{count}', match[1]) : t(short)
+  return match ? t(`{count}${match[2]}`).replace('{count}', () => match[1]) : t(short)
 }
 
 function localizedLongTime(value: string, t: (source: string) => string) {
   const long = longRelativeTime(value)
   const match = /^(\d+) /.exec(long)
-  return match && match[1] !== '1' ? t(long.replace(/^\d+/, '{count}')).replace('{count}', match[1]) : t(long)
+  return match && match[1] !== '1' ? t(long.replace(/^\d+/, '{count}')).replace('{count}', () => match[1]) : t(long)
 }
 
 function DotsIcon() {
@@ -281,7 +281,7 @@ function NeedDetail({ data, customer, group, need, editing, onEdit, onCloseEdit,
     {need.attachments.length > 0 && <div className="customer-need-detail__files">
       {need.attachments.map(attachment => <span key={attachment.id}>
         <a href={attachment.url} target="_blank" rel="noreferrer"><Paperclip size={12} aria-hidden="true"/><span data-i18n-ignore>{attachment.title}</span></a>
-        <button type="button" aria-label={t('Remove {name}').replace('{name}', attachment.title)} onClick={() => void deleteCustomerRequestAttachment(need.id, attachment.id).then(() => onReload())}>×</button>
+        <button type="button" aria-label={t('Remove {name}').replace('{name}', () => attachment.title)} onClick={() => void deleteCustomerRequestAttachment(need.id, attachment.id).then(() => onReload())}>×</button>
       </span>)}
     </div>}
   </div>
@@ -316,12 +316,12 @@ function useNeedActions({ data, customer, group, need, onReload, onEdit, onNewRe
   const requestUrl = `${window.location.origin}${customerPath(workspace, customer)}#${CUSTOMER_REQUEST_HASH_PREFIX}${target.id}`
   const moveToIssue = (next: Issue) => void run(async () => {
     await updateCustomerRequest(target.id, { issueId: next.id, projectId: '' })
-    toast.success(t('Customer request moved to {target}').replace('{target}', `${next.identifier} ${next.title}`))
+    toast.success(t('Customer request moved to {target}').replace('{target}', () => `${next.identifier} ${next.title}`))
     await onReload(touched(target, next.id))
   })
   const moveToProject = (next: Project) => void run(async () => {
     await updateCustomerRequest(target.id, { issueId: '', projectId: next.id })
-    toast.success(t('Customer request moved to {target}').replace('{target}', next.name))
+    toast.success(t('Customer request moved to {target}').replace('{target}', () => next.name))
     await onReload(touched(target))
   })
   const changeCustomer = (customerId: string) => {
@@ -329,7 +329,7 @@ function useNeedActions({ data, customer, group, need, onReload, onEdit, onNewRe
     if (!next || next.id === target.customerId) return
     void run(async () => {
       await updateCustomerRequest(target.id, { customerId: next.id })
-      toast.success(t('Customer changed to {customer}').replace('{customer}', next.name))
+      toast.success(t('Customer changed to {customer}').replace('{customer}', () => next.name))
       await onReload(touched(target))
     })
   }
@@ -341,12 +341,12 @@ function useNeedActions({ data, customer, group, need, onReload, onEdit, onNewRe
       if (!team) throw new Error(t('Create a team before adding requests'))
       const created = await createIssue({ title: title.trim(), description: target.body, teamId: team.id, stateId: customerRequestIssueState(data, team.id)?.id, priority: 0, projectId: target.projectId || undefined })
       await updateCustomerRequest(target.id, { issueId: created.id, projectId: '' })
-      toast.success(t('Request from {customer} added to {target}').replace('{customer}', customer.name).replace('{target}', `${created.identifier} ${created.title}`))
+      toast.success(t('Request from {customer} added to {target}').replace('{customer}', () => customer.name).replace('{target}', () => `${created.identifier} ${created.title}`))
       await onReload(touched(target, created.id))
     })
   })()
   const remove = () => void (async () => {
-    const confirmed = await confirmAction(t('Delete customer request from {customer}').replace('{customer}', customer.name), { description: t('You cannot undo this action.'), confirmLabel: t('Delete'), danger: true })
+    const confirmed = await confirmAction(t('Delete customer request from {customer}').replace('{customer}', () => customer.name), { description: t('You cannot undo this action.'), confirmLabel: t('Delete'), danger: true })
     if (!confirmed) return
     await run(async () => {
       await deleteCustomerRequest(target.id)

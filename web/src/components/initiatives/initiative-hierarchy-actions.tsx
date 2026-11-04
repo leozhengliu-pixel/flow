@@ -12,7 +12,7 @@ export const initiativeOption = (item: Initiative): FlowMenuOption => ({ id: ite
 
 /** The reference app's `canCreateSubInitiative` toast when the parent already sits on the deepest level. */
 export function showNestingLimitError(t: Translate) {
-  toast.error(t('Maximum initiative nesting level reached'), { description: t('Initiatives cannot be nested deeper than {n} levels').replace('{n}', String(MAX_INITIATIVE_NESTING)) })
+  toast.error(t('Maximum initiative nesting level reached'), { description: t('Initiatives cannot be nested deeper than {n} levels').replace('{n}', () => String(MAX_INITIATIVE_NESTING)) })
 }
 
 export async function saveInitiativeRelation(update: () => Promise<unknown>, t: Translate) {

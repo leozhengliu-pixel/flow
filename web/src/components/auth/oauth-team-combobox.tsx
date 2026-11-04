@@ -23,7 +23,7 @@ export function TeamCombobox({ teams, value, onChange, t, placeholder = 'Select 
     <div className="oauth-team-control" onMouseDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); inputRef.current?.focus(); setOpen(true) } }}>
       {value.map(id => teams.find(team => team.id === id)).filter((team): team is Team => Boolean(team)).map(team => <span className="oauth-team-chip" key={team.id}>
         <span className="oauth-team-chip-label"><TeamIcon team={team} size={14}/><span data-i18n-ignore>{team.name}</span>{team.private && <Lock aria-hidden="true" className="oauth-team-lock"/>}</span>
-        <button type="button" aria-label={t('Remove {team}').replace('{team}', team.name)} onMouseDown={event => event.preventDefault()} onClick={() => onChange(value.filter(item => item !== team.id))}><X aria-hidden="true"/></button>
+        <button type="button" aria-label={t('Remove {team}').replace('{team}', () => team.name)} onMouseDown={event => event.preventDefault()} onClick={() => onChange(value.filter(item => item !== team.id))}><X aria-hidden="true"/></button>
       </span>)}
       <input ref={inputRef} role="combobox" aria-expanded={open} aria-controls="oauth-team-options" aria-label={t(placeholder)} placeholder={value.length ? '' : t(placeholder)} value={query}
         aria-activedescendant={open && options[active] ? `oauth-team-${options[active].id}` : undefined}

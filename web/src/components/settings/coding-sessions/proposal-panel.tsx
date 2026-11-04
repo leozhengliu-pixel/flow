@@ -50,7 +50,7 @@ export function ProposalPanel({ environment, proposal, disabled, onApplied }: { 
       {changes.map((change) => (
         <div key={change.field} className="cs-diff">
           <h4>{t(change.field)}</h4>
-          <pre aria-label={t("Changes to {field}").replace("{field}", t(change.field))}>
+          <pre aria-label={t("Changes to {field}").replace("{field}", () => t(change.field))}>
             {lineDiff(change.before, change.after).map((line, index) => (
               <span key={index} className={`cs-diff-line is-${line.kind}`} data-i18n-ignore>
                 {line.kind === "add" ? "+ " : line.kind === "remove" ? "- " : "  "}

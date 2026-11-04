@@ -340,7 +340,7 @@ export function CommandMenu({
     return groups
   }, [])
   // Keep the group registered while requests change; cmdk sorts groups in a deferred layout effect.
-  const searchResults = <Command.Group value="workspace-search-results" heading={!loading && query && results.length > 0 ? t('Quick results for "{query}"').replace('{query}', query) : undefined}>
+  const searchResults = <Command.Group value="workspace-search-results" heading={!loading && query && results.length > 0 ? t('Quick results for "{query}"').replace('{query}', () => query) : undefined}>
     {!loading && query && results.map(result => <Command.Item key={`${result.type}-${result.id}`} value={`${result.identifier ?? ''} ${result.title} ${result.subtitle ?? ''}`} onSelect={closeAnd(() => onOpenResult(result))}>
       <ResourceIcon result={result}/>
       <span className="command-result-copy">{result.identifier && <small>{result.identifier}</small>}<span>{result.title}</span></span>

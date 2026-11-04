@@ -25,8 +25,8 @@ export function ProjectChatGroupDialog({ open, onOpenChange, provider, project, 
   const name = chatProviderName(provider, t)
   return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay"/>
     <Dialog.Content data-flow-motion="dialog" className="project-detail-page__form-dialog project-slack-dialog project-chat-group-dialog">
-      <Dialog.Title><IntegrationBrandIcon provider={provider} size={16}/>{t('{name} notifications for').replace('{name}', name)} <span data-i18n-ignore>{project.name}</span></Dialog.Title>
-      <Dialog.Description>{t('Connect a {name} group to receive notifications about this project.').replace('{name}', name)}</Dialog.Description>
+      <Dialog.Title><IntegrationBrandIcon provider={provider} size={16}/>{t('{name} notifications for').replace('{name}', () => name)} <span data-i18n-ignore>{project.name}</span></Dialog.Title>
+      <Dialog.Description>{t('Connect a {name} group to receive notifications about this project.').replace('{name}', () => name)}</Dialog.Description>
       {open && <ProjectChatGroups provider={provider} project={project} data={data}/>}
       <footer><Dialog.Close asChild><button type="button">{t('Close')}</button></Dialog.Close></footer>
     </Dialog.Content>
@@ -51,7 +51,7 @@ function ProjectChatGroups({ provider, project, data }: { provider: ChatIntegrat
     finally { setBusy('') }
   }
   if (loading && !settings) return <p className="chat-muted" role="status">{t('Loading integration…')}</p>
-  if (!settings?.connection || !tenantAuthorized) return <AppLink className="project-slack-dialog__connect" href={integrationSettingsPath(workspace, provider)}>{t('Connect {name}').replace('{name}', name)}</AppLink>
+  if (!settings?.connection || !tenantAuthorized) return <AppLink className="project-slack-dialog__connect" href={integrationSettingsPath(workspace, provider)}>{t('Connect {name}').replace('{name}', () => name)}</AppLink>
   return <div className="chat-integration-settings project-chat-groups">
     {error && <p className="chat-integration-alert" role="alert">{error}</p>}
     {data && bindings.length > 0 && <div className="feature-card">{bindings.map(binding => <ChatBindingRow key={binding.id} binding={binding} data={data} busy={busy} canEdit={false}
@@ -61,6 +61,6 @@ function ProjectChatGroups({ provider, project, data }: { provider: ChatIntegrat
       ? <p className="chat-muted">{t("Only owners of this project's teams can connect groups to it.")}</p>
       : data && (adding
         ? <ChatBindingEditor provider={provider} data={data} bindableTeamIds={teamIds} privateTeamIds={settings.permissions?.teams.privateTeamIds} fixedProjectId={project.id} defaultEvents={['project.update_created', 'issue.created', 'issue.status_changed']} busy={Boolean(busy)} onCancel={() => setAdding(false)} onSave={input => mutate('binding', () => saveChatBinding(provider, input), 'Group binding saved', () => setAdding(false))}/>
-        : <button type="button" className="feature-button" disabled={Boolean(busy)} onClick={() => setAdding(true)}>{t('Connect {name} group').replace('{name}', name)}</button>)}
+        : <button type="button" className="feature-button" disabled={Boolean(busy)} onClick={() => setAdding(true)}>{t('Connect {name} group').replace('{name}', () => name)}</button>)}
   </div>
 }

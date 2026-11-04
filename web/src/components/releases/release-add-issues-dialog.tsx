@@ -43,7 +43,7 @@ export function ReleaseAddIssuesDialog({ data, release, onClose, onReload }: { d
       toast.error(error instanceof Error ? error.message : t('Could not save release'))
     } finally { setBusy(false) }
   }
-  const placeholder = t('Search for issues to add to {release}…').replace('{release}', release.name)
+  const placeholder = t('Search for issues to add to {release}…').replace('{release}', () => release.name)
   return <Dialog open onOpenChange={open => { if (!open) onClose() }}>
     <DialogContent className="command-dialog flow-release-add-issues" overlayClassName="command-overlay" onOpenAutoFocus={event => { event.preventDefault(); inputRef.current?.focus() }} onCloseAutoFocus={event => event.preventDefault()}>
       <DialogTitle className="sr-only">{t('Add issues to release…')}</DialogTitle>

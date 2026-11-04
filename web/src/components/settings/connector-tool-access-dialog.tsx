@@ -44,7 +44,7 @@ export function ConnectorToolAccessDialog({ item, onSave, onClose }: { item: Con
           {tools.map(tool => <li key={tool}>
             <label>
               <span>{tool}</span>
-              <select aria-label={t("Access of {tool}").replace("{tool}", tool)} value={access[tool] ?? ""} disabled={busy} onChange={event => change(tool, event.target.value)}>
+              <select aria-label={t("Access of {tool}").replace("{tool}", () => tool)} value={access[tool] ?? ""} disabled={busy} onChange={event => change(tool, event.target.value)}>
                 <option value="">{readOnly.has(tool) ? t("Follow connector: read-only") : t("Follow connector: may change data")}</option>
                 <option value="read">{t("Treat as read-only")}</option>
                 <option value="write">{t("Treat as write")}</option>

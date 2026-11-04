@@ -172,7 +172,7 @@ export function setDocumentVisual(ctx: DocumentActionContext, document: FlowDocu
 
 export async function deleteDocumentWithConfirm(ctx: DocumentActionContext, document: FlowDocument, afterDelete?: () => void) {
   const title = documentDisplayTitle(document, ctx.t)
-  const confirmed = await confirmAction(ctx.t('Delete "{name}"?').replace('{name}', title), {
+  const confirmed = await confirmAction(ctx.t('Delete "{name}"?').replace('{name}', () => title), {
     description: withTrashRetention(ctx.t('Deleted documents are available in the "Recently deleted" view for {days} days, before they are permanently deleted.'), ctx.data),
     confirmLabel: ctx.t('Delete'),
   })
@@ -185,7 +185,7 @@ export async function deleteDocumentWithConfirm(ctx: DocumentActionContext, docu
 /** Deletes one or several documents after a single confirmation (a list selection can hold many). */
 export async function deleteDocumentsWithConfirm(ctx: DocumentActionContext, documents: FlowDocument[], afterDelete?: () => void) {
   if (documents.length === 1) return deleteDocumentWithConfirm(ctx, documents[0], afterDelete)
-  const confirmed = await confirmAction(ctx.t('Delete {count} documents?').replace('{count}', String(documents.length)), {
+  const confirmed = await confirmAction(ctx.t('Delete {count} documents?').replace('{count}', () => String(documents.length)), {
     description: withTrashRetention(ctx.t('Deleted documents are available in the "Recently deleted" view for {days} days, before they are permanently deleted.'), ctx.data),
     confirmLabel: ctx.t('Delete'),
   })
@@ -266,7 +266,7 @@ export async function moveDocument(ctx: DocumentActionContext, document: FlowDoc
     if (target.type === 'initiative' && !linked.some(initiative => initiative.id === target.id)) {
       await createInitiativeResource(target.id, { type: 'document', documentId: document.id, title: document.title || undefined })
     }
-  }, ctx.t('Moved to {name}').replace('{name}', name ?? ''), 'Could not move document')
+  }, ctx.t('Moved to {name}').replace('{name}', () => name ?? ''), 'Could not move document')
 }
 
 /**

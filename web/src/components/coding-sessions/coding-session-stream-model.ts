@@ -182,7 +182,7 @@ export function durationParts(ms: number): { count: number; unit: DurationUnit }
 /** "11 seconds", "3 minutes", "1 hour" through a translator ("{count} seconds" → "{count} 秒"). */
 export function formatDuration(ms: number, t: (source: string) => string): string {
   const { count, unit } = durationParts(ms)
-  return t(count === 1 ? `{count} ${unit}` : `{count} ${unit}s`).replace('{count}', String(count))
+  return t(count === 1 ? `{count} ${unit}` : `{count} ${unit}s`).replace('{count}', () => String(count))
 }
 
 /** "Worked for 11 seconds", or "Worked for a while" without timestamps. */
@@ -190,7 +190,7 @@ export function workedForLabel(startedAt: string | undefined, endedAt: string | 
   const start = startedAt ? Date.parse(startedAt) : Number.NaN
   const end = endedAt ? Date.parse(endedAt) : Number.NaN
   if (Number.isNaN(start) || Number.isNaN(end)) return t('Worked for a while')
-  return t('Worked for {duration}').replace('{duration}', formatDuration(Math.max(1000, end - start), t))
+  return t('Worked for {duration}').replace('{duration}', () => formatDuration(Math.max(1000, end - start), t))
 }
 
 /** The plan step the collapsed pill shows: the first in progress, else the first pending, else the last. */
@@ -276,7 +276,7 @@ export function streamTimeLabel(value: string, locale: string, t: (source: strin
   if (date.toDateString() === now.toDateString()) return `${t('Today')} ${time}`
   if (date.toDateString() === yesterday.toDateString()) return `${t('Yesterday')} ${time}`
   const day = date.toLocaleDateString(locale, { month: 'short', day: 'numeric', ...(date.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }) })
-  return t('{date} at {time}').replace('{date}', day).replace('{time}', time)
+  return t('{date} at {time}').replace('{date}', () => day).replace('{time}', () => time)
 }
 
 

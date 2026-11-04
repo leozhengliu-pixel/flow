@@ -73,7 +73,7 @@ export function DocumentTemplateEditor({ data, teamId, template, backLabel = 'Do
   }
   const remove = async () => {
     if (!template) return
-    if (!(await confirmTemplateAction({ title: t('Delete the template "{name}"?').replace('{name}', template.name), description: t('You cannot undo this action.'), confirmLabel: t('Delete'), cancelLabel: t('Cancel') }))) return
+    if (!(await confirmTemplateAction({ title: t('Delete the template "{name}"?').replace('{name}', () => template.name), description: t('You cannot undo this action.'), confirmLabel: t('Delete'), cancelLabel: t('Cancel') }))) return
     try {
       await deleteDocumentTemplate(template.id)
       await onSaved()
@@ -122,14 +122,14 @@ export function DocumentTemplateRow({ template, inheritedFrom, onOpen, onChanged
   const { t } = useI18n()
   const duplicate = async () => {
     try {
-      await createDocumentTemplate({ teamId: template.teamId, name: t('Copy of {name}').replace('{name}', template.name), description: template.description ?? '', title: template.title ?? '', icon: template.icon ?? '', color: template.color ?? '', content: template.content ?? '', contentState: template.contentState, contentData: template.contentData })
+      await createDocumentTemplate({ teamId: template.teamId, name: t('Copy of {name}').replace('{name}', () => template.name), description: template.description ?? '', title: template.title ?? '', icon: template.icon ?? '', color: template.color ?? '', content: template.content ?? '', contentState: template.contentState, contentData: template.contentData })
       await onChanged()
     } catch (error) {
       toast.error(error instanceof Error && error.message ? error.message : t('Could not save template'))
     }
   }
   const remove = async () => {
-    if (!(await confirmTemplateAction({ title: t('Delete the template "{name}"?').replace('{name}', template.name), description: t('You cannot undo this action.'), confirmLabel: t('Delete'), cancelLabel: t('Cancel') }))) return
+    if (!(await confirmTemplateAction({ title: t('Delete the template "{name}"?').replace('{name}', () => template.name), description: t('You cannot undo this action.'), confirmLabel: t('Delete'), cancelLabel: t('Cancel') }))) return
     try {
       await deleteDocumentTemplate(template.id)
       await onChanged()

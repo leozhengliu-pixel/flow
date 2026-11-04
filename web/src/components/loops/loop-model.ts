@@ -176,7 +176,7 @@ export function triggerSummary(loop: Pick<Loop, "triggerType" | "triggerConfig">
     const [single, plural] = names[unit] ?? names.day;
     const weekdays = configStrings(config, "weekdays");
     if (unit === "day" && interval === 1 && weekdays.length === 5 && ["mon", "tue", "wed", "thu", "fri"].every((day) => weekdays.includes(day))) return t("Every weekday");
-    return interval === 1 ? t(single) : t(`Every {count} ${plural}`).replace("{count}", String(interval));
+    return interval === 1 ? t(single) : t(`Every {count} ${plural}`).replace("{count}", () => String(interval));
   }
   const event = loopEvent(config);
   if (loop.triggerType === "issue") {
@@ -210,7 +210,7 @@ export function relativeTime(value: string | undefined, now = Date.now(), t: Tra
   const time = Date.parse(value);
   if (!Number.isFinite(time)) return "";
   const seconds = Math.max(0, Math.round((now - time) / 1000));
-  const count = (template: string, amount: number) => t(template).replace("{count}", String(amount));
+  const count = (template: string, amount: number) => t(template).replace("{count}", () => String(amount));
   if (seconds < 60) return t("just now");
   if (seconds < 3600) return count("{count}m ago", Math.floor(seconds / 60));
   if (seconds < 86400) return count("{count}h ago", Math.floor(seconds / 3600));

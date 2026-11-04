@@ -841,9 +841,9 @@ function inboxRowTeamIds(row: InboxProjection, data: BootstrapData): string[] {
 /** Localizes the server's summary line ("Update from X" / "A, B and N other updates"); source names stay as written. */
 function localizePulseText(text: string, t: (source: string) => string) {
   const single = /^Update from (.+)$/.exec(text)
-  if (single) return t('Update from {name}').replace('{name}', single[1])
+  if (single) return t('Update from {name}').replace('{name}', () => single[1])
   const many = /^(.+) and (\d+) other updates?$/.exec(text)
-  if (many) return t(many[2] === '1' ? '{names} and 1 other update' : '{names} and {count} other updates').replace('{names}', many[1]).replace('{count}', many[2])
+  if (many) return t(many[2] === '1' ? '{names} and 1 other update' : '{names} and {count} other updates').replace('{names}', () => many[1]).replace('{count}', () => many[2])
   return t(text)
 }
 

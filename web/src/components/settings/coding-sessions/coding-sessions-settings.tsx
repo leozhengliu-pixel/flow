@@ -129,7 +129,7 @@ function CodingSessionsOverview({ data, settings: workspaceSettings, disabled, o
           {error && <p className="cs-inline-error" role="alert">{error}</p>}
           {environments.length > 0 && (
             <div className="feature-row cs-row cs-environments-header">
-              <h3>{t(environments.length === 1 ? "1 environment" : "{count} environments").replace("{count}", String(environments.length))}</h3>
+              <h3>{t(environments.length === 1 ? "1 environment" : "{count} environments").replace("{count}", () => String(environments.length))}</h3>
               <aside>
                 <NewEnvironmentButton status={status} environments={environments} disabled={controlsDisabled} onOpenEnvironment={onOpenEnvironment} />
               </aside>
@@ -309,7 +309,7 @@ function PolicyRows({ settings, update, models, status, disabled }: { settings: 
         title="Pin sandbox region"
         disabled={disabled}
         description={regions.length
-          ? <span data-i18n-ignore>{t("Pin new coding session sandboxes to {region}.").replace("{region}", settings.pinnedRegion || regions[0])} {t("Region pinning raises the sandbox compute price.")}</span>
+          ? <span data-i18n-ignore>{t("Pin new coding session sandboxes to {region}.").replace("{region}", () => settings.pinnedRegion || regions[0])} {t("Region pinning raises the sandbox compute price.")}</span>
           : "No sandbox regions are configured on this server"}
       >
         {pinned && regions.length > 1 && (
@@ -405,7 +405,7 @@ function TrustedSourcesSection({ settings, update, disabled, onOpenCodeAccess }:
                 <strong>{t(trustedSourceLabel(source))}</strong>
               </div>
               <aside>
-                <button type="button" className="cs-icon-button" aria-label={t("Remove {source}").replace("{source}", t(trustedSourceLabel(source)))} disabled={disabled} onClick={() => void update({ trustedExternalSources: trusted.filter((item) => item !== source) })}>
+                <button type="button" className="cs-icon-button" aria-label={t("Remove {source}").replace("{source}", () => t(trustedSourceLabel(source)))} disabled={disabled} onClick={() => void update({ trustedExternalSources: trusted.filter((item) => item !== source) })}>
                   <X size={14} />
                 </button>
               </aside>

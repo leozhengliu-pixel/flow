@@ -17,5 +17,5 @@ export function trashRetentionDays(data?: Pick<BootstrapData, 'trashRetentionDay
 
 /** Fills `{days}` in an already translated text with the trash retention. */
 export function withTrashRetention(text: string, data?: Pick<BootstrapData, 'trashRetentionDays'> | null): string {
-  return text.replaceAll('{days}', String(trashRetentionDays(data)))
+  return text.replaceAll('{days}', () => String(trashRetentionDays(data)))
 }

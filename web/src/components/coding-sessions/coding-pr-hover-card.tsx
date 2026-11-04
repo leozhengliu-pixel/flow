@@ -44,7 +44,7 @@ export function CodingPullRequestHoverCard({ pr, review, session }: { pr: Sessio
       <span>{when ? `${t(PULL_REQUEST_STATE_LABELS[state])} ${when}` : t(PULL_REQUEST_STATE_LABELS[state])}</span>
       {files > 0 && <>
         <span aria-hidden="true">·</span>
-        <span>{t(files === 1 ? '1 file' : '{count} files').replace('{count}', String(files))}</span>
+        <span>{t(files === 1 ? '1 file' : '{count} files').replace('{count}', () => String(files))}</span>
         {additions > 0 && <span className="coding-additions">+{additions}</span>}
         {deletions > 0 && <span className="coding-deletions">-{deletions}</span>}
       </>}

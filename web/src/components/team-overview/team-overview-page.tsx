@@ -411,7 +411,7 @@ export function TeamOverviewPage({
   );
   const hiddenAfterActive = hiddenTeamTabs.filter(tab => tab.id !== activeTeamTab.id).length;
   const activeOverflowLabel = hiddenAfterActive
-    ? t("{name} & {count} more").replace("{name}", activeTeamTab.label).replace("{count}", String(hiddenAfterActive))
+    ? t("{name} & {count} more").replace("{name}", () => activeTeamTab.label).replace("{count}", () => String(hiddenAfterActive))
     : activeTeamTab.label;
   const teamTabs = (
     <div className="team-home-band">
@@ -429,7 +429,7 @@ export function TeamOverviewPage({
           <Popover.Root open={teamTabsMenuOpen} onOpenChange={setTeamTabsMenuOpen}>
             <Popover.Trigger asChild>
               <button type="button" className="team-home-tabs-overflow-pill">
-                <span>{t("{count} more").replace("{count}", String(hiddenTeamTabs.length))}</span>
+                <span>{t("{count} more").replace("{count}", () => String(hiddenTeamTabs.length))}</span>
                 <TabsOverflowIcon aria-hidden="true" className="team-home-tab-caret" />
               </button>
             </Popover.Trigger>
@@ -438,7 +438,7 @@ export function TeamOverviewPage({
         )}
         {phone && <div ref={teamTabsMeasureRef} className="team-home-tabs-measure" aria-hidden="true">
           {teamTabItems.map(tab => <span key={tab.id} data-team-tab-measure className="team-home-tabs-measure-pill">{tab.label}</span>)}
-          {teamTabItems.map((_, index) => <span key={index} data-team-tab-measure-count={index + 1} className="team-home-tabs-overflow-pill"><span>{t("{count} more").replace("{count}", String(index + 1))}</span><TabsOverflowIcon className="team-home-tab-caret" /></span>)}
+          {teamTabItems.map((_, index) => <span key={index} data-team-tab-measure-count={index + 1} className="team-home-tabs-overflow-pill"><span>{t("{count} more").replace("{count}", () => String(index + 1))}</span><TabsOverflowIcon className="team-home-tab-caret" /></span>)}
           <span data-team-tab-measure-active className="team-home-tabs-measure-pill is-active"><span>{activeTeamTab.label}</span><TabsOverflowIcon className="team-home-tab-caret" /></span>
         </div>}
       </nav>

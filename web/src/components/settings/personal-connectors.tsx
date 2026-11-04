@@ -28,7 +28,7 @@ import "./personal-connectors.css";
 type Translate = (source: string) => string;
 
 const count = (t: Translate, value: number, one: string, many: string) =>
-  value === 1 ? t(one) : t(many).replace("{count}", String(value));
+  value === 1 ? t(one) : t(many).replace("{count}", () => String(value));
 
 /**
  * Settings › Agent personalization › MCP connectors: the viewer's own MCP
@@ -430,7 +430,7 @@ function RemoveConnectorDialog({
   const [busy, setBusy] = useState(false);
   return (
     <SettingsConfirmDialog
-      title={t("Remove {name}?").replace("{name}", connectorLabel(item))}
+      title={t("Remove {name}?").replace("{name}", () => connectorLabel(item))}
       description={t("This MCP connector will be removed and its tools will no longer be available to Flow Agent.")}
       confirmLabel={t("Remove")}
       busy={busy}

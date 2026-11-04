@@ -36,13 +36,13 @@ export function ToolsEditor({ tools, disabled, onChange }: { tools: ToolRow[]; d
             <strong data-i18n-ignore>{label}</strong>
             <CodingSelect
               small
-              label={t("{tool} version").replace("{tool}", label)}
+              label={t("{tool} version").replace("{tool}", () => label)}
               value={row.version.trim() || "latest"}
               disabled={disabled}
               options={toolVersions(row.tool, row.version).map((version) => ({ value: version, label: version, translate: false }))}
               onChange={(version) => set(index, { version })}
             />
-            <TrashButton label={t("Remove {tool}").replace("{tool}", label)} disabled={disabled} onClick={() => onChange(tools.filter((_, i) => i !== index))} />
+            <TrashButton label={t("Remove {tool}").replace("{tool}", () => label)} disabled={disabled} onClick={() => onChange(tools.filter((_, i) => i !== index))} />
           </div>
         );
       })}
@@ -209,10 +209,10 @@ export function EnvVarsEditor({ rows, saved, disabled, onChange, onDeleteSecret,
               <input type="checkbox" className="cs-checkbox" aria-label={t("Secret")} checked disabled readOnly />
               {onDeleteSecret ? (
                 <TrashButton
-                  label={t("Delete secret {name}").replace("{name}", secret.name)}
+                  label={t("Delete secret {name}").replace("{name}", () => secret.name)}
                   disabled={disabled || deleting === secret.name}
                   onClick={async () => {
-                    const confirmed = await confirmAction(t("Delete secret {name}?").replace("{name}", secret.name), {
+                    const confirmed = await confirmAction(t("Delete secret {name}?").replace("{name}", () => secret.name), {
                       description: t("Sessions and snapshots created after this will not receive it. This cannot be undone."),
                       confirmLabel: t("Delete"),
                     });
@@ -314,7 +314,7 @@ export function OwnersEditor({ ownerIds, users, canManage, onChange }: { ownerId
               {user?.email && <span data-i18n-ignore>{user.email}</span>}
             </div>
             {canManage && (
-              <button type="button" className="cs-icon-button cs-owner-remove" aria-label={t("Remove {name}").replace("{name}", name)} title={t("Remove owner")} onClick={() => onChange(ownerIds.filter((owner) => owner !== id))}>
+              <button type="button" className="cs-icon-button cs-owner-remove" aria-label={t("Remove {name}").replace("{name}", () => name)} title={t("Remove owner")} onClick={() => onChange(ownerIds.filter((owner) => owner !== id))}>
                 <X size={14} />
               </button>
             )}

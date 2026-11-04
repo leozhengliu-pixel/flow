@@ -45,7 +45,7 @@ export function SlackUpdates(props: SlackUpdatesProps) {
 function ChatGroupUpdates({ data, kind, disabled = false, variant = "card", provider }: SlackUpdatesProps & { provider: ChatIntegrationProvider }) {
   const { t } = useI18n();
   const name = chatProviderName(provider, t);
-  const format = (text: string) => text.replaceAll("{name}", name);
+  const format = (text: string) => text.replaceAll("{name}", () => name);
   const heading = format(t("{name} notifications"));
   const hint = format(t(kind === "project"
     ? "Project updates are posted to the {name} groups of the project's teams that share project updates, and never when a private team would be disclosed"
@@ -140,8 +140,8 @@ function SlackChannelUpdates({
   const enabledBy =
     connected && creator
       ? t("Enabled by {name} on {date}")
-          .replace("{name}", creator.displayName || creator.name)
-          .replace("{date}", new Date(connected.createdAt).toLocaleDateString())
+          .replace("{name}", () => creator.displayName || creator.name)
+          .replace("{date}", () => new Date(connected.createdAt).toLocaleDateString())
       : undefined;
 
   if (variant === "row") {

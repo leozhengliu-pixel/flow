@@ -44,9 +44,9 @@ function useTriageWork(issue: Issue, data: BootstrapData, team: Pick<Team, 'id'>
     markDuplicate: (target: Issue) => duplicate ? run(async () => {
       await createRelation(issue.id, 'duplicate', target.id)
       return updateIssue(issue.id, { stateId: duplicate.id, expectedVersion: issue.version })
-    }, t('Marked as duplicate of {identifier}').replace('{identifier}', target.identifier)) : Promise.resolve(),
+    }, t('Marked as duplicate of {identifier}').replace('{identifier}', () => target.identifier)) : Promise.resolve(),
     relate: (type: IssueRelationType, target: Issue) => run(async () => { await createRelation(issue.id, type, target.id); return issue }, t('Relation added')),
-    snooze: (until: Date) => run(() => updateIssue(issue.id, { snoozedUntil: until.toISOString() }), t('Snoozed until {date}').replace('{date}', formatSnoozeDate(until))),
+    snooze: (until: Date) => run(() => updateIssue(issue.id, { snoozedUntil: until.toISOString() }), t('Snoozed until {date}').replace('{date}', () => formatSnoozeDate(until))),
     unsnooze: () => run(() => updateIssue(issue.id, { snoozedUntil: '' }), t('Issue unsnoozed')),
   }
 }

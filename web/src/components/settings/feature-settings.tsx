@@ -184,7 +184,7 @@ function LoopsWebSearchSettings({busy}:{busy:boolean}) {
   const available=config?.webSearchAvailable===true;
   return <div id="web-search"><FeatureSection title="Web search" description="Loops with Web search turned on can search the web and read pages to gather context.">
     <FeatureCard>
-      <FeatureRow title="Web search provider" description={config===undefined?undefined:available?t("Configured ({provider})").replace("{provider}",config.webSearchProvider||t("custom")):"Web search isn't configured for this workspace. A server administrator can enable it by setting FLOW_WEB_SEARCH_PROVIDER (tavily, brave or searxng)."}>
+      <FeatureRow title="Web search provider" description={config===undefined?undefined:available?t("Configured ({provider})").replace("{provider}",() => config.webSearchProvider||t("custom")):"Web search isn't configured for this workspace. A server administrator can enable it by setting FLOW_WEB_SEARCH_PROVIDER (tavily, brave or searxng)."}>
         <span className={`feature-status${available?" is-on":""}`}>{t(config===undefined?"Checking…":available?"Available":"Not configured")}</span>
       </FeatureRow>
       <FeatureRow title="Web search in Flow Agent chat" description={config?.agentNativeWebSearch&&!available?"Flow Agent searches with the AI provider's built-in web search and reads pages it links to.":"Let Flow Agent search the web when answering in chat"}><Toggle checked={config?.agentWebSearch===true} disabled={busy||config===undefined} label="Web search in Flow Agent chat" onChange={value=>void setAgentWebSearch(value)}/></FeatureRow>
@@ -275,7 +275,7 @@ function DocumentsPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<
     <section className="tpl-section">
       <h3>{t("Templates")}</h3>
       <p className="tpl-section-description">{t("These templates are available when creating documents for any team in the workspace. To create templates that only apply to specific teams, add them as team templates.")}{" "}<a className="tpl-docs-link" href="https://flow.app/docs/documents" target="_blank" rel="noopener noreferrer">{t("Docs")}</a></p>
-      <TemplateListCard emptyLabel="No document templates" createLabel="Create new document template" onCreate={()=>setEditing(null)} count={templates.length} countLabel={t(templates.length===1?"1 document template":"{count} document templates").replace("{count}",String(templates.length))}>
+      <TemplateListCard emptyLabel="No document templates" createLabel="Create new document template" onCreate={()=>setEditing(null)} count={templates.length} countLabel={t(templates.length===1?"1 document template":"{count} document templates").replace("{count}",() => String(templates.length))}>
         {templates.map(item=><DocumentTemplateRow key={item.id} template={item} onOpen={()=>setEditing(item)} onChanged={onReload}/>)}
       </TemplateListCard>
     </section>
@@ -401,7 +401,7 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
     const shown = limit ? items.slice(0, limit) : items;
     const rest = Math.max(0, items.length - shown.length);
     const showConnections = className.includes("enabled");
-    return <div className={`mobile-integration-card-list ${className}`}><ul>{shown.map(item => renderRow(item, item.connectProvider && !(className.includes("essentials") && item.slug === "slack") && (showConnections || item.connectProvider === "github" || item.connectProvider === "slack") ? data.integrationConnections.find(connection => connection.provider === item.connectProvider) : undefined))}{rest > 0 && <li className="mobile-integration-more"><button type="button" onClick={() => setShowAllEssentials(true)}><span>{t("View {count} more").replace("{count}", String(rest))}</span></button></li>}</ul></div>;
+    return <div className={`mobile-integration-card-list ${className}`}><ul>{shown.map(item => renderRow(item, item.connectProvider && !(className.includes("essentials") && item.slug === "slack") && (showConnections || item.connectProvider === "github" || item.connectProvider === "slack") ? data.integrationConnections.find(connection => connection.provider === item.connectProvider) : undefined))}{rest > 0 && <li className="mobile-integration-more"><button type="button" onClick={() => setShowAllEssentials(true)}><span>{t("View {count} more").replace("{count}", () => String(rest))}</span></button></li>}</ul></div>;
   };
   return <div className="feature-integrations mobile-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with a wide variety of add-ons and integrations">
     <div className="feature-integration-toolbar mobile-integrations-search"><div className="feature-integration-search"><FlowGlyph name="search" size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div></div>
@@ -426,7 +426,7 @@ function initiativeScheduleValue(frequency:number){return frequency<=0?"none":fr
 function initiativeScheduleFrequency(value:string){return value==="weekly"?1:value==="biweekly"?2:value==="monthly"?4:0}
 function initiativeScheduleSummary(schedule:{frequency:number;weekday:number;hour:number},t:(value:string)=>string){
   if(schedule.frequency<=0)return t("No expectation for updates")
-  const frequency=schedule.frequency===1?t("Every week"):t("Every {count} weeks").replace("{count}",String(schedule.frequency))
+  const frequency=schedule.frequency===1?t("Every week"):t("Every {count} weeks").replace("{count}",() => String(schedule.frequency))
   const weekday=t(INITIATIVE_WEEKDAYS[schedule.weekday]??INITIATIVE_WEEKDAYS[4])
   const time=`${String(schedule.hour).padStart(2,"0")}:00 - ${String((schedule.hour+1)%24).padStart(2,"0")}:00`
   return `${frequency} ${t("on")} ${weekday} ${t("between")} ${time}`

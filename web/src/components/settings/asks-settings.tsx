@@ -185,7 +185,7 @@ export function AsksSettingsPage({
           <div className="asks-email-list-header">
             <span className={emailIntakes.length || legacyEmails.length ? "" : "is-muted"}>
               {emailIntakes.length + legacyEmails.length
-                ? (emailIntakes.length + legacyEmails.length === 1 ? t("1 email") : t("{count} emails").replace("{count}", String(emailIntakes.length + legacyEmails.length)))
+                ? (emailIntakes.length + legacyEmails.length === 1 ? t("1 email") : t("{count} emails").replace("{count}", () => String(emailIntakes.length + legacyEmails.length)))
                 : t("No email addresses configured")}
             </span>
             <button
@@ -204,7 +204,7 @@ export function AsksSettingsPage({
               type="button"
               key={intake.id}
               className="asks-email-list-row"
-              aria-label={t("{name} settings").replace("{name}", intakeTitle(intake))}
+              aria-label={t("{name} settings").replace("{name}", () => intakeTitle(intake))}
               onClick={() => onOpenEmailIntake?.(intake.id)}
             >
               <Mail size={16} />
@@ -500,7 +500,7 @@ export function AsksSlackSettingsPage({
               {mappings.length
                 ? t("{count} channels mapped").replace(
                     "{count}",
-                    String(mappings.length),
+                    () => String(mappings.length),
                   )
                 : t("None")}
             </span>

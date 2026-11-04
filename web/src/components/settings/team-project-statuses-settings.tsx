@@ -109,7 +109,7 @@ export function TeamProjectStatusesSettingsPage({
                 ? t('1 sub-team opted to inherit this team\'s project statuses')
                 : t('{count} sub-teams opted to inherit this team\'s project statuses').replace(
                     '{count}',
-                    String(inheritingChildren.length),
+                    () => String(inheritingChildren.length),
                   )}
             </strong>
             <p>{t('Any changes will be automatically applied to all inheriting sub-teams')}</p>
@@ -141,7 +141,7 @@ export function TeamProjectStatusesSettingsPage({
               {source === 'parent'
                 ? t('Manage statuses from the parent team ({name}). Changes are synced automatically.').replace(
                     '{name}',
-                    parentName,
+                    () => parentName,
                   )
                 : t('Manage statuses from the workspace. Changes are synced automatically.')}
             </p>
@@ -186,12 +186,12 @@ function ConfirmInheritStatusesDialog({
           aria-describedby="confirm-inherit-project-statuses-desc"
         >
           <Dialog.Title>
-            {t('Inherit project statuses from {source}?').replace('{source}', sourceLabel)}
+            {t('Inherit project statuses from {source}?').replace('{source}', () => sourceLabel)}
           </Dialog.Title>
           <p id="confirm-inherit-project-statuses-desc">
             {t(
               'This team will use project statuses from the {source}. You can turn inheritance off later.',
-            ).replaceAll('{source}', sourceLabel)}
+            ).replaceAll('{source}', () => sourceLabel)}
           </p>
           <footer>
             <button disabled={confirming} onClick={onCancel} type="button">

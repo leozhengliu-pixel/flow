@@ -205,7 +205,7 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
 
   const archive = async () => {
     if (!environment) return;
-    const confirmed = await confirmAction(t("Archive {name}?").replace("{name}", environment.name), {
+    const confirmed = await confirmAction(t("Archive {name}?").replace("{name}", () => environment.name), {
       description: t("Running sessions continue, but new coding sessions can't use this environment. You can unarchive it later."),
       confirmLabel: t("Archive"),
     });
@@ -280,7 +280,7 @@ export function EnvironmentEditorPage({ data, environmentId, disabled, onBack, o
         <CodingRow
           title="Repository"
           description={repoInUse
-            ? t("{name} already uses this repository. Only one active environment per repository is allowed.").replace("{name}", repoInUse.name)
+            ? t("{name} already uses this repository. Only one active environment per repository is allowed.").replace("{name}", () => repoInUse.name)
             : isNew ? "Choose the repository for this environment" : "Create a new environment to use a different repository"}
           warning={Boolean(repoInUse)}
         >

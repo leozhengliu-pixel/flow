@@ -105,7 +105,7 @@ export function CodeIntelligencePage({
                   title="Selected repositories"
                   description={
                     policy.allowedRepositories.length
-                      ? t("{count} repositories selected").replace("{count}", String(policy.allowedRepositories.length))
+                      ? t("{count} repositories selected").replace("{count}", () => String(policy.allowedRepositories.length))
                       : "Repository listing requires GitHub code access — Coming soon"
                   }
                 />

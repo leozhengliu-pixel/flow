@@ -15,7 +15,7 @@ export type TriageNotSelectedPageProps = {
  */
 export function TriageNotSelectedPage({ issueCount, onCreate }: TriageNotSelectedPageProps) {
   const { t } = useI18n()
-  const label = issueCount <= 0 ? t('No issues to triage') : issueCount === 1 ? t('1 issue to triage') : t('{count} issues to triage').replace('{count}', String(issueCount))
+  const label = issueCount <= 0 ? t('No issues to triage') : issueCount === 1 ? t('1 issue to triage') : t('{count} issues to triage').replace('{count}', () => String(issueCount))
   return (
     <div className="flow-triage-not-selected" data-triage-empty={issueCount <= 0 ? '' : undefined} data-triage-not-selected={issueCount > 0 ? '' : undefined}>
       <div className="flow-triage-not-selected__body">

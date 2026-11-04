@@ -19,7 +19,7 @@ export function PulseWhyDialog({ data, item, open, onOpenChange, onToggleSubscri
   const teamIds = reason?.type === 'teamProjectUpdates' ? reason.sourceIds ?? [] : []
   const teams = teamIds.map(id => data.teams.find(team => team.id === id)).filter((team): team is BootstrapData['teams'][number] => Boolean(team)).sort((left, right) => left.name.localeCompare(right.name))
   const type = item.kind === 'project' ? t('project') : t('initiative')
-  const subscribeLabel = (item.subscribed ? t('Unsubscribe from this {type}') : t('Subscribe to this {type}')).replace('{type}', type)
+  const subscribeLabel = (item.subscribed ? t('Unsubscribe from this {type}') : t('Subscribe to this {type}')).replace('{type}', () => type)
   return <Dialog.Root onOpenChange={onOpenChange} open={open}>
     <Dialog.Portal>
       <Dialog.Overlay className="pulse-dialog-overlay" data-flow-motion="backdrop"/>

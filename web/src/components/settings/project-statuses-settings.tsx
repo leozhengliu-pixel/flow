@@ -126,12 +126,12 @@ export function ProjectStatusesSection({
       return;
     }
     if (usage > 0) {
-      toast(t('Can\'t delete the "{name}" project status').replace("{name}", status.name), {
+      toast(t('Can\'t delete the "{name}" project status').replace("{name}", () => status.name), {
         description: t(
           usage === 1
             ? "The status has {count} project assigned. Please archive or move them before deleting the status."
             : "The status has {count} projects assigned. Please archive or move them before deleting the status.",
-        ).replace("{count}", String(usage)),
+        ).replace("{count}", () => String(usage)),
       });
       return;
     }
@@ -280,7 +280,7 @@ function StatusRow({
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const viewHref = `/${location.pathname.split("/")[1]}/projects/all?status=${encodeURIComponent(status.id)}`;
-  const usageLabel = t(usage === 1 ? "{count} project" : "{count} projects").replace("{count}", String(usage));
+  const usageLabel = t(usage === 1 ? "{count} project" : "{count} projects").replace("{count}", () => String(usage));
   const menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
     const index = items.indexOf(document.activeElement as HTMLButtonElement);

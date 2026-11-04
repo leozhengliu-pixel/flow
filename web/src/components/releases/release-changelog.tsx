@@ -23,6 +23,7 @@ import { ReleaseStatusIcon } from './release-icons'
 import { absoluteUrl, copyToClipboard } from './release-actions-model'
 import { RELEASE_DOCS_URL, ReleaseEmptyState } from './release-page-chrome'
 import { changelogTargetRelease, dayValue, releaseHasNotes, releaseStatusForStage, releasesForPipeline } from './release-view-model'
+import { asIs } from '@/lib/as-is'
 
 /** The reference app's "Missing release notes" scope menu. */
 const SCOPES = [{ id: 'single', label: 'Single release' }, { id: 'range', label: 'Release range' }, { id: 'lastCovered', label: 'From last covered release' }]
@@ -139,7 +140,7 @@ export function ReleaseChangelog({ data, pipeline, onCreate, onNavigate, onReloa
         </div>
         <div className="flow-release-changelog__meta">
           {article.release.version && <div className="flow-release-changelog__meta-slot"><AppLink className="flow-release-changelog__version" href={releasePath(workspace, pipeline.slugId, article.release.slugId)} onClick={event => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); onNavigate(releasePath(workspace, pipeline.slugId, article.release.slugId)) }} data-i18n-ignore>{article.release.version}</AppLink></div>}
-          {article.release.stage && <div className="flow-release-changelog__stage"><ReleaseStatusIcon status={releaseStatusForStage(pipeline, article.release.stage, article.release.status)} size={16}/><div><span>{article.release.releasedAt ? t('Released {date}').replace('{date}', shortDate(article.release.releasedAt)) : article.release.targetDate ? <><span data-i18n-ignore>{article.release.stage}</span> · {shortDate(dayValue(article.release.targetDate))}</> : <span data-i18n-ignore>{article.release.stage}</span>}</span></div></div>}
+          {article.release.stage && <div className="flow-release-changelog__stage"><ReleaseStatusIcon status={releaseStatusForStage(pipeline, article.release.stage, article.release.status)} size={16}/><div><span>{article.release.releasedAt ? t('Released {date}').replace('{date}', asIs(shortDate(article.release.releasedAt))) : article.release.targetDate ? <><span data-i18n-ignore>{article.release.stage}</span> · {shortDate(dayValue(article.release.targetDate))}</> : <span data-i18n-ignore>{article.release.stage}</span>}</span></div></div>}
         </div>
       </div>
       <div className="flow-release-changelog__body">{article.body.trim() ? <div className="flow-release-changelog__prose" data-i18n-ignore><IssueDescriptionEditor ariaLabel={article.title} readOnly value={article.body}/></div> : <p className="flow-release-changelog__empty">{t('No content yet.')}</p>}</div>

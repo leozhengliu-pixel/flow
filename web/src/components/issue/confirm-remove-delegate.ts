@@ -7,5 +7,5 @@ export async function confirmRemoveDelegate(delegate: User, sessionActive: boole
   const description = sessionActive
     ? translate('{name} is still set to work on this issue. You can keep the agent on the issue, or remove it and archive its working session.')
     : translate('{name} is still set to work on this issue. You can keep the agent on the issue.')
-  return confirmAction(translate('Remove {name} too?').replace('{name}', name), { description: description.replace('{name}', name), confirmLabel: translate('Remove agent'), cancelLabel: translate('Keep agent'), danger: false })
+  return confirmAction(translate('Remove {name} too?').replace('{name}', () => name), { description: description.replace('{name}', () => name), confirmLabel: translate('Remove agent'), cancelLabel: translate('Keep agent'), danger: false })
 }

@@ -249,7 +249,7 @@ export function LoopDetail({
                   ·
                 </span>
                 <button className="loops-detail-version" type="button" onClick={() => setVersionsOpen(true)}>
-                  {t("Version {version}").replace("{version}", String(loop.version))}
+                  {t("Version {version}").replace("{version}", () => String(loop.version))}
                 </button>
               </>
             )}

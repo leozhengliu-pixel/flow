@@ -105,7 +105,7 @@ export function CustomerDetailPage({
   const toggleEvent = (event: string) => void setEvents(subscribedEvents.includes(event) ? subscribedEvents.filter(item => item !== event) : [...subscribedEvents, event])
   const remove = async () => {
     const description = `${t('Are you sure you want to delete this customer?')}${requests.length ? ` ${t('This will also delete all associated customer requests.')}` : ''}`
-    const confirmed = await confirmAction(t('Delete {name}').replace('{name}', customer.name), { description, confirmLabel: t('Delete'), danger: true })
+    const confirmed = await confirmAction(t('Delete {name}').replace('{name}', () => customer.name), { description, confirmLabel: t('Delete'), danger: true })
     if (!confirmed) return
     try {
       await deleteCustomer(customer.id)

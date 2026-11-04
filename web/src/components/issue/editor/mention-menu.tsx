@@ -44,7 +44,7 @@ export function MentionMenu({ options, selectedIndex, anchor, query, onSelect }:
   const top = below + height > window.innerHeight - 8 && above >= 8 ? above : below
   let lastGroup = ''
   return createPortal(<div className="description-mention-menu description-mention-menu--floating" ref={menuRef} style={{ left, top, pointerEvents: 'auto' }} role="listbox" aria-label={t('Mention')} onPointerDown={keepFromDialog} onWheel={keepFromDialog} onTouchMove={keepFromDialog}>
-    {options.length === 0 ? <div className="description-slash-empty">{t('No results for “@{query}”').replace('{query}', query)}</div> : options.map((option, index) => {
+    {options.length === 0 ? <div className="description-slash-empty">{t('No results for “@{query}”').replace('{query}', () => query)}</div> : options.map((option, index) => {
       const heading = option.group !== lastGroup ? option.group : ''
       lastGroup = option.group
       const button = <button

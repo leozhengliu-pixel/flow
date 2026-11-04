@@ -97,7 +97,7 @@ function GroupChildView({ child, renderQuestion }: { child: GroupChild; renderQu
   if (child.kind === 'question') return <>{renderQuestion?.(child.activity)}</>
   return <div className="cs-tools">
     <button type="button" className="cs-group-header is-sub" aria-expanded={open} onClick={() => setOpen(!open)}>
-      <span>{t('Used {count} tools').replace('{count}', String(child.actions.length))}</span><DisclosureTriangle open={open}/>
+      <span>{t('Used {count} tools').replace('{count}', () => String(child.actions.length))}</span><DisclosureTriangle open={open}/>
     </button>
     {open && <div className="cs-group-children">{child.actions.map(action => <CodingActionRow key={action.activity.id} action={action}/>)}</div>}
   </div>
@@ -175,10 +175,10 @@ export function CodingErrorCard({ activity, session, data, onRetry, busy, retry 
   if (variant === 'codeAccess') {
     const firstAdmin = data.members?.find(member => (member.role === 'admin' || member.role === 'owner') && member.status === 'active')?.user
     return <div className="cs-access" role="alert" data-code={code}>
-      <p>{t('Flow doesn’t have {host} code access yet. Enable code access for your workspace to allow Flow to make code changes.').replace('{host}', hostName)}</p>
+      <p>{t('Flow doesn’t have {host} code access yet. Enable code access for your workspace to allow Flow to make code changes.').replace('{host}', () => hostName)}</p>
       {admin
-        ? <AccessPill label={t('{host} code access needed').replace('{host}', hostName)}><AppLink className="cs-button is-small" href={integrationSettingsPath(workspace, host)}>{t('Enable')}<ArrowUpRight size={14} aria-hidden="true"/></AppLink></AccessPill>
-        : <AccessPill label={t('Request Flow code access from {name}').replace('{name}', firstAdmin?.displayName || firstAdmin?.name || t('an admin'))}><AppLink className="cs-button is-small" href={membersPath(workspace)}>{t('View admins')}</AppLink></AccessPill>}
+        ? <AccessPill label={t('{host} code access needed').replace('{host}', () => hostName)}><AppLink className="cs-button is-small" href={integrationSettingsPath(workspace, host)}>{t('Enable')}<ArrowUpRight size={14} aria-hidden="true"/></AppLink></AccessPill>
+        : <AccessPill label={t('Request Flow code access from {name}').replace('{name}', () => firstAdmin?.displayName || firstAdmin?.name || t('an admin'))}><AppLink className="cs-button is-small" href={membersPath(workspace)}>{t('View admins')}</AppLink></AccessPill>}
     </div>
   }
   if (variant === 'connect' || variant === 'awaiting') {
@@ -187,15 +187,15 @@ export function CodingErrorCard({ activity, session, data, onRetry, busy, retry 
     const linkRequired = code === 'requiresGithubConnection' || code === 'requiresGitlabConnection'
     const explanation = linkRequired && code
       ? t(codingErrorInfo(code, { workspace, codeHost: host }).message)
-      : t('Flow needs to confirm you’re authorized to make code changes on {host}. Confirm your {host} access to proceed.').replaceAll('{host}', hostName)
+      : t('Flow needs to confirm you’re authorized to make code changes on {host}. Confirm your {host} access to proceed.').replaceAll('{host}', () => hostName)
     return <div className="cs-access" role="alert" data-code={code}>
       <p>{explanation} <a className="cs-inline-link" href={CODING_SESSIONS_DOCS} target="_blank" rel="noreferrer">{t('Docs')}</a></p>
       {variant === 'awaiting'
-        ? <AccessPill label={t('Awaiting confirmation of code access from {name}').replace('{name}', creator?.displayName || creator?.name || t('the session creator'))}/>
+        ? <AccessPill label={t('Awaiting confirmation of code access from {name}').replace('{name}', () => creator?.displayName || creator?.name || t('the session creator'))}/>
         : linked
           ? <AccessPill label={t('Code access confirmed')}><button type="button" className="cs-button is-primary is-small" disabled={busy} onClick={onRetry}>{t('Resume')}</button></AccessPill>
           : host === 'github'
-            ? <AccessPill label={t('Connect {host}').replace('{host}', hostName)}><button type="button" className="cs-button is-small" onClick={() => void connect()}>{t('Connect')}<ArrowUpRight size={14} aria-hidden="true"/></button></AccessPill>
+            ? <AccessPill label={t('Connect {host}').replace('{host}', () => hostName)}><button type="button" className="cs-button is-small" onClick={() => void connect()}>{t('Connect')}<ArrowUpRight size={14} aria-hidden="true"/></button></AccessPill>
             : <AccessPill label={t('Link your GitLab account')}>
               <AppLink className="cs-button is-small" href={settingsPath(workspace, 'connections')}>{t('Link GitLab account')}<ArrowUpRight size={14} aria-hidden="true"/></AppLink>
               {retry && <button type="button" className="cs-button is-small" disabled={busy} onClick={onRetry}>{t('Retry')}</button>}
@@ -230,7 +230,7 @@ export function CodingAuthLine({ activity, data }: { activity: ApplicationActivi
   const { t } = useI18n()
   const user = data.users.find(candidate => candidate.id === (activity.signalMetadata?.userId || data.viewer.id))
   const provider = activity.signalMetadata?.providerName || 'GitHub'
-  return <p className="cs-auth-line"><Link2 size={13} aria-hidden="true"/>{t('Flow requested {name} to connect their {provider} account.').replace('{name}', user?.displayName || user?.name || t('you')).replace('{provider}', provider)}</p>
+  return <p className="cs-auth-line"><Link2 size={13} aria-hidden="true"/>{t('Flow requested {name} to connect their {provider} account.').replace('{name}', () => user?.displayName || user?.name || t('you')).replace('{provider}', () => provider)}</p>
 }
 
 /** The floating "Latest" button; its label shimmers while the agent works. */

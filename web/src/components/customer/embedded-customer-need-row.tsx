@@ -270,7 +270,7 @@ function RequestMenu({ data, request, customer, variant, topLevel = false, hasAd
     }
   }
   const remove = async () => {
-    const title = customer ? t('Delete customer request from {name}').replace('{name}', customer.name) : t('Delete customer request')
+    const title = customer ? t('Delete customer request from {name}').replace('{name}', () => customer.name) : t('Delete customer request')
     if (!await confirmAction(title, { description: t('You cannot undo this action.'), confirmLabel: t('Delete'), danger: true })) return
     try {
       await deleteCustomerRequest(request.id)
@@ -319,7 +319,7 @@ function RequestMenu({ data, request, customer, variant, topLevel = false, hasAd
       {perRequest && <FlowMenuItem icon={<ViewGlyph icon="IssueStatusTodo" color="currentColor"/>} label="Create issue from request…" onSelect={() => void createIssueFromRequest()}/>}
       <FlowMenuSeparator/>
       {perRequest && <FlowMenuItem icon={<FlowGlyph name="edit"/>} label="Edit request" onSelect={onEdit}/>}
-      {topLevel && onNewRequest && customer && <FlowMenuItem icon={<RequestPlusIcon/>} label={variant === 'customerPage' ? `${t('New request on')} ${t(request.issueId ? 'issue' : 'project')}` : t('New request from {name}').replace('{name}', customer.name)} translate={false} onSelect={onNewRequest}/>}
+      {topLevel && onNewRequest && customer && <FlowMenuItem icon={<RequestPlusIcon/>} label={variant === 'customerPage' ? `${t('New request on')} ${t(request.issueId ? 'issue' : 'project')}` : t('New request from {name}').replace('{name}', () => customer.name)} translate={false} onSelect={onNewRequest}/>}
       {perRequest && <FlowSubmenu icon={null} label="Change customer…" search>
         <ChangeCustomerOptions data={data} request={request} onChanged={onChanged}/>
       </FlowSubmenu>}
@@ -352,7 +352,7 @@ function ChangeCustomerOptions({ data, request, onChanged }: { data: BootstrapDa
     placeholder="Search customers…"
     emptyLabel={data.customers.length ? 'No results' : 'Type a name to create your first customer'}
     onChoose={id => void change({ customerId: id === request.customerId ? '' : id })}
-    footer={query => query ? <FlowMenuItem icon={<RequestPlusIcon/>} label={t('Create new customer: "{name}"').replace('{name}', query)} translate={false} onSelect={() => void change({ customerName: query }, query)}/> : null}
+    footer={query => query ? <FlowMenuItem icon={<RequestPlusIcon/>} label={t('Create new customer: "{name}"').replace('{name}', () => query)} translate={false} onSelect={() => void change({ customerName: query }, query)}/> : null}
   />
 }
 

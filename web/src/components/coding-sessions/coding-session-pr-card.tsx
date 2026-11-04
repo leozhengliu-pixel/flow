@@ -63,7 +63,7 @@ export function CodingPullRequestCard({ session, pr, reviews, workspace }: { ses
       ? <AppLink className="cs-pr-card-link" href={reviewPath(workspace, review)} aria-label={label}/>
       : <a className="cs-pr-card-link" href={external(pr.url)} target="_blank" rel="noreferrer" aria-label={label}/>}
     {diffs.length > 0 && <div className="cs-pr-card-stats">
-      <span><strong>{t('Changed')}</strong> <span className="cs-tabular">{t(diffs.length === 1 ? '{count} file' : '{count} files').replace('{count}', String(diffs.length))}</span>
+      <span><strong>{t('Changed')}</strong> <span className="cs-tabular">{t(diffs.length === 1 ? '{count} file' : '{count} files').replace('{count}', () => String(diffs.length))}</span>
         <span className="cs-additions">+{additions}</span><span className="cs-deletions">-{deletions}</span></span>
     </div>}
     <div className="cs-pr-card-title">
@@ -100,7 +100,7 @@ export function CodingCommitBadge({ commits, pr, stats, onOpenChanges }: { commi
   }
   if (stats && stats.files > 0) {
     const last = commits.at(-1)!
-    const files = t(stats.files === 1 ? '{count} file' : '{count} files').replace('{count}', String(stats.files))
+    const files = t(stats.files === 1 ? '{count} file' : '{count} files').replace('{count}', () => String(stats.files))
     return <button type="button" className="cs-commit-badge is-stats" title={last.message?.split('\n')[0] || last.sha} aria-label={`${files} ${last.sha.slice(0, 7)} +${stats.additions} -${stats.deletions}`}
       onClick={() => onOpenChanges ? onOpenChanges() : open(last.sha)}>
       <span className="cs-commit-files">{files}</span><code data-i18n-ignore>{last.sha.slice(0, 7)}</code>
@@ -115,10 +115,10 @@ export function CodingCommitBadge({ commits, pr, stats, onOpenChanges }: { commi
   }
   return <DropdownMenu>
     <DropdownMenuTrigger asChild>
-      <button type="button" className="cs-commit-badge"><span className="cs-commit-label">{t('{count} commits').replace('{count}', String(commits.length))}</span></button>
+      <button type="button" className="cs-commit-badge"><span className="cs-commit-label">{t('{count} commits').replace('{count}', () => String(commits.length))}</span></button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="start" className="coding-session-menu">
-      <DropdownMenuLabel>{t('All {count} commits').replace('{count}', String(commits.length))}</DropdownMenuLabel>
+      <DropdownMenuLabel>{t('All {count} commits').replace('{count}', () => String(commits.length))}</DropdownMenuLabel>
       <DropdownMenuSeparator/>
       {commits.map(commit => <DropdownMenuItem key={commit.sha} onSelect={() => open(commit.sha)}>
         <code className="cs-commit-sha" data-i18n-ignore>{commit.sha.slice(0, 7)}</code><span className="cs-commit-message" data-i18n-ignore>{commit.message?.split('\n')[0]}</span>

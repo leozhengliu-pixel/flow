@@ -120,14 +120,14 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
   const copy = async (text: string, description: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      toast.success(t('Copied to clipboard'), { description: description.replace('{name}', item.source.name) })
+      toast.success(t('Copied to clipboard'), { description: description.replace('{name}', () => item.source.name) })
     } catch { toast.error(t('Could not copy to clipboard')) }
   }
   const toggleSubscription = async () => {
     const next = !item.subscribed
     await props.onToggleSubscription(item, next)
-    toast(next ? t('Subscribed to {type}').replace('{type}', type) : t('Unsubscribed from {type}').replace('{type}', type), {
-      description: (next ? t('You will now receive updates for this {type}') : t('You will no longer receive updates for this {type}')).replace('{type}', type),
+    toast(next ? t('Subscribed to {type}').replace('{type}', () => type) : t('Unsubscribed from {type}').replace('{type}', () => type), {
+      description: (next ? t('You will now receive updates for this {type}') : t('You will no longer receive updates for this {type}')).replace('{type}', () => type),
     })
   }
   const toggleProjectUpdates = async () => {
@@ -170,7 +170,7 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
           <DropdownMenu.Item onSelect={() => void copy(pulseUpdateLink(item), item.kind === 'project' ? t('The project update URL for {name} is copied to clipboard') : t('The initiative update URL for {name} is copied to clipboard'))}><Link2 size={14}/>{t('Copy link')}</DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => void copy(pulseUpdateMarkdown(item), item.kind === 'project' ? t('The project update for {name} is copied to clipboard') : t('The initiative update for {name} is copied to clipboard'))}><Copy size={14}/>{t('Copy as markdown')}</DropdownMenu.Item>
           <DropdownMenu.Separator/>
-          <DropdownMenu.Item onSelect={() => toggleSubscription().catch(() => undefined)}>{item.subscribed ? <BellOff size={14}/> : <BellRing size={14}/>}{(item.subscribed ? t('Unsubscribe from this {type}') : t('Subscribe to this {type}')).replace('{type}', type)}</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => toggleSubscription().catch(() => undefined)}>{item.subscribed ? <BellOff size={14}/> : <BellRing size={14}/>}{(item.subscribed ? t('Unsubscribe from this {type}') : t('Subscribe to this {type}')).replace('{type}', () => type)}</DropdownMenu.Item>
           {item.kind === 'initiative' && <DropdownMenu.Item onSelect={() => void toggleProjectUpdates()}>{projectUpdates.subscribed ? <BellOff size={14}/> : <BellRing size={14}/>}{projectUpdates.subscribed ? t("Unsubscribe from initiative's project updates") : t("Subscribe to initiative's project updates")}</DropdownMenu.Item>}
           {props.view === 'following' && item.reasons.length > 0 && <DropdownMenu.Item onSelect={() => setWhyOpen(true)}><HelpCircle size={14}/>{t('Why am I seeing this?')}</DropdownMenu.Item>}
         </DropdownMenu.Content></DropdownMenu.Portal>

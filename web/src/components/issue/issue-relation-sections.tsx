@@ -63,7 +63,7 @@ export function IssueRelationSections({ issue, data, activities, onOpenIssue, on
 
 function IssueRelationRow({ kind, issue, data, onOpen, onRemove }: { kind: IssueRelationSectionKind; issue: Issue; data: BootstrapData; onOpen: () => void; onRemove: () => void }) {
   const { t } = useI18n()
-  const removeLabel = t(REMOVE_LABEL[kind]).replace('{identifier}', issue.identifier)
+  const removeLabel = t(REMOVE_LABEL[kind]).replace('{identifier}', () => issue.identifier)
   const open = (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     event.preventDefault()

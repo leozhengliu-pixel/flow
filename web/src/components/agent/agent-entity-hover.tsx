@@ -89,7 +89,7 @@ function IssueCard({ issue }: { issue: Issue }) {
 function DelegateStack({ assignee, delegate }: { assignee?: Issue['assignee']; delegate: NonNullable<Issue['delegate']> }) {
   const { t } = useI18n()
   const agentName = delegate.displayName || delegate.name
-  const label = assignee ? `${assignee.displayName || assignee.name} · ${t('Delegated to {name}').replace('{name}', agentName)}` : t('Delegated to {name}').replace('{name}', agentName)
+  const label = assignee ? `${assignee.displayName || assignee.name} · ${t('Delegated to {name}').replace('{name}', () => agentName)}` : t('Delegated to {name}').replace('{name}', () => agentName)
   return <span aria-label={label} className={styles.facepile} data-i18n-ignore role="img">
     <UserAvatar avatarUrl={delegate.avatarUrl} className={styles.avatar} name={agentName} userId={delegate.id}/>
     {assignee ? <UserAvatar avatarUrl={assignee.avatarUrl} className={styles.avatar} name={assignee.displayName || assignee.name} userId={assignee.id}/> : <NoAssigneeIcon className={styles.dim} size={16}/>}

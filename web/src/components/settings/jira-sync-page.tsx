@@ -220,7 +220,7 @@ export function JiraSyncPage({ data, mode, jiraProjectId, onBack, onReload }: Pr
         toast.success(
           t("Issues from your Jira project will now be added to your Flow team").replace(
             "{project}",
-            project.name,
+            () => project.name,
           ),
         );
       }

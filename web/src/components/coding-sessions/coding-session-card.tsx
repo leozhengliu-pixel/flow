@@ -42,7 +42,7 @@ export function CodingSessionStatusRow({ session, data, href, onOpen, surface = 
   const pr = surface === 'issue' ? session.latestPullRequest ?? session.pullRequests?.at(-1) : undefined
   const content = <>
     <CodingStatusIcon tone={status.tone}/>
-    <span className="coding-session-status-label" data-i18n-ignore={status.repo || status.rawLabel ? true : undefined}>{status.rawLabel ? status.label : t(status.label).replace('{count}', String(status.count ?? '')).replace('{repo}', status.repo ?? '')}</span>
+    <span className="coding-session-status-label" data-i18n-ignore={status.repo || status.rawLabel ? true : undefined}>{status.rawLabel ? status.label : t(status.label).replace('{count}', () => String(status.count ?? '')).replace('{repo}', () => status.repo ?? '')}</span>
     {status.detail && (status.codeDetail
       ? <code className="coding-session-status-code" data-i18n-ignore title={status.detail}>{status.detail}</code>
       : <span className="coding-session-status-detail" data-i18n-ignore={status.translateDetail ? undefined : true}>{status.translateDetail ? t(status.detail) : plainSummary(status.detail)}</span>)}
@@ -110,7 +110,7 @@ export function CodingSessionCard({ sessionId, initial, data, onDismiss }: { ses
     </header>
     <div className="coding-session-card-status">
       <CodingSessionStatusRow session={session} data={data} surface="chat" {...opener.rowProps}/>
-      {codingSessionCapabilities(session).stop && <button type="button" className="cs-button is-small coding-session-card-stop" aria-label={t('Send stop request')} title={session.stopRequested ? t('Stop request already sent, waiting for {agent}').replace('{agent}', t('Flow')) : t('Send stop request')} disabled={stopping || session.stopRequested}
+      {codingSessionCapabilities(session).stop && <button type="button" className="cs-button is-small coding-session-card-stop" aria-label={t('Send stop request')} title={session.stopRequested ? t('Stop request already sent, waiting for {agent}').replace('{agent}', () => t('Flow')) : t('Send stop request')} disabled={stopping || session.stopRequested}
         onClick={() => void stop()}><AgentStopIcon size={14}/></button>}
     </div>
     {opener.dialog}

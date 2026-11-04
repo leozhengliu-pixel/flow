@@ -34,7 +34,7 @@ export function OAuthApplicationsSection({ data }: { data: BootstrapData }) {
       {apps.length ? (
         <>
           <div className="oauth-app-list-header">
-            <span>{apps.length === 1 ? t("1 OAuth application") : t("{count} OAuth applications").replace("{count}", String(apps.length))}</span>
+            <span>{apps.length === 1 ? t("1 OAuth application") : t("{count} OAuth applications").replace("{count}", () => String(apps.length))}</span>
             <FlowTooltip label={t("New OAuth application")}>
               <button type="button" className="oauth-app-icon-button is-medium" aria-label={t("New OAuth application")} onClick={() => navigate(createPath)}>
                 {phone ? <FlowGlyph name="plus" size={16} /> : <PlusGlyph />}
@@ -56,7 +56,7 @@ export function OAuthApplicationsSection({ data }: { data: BootstrapData }) {
                   {phone ? <AppLogo className="oauth-app-avatar" logoUrl={app.logoUrl} name={app.name} redirectUris={app.redirectUris} fallback={<ApiApplicationPlaceholder />} /> : <OAuthAppAvatar logoUrl={app.logoUrl} name={app.name} redirectUris={app.redirectUris} />}
                   <span className="oauth-app-list-copy">
                     <strong data-i18n-ignore>{app.name}</strong>
-                    <span>{t("Updated {date}").replace("{date}", formatDate(app.updatedAt || app.createdAt, { month: "short", day: "numeric", ...(phone ? {} : { year: "numeric" as const }) }))}</span>
+                    <span>{t("Updated {date}").replace("{date}", () => formatDate(app.updatedAt || app.createdAt, { month: "short", day: "numeric", ...(phone ? {} : { year: "numeric" as const }) }))}</span>
                   </span>
                 </a>
                 {phone && <DropdownMenu>

@@ -1,4 +1,5 @@
 import type { AgentApproval, AgentApprovalTarget } from '@/types/flow'
+import { asIs } from '@/lib/as-is'
 
 type Translate = (source: string) => string
 type Choice = { label: string; value: string }
@@ -31,7 +32,7 @@ export function agentApprovalMarkdown(approval: AgentApproval, t: Translate) {
   if (targets.length) {
     const lines = targets.map(target => {
       const notes = [
-        ...(target.subIssues ? [t('{count} sub-issues').replace('{count}', String(target.subIssues))] : []),
+        ...(target.subIssues ? [t('{count} sub-issues').replace('{count}', () => String(target.subIssues))] : []),
         ...Object.entries(target.affected ?? {}).filter(([, count]) => count > 0).map(([kind, count]) => `${count} ${affectedNoun(kind, t)}`),
       ]
       return `- ${targetLink(target)}${target.permanent ? ` (${t('permanent')})` : ''}${notes.length ? ` (${t('also affects')} ${notes.join(', ')})` : ''}`
@@ -40,10 +41,10 @@ export function agentApprovalMarkdown(approval: AgentApproval, t: Translate) {
     const heading = targets.some(target => target.permanent)
       ? t('Delete these {count} items? Items marked permanent can’t be restored.')
       : t('Delete these {count} items? They go to the trash and can be restored.')
-    sections.push(`${heading.replace('{count}', String(targets.length))}\n\n${lines.join('\n')}`)
+    sections.push(`${heading.replace('{count}', () => String(targets.length))}\n\n${lines.join('\n')}`)
   }
   if (approval.kind === 'publish' || approval.body) {
-    const heading = approval.parent ? t('Post this update to {name}?').replace('{name}', targetLink(approval.parent)) : t('Post this update?')
+    const heading = approval.parent ? t('Post this update to {name}?').replace('{name}', asIs(targetLink(approval.parent))) : t('Post this update?')
     const quote = (approval.body ?? '').split('\n').map(line => `> ${line}`).join('\n')
     const health = approval.health ? `\n\n${t('Health')}: ${t(HEALTH_LABELS[approval.health] ?? approval.health)}` : ''
     sections.push(`${heading}\n\n${quote}${health}`)

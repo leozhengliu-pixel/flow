@@ -53,7 +53,7 @@ export function CustomerRequestPicker({ customers, title, onPick, onClose }: { c
   }, [])
   const label = (option: CustomerPickOption): ReactNode => {
     if (option.kind === 'customer') return <span data-i18n-ignore>{option.label}</span>
-    if (option.kind === 'create') return <span data-i18n-ignore>{t('Create new customer: "{name}"').replace('{name}', query.trim())}</span>
+    if (option.kind === 'create') return <span data-i18n-ignore>{t('Create new customer: "{name}"').replace('{name}', () => query.trim())}</span>
     return t(option.label)
   }
   return <Dialog open onOpenChange={open => { if (!open) onClose() }}>

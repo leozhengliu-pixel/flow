@@ -249,7 +249,7 @@ function OAuthMarks({ clientName, logoUri, redirectUri, t }: { clientName: strin
   const logo = safeHttpUrl(logoUri)
   const known = logo ? undefined : matchKnownApp({ name: clientName, redirectUris: redirectUri ? [redirectUri] : [] })
   return <div className="oauth-marks">
-    <span className={`oauth-mark${logo ? '' : known ? ' is-known' : ' is-placeholder'}`} role="img" aria-label={t('{app} icon').replace('{app}', clientName)}>
+    <span className={`oauth-mark${logo ? '' : known ? ' is-known' : ' is-placeholder'}`} role="img" aria-label={t('{app} icon').replace('{app}', () => clientName)}>
       {logo ? <img src={logo} alt=""/> : known ? <KnownAppMark app={known} size={32} decorative/> : <ApplicationIconPlaceholder/>}
     </span>
     <ArrowRightLeft aria-hidden="true" className="oauth-marks-arrows"/>

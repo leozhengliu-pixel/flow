@@ -592,10 +592,10 @@ function GitLabTokenSection({ connection, onReload }: { connection: IntegrationC
       ? t("Needs attention")
       : undefined;
   const expiry = config.expiresAt
-    ? (expired ? t("Expired {date}. Update the token to reconnect.") : t("Expires {date}")).replace("{date}", when(config.expiresAt))
+    ? (expired ? t("Expired {date}. Update the token to reconnect.") : t("Expires {date}")).replace("{date}", () => when(config.expiresAt))
     : t("Expiry unavailable");
   const rotateTooltip = [
-    config.lastRotatedAt ? t("Last rotated {date}.").replace("{date}", when(config.lastRotatedAt)) : "",
+    config.lastRotatedAt ? t("Last rotated {date}.").replace("{date}", () => when(config.lastRotatedAt)) : "",
     t("Rotating revokes the current token and saves its replacement in Flow."),
   ]
     .filter(Boolean)
@@ -605,7 +605,7 @@ function GitLabTokenSection({ connection, onReload }: { connection: IntegrationC
     failure ||
     (rotationEnabled
       ? config.nextRotationAt
-        ? t("Next rotation {date}").replace("{date}", when(config.nextRotationAt))
+        ? t("Next rotation {date}").replace("{date}", () => when(config.nextRotationAt))
         : t("Automatic rotation needs attention")
       : t("Automatically renew the token before it expires."));
 

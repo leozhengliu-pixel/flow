@@ -549,7 +549,7 @@ export function SettingsPage(props: SettingsPageProps) {
   // Entries about the chat platform name Lark or Feishu when it is the deployment's platform.
   const searchChat = useChatPlatform(props.data);
   const searchChatName = searchChat.name;
-  const searchTranslate = useCallback((value: string) => t(value).replaceAll("{name}", searchChatName), [t, searchChatName]);
+  const searchTranslate = useCallback((value: string) => t(value).replaceAll("{name}", () => searchChatName), [t, searchChatName]);
   const searchablePages = useMemo(
     () => chatPlatformSearchPages(SETTINGS_SEARCH_PAGES, searchChat.platform).filter(page => accessiblePageIds.has(page.id)),
     [accessiblePageIds, searchChat.platform],
@@ -729,7 +729,7 @@ export function SettingsPage(props: SettingsPageProps) {
                   query={trimmedQuery}
                   results={searchResults}
                   teamResults={teamSearchResults}
-                  format={text => text.replaceAll("{name}", searchChatName)}
+                  format={text => text.replaceAll("{name}", () => searchChatName)}
                 />
               </div>
             ) : visible.map((section) => (
@@ -1020,7 +1020,7 @@ function settingsBodyAccess(props: SettingsPageProps): SettingsBodyAccess {
 function ReadOnlySettings({ notice, name, banner, children }: { notice: string; name: string; banner: boolean; children: ReactNode }) {
   const { t } = useI18n();
   // Notices name the deployment's chat platform as {name}.
-  const text = t(notice).replaceAll("{name}", name);
+  const text = t(notice).replaceAll("{name}", () => name);
   // A stable element (not state) so Suspense re-attaching refs cannot loop.
   const [crumbSlot] = useState(() => document.createElement("div"));
   return (

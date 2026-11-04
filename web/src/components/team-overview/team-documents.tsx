@@ -296,7 +296,7 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
       {icon?.kind === 'cycle' && <CalendarDays size={16}/>}
       <span className="team-docs-group-title" data-i18n-ignore={group.entity || undefined}>{group.entity ? group.name : t(group.name)}</span>
       <small style={countColor ? { '--team-docs-group-count-color': countColor } as CSSProperties : undefined}>{group.items.length}</small>
-      <button aria-label={t('Create document in {group}').replace('{group}', group.entity ? group.name : t(group.name))} className="team-docs-group-add" onClick={() => onNewInGroup?.(icon?.kind === 'project' ? icon.project.id : undefined)} type="button"><PlusIcon/></button>
+      <button aria-label={t('Create document in {group}').replace('{group}', () => group.entity ? group.name : t(group.name))} className="team-docs-group-add" onClick={() => onNewInGroup?.(icon?.kind === 'project' ? icon.project.id : undefined)} type="button"><PlusIcon/></button>
     </div>
   }
 

@@ -77,7 +77,7 @@ export function CodingSessionPanel({ session, data, onChange, onDismiss, onOpenS
 
   return <section className={`coding-session-panel${agentHidden ? ' is-agent-hidden' : ''}${className ? ` ${className}` : ''}`} data-state={session.state} data-phase={session.phase} aria-label={t('Coding session')}>
     <div className="coding-session-changes" ref={changes}>
-      {session.state === 'stale' && session.stoppedBy && <p className="coding-session-muted">{t('Stopped by {name}').replace('{name}', data.users.find(user => user.id === session.stoppedBy)?.displayName || t('a member'))}</p>}
+      {session.state === 'stale' && session.stoppedBy && <p className="coding-session-muted">{t('Stopped by {name}').replace('{name}', () => data.users.find(user => user.id === session.stoppedBy)?.displayName || t('a member'))}</p>}
       <CodingPullRequests session={session} reviews={data.reviews ?? []} busy={busy} onFixChecks={(_, review) => void startOther(() => startReviewCodingSession(review.id, { kind: 'fix' }), 'Started a session to fix failing checks')}/>
       <CodingChanges session={session} commitsOnly/>
       {/* Plain screenshots show in the conversation, under the turn that took them; pairs and recordings stay here. */}
@@ -197,7 +197,7 @@ export function CodingSessionMenu({ session, data, busy, items, onArchive, onSta
       </DropdownMenuSub>
       {(items || startOver || onArchive) && <DropdownMenuSeparator/>}
       {items}
-      {startOver && <DropdownMenuItem disabled={busy} onSelect={() => startOver(session.escalationModel!)}><RotateCcw size={14} aria-hidden="true"/>{t('Start over with {model}').replace('{model}', escalationLabel)}</DropdownMenuItem>}
+      {startOver && <DropdownMenuItem disabled={busy} onSelect={() => startOver(session.escalationModel!)}><RotateCcw size={14} aria-hidden="true"/>{t('Start over with {model}').replace('{model}', () => escalationLabel)}</DropdownMenuItem>}
       {onArchive && <DropdownMenuItem onSelect={onArchive}><FlowGlyph name="agentSessionDismissed" size={16}/>{t('Archive')}</DropdownMenuItem>}
     </DropdownMenuContent>
   </DropdownMenu>

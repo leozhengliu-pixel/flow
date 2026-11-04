@@ -56,7 +56,7 @@ export function AdvancedFilterChip({ defaultOpen = false, filter, filterOptions,
               <span className={styles.muted}>{t(part.operatorLabel)}</span>{' '}
               <SummaryValue condition={part.condition} options={filterOptions(part.condition.field)}/>{' '}
             </span>)}
-            {summary.more > 0 && <span className={styles.muted}>{t(summary.more === 1 ? 'and 1 more condition' : 'and {count} more conditions').replace('{count}', String(summary.more))}</span>}
+            {summary.more > 0 && <span className={styles.muted}>{t(summary.more === 1 ? 'and 1 more condition' : 'and {count} more conditions').replace('{count}', () => String(summary.more))}</span>}
           </> : <span className={styles.muted}>{t('Advanced filter')}</span>}
         </button>
       </Popover.Trigger>

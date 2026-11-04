@@ -46,15 +46,15 @@ export function PipelineStageEditor({ stages, onChange, releaseCountByStage }: {
   }
   const remove = (stage: StageDraft) => {
     if (started.length <= 1) {
-      toast.warning(t('Can’t delete the "{name}" release stage').replace('{name}', stage.name || t('unnamed')), { description: t('Each type of release stage must have at least one option. You can edit this stage, or create a replacement stage prior to deleting it.') })
+      toast.warning(t('Can’t delete the "{name}" release stage').replace('{name}', () => stage.name || t('unnamed')), { description: t('Each type of release stage must have at least one option. You can edit this stage, or create a replacement stage prior to deleting it.') })
       return
     }
     if (stage.originalName && (releaseCountByStage[stage.originalName] ?? 0) > 0) {
-      toast.warning(t('Can’t archive the "{name}" release stage').replace('{name}', stage.name), { description: t('This stage has releases associated with it. You can edit this stage, or move the releases to a different stage prior to archiving it.') })
+      toast.warning(t('Can’t archive the "{name}" release stage').replace('{name}', () => stage.name), { description: t('This stage has releases associated with it. You can edit this stage, or move the releases to a different stage prior to archiving it.') })
       return
     }
     if (!stage.frozen && !started.some(other => other.key !== stage.key && !other.frozen)) {
-      toast.warning(t('Can’t archive the "{name}" release stage').replace('{name}', stage.name), { description: t('At least one started stage must remain non-frozen.') })
+      toast.warning(t('Can’t archive the "{name}" release stage').replace('{name}', () => stage.name), { description: t('At least one started stage must remain non-frozen.') })
       return
     }
     replaceStarted(started.filter(other => other.key !== stage.key))

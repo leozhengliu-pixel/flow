@@ -331,7 +331,7 @@ function InsightAggregationPicker({ config, layout, onChange }: { config: SavedV
       const checked = selected.includes(id)
       return <DropdownMenu.CheckboxItem className={`${styles.menuItem} ${styles.treeItem}`} key={id} checked={checked} onSelect={event => event.preventDefault()} onCheckedChange={next => onChange(next ? [...selected, id] : selected.filter(value => value !== id))}>
         <MenuCheckbox/><span className={styles.treeLabel}><span className={styles.menuLabel}>{percentileLabel(id)}</span></span>
-        <MenuRowTooltip label={t('{value}% of issues are at or below this point').replace('{value}', String(percentileShare(id)))}/>
+        <MenuRowTooltip label={t('{value}% of issues are at or below this point').replace('{value}', () => String(percentileShare(id)))}/>
       </DropdownMenu.CheckboxItem>
     })}
   </TooltipProvider></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></label>
@@ -412,7 +412,7 @@ function measureDisplay(config: SavedViewInsightsConfig, data: BootstrapData, t:
   if (config.measure !== 'timeInStatus') return { label: MEASURE_OPTIONS.find(option => option.id === config.measure)?.label ?? config.measure }
   const nodes = timeInStatusTree(data).filter(node => node.values.some(value => config.timeInStatusIds.includes(value)))
   if (!nodes.length) return { label: 'Time in status' }
-  if (nodes.length > 1) return { label: t(nodes.every(node => node.depth === 0) ? '{count} status types' : '{count} statuses').replace('{count}', String(nodes.length)) }
+  if (nodes.length > 1) return { label: t(nodes.every(node => node.depth === 0) ? '{count} status types' : '{count} statuses').replace('{count}', () => String(nodes.length)) }
   return { label: nodes[0].label, icon: nodes[0].icon }
 }
 
@@ -463,12 +463,12 @@ function segmentOptions(data: BootstrapData): InsightOption[] {
 /** The reference app's header sentence: "4 issues in Todo without priority", "1 issue in Backlog in low priority". */
 function selectionPhrase(target: InsightTarget, config: SavedViewInsightsConfig, data: BootstrapData, t: (source: string) => string, sliceLabel?: string, segmentLabel?: string) {
   const parts: string[] = []
-  if (sliceLabel) parts.push(t('in {value}').replace('{value}', t(sliceLabel)))
+  if (sliceLabel) parts.push(t('in {value}').replace('{value}', () => t(sliceLabel)))
   if (config.segment !== 'none' && target.segment !== undefined) {
     const dimension = t(dimensionLabel(config.segment, data)).toLowerCase()
-    if (isEmptyInsightValue(config.segment, target.segment)) parts.push(t('without {value}').replace('{value}', dimension))
-    else if (config.segment === 'priority' && segmentLabel) parts.push(t('in {value} priority').replace('{value}', t(segmentLabel).toLowerCase()))
-    else if (segmentLabel) parts.push(t('with {value}').replace('{value}', t(segmentLabel)))
+    if (isEmptyInsightValue(config.segment, target.segment)) parts.push(t('without {value}').replace('{value}', () => dimension))
+    else if (config.segment === 'priority' && segmentLabel) parts.push(t('in {value} priority').replace('{value}', () => t(segmentLabel).toLowerCase()))
+    else if (segmentLabel) parts.push(t('with {value}').replace('{value}', () => t(segmentLabel)))
   }
   if (target.aggregation) parts.push(`${percentileLabel(target.aggregation as InsightAggregation)} ${target.operator === 'gt' ? '>' : '≤'} ${formatMetric(target.threshold ?? 0, config.measure)}`)
   return parts.join(' ')

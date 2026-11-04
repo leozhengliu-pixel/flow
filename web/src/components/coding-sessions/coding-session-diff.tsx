@@ -76,7 +76,7 @@ export function CodingDiffViewer({ session }: { session: CodingSession }) {
 
   return <section className="coding-diff" aria-label={t('Code changes')}>
     <header className="coding-diff-toolbar">
-      <strong>{t(files.length === 1 ? '1 file changed' : '{count} files changed').replace('{count}', String(files.length))}</strong>
+      <strong>{t(files.length === 1 ? '1 file changed' : '{count} files changed').replace('{count}', () => String(files.length))}</strong>
       <span className="coding-diff-counts"><span className="coding-additions">+{diff?.additions ?? 0}</span><span className="coding-deletions">−{diff?.deletions ?? 0}</span></span>
       {diff?.head && <span className="coding-diff-refs" data-i18n-ignore><GitBranch size={12} aria-hidden="true"/>{diff.head}{diff.base ? ` → ${diff.base}` : ''}</span>}
       <button type="button" className="coding-session-button coding-diff-toggle-all" onClick={toggleAll}>{t(allCollapsed ? 'Expand all' : 'Collapse all')}</button>
@@ -113,12 +113,12 @@ function CodingDiffFileView({ id, file, source, collapsed, onToggle }: { id: str
     </header>
     {!collapsed && (message
       ? <p className="coding-diff-file-message">{t(message)}</p>
-      : <div className="coding-diff-table" role="table" aria-label={t('Diff of {path}').replace('{path}', file.path)}>
+      : <div className="coding-diff-table" role="table" aria-label={t('Diff of {path}').replace('{path}', () => file.path)}>
         {file.hunks.map((hunk, hunkIndex) => <div key={`${hunk.header}-${hunkIndex}`} role="rowgroup">
           <div className="coding-diff-hunk" role="row"><span role="cell" data-i18n-ignore>{hunk.header}</span></div>
           {hunk.lines.map((line, lineIndex) => <div key={lineIndex} className="coding-diff-line" data-kind={line.kind} role="row">
-            <span className="coding-diff-number" role="cell" aria-label={line.oldLine ? t('Old line {n}').replace('{n}', String(line.oldLine)) : undefined}>{line.kind === 'note' ? '' : line.oldLine ?? ''}</span>
-            <span className="coding-diff-number" role="cell" aria-label={line.newLine ? t('New line {n}').replace('{n}', String(line.newLine)) : undefined}>{line.kind === 'note' ? '' : line.newLine ?? ''}</span>
+            <span className="coding-diff-number" role="cell" aria-label={line.oldLine ? t('Old line {n}').replace('{n}', () => String(line.oldLine)) : undefined}>{line.kind === 'note' ? '' : line.oldLine ?? ''}</span>
+            <span className="coding-diff-number" role="cell" aria-label={line.newLine ? t('New line {n}').replace('{n}', () => String(line.newLine)) : undefined}>{line.kind === 'note' ? '' : line.newLine ?? ''}</span>
             <span className="coding-diff-marker" role="cell" aria-hidden="true">{line.kind === 'add' ? '+' : line.kind === 'delete' ? '−' : ''}</span>
             <span className="coding-diff-code" role="cell">{line.kind === 'note' || !highlight ? <code data-i18n-ignore>{line.text}</code> : <ReviewCode content={line.text} path={file.path} marks={wordMarks[hunkIndex]?.get(lineIndex)}/>}</span>
           </div>)}

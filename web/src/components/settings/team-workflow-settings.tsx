@@ -574,7 +574,7 @@ function TeamOverview({
   };
   const summary = (id: TeamSettingsSection) => {
     const count = (value: number, singular: string, plural: string) => value
-      ? t(value === 1 ? singular : plural).replace('{count}', String(value))
+      ? t(value === 1 ? singular : plural).replace('{count}', () => String(value))
       : t('None');
     switch (id) {
       case 'members': { const size = data.teamMembers.filter(item => item.teamId === team.id).length; return count(size, '{count} member', '{count} members'); }
@@ -998,14 +998,14 @@ function EmailIntakeSettings({
     if (!address) return;
     const subject = `${t("team")} "${team.name}"`;
     const confirmed = await confirmAction(t("Reset the email address?"), {
-      description: t("A new email address will be generated for {subject} and the previous address will be permanently disabled.").replace("{subject}", subject),
+      description: t("A new email address will be generated for {subject} and the previous address will be permanently disabled.").replace("{subject}", () => subject),
       confirmLabel: t("Reset address"),
       danger: true,
     });
     if (!confirmed) return;
     await run(async () => {
       await rotateEmailIntakeAddress(team.id, address.id);
-      toast.success(t("Email address reset"), { description: t("The email address for {subject} has been reset.").replace("{subject}", subject) });
+      toast.success(t("Email address reset"), { description: t("The email address for {subject} has been reset.").replace("{subject}", () => subject) });
     });
   };
   return (
@@ -2431,7 +2431,7 @@ function TemplatesSettings({
           createLabel="Create new document template"
           onCreate={() => openEditor("document", null)}
           count={documentTemplates.length}
-          countLabel={t(documentTemplates.length === 1 ? "1 document template" : "{count} document templates").replace("{count}", String(documentTemplates.length))}
+          countLabel={t(documentTemplates.length === 1 ? "1 document template" : "{count} document templates").replace("{count}", () => String(documentTemplates.length))}
         >
           {documentTemplates.map((template) => {
             const sourceTeamID = sourceTeamOf("document", template);

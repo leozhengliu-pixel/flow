@@ -25,6 +25,7 @@ import { CodeIntelligencePage } from "./code-intelligence-settings";
 import { FeatureCard, FeatureLinkRow, FeatureRow, FeatureSection, FeatureSelect, FeatureShell, Toggle, type FeatureIcon } from "./feature-primitives";
 
 import "./ai-settings-pages.css";
+import { asIs } from '@/lib/as-is'
 
 export type AiPageProps = {
   data: BootstrapData;
@@ -82,7 +83,7 @@ export function AiSettingsHub({ data, settings, busy, setEnabled, onNavigateSett
     <FeatureShell className="feature-ai-settings" title="AI & agents" description="Automate your product development processes and operations with AI">
       <div className="feature-card-stack">
         <FeatureCard>
-          <FeatureLinkRow title="Usage" description={credits ? t("{amount} remaining").replace("{amount}", formatCredits(credits.remainingMicros)) : undefined} onClick={go("usage")} />
+          <FeatureLinkRow title="Usage" description={credits ? t("{amount} remaining").replace("{amount}", () => formatCredits(credits.remainingMicros)) : undefined} onClick={go("usage")} />
         </FeatureCard>
         <FeatureCard>
           <FeatureRow title="Enable usage feedback" description="Improve AI functionality by sharing usage feedback. Never used to train models">
@@ -111,7 +112,7 @@ export function AiSettingsHub({ data, settings, busy, setEnabled, onNavigateSett
                 <UserAvatar className="feature-row-icon feature-agent-avatar" name={item.name} avatarUrl={item.avatarUrl} userId={item.userId}/>
                 <div>
                   <strong data-i18n-ignore>{item.name}</strong>
-                  <span>{item.allPublicTeams ? t("Access to all public teams") : t("Access to {count} teams").replace("{count}", String(item.teamIds.length))}</span>
+                  <span>{item.allPublicTeams ? t("Access to all public teams") : t("Access to {count} teams").replace("{count}", () => String(item.teamIds.length))}</span>
                 </div>
                 <aside><ChevronRight size={15} aria-hidden="true" /></aside>
               </button>
@@ -160,7 +161,7 @@ function GuidanceEdited({ data, settings }: { data: BootstrapData; settings: Wor
   const name = editor?.displayName || editor?.name;
   return (
     <p className="feature-guidance-meta" data-testid="guidance-last-edit">
-      {t(name ? "Last edit by {name} {time}" : "Last edited {time}").replace("{name}", name ?? "").replace("{time}", relative(settings.agentInstructionsEditedAt))}
+      {t(name ? "Last edit by {name} {time}" : "Last edited {time}").replace("{name}", () => name ?? "").replace("{time}", asIs(relative(settings.agentInstructionsEditedAt)))}
     </p>
   );
 }
@@ -379,7 +380,7 @@ export function InstalledAgentsSettings({ data, settings, busy, onReload, onNavi
       <UserAvatar className="feature-row-icon feature-agent-avatar" name={item.name} avatarUrl={item.avatarUrl} userId={item.userId}/>
       <div>
         <strong data-i18n-ignore>{item.name}</strong>
-        <span>{item.allPublicTeams ? t("Access to all public teams") : t("Access to {count} teams").replace("{count}", String(item.teamIds.length))}</span>
+        <span>{item.allPublicTeams ? t("Access to all public teams") : t("Access to {count} teams").replace("{count}", () => String(item.teamIds.length))}</span>
       </div>
       <aside><ChevronRight size={15} aria-hidden="true" /></aside>
     </button>
@@ -394,7 +395,7 @@ export function InstalledAgentsSettings({ data, settings, busy, onReload, onNavi
       <FeatureCard>
         <div className="feature-row feature-agents-summary">
           <div>
-            <strong>{count === 1 ? t("1 agent enabled") : t("{count} agents enabled").replace("{count}", String(count))}</strong>
+            <strong>{count === 1 ? t("1 agent enabled") : t("{count} agents enabled").replace("{count}", () => String(count))}</strong>
             <span>
               {t("Browse")}{" "}
               <button type="button" className="feature-section-link" onClick={() => onNavigateSettings?.("integrations")}>{t("integrations")}</button>{" "}

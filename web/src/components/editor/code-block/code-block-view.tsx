@@ -174,7 +174,7 @@ function PlainCodeBlockView({ editor, getPos, node }: ReactNodeViewProps) {
       {collapsible && (
         <button className="flow-code-block__expander" contentEditable={false} onClick={() => expanded ? collapse() : setShowAll(true)} type="button">
           {expanded ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
-          {expanded ? t('Collapse') : t('Show all {count} lines').replace('{count}', String(lineCount))}
+          {expanded ? t('Collapse') : t('Show all {count} lines').replace('{count}', () => String(lineCount))}
         </button>
       )}
     </NodeViewWrapper>

@@ -150,7 +150,7 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
       <nav aria-label={t('Search resource type')}>
         {(phone ? tabs.slice(0, 3) : tabs).map(item => <button key={item.id} type="button" aria-pressed={item.id===tab} className={`ui-pill ${item.id === tab ? 'active' : ''}`} onClick={() => updateState({...state,tab:item.id})}>{t(item.label)}</button>)}
         {phone && <DropdownMenu><DropdownMenuTrigger className={`ui-pill workspace-search-more-tabs ${tabs.slice(3).some(item => item.id === tab) ? 'active' : ''}`}>
-          <span>{tabs.slice(3).find(item => item.id === tab) ? t(tabs.find(item => item.id === tab)!.label) : t('{count} more').replace('{count}', String(tabs.length - 3))}</span><TabsOverflowIcon/>
+          <span>{tabs.slice(3).find(item => item.id === tab) ? t(tabs.find(item => item.id === tab)!.label) : t('{count} more').replace('{count}', () => String(tabs.length - 3))}</span><TabsOverflowIcon/>
         </DropdownMenuTrigger><DropdownMenuContent>{tabs.slice(3).map(item => <DropdownMenuItem key={item.id} onSelect={() => updateState({...state,tab:item.id})}>{t(item.label)}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>}
       </nav>
       <div className="workspace-search-tools"><SearchMenus state={state} users={users} onChange={updateState}/></div>
@@ -159,12 +159,12 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
     <section className="workspace-search-content" aria-live="polite">
       {state.filters.length>0&&<SearchFilterChips state={state} users={users} onChange={updateState}/>}
       {inputPending&&<div className="workspace-search-pending" role="status">{t('Press Enter to search')}</div>}
-      {identifierList.length>1&&<a className="workspace-search-identifiers" href={`${location.pathname.replace(/\/search.*$/,'')}/issues/all?ids=${encodeURIComponent(identifierList.join(','))}`}>{t('View {count} issues').replace('{count}',String(identifierList.length))}<span data-i18n-ignore>{identifierList.join(', ')}</span></a>}
+      {identifierList.length>1&&<a className="workspace-search-identifiers" href={`${location.pathname.replace(/\/search.*$/,'')}/issues/all?ids=${encodeURIComponent(identifierList.join(','))}`}>{t('View {count} issues').replace('{count}',() => String(identifierList.length))}<span data-i18n-ignore>{identifierList.join(', ')}</span></a>}
       {!normalizedQuery && resultsReady && <RecentSearches history={response.history} onSearch={runSearch} onClear={async () => { try{await clearSearchHistory(); setResponse(current => ({ ...current, history: [] }))}catch(reason){setError(reason instanceof Error?reason.message:t('Could not clear search history'))} }}/>}
       {!normalizedQuery && resultsReady && !response.history.length && !results.length && <SearchEmpty/>}
       {loading && !inputPending && <SearchLoading/>}
       {error && !inputPending && <div className="workspace-search-state"><strong>{t('Search unavailable')}</strong><span>{t(error)}</span><button type="button" onClick={() => setRetry(value => value + 1)}>{t('Try again')}</button></div>}
-      {resultsReady && normalizedQuery && response.results.length === 0 && <div className="workspace-search-state workspace-search-no-results"><strong>{t('No results found for "{query}"').replace('{query}', normalizedQuery)}</strong></div>}
+      {resultsReady && normalizedQuery && response.results.length === 0 && <div className="workspace-search-state workspace-search-no-results"><strong>{t('No results found for "{query}"').replace('{query}', () => normalizedQuery)}</strong></div>}
       {resultsReady && results.length > 0 && <div className="workspace-search-results" ref={resultListRef}>
         <h2>{t(normalizedQuery ? 'Search results' : 'Recently viewed')}</h2>
         {results.map((result, index) => {

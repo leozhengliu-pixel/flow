@@ -18,10 +18,10 @@ export const CHANGE_LABELS: Record<Exclude<LoopVersionChange, "published" | "res
 /** "Published", "Restored version 2", "Changed trigger, instructions". */
 export function versionSummary(version: Pick<LoopVersion, "changeSummary" | "restoredFromVersion">, t: Translate = (value) => value) {
   const changes = version.changeSummary ?? [];
-  if (changes.includes("restored")) return t("Restored version {version}").replace("{version}", String(version.restoredFromVersion ?? "?"));
+  if (changes.includes("restored")) return t("Restored version {version}").replace("{version}", () => String(version.restoredFromVersion ?? "?"));
   if (changes.includes("published") || !changes.length) return t("Published");
   const fields = changes.filter((item): item is keyof typeof CHANGE_LABELS => item in CHANGE_LABELS).map((item) => t(CHANGE_LABELS[item]).toLocaleLowerCase());
-  return t("Changed {fields}").replace("{fields}", fields.join(", "));
+  return t("Changed {fields}").replace("{fields}", () => fields.join(", "));
 }
 
 const stable = (value: unknown) => JSON.stringify(value ?? null, (_key, item) => (item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item));

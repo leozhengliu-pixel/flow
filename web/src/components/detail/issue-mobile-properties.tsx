@@ -17,7 +17,7 @@ export function IssueMobileRelations({ issue, data, activities, onOpenIssue }: {
   if (!entries.length) return null
   const titles = { blockedBy: 'Blocked by', blocking: 'Blocking', related: 'Related', duplicateOf: 'Duplicate of', duplicates: 'Duplicates' }
   return <Dialog.Root open={open} onOpenChange={value => { setOpen(value); setQuery('') }}>
-    <Dialog.Trigger asChild><button type="button" className="label-project-trigger issue-mobile-relations-trigger" aria-label={t('Open related issue')}><IssueActionGlyph label="Related to…" fallback={null}/><span>{t('{count} related').replace('{count}', String(entries.length))}</span></button></Dialog.Trigger>
+    <Dialog.Trigger asChild><button type="button" className="label-project-trigger issue-mobile-relations-trigger" aria-label={t('Open related issue')}><IssueActionGlyph label="Related to…" fallback={null}/><span>{t('{count} related').replace('{count}', () => String(entries.length))}</span></button></Dialog.Trigger>
     <Dialog.Portal>
       <Dialog.Overlay className="issue-mobile-command-overlay" data-flow-motion="backdrop"/>
       <Dialog.Content className="issue-mobile-relations-menu" aria-describedby={undefined} data-flow-motion="dialog" data-dialog-placement="window">

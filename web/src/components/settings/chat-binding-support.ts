@@ -65,7 +65,7 @@ export const TEAM_CHAT_DEFAULT_EVENTS: ChatIntegrationEvent[] = ["issue.created"
 /** Asks before a binding is revoked; shared by the integration, team and project pages. */
 export async function confirmRevokeBinding(binding: ChatBinding, t: (source: string) => string) {
   return confirmAction(t("Revoke group binding?"), {
-    description: t("{group} stops receiving updates and its group actions stop working. The binding stays listed as revoked.").replace("{group}", binding.chatName),
+    description: t("{group} stops receiving updates and its group actions stop working. The binding stays listed as revoked.").replace("{group}", () => binding.chatName),
     confirmLabel: t("Revoke"), danger: true,
   });
 }

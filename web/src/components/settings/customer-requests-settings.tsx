@@ -141,7 +141,7 @@ function DocsLink({ href, children }: { href: string; children: ReactNode }) {
 
 function countText(t: (value: string) => string, count: number, singular: string, plural: string) {
   const formatted = new Intl.NumberFormat().format(count)
-  return count === 1 ? t(`1 ${singular}`) : t(`{count} ${plural}`).replace('{count}', formatted)
+  return count === 1 ? t(`1 ${singular}`) : t(`{count} ${plural}`).replace('{count}', () => formatted)
 }
 
 function DefaultTeamSelect({ data, value, disabled, onChange }: { data: BootstrapData; value?: string; disabled: boolean; onChange: (value: string) => void }) {
@@ -216,7 +216,7 @@ function TaxonomyList({ kind, items, disabled, onReload }: { kind: CustomerTaxon
       const reassigned = result.reassignedCustomerIds ?? []
       toast(t(kind === 'status' ? 'Customer status deleted' : 'Customer tier deleted'), {
         action: {
-          label: t('Undo delete {name}').replace('{name}', item.name),
+          label: t('Undo delete {name}').replace('{name}', () => item.name),
           onClick: () => {
             setLocal(current => current.some(value => value.id === item.id) ? current : [...current, item])
             void run(() => restoreCustomerTaxonomyItem(kind, item.id, reassigned))
@@ -335,10 +335,10 @@ function SourceList({ kind, values, disabled, busy, onChange }: { kind: 'exclude
     : kind === 'excluded' ? countText(t, values.length, 'exclusion', 'exclusions')
     : allEmails ? countText(t, values.length, 'email', 'emails')
     : allDomains ? countText(t, values.length, 'domain', 'domains')
-    : t('{count} domains and emails').replace('{count}', String(values.length))
+    : t('{count} domains and emails').replace('{count}', () => String(values.length))
   const add = async (source: string) => {
     if (kind === 'excluded') {
-      const confirmed = await confirmAction(t('Add {source} to the list of excluded domains and emails?').replace('{source}', source), {
+      const confirmed = await confirmAction(t('Add {source} to the list of excluded domains and emails?').replace('{source}', () => source), {
         description: t(source.includes('@') ? 'Requests will not be created from this email, and any existing requests will be archived.' : 'Requests will not be created from this domain, and any existing requests will be archived.'),
         confirmLabel: t('Add'),
         danger: false,
@@ -350,7 +350,7 @@ function SourceList({ kind, values, disabled, busy, onChange }: { kind: 'exclude
   }
   const remove = async (value: string) => {
     if (kind === 'excluded') {
-      const confirmed = await confirmAction(t('Remove {value} from the list of excluded domains and emails?').replace('{value}', value), {
+      const confirmed = await confirmAction(t('Remove {value} from the list of excluded domains and emails?').replace('{value}', () => value), {
         description: t(value.includes('@') ? 'Requests from this email will be converted to customer requests, including any that were previously excluded.' : 'Requests from this domain will be converted to customer requests, including any that were previously excluded.'),
         confirmLabel: t('Remove'),
         danger: false,

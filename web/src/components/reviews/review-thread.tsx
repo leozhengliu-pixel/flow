@@ -65,8 +65,8 @@ export function ReviewThread({
           <CircleCheck />
           <span>
             {t(comments.length === 1 ? "{count} resolved comment from {names}" : "{count} resolved comments from {names}")
-              .replace("{count}", String(comments.length))
-              .replace("{names}", authors.join(", "))}
+              .replace("{count}", () => String(comments.length))
+              .replace("{names}", () => authors.join(", "))}
           </span>
           <ChevronsUpDown className="review-thread-expand" />
         </button>
@@ -222,7 +222,7 @@ export function ReviewSyncState({ review, event, onReload }: { review: CodeRevie
       setBusy(false);
     }
   };
-  const label = t(sync.op === "create" ? "Not synced to {host}" : "Thread state not synced to {host}").replace("{host}", host);
+  const label = t(sync.op === "create" ? "Not synced to {host}" : "Thread state not synced to {host}").replace("{host}", () => host);
   return (
     <span className="review-sync-state is-failed" title={sync.error}>
       <AlertCircle />

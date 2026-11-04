@@ -10,6 +10,7 @@ import type { BootstrapData, Project } from "@/types/flow";
 
 import { bindingProjectIds, CHAT_BINDING_EVENTS, useBotChats } from "./chat-binding-support";
 import { SettingsSelect, SettingsToggle } from "./settings-primitives";
+import { asIs } from '@/lib/as-is'
 
 // Radix Select shows its trigger text only for a non-empty value; this one matches no option.
 const NO_SELECTION = "__none__";
@@ -39,7 +40,7 @@ const REQUEST_PRIORITIES = [{ value: "0", label: "No priority" }, { value: "1", 
 function ChatProjectsPicker({ projects, selectedIds, onChange }: { projects: Project[]; selectedIds: string[]; onChange: (ids: string[]) => void }) {
   const { t } = useI18n();
   const selected = projects.filter((project) => selectedIds.includes(project.id));
-  const value = !selectedIds.length ? t("All team projects") : selected.length === 1 ? selected[0].name : t("{count} projects").replace("{count}", String(selectedIds.length));
+  const value = !selectedIds.length ? t("All team projects") : selected.length === 1 ? selected[0].name : t("{count} projects").replace("{count}", () => String(selectedIds.length));
   return <PropertyMenu
     compact
     multiple
@@ -84,14 +85,14 @@ export function ChatBindingRow({ binding, data, busy, canEdit, onEdit, onRevoke,
       <span className="chat-binding-scope">
         {team ? <span data-i18n-ignore>{team.name}</span> : t("Team unavailable")}
         {projectIds.length === 1 && <> / {project ? <span data-i18n-ignore>{project.name}</span> : t("Project unavailable")}</>}
-        {projectIds.length > 1 && <> / <span title={projectIds.map((id) => data.projects.find((item) => item.id === id)?.name ?? t("Project unavailable")).join(", ")}>{t("{count} projects").replace("{count}", String(projectIds.length))}</span></>}
-        {` · ${binding.events.length === 1 ? t("1 notification type") : t("{count} notification types").replace("{count}", String(binding.events.length))}`}
+        {projectIds.length > 1 && <> / <span title={projectIds.map((id) => data.projects.find((item) => item.id === id)?.name ?? t("Project unavailable")).join(", ")}>{t("{count} projects").replace("{count}", () => String(projectIds.length))}</span></>}
+        {` · ${binding.events.length === 1 ? t("1 notification type") : t("{count} notification types").replace("{count}", () => String(binding.events.length))}`}
         {` · ${t(binding.allowCreate ? "Creating issues allowed" : "Creating issues off")} · ${t(binding.allowUpdate ? "Updating issues allowed" : "Updating issues off")}`}
         {binding.requests?.enabled && ` · ${t("Requests on")}`}
       </span>
       {binding.authorization && <span className="chat-binding-authorization">
-        {t("Authorized by {name} on {date}").replace("{name}", authorizer?.displayName || authorizer?.name || t("a former member")).replace("{date}", formatDate(binding.authorization.authorizedAt, { dateStyle: "medium" }))}
-        {revoked && binding.revokedAt && ` · ${t("Revoked on {date}").replace("{date}", formatDate(binding.revokedAt, { dateStyle: "medium" }))}`}
+        {t("Authorized by {name} on {date}").replace("{name}", () => authorizer?.displayName || authorizer?.name || t("a former member")).replace("{date}", asIs(formatDate(binding.authorization.authorizedAt, { dateStyle: "medium" })))}
+        {revoked && binding.revokedAt && ` · ${t("Revoked on {date}").replace("{date}", asIs(formatDate(binding.revokedAt, { dateStyle: "medium" })))}`}
       </span>}
     </div>
     <aside>

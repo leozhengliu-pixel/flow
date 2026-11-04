@@ -87,7 +87,7 @@ function groupCreatedIssues(cards: AgentChangeCard[]): GroupedCard[] {
 function AgentChangeCardView({ card, data, onAction }: { card: GroupedCard; data?: BootstrapData; onAction?: (undo: boolean) => Promise<string[]> }) {
   const { locale, t } = useI18n()
   const [busy, setBusy] = useState(false)
-  const header = card.issues ? t('Created {count} issues').replace('{count}', card.label) : agentChangeHeader(card, t)
+  const header = card.issues ? t('Created {count} issues').replace('{count}', () => card.label) : agentChangeHeader(card, t)
   const summary = card.action === 'updated' ? agentChangeSummary(card, t, locale) : ''
   const run = async () => {
     if (!onAction || busy) return
@@ -293,12 +293,12 @@ function EntityMeta({ data, entity }: { data: BootstrapData; entity: AgentEntity
     return (
       <div className={styles.pills}>
         {owner && <span className={styles.pill} data-i18n-ignore><UserAvatar avatarUrl={owner.avatarUrl} className={answerStyles.referenceAvatar} name={owner.displayName || owner.name} userId={owner.id}/>{owner.displayName || owner.name}</span>}
-        {entity.view.updatedAt && <span className={styles.pill}>{t('Last updated {date}').replace('{date}', date(entity.view.updatedAt))}</span>}
+        {entity.view.updatedAt && <span className={styles.pill}>{t('Last updated {date}').replace('{date}', () => date(entity.view.updatedAt))}</span>}
       </div>
     )
   }
   if (entity.kind === 'document' && entity.document.updatedAt) {
-    return <div className={styles.pills}><span className={styles.pill}>{t('Last edited {date}').replace('{date}', date(entity.document.updatedAt))}</span></div>
+    return <div className={styles.pills}><span className={styles.pill}>{t('Last edited {date}').replace('{date}', () => date(entity.document.updatedAt))}</span></div>
   }
   return null
 }

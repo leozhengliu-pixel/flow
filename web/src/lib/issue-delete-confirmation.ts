@@ -19,7 +19,7 @@ export function issueDeleteConfirmation(issue: Pick<Issue, 'identifier' | 'title
   const name = `${issue.identifier} – ${issue.title}`
   const count = issue.subIssueIds?.length ?? 0
   const title = count === 0
-    ? t('Delete "{name}"?').replace('{name}', name)
-    : t(count === 1 ? 'Delete "{name}" and 1 sub-issue?' : 'Delete "{name}" and {count} sub-issues?').replace('{name}', name).replace('{count}', String(count))
+    ? t('Delete "{name}"?').replace('{name}', () => name)
+    : t(count === 1 ? 'Delete "{name}" and 1 sub-issue?' : 'Delete "{name}" and {count} sub-issues?').replace('{name}', () => name).replace('{count}', () => String(count))
   return { title, description: issueDeleteDescription(t), confirmLabel: t('Delete') }
 }

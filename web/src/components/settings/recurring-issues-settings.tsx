@@ -196,12 +196,12 @@ function RecurringIssuesList({ data, team, onBack, onNavigateSubPath }: Props) {
                 <span className="recurring-issue-meta">
                   <Repeat2 size={12} aria-hidden="true" />
                   {describeRepeats(issue.recurrence, { t, locale, anchor: due })}
-                  {next && <> · {t("Next due {date}").replace("{date}", dateLabel(next))}</>}
-                  {Boolean(issue.subIssueCount) && <> · <GitBranch size={12} aria-hidden="true" />{issue.subIssueCount === 1 ? t("1 sub-issue") : t("{count} sub-issues").replace("{count}", String(issue.subIssueCount))}</>}
+                  {next && <> · {t("Next due {date}").replace("{date}", () => dateLabel(next))}</>}
+                  {Boolean(issue.subIssueCount) && <> · <GitBranch size={12} aria-hidden="true" />{issue.subIssueCount === 1 ? t("1 sub-issue") : t("{count} sub-issues").replace("{count}", () => String(issue.subIssueCount))}</>}
                 </span>
               }
             >
-              {due && <span className="recurring-issue-due">{t("Due {date}").replace("{date}", dateLabel(due))}</span>}
+              {due && <span className="recurring-issue-due">{t("Due {date}").replace("{date}", () => dateLabel(due))}</span>}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button type="button" className="settings-icon-action" aria-label={`${t("Recurring issue actions")} ${issue.identifier}`} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>

@@ -33,7 +33,7 @@ export function HiddenByFiltersFooter({ hidden, onClear }: { hidden: number; onC
   const { t } = useI18n()
   if (hidden <= 0) return null
   return <div className={styles.footer} role="status">
-    <span><b>{t(hidden === 1 ? '1 issue' : '{count} issues').replace('{count}', String(hidden))}</b> {t('hidden by filters')}</span>
+    <span><b>{t(hidden === 1 ? '1 issue' : '{count} issues').replace('{count}', () => String(hidden))}</b> {t('hidden by filters')}</span>
     <button type="button" className={styles.footerClear} onClick={onClear}><span>{t('Clear Filters')}</span><X size={12}/></button>
   </div>
 }
@@ -53,7 +53,7 @@ export function NoMatchingIssues({ hidden = 0, onClear }: { hidden?: number; onC
     <strong className={styles.phoneHeading}>{t('No matching issues')}</strong>
     <strong className={styles.desktopHeading}>{t('No issues matching the filters')}</strong>
     {hidden > 0 && onClear && <div className={styles.emptyFilterCard} data-filter-empty-card>
-      <span><b>{t(hidden === 1 ? '1 issue' : '{count} issues').replace('{count}', String(hidden))}</b><span>{t('hidden by filters')}</span></span>
+      <span><b>{t(hidden === 1 ? '1 issue' : '{count} issues').replace('{count}', () => String(hidden))}</b><span>{t('hidden by filters')}</span></span>
       <button type="button" onClick={onClear}><span>{t('Clear Filters')}</span><X size={12}/></button>
     </div>}
     </div>

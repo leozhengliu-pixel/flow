@@ -115,13 +115,13 @@ export function LoopContractReview({ current, suggested, data, saving, onSave, o
     </div>
     {items.length === 0 && unchanged.length === 0 && <p className="loops-contract-hint">{t("No output changes suggested")}</p>}
     {unchanged.length > 0 && <details className="loops-contract-review-unchanged">
-      <summary>{unchanged.length === 1 ? t("1 output unchanged") : t("{count} outputs unchanged").replace("{count}", String(unchanged.length))}</summary>
+      <summary>{unchanged.length === 1 ? t("1 output unchanged") : t("{count} outputs unchanged").replace("{count}", () => String(unchanged.length))}</summary>
       <ul>
         {unchanged.map(item => <li key={item.id}><ReviewOutputLine output={item.current} data={data} t={t} /></li>)}
       </ul>
     </details>}
     {items.map((item, position) => {
-      const title = item.removed ? t("Removed output") : item.added ? t("New output") : t("Output {number}").replace("{number}", String((item.index ?? position) + 1));
+      const title = item.removed ? t("Removed output") : item.added ? t("New output") : t("Output {number}").replace("{number}", () => String((item.index ?? position) + 1));
       const details = changedDetails(item.current, item.suggested, data, t);
       return <fieldset key={item.id} className="loops-contract-review-output">
         <legend>{title}</legend>

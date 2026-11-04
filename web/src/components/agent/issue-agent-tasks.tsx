@@ -239,7 +239,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
   const replyPlaceholder = t(variant === 'document' ? 'Reply…' : 'Leave a reply…')
   return <section className="issue-agent-thread" id={`agent-session-${task.id}`} data-agent-task-id={task.id} data-status={current.status} data-unresponsive={unresponsive || undefined} aria-label={`${name} ${t('Agent session')}`}>
     {/* AIG: a delegated issue names the responsible human ("Delegated to Flow by Skyler"). */}
-    {delegator && <div className="issue-agent-delegation"><AgentMessageHeader user={agent} name={t('Delegated to {name} by {user}').replace('{name}', name).replace('{user}', delegator.displayName || delegator.name)} time={taskCreatedAt(task)}/>{sessionMenu && <div className="issue-agent-message-actions">{sessionMenu}</div>}</div>}
+    {delegator && <div className="issue-agent-delegation"><AgentMessageHeader user={agent} name={t('Delegated to {name} by {user}').replace('{name}', () => name).replace('{user}', () => delegator.displayName || delegator.name)} time={taskCreatedAt(task)}/>{sessionMenu && <div className="issue-agent-message-actions">{sessionMenu}</div>}</div>}
     <AgentSessionDetails session={current}/>
     {/* coding sessions (track G): the session view when this task anchors a coding session */}
     <AgentTaskCodingSession task={current} data={data}/>
@@ -285,7 +285,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
     </div>}
     {(unresponsive || current.status === 'stale') && <div className="issue-agent-working issue-agent-session-state" role="status" data-state={unresponsive ? 'unresponsive' : 'stale'}>
       <AgentMessageHeader user={agent} name={name} time=""/>
-      <span className="issue-agent-working-text">{t(unresponsive ? '{name} didn’t respond' : 'No activity from {name} for 30 minutes').replace('{name}', name)}</span>
+      <span className="issue-agent-working-text">{t(unresponsive ? '{name} didn’t respond' : 'No activity from {name} for 30 minutes').replace('{name}', () => name)}</span>
       {sessionMenu && !delegator && <div className="issue-agent-message-actions">{sessionMenu}</div>}
     </div>}
     {current.pendingTool && current.status === 'awaitingInput' && !pendingQuestion?.activity.signalMetadata?.options?.length && <div className="issue-agent-approval"><span>{t('Approval required')}: {current.pendingTool.name}</span><button type="button" disabled={busy} onClick={() => void submit('prompt', '', false)}>{t('Reject')}</button><button type="button" disabled={busy} onClick={() => void submit('prompt', '', true)}>{t('Approve')}</button></div>}

@@ -206,7 +206,7 @@ export function ApplicationEditPage({
       }
       await updateOAuthApplicationFromManifest(app.id, manifestFromFormState(state));
       await onReload();
-      toast.success(t("Application updated"), { description: t("“{name}” updated.").replace("{name}", state.name.trim()) });
+      toast.success(t("Application updated"), { description: t("“{name}” updated.").replace("{name}", () => state.name.trim()) });
       navigate(applicationSettingsPath(data.workspace.urlKey, app.id));
     } catch (error) {
       const next = errorIssues(error);
@@ -352,7 +352,7 @@ export function ApplicationDetailsPage({
       {pendingGroups.length > 0 && (
         <Section className="oauth-app-section" title={t("Sync group requests")}>
           {pendingGroups.map((item) => (
-            <Row key={item.id} title={<span data-i18n-ignore>{item.groupName}</span>} description={t("Requested {date}").replace("{date}", formatDate(item.createdAt, { month: "short", day: "numeric", year: "numeric" }))}>
+            <Row key={item.id} title={<span data-i18n-ignore>{item.groupName}</span>} description={t("Requested {date}").replace("{date}", () => formatDate(item.createdAt, { month: "short", day: "numeric", year: "numeric" }))}>
               <div className="oauth-app-actions">
                 {(["approved", "denied"] as const).map((status) => (
                   <button
@@ -395,7 +395,7 @@ export function ApplicationDetailsPage({
       />
       <TypedConfirmDialog
         open={deleting}
-        title={t('Delete the application "{name}"?').replace("{name}", app.name)}
+        title={t('Delete the application "{name}"?').replace("{name}", () => app.name)}
         description={t("You cannot undo this action.")}
         value={app.name}
         confirmLabel={t("Delete")}

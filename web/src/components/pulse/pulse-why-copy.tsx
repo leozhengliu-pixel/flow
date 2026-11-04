@@ -35,7 +35,7 @@ export function pulseReasonCopy(item: Pick<PulseItem, 'kind' | 'source'>, reason
   const strong = (name: string) => <strong data-i18n-ignore>{name}</strong>
   const build = (template: string, name: string, footer?: string): PulseReasonCopy => ({
     text: fillTemplate(t(template), { name: strong(name) }),
-    plain: t(template).replace('{name}', name),
+    plain: t(template).replace('{name}', () => name),
     footer,
   })
   const here = item.kind === 'project' ? t('this project') : t('this initiative')
@@ -57,11 +57,11 @@ export function pulseReasonCopy(item: Pick<PulseItem, 'kind' | 'source'>, reason
       const names = reasonNames(reason, data, 'team')
       const initiatives = reason.initiativeNames?.length ? reason.initiativeNames : (reason.initiativeIds ?? []).map(id => data.initiatives.find(entry => entry.id === id)?.name).filter((name): name is string => Boolean(name))
       if (initiatives.length) {
-        const parts = [names.length ? (names.length === 1 ? t('the {names} team') : t('the {names} teams')).replace('{names}', joinNames(names, t)) : '', (initiatives.length === 1 ? t('the {names} initiative') : t('the {names} initiatives')).replace('{names}', joinNames(initiatives, t))].filter(Boolean)
+        const parts = [names.length ? (names.length === 1 ? t('the {names} team') : t('the {names} teams')).replace('{names}', () => joinNames(names, t)) : '', (initiatives.length === 1 ? t('the {names} initiative') : t('the {names} initiatives')).replace('{names}', () => joinNames(initiatives, t))].filter(Boolean)
         return build('You’re subscribed to project updates for {name}.', parts.join(` ${t('and')} `), parts.length > 1 || !names.length ? FOOTER_PROJECT_AND_INITIATIVE : FOOTER_TEAM)
       }
       if (!names.length) return { text: t('You’re subscribed to project updates for a team or initiative this project belongs to.'), plain: t('You’re subscribed to project updates for a team or initiative this project belongs to.'), footer: FOOTER_TEAM }
-      const label = (names.length === 1 ? t('the {names} team') : t('the {names} teams')).replace('{names}', joinNames(names, t))
+      const label = (names.length === 1 ? t('the {names} team') : t('the {names} teams')).replace('{names}', () => joinNames(names, t))
       return build('You’re subscribed to project updates for {name}.', label, FOOTER_TEAM)
     }
     default: return { text: t('No reason to display.'), plain: t('No reason to display.') }

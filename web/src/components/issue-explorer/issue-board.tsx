@@ -263,7 +263,7 @@ function BoardPlusIcon({ size = 14 }: { size?: number }) {
 export function IssueBoardGroupHeader({group,estimateSum,createIssueLabel='Add new issue',onCreateIssue,onHideGroup,onSelectIssue}:{group:MyIssuesGroupData;estimateSum?:number;createIssueLabel?:string;onCreateIssue?:(group:MyIssuesGroupData)=>void;onHideGroup?:(id:string)=>void;onSelectIssue?:(id:string,selected:boolean,range:boolean)=>void}){
   const {t}=useI18n()
   const count=group.totalCount??group.issues.length
-  const pointsLabel=estimateSum === undefined ? undefined : t('{count} estimate points').replace('{count}', formatEstimatePoints(estimateSum))
+  const pointsLabel=estimateSum === undefined ? undefined : t('{count} estimate points').replace('{count}', () => formatEstimatePoints(estimateSum))
   return <div className={styles.columnHeaderWrap} data-board-column-header>
       <header className={styles.columnHeader}>
         {group.stateType && <StatusIcon

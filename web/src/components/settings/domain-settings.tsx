@@ -32,6 +32,7 @@ import {
   type LabelColumn, type LabelDisplayState, type LabelFilters, type LabelRuleUsage,
 } from './label-settings-model'
 import { LabelDisplayOptions, LabelFilterBar, LabelFilterMenu, LabelsEmptyState } from './label-settings-toolbar'
+import { asIs } from '@/lib/as-is'
 
 export { ProjectStatusesSettings } from './project-statuses-settings'
 
@@ -176,7 +177,7 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
       await removeLabel(label)
       return true
     })
-    if (done) toast.success(t('Converted "{name}" to group').replace('{name}', label.name))
+    if (done) toast.success(t('Converted "{name}" to group').replace('{name}', () => label.name))
   }
   const convertGroupToLabel = async (group: LabelGroup) => {
     const scope = group.scope && teamIds.has(group.scope) ? group.scope : undefined
@@ -185,7 +186,7 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
       await removeGroup(group)
       return true
     })
-    if (done) toast.success(t('Converted "{name}" to label').replace('{name}', group.name))
+    if (done) toast.success(t('Converted "{name}" to label').replace('{name}', () => group.name))
   }
   const inheritedCount = team ? data.labels.filter(item => isWorkspaceLabel(item) && !item.archivedAt && labelResourceType(item) === resourceType).length : 0
   const noun = NOUNS[resourceType]
@@ -397,9 +398,9 @@ function ValueCells({ context, label, usage, rules, teamUsage, lastAppliedAt, gr
     if (column === 'team') content = team ? <span data-i18n-ignore>{team.name}</span> : null
     else if (column === 'rules') content = rules && rules.total > 0 ? <RulesCount rules={rules} data={data}/> : null
     else if (column === 'usage') content = usage > 0 ? group ? <span className="label-settings-usage is-static">{usage}</span> : <UsageCount count={usage} label={label as IssueLabel} resourceType={resourceType} data={data} teamUsage={teamUsage}/> : null
-    else if (column === 'lastAppliedAt') content = lastAppliedAt ? <DateCell value={lastAppliedAt} relative title={t('Last applied on {date}').replace('{date}', longDate(lastAppliedAt, locale))}/> : null
-    else if (column === 'createdAt') content = created ? <DateCell value={created} title={creator ? t('Created by {name}').replace('{name}', creator.name) : t('Created {date}').replace('{date}', longDate(created, locale))}/> : null
-    else if (column === 'archivedAt') content = label.archivedAt ? <DateCell value={label.archivedAt} relative title={t('Archived on {date}').replace('{date}', longDate(label.archivedAt, locale))}/> : null
+    else if (column === 'lastAppliedAt') content = lastAppliedAt ? <DateCell value={lastAppliedAt} relative title={t('Last applied on {date}').replace('{date}', () => longDate(lastAppliedAt, locale))}/> : null
+    else if (column === 'createdAt') content = created ? <DateCell value={created} title={creator ? t('Created by {name}').replace('{name}', () => creator.name) : t('Created {date}').replace('{date}', () => longDate(created, locale))}/> : null
+    else if (column === 'archivedAt') content = label.archivedAt ? <DateCell value={label.archivedAt} relative title={t('Archived on {date}').replace('{date}', asIs(longDate(label.archivedAt, locale)))}/> : null
     cells.push(<span key={column} className="label-settings-cell" style={{ gridColumn: column }}>{content}</span>)
   }
   return <>{cells}</>
@@ -417,9 +418,9 @@ function UsageCount({ count, label, resourceType, data, teamUsage }: { count: nu
   const noun = NOUNS[resourceType]
   const card = teams.length
     ? <div className="label-settings-usage-card" data-i18n-ignore>
-      <strong>{(teams.length === 1 ? t('Used by {count} team') : t('Used by {count} teams')).replace('{count}', String(teams.length))}</strong>
+      <strong>{(teams.length === 1 ? t('Used by {count} team') : t('Used by {count} teams')).replace('{count}', () => String(teams.length))}</strong>
       {teams.slice(0, 3).map(({ team, value }) => <AppLink key={team!.id} href={href}><TeamIcon team={team} size={14}/><span>{team!.name}</span><em>{value}</em></AppLink>)}
-      {teams.length > 3 && <strong>{t('+ {count} more').replace('{count}', String(teams.length - 3))}</strong>}
+      {teams.length > 3 && <strong>{t('+ {count} more').replace('{count}', () => String(teams.length - 3))}</strong>}
     </div>
     : <span>{locale === 'zh-CN' ? `${count} 个${noun.zh}` : `${count} ${count === 1 ? noun.one : noun.many}`}</span>
   return <FlowTooltip side="top" contentClassName="flow-tooltip-content--title label-settings-usage-tooltip" label={card}><AppLink className="label-settings-usage" href={href} aria-label={locale === 'zh-CN' ? `查看 ${count} 个带此标签的${noun.zh}` : `View ${count} labeled ${count === 1 ? noun.one : noun.many}`}>{count}</AppLink></FlowTooltip>
@@ -463,7 +464,7 @@ function LabelRow({ context, label, grouped, treeLast = false, selected, groups,
     if (label.archivedAt) { await onArchive(); return }
     if (count > 0 || rules.total > 0) { setConfirm('archive'); return }
     await onArchive()
-    toast.success(t('Label archived'), { description: t('"{name}" has been archived').replace('{name}', label.name) })
+    toast.success(t('Label archived'), { description: t('"{name}" has been archived').replace('{name}', () => label.name) })
   }
   return <><div data-testid="domain-label-row" className={`domain-labels-row${grouped ? ' is-nested' : ''}${label.archivedAt ? ' is-archived' : ''}${selected ? ' is-selected' : ''}`}>
     <SelectionCell kind="label" selected={selected} onToggle={onToggleSelected}/>
@@ -591,7 +592,7 @@ function MergeLabelsDialog({ labels, resourceType, usage, onClose, onMerge }: { 
   const applied = total > 0 ? (locale === 'zh-CN' ? `${total} 个${noun.zh}` : `${total} ${total === 1 ? noun.one : noun.many}`) : ''
   const confirm = async () => { if (busy) return; setBusy(true); try { await onMerge(items) } finally { setBusy(false) } }
   return <Dialog open={Boolean(target)} onOpenChange={open => !open && onClose()}><DialogContent data-i18n-ignore className="domain-label-confirm label-settings-merge-dialog">
-    <DialogTitle>{t('Merge {count} labels?').replace('{count}', String(items.length))}</DialogTitle>
+    <DialogTitle>{t('Merge {count} labels?').replace('{count}', () => String(items.length))}</DialogTitle>
     {target && <p>{t('These labels will be merged into')} <i className="label-settings-merge-dot" style={{ background: target.color }}/><strong data-i18n-ignore>{target.name}</strong>{applied && <>{locale === 'zh-CN' ? '。' : '. '}{t('The merged label will be applied to')} <span>{applied}</span></>}{locale === 'zh-CN' ? '。' : '.'}</p>}
     <p>{t('This action cannot be undone.')}</p>
     <footer><span/><button disabled={busy} onClick={onClose}>{t('Cancel')}</button><button className="primary" disabled={busy} onClick={() => void confirm()}>{t('Merge')}</button></footer>

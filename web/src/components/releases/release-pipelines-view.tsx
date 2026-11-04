@@ -114,7 +114,7 @@ export function ReleasePipelinesView({ data, onNavigate, onOpenSidebar, onCreate
                       ? <span className="flow-pipeline-row__type" title={t("Continuous pipelines don't have active releases")}>{t('Continuous')}</span>
                       : active.length > 0 && <span className="flow-pipeline-row__active">
                         {(active.length - 3 > 1 ? active.slice(0, 3) : active).map(release => <span key={release.id} className="flow-release-title-chip is-strong" data-i18n-ignore><span className="flow-release-title-chip__icon"><ReleaseStatusIcon status={release.status} size={14}/></span><span>{release.name}</span></span>)}
-                        {active.length - 3 > 1 && <span className="flow-release-title-chip is-strong is-text">{t('+{count} releases').replace('{count}', String(active.length - 3))}</span>}
+                        {active.length - 3 > 1 && <span className="flow-release-title-chip is-strong is-text">{t('+{count} releases').replace('{count}', () => String(active.length - 3))}</span>}
                       </span>)}
                   </span>
                   {properties.teams && <span className="flow-pipeline-row__teams">{teams.length > 0 && <ScopedFlowTooltip label={<span data-i18n-ignore>{teams.map(team => team.name).join(', ')}</span>}><span className="flow-pipeline-row__teams-label">{teams.length === 1 && <TeamIcon team={teams[0]} size={14}/>}<span data-i18n-ignore>{teams.slice(0, 2).map(team => team.key).join(', ')}{teams.length > 2 ? ` +${teams.length - 2}` : ''}</span></span></ScopedFlowTooltip>}</span>}

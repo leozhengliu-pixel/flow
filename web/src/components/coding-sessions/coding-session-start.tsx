@@ -135,8 +135,8 @@ async function offerArchive(issue: StartIssue, agentName: string, t: Translate) 
   try { sessions = (await fetchCodingSessions({ issueId: issue.id })).filter(session => !session.archivedAt) }
   catch { return }
   if (!sessions.length) return
-  const confirmed = await confirmAction(t('Archive session with {name}?').replace('{name}', agentName), {
-    description: t('{name} has been removed from this issue. Do you want to archive the agent session? It can be restored at any time.').replace('{name}', agentName),
+  const confirmed = await confirmAction(t('Archive session with {name}?').replace('{name}', () => agentName), {
+    description: t('{name} has been removed from this issue. Do you want to archive the agent session? It can be restored at any time.').replace('{name}', () => agentName),
     confirmLabel: t('Archive session'), cancelLabel: t('Skip'), danger: false,
   })
   if (confirmed) await archiveSessions(issue, sessions, t)

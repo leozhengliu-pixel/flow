@@ -17,7 +17,7 @@ function ScheduleForm({project,onSave,onClose,defaultCadenceDays}:{project:Proje
   const [value,setValue] = useState(() => projectSchedule(project))
   const [saving,setSaving] = useState(false)
   const weekDays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
-  const frequencyOptions = [1,7,14,21,28,35,42,49,56].map(days => ({value:String(days),label:t(days === 1 ? 'Every day' : days === 7 ? 'Every week' : 'Every {count} weeks').replace('{count}',String(days / 7))}))
+  const frequencyOptions = [1,7,14,21,28,35,42,49,56].map(days => ({value:String(days),label:t(days === 1 ? 'Every day' : days === 7 ? 'Every week' : 'Every {count} weeks').replace('{count}',() => String(days / 7))}))
   const hourOptions = Array.from({length:24},(_,hour) => ({value:String(hour),label:`${String(hour).padStart(2,'0')}:00 - ${String((hour + 1) % 24).padStart(2,'0')}:00`}))
   const save = async () => {
     setSaving(true)
@@ -28,7 +28,7 @@ function ScheduleForm({project,onSave,onClose,defaultCadenceDays}:{project:Proje
   return <>
     <header><Dialog.Title>{t('Update schedule')}</Dialog.Title><Dialog.Description>{t('Configure how often updates are expected when this project is in progress')}</Dialog.Description></header>
     <div className="project-update-schedule__options" role="radiogroup" aria-label={t('Update schedule')}>
-      <label><input type="radio" name="project-update-schedule" checked={value.mode === 'default'} onChange={() => setValue({...value,mode:'default'})}/><span>{t('Default')}<small>{defaultCadenceDays ? t('Every {count} days').replace('{count}',String(defaultCadenceDays)) : t('No expectation for updates')}</small></span></label>
+      <label><input type="radio" name="project-update-schedule" checked={value.mode === 'default'} onChange={() => setValue({...value,mode:'default'})}/><span>{t('Default')}<small>{defaultCadenceDays ? t('Every {count} days').replace('{count}',() => String(defaultCadenceDays)) : t('No expectation for updates')}</small></span></label>
       <label><input type="radio" name="project-update-schedule" checked={value.mode === 'custom'} onChange={() => setValue({...value,mode:'custom'})}/><span>{t('Custom schedule')}</span></label>
       {value.mode === 'custom' && <div className="project-update-schedule__custom"><SelectControl label={t('Frequency')} value={String(value.frequencyDays)} options={frequencyOptions} onChange={frequencyDays => setValue({...value,frequencyDays:Number(frequencyDays)})}/>{value.frequencyDays > 1 && <><span>{t('on')}</span><SelectControl label={t('Day of week')} value={String(value.weekday)} options={weekDays.map((day,index) => ({value:String(index),label:t(day)}))} onChange={weekday => setValue({...value,weekday:Number(weekday)})}/></>}<span>{t('between')}</span><SelectControl label={t('Time range')} value={String(value.hour)} options={hourOptions} onChange={hour => setValue({...value,hour:Number(hour)})}/></div>}
       <label><input type="radio" name="project-update-schedule" checked={value.mode === 'never'} onChange={() => setValue({...value,mode:'never'})}/><span>{t('Never')}</span></label>

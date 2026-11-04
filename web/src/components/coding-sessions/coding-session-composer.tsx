@@ -56,7 +56,7 @@ function useComposerFiles() {
     if (usable.length > room) toast.error(t('A message can carry up to 8 files'), { id: 'coding-attachment-limit' })
     for (const original of usable.slice(0, Math.max(0, room))) {
       const file = await shrinkAgentImage(original)
-      if (file.size > agentUploadLimit(file)) { toast.error(t('{name} is too large to attach').replace('{name}', file.name)); continue }
+      if (file.size > agentUploadLimit(file)) { toast.error(t('{name} is too large to attach').replace('{name}', () => file.name)); continue }
       const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`
       const preview = agentFileKind(file) === 'image' && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined
       setFiles(items => [...items, { key, name: file.name, contentType: file.type || 'application/octet-stream', size: file.size, preview }])
@@ -211,10 +211,10 @@ export function CodingComposer({ data, sessionId, generating, stopPending, canPr
         {file.preview ? <img src={file.preview} alt=""/> : <AgentAttachIcon size={12} aria-hidden="true"/>}
         <span data-i18n-ignore title={file.name}>{file.name}</span>
         {!file.url && !file.failed && <span className="sr-only">{t('Uploading…')}</span>}
-        <button type="button" className="coding-session-icon-button" aria-label={t('Remove {name}').replace('{name}', file.name)} onClick={() => attachments.remove(file.key)}><X size={12}/></button>
+        <button type="button" className="coding-session-icon-button" aria-label={t('Remove {name}').replace('{name}', () => file.name)} onClick={() => attachments.remove(file.key)}><X size={12}/></button>
       </li>)}
     </ul>}
-    <textarea rows={1} aria-label={t('Send a message to {agent}').replace('{agent}', agentName)} placeholder={t('Tell {agent} what to do next…').replace('{agent}', agentName)} value={value} disabled={!canPrompt}
+    <textarea rows={1} aria-label={t('Send a message to {agent}').replace('{agent}', () => agentName)} placeholder={t('Tell {agent} what to do next…').replace('{agent}', () => agentName)} value={value} disabled={!canPrompt}
       onChange={event => setValue(event.target.value)}
       onPaste={event => {
         const pasted = pastedAgentFiles(event.clipboardData)
@@ -242,7 +242,7 @@ export function CodingComposer({ data, sessionId, generating, stopPending, canPr
       {/* Attach sits beside send on the right, like the reference app's composer. */}
       <button type="button" className="coding-session-composer-attach" aria-label={t('Attach images, files, or videos')} title={t('Attach images, files, or videos')} disabled={!canPrompt || attachments.files.length >= AGENT_UPLOAD_MAX_ITEMS} onClick={() => picker.current?.click()}><AgentAttachIcon size={14}/></button>
       {stopMode
-        ? <button type="button" className="coding-session-composer-send is-stop" aria-label={t('Stop agent')} title={stopPending ? t('Stop request already sent, waiting for {agent}').replace('{agent}', agentName) : t('Stop agent')} disabled={busy || stopPending} onClick={onStop}><AgentStopIcon size={14}/></button>
+        ? <button type="button" className="coding-session-composer-send is-stop" aria-label={t('Stop agent')} title={stopPending ? t('Stop request already sent, waiting for {agent}').replace('{agent}', () => agentName) : t('Stop agent')} disabled={busy || stopPending} onClick={onStop}><AgentStopIcon size={14}/></button>
         : choice || queueMode
           ? <button type="submit" className={`cs-send-label${choice ? ' is-primary' : ''}`} aria-label={choice ? t('Continue with selected option') : t('Queue message')}
             title={choice ? t('Enter to continue with selected option') : `${t('Enter to queue message')}\n${t('Ctrl/⌘ Shift Enter to send immediately')}`} disabled={busy || attachments.uploading}>
@@ -257,7 +257,7 @@ export function CodingComposer({ data, sessionId, generating, stopPending, canPr
     <div className="cs-input-frame-header">
       {auth
         ? <>
-          <span>{authForOther ? t('Waiting for {name} to connect their {provider} account to continue').replace('{name}', authUser?.displayName || authUser?.name || '').replace('{provider}', provider) : t('Connect your {provider} account to continue').replace('{provider}', provider)}</span>
+          <span>{authForOther ? t('Waiting for {name} to connect their {provider} account to continue').replace('{name}', () => authUser?.displayName || authUser?.name || '').replace('{provider}', () => provider) : t('Connect your {provider} account to continue').replace('{provider}', () => provider)}</span>
           {!authForOther && authUrl && <a className="cs-connect-pill" href={authUrl} target="_blank" rel="noreferrer"><Link2 size={14} aria-hidden="true"/>{t('Connect')}</a>}
         </>
         : <span>{t('Input needed to continue')}</span>}

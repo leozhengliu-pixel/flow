@@ -72,7 +72,7 @@ export const AGENT_CHANGE_FIELD_LABELS: Record<string, string> = {
 
 export function agentChangeHeader(card: Pick<AgentChangeCard, 'action' | 'entityType' | 'label'>, t: (source: string) => string) {
   const labels = AGENT_CHANGE_ENTITIES[card.entityType] ?? GENERIC
-  return t(labels[card.action]).replace('{label}', card.label)
+  return t(labels[card.action]).replace('{label}', () => card.label)
 }
 
 function fieldList(fields: string[], t: (source: string) => string, locale: string) {
@@ -84,13 +84,13 @@ function fieldList(fields: string[], t: (source: string) => string, locale: stri
 /** "Changed the description and summary." — the one-line summary on an "Updated" card. */
 export function agentChangeSummary(card: Pick<AgentChangeCard, 'fields'>, t: (source: string) => string, locale = 'en') {
   if (!card.fields.length) return ''
-  return t('Changed the {fields}.').replace('{fields}', fieldList(card.fields, t, locale))
+  return t('Changed the {fields}.').replace('{fields}', () => fieldList(card.fields, t, locale))
 }
 
 /** Why an Undo / Restore left fields alone ("Left the description as is: it changed after the agent’s edit."). */
 export function agentChangeSkippedNote(skipped: string[] | undefined, t: (source: string) => string, locale = 'en') {
   if (!skipped?.length) return ''
-  return t('Left the {fields} as is: it changed after the agent’s edit.').replace('{fields}', fieldList(skipped, t, locale))
+  return t('Left the {fields} as is: it changed after the agent’s edit.').replace('{fields}', () => fieldList(skipped, t, locale))
 }
 
 /** The server's Undo / Restore refusals in the viewer's language. */

@@ -51,7 +51,7 @@ export function ApplicationPolicySettings({ admin, title }: { admin: boolean; ti
 }
 
 const toolOverrides = (t: (source: string) => string, count: number) =>
-  count === 1 ? t("1 tool override") : t("{count} tool overrides").replace("{count}", String(count));
+  count === 1 ? t("1 tool override") : t("{count} tool overrides").replace("{count}", () => String(count));
 
 export function DataPrivacyDialog({ kind, settings, onSave, onClose }: { kind: "support" | "health"; settings: WorkspaceSettings; onSave: (patch: Partial<WorkspaceSettings>) => Promise<void>; onClose: () => void }) {
   const [enabled, setEnabled] = useState(kind === "support" ? Boolean(settings.reduceSupportPersonalInfo) : Boolean(settings.hipaaCompliance));

@@ -35,16 +35,16 @@ export function useReleaseActions({ data, onReload, onNavigate, afterDelete }: {
     onAddLink: () => setDialog({ kind: 'link', release, pipeline }),
     onToggleFavorite: () => { void toggleFavoriteFor(data, 'release', release.id, undefined, isFavorite(data, 'release', release.id)) },
     onCopyUrl: () => void copyToClipboard(absoluteUrl(releasePath(data.workspace.urlKey, pipeline.slugId, release.slugId)), t('URL copied to clipboard'), t('Could not copy URL')),
-    onCopyVersion: () => void copyToClipboard(release.version, t('"{version}" copied to clipboard').replace('{version}', release.version), t('Could not copy to clipboard')),
+    onCopyVersion: () => void copyToClipboard(release.version, t('"{version}" copied to clipboard').replace('{version}', () => release.version), t('Could not copy to clipboard')),
     onDelete: () => {
       void (async () => {
-        const confirmed = await confirmAction(t('Delete "{name}"?').replace('{name}', release.name), { description: withTrashRetention(t('Deleted releases are available in the "Recently deleted releases" view for {days} days, before they are permanently deleted.'), data), confirmLabel: t('Delete'), danger: true })
+        const confirmed = await confirmAction(t('Delete "{name}"?').replace('{name}', () => release.name), { description: withTrashRetention(t('Deleted releases are available in the "Recently deleted releases" view for {days} days, before they are permanently deleted.'), data), confirmLabel: t('Delete'), danger: true })
         if (!confirmed) return
         try {
           await deleteRelease(release.id)
           await onReload()
           afterDelete?.(release, pipeline)
-          toast.success(t('Deleted release {name}').replace('{name}', release.name), {
+          toast.success(t('Deleted release {name}').replace('{name}', () => release.name), {
             description: t('You can restore it from the recently deleted releases view.'),
             action: { label: t('View recently deleted releases'), onClick: () => onNavigate(releasePipelinePath(data.workspace.urlKey, pipeline.slugId, 'deleted')) },
           })

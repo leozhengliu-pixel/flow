@@ -38,6 +38,7 @@ import { ReleaseDateCell } from './release-pipeline-view'
 import { dayValue, releaseIssueQuery, releaseStatusForStage } from './release-view-model'
 import { copyToClipboard, isFavorite } from './release-actions-model'
 import { useReleaseActions } from './use-release-actions'
+import { asIs } from '@/lib/as-is'
 
 type Props = { data: BootstrapData; pipeline: ReleasePipeline; release: Release; tab: ReleaseRouteTab; onNavigate: (path: string) => void; onOpenSidebar: () => void; onReload: () => Promise<void> }
 
@@ -203,7 +204,7 @@ function ReleaseNotesTab({ data, pipeline, release, issues, onReload }: { data: 
           <div className="flow-release-notes__release">
             {release.version && <div className="flow-release-notes__slot"><span className="flow-release-changelog__version" data-i18n-ignore>{release.version}</span></div>}
             {stage && <div className="flow-release-notes__stage"><ReleaseStatusIcon status={releaseStatusForStage(pipeline, stage, release.status)}/>{releaseStatusForStage(pipeline, stage, release.status) === 'released' && release.releasedAt
-              ? <span>{t('Released {date}').replace('{date}', formatDate(release.releasedAt, { month: 'short', day: 'numeric' }))}</span>
+              ? <span>{t('Released {date}').replace('{date}', asIs(formatDate(release.releasedAt, { month: 'short', day: 'numeric' })))}</span>
               : <span data-i18n-ignore>{stage}</span>}</div>}
             {release.status !== 'released' && release.targetDate && <div className="flow-release-notes__date"><span>{formatDate(dayValue(release.targetDate), { month: 'short', day: 'numeric' })}</span></div>}
           </div>

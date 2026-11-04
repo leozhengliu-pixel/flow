@@ -149,13 +149,13 @@ export function IssueReleasePicker({ data, issue, grouped = false, externalAncho
     const date = first.releasedAt || first.targetDate
     const single = group.length === 1
     const pill = <button type="button" className="issue-release-pill" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
-      <ReleaseStatusIcon status={first.status}/><span data-i18n-ignore>{pipeline?.name}</span>{single ? <strong data-i18n-ignore>{first.name}</strong> : <strong>{t('{count} releases').replace('{count}', String(group.length))}</strong>}{date && <small>{formatDate(date, { month: 'short', day: 'numeric' })}</small>}
+      <ReleaseStatusIcon status={first.status}/><span data-i18n-ignore>{pipeline?.name}</span>{single ? <strong data-i18n-ignore>{first.name}</strong> : <strong>{t('{count} releases').replace('{count}', () => String(group.length))}</strong>}{date && <small>{formatDate(date, { month: 'short', day: 'numeric' })}</small>}
     </button>
     return <div className="issue-release-value" data-release-group={single ? undefined : ''} key={group.map(item => item.id).join(',')}>
       {single && pipeline ? <AgentEntityHover data={data} entity={{ kind: 'release', release: first, pipeline }} side="left">{pill}</AgentEntityHover> : pill}
       {single && pipeline && <a className="issue-release-open" href={releasePath(data.workspace.urlKey, pipeline.slugId, first.slugId)} aria-label={t('Open release')}><OpenReleaseChevron/></a>}
     </div>
-  })}{collapsible && <button type="button" className="issue-release-more" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? t('Show less') : t('Show {count} more').replace('{count}', String(rows.length - ROW_LIMIT))}</button>}</div>
+  })}{collapsible && <button type="button" className="issue-release-more" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? t('Show less') : t('Show {count} more').replace('{count}', () => String(rows.length - ROW_LIMIT))}</button>}</div>
 
   const anchor = grouped
     ? <section className="property-group issue-release-group"><h4><span>{t('Releases')}</span>{selectedReleases.length ? trigger : null}</h4>{!selectedReleases.length && trigger}{values}</section>
@@ -234,7 +234,7 @@ function PipelineReleaseMenu({ open, pipeline, releases, selected, saving, onCre
     else if (event.key === 'Enter') { event.preventDefault(); if (activeId === '__create') setCreateOpen(true); else if (activeId) void onToggle(activeId) }
   }
   return <Popover.Content data-flow-motion="floating" className="issue-release-picker issue-release-submenu issue-release-pipeline-releases" side="right" align="start" sideOffset={-2} collisionPadding={8} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onOpenChange(false) }} onKeyDown={onKeyDown}>
-    <ReleaseSearch autoFocus value={query} placeholder={t('Add to {pipeline} releases…').replace('{pipeline}', pipeline.name)} activeId={activeId} onChange={value => { setQuery(value); setCreateOpen(false) }}/>
+    <ReleaseSearch autoFocus value={query} placeholder={t('Add to {pipeline} releases…').replace('{pipeline}', () => pipeline.name)} activeId={activeId} onChange={value => { setQuery(value); setCreateOpen(false) }}/>
     <div className="issue-release-results" role="listbox" aria-multiselectable="true">{groups.map(group => <div className="issue-release-section" key={group.status}><div className="issue-release-group-label" role="group">{t(groupLabel(group.status))}</div>{group.items.map(item => <ReleaseOption active={activeId === item.id} checked={selected.includes(item.id)} disabled={saving || Boolean(item.stageFrozenAt && !selected.includes(item.id))} item={item} key={item.id} onActive={() => setActiveId(item.id)} onChoose={() => void onToggle(item.id)}/>)}</div>)}
       {canCreate && <CreateReleaseOption active={activeId === '__create'} name={query.trim()} open={createOpen} pipeline={pipeline} saving={saving} onActive={() => setActiveId('__create')} onCreate={onCreate} onOpenChange={setCreateOpen}/>} {!groups.length && !canCreate && <p>{t('No releases found')}</p>}
     </div>
@@ -258,7 +258,7 @@ function VersionMenu({ name, pipeline, saving, onCreate, onOpenChange }: { name:
   return <Popover.Content data-flow-motion="floating" className="issue-release-picker issue-release-submenu issue-release-version-menu" side="right" align="end" sideOffset={-2} collisionPadding={8} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onOpenChange(false) }}>
     <ReleaseSearch autoFocus value={query} placeholder={t('Type to set version…')} onChange={setQuery}/>
     <div className="issue-release-results" role="listbox" onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void onCreate(pipeline, name, version) } }}>
-      <button type="button" className="issue-release-option issue-release-version-option" role="option" disabled={saving} onClick={() => void onCreate(pipeline, name, version)}><span className="issue-release-option-bg"/><span>{t('Use "{version}" as version').replace('{version}', version)}</span></button>
+      <button type="button" className="issue-release-option issue-release-version-option" role="option" disabled={saving} onClick={() => void onCreate(pipeline, name, version)}><span className="issue-release-option-bg"/><span>{t('Use "{version}" as version').replace('{version}', () => version)}</span></button>
       <button type="button" className="issue-release-option issue-release-version-option" role="option" disabled={saving} onClick={() => void onCreate(pipeline, name, '')}><span className="issue-release-option-bg"/><span>{t('No version')}</span></button>
     </div>
   </Popover.Content>

@@ -643,7 +643,7 @@ export function InboxNoSelection({ unreadCount = 0 }: { unreadCount?: number }) 
   return (
     <div className="flow-inbox__no-selection">
       <InboxTrayIllustration />
-      <span>{unreadCount > 0 ? t(unreadCount === 1 ? '1 unread notification' : '{count} unread notifications').replace('{count}', String(unreadCount)) : t('No notification selected')}</span>
+      <span>{unreadCount > 0 ? t(unreadCount === 1 ? '1 unread notification' : '{count} unread notifications').replace('{count}', () => String(unreadCount)) : t('No notification selected')}</span>
     </div>
   )
 }

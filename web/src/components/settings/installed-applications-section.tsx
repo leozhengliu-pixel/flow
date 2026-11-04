@@ -24,6 +24,7 @@ import { OAuthAppAvatar } from './oauth-applications-section'
 import { fillNodes } from '@/lib/fill-nodes'
 import './oauth-application-settings.css'
 import './installed-applications-section.css'
+import { asIs } from '@/lib/as-is'
 
 type AppEntry = AuthorizedApplication & { installation?: ApplicationInstallation }
 
@@ -66,10 +67,10 @@ function useAuthorizedApplications(data: BootstrapData) {
 function appSubtitle(entry: AppEntry, data: BootstrapData, t: (value: string) => string, formatDate: (value: string, options?: Intl.DateTimeFormatOptions) => string) {
   if (entry.installation) {
     const installer = data.users.find(user => user.id === entry.installation?.installedBy)
-    return t('App user installed by {member} on {date}').replace('{member}', installer?.displayName || installer?.name || t('a member')).replace('{date}', formatDate(entry.installation.createdAt, { month: 'short', day: 'numeric' }))
+    return t('App user installed by {member} on {date}').replace('{member}', () => installer?.displayName || installer?.name || t('a member')).replace('{date}', asIs(formatDate(entry.installation.createdAt, { month: 'short', day: 'numeric' })))
   }
   const count = new Set(entry.authorizations.map(item => item.userId)).size
-  return count === 1 ? t('Authorized by 1 member') : t('Authorized by {count} members').replace('{count}', String(count))
+  return count === 1 ? t('Authorized by 1 member') : t('Authorized by {count} members').replace('{count}', () => String(count))
 }
 
 /** The "MCP" entry's logo: Flow's own mark on its brand tile. */
@@ -149,26 +150,26 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
   const back = () => navigate(settingsPath(workspace, 'applications'))
 
   const revokeTokens = async () => {
-    const confirmed = await confirmAction(t('Revoke access for "{name}"?').replace('{name}', name), { description: t('This will revoke all existing tokens for "{name}". You cannot undo this action.').replace('{name}', name), confirmLabel: t('Revoke'), danger: true })
+    const confirmed = await confirmAction(t('Revoke access for "{name}"?').replace('{name}', () => name), { description: t('This will revoke all existing tokens for "{name}". You cannot undo this action.').replace('{name}', () => name), confirmLabel: t('Revoke'), danger: true })
     if (!confirmed) return
     try {
       // MCP: every MCP client's authorizations at once (an admin's revoke covers every member, a member's their own).
       if (mcp) await revokeMCPAccess()
       else for (const item of authorizations) await revokeOAuthAuthorization(item.id)
       await Promise.all([reload(), onReload()])
-      toast.success(t('Tokens revoked'), { description: t('The tokens for "{name}" have been revoked.').replace('{name}', name) })
+      toast.success(t('Tokens revoked'), { description: t('The tokens for "{name}" have been revoked.').replace('{name}', () => name) })
     } catch (error) {
       toast.error(error instanceof Error && error.message ? error.message : t('Could not revoke access'))
     }
   }
   const revokeInstallation = async () => {
     if (!installation) return
-    const confirmed = await confirmAction(t('Revoke access for {name}?').replace('{name}', name), { description: t('The application will lose access to the workspace for now. It can be reauthorized in the future.'), confirmLabel: t('Confirm'), danger: true })
+    const confirmed = await confirmAction(t('Revoke access for {name}?').replace('{name}', () => name), { description: t('The application will lose access to the workspace for now. It can be reauthorized in the future.'), confirmLabel: t('Confirm'), danger: true })
     if (!confirmed) return
     try {
       await uninstallApplication(workspace, installation.id)
       await Promise.all([reload(), onReload()])
-      toast.success(t('Access revoked'), { description: t('Access has been revoked for {name}').replace('{name}', name) })
+      toast.success(t('Access revoked'), { description: t('Access has been revoked for {name}').replace('{name}', () => name) })
     } catch (error) {
       toast.error(error instanceof Error && error.message ? error.message : t('Could not revoke access'))
     }
@@ -185,7 +186,7 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
       <ApplicationLogo entry={entry} logoUrl={logoUrl} name={name} redirectUris={entry?.redirectUris ?? ownApp?.redirectUris} size={48}/>
       <div className="oauth-app-page-header-copy">
         <h1 data-i18n-ignore>{name}</h1>
-        {developerName && <p data-i18n-ignore>{t('by {developer}').replace('{developer}', developerName)}</p>}
+        {developerName && <p data-i18n-ignore>{t('by {developer}').replace('{developer}', () => developerName)}</p>}
       </div>
       {(admin || mcp) && (ownApp || authorizations.length > 0) && <DropdownMenu>
         <DropdownMenuTrigger className="oauth-app-icon-button is-small" aria-label={t('Open menu')}><MoreHorizontal aria-hidden="true"/></DropdownMenuTrigger>
@@ -212,12 +213,12 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
     {mcp && entry.members && entry.members.length > 0 && <Section className="oauth-app-section" title={t('Authorizing members')} description={t('Members who have authorized this application to access workspace data')}>
       {entry.members.map(item => {
         const user = data.users.find(member => member.id === item.userId)
-        const authorized = t('Authorized on {date}').replace('{date}', formatDate(item.authorizedAt, { month: 'short', day: 'numeric' }))
+        const authorized = t('Authorized on {date}').replace('{date}', () => formatDate(item.authorizedAt, { month: 'short', day: 'numeric' }))
         return <div key={item.userId} className="oauth-app-member">
           <UserAvatar className="oauth-app-member-avatar" name={user?.displayName || user?.name || '?'} avatarUrl={user?.avatarUrl} userId={user?.id}/>
           <div className="oauth-app-member-copy">
             <span data-i18n-ignore>{user?.displayName || user?.name || t('Unknown user')}{user?.username && <em>({user.username})</em>}</span>
-            <span data-i18n-ignore>{item.lastUsedAt ? `${authorized} · ${t('Last used on {date}').replace('{date}', formatDate(item.lastUsedAt, { month: 'short', day: 'numeric' }))}` : authorized}</span>
+            <span data-i18n-ignore>{item.lastUsedAt ? `${authorized} · ${t('Last used on {date}').replace('{date}', asIs(formatDate(item.lastUsedAt, { month: 'short', day: 'numeric' })))}` : authorized}</span>
           </div>
         </div>
       })}
@@ -229,7 +230,7 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
           <UserAvatar className="oauth-app-member-avatar" name={user?.displayName || user?.name || '?'} avatarUrl={user?.avatarUrl} userId={user?.id}/>
           <div className="oauth-app-member-copy">
             <span data-i18n-ignore>{user?.displayName || user?.name || t('Unknown user')}{user?.username && <em>({user.username})</em>}</span>
-            <span>{t('Authorized on {date}').replace('{date}', formatDate(item.createdAt, { month: 'short', day: 'numeric' }))}</span>
+            <span>{t('Authorized on {date}').replace('{date}', () => formatDate(item.createdAt, { month: 'short', day: 'numeric' }))}</span>
           </div>
         </div>
       })}
@@ -279,7 +280,7 @@ function AppUserSection({ data, name, installation, onRevoke, onSaved }: { data:
         <span>
           <span data-i18n-ignore>{fillNodes(t('Installed by {member} on {date}'), { member: installer?.displayName || installer?.name || t('a member'), date: formatDate(installation.createdAt, { month: 'short', day: 'numeric' }) })}</span>
           <FlowTooltip label={installedScopes.map(scope => t(OAUTH_SCOPE_LABELS[scope] ?? scope)).join('\n')}>
-            <span className="oauth-app-scope-count"><Info aria-hidden="true"/>{installedScopes.length === 1 ? t('1 permission') : t('{count} permissions').replace('{count}', String(installedScopes.length))}</span>
+            <span className="oauth-app-scope-count"><Info aria-hidden="true"/>{installedScopes.length === 1 ? t('1 permission') : t('{count} permissions').replace('{count}', () => String(installedScopes.length))}</span>
           </FlowTooltip>
         </span>
       </div>
@@ -328,7 +329,7 @@ function TeamAccessConfirmDialog({ open, name, from, to, teams, onCancel, onConf
   }
   return <Dialog open={open} onOpenChange={next => { if (!next) onCancel() }}>
     <DialogContent className="action-dialog oauth-app-confirm" overlayClassName="action-dialog-overlay">
-      <DialogTitle data-i18n-ignore>{t('Update team access for {name}?').replace('{name}', name)}</DialogTitle>
+      <DialogTitle data-i18n-ignore>{t('Update team access for {name}?').replace('{name}', () => name)}</DialogTitle>
       <div className="oauth-app-confirm-body" data-i18n-ignore>
         {describe('The application currently has access to {access}', from)}
         {describe('The application will now have access to {access}', to)}

@@ -57,19 +57,19 @@ export function ChatTeamNotifications({ provider, data, team }: { provider: Chat
 
   let state: { description: string; action?: ReactNode };
   if (loading && !settings) state = { description: t("Loading integration…"), action: <GridLoader size={14} /> };
-  else if (!settings?.connection) state = { description: t("Connect {name} to your workspace to broadcast notifications from this team").replace("{name}", name), action: <button type="button" className="settings-action" onClick={() => navigate(settingsHref)}>{t("Connect")}</button> };
-  else if (!tenantAuthorized) state = { description: t("{name} hasn't approved the app in your organization yet. Your {name} admin approves the app version in the admin console; Flow then connects automatically.").replaceAll("{name}", name), action: <button type="button" className="settings-action" onClick={() => navigate(settingsHref)}>{t("Open settings")}</button> };
+  else if (!settings?.connection) state = { description: t("Connect {name} to your workspace to broadcast notifications from this team").replace("{name}", () => name), action: <button type="button" className="settings-action" onClick={() => navigate(settingsHref)}>{t("Connect")}</button> };
+  else if (!tenantAuthorized) state = { description: t("{name} hasn't approved the app in your organization yet. Your {name} admin approves the app version in the admin console; Flow then connects automatically.").replaceAll("{name}", () => name), action: <button type="button" className="settings-action" onClick={() => navigate(settingsHref)}>{t("Open settings")}</button> };
   else if (sharingBlocked) state = { description: t("Workspace policy prevents sharing updates with chat applications.") };
   else if (!canManage) state = { description: t("Only the team's owners and workspace administrators can connect groups to this team.") };
   else if (!bindable) state = { description: t("This team can't be shared with a group right now.") };
   else state = {
     description: t(privateTeam ? "Connect a group to broadcast this private team's selected updates. Binding doesn't add anyone to the team." : "Connect a group to broadcast notifications from this team"),
-    action: !editing ? <button type="button" className="settings-action" disabled={Boolean(busy)} onClick={() => setEditing("new")}><Plus size={14} aria-hidden="true" />{t("Connect {name} group").replace("{name}", name)}</button> : undefined,
+    action: !editing ? <button type="button" className="settings-action" disabled={Boolean(busy)} onClick={() => setEditing("new")}><Plus size={14} aria-hidden="true" />{t("Connect {name} group").replace("{name}", () => name)}</button> : undefined,
   };
 
   return <div className="chat-integration-settings chat-team-notifications" data-provider={provider}>
     <SettingsSection headerClassName="team-settings-section-title">
-      <SettingsRow icon={<IntegrationBrandIcon provider={provider} size={16} />} title={<>{t("Connect a {name} group").replace("{name}", name)}{privateTeam && <small className="chat-binding-badge"><Lock size={11} aria-hidden="true" />{t("Private team")}</small>}</>} description={state.description}>
+      <SettingsRow icon={<IntegrationBrandIcon provider={provider} size={16} />} title={<>{t("Connect a {name} group").replace("{name}", () => name)}{privateTeam && <small className="chat-binding-badge"><Lock size={11} aria-hidden="true" />{t("Private team")}</small>}</>} description={state.description}>
         {state.action}
       </SettingsRow>
     </SettingsSection>

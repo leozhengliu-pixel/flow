@@ -634,7 +634,7 @@ function ReviewActivityCard({
                 }}
               >
                 <CornerDownRight />
-                {t("{resolved} of {total} code comments resolved").replace("{resolved}", String(summary.resolved)).replace("{total}", String(summary.total))}
+                {t("{resolved} of {total} code comments resolved").replace("{resolved}", () => String(summary.resolved)).replace("{total}", () => String(summary.total))}
               </a>
             )}
           </div>

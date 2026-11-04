@@ -105,7 +105,7 @@ function RunOutcome({ data, run }: { data: BootstrapData; run: LoopRun }) {
         <Ban size={16} />
         <div>
           <strong>{t("Run cancelled")}</strong>
-          {by && <p>{t("Cancelled by {name}").replace("{name}", by.displayName || by.name)}</p>}
+          {by && <p>{t("Cancelled by {name}").replace("{name}", () => by.displayName || by.name)}</p>}
         </div>
       </div>
     );
@@ -523,7 +523,7 @@ export function LoopRunPage({
                       onNavigate(versionsHref);
                     }}
                   >
-                    · {t("Ran version {version}").replace("{version}", String(selected.version))}
+                    · {t("Ran version {version}").replace("{version}", () => String(selected.version))}
                   </a>
                 )}
               </p>
@@ -539,7 +539,7 @@ export function LoopRunPage({
                   {runDefinition === null && selected.version !== undefined && (
                     <p className="loops-run-notice" role="note">
                       <Info size={14} />
-                      <span>{t("Version {version} is no longer stored; these are the current instructions.").replace("{version}", String(selected.version))}</span>
+                      <span>{t("Version {version} is no longer stored; these are the current instructions.").replace("{version}", () => String(selected.version))}</span>
                     </p>
                   )}
                   {/* A run of an older version waits for that version's instructions instead of showing the current ones. */}

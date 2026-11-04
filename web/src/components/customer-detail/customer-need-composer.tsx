@@ -103,7 +103,7 @@ export function CustomerNeedComposer({ data, customer, mode, request, issue, pro
       }
       const created = await createCustomerRequest({ customerId: customer.id, body: text, source: 'manual', sourceUrl: sourceUrl || undefined, issueId, projectId })
       await Promise.all(files.map(file => uploadCustomerRequestAttachment(created.id, file)))
-      if (mode === 'customer') toast.success(t('Request from {customer} added to {target}').replace('{customer}', customer.name).replace('{target}', targetName ?? ''))
+      if (mode === 'customer') toast.success(t('Request from {customer} added to {target}').replace('{customer}', () => customer.name).replace('{target}', () => targetName ?? ''))
       else toast.success(t('Customer request added'))
       onClose()
       await onSaved(issueId ? [issueId] : [])
@@ -132,7 +132,7 @@ export function CustomerNeedComposer({ data, customer, mode, request, issue, pro
     {files.length > 0 && <div className="customer-need-composer__files">
       {files.map((file, index) => <span key={`${file.name}:${index}`}>
         <Paperclip size={12} aria-hidden="true"/><span data-i18n-ignore>{file.name}</span>
-        <button type="button" aria-label={t('Remove {name}').replace('{name}', file.name)} onClick={() => setFiles(current => current.filter((_, itemIndex) => itemIndex !== index))}><X size={11}/></button>
+        <button type="button" aria-label={t('Remove {name}').replace('{name}', () => file.name)} onClick={() => setFiles(current => current.filter((_, itemIndex) => itemIndex !== index))}><X size={11}/></button>
       </span>)}
     </div>}
     <div className="customer-need-composer__toolbar">
@@ -177,7 +177,7 @@ function SourceButton({ value, onChange }: { value: string; onChange: (value: st
   return <Popover.Root open={open} onOpenChange={next => { if (!next && open) commit(); else setOpen(next) }}>
     <FlowTooltip label={host ? normalizeUrl(value) : t('Add source')} disabled={open}>
       <Popover.Trigger asChild>
-        <button type="button" className="customer-need-composer__source" aria-haspopup="dialog"><LinkIcon size={14}/><span data-i18n-ignore={host ? '' : undefined}>{host ? t('via {host}').replace('{host}', host) : t('Source')}</span></button>
+        <button type="button" className="customer-need-composer__source" aria-haspopup="dialog"><LinkIcon size={14}/><span data-i18n-ignore={host ? '' : undefined}>{host ? t('via {host}').replace('{host}', () => host) : t('Source')}</span></button>
       </Popover.Trigger>
     </FlowTooltip>
     <Popover.Portal>

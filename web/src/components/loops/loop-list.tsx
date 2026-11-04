@@ -640,7 +640,7 @@ function LoopsFilteredEmpty({ hiddenCount, onClear }: { hiddenCount: number; onC
       <h2>{t("No loops matching the filters")}</h2>
       <div className="loops-filtered-empty-notice">
         <span>
-          <strong>{t(hiddenCount === 1 ? "{count} loop" : "{count} loops").replace("{count}", String(hiddenCount))}</strong> <small>{t("hidden by filters")}</small>
+          <strong>{t(hiddenCount === 1 ? "{count} loop" : "{count} loops").replace("{count}", () => String(hiddenCount))}</strong> <small>{t("hidden by filters")}</small>
         </span>
         <button type="button" onClick={onClear}>
           {t("Clear Filters")}

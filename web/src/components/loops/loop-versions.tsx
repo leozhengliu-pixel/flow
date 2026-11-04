@@ -23,7 +23,7 @@ function VersionDefinition({ data, version, loop, onNavigate }: { data: Bootstra
     <div className="loops-version-definition">
       <p className={`loops-version-diff${diff.length ? " is-changed" : ""}`} role="status">
         {diff.length
-          ? t("Differs from the current loop: {fields}").replace("{fields}", diff.map((item) => t(CHANGE_LABELS[item]).toLocaleLowerCase()).join(", "))
+          ? t("Differs from the current loop: {fields}").replace("{fields}", () => diff.map((item) => t(CHANGE_LABELS[item]).toLocaleLowerCase()).join(", "))
           : t("Same as the current loop")}
       </p>
       <section className="loops-card is-trigger" aria-label={t("Trigger")}>
@@ -122,7 +122,7 @@ export function LoopVersionsDialog({
   const selected = versions?.find((item) => item.id === selectedId);
   const restore = async () => {
     if (!selected || restoring) return;
-    const confirmed = await confirmAction(t("Restore version {version}?").replace("{version}", String(selected.version)), {
+    const confirmed = await confirmAction(t("Restore version {version}?").replace("{version}", () => String(selected.version)), {
       description: t("The loop's trigger, instructions and permissions are replaced with this version. It is saved as a new version; run history and the enabled state stay as they are."),
       confirmLabel: t("Restore"),
       danger: false,
@@ -132,7 +132,7 @@ export function LoopVersionsDialog({
     try {
       const next = await restoreLoopVersion(loop.id, selected.id);
       onRestored(next);
-      toast.success(t("Version {version} restored").replace("{version}", String(selected.version)));
+      toast.success(t("Version {version} restored").replace("{version}", () => String(selected.version)));
       setSelectedId(undefined);
       setReload((value) => value + 1);
     } catch (reason) {
@@ -166,7 +166,7 @@ export function LoopVersionsDialog({
                       onClick={() => setSelectedId(version.id)}
                     >
                       <span className="loops-version-row-head">
-                        <strong>{t("Version {version}").replace("{version}", String(version.version))}</strong>
+                        <strong>{t("Version {version}").replace("{version}", () => String(version.version))}</strong>
                         {version.current && <span className="loops-version-badge">{t("Current")}</span>}
                         <time dateTime={version.publishedAt} title={new Date(version.publishedAt).toLocaleString()}>
                           {relativeTime(version.publishedAt, undefined, t)}
@@ -184,14 +184,14 @@ export function LoopVersionsDialog({
               })
             )}
           </ol>
-          <section className="loops-versions-detail" aria-label={selected ? t("Version {version}").replace("{version}", String(selected.version)) : t("Version")}>
+          <section className="loops-versions-detail" aria-label={selected ? t("Version {version}").replace("{version}", () => String(selected.version)) : t("Version")}>
             {selected && (
               <>
                 <header className="loops-versions-detail-header">
                   <div>
                     <h3 data-i18n-ignore>{selected.definition.name || loop.name}</h3>
                     <p>
-                      {t("Version {version}").replace("{version}", String(selected.version))} · {versionSummary(selected, t)}
+                      {t("Version {version}").replace("{version}", () => String(selected.version))} · {versionSummary(selected, t)}
                     </p>
                   </div>
                   <button className="loops-secondary-button" type="button" disabled={selected.current || restoring} title={selected.current ? t("This is the current version") : undefined} onClick={() => void restore()}>

@@ -268,7 +268,7 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
             {last && stopReply && <p className="cs-text cs-stop-reply">{t(CODING_STOPPED_MESSAGE)}</p>}
             {turnCommits?.length ? <CodingCommitBadge commits={turnCommits} stats={commitStats} onOpenChanges={onOpenChanges} pr={pr ?? (session.repository ? { codeHost: session.codeHost ?? 'github', hostName: session.hostName ?? '', repository: session.repository } : undefined)}/> : null}
             {last && leftovers > 0 && <div className="cs-leftovers" role="group" aria-label={t('Commit earlier changes')}>
-              <span>{t('Earlier uncommitted changes in {count} path(s) were not committed.').replace('{count}', String(leftovers))}</span>
+              <span>{t('Earlier uncommitted changes in {count} path(s) were not committed.').replace('{count}', () => String(leftovers))}</span>
               <button type="button" className="cs-button is-small" disabled={busy} onClick={commitLeftovers}>{t('Commit earlier changes')}</button>
             </div>}
           </div>}

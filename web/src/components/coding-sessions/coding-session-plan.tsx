@@ -78,10 +78,10 @@ export function CodingPlanPill({ plan, updatedAt, complete }: { plan?: CodingPla
   const relative = Number.isNaN(Date.parse(planUpdatedAt)) ? '' : formatRelative(planUpdatedAt)
   return <div ref={root} className="cs-plan" data-open={open || undefined}>
     <button type="button" className="cs-plan-header" aria-expanded={open}
-      aria-label={open ? t('Collapse steps') : t('Expand steps, step {current} of {total}: {step}').replace('{current}', String(current.index + 1)).replace('{total}', String(steps.length)).replace('{step}', current.step.content)}
+      aria-label={open ? t('Collapse steps') : t('Expand steps, step {current} of {total}: {step}').replace('{current}', () => String(current.index + 1)).replace('{total}', () => String(steps.length)).replace('{step}', () => current.step.content)}
       onClick={() => setOpen(value => !value)}>
       {open
-        ? <span className="cs-plan-heading" key="open"><strong>{t('Plan')}</strong>{relative && <span className="cs-plan-updated">{t('Updated {time}').replace('{time}', relative)}</span>}</span>
+        ? <span className="cs-plan-heading" key="open"><strong>{t('Plan')}</strong>{relative && <span className="cs-plan-updated">{t('Updated {time}').replace('{time}', () => relative)}</span>}</span>
         : <span className="cs-plan-heading" key="closed"><span className="cs-plan-position">{position}</span><MarqueeText text={current.step.content}/></span>}
     </button>
     {open && <ol ref={list} className="cs-plan-list" aria-label={t('Plan')}>

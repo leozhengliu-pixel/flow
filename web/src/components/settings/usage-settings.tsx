@@ -103,7 +103,7 @@ function UsageOverview({ data, onOpenView }: UsageProps) {
         </header>
         <div className="usage-card usage-row usage-row-short">
           <strong>{t("Workspace credits")}</strong>
-          <strong data-testid="workspace-credits">{credits ? t("{amount} remaining").replace("{amount}", formatCredits(credits.remainingMicros)) : "…"}</strong>
+          <strong data-testid="workspace-credits">{credits ? t("{amount} remaining").replace("{amount}", () => formatCredits(credits.remainingMicros)) : "…"}</strong>
         </div>
         <button type="button" className="usage-card usage-link-row" onClick={() => onOpenView("spend-limits")}>
           <span className="usage-row-copy">
@@ -143,7 +143,7 @@ function SpendLimitsPage({ data, onOpenView, onReload }: UsageProps) {
         <div className="usage-card usage-row">
           <span className="usage-row-copy">
             <strong>{item.label}</strong>
-            <span>{item.amount ? t("{amount} per period").replace("{amount}", formatLimit(item.amount)) : t("No limit set")}</span>
+            <span>{item.amount ? t("{amount} per period").replace("{amount}", () => formatLimit(item.amount)) : t("No limit set")}</span>
           </span>
           <button type="button" className="usage-pill-button" onClick={() => setEditing(kind)}>
             {t("Set limit")}

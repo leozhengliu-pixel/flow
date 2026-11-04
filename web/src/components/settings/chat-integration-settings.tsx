@@ -28,6 +28,7 @@ import { ChatBindingEditor, ChatBindingRow, FieldRow } from "./chat-group-bindin
 import { IntegrationBrandIcon } from "./integration-brand-icon";
 import "./feature-settings.css";
 import "./chat-integration-settings.css";
+import { asIs } from '@/lib/as-is'
 
 function PermissionRow({ icon, title, granted, failed, children, testId }: { icon: ReactNode; title: string; granted: boolean; failed?: boolean; children: ReactNode; testId?: string }) {
   return <div className="feature-row chat-permission-row" data-granted={granted} data-testid={testId}>
@@ -132,7 +133,7 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
   };
 
   const disconnect = async () => {
-    if (!await confirmAction(t("Disconnect {name}?").replace("{name}", name), {
+    if (!await confirmAction(t("Disconnect {name}?").replace("{name}", () => name), {
       description: t("Group notifications and issue actions will stop. Group and account bindings will be removed."),
       confirmLabel: t("Disconnect"), danger: true,
     })) return;
@@ -175,13 +176,13 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
   const tenantMessage = tenantAuthorized
     ? (tenant?.tenantKey
       ? (tenant.tenantName
-        ? t("Connected to tenant {name} ({tenant}).").replace("{name}", tenant.tenantName)
-        : t("Connected to tenant {tenant}.")).replace("{tenant}", tenant.tenantKey)
+        ? t("Connected to tenant {name} ({tenant}).").replace("{name}", asIs(tenant.tenantName))
+        : t("Connected to tenant {tenant}.")).replace("{tenant}", asIs(tenant.tenantKey))
       : t(tenantInfoMissing
         ? "Connected to the app's tenant. Its tenant key is recorded once the bot joins an internal group or a member links an account."
         : "Connected to the app's tenant. Flow reads its tenant key on the next check."))
     : tenantMismatch
-      ? `${t(CHAT_ERROR_MESSAGES.chat_tenant_mismatch)} ${t("Recorded tenant: {recorded}. Reported by the platform: {reported}.").replace("{recorded}", tenant?.tenantKey || "—").replace("{reported}", tenant?.reportedTenantKey || "—")}`
+      ? `${t(CHAT_ERROR_MESSAGES.chat_tenant_mismatch)} ${t("Recorded tenant: {recorded}. Reported by the platform: {reported}.").replace("{recorded}", () => tenant?.tenantKey || "—").replace("{reported}", () => tenant?.reportedTenantKey || "—")}`
     : tenantNotApproved
       ? chatErrorCodeMessage(tenant?.errorCode, t) ?? t(CHAT_ERROR_MESSAGES.chat_tenant_not_approved)
       : t("Not checked yet. Flow checks automatically once the app is approved and published.") + (canManage ? ` ${t("Select Test connection to check now.")}` : "");
@@ -228,9 +229,9 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
                 {tenantAuthorized && tenant?.tenantKey && tenant.tenantKeySource === "observed" && <span className="chat-muted">{t("The tenant key was first seen in an internal group or a linked account.")}</span>}
                 {tenantInfoHint && <span data-testid="chat-tenant-info-hint">{tenantInfoHint}</span>}
                 {tenantAuthorized && authorization && <span>{(configuredBy
-                  ? t("Detected automatically on {date}. Configured by {name}.").replace("{name}", configuredBy.displayName || configuredBy.name)
-                  : t("Detected automatically on {date}.")).replace("{date}", formatDate(authorization.authorizedAt, { dateStyle: "medium" }))}</span>}
-                <span className="chat-muted">{t("Automatic: once your {name} admin approves and publishes the app version in the admin console, Flow detects it. Nobody signs in for it in Flow.").replace("{name}", name)}
+                  ? t("Detected automatically on {date}. Configured by {name}.").replace("{name}", () => configuredBy.displayName || configuredBy.name)
+                  : t("Detected automatically on {date}.")).replace("{date}", () => formatDate(authorization.authorizedAt, { dateStyle: "medium" }))}</span>}
+                <span className="chat-muted">{t("Automatic: once your {name} admin approves and publishes the app version in the admin console, Flow detects it. Nobody signs in for it in Flow.").replace("{name}", () => name)}
                   {!tenantAuthorized && !canManage && ` ${t("Ask a workspace administrator to test the connection.")}`}</span>
               </PermissionRow>
               <PermissionRow icon={<ShieldCheck size={14} aria-hidden="true" />} title={t("Workspace integration")} granted={canManage}>
@@ -240,7 +241,7 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
                 <span>{canManage
                   ? t("You can bind groups for every team.")
                   : manageableTeamIds.length
-                    ? (manageableTeamIds.length === 1 ? t("You can bind groups for 1 team you own.") : t("You can bind groups for {count} teams you own.").replace("{count}", String(manageableTeamIds.length)))
+                    ? (manageableTeamIds.length === 1 ? t("You can bind groups for 1 team you own.") : t("You can bind groups for {count} teams you own.").replace("{count}", () => String(manageableTeamIds.length)))
                     : t("A team's owners bind its groups. Ask a team owner or a workspace administrator.")}</span>
               </PermissionRow>
             </div>

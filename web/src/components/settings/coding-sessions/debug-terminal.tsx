@@ -178,7 +178,7 @@ export function DebugTerminal({ environmentId, disabled, available = true }: { e
           ended = true;
           setState("exited");
           const code = frame.exitCode ?? frame.code;
-          note(code === undefined ? frame.message || t("Shell exited") : t("Shell exited with code {code}").replace("{code}", String(code)));
+          note(code === undefined ? frame.message || t("Shell exited") : t("Shell exited with code {code}").replace("{code}", () => String(code)));
         } else if (frame.type === "ready") {
           attached();
           if (frame.expiresAt) {
@@ -263,7 +263,7 @@ export function DebugTerminal({ environmentId, disabled, available = true }: { e
           <header className="cs-terminal-dialog-header">
             <DialogTitle className="sr-only">{t("Terminal")}</DialogTitle>
             <TerminalStatusLine state={state} message={message} />
-            {state === "connected" && expiresAt && <span className="cs-terminal-countdown" data-testid="terminal-countdown">{t("Expires in {time}").replace("{time}", remaining(expiresAt - now))}</span>}
+            {state === "connected" && expiresAt && <span className="cs-terminal-countdown" data-testid="terminal-countdown">{t("Expires in {time}").replace("{time}", () => remaining(expiresAt - now))}</span>}
             <span className="cs-terminal-dialog-actions">
               {state === "connected" && <CodingButton small onClick={() => void runPrepare()}>Run prepare script</CodingButton>}
               <button type="button" className="cs-icon-button" aria-label={startLabel} title={startLabel} disabled={disabled || !available || (live && state !== "connected")} onClick={() => void connect()}>

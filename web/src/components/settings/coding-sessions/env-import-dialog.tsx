@@ -81,11 +81,11 @@ export function EnvImportDialog({ environmentId, open, onClose, onImport }: { en
           <div className="cs-import-review">
             {rows.map((row, index) => (
               <div key={`${row.name}-${index}`} className="cs-import-row">
-                <input type="checkbox" aria-label={t("Import {name}").replace("{name}", row.name)} checked={row.include} onChange={(event) => setRows(rows.map((item, i) => (i === index ? { ...item, include: event.target.checked } : item)))} />
+                <input type="checkbox" aria-label={t("Import {name}").replace("{name}", () => row.name)} checked={row.include} onChange={(event) => setRows(rows.map((item, i) => (i === index ? { ...item, include: event.target.checked } : item)))} />
                 <code data-i18n-ignore>{row.name}</code>
                 <span className="cs-import-value" data-i18n-ignore>{row.secret ? "••••••••" : row.value}</span>
                 <label className="cs-import-secret">
-                  <input type="checkbox" aria-label={t("{name} is a secret").replace("{name}", row.name)} checked={row.secret} onChange={(event) => setRows(rows.map((item, i) => (i === index ? { ...item, secret: event.target.checked } : item)))} />
+                  <input type="checkbox" aria-label={t("{name} is a secret").replace("{name}", () => row.name)} checked={row.secret} onChange={(event) => setRows(rows.map((item, i) => (i === index ? { ...item, secret: event.target.checked } : item)))} />
                   {t("Secret")}
                 </label>
               </div>
@@ -112,7 +112,7 @@ export function EnvImportDialog({ environmentId, open, onClose, onImport }: { en
                 close();
               }}
             >
-              {t("Import {count}").replace("{count}", String(selected.length))}
+              {t("Import {count}").replace("{count}", () => String(selected.length))}
             </button>
           )}
         </footer>

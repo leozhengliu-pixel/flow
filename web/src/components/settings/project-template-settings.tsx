@@ -207,7 +207,7 @@ export function ProjectTemplateListCard({
       <header>
         <h3>
           {items.length
-            ? t(items.length === 1 ? "1 project template" : "project template count").replace("{count}", String(items.length))
+            ? t(items.length === 1 ? "1 project template" : "project template count").replace("{count}", () => String(items.length))
             : t("No project templates")}
         </h3>
         <button type="button" aria-label={t("Create new project template")} onClick={onCreate}>
@@ -311,7 +311,7 @@ function relativeTemplateTime(value: string, t: (value: string) => string) {
   if (Number.isNaN(date.getTime())) return "";
   const minutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
   if (minutes < 1) return t("just now");
-  if (minutes < 60) return t(minutes === 1 ? "1 minute ago" : "{count} minutes ago").replace("{count}", String(minutes));
+  if (minutes < 60) return t(minutes === 1 ? "1 minute ago" : "{count} minutes ago").replace("{count}", () => String(minutes));
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
@@ -714,7 +714,7 @@ function toggleId(values: string[], id: string) {
 }
 
 function countLabel(t: (value: string) => string, count: number, one: string, many: string) {
-  return count === 1 ? t(one) : t(many).replace("{count}", String(count));
+  return count === 1 ? t(one) : t(many).replace("{count}", () => String(count));
 }
 
 function TemplatePills({

@@ -422,7 +422,7 @@ export function AgentPage({
       const groups = phone
         ? (historyQuery.trim() ? [{ id: "results", label: "", count: undefined, sessions: filtered }] : buildChatHistory(filtered).sections)
           .filter((section) => section.sessions.length > 0)
-          .map((section) => ({ ...section, label: section.count == null ? t(section.label) : t(section.label).replace("{count}", String(section.count)) }))
+          .map((section) => ({ ...section, label: section.count == null ? t(section.label) : t(section.label).replace("{count}", () => String(section.count)) }))
         : groupAgentHistory(filtered).map((group) => ({ ...group, id: group.label }));
       const headingHeight = phone && historyQuery.trim() ? 0 : 30;
       return groups.map((group, index) => {

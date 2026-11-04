@@ -212,7 +212,7 @@ function ChatHistoryDialog({
 
   const sectionLabel = (section: ChatHistorySection) => {
     if (section.entity) return t(`Related to this ${section.entity}`);
-    if (section.count != null) return t(section.label).replace("{count}", String(section.count));
+    if (section.count != null) return t(section.label).replace("{count}", () => String(section.count));
     return t(section.label);
   };
 
@@ -260,7 +260,7 @@ function ChatHistoryDialog({
     >
       <div className={styles.header}>
         <form onSubmit={(event) => event.preventDefault()}>
-          <span className="sr-only" role="status">{t("Showing {count} items").replace("{count}", String(rows.length))}</span>
+          <span className="sr-only" role="status">{t("Showing {count} items").replace("{count}", () => String(rows.length))}</span>
           <input
             aria-activedescendant={focusedId ? rowId(focusedId) : undefined}
             aria-autocomplete="list"

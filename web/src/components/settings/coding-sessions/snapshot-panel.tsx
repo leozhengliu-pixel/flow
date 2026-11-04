@@ -180,8 +180,8 @@ function SnapshotLogsDialog({ snapshot, disabled, onClose, onChange, onFixWithAg
   const outcome = running ? t(SNAPSHOT_STATUS_LABEL[snapshot.status]) : t(OUTCOME[snapshot.status] ?? SNAPSHOT_STATUS_LABEL[snapshot.status]);
   const summary = [
     outcome,
-    snapshot.startedAt || snapshot.createdAt ? t("started {time}").replace("{time}", formatRelative(snapshot.startedAt || snapshot.createdAt)) : "",
-    duration !== undefined ? t("took {duration}").replace("{duration}", formatDuration(duration)) : "",
+    snapshot.startedAt || snapshot.createdAt ? t("started {time}").replace("{time}", () => formatRelative(snapshot.startedAt || snapshot.createdAt)) : "",
+    duration !== undefined ? t("took {duration}").replace("{duration}", () => formatDuration(duration)) : "",
   ].filter(Boolean).join(" · ");
 
   return (

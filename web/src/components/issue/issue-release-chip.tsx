@@ -22,7 +22,7 @@ export function IssueReleaseChip({ className, iconSize = 13, releases }: { class
   const single = releases.length === 1 ? releases[0] : undefined
   const label = single
     ? single.pipelineName ? `${single.pipelineName} · ${single.name}` : single.name
-    : t('{count} releases').replace('{count}', String(releases.length))
+    : t('{count} releases').replace('{count}', () => String(releases.length))
   return <span aria-label={single ? `${t('Release')} ${label}` : label} className={className} data-issue-release-chip="">
     {single ? <ReleaseStatusIcon color={single.color} size={iconSize} status={single.status}/> : <ReleasesIcon size={iconSize}/>}
     <span data-i18n-ignore={single ? true : undefined}>{label}</span>

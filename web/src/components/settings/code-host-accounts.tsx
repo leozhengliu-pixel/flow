@@ -109,7 +109,7 @@ function AccountStatusMenu({
         <button
           type="button"
           className={`personal-action code-host-status${reconnect ? " reconnect" : ""}`}
-          aria-label={t("{name} account options").replace("{name}", codeHostName)}
+          aria-label={t("{name} account options").replace("{name}", () => codeHostName)}
           disabled={disabled}
         >
           <span className="code-host-status-dot" aria-hidden="true" />
@@ -118,7 +118,7 @@ function AccountStatusMenu({
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <FlowDropdownMenuContent align="end" alignOffset={6} sideOffset={5} label={t("{name} account options").replace("{name}", codeHostName)}>
+        <FlowDropdownMenuContent align="end" alignOffset={6} sideOffset={5} label={t("{name} account options").replace("{name}", () => codeHostName)}>
           {reconnect && <FlowMenuItem label="Reconnect" onSelect={onReconnect} />}
           <FlowMenuItem label="Disconnect…" onSelect={onDisconnect} />
         </FlowDropdownMenuContent>
@@ -272,7 +272,7 @@ export function CodeHostConnectionRows({
       })}
       {confirming && (
         <SettingsConfirmDialog
-          title={t("Disconnect personal {name} account?").replace("{name}", confirming.codeHost === "github" ? "GitHub" : "GitLab")}
+          title={t("Disconnect personal {name} account?").replace("{name}", () => confirming.codeHost === "github" ? "GitHub" : "GitLab")}
           confirmLabel={t("Disconnect")}
           onCancel={() => setConfirming(undefined)}
           onConfirm={() => void disconnect(confirming)}

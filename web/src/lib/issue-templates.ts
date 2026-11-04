@@ -50,9 +50,9 @@ export function relativeTemplateTime(value: string, t: (value: string) => string
   const days = Math.floor((Date.now() - created) / 86_400_000);
   if (days < 1) return t("today");
   if (days === 1) return t("yesterday");
-  if (days < 30) return t("{count} days ago").replace("{count}", String(days));
+  if (days < 30) return t("{count} days ago").replace("{count}", () => String(days));
   const months = Math.floor(days / 30);
-  if (months < 12) return t(months === 1 ? "1 month ago" : "{count} months ago").replace("{count}", String(months));
+  if (months < 12) return t(months === 1 ? "1 month ago" : "{count} months ago").replace("{count}", () => String(months));
   const years = Math.floor(months / 12);
-  return t(years === 1 ? "1 year ago" : "{count} years ago").replace("{count}", String(years));
+  return t(years === 1 ? "1 year ago" : "{count} years ago").replace("{count}", () => String(years));
 }

@@ -43,7 +43,7 @@ export interface ChatPlatformInfo {
 export function chatPlatformInfo(platform: ChatPlatform, t: (source: string) => string): ChatPlatformInfo {
   const provider = platform === "slack" ? undefined : platform;
   const name = provider ? chatProviderName(provider, t) : "Slack";
-  return { platform, provider, name, settingsSlug: platform, format: (translated) => translated.replaceAll("{name}", name) };
+  return { platform, provider, name, settingsSlug: platform, format: (translated) => translated.replaceAll("{name}", () => name) };
 }
 
 /** Source strings (for t, then format) of a team's chat notifications page. */

@@ -16,7 +16,7 @@ export function agentReplyLine(notification: Notification, t: (source: string) =
     : kind === 'error'
       ? (excerpt ? '{name} ran into an error: {text}' : '{name} ran into an error')
       : (excerpt ? '{name} replied: {text}' : '{name} replied')
-  return t(template).replace('{name}', name).replace('{text}', excerpt)
+  return t(template).replace('{name}', () => name).replace('{text}', () => excerpt)
 }
 
 /**

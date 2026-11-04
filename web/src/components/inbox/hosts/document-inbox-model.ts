@@ -31,9 +31,9 @@ export function documentNotificationLine(notification: Notification, t: Translat
   if (notification.type === 'agentReply') return agentReplyLine(notification, t)
   const template = LINES[notification.type] ?? '{actor} updated the document'
   const actor = notification.actor.displayName || notification.actor.name || t('Someone')
-  const line = t(template).replace('{actor}', actor).replace('{emoji}', String(notification.payload?.emoji ?? ''))
+  const line = t(template).replace('{actor}', () => actor).replace('{emoji}', () => String(notification.payload?.emoji ?? ''))
   const excerpt = typeof notification.payload?.excerpt === 'string' ? notification.payload.excerpt : ''
-  const occurrences = notification.occurrenceCount > 1 ? ` · ${t('{count} updates').replace('{count}', String(notification.occurrenceCount))}` : ''
+  const occurrences = notification.occurrenceCount > 1 ? ` · ${t('{count} updates').replace('{count}', () => String(notification.occurrenceCount))}` : ''
   return (excerpt && /Comment|Mention$/.test(notification.type) && notification.type !== 'documentMention' ? `${line}: ${excerpt}` : line) + occurrences
 }
 

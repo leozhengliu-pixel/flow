@@ -30,7 +30,7 @@ export function WorkflowStateDeleteDialog({teamId,state,states,usage,loading,loa
     <p id="workflow-state-delete-description">{t('Delete the status')} <strong data-i18n-ignore>{state.name}</strong>{t(' and move its issues to a replacement status.')}</p>
     {loading&&<p role="status">{t('Loading issue count…')}</p>}
     {loadError&&<div role="alert"><p>{t('Could not load issue count')}: {t(loadError)}</p><button type="button" disabled={loading} onClick={onRetry}>{t('Try again')}</button></div>}
-    {usage!==undefined&&<p>{t(usage===1?'{count} issue will be moved.':'{count} issues will be moved.').replace('{count}',usage.toLocaleString())}</p>}
+    {usage!==undefined&&<p>{t(usage===1?'{count} issue will be moved.':'{count} issues will be moved.').replace('{count}',() => usage.toLocaleString())}</p>}
     {state.reserved&&<p role="alert">{t('Reserved statuses cannot be deleted.')}</p>}
     {lastOfType&&<p role="alert">{t("You can't delete the last status of a type.")}</p>}
     {state.default&&<p role="alert">{t('Change the default status before deleting this status.')}</p>}

@@ -80,7 +80,7 @@ export function FilePreviewCard({ src, provider, compactHeader }: { src: string;
   const href = preview?.htmlUrl ?? src
   const collapsible = lines.length > COLLAPSE_THRESHOLD
   const expanded = !collapsible || showAll
-  const name = (text: string) => text.replaceAll('{provider}', providerName)
+  const name = (text: string) => text.replaceAll('{provider}', () => providerName)
   const copy = state.status === 'error' ? ERROR_COPY[state.code] : undefined
 
   return (
@@ -132,7 +132,7 @@ export function FilePreviewCard({ src, provider, compactHeader }: { src: string;
           {collapsible && (
             <button className="flow-code-block__expander" onClick={() => setShowAll(value => !value)} type="button">
               {expanded ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
-              {expanded ? t('Collapse') : t('Show all {count} lines').replace('{count}', String(lines.length))}
+              {expanded ? t('Collapse') : t('Show all {count} lines').replace('{count}', () => String(lines.length))}
             </button>
           )}
           {preview.truncated && <div className={styles.previewNote}>{name(t('Preview truncated. Open the file on {provider} to see all of it.'))}</div>}

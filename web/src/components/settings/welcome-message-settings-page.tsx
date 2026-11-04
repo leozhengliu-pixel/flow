@@ -85,7 +85,7 @@ export function WelcomeMessageSettingsPage({
             aria-label={t('Welcome message title')}
             className="welcome-message-editor__title"
             maxLength={200}
-            placeholder={t('Welcome to {workspace}').replace('{workspace}', data.workspace.name)}
+            placeholder={t('Welcome to {workspace}').replace('{workspace}', () => data.workspace.name)}
             value={title}
             onChange={event => setTitle(event.target.value)}
             onBlur={() => {

@@ -245,7 +245,7 @@ export function IssueOptionsMenu({
     const handled = !window.dispatchEvent(new CustomEvent('flow:find-issue-suggestions', { detail: { issueId: issue.id }, cancelable: true }))
     const started = handled ? Promise.resolve() : refreshIssueSuggestions(issue.id).then(() => undefined)
     void started.then(
-      () => toast.info(t('Started identifying suggestions'), { description: t('Identifying suggestions for {identifier}.').replace('{identifier}', issue.identifier) }),
+      () => toast.info(t('Started identifying suggestions'), { description: t('Identifying suggestions for {identifier}.').replace('{identifier}', () => issue.identifier) }),
       error => toast.error(error instanceof Error ? error.message : t('Could not refresh suggestions')),
     )
   }

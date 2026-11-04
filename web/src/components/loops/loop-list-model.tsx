@@ -78,7 +78,7 @@ export function matchesLoopFilters(loop: Loop, filters: LoopListFilters, viewerI
 }
 
 export type Translate = (source: string) => string;
-export const loopCount = (t: Translate, count: number) => t(count === 1 ? "{count} loop" : "{count} loops").replace("{count}", String(count));
+export const loopCount = (t: Translate, count: number) => t(count === 1 ? "{count} loop" : "{count} loops").replace("{count}", () => String(count));
 
 const ownerAvatar = (user: User) => <UserAvatar avatarUrl={user.avatarUrl} className="workspace-directory-avatar" name={user.displayName || user.name} userId={user.id} />;
 

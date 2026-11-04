@@ -79,7 +79,7 @@ export function OrganizationNotFound({ orgKey, onLogout }: Props) {
       labels.length > 0 ? labels.join(` ${t("or")} `) : t("an allowed authentication method");
     body = t(
       "You can only switch to this workspace when logged in with {methods}. Please logout and login with the correct authentication method.",
-    ).replace("{methods}", methods);
+    ).replace("{methods}", () => methods);
     showLogout = true;
   } else if (reason === "no_access") {
     title = t("You don’t have access to this workspace.");

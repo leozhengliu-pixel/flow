@@ -94,7 +94,7 @@ function cardParts(entity: AgentEntity, data: BootstrapData, t: (source: string)
       icon: <DocumentGlyph document={document}/>,
       title: document.title,
       project,
-      detail: (creator ? t('Last edited {date} by {name}').replace('{name}', creator) : t('Last edited {date}')).replace('{date}', date(document.updatedAt)),
+      detail: (creator ? t('Last edited {date} by {name}').replace('{name}', () => creator) : t('Last edited {date}')).replace('{date}', () => date(document.updatedAt)),
     }
   }
   if (entity.kind === 'view') {
@@ -104,7 +104,7 @@ function cardParts(entity: AgentEntity, data: BootstrapData, t: (source: string)
       icon: <ViewGlyph color={view.color} icon={view.icon}/>,
       title: view.name,
       owner,
-      detail: t('Last updated {date}').replace('{date}', date(view.updatedAt)),
+      detail: t('Last updated {date}').replace('{date}', () => date(view.updatedAt)),
     }
   }
   return undefined

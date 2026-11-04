@@ -218,7 +218,7 @@ function ReviewList({
       if (result.rateLimitedUntil) toast.error(t("The code host's rate limit is reached; the rest syncs later"));
       else if (result.errors.length) toast.error(`${t("Some repositories could not be synced")}: ${result.errors[0]}`);
       else if (!result.repositories) toast.error(t("No connected repositories to sync"));
-      else toast.success(t("Synced: {count} new reviews").replace("{count}", String(result.imported)));
+      else toast.success(t("Synced: {count} new reviews").replace("{count}", () => String(result.imported)));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Could not sync with the code host"));
     } finally {

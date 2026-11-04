@@ -29,7 +29,7 @@ const categories: [NotificationCategory,string,string][] = [
  */
 export function NotificationChannelSettings({channel,preferences,save,onBack,p,name='',notice,locked=false}:{channel:'desktop'|'email'|'chat';preferences:NotificationPreferences;save:(value:NotificationPreferences)=>Promise<void>;onBack:()=>void;p:(text:string)=>string;name?:string;notice?:ReactNode;locked?:boolean}) {
   const value: NotificationChannelPreferences = channel === 'chat' ? chatChannelPreferences(preferences) : preferences[channel]
-  const fill = (text: string) => text.replaceAll('{name}', name)
+  const fill = (text: string) => text.replaceAll('{name}', () => name)
   const title = channel === 'chat' ? name : p(channel === 'desktop' ? 'Desktop' : 'Email')
   const description = channel === 'chat' ? fill(p('Direct messages from the {name} app bot to your linked account')) : p(channel === 'desktop' ? 'Applies across your browsers with notifications enabled' : 'Notifications delivered to your email address')
   const enableLabel = channel === 'chat' ? fill(p('Enable {name} notifications')) : p(`Enable ${channel} notifications`)

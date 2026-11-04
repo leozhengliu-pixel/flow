@@ -195,7 +195,7 @@ export function TriagePage({ data, team, onReload, onCreateIssue, onNavigate, se
     t={t}
     onOpen={() => select(issue)}
     onAction={kind => setMenuAction({ issue, kind })}
-    onSnooze={until => void updateIssue(issue.id, { snoozedUntil: until.toISOString() }).then(updated => { toast.success(t('Snoozed until {date}').replace('{date}', formatSnoozeDate(until))); settle(updated) }).catch(error => toast.error(error instanceof Error ? error.message : t('Could not update issue')))}
+    onSnooze={until => void updateIssue(issue.id, { snoozedUntil: until.toISOString() }).then(updated => { toast.success(t('Snoozed until {date}').replace('{date}', () => formatSnoozeDate(until))); settle(updated) }).catch(error => toast.error(error instanceof Error ? error.message : t('Could not update issue')))}
   />) : issues.length ? <div className="flow-triage-list__empty-filter">{t('No issues match these filters')}</div> : null
 
   const list = <div className="flow-triage-list" data-scroll-id={`triage-list-${team.id}`}>
@@ -224,7 +224,7 @@ function FlowTooltipButton({ tooltip, shortcut, label, count = 0, children, ...p
 
 function relativeAgo(value: string, t: (text: string) => string) {
   const elapsed = Math.max(0, Date.now() - Date.parse(value))
-  const unit = (template: string, count: number) => t(template).replace('{count}', String(Math.max(1, Math.floor(count))))
+  const unit = (template: string, count: number) => t(template).replace('{count}', () => String(Math.max(1, Math.floor(count))))
   if (elapsed < MINUTE) return t('Just now')
   if (elapsed < HOUR) return unit('{count}m ago', elapsed / MINUTE)
   if (elapsed < DAY) return unit('{count}h ago', elapsed / HOUR)
@@ -371,7 +371,7 @@ function TriageDisabledPage({ team, onOpenSettings }: { team: Team; onOpenSettin
     <div className="flow-triage-not-selected__body">
       <TriageIllustration/>
       <h2>{t('Triage is turned off')}</h2>
-      <p>{t('Turn on triage to review issues created by integrations and members outside {team} before they enter the team workflow.').replace('{team}', team.name)}</p>
+      <p>{t('Turn on triage to review issues created by integrations and members outside {team} before they enter the team workflow.').replace('{team}', () => team.name)}</p>
       {onOpenSettings ? <button type="button" className="flow-triage-not-selected__cta" onClick={onOpenSettings}><Settings2 size={14}/>{t('Go to triage settings')}</button> : null}
     </div>
   </section>

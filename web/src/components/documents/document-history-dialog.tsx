@@ -124,7 +124,7 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
     if (kind === 'yesterday') return t('Yesterday')
     return formatDate(date, { month: 'short', day: 'numeric', ...(date.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) })
   }
-  const counter = t('{current} of {total}').replace('{current}', String(changes ? activeChange : 0)).replace('{total}', String(changes))
+  const counter = t('{current} of {total}').replace('{current}', () => String(changes ? activeChange : 0)).replace('{total}', () => String(changes))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

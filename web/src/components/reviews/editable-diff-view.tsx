@@ -79,7 +79,7 @@ export function EditableDiffView({
       <div className="editable-diff-toolbar" role="status">
         <span>
           {changes.length
-            ? t("{count} local edit(s) staged").replace("{count}", String(changes.length))
+            ? t("{count} local edit(s) staged").replace("{count}", () => String(changes.length))
             : t("Editable diff — click a modified line to stage a local change")}
         </span>
         {changes.length > 0 ? (

@@ -267,7 +267,7 @@ export function LoopBulkActionsMenu({
   const teamIds = new Set(published.map((loop) => loopTeamId(loop) ?? ""));
   const teamLoops = published.length > 0 && !teamIds.has("");
   const sharedPolicy = new Set(published.map((loop) => loop.editPolicy ?? "all")).size === 1 ? (published[0]?.editPolicy ?? "all") : undefined;
-  const count = (template: string, amount: number) => t(template).replace("{count}", String(amount));
+  const count = (template: string, amount: number) => t(template).replace("{count}", () => String(amount));
   const apply = async (targets: Loop[], input: Parameters<typeof updateLoop>[1], success: string) => {
     const results = await Promise.allSettled(targets.map((loop) => updateLoop(loop.id, input)));
     const changed = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));

@@ -262,7 +262,7 @@ function IssueTemplateListCard({
       toast.error(errorMessage(error));
     }
   };
-  const countLabel = t(items.length === 1 ? "1 issue template" : "issue template count").replace("{count}", String(items.length));
+  const countLabel = t(items.length === 1 ? "1 issue template" : "issue template count").replace("{count}", () => String(items.length));
   return (
     <>
       <TemplateListCard emptyLabel="No issue templates" createLabel="Create new issue template" onCreate={() => setChooser(true)} count={items.length} countLabel={countLabel}>
@@ -332,7 +332,7 @@ export function TeamIssueTemplateList(props: {
 
 function confirmIssueTemplateDelete(template: IssueTemplate, t: (value: string) => string) {
   return confirmTemplateAction({
-    title: t("Delete the template \"{name}\"?").replace("{name}", template.name),
+    title: t("Delete the template \"{name}\"?").replace("{name}", () => template.name),
     description: t("You cannot undo this action."),
     confirmLabel: t("Delete"),
     cancelLabel: t("Cancel"),

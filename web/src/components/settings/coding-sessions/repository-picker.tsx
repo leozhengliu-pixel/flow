@@ -134,7 +134,7 @@ export function RepositoryPickerPopover({ hosts, value, open, onOpenChange, onPi
               <button type="button" className="cs-repo-option" onKeyDown={(event) => move(event, results.length)} onClick={pickTyped}>
                 <span className="cs-repo-option-inner">
                   <IntegrationBrandIcon provider={hosts[0].codeHost} size={16} />
-                  <span>{t("Use {repository}").replace("{repository}", typed)}</span>
+                  <span>{t("Use {repository}").replace("{repository}", () => typed)}</span>
                 </span>
               </button>
             )}
