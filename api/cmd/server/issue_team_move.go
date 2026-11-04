@@ -34,8 +34,8 @@ const maxPreviousIdentifiers = 50
 //     name, or dropped;
 //   - the estimate is cleared when the target team does not use estimates, and
 //     a delegated agent that cannot work in the target team is removed;
-//   - assignee, project, milestone, parent and sub-issues stay as they are
-//     (sub-issues keep their own teams).
+//   - a project and its milestone stay only when the project includes the team;
+//   - assignee, parent and sub-issues stay as they are (sub-issues keep their own teams).
 //
 // The changes are recorded in changes for the issue history, notifications
 // and webhooks.
@@ -101,6 +101,18 @@ func moveIssueToTeam(data *domain.Bootstrap, issue *domain.Issue, team domain.Te
 		issue.CycleID = nil
 	}
 	issue.AddedToCycle = ""
+
+	if issue.Project != nil {
+		project, err := fullProjectByID(data, issue.Project.ID)
+		if err == nil && !slices.Contains(project.TeamIDs, team.ID) {
+			changes["projectBefore"], changes["project"] = issue.Project.ID, ""
+			issue.Project = nil
+			if issue.ProjectMilestoneID != nil {
+				changes["projectMilestoneBefore"], changes["projectMilestone"] = *issue.ProjectMilestoneID, ""
+				issue.ProjectMilestoneID = nil
+			}
+		}
+	}
 
 	if labels, changed := teamMoveLabels(data, issue.Labels, team.ID); changed {
 		before := make([]string, 0, len(issue.Labels))
