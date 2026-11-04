@@ -84,8 +84,7 @@ test('keeps issue properties readable, toggles labels, and searches short and lo
     const labelBox = label.getBoundingClientRect()
     return { labelX: labelBox.x - optionBox.x, labelWidth: labelBox.width }
   })
-  expect(uncheckedGeometry.labelX).toBeGreaterThan(58)
-  expect(uncheckedGeometry.labelX).toBeLessThan(61)
+  expect(uncheckedGeometry.labelX).toBe(60)
   expect(uncheckedGeometry.labelWidth).toBeGreaterThan(100)
   if (process.env.FLOW_CI_SHOTS) await labels.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/issue-labels-desktop-unchecked.png`, animations: 'disabled' })
   await uncheckedLabel.hover()
