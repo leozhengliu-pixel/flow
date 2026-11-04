@@ -986,7 +986,7 @@ function App() {
         const team = data.teams.find(team => team.key === teamKey) ?? data.teams.find(team => !team.archivedAt && !team.retiredAt);
         const workspace = data.workspace.urlKey;
         if (sequence.key === 'g') {
-          const paths: Record<string, string | undefined> = { x: team ? teamArchivePath(workspace, team.key) : undefined, e: team ? teamIssuesPath(workspace, team.key, 'all') : workspaceIssuesPath(workspace, 'all'), l: loopsPath(workspace), v: team ? currentCyclePath(workspace, team.key) : undefined, w: team ? upcomingCyclePath(workspace, team.key) : undefined, n: workspaceFeatureEnabled(data.workspaceSettings.featureFlags, 'initiatives') ? initiativesPath(workspace) : undefined, '-': workspaceFeatureEnabled(data.workspaceSettings.featureFlags, 'dashboards') ? dashboardsPath(workspace) : undefined };
+          const paths: Record<string, string | undefined> = { x: team ? teamArchivePath(workspace, team.key) : undefined, e: team ? teamIssuesPath(workspace, team.key, 'all') : workspaceIssuesPath(workspace, 'all'), l: loopsPath(workspace), u: workspaceViewsPath(workspace, 'issues'), v: team ? currentCyclePath(workspace, team.key) : undefined, w: team ? upcomingCyclePath(workspace, team.key) : undefined, n: workspaceFeatureEnabled(data.workspaceSettings.featureFlags, 'initiatives') ? initiativesPath(workspace) : undefined, '-': workspaceFeatureEnabled(data.workspaceSettings.featureFlags, 'dashboards') ? dashboardsPath(workspace) : undefined };
           if (paths[pressed]) {
             e.preventDefault();
             shortcutSequence.current = { key: '', at: 0 };
@@ -7421,16 +7421,18 @@ function App() {
       <div className="bottom-agent">
         {/* Minimized floating chats park here as pills's bottom bar. */}
         <div className="bottom-agent__chats" data-agent-dock-slot="" />
-        <button
-          aria-label="Agent"
-          aria-expanded={floatingAgentOpen}
-          onClick={() => setFloatingAgentOpen((value) => !value)}
-          type="button"
-        >
-          <AgentCursorGlyph size={14} />
-          <span>Agent</span>
-        </button>
-        <FlowTooltip align="end" disabled={chatHistoryOpen} label="Chat history…" side="top">
+        <FlowTooltip disabled={floatingAgentOpen} label="New chat" shortcut="⌘ J" side="top">
+          <button
+            aria-label="Agent"
+            aria-expanded={floatingAgentOpen}
+            onClick={() => setFloatingAgentOpen((value) => !value)}
+            type="button"
+          >
+            <AgentCursorGlyph size={14} />
+            <span>Agent</span>
+          </button>
+        </FlowTooltip>
+        <FlowTooltip align="end" alignOffset={2} disabled={chatHistoryOpen} label="Chat history…" side="top">
           <button
             aria-expanded={chatHistoryOpen}
             aria-haspopup="dialog"

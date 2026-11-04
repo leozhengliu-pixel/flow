@@ -707,7 +707,7 @@ export function Sidebar({
               onCreate={onCreateWorkspace}
               onLogout={onLogout}
             />
-            <FlowTooltip label={translate('Search')} shortcut="/" contentClassName="sidebar-search-tooltip">
+            <FlowTooltip label={translate('Search')} shortcut="/">
               <button
                 className="sidebar-top-action"
                 type="button"
@@ -1612,6 +1612,9 @@ function TeamNavigation({
   onNavigate: () => void;
 }) {
   const phone = usePhoneLayout();
+  const { t } = useI18n();
+  // The Ctrl ⇧ 1…9 shortcut opens the nth active team's home.
+  const teamPosition = data.teams.filter((item) => !item.archivedAt && !item.retiredAt).findIndex((item) => item.id === team.id) + 1;
   const [expanded, setExpanded] = useState(() =>
     readExpandedSection(`team.${team.id}`),
   );
@@ -1650,6 +1653,7 @@ function TeamNavigation({
             active={onOverview}
             icon={<HomeIcon />}
             label="Home"
+            tip={teamPosition > 0 && teamPosition <= 9 ? `${team.name} (Ctrl ⇧ ${teamPosition})` : team.name}
             to={homePath}
             matchPath={overviewPath}
             onClick={onNavigate}
@@ -1684,6 +1688,7 @@ function TeamNavigation({
               {current && (
                 <SubNav
                   label="Current"
+                  tip={`${t("Go to current cycle")} (G then V)`}
                   to={currentCyclePath(workspaceSlug, team.key)}
                   onClick={onNavigate}
                 />
@@ -1691,6 +1696,7 @@ function TeamNavigation({
               {upcoming && (
                 <SubNav
                   label="Upcoming"
+                  tip={`${t("Go to upcoming cycle")} (G then W)`}
                   to={upcomingCyclePath(workspaceSlug, team.key)}
                   onClick={onNavigate}
                 />
@@ -1889,11 +1895,27 @@ function TryItem({
   );
 }
 
+/** What a sidebar link's tooltip says and the key sequence behind it; links not listed here get no tooltip of their own. */
+const NAV_TOOLTIPS: Record<string, [string, string]> = {
+  Inbox: ["Go to inbox", "G then I"],
+  Reviews: ["Go to reviews", "G then R"],
+  "My issues": ["Go to my issues", "G then M"],
+  Pulse: ["Go to pulse", "G then F"],
+  Drafts: ["Go to drafts", "G then D"],
+  Agent: ["Go to Agent", "G then J"],
+  Initiatives: ["Go to initiatives", "G then N"],
+  Projects: ["Go to projects", "G then P"],
+  Views: ["Go to views", "G then U"],
+  Loops: ["Go to Loops", "G then L"],
+  Cycles: ["Go to cycles", "G then C"],
+};
+
 function Nav({
   entry,
   badgeStyle,
   icon,
   label,
+  tip,
   badge,
   badgeLabel,
   count,
@@ -1909,6 +1931,8 @@ function Nav({
   badgeStyle?: SidebarBadgeStyle | "none";
   icon: ReactElement;
   label: string;
+  /** The tooltip, beside the row; by default the link's "Go to …" text and its key sequence. */
+  tip?: string;
   badge?: number;
   /** Accessible name for the unread pill (defaults to "N unread"). */
   badgeLabel?: string;
@@ -1923,6 +1947,9 @@ function Nav({
   to?: string;
 }) {
   const contextPath = useContext(SidebarRouteContext);
+  const { t } = useI18n();
+  const hint = NAV_TOOLTIPS[label];
+  const title = tip ?? (hint ? `${t(hint[0])} (${hint[1]})` : undefined);
   const content = (
     <>
       <span className="nav-icon">{icon}</span>
@@ -1942,7 +1969,8 @@ function Nav({
     <button
       type="button"
       className={`nav-item ${active ? "active" : ""}`}
-      title={label}
+      title={title}
+      data-tooltip-side="right"
       onClick={onClick}
     >
       {content}
@@ -1954,7 +1982,8 @@ function Nav({
         `nav-item ${(contextPath ? contextPath.toLowerCase() === activePath : active || isActive) ? "active" : ""}`
       }
       to={to}
-      title={label}
+      title={title}
+      data-tooltip-side="right"
       onClick={onClick}
     >
       {content}
@@ -1970,10 +1999,12 @@ function Nav({
 function SubNav({
   label,
   to,
+  tip,
   onClick,
 }: {
   label: string;
   to: string;
+  tip?: string;
   onClick?: () => void;
 }) {
   return (
@@ -1984,6 +2015,8 @@ function SubNav({
           `nav-item team-sub-link ${isActive ? "active" : ""}`
         }
         to={to}
+        title={tip}
+        data-tooltip-side="right"
         onClick={onClick}
       >
         <span className="nav-label">{label}</span>
@@ -2360,15 +2393,17 @@ export function HelpMenu({
   }
   return (
     <DropdownMenu.Root open={open} onOpenChange={setOpen}>
-      <DropdownMenu.Trigger asChild>
-        <button
-          className="sidebar-help"
-          type="button"
-          aria-label="Open Help menu"
-        >
-          <span aria-hidden="true">?</span>
-        </button>
-      </DropdownMenu.Trigger>
+      <FlowTooltip label="Open help menu" shortcut="?" side="top" align="start" disabled={open}>
+        <DropdownMenu.Trigger asChild>
+          <button
+            className="sidebar-help"
+            type="button"
+            aria-label="Open Help menu"
+          >
+            <span aria-hidden="true">?</span>
+          </button>
+        </DropdownMenu.Trigger>
+      </FlowTooltip>
       <DropdownMenu.Portal>
         <DropdownMenu.Content data-flow-motion="floating"
           className="sidebar-popover sidebar-help-menu"

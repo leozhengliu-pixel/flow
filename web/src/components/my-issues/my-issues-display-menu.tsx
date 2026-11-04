@@ -5,6 +5,7 @@ import { CompactSelectChevron, DisplayIcon } from './my-issues-icons'
 import { useI18n } from '@/i18n/i18n'
 import { useRef, type ReactNode } from 'react'
 import { Toggle } from '@/components/ui/toggle'
+import { FlowTooltip } from '@/components/ui/tooltip'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesOrdering, MyIssuesProperty } from './my-issues-surface'
 import { GROUPING_LABELS, ORDERING_LABELS, defaultOrderDirection } from '@/components/issue-explorer/issue-grouping'
@@ -109,12 +110,14 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
   const issueNesting = (desktopIssueMenu || phoneIssueMenu) && !myIssuesPhoneMenu
 
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
-    <Popover.Trigger asChild>
-      <button type="button" data-issue-display-trigger={phoneIssueMenu ? 'true' : undefined} className={`${styles.trigger} ui-pill`} aria-label={t('Display options')} aria-pressed={open}>
-        <DisplayIcon />
-        {modified && <span className={styles.triggerDot} aria-hidden="true"/>}
-      </button>
-    </Popover.Trigger>
+    <FlowTooltip label={t('Show display options')} shortcut="⇧ V" align="end" disabled={open}>
+      <Popover.Trigger asChild>
+        <button type="button" data-issue-display-trigger={phoneIssueMenu ? 'true' : undefined} className={`${styles.trigger} ui-pill`} aria-label={t('Display options')} aria-pressed={open}>
+          <DisplayIcon />
+          {modified && <span className={styles.triggerDot} aria-hidden="true"/>}
+        </button>
+      </Popover.Trigger>
+    </FlowTooltip>
     <Popover.Portal>
       <Popover.Content ref={popoverRef} data-flow-motion="floating" data-phone-popover data-issue-display-menu={phoneIssueMenu ? 'true' : undefined} data-my-issues-display-menu={myIssuesPhoneMenu ? 'true' : undefined} data-layout={phoneIssueMenu ? options.layout : undefined} className={styles.popover} side="bottom" align="end" sideOffset={phone ? 3 : 4} collisionPadding={11} avoidCollisions={phone ? false : undefined} aria-label={t('Display options')}>
         <div className={styles.layoutTabs} role="tablist" aria-label="Layout">

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { TOOLTIP_DELAY, TOOLTIP_OFFSET, TOOLTIP_SKIP_DELAY } from './tooltip'
-import { tooltipTone, type TooltipTone } from './tooltip-shortcut'
+import { TOOLTIP_DELAY, TOOLTIP_OFFSET, TOOLTIP_SKIP_DELAY, TooltipBody } from './tooltip'
+import { tooltipShortcutKeys, tooltipTone, type TooltipTone } from './tooltip-shortcut'
 
 /**
  * Renders native `title` attributes as Flow tooltips app-wide, so every hover hint shares the
@@ -11,7 +11,7 @@ import { tooltipTone, type TooltipTone } from './tooltip-shortcut'
  * `aria-label` in the meantime. Opt out with `data-native-title` on the element or an ancestor.
  */
 export function TitleTooltipBridge({ delay = TOOLTIP_DELAY, skipDelay = TOOLTIP_SKIP_DELAY }: { delay?: number; skipDelay?: number }) {
-  const [tip, setTip] = useState<{ text: string; rect: DOMRect; tone?: TooltipTone } | null>(null)
+  const [tip, setTip] = useState<{ text: string; rect: DOMRect; tone?: TooltipTone; side?: 'right' } | null>(null)
   const active = useRef<HTMLElement | null>(null)
   const timer = useRef<number | undefined>(undefined)
   const lastHidden = useRef(0)
@@ -50,7 +50,7 @@ export function TitleTooltipBridge({ delay = TOOLTIP_DELAY, skipDelay = TOOLTIP_
         element.setAttribute('aria-label', text)
         element.setAttribute('data-flow-title-label', '')
       }
-      const show = () => { if (active.current === element && element.isConnected) setTip({ text, rect: element.getBoundingClientRect(), tone: tooltipTone(element) }) }
+      const show = () => { if (active.current === element && element.isConnected) setTip({ text, rect: element.getBoundingClientRect(), tone: tooltipTone(element), side: element.getAttribute('data-tooltip-side') === 'right' ? 'right' : undefined }) }
       window.clearTimeout(timer.current)
       if (immediate || Date.now() - lastHidden.current < skipDelay) show()
       else timer.current = window.setTimeout(show, delay)
@@ -93,26 +93,43 @@ export function TitleTooltipBridge({ delay = TOOLTIP_DELAY, skipDelay = TOOLTIP_
     }
   }, [delay, skipDelay])
 
-  return tip ? createPortal(<TitleTooltip text={tip.text} rect={tip.rect} tone={tip.tone}/>, document.body) : null
+  return tip ? createPortal(<TitleTooltip text={tip.text} rect={tip.rect} tone={tip.tone} side={tip.side}/>, document.body) : null
 }
 
-function TitleTooltip({ text, rect, tone }: { text: string; rect: DOMRect; tone?: TooltipTone }) {
+/** A trailing key combination ("Open details (⌘I)", "Go to inbox (G then I)") becomes keycaps next to the label instead of plain text. */
+const TITLE_SHORTCUT = /^(.*\S)\s+\(([^()]{1,24})\)$/u
+const MODIFIER_KEY = /^(?:[⌘⇧⌥⌃]|Ctrl|Alt|Shift|Cmd|Meta|Option|Control)$/u
+function splitTitleShortcut(text: string): { label: string; shortcut?: string } {
+  const match = TITLE_SHORTCUT.exec(text)
+  if (!match) return { label: text }
+  const steps = tooltipShortcutKeys(match[2])
+  const isShortcut = steps.length === 2 ? steps.every(step => step.length === 1) : steps.length === 1 && steps[0].length >= 2 && steps[0].length <= 4 && MODIFIER_KEY.test(steps[0][0])
+  return isShortcut ? { label: match[1], shortcut: match[2] } : { label: text }
+}
+
+function TitleTooltip({ text, rect, tone, side }: { text: string; rect: DOMRect; tone?: TooltipTone; side?: 'right' }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [position, setPosition] = useState<{ top: number; left: number; side: 'top' | 'bottom' } | null>(null)
+  const { label, shortcut } = splitTitleShortcut(text)
+  const [position, setPosition] = useState<{ top: number; left: number; side: 'top' | 'bottom' | 'right' } | null>(null)
   useLayoutEffect(() => {
     const node = ref.current
     if (!node) return
     const width = node.offsetWidth, height = node.offsetHeight, gap = TOOLTIP_OFFSET, pad = 8
+    if (side === 'right' && rect.right + gap + width <= window.innerWidth - pad) {
+      // Beside the element, centred on it: a sidebar row's tooltip sits next to the row instead of covering the one below.
+      setPosition({ top: Math.min(Math.max(rect.top + rect.height / 2 - height / 2, pad), Math.max(pad, window.innerHeight - height - pad)), left: rect.right + gap, side: 'right' })
+      return
+    }
     const below = rect.bottom + gap + height <= window.innerHeight - pad
     const left = Math.min(Math.max(rect.left + rect.width / 2 - width / 2, pad), Math.max(pad, window.innerWidth - width - pad))
     setPosition({ top: below ? rect.bottom + gap : Math.max(pad, rect.top - gap - height), left, side: below ? 'bottom' : 'top' })
-  }, [rect, text])
+  }, [rect, text, side])
   return <div
     ref={ref}
     role="tooltip"
     className={`flow-tooltip-content flow-tooltip-content--title${tone ? ` flow-tooltip-content--${tone}` : ''}`}
     data-flow-motion="tooltip"
     data-side={position?.side ?? 'bottom'}
-    style={{ position: 'fixed', top: position?.top ?? rect.bottom + TOOLTIP_OFFSET, left: position?.left ?? rect.left, visibility: position ? 'visible' : 'hidden', pointerEvents: 'none' }}
-  ><span className="flow-tooltip-copy">{text}</span></div>
+    style={{ position: 'fixed', top: position?.top ?? rect.bottom + TOOLTIP_OFFSET, left: position?.left ?? 0, visibility: position ? 'visible' : 'hidden', pointerEvents: 'none' }}
+  ><TooltipBody label={label} shortcut={shortcut}/></div>
 }

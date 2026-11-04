@@ -57,4 +57,33 @@ describe('TitleTooltipBridge', () => {
     fireEvent.pointerOver(screen.getByRole('button'), { pointerType: 'mouse' })
     expect(screen.getByRole('button')).toHaveAttribute('title', 'Native')
   })
+
+  it('renders a trailing key combination in a title as keycaps', () => {
+    vi.useFakeTimers()
+    render(<><TitleTooltipBridge/><button type="button" title="Open details (⌘I)"><svg/></button><button type="button" title="Go to inbox (G then I)"><svg/></button><button type="button" title="Copy (1)"><svg/></button></>)
+    const [details, inbox, plain] = screen.getAllByRole('button')
+    fireEvent.pointerOver(details, { pointerType: 'mouse' })
+    act(() => vi.advanceTimersByTime(450))
+    const tooltip = screen.getByRole('tooltip')
+    expect(tooltip.querySelector('.flow-tooltip-copy')).toHaveTextContent(/^Open details$/)
+    expect([...tooltip.querySelectorAll('kbd.flow-tooltip-key')].map(key => key.textContent)).toEqual(['⌘', 'I'])
+    fireEvent.pointerOut(details, { relatedTarget: inbox })
+    fireEvent.pointerOver(inbox, { pointerType: 'mouse' })
+    expect([...screen.getByRole('tooltip').querySelectorAll('.flow-tooltip-shortcut > *')].map(node => node.textContent)).toEqual(['G', 'then', 'I'])
+    fireEvent.pointerOut(inbox, { relatedTarget: plain })
+    fireEvent.pointerOver(plain, { pointerType: 'mouse' })
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Copy (1)')
+    expect(screen.getByRole('tooltip').querySelector('kbd')).toBeNull()
+  })
+
+  it('opens beside an element marked data-tooltip-side="right"', () => {
+    vi.useFakeTimers()
+    render(<><TitleTooltipBridge/><a href="#home" title="Go to pulse (G then F)" data-tooltip-side="right">Pulse</a></>)
+    const link = screen.getByRole('link')
+    link.getBoundingClientRect = () => ({ x: 12, y: 60, left: 12, top: 60, right: 232, bottom: 88, width: 220, height: 28, toJSON() {} }) as DOMRect
+    fireEvent.pointerOver(link, { pointerType: 'mouse' })
+    act(() => vi.advanceTimersByTime(450))
+    expect(screen.getByRole('tooltip')).toHaveAttribute('data-side', 'right')
+    expect(screen.getByRole('tooltip').style.left).toBe('240px')
+  })
 })

@@ -15,8 +15,11 @@ export const TOOLTIP_DELAY = 450
 export const TOOLTIP_SKIP_DELAY = 400
 export const TOOLTIP_OFFSET = 8
 
+/** Whether an app tooltip provider is above, so a FlowTooltip in a shared control only adds its own when none is. */
+const TooltipProviderContext = React.createContext(false)
+
 export function TooltipProvider({ delayDuration = TOOLTIP_DELAY, skipDelayDuration = TOOLTIP_SKIP_DELAY, ...props }: TooltipPrimitive.TooltipProviderProps) {
-  return <TooltipPrimitive.Provider delayDuration={delayDuration} skipDelayDuration={skipDelayDuration} {...props}/>
+  return <TooltipProviderContext.Provider value><TooltipPrimitive.Provider delayDuration={delayDuration} skipDelayDuration={skipDelayDuration} {...props}/></TooltipProviderContext.Provider>
 }
 export const TooltipRoot = TooltipPrimitive.Root
 export const TooltipTrigger = TooltipPrimitive.Trigger
@@ -48,6 +51,7 @@ export interface FlowTooltipProps {
   shortcut?: React.ReactNode
   side?: TooltipPrimitive.TooltipContentProps['side']
   align?: TooltipPrimitive.TooltipContentProps['align']
+  alignOffset?: number
   /** Keeps the tooltip closed, e.g. while the control's own menu is open. */
   disabled?: boolean
   /** Extra class on the tooltip surface, e.g. `flow-tooltip-content--card` for rich content. */
@@ -79,7 +83,12 @@ export function TooltipBody({ label, shortcut }: { label?: React.ReactNode; shor
 }
 
 /** Convenience wrapper for icon buttons and compact controls. */
-export function FlowTooltip({ label, shortcut, children, side = 'bottom', align = 'center', disabled = false, contentClassName, sideOffset, elevated, raised }: FlowTooltipProps) {
+export function FlowTooltip(props: FlowTooltipProps) {
+  const provided = React.useContext(TooltipProviderContext)
+  return provided ? <FlowTooltipBody {...props}/> : <TooltipProvider><FlowTooltipBody {...props}/></TooltipProvider>
+}
+
+function FlowTooltipBody({ label, shortcut, children, side = 'bottom', align = 'center', alignOffset, disabled = false, contentClassName, sideOffset, elevated, raised }: FlowTooltipProps) {
   const [open, setOpen] = React.useState(false)
   const [inferredTone, setInferredTone] = React.useState<TooltipTone | undefined>()
   const triggerRef = React.useRef<HTMLButtonElement>(null)
@@ -93,7 +102,7 @@ export function FlowTooltip({ label, shortcut, children, side = 'bottom', align 
       setOpen(next && !disabled)
     }}>
       <TooltipTrigger asChild ref={triggerRef}>{children}</TooltipTrigger>
-      <TooltipContent align={align} className={cn(tone && `flow-tooltip-content--${tone}`, contentClassName)} side={side} sideOffset={sideOffset}>
+      <TooltipContent align={align} alignOffset={alignOffset} className={cn(tone && `flow-tooltip-content--${tone}`, contentClassName)} side={side} sideOffset={sideOffset}>
         <TooltipBody label={label} shortcut={shortcut}/>
       </TooltipContent>
     </TooltipRoot>
@@ -102,5 +111,5 @@ export function FlowTooltip({ label, shortcut, children, side = 'bottom', align 
 
 /** FlowTooltip for components that may render outside the app's TooltipProvider (shared bars, tests). */
 export function ScopedFlowTooltip(props: FlowTooltipProps) {
-  return <TooltipProvider><FlowTooltip {...props}/></TooltipProvider>
+  return <FlowTooltip {...props}/>
 }

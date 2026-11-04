@@ -182,6 +182,16 @@ describe('sidebar feature flags', () => {
     expect(workspaceFeatureEnabled({ loops: false }, 'loops')).toBe(false)
   })
 
+  it('gives sidebar links a tooltip beside the row with the go-to text and its key sequence', () => {
+    renderSidebar({ loops: true })
+    const inbox = document.querySelector('a.nav-item[href$="/inbox"]')!
+    expect(inbox).toHaveAttribute('title', 'Go to inbox (G then I)')
+    expect(inbox).toHaveAttribute('data-tooltip-side', 'right')
+    expect(document.querySelector('a.nav-item[href$="/pulse/all"], a.nav-item[href*="/pulse"]')).toHaveAttribute('title', 'Go to pulse (G then F)')
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('title', expect.stringMatching(/ \(Ctrl ⇧ 1\)$/))
+    expect(screen.getByRole('button', { name: 'Open Help menu' })).not.toHaveAttribute('title')
+  })
+
   it('hides Loops and Customers from More after flags are off, including after bootstrap refresh', async () => {
     const enabled = { loops: true, 'customer-requests': true, asks: true }
     const view = renderSidebar(enabled)

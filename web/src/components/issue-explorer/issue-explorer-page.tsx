@@ -615,7 +615,6 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       resourceHeader={resourceHeader}
       className={className}
       insightsLabel={insightsLabel ?? (savedView ? 'view insights' : 'insights')}
-      detailsShortcutTooltip={Boolean(detailsPanel)}
       viewEditor={editorCard || undefined}
       viewEditorMode={editorMode}
       draftName={editorDraft?.name.trim() || undefined}

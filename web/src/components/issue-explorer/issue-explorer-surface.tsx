@@ -37,7 +37,7 @@ export type ViewEditorControls = { filterButton: ReactNode; displayButton: React
 
 export function IssueExplorerSurface({
   children, scopeName, scopeHref, scopeTeam, activeView, viewHref, filters, filterBar, footer, viewEditor, viewEditorMode, draftName, draftPlaceholder, draftVisual, viewActions, displayOptions, detailsOpen, itemCount = 0,
-  creatingView = false, favorite = false, filterActive = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onAdvancedFilter, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar, onCreateIssue, displayMenuProps, resourceHeader, className, insightsLabel = 'view insights', detailsShortcutTooltip = false, teamFavorite = false, onToggleTeamFavorite, teamNotificationsHref,
+  creatingView = false, favorite = false, filterActive = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onAdvancedFilter, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar, onCreateIssue, displayMenuProps, resourceHeader, className, insightsLabel = 'view insights', teamFavorite = false, onToggleTeamFavorite, teamNotificationsHref,
 }: {
   children: ReactNode
   scopeName: string
@@ -93,8 +93,6 @@ export function IssueExplorerSurface({
   teamFavorite?: boolean
   onToggleTeamFavorite?: () => void
   teamNotificationsHref?: string
-  /** Show the details toggle's ⌘ I shortcut in a tooltip instead of the native title. */
-  detailsShortcutTooltip?: boolean
 }) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
@@ -117,7 +115,7 @@ export function IssueExplorerSurface({
   const displayMenu = <MyIssuesDisplayMenu {...displayMenuProps} phoneExtraActions={<DisplayMenuActionRow label="Insights" checked={Boolean(insightsOpen)} onChange={value => onInsightsOpenChange?.(value)}/>} open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange} />
   const editorControls: ViewEditorControls = {
     filterButton: <ScopedFlowTooltip label={t('Add Filter')} shortcut="F" disabled={filterOpen}><span className={styles.cardDisplay}>{filterMenu(<ToolbarButton label={t('Add filter')} className={styles.cardButton}><FilterIcon /></ToolbarButton>, 'end')}</span></ScopedFlowTooltip>,
-    displayButton: <ScopedFlowTooltip label={t('Show display options')} shortcut="⇧ V" disabled={displayOpen}><span className={styles.cardDisplay}>{displayMenu}</span></ScopedFlowTooltip>,
+    displayButton: <span className={styles.cardDisplay}>{displayMenu}</span>,
     resourceTabs: <nav className={styles.resourceTabs} aria-label="View resource">
       <button className={`${styles.resourceTab} ui-pill`} data-active="true" type="button" aria-current="page">{t('Issues')}</button>
       <button className={`${styles.resourceTab} ui-pill`} type="button" onClick={() => onNewViewResourceChange?.('projects')}>{t('Projects')}</button>
@@ -168,16 +166,17 @@ export function IssueExplorerSurface({
                 id: 'scope',
                 label: scopeName,
                 href: scopeHref,
+                tooltip: scopeTeam ? 'Team overview' : undefined,
                 icon: scopeTeam ? <ViewGlyph className={styles.scopeIcon} color={scopeTeam.color} icon={scopeTeam.icon || 'Team'} /> : undefined,
               },
               { id: 'issues', label: 'Issues', current: true },
             ]}
           />
-          {scopeTeam && onToggleTeamFavorite ? <button type="button" role="switch" aria-checked={teamFavorite} aria-label={t(teamFavorite ? 'Remove from favorites' : 'Add to favorites')} className={styles.phoneTeamFavorite} onClick={onToggleTeamFavorite}>{teamFavorite ? <FlowFavoriteFilledIcon /> : <FlowFavoriteIcon />}</button> : null}
+          {scopeTeam && onToggleTeamFavorite ? <FlowTooltip label={teamFavorite ? 'Remove from favorites' : 'Favorite page'} shortcut="⌥ F"><button type="button" role="switch" aria-checked={teamFavorite} aria-label={t(teamFavorite ? 'Remove from favorites' : 'Add to favorites')} className={styles.phoneTeamFavorite} onClick={onToggleTeamFavorite}>{teamFavorite ? <FlowFavoriteFilledIcon /> : <FlowFavoriteIcon />}</button></FlowTooltip> : null}
         </>
       )}
-      {scopeTeam && !savedView && teamNotificationsHref ? <a className={styles.phoneTeamNotifications} href={teamNotificationsHref} aria-label={t('Setup team notifications')}><FlowBellIcon /></a> : null}
-      {mode === 'view' && onCreateIssue ? <button className={styles.headerNewIssue} type="button" onClick={onCreateIssue}><PlusIcon width={14} height={14} /><span>{t('New issue')}</span></button> : null}
+      {scopeTeam && !savedView && teamNotificationsHref ? <FlowTooltip label="Notification settings"><a className={styles.phoneTeamNotifications} href={teamNotificationsHref} aria-label={t('Setup team notifications')}><FlowBellIcon /></a></FlowTooltip> : null}
+      {mode === 'view' && onCreateIssue ? <FlowTooltip label="Create new issue" shortcut="C" align="end"><button className={styles.headerNewIssue} type="button" onClick={onCreateIssue}><PlusIcon width={14} height={14} /><span>{t('New issue')}</span></button></FlowTooltip> : null}
     </ContentViewHeader>
   )
 
@@ -221,33 +220,29 @@ export function IssueExplorerSurface({
             ) : (
               savedViews.map(renderSavedView)
             )}
-            <FlowTooltip label="Add new view" shortcut="⌥ V"><button className={styles.addView} type="button" aria-label="Add new view" onClick={onAddView}><AddViewIcon /></button></FlowTooltip>
+            <FlowTooltip label="Create new view"><button className={styles.addView} type="button" aria-label="Add new view" onClick={onAddView}><AddViewIcon /></button></FlowTooltip>
           </nav>
         )
       }
       end={
         <ToolbarButtonsNavigation className={styles.actions}>
-          {filterMenu(<ToolbarButton label={t(filterActive ? 'Add another filter' : 'Add filter')} pressed={filterActive || undefined} data-filter-active={filterActive || undefined}><FilterIcon /></ToolbarButton>)}
+          {filterMenu(<ToolbarButton label={t(filterActive ? 'Add another filter' : 'Add filter')} tooltip={t('Add Filter')} shortcut="F" pressed={filterActive || undefined} data-filter-active={filterActive || undefined}><FilterIcon /></ToolbarButton>)}
           {displayMenu}
           {!phone && <ToolbarButton className={styles.insightsButton} label={`${insightsOpen ? 'Close' : 'Open'} ${insightsLabel}`} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}>
             <InsightsIcon />
           </ToolbarButton>}
-          {mode === 'view' && (detailsShortcutTooltip ? (
-            <FlowTooltip label={detailsOpen ? 'Close details' : 'Open details'} shortcut={isMacPlatform() ? '⌘ I' : 'Ctrl I'}>
-              <ToolbarButton label={detailsOpen ? 'Close details' : 'Open details'} pressed={detailsOpen} onClick={() => onDetailsOpenChange(!detailsOpen)}>
-                <DetailsIcon open={detailsOpen} />
-              </ToolbarButton>
-            </FlowTooltip>
-          ) : (
+          {mode === 'view' && (
             <ToolbarButton
               label={savedView ? (detailsOpen ? 'Close view details' : 'Open view details') : (detailsOpen ? 'Close details' : 'Open details')}
-              title={`${detailsOpen ? 'Close' : 'Open'} details (⌘I)`}
+              tooltip={savedView ? (detailsOpen ? 'Close view details' : 'Open view details') : (detailsOpen ? 'Close details' : 'Open details')}
+              shortcut={isMacPlatform() ? '⌘ I' : 'Ctrl I'}
+              tooltipAlign="end"
               pressed={detailsOpen}
               onClick={() => onDetailsOpenChange(!detailsOpen)}
             >
               <DetailsIcon open={detailsOpen} />
             </ToolbarButton>
-          ))}
+          )}
         </ToolbarButtonsNavigation>
       }
     />
@@ -277,6 +272,8 @@ function isMacPlatform() {
   return /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent)
 }
 
-function ToolbarButton({ children, label, pressed, className, ...props }: ComponentPropsWithRef<'button'> & { label: string; pressed?: boolean }) {
-  return <button type="button" className={`${styles.iconButton} ui-pill ${className ?? ''}`} aria-label={label} aria-pressed={pressed} {...props}>{children}</button>
+/** An icon button; `tooltip` (with an optional `shortcut`) adds the app tooltip, which stays closed while the button's menu is open. */
+function ToolbarButton({ children, label, pressed, className, tooltip, shortcut, tooltipAlign, ...props }: ComponentPropsWithRef<'button'> & { label: string; pressed?: boolean; tooltip?: string; shortcut?: string; tooltipAlign?: 'start' | 'center' | 'end' }) {
+  const button = <button type="button" className={`${styles.iconButton} ui-pill ${className ?? ''}`} aria-label={label} aria-pressed={pressed} {...props}>{children}</button>
+  return tooltip ? <FlowTooltip label={tooltip} shortcut={shortcut} align={tooltipAlign} disabled={props['aria-expanded'] === true || props['aria-expanded'] === 'true'}>{button}</FlowTooltip> : button
 }

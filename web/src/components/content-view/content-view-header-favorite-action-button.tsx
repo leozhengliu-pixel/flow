@@ -1,5 +1,6 @@
 import { Star } from 'lucide-react'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { FlowTooltip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import styles from './content-view.module.css'
 
@@ -20,7 +21,7 @@ export function ContentViewHeaderFavoriteActionButton({
   className,
   ...rest
 }: ContentViewHeaderFavoriteActionButtonProps) {
-  return (
+  const button = (
     <button
       type="button"
       role="switch"
@@ -34,4 +35,5 @@ export function ContentViewHeaderFavoriteActionButton({
       {icon ?? <Star size={14} fill={favorited ? 'currentColor' : 'none'} />}
     </button>
   )
+  return <FlowTooltip label={favorited ? unfavoriteLabel : 'Favorite page'} shortcut="⌥ F">{button}</FlowTooltip>
 }

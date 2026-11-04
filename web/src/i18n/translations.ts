@@ -274,6 +274,8 @@ export const zhCN: Record<string, string> = {
   "Go to active issues": "前往活跃事项",
   "Go to backlog": "前往待办事项",
   "Go to cycles": "前往周期",
+  "Go to views": "前往视图",
+  "Notification settings": "通知设置",
   "Go to projects": "前往项目",
   "Leave feedback…": "留下反馈…",
   "Create new project template…": "创建新项目模板…",

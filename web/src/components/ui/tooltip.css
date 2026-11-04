@@ -1,6 +1,6 @@
 /*
  * The app-wide tooltip (measured against the reference app in both themes): a 27.5px surface — 5px 8px padding,
- * .5px border, 8px radius, a hairline shadow — with the label in 400 11px/16.5px and the shortcut as 18×17px
+ * .5px border, 8px radius, a hairline shadow — with the label in 450 11px/16.5px and the shortcut as 18×17px
  * boxed keys 3px apart, 8px after the label. Colours come from the --tooltip-* tokens in styles/tokens.css;
  * `--raised` (over dialogs and floating panels) and `--elevated` (over the agent composer card) are the lighter
  * palettes used over raised surfaces.
@@ -40,20 +40,14 @@
   --tooltip-key-border: var(--tooltip-elevated-key-border);
 }
 
-/* The sidebar search tooltip sits tighter than the default 8px label/shortcut gap. */
-.flow-tooltip-content.sidebar-search-tooltip { gap: 5px; }
-@media (--desktop-layout) {
-  .flow-tooltip-content.sidebar-search-tooltip { font-weight: 450; }
-}
-
-/* Long labels wrap at the reference's 520px text width. */
-.flow-tooltip-copy { min-width: 0; max-width: 520px; overflow-wrap: anywhere; white-space: normal; }
+/* Long labels wrap at the reference's 520px text width; the label is a touch heavier than the keys (450 against 400). */
+.flow-tooltip-copy { min-width: 0; max-width: 520px; overflow-wrap: anywhere; white-space: normal; font-weight: 450; }
 .flow-tooltip-content--title { white-space: pre-line; }
 .flow-tooltip-content--title .flow-tooltip-copy { white-space: pre-line; }
 /* Rich hover cards (customer lists, stats): size to their content. */
 .flow-tooltip-content--card { min-height: 0; }
 
-/* The 17.1px key caps overhang the 16.5px text line, sitting .5px above its centre like the reference. */
-.flow-tooltip-shortcut { height: 16.5px; display: inline-flex; flex: none; align-items: center; gap: 3px; color: var(--tooltip-muted); font: 400 11px/12.1px var(--font); }
-.flow-tooltip-key { box-sizing: border-box; min-width: 18px; height: 17.1px; margin-top: -1px; display: grid; place-items: center; padding: 2px; border: .5px solid var(--tooltip-key-border); border-radius: 4px; background: transparent; color: var(--tooltip-muted); font: 400 11px/12.1px var(--font); }
+/* The 17.1px key caps set the line height (28.1px surface); the -3px end margin leaves 5px between the last key and the surface edge. */
+.flow-tooltip-shortcut { display: inline-flex; flex: none; align-items: center; gap: 3px; margin-right: -3px; color: var(--tooltip-muted); font: 400 11px/12.1px var(--font); }
+.flow-tooltip-key { box-sizing: border-box; min-width: 18px; height: 17.1px; display: grid; place-items: center; padding: 2px; border: .5px solid var(--tooltip-key-border); border-radius: 4px; background: transparent; color: var(--tooltip-muted); font: 400 11px/12.1px var(--font); }
 .flow-tooltip-then { color: var(--tooltip-muted); font: 450 10px/16.5px var(--font); }

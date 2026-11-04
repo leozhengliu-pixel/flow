@@ -1,3 +1,4 @@
+import { FlowTooltip } from '@/components/ui/tooltip'
 import { memo, useContext, useEffect, useInsertionEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { useI18n } from '@/i18n/i18n'
 import { Virtuoso, type Components } from 'react-virtuoso'
@@ -381,6 +382,8 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
           propertyLabel="Priority"
           label={`${priorityName(issue.priority)} Priority`}
           searchLabel="Change priority to..."
+          tooltip="Set priority"
+          tooltipShortcut="P"
           selectedIds={[String(issue.priority)]}
           options={propertyOptions.priority}
           onSelect={value => change('priority', value)}
@@ -434,8 +437,8 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
             {mutationError && <button type="button" className={styles.rowError} title={mutationError} onClick={() => onRetryMutation?.(issue)}>Retry</button>}
           </span>
         </div>
-        {displayProperties.has('created') && <time className={styles.rowDate} aria-label={`Created ${formatFullDate(issue.createdAt)}`} dateTime={issue.createdAt}>{formatRowDate(issue.createdAt)}</time>}
-        {displayProperties.has('updated') && <time className={styles.rowDate} aria-label={`Updated ${formatFullDate(issue.updatedAt)}`} dateTime={issue.updatedAt}>{formatRowDate(issue.updatedAt)}</time>}
+        {displayProperties.has('created') && <FlowTooltip align="end" label={`Created ${formatFullDate(issue.createdAt)}`}><time className={styles.rowDate} aria-label={`Created ${formatFullDate(issue.createdAt)}`} dateTime={issue.createdAt}>{formatRowDate(issue.createdAt)}</time></FlowTooltip>}
+        {displayProperties.has('updated') && <FlowTooltip align="end" label={`Updated ${formatFullDate(issue.updatedAt)}`}><time className={styles.rowDate} aria-label={`Updated ${formatFullDate(issue.updatedAt)}`} dateTime={issue.updatedAt}>{formatRowDate(issue.updatedAt)}</time></FlowTooltip>}
         {displayProperties.has('myActivity') && <time className={styles.rowDate} aria-label={issue.myActivityAt ? `My activity ${formatFullDate(issue.myActivityAt)}` : 'No activity'} dateTime={issue.myActivityAt}>{issue.myActivityAt ? formatRowDate(issue.myActivityAt) : null}</time>}
         {displayProperties.has('timeInStatus') && <time className={styles.rowDate} aria-label={issue.timeInStatusMinutes == null ? 'Time in status unavailable' : `${formatTimeInStatus(issue.timeInStatusMinutes)} in status`}>{issue.timeInStatusMinutes == null ? null : <><Clock3 size={12}/>{formatTimeInStatus(issue.timeInStatusMinutes)}</>}</time>}
         {displayProperties.has('links') && <span className={styles.rowDate} aria-label={issue.linkCount ? `${issue.linkCount} links` : 'No links'}>{issue.linkCount ? <><Link2 size={12}/>{issue.linkCount}</> : null}</span>}
@@ -484,12 +487,12 @@ function RowStatusHover({ issue }: { issue: MyIssuesRowData }) {
 
 const ASSIGNEE_INVITE_OPTION: MyIssuesContextOption = { id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', groupLabel: 'New user', kind: 'assignee' }
 
-export function RowCommandPicker({ propertyLabel, label, multi = false, onSelect, options, searchLabel, searchShortcut, selectedIds, trigger, triggerClassName, kind = 'standard', hoverContent, hoverClassName, hoverPlacement, open, onOpenChange }: { propertyLabel: string; label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; searchLabel: string; searchShortcut?: string; selectedIds: string[]; trigger: ReactNode; triggerClassName?: string; kind?: PropertyMenuKind; hoverContent?: ReactNode; hoverClassName?: string; hoverPlacement?: 'left' | 'below'; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+export function RowCommandPicker({ propertyLabel, label, multi = false, onSelect, options, searchLabel, searchShortcut, selectedIds, trigger, triggerClassName, kind = 'standard', hoverContent, hoverClassName, hoverPlacement, tooltip, tooltipShortcut, open, onOpenChange }: { propertyLabel: string; label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; searchLabel: string; searchShortcut?: string; selectedIds: string[]; trigger: ReactNode; triggerClassName?: string; kind?: PropertyMenuKind; hoverContent?: ReactNode; hoverClassName?: string; hoverPlacement?: 'left' | 'below'; /** A plain tooltip over the trigger (with its key), for pickers without a hover card. */ tooltip?: string; tooltipShortcut?: string; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const assignee = propertyLabel === 'Assignee'
   // Assignee pickers: number keys on "No assignee" (0) and the rows after it, agents without a pill but with a hover card, and an invite action under "New user".
   const rows = assignee && viewerCanInvite() ? [...options, ASSIGNEE_INVITE_OPTION] : options
   const commandOptions = rows.map((option, index) => ({ ...option, icon: option.icon ?? <MyIssuesOptionIcon option={option}/>, ...(option.id === ASSIGNEE_INVITE_ID ? { action: true } : option.agent ? agentHoverProps({ id: option.id, name: option.handle ?? option.label, displayName: option.label, avatarUrl: option.avatarUrl }) : {}), shortcut: option.kind === 'priority' ? option.id : option.kind === 'status' ? String(index + 1) : assignee && option.id !== ASSIGNEE_INVITE_ID ? assigneeShortcut(index) : option.shortcut }))
-  return <PropertyMenu label={propertyLabel} value={options.find(option => selectedIds.includes(option.id))?.label} multiple={multi} selectedId={selectedIds[0]} selectedIds={selectedIds} options={commandOptions} kind={kind} searchPlaceholder={searchLabel} searchShortcut={searchShortcut ?? (assignee ? 'A' : undefined)} ariaLabel={label} triggerClassName={triggerClassName ?? styles.propertyTrigger} trigger={trigger} hoverContent={hoverContent} hoverClassName={hoverClassName} hoverPlacement={hoverPlacement} open={open} onOpenChange={onOpenChange} onChange={id => id === ASSIGNEE_INVITE_ID ? openMemberInvite() : onSelect(id)}/>
+  return <PropertyMenu label={propertyLabel} value={options.find(option => selectedIds.includes(option.id))?.label} multiple={multi} selectedId={selectedIds[0]} selectedIds={selectedIds} options={commandOptions} kind={kind} searchPlaceholder={searchLabel} searchShortcut={searchShortcut ?? (assignee ? 'A' : undefined)} ariaLabel={label} triggerClassName={triggerClassName ?? styles.propertyTrigger} trigger={trigger} hoverContent={hoverContent} hoverClassName={hoverClassName} hoverPlacement={hoverPlacement} tooltip={tooltip} tooltipShortcut={tooltipShortcut} open={open} onOpenChange={onOpenChange} onChange={id => id === ASSIGNEE_INVITE_ID ? openMemberInvite() : onSelect(id)}/>
 }
 
 function IssueCheckbox({ checked, onChange }: { checked: boolean; onChange: (checked: boolean, range: boolean) => void }) {

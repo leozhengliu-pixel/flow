@@ -80,4 +80,11 @@ describe('FlowTooltip', () => {
     render(<TooltipProvider><FlowTooltip><button type="button">Plain</button></FlowTooltip></TooltipProvider>)
     expect(screen.getByRole('button', { name: 'Plain' })).not.toHaveAttribute('data-state')
   })
+
+  it('works inside shared controls rendered without an app provider', async () => {
+    render(<FlowTooltip label="Show display options" shortcut="⇧ V"><button type="button">Display</button></FlowTooltip>)
+    await userEvent.hover(screen.getByRole('button', { name: 'Display' }))
+    const surface = (await screen.findAllByText('Show display options'))[0].closest('.flow-tooltip-content')!
+    expect([...surface.querySelectorAll('kbd.flow-tooltip-key')].map(key => key.textContent)).toEqual(['⇧', 'V'])
+  })
 })

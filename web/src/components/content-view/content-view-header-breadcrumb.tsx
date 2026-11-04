@@ -1,6 +1,7 @@
 import { ChevronRight } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { AppLink } from '@/components/ui/app-link'
+import { FlowTooltip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import styles from './content-view.module.css'
 
@@ -11,6 +12,8 @@ export interface ContentViewBreadcrumbItem {
   icon?: ReactNode
   muted?: boolean
   current?: boolean
+  /** Tooltip over the link (a team's crumb says "Team overview"). */
+  tooltip?: string
   onClick?: () => void
 }
 
@@ -39,6 +42,7 @@ export function ContentViewHeaderBreadcrumbLink({
   icon,
   muted,
   current,
+  tooltip,
   onClick,
 }: {
   href?: string
@@ -47,6 +51,7 @@ export function ContentViewHeaderBreadcrumbLink({
   icon?: ReactNode
   muted?: boolean
   current?: boolean
+  tooltip?: string
   onClick?: () => void
 }) {
   const classNames = cn(styles.breadcrumbItem, className)
@@ -57,7 +62,7 @@ export function ContentViewHeaderBreadcrumbLink({
     </>
   )
   if (href) {
-    return (
+    const link = (
       <AppLink
         href={href}
         className={classNames}
@@ -73,6 +78,7 @@ export function ContentViewHeaderBreadcrumbLink({
         {body}
       </AppLink>
     )
+    return tooltip ? <FlowTooltip label={tooltip}>{link}</FlowTooltip> : link
   }
   if (onClick) {
     return (
@@ -108,6 +114,7 @@ export function ContentViewHeaderBreadcrumb({
               icon={item.icon}
               muted={item.muted}
               current={item.current ?? isLast}
+              tooltip={item.tooltip}
               onClick={item.onClick}
             >
               {item.label}
