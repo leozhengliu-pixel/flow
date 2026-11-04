@@ -34,6 +34,20 @@ it('offers unused workflow states and persists cycle changes from a project card
   expect(onOpenIssue).not.toHaveBeenCalled()
 })
 
+it.each([false, true])('shows empty project board columns only when "Show empty columns" is on (%s)', showEmptyGroups => {
+  const issue = makeIssue()
+  const data = makeBootstrap({ issues: [issue] })
+  const props = {
+    ...data, project: { ...project, teamIds: [issue.team.id] }, projectIssues: [issue],
+    workflowStates: [issue.state, { ...issue.state, id: 'unused-state', name: 'Unused status', position: 5 }],
+    display: createIssueDisplayOptions({ layout: 'board', grouping: 'status', showEmptyGroups, properties: new Set(['id', 'status']) }),
+    filters: [], onUpdateIssue: vi.fn(), onOpenIssue: vi.fn(), onFiltersChange: vi.fn(), onDisplayChange: vi.fn(),
+  } as unknown as ComponentProps<typeof ProjectIssues>
+  render(<I18nProvider><ProjectIssues {...props}/></I18nProvider>)
+  expect(screen.queryByRole('listitem', { name: 'Unused status' }) !== null).toBe(showEmptyGroups)
+  expect(screen.queryByRole('region', { name: 'Hidden columns' }) !== null).toBe(!showEmptyGroups)
+})
+
 it('reuses the issue explorer filter fields and swaps project fields for milestone', async () => {
   const user = userEvent.setup()
   const onChange = vi.fn()

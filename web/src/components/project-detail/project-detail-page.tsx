@@ -795,6 +795,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
                 filters={issueFilters}
                 milestoneScope={milestoneScope}
                 onClearMilestoneScope={() => openMilestoneIssues()}
+                onDisplayChange={changeIssueDisplay}
                 onFiltersChange={changeIssueFilters}
                 projectIssues={scopedProjectIssues}
               />

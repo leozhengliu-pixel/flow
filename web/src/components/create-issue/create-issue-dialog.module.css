@@ -291,7 +291,7 @@
   .properties :global(.mini-property-trigger[data-property="status"] span) { color: var(--create-issue-fg); }
   .properties .cycleChip, .moreButton, .attachButton { padding: 0 2px; }
   .properties .cycleChip { color: var(--create-issue-icon-fg); }
-  .titleField :global(.title-editor) { padding-top: 3.5px; }
+  .titleField :global(.title-editor) { min-height: 24px; margin-top: 3.5px; padding: 0; }
   .footer .submit { letter-spacing: normal; }
   .iconButton .compactGlyph, .attachButton .compactGlyph { display: none; }
   .iconButton .desktopGlyph { display: block; width: 16px; height: 16px; }

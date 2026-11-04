@@ -61,11 +61,19 @@
 .cycle-stat > dd { color: var(--bright); font-size: 13px; }
 .cycle-stat.is-capacity > dd { color: var(--cycle-panel-text); }
 .cycle-stat > dd.cycle-planning-scope { height: 15.5px; font-size: 12px; }
+.cycle-stat > dd.cycle-planning-scope > svg { margin-right: 5px; }
 .cycle-stat-value > svg,
 .cycle-stat > dd > svg { flex: none; margin: 0 4px 0 -1px; color: var(--cycle-panel-muted); }
 .cycle-stat-value strong { font: inherit; }
 .cycle-stat-percent { margin-left: 3px; color: var(--cycle-panel-muted); font-weight: 450; white-space: nowrap; }
 .cycle-stat-percent > b { margin-right: 3px; font-weight: inherit; }
+/* On a phone the figures are rows: the label on the left, the figures in one left-aligned column at the right edge. */
+@media (max-width: 767px) {
+  .cycle-stat-grid { grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 6px; padding-right: 0; }
+  .cycle-stat { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; padding-left: 0; }
+  .cycle-stat > dt, .cycle-stat-label { padding-left: 22px; }
+  .cycle-stat > dd, .cycle-stat-value { align-self: center; }
+}
 
 .cycle-progress-chart { margin-top: 2px; }
 

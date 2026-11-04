@@ -282,6 +282,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onContextAction={(row, action) => { void contextAction(row, action) }}
       /> : controller.display.layout === 'board' ? <IssueBoard
         groups={boardGroups}
+        showEmptyGroups={controller.display.showEmptyGroups}
         hiddenGroupIds={controller.display.hiddenGroupIds}
         properties={controller.display.properties}
         propertyOptions={rowOptions}

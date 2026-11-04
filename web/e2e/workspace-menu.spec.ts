@@ -79,7 +79,7 @@ for (const width of [1440, 390]) {
                 const row = (await settings.boundingBox())!
                 expect(row.x - box.x).toBeGreaterThanOrEqual(6)
                 expect(box.x + box.width - row.x - row.width).toBeGreaterThanOrEqual(6)
-                await expect(menu.locator('.workspace-switch-arrow')).toHaveText('▶')
+                await expect(menu.locator('.flow-submenu-chevron')).toHaveText('▶')
               }
               await page.keyboard.press('Escape')
               await expect(menu).toBeHidden()

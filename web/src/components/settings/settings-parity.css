@@ -542,8 +542,8 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
   }
   /* A not-found page fills the space under the header and centres its content there. */
   html:root .settings-app .settings-mobile-content-gap:has(+ .settings-content > .settings-shortcuts-not-found) { height: 0; }
-  html:root .settings-app .settings-content:has(> .settings-shortcuts-not-found) { min-height: calc(100% - var(--settings-mobile-header-height)); padding-bottom: 0; }
-  html:root .settings-app .settings-content:not(:has(> .settings-shortcuts-not-found)) {
+  html:root .settings-app .settings-content:has(> .settings-shortcuts-not-found) { width: 100%; margin: 0; padding: 0; min-height: calc(100% - var(--settings-mobile-header-height)); }
+  html:root .settings-app .settings-content {
     width: calc(100% - 44px);
     max-width: none;
     margin: 0 22px;

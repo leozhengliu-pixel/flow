@@ -315,6 +315,7 @@ export function ProjectNewView({
         filters={filters}
         display={display}
         onCreateSavedView={onCreateSavedView}
+        onDisplayChange={onDisplayChange}
         onFiltersChange={onFiltersChange}
         onTabChange={onTabChange}
       />
@@ -336,6 +337,7 @@ export function ProjectIssues({
   onClearMilestoneScope,
   onCreateIssue,
   onDeleteIssues,
+  onDisplayChange,
   onFiltersChange,
   onOpenIssue,
   onUpdateIssue,
@@ -349,6 +351,7 @@ export function ProjectIssues({
   display: MyIssuesDisplayOptions;
   milestoneScope?: ProjectMilestone;
   onClearMilestoneScope?: () => void;
+  onDisplayChange?: (display: MyIssuesDisplayOptions) => void;
   onFiltersChange: (filters: ProjectIssueFilters) => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -376,12 +379,18 @@ export function ProjectIssues({
       ),
     [issues, workflowStates, project.teamIds],
   );
-  const groups = useMemo(() => {
+  const allGroups = useMemo(() => {
     const cycleNames = new Map((cycles ?? []).map(cycle => [cycle.id, cycle.name]));
     const rows = visible.map(issue => issueData ? issueToExplorerRow(issue, issueData.workspace.urlKey, issueData.issues, issueData) : { ...toRowData(issue, visible), cycleName: cycleNames.get(issue.cycleId ?? '') });
-    const hidden = new Set(display.hiddenGroupIds);
-    return buildIssueGroups(rows, display, { data: issueData, states: allStates }).filter(group => !hidden.has(group.id) && !hidden.has(group.parentGroupId ?? ''));
+    return buildIssueGroups(rows, display, { data: issueData, states: allStates });
   }, [allStates, cycles, display, issueData, visible]);
+  // The board keeps hidden columns so its Hidden columns panel can list them; the list drops them.
+  const groups = useMemo(() => {
+    const hidden = new Set(display.hiddenGroupIds);
+    return allGroups.filter(group => !hidden.has(group.id) && !hidden.has(group.parentGroupId ?? ''));
+  }, [allGroups, display.hiddenGroupIds]);
+  const hideBoardGroup = (id: string) => onDisplayChange?.({ ...display, hiddenGroupIds: [...new Set([...display.hiddenGroupIds, id])] });
+  const showBoardGroup = (id: string) => onDisplayChange?.({ ...display, hiddenGroupIds: display.hiddenGroupIds.filter(value => value !== id) });
   const rowIssues = useMemo(
     () => new Map([...projectIssues, ...loadedIssues].map((issue) => [issue.id, issue])),
     [projectIssues, loadedIssues],
@@ -519,13 +528,15 @@ export function ProjectIssues({
       {showProjectIntro ? null : issueData?.issueCollectionPaged ? <PagedIssueList
         data={issueData} query={pagedQuery} layout={display.layout === 'board' ? 'board' : 'list'}
         onLoadedIssuesChange={setLoadedIssues} onOpenIssueRecord={onOpenIssue}
+        emptyGroups={allGroups.filter(group => !group.issues.length)} showEmptyGroups={display.showEmptyGroups}
+        hiddenGroupIds={display.hiddenGroupIds} onHideGroup={hideBoardGroup} onShowGroup={showBoardGroup}
         onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
         collapsedGroupIds={collapsed} displayProperties={display.properties} nestedSubIssues={display.nestedSubIssues}
         propertyOptions={propertyOptions} selectedIds={selected}
         onContextAction={contextAction} onPropertyChange={changeProperty} onSelectIssue={select}
         onCreateIssue={group => onCreateIssue(project.id, milestoneScope?.id, group.createContext)}
         onGroupCollapsedChange={(id, value) => setCollapsed(current => { const next = new Set(current); if (value) next.add(id); else next.delete(id); return next })}
-      /> : groups.length > 0 &&
+      /> : (display.layout === "board" ? allGroups : groups).length > 0 &&
         (display.layout === "list" ? (
           <MyIssuesList
             collapsedGroupIds={collapsed}
@@ -554,7 +565,11 @@ export function ProjectIssues({
           />
         ) : (
           <IssueBoard
-            groups={groups}
+            groups={allGroups}
+            showEmptyGroups={display.showEmptyGroups}
+            hiddenGroupIds={display.hiddenGroupIds}
+            onHideGroup={hideBoardGroup}
+            onShowGroup={showBoardGroup}
             onCreateIssue={(group) => onCreateIssue(project.id, milestoneScope?.id, group.createContext)}
             onMove={move}
             onOpenIssue={(row) => {

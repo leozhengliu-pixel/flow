@@ -330,6 +330,8 @@
 .flow-inbox-menu__item:is([data-highlighted], [data-state="open"]):not([data-disabled]) .flow-inbox-menu__item-icon { color: var(--pk-text-strong); }.flow-inbox-menu__item-icon svg { width: 16px; height: 16px; fill: currentColor; }.flow-inbox-menu__item-icon svg[fill="none"] { fill: none; }.flow-inbox-menu__trailing { position: relative; display: flex; width: 16px; flex: 0 0 16px; align-items: center; justify-content: flex-end; margin-left: auto; color: var(--pk-faint); font: inherit; }
 /* The submenu marker is the reference's 6px triangle, right-aligned in the 16px box, brighter on the highlighted row. */
 .flow-inbox-menu__trailing--submenu { font: 450 6px/normal var(--font); }
+/* A row with both a key and a submenu marker spaces them 6px apart (the item gap is 8px). */
+.flow-inbox-menu__shortcut + .flow-inbox-menu__trailing { margin-left: -2px; }
 .flow-inbox-menu__item:is([data-highlighted], [data-state="open"]) .flow-inbox-menu__trailing--submenu { color: var(--pk-muted); }.flow-inbox-menu__shortcut { position: relative; display: flex; flex: 0 0 16px; align-items: center; justify-content: flex-end; margin-left: auto; color: lch(41.778% 1.425 272); font: inherit; width: auto; font-size: 12px; }.flow-inbox-menu__trailing svg { width: 16px; height: 16px; }.flow-inbox-menu__search-wrap {
   position: relative;
   display: flex;

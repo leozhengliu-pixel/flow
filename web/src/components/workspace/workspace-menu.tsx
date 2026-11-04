@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FocusEvent } from "react";
 import { Check } from "lucide-react";
 import { Command } from 'cmdk';
 import { PhoneMenu, PhoneMenuCommand } from '@/components/ui/phone-menu';
+import { SubmenuChevron } from '@/components/ui/submenu-chevron';
 import { usePhoneLayout } from '@/hooks/use-phone-layout';
 import { useOptionalTranslate } from '@/i18n/i18n';
 import { useOnlineStatus } from '@/hooks/use-online-status';
@@ -164,7 +165,7 @@ export function WorkspaceMenu({
               <DropdownMenuSubTrigger data-workspace-switch-trigger className="workspace-switch-trigger">
                 {t('Switch workspace')}
                 <WorkspaceMenuShortcut>{t('O then W')}</WorkspaceMenuShortcut>
-                <span className="workspace-switch-arrow" aria-hidden="true">▶</span>
+                <SubmenuChevron/>
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent
                 sideOffset={5}
