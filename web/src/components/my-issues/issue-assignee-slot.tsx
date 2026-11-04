@@ -21,7 +21,7 @@ type Person = { id: string; name: string; avatarUrl?: string; color?: string }
  * connector beneath, or the agent card alone) and the picker is the issue's shared assignee menu
  * (`IssueAssigneeMenu`): the agent hangs under the assignee with an "Agent" pill and opens its agent submenu.
  */
-export function IssueAssigneeSlot({ issue, options, onChange, triggerClassName, avatarClassName, emptyClassName, label, hoverPlacement = 'below', sessionLabel }: {
+export function IssueAssigneeSlot({ issue, options, onChange, triggerClassName, avatarClassName, emptyClassName, label, hoverPlacement = 'above', sessionLabel }: {
   issue: { assignee?: Person; delegate?: Person; agentSessionState?: string }
   options: MyIssuesContextOption[]
   onChange: (id: string) => void | Promise<void>
@@ -29,7 +29,7 @@ export function IssueAssigneeSlot({ issue, options, onChange, triggerClassName, 
   avatarClassName: string
   emptyClassName?: string
   label?: string
-  hoverPlacement?: 'left' | 'below'
+  hoverPlacement?: 'left' | 'below' | 'above'
   /** The delegated session's state ("Finished"): drawn in a pill before the assignee avatars. */
   sessionLabel?: string
 }) {

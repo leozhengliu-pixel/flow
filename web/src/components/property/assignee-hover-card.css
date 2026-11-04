@@ -1,0 +1,32 @@
+.assignee-person-surface {
+  z-index: 1300;
+  box-sizing: border-box;
+  max-width: min(300px, calc(100vw - 16px));
+  padding: 5px 8px;
+  border: .5px solid var(--tooltip-border);
+  border-radius: 8px;
+  background: var(--tooltip-bg);
+  color: var(--tooltip-text);
+  box-shadow: var(--tooltip-shadow);
+  outline: none;
+}
+.assignee-person-card { display: grid; gap: 6px; font: 450 12px/18px var(--font); }
+.assignee-person-card header { display: flex; align-items: center; gap: 10px; padding: 4px; }
+.assignee-person-card header .avatar { width: 32px; height: 32px; flex: 0 0 32px; font-size: 14px; }
+.assignee-person-card header > div { min-width: 0; display: grid; }
+.assignee-person-card strong { color: var(--bright); font: 500 13px/18px var(--font); overflow-wrap: anywhere; }
+.assignee-person-card header > div > span { color: var(--tooltip-muted); overflow-wrap: anywhere; }
+.assignee-person-card a { color: inherit; text-decoration: none; border-radius: 4px; }
+.assignee-person-card strong a { padding: 3px 5px; margin: -3px -5px; }
+.assignee-person-card a:hover { background: var(--theme-surface-hover); }
+.assignee-person-card a:focus-visible { outline: 1px solid var(--theme-accent); outline-offset: 2px; }
+.assignee-person-card__details { position: relative; display: grid; gap: 8px; padding: 12px 4px 6px; }
+.assignee-person-card__details::before { content: ''; position: absolute; top: 0; left: 4px; right: 4px; border-top: .5px solid var(--theme-border); }
+.assignee-person-card__details > div { display: flex; align-items: center; gap: 8px; min-height: 18px; }
+.assignee-person-card__details > div > span { min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
+.assignee-person-card__details a { padding: 3px 4px; margin: -3px -4px; }
+.assignee-person-card__details svg { width: 16px; height: 16px; flex: 0 0 16px; color: var(--tooltip-muted); }
+.assignee-person-card__details small { margin-inline-start: 4px; color: var(--tooltip-muted); font: inherit; }
+.assignee-person-card__presence { position: relative; width: 16px; height: 16px; flex: 0 0 16px; border-radius: 50%; background: var(--theme-surface-hover); }
+.assignee-person-card__presence::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: var(--tooltip-muted); }
+.assignee-person-card__presence[data-online]::after { background: var(--semantic-success); }

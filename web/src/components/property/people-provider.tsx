@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react'
-import type { FlowDocument, Project, Team, TeamMember, TeamSettings, User, WorkspaceMember } from '@/types/flow'
+import type { FlowDocument, Presence, Project, Team, TeamMember, TeamSettings, User, WorkspaceMember } from '@/types/flow'
 import { PeopleContext, type TeamDirectoryEntry } from './people-context'
 
 const EMPTY_MEMBERS: WorkspaceMember[] = []
@@ -9,7 +9,7 @@ const EMPTY_PROJECTS: Project[] = []
 const EMPTY_DOCUMENTS: FlowDocument[] = []
 const EMPTY_SETTINGS: Record<string, Pick<TeamSettings, 'parentTeamId'>> = {}
 
-export function PeopleProvider({ users, workspaceName, children, members = EMPTY_MEMBERS, teams = EMPTY_TEAMS, teamMembers = EMPTY_TEAM_MEMBERS, projects = EMPTY_PROJECTS, documents = EMPTY_DOCUMENTS, teamSettings = EMPTY_SETTINGS, viewerId }: { users: User[]; viewerId?: string; workspaceName?: string; children: ReactNode; members?: WorkspaceMember[]; teams?: Team[]; teamMembers?: TeamMember[]; projects?: Project[]; documents?: FlowDocument[]; teamSettings?: Record<string, Pick<TeamSettings, 'parentTeamId'>> }) {
+export function PeopleProvider({ users, workspaceName, workspaceKey, presence, children, members = EMPTY_MEMBERS, teams = EMPTY_TEAMS, teamMembers = EMPTY_TEAM_MEMBERS, projects = EMPTY_PROJECTS, documents = EMPTY_DOCUMENTS, teamSettings = EMPTY_SETTINGS, viewerId }: { users: User[]; viewerId?: string; workspaceName?: string; workspaceKey?: string; presence?: Presence[]; children: ReactNode; members?: WorkspaceMember[]; teams?: Team[]; teamMembers?: TeamMember[]; projects?: Project[]; documents?: FlowDocument[]; teamSettings?: Record<string, Pick<TeamSettings, 'parentTeamId'>> }) {
   const value = useMemo(() => {
     const teamNames = new Map(teams.map(team => [team.id, team.name]))
     const userTeams = new Map<string, string[]>()
@@ -29,7 +29,7 @@ export function PeopleProvider({ users, workspaceName, children, members = EMPTY
       if (project.archivedAt) continue
       for (const id of new Set([...(project.memberIds ?? []), ...(project.lead ? [project.lead.id] : [])])) append(userProjects, id, project.name)
     }
-    const teamDirectory = new Map<string, TeamDirectoryEntry>(teams.map(team => [team.id, { parentId: teamSettings[team.id]?.parentTeamId || undefined, memberIds: [], projectCount: 0, documentCount: 0 }]))
+    const teamDirectory = new Map<string, TeamDirectoryEntry>(teams.filter(team => !team.retiredAt).map(team => [team.id, { key: team.key, name: team.name, parentId: teamSettings[team.id]?.parentTeamId || undefined, memberIds: [], projectCount: 0, documentCount: 0 }]))
     for (const member of teamMembers) teamDirectory.get(member.teamId)?.memberIds.push(member.userId)
     const projectTeams = new Map(projects.map(project => [project.id, project.teamIds ?? []]))
     for (const project of projects) if (!project.archivedAt) for (const id of new Set(project.teamIds ?? [])) { const entry = teamDirectory.get(id); if (entry) entry.projectCount += 1 }
@@ -38,7 +38,7 @@ export function PeopleProvider({ users, workspaceName, children, members = EMPTY
       if (document.archivedAt) continue
       for (const id of new Set([...(document.teamIds ?? []), ...(document.projectIds ?? []).flatMap(projectId => projectTeams.get(projectId) ?? [])])) { const entry = teamDirectory.get(id); if (entry) entry.documentCount += 1 }
     }
-    return { teamDirectory, users: new Map(users.map(user => [user.id, user])), members: new Map(members.map(member => [member.user.id, member])), teams: userTeams, teamIds: userTeamIds, projects: userProjects, workspaceName, viewerId }
-  }, [users, members, teams, teamMembers, projects, documents, teamSettings, workspaceName, viewerId])
+    return { teamDirectory, users: new Map(users.map(user => [user.id, user])), members: new Map(members.map(member => [member.user.id, member])), teams: userTeams, teamIds: userTeamIds, projects: userProjects, onlineUserIds: presence ? new Set(presence.map(item => item.user.id)) : undefined, workspaceName, workspaceKey, viewerId }
+  }, [users, members, teams, teamMembers, projects, documents, teamSettings, presence, workspaceName, workspaceKey, viewerId])
   return <PeopleContext.Provider value={value}>{children}</PeopleContext.Provider>
 }

@@ -4921,7 +4921,7 @@ function App() {
     );
   if (route.kind === "settings")
     return withStore(
-      <PeopleProvider users={data.users} viewerId={data.viewer.id} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects} documents={data.documents} teamSettings={data.teamSettings}>
+      <PeopleProvider users={data.users} viewerId={data.viewer.id} workspaceName={data.workspace.name} workspaceKey={data.workspace.urlKey} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects} documents={data.documents} teamSettings={data.teamSettings}>
       <Suspense
         fallback={
           <WorkspaceBootShell>
@@ -5349,7 +5349,7 @@ function App() {
       )
     : issueSavedViews.filter((view) => view.scope !== "team");
   return withStore(
-    <PeopleProvider users={data.users} viewerId={data.viewer.id} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects} documents={data.documents} teamSettings={data.teamSettings}><ActiveTeamProvider><div className="app"><SkipToContent />
+    <PeopleProvider users={data.users} viewerId={data.viewer.id} workspaceName={data.workspace.name} workspaceKey={data.workspace.urlKey} presence={realtime.connected ? realtime.presence : undefined} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects} documents={data.documents} teamSettings={data.teamSettings}><ActiveTeamProvider><div className="app"><SkipToContent />
       <Sidebar
         onReload={(teamId) => reloadTeamMembership(data.workspace.urlKey, teamId)}
         account={account}

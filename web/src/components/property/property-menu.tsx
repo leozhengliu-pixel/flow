@@ -107,7 +107,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   hoverContent?: ReactNode
   hoverClassName?: string
   /** Where the rich hover card opens: beside the trigger (property sidebars) or below it (list rows). */
-  hoverPlacement?: 'left' | 'below'
+  hoverPlacement?: 'left' | 'below' | 'above'
   valueIsEntityName?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -131,6 +131,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   const setOpen = (next: boolean) => { setLocalOpen(next); onOpenChange?.(next) }
   const [activeTrigger, setActiveTrigger] = useState<string>()
   const [hoverOpen, setHoverOpen] = useState(false)
+  const hoverSurface = useRef<HTMLDivElement>(null)
   const [openLabelGroupId, setOpenLabelGroupId] = useState<string>()
   const [openSubmenuId, setOpenSubmenuId] = useState<string>()
   const listboxId = useId()
@@ -142,6 +143,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     hoverContent = <PersonInfo person={selectedPerson}/>
     hoverClassName = 'person-info-surface'
   }
+  const personCard = hoverClassName === 'assignee-person-surface'
   const kind = explicitKind ?? (multiple && label === 'Labels' ? 'labels' : label === 'Project' ? 'project' : 'standard')
   const orderedOptions = useMemo(() => multiple && kind !== 'labels' ? [...menuOptions.filter(option => selectedSet.has(option.id)), ...menuOptions.filter(option => !selectedSet.has(option.id))] : menuOptions, [menuOptions, multiple, kind, selectedSet])
   const { inputRef: commandInputRef, ...command } = usePropertyCommand({
@@ -187,7 +189,12 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   // The sheet's title is the search prompt without its ellipsis, translated whole when the prompt has an entry ("Set priority to…").
   const translatedPlaceholder = t(placeholder)
   const sheetLabel = (translatedPlaceholder === placeholder ? t(placeholder.replace(/…$/, '')) : translatedPlaceholder).replace(/…$/, '')
-  const triggerButton = <button type="button" data-property={label.toLowerCase()} data-empty={selected.every(id => !id)} role={triggerRole === 'combobox' ? 'combobox' : undefined} className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open} data-state={open ? 'open' : 'closed'}>
+  const triggerButton = <button type="button" data-property={label.toLowerCase()} data-empty={selected.every(id => !id)} role={triggerRole === 'combobox' ? 'combobox' : undefined} className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open} data-state={open ? 'open' : 'closed'} onPointerLeave={event => {
+    if (!personCard || !hoverSurface.current) return
+    const trigger = event.currentTarget.getBoundingClientRect(), card = hoverSurface.current.getBoundingClientRect()
+    // Keep the gap traversable, but close even when a pointer jumps beyond Radix's grace polygon in one event.
+    if (event.clientX < Math.min(trigger.left, card.left) || event.clientX > Math.max(trigger.right, card.right) || event.clientY < Math.min(trigger.top, card.top) || event.clientY > Math.max(trigger.bottom, card.bottom)) setHoverOpen(false)
+  }}>
         {trigger ?? (compact ? <>{icon ?? iconFor(label)}<span data-i18n-ignore={valueIsEntityName || undefined}>{value || label}</span></> : <><span>{icon ?? iconFor(label)}</span><span className="property-label">{label}</span><span className="property-value" data-i18n-ignore={valueIsEntityName || undefined}>{value || `Add ${label.toLowerCase()}`}</span></>)}
       </button>
   const popoverTrigger = <Popover.Trigger asChild>{triggerButton}</Popover.Trigger>
@@ -225,7 +232,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
         {content}
       </Popover.Content>
     </Popover.Portal>
-  </Popover.Root>{tooltipContent&&<Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className={plainTooltip ? 'flow-tooltip-content' : hoverClassName ?? 'property-hover-tooltip'} side={plainTooltip || hoverPlacement === 'below' ? 'bottom' : 'left'} align="center" sideOffset={plainTooltip ? 8 : hoverPlacement === 'below' ? 14 : 6} collisionPadding={8}>{tooltipContent}</Tooltip.Content></Tooltip.Portal>}</Tooltip.Root></Tooltip.Provider>
+  </Popover.Root>{tooltipContent&&<Tooltip.Portal><Tooltip.Content ref={hoverSurface} data-flow-motion="tooltip" className={plainTooltip ? 'flow-tooltip-content' : hoverClassName ?? 'property-hover-tooltip'} side={hoverPlacement === 'above' ? 'top' : plainTooltip || hoverPlacement === 'below' ? 'bottom' : 'left'} align="center" sideOffset={plainTooltip || personCard || hoverPlacement === 'above' ? 8 : hoverPlacement === 'below' ? 14 : 6} collisionPadding={8} onClick={event => event.stopPropagation()}>{tooltipContent}</Tooltip.Content></Tooltip.Portal>}</Tooltip.Root></Tooltip.Provider>
 }
 
 function VirtualStandardOptions({ options, activeId, selected, label, multiple, listboxId, onChoose, onActive }: {

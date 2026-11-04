@@ -28,13 +28,13 @@ describe('AssigneeHoverPreview presence status', () => {
     const avatar = screen.getByLabelText('zheng liu')
     expect(avatar).toHaveClass('avatar')
     expect(avatar.parentElement?.tagName).toBe('HEADER')
-    expect(avatar.nextElementSibling?.querySelector('span')?.textContent).toBe('leo.zheng.liu')
+    expect(avatar.nextElementSibling?.querySelector('span')?.textContent).toBe('leo')
   })
 
   it('shows online only for an explicit live presence flag', () => {
     render(<I18nProvider><AssigneeHoverPreview online user={user} workspaceName="Workspace" /></I18nProvider>)
 
-    const details = screen.getByText('Online').closest('.assignee-hover-preview__details') as HTMLElement | null
+    const details = screen.getByText('Online').closest('.assignee-person-card__details') as HTMLElement | null
     expect(details).not.toBeNull()
     expect(within(details!).getByText('Online')).toBeVisible()
     expect(within(details!).queryByText('Offline')).not.toBeInTheDocument()

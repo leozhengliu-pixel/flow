@@ -249,7 +249,7 @@ export function IssueAssigneeMenu({ people, assignee, delegate, viewerId, trigge
   value?: string
   hoverContent?: ReactNode
   hoverClassName?: string
-  hoverPlacement?: 'left' | 'below'
+  hoverPlacement?: 'left' | 'below' | 'above'
   delegateSessionActive?: boolean
   /** A person picked, or '' to unassign. */
   onAssign: (id: string) => void | Promise<void>
@@ -327,8 +327,8 @@ export function IssueAssigneeMenu({ people, assignee, delegate, viewerId, trigge
   return <PropertyMenu
     ariaLabel={ariaLabel}
     compact
-    hoverClassName={hoverClassName}
-    hoverContent={hoverContent}
+    hoverClassName={hoverClassName ?? (assignee ? 'assignee-person-surface' : undefined)}
+    hoverContent={hoverContent ?? (assignee ? <AssigneeHoverPreview user={assignee}/> : undefined)}
     hoverPlacement={hoverPlacement}
     label="Assignee"
     menuContext="Assigned users"
@@ -368,7 +368,7 @@ export function AssigneePicker({ value, delegate, users, onChange, onDelegate, o
     delegate={delegate}
     delegateSessionActive={delegateSessionActive}
     hoverContent={personHover && value && hoverContext ? <AssigneeHoverPreview user={value} {...hoverContext}/> : stacked && delegate ? <AgentHoverCard agent={delegate}/> : undefined}
-    hoverClassName={!personHover && stacked ? AGENT_HOVER_CLASS : 'property-rich-hover assignee-hover-surface'}
+    hoverClassName={!personHover && stacked ? AGENT_HOVER_CLASS : 'assignee-person-surface'}
     onAssign={onChange}
     onDelegate={onDelegate ?? onChange}
     onRemoveAgent={onRemoveAgent}

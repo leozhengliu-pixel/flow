@@ -10,6 +10,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Finish closing the desktop workspace menu and return focus even when an exit animation completion event is lost, preserving its divider and row spacing.
 - Restore shared phone picker content widths and consistent search/list insets while preserving Team filter row sizing.
 - Cover the MCP count filter tree with a matching team predicate in the schema fast-path check.
+- Share assignee profile cards across issue rows, boards and details, with visible profile and team links, live presence, known local time and out-of-office status; keep inactive people identifiable without active links.
+
 - Show the sidebar Issues shortcut card on hover and keyboard focus, with shared tooltip styling and pointer dismissal.
 
 - Reset phone drawer navigation when focus returns to its pinned header, including on reopen, while preserving the hardware-keyboard skip link.
