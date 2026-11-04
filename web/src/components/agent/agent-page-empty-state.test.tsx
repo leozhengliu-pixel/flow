@@ -259,8 +259,10 @@ describe('agent history helpers', () => {
     expect(formatAgentHistoryTime(ago(29.5 * DAY), t, now, true)).toBe('30d')
     expect(formatAgentHistoryTime(ago(24 * DAY), t, now)).toBe('24d')
     expect(formatAgentHistoryTime('not a date', t, now)).toBe('')
-    expect(formatAgentHistoryTime(ago(8 * DAY), translateToChinese, now)).toBe('8 天')
-    expect(formatAgentHistoryTime(ago(24 * DAY), translateToChinese, now, true)).toBe('3 周')
+    // The history reads like every other relative time in Chinese ("31分钟前").
+    expect(formatAgentHistoryTime(ago(42 * 60_000), translateToChinese, now)).toBe('42分钟前')
+    expect(formatAgentHistoryTime(ago(8 * DAY), translateToChinese, now)).toBe('8天前')
+    expect(formatAgentHistoryTime(ago(24 * DAY), translateToChinese, now, true)).toBe('3周前')
   })
 
   it('treats a chat as unread only when it changed after it was last read', () => {
