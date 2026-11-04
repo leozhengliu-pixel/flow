@@ -36,6 +36,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Give shared desktop toolbar icon pills their measured resting, hover and open fills separately from text tabs.
 - Size the desktop issue document and property rail with the shared container grid, so their gutters and columns adapt together as the pane changes width.
 - Reset phone drawer navigation when focus returns to its pinned header, including on reopen, while preserving the hardware-keyboard skip link.
+- Cover phone parent issue rows with labels and sub-issue counters at both phone widths, themes, and languages, including the avatar inset and full pill containment.
 - Match label picker checkbox and dot geometry, reveal empty checks during keyboard navigation, and let phone picker rows and composer search fields fill their shared surface.
 - Wait for the label picker's opening animation before hovering its rows in the shared menu browser checks, preserving exact phone geometry assertions.
 - Suggest next steps on issue comments with Flow Agent. Personal Agent settings control suggestions; editors can accept status, assignee, priority, label, sub-issue and link proposals or dismiss them. Acceptance records normal issue activity and resolves once across concurrent clients.
