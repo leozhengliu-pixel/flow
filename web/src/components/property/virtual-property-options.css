@@ -1,4 +1,15 @@
 .property-command-standard>.property-command-options{min-height:0}
+[data-property-multiple=standard] .property-command-search{height:36.5px;padding:0 14px}
+[data-property-multiple=standard] .property-command-search input{height:36px;padding:10px 0 9px;font-weight:400;line-height:normal}
+.property-command-search:not(:has(kbd)){grid-template-columns:minmax(0,1fr)}
+.property-command-label{line-height:normal}
+[data-property-multiple=standard] .property-command-options{padding:6px 0}
+[data-property-multiple=standard] .property-command-options [role=option]{grid-template-columns:16px 16px minmax(0,1fr) auto;gap:8px;padding:0 18px 0 14px}
+[data-property-multiple=standard] .property-command-checkbox{width:12px;height:12px;justify-self:center;opacity:0}
+[data-property-multiple=standard] [role=option]:hover .property-command-checkbox,[data-property-multiple=standard] [role=option][aria-selected=true] .property-command-checkbox,[data-property-multiple=standard] [role=option][aria-checked=true] .property-command-checkbox{opacity:1}
+[data-property-multiple=standard] [role=option][aria-checked=true] .property-command-checkbox{background:var(--checkbox-selected-fill);border-color:var(--checkbox-selected-border)}
+[data-property-multiple=standard] .property-command-option-end{grid-column:4}
+.property-command-ancestor{display:inline-flex;align-items:center;gap:6px;margin-right:6px;color:var(--theme-text-secondary)}
 .property-command-standard>div{display:flex;flex-direction:column;max-height:inherit;min-height:0;overflow:hidden}
 .property-command-standard .property-command-search{flex:0 0 40px}
 .property-command-standard .property-command-options{min-height:0;max-height:min(319px,calc(100dvh - 62px),calc(var(--radix-popover-content-available-height,100dvh) - 42px));overscroll-behavior:contain;scrollbar-width:thin}

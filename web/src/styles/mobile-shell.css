@@ -105,6 +105,7 @@
 
 .phone-menu-overlay { position: fixed; inset: 0; z-index: 1200; background: transparent; }
 .phone-menu-surface[data-phone-popover] {
+  box-sizing: content-box;
   position: fixed;
   top: var(--phone-menu-top);
   left: 16px;
