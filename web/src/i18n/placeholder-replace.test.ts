@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
@@ -35,8 +35,9 @@ function unsafePlaceholderReplacements(file: string) {
 }
 
 describe('placeholder replacement', () => {
-  it('never lets a replacement value expand $ patterns', () => {
-    expect(sources(SRC).flatMap(unsafePlaceholderReplacements)).toEqual([])
+  // Give each source its own case so the full AST scan does not share one test deadline.
+  it.each(sources(SRC).map(file => relative(SRC, file)))('never lets a replacement value expand $ patterns in %s', file => {
+    expect(unsafePlaceholderReplacements(join(SRC, file))).toEqual([])
   })
 
   it('keeps `$&` in a name when a replacer function fills the placeholder', () => {

@@ -1,5 +1,27 @@
 # CI guard delivery
 
+## Continuation: run 41777655254
+
+Commit `879483f8` added a TypeScript AST check for unsafe translation placeholder replacements. Run [41777655254](https://github.com/leozhengliu-pixel/flow/actions/runs/41777655254) exceeded the 15-second test deadline in the critical and whole-source coverage jobs because one test synchronously parsed all 1,305 non-test source files. The unchanged test passed locally under coverage, but spent about 11.5 seconds in that single case, consistent with the timing failure under CI load.
+
+The check now uses one case per source file, retaining the same source discovery, AST traversal, unsafe-replacement detection and empty-results assertion. No assertion, source file, timeout or retry was removed or relaxed. Failures identify the affected source in the test title. The accompanying phone toolbar failure was already corrected on main by `055ab0e9`, after `11c00893` intentionally made the Display dot conditional on modified options.
+
+Changed files are `web/src/i18n/placeholder-replace.test.ts`, `CHANGELOG.md` and this report. There are no product or UI changes, so browser screenshots and a UI state matrix do not apply.
+
+Validation uses Node 24.7.0 and `~/.flow-local/heavy.sh`, from `web/`:
+
+| Command | Result |
+| --- | --- |
+| `npm ci` | Exit 0; no dependency changes |
+| `npx vitest run --maxWorkers=2 src/i18n/placeholder-replace.test.ts --coverage` with the targeted coverage options below | Exit 0 before and after the correction; 2 baseline cases, 1,306 corrected cases |
+| `npm run typecheck` | Exit 0 |
+| `npm run lint` | Exit 0; full command, including every architecture, token and motion check |
+| `git diff --check` (repository root) | Exit 0 |
+
+The targeted coverage command sets `--coverage.thresholds.branches=0 --coverage.thresholds.functions=0 --coverage.thresholds.lines=0 --coverage.thresholds.statements=0` because this static check does not exercise the unrelated product modules included by the repository-wide coverage floors. Repository configuration and CI floors are unchanged. Reports are directed to `/tmp/codex-ci-guard/placeholder-{baseline,fixed}-coverage`. The corrected run additionally uses `--reporter=json --outputFile=/tmp/codex-ci-guard/placeholder-fixed.json`; all 1,306 cases passed, the maximum case duration was 383 ms, and no case took over one second. Total scan time was about 11.2 seconds.
+
+Logs are `/tmp/codex-ci-guard/{npm-ci-placeholder,placeholder-baseline,placeholder-fixed,typecheck-placeholder,lint-placeholder}.log`. No Go, REST, schema or browser spec changed; Go checks, generation and browser runs are not applicable. Only the affected test file was run, not the full unit suite.
+
 ## Continuation: runs 41755652456 and 41761872413
 
 The resumed worktree contained five modified files and no unpublished commits. The earlier delivery below, commit `1eefe567`, was already on main and was retained. This continuation finishes the inherited corrections rather than repeating that fix. The worktree was updated from `cb8578f9` to `11c00893` before final validation; both changelog entries were preserved.
