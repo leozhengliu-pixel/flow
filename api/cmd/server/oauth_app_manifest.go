@@ -373,7 +373,7 @@ func (s *server) validateOAuthAppManifest(w http.ResponseWriter, r *http.Request
 // POST /api/oauth-applications/manifest creates an application from a manifest.
 func (s *server) createOAuthApplicationFromManifest(w http.ResponseWriter, r *http.Request) {
 	manifest, scopes, resourceTypes, ok := s.readOAuthAppManifest(w, r)
-	if !ok {
+	if !ok || !s.checkManifestIcon(w, r, manifest, "") {
 		return
 	}
 	clientID, idErr := randomSecret("flow_client_")
@@ -400,6 +400,19 @@ func (s *server) createOAuthApplicationFromManifest(w http.ResponseWriter, r *ht
 	}
 	s.auditAPIKeyCredential(r, "client_secret_issued", created)
 	s.respondManifestApplication(w, r, http.StatusCreated, created, manifestWebhookSecret(manifest))
+}
+
+// checkManifestIcon refuses a manifest icon this workspace did not upload
+// (see checkOAuthAppIconOwner) for application appID ("" when creating).
+func (s *server) checkManifestIcon(w http.ResponseWriter, r *http.Request, m oauthAppManifest, appID string) bool {
+	if m.Display == nil {
+		return true
+	}
+	if err := s.checkOAuthAppLogoInput(r, &m.Display.IconURL, appID); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Invalid OAuth application manifest", "issues": []oauthAppManifestIssue{{Path: "display.iconUrl", Message: err.Error()}}})
+		return false
+	}
+	return true
 }
 
 // manifestWebhookSecret is the signing secret the settings form generated, if any.
@@ -440,7 +453,7 @@ func (s *server) respondManifestApplication(w http.ResponseWriter, r *http.Reque
 // configuration. Client ID and secret are kept.
 func (s *server) updateOAuthApplicationFromManifest(w http.ResponseWriter, r *http.Request) {
 	manifest, scopes, resourceTypes, ok := s.readOAuthAppManifest(w, r)
-	if !ok {
+	if !ok || !s.checkManifestIcon(w, r, manifest, r.PathValue("id")) {
 		return
 	}
 	id := r.PathValue("id")

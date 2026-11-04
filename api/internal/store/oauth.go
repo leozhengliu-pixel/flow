@@ -190,6 +190,30 @@ func (s *SQLiteStore) OAuthApplicationClient(clientID string) (domain.OAuthClien
 	return domain.OAuthClient{}, false
 }
 
+// OAuthApplicationLogoRef is an OAuth application whose logo is a given URL,
+// with the workspace that registered it.
+type OAuthApplicationLogoRef struct {
+	WorkspaceKey string
+	Application  domain.OAuthApplication
+}
+
+// OAuthApplicationsWithLogo lists the registered applications whose logo is
+// logoURL (an uploaded application icon is shared by no other record).
+func (s *SQLiteStore) OAuthApplicationsWithLogo(logoURL string) []OAuthApplicationLogoRef {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	refs := []OAuthApplicationLogoRef{}
+	for workspace, data := range s.workspaces {
+		for _, app := range data.OAuthApplications {
+			if app.LogoURL == logoURL {
+				app.ClientSecret = ""
+				refs = append(refs, OAuthApplicationLogoRef{WorkspaceKey: workspace, Application: app})
+			}
+		}
+	}
+	return refs
+}
+
 func (s *SQLiteStore) CreateOAuthAuthorizationCode(ctx context.Context, code string, grant domain.OAuthAuthorizationCode) error {
 	raw, err := json.Marshal(grant)
 	if err != nil {

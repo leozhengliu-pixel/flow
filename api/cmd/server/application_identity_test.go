@@ -14,7 +14,9 @@ import (
 func TestOAuthApplicationEditUpdatesItsAgentIdentity(t *testing.T) {
 	s, host, admin, data := applicationHTTPFixture(t)
 	workspace := data.Workspace.URLKey
-	app := authRequest[domain.OAuthApplication](t, admin, "POST", host.URL+"/api/oauth-applications", map[string]any{"name": "Old agent", "logoUrl": "/uploads/oauth_app_icon_old.png", "scopes": domain.ApplicationScopes()}, workspace, 201)
+	oldIcon := uploadOAuthAppIconFile(t, admin, host.URL, workspace, "old.svg", []byte(safeOAuthAppIconSVG), 201)
+	newIcon := uploadOAuthAppIconFile(t, admin, host.URL, workspace, "new.png", oauthAppIconRaster(t, "png"), 201)
+	app := authRequest[domain.OAuthApplication](t, admin, "POST", host.URL+"/api/oauth-applications", map[string]any{"name": "Old agent", "logoUrl": oldIcon, "scopes": domain.ApplicationScopes()}, workspace, 201)
 	token := authRequest[struct {
 		Token   string `json:"access_token"`
 		Subject string `json:"subject_user_id"`
@@ -24,11 +26,11 @@ func TestOAuthApplicationEditUpdatesItsAgentIdentity(t *testing.T) {
 	bearerJSON(t, "POST", host.URL+"/api/issue-records/"+issue.ID+"/comments", token.Token, map[string]any{"body": "On it"}, 201)
 	bearerJSON(t, "PATCH", host.URL+"/api/issue-records/"+issue.ID, token.Token, map[string]any{"priority": 2}, 200)
 
-	authRequest[domain.OAuthApplication](t, admin, "PATCH", host.URL+"/api/oauth-applications/"+app.ID, map[string]any{"name": "New agent", "logoUrl": "/uploads/oauth_app_icon_new.png"}, workspace, 200)
+	authRequest[domain.OAuthApplication](t, admin, "PATCH", host.URL+"/api/oauth-applications/"+app.ID, map[string]any{"name": "New agent", "logoUrl": newIcon}, workspace, 200)
 
 	check := func(where string, user domain.User) {
 		t.Helper()
-		if user.ID != appUser || user.Name != "New agent" || user.DisplayName != "New agent" || user.AvatarURL != "/uploads/oauth_app_icon_new.png" {
+		if user.ID != appUser || user.Name != "New agent" || user.DisplayName != "New agent" || user.AvatarURL != newIcon {
 			t.Fatalf("%s = %+v", where, user)
 		}
 	}
@@ -70,7 +72,7 @@ func TestOAuthApplicationEditUpdatesItsAgentIdentity(t *testing.T) {
 		}
 		installations := authRequest[[]domain.ApplicationInstallation](t, admin, "GET", host.URL+"/api/application-installations", nil, workspace, 200)
 		for _, installation := range installations {
-			if installation.UserID == appUser && (installation.Name != "New agent" || installation.AvatarURL != "/uploads/oauth_app_icon_new.png") {
+			if installation.UserID == appUser && (installation.Name != "New agent" || installation.AvatarURL != newIcon) {
 				t.Fatalf("installation = %+v", installation)
 			}
 		}
@@ -85,7 +87,7 @@ func TestOAuthApplicationEditUpdatesItsAgentIdentity(t *testing.T) {
 	// An app user left stale by an earlier edit is repaired at startup.
 	if _, err := s.store.InstallApplication(t.Context(), workspace, func() domain.ApplicationInstallation {
 		installation, _ := s.store.ApplicationByUser(t.Context(), appUser)
-		installation.Name, installation.AvatarURL, installation.InstalledBy = "Stale agent", "/uploads/oauth_app_icon_old.png", data.Viewer.ID
+		installation.Name, installation.AvatarURL, installation.InstalledBy = "Stale agent", oldIcon, data.Viewer.ID
 		return installation
 	}(), ""); err != nil {
 		t.Fatal(err)

@@ -30,6 +30,11 @@ const (
 	FileUploadAttaching = "attaching"
 )
 
+// FileUploadPurposeOAuthAppIcon marks an OAuth application icon stored by
+// POST /api/oauth-applications/icon: the row records the workspace and admin
+// that own the object.
+const FileUploadPurposeOAuthAppIcon = "oauth_app_icon"
+
 type FileUpload struct {
 	ID           string // sha256 of the upload token
 	WorkspaceKey string
@@ -128,6 +133,18 @@ func (s *SQLiteStore) CreateFileUpload(ctx context.Context, upload FileUpload, q
 	return err
 }
 
+// RecordStoredUpload records an object the server stored itself (there is no
+// upload token to finish): the row is completed, so it keeps the object's
+// owner for as long as the object exists.
+func (s *SQLiteStore) RecordStoredUpload(ctx context.Context, upload FileUpload, now time.Time) error {
+	if upload.ID == "" || len(upload.ObjectKey) > 191 || utf8.RuneCountInString(upload.Filename) > 512 || utf8.RuneCountInString(upload.ContentType) > 255 || len(upload.Purpose) > 255 {
+		return fmt.Errorf("upload metadata exceeds limit")
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO file_uploads(`+fileUploadColumns+`,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		upload.ID, upload.WorkspaceKey, upload.UserID, upload.ObjectKey, upload.Filename, upload.ContentType, upload.ActualSize, upload.ActualSize, upload.Purpose, "", "", FileUploadCompleted, formatUploadTime(upload.ExpiresAt), formatUploadTime(now), formatUploadTime(now))
+	return err
+}
+
 func (s *SQLiteStore) FileUpload(ctx context.Context, id string) (FileUpload, error) {
 	upload, err := scanFileUpload(s.db.QueryRowContext(ctx, `SELECT `+fileUploadColumns+` FROM file_uploads WHERE id=?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -215,9 +232,10 @@ func (s *SQLiteStore) DeleteFileUpload(ctx context.Context, id string) error {
 
 // ExpiredFileUploads lists uploads whose token expired: pending ones (no
 // object) and attachment uploads that were never attached (orphan objects).
-// REST asset uploads stay once completed because Markdown may reference them.
+// REST asset uploads stay once completed because Markdown may reference them,
+// and OAuth application icons stay because application logos reference them.
 func (s *SQLiteStore) ExpiredFileUploads(ctx context.Context, now time.Time, limit int) ([]FileUpload, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+fileUploadColumns+` FROM file_uploads WHERE expires_at<=? AND (status IN ('pending','uploading') OR status='completed' AND purpose<>'asset') ORDER BY expires_at LIMIT ?`, formatUploadTime(now.Add(-time.Minute)), min(max(limit, 1), 256))
+	rows, err := s.db.QueryContext(ctx, `SELECT `+fileUploadColumns+` FROM file_uploads WHERE expires_at<=? AND (status IN ('pending','uploading') OR status='completed' AND purpose NOT IN ('asset',?)) ORDER BY expires_at LIMIT ?`, formatUploadTime(now.Add(-time.Minute)), FileUploadPurposeOAuthAppIcon, min(max(limit, 1), 256))
 	if err != nil {
 		return nil, err
 	}

@@ -253,13 +253,24 @@ func (s *server) cleanupFileUploads(ctx context.Context) {
 }
 
 // serveUploadOrAsset serves REST-uploaded assets to the uploader and to the
-// active members of the upload's workspace, then falls back to the existing
-// attachment visibility rules.
+// active members of the upload's workspace, OAuth application icons to the
+// people who see the application (oauthAppIconReadable), then falls back to
+// the existing attachment visibility rules.
 func (s *server) serveUploadOrAsset(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if strings.HasPrefix(name, "asset_") && filepath.Base(name) == name {
 		if upload, err := s.store.FileUploadByObject(r.Context(), name); err == nil && upload.Purpose == "asset" && (s.authDisabled || s.assetReadable(r, upload)) {
 			s.writeStoredObject(w, r, name)
+			return
+		}
+	}
+	if name != "" && filepath.Base(name) == name {
+		if icon, ok := s.resolveOAuthAppIcon(r.Context(), name); ok {
+			if !s.authDisabled && !s.oauthAppIconReadable(r.Context(), icon, authUser(r).ID) {
+				http.NotFound(w, r)
+				return
+			}
+			s.serveOAuthAppIcon(w, r, icon)
 			return
 		}
 	}
@@ -423,6 +434,9 @@ func (s *server) fileReadable(r *http.Request, name string) bool {
 	}
 	if upload, err := s.store.FileUploadByObject(r.Context(), name); err == nil && upload.Purpose == "asset" && s.assetReadable(r, upload) {
 		return true
+	}
+	if icon, ok := s.resolveOAuthAppIcon(r.Context(), name); ok {
+		return s.oauthAppIconReadable(r.Context(), icon, authUser(r).ID)
 	}
 	user := authUser(r)
 	account, err := s.store.AccountForUser(r.Context(), user.ID)

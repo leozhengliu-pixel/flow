@@ -481,7 +481,18 @@ Flow's settings pages:
   deletes (type the name to confirm) or opens the application in the
   workspace. The icon picker uploads to `POST /api/oauth-applications/icon`;
   the returned `/uploads/oauth_app_icon_…` URL is accepted as
-  `display.iconUrl`.
+  `display.iconUrl` (or `logoUrl`) by applications of the workspace that
+  uploaded it. `GET` on that URL needs a signed-in session or token: the
+  uploading admin and the workspace's admins can read it, and once an
+  application uses it, so can the active members of the application's
+  workspace and of every workspace that installed it. A public application's
+  icon is readable by any signed-in account, because its consent screen is
+  shown to users of any workspace; anonymous requests get `401`, as the
+  consent screen asks them to sign in first. Icons are served inline with
+  the type validated at upload (`image/png`, `image/jpeg`, `image/webp` or a
+  sanitized `image/svg+xml`), `X-Content-Type-Options: nosniff`, a
+  `default-src 'none'; sandbox` Content-Security-Policy and
+  `Cross-Origin-Resource-Policy: same-origin`.
 - **Settings › Applications** lists every application members authorized
   ("Authorized by N members") or installed as an app user. Admins load it from
   `GET /api/oauth/authorized-applications`, which includes every member's

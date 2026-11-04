@@ -1652,6 +1652,10 @@ func (s *server) createOAuthApplication(w http.ResponseWriter, r *http.Request) 
 		writeError(w, 400, err.Error())
 		return
 	}
+	if err := s.checkOAuthAppLogoInput(r, input.LogoURL, ""); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
 	clientID, _ := randomSecret("flow_client_")
 	secret, _ := randomSecret("flow_secret_")
 	actor := requestActor(s, r)
@@ -1719,6 +1723,10 @@ func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	id := r.PathValue("id")
+	if err := s.checkOAuthAppLogoInput(r, input.LogoURL, id); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
 	var updated domain.OAuthApplication
 	changed := false
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_application.updated", id, input, func(data *domain.Bootstrap) error {
