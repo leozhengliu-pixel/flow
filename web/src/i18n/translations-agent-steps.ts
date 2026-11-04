@@ -237,6 +237,8 @@ export const agentStepsZhCN: Record<string, string> = {
   "subject:agent sessions": "Agent 会话",
   "subject:comment": "评论",
   "subject:comments": "评论",
+  "subject:comment actions": "评论建议操作",
+  "subject:comment action": "评论建议操作",
   "subject:milestone": "里程碑",
   "subject:milestones": "里程碑",
   "subject:team": "团队",

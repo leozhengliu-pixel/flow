@@ -575,6 +575,12 @@ Clients that support OAuth discover Flow's authorization server
 send an API key or OAuth access token as a bearer token. Tokens with only the
 `read` scope see read tools.
 
+The read/write inventory contains 98 tools, including `list_comment_actions`
+(read; `issueId`) and `resolve_comment_action` (write; `issueId`, `id`, and
+`status`: `accepted` or `dismissed`). Both enforce issue permissions and personal
+suggestion settings; resolution applies an accepted proposal at most once.
+See [suggested actions on comments](comment-actions.md) for lifecycle details.
+
 | Client | Setup |
 | --- | --- |
 | Claude Code | `claude mcp add --transport http flow $FLOW_BASE_URL/mcp` (add `--header "Authorization: Bearer $FLOW_API_KEY"` to skip OAuth) |

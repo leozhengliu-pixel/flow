@@ -19,7 +19,7 @@ import (
 
 // agentChatCoreTools are offered on every chat turn, in this order (a stable prefix keeps prompt caching warm).
 var agentChatCoreTools = []string{
-	"search_issues", "get_issue", "list_issues", "list_comments", "list_issue_history",
+	"search_issues", "get_issue", "list_issues", "list_comments", "list_comment_actions", "list_issue_history",
 	"get_project", "list_projects", "list_project_activity", "get_status_updates", "list_milestones",
 	"search_documents", "get_document", "list_documents",
 	"list_users", "get_user", "list_teams", "get_team", "list_cycles", "list_issue_statuses", "get_issue_status", "list_issue_labels",
@@ -40,8 +40,8 @@ var agentChangeIntent = regexp.MustCompile(`(?i)改|设置|设为|设成|调成|
 
 // agentToolGroups are the optional chat tool groups, in the order they are appended after the core tools.
 var agentToolGroups = []agentToolGroup{
-	{Name: "issue_changes", Summary: "create, edit, comment on, triage, delete issues; reactions, subscriptions, reminders, drafts", NeedsChange: true,
-		Tools:  []string{"save_issue", "save_comment", "delete_comment", "triage_issue", "delete_issue", "save_reaction", "save_subscription", "create_reminder", "create_issue_label", "save_draft", "delete_attachment", "save_attachment"},
+	{Name: "issue_changes", Summary: "create, edit, comment on, triage, delete issues; accept or dismiss comment actions; reactions, subscriptions, reminders, drafts", NeedsChange: true,
+		Tools:  []string{"save_issue", "save_comment", "delete_comment", "resolve_comment_action", "triage_issue", "delete_issue", "save_reaction", "save_subscription", "create_reminder", "create_issue_label", "save_draft", "delete_attachment", "save_attachment"},
 		Intent: regexp.MustCompile(`.`)},
 	{Name: "project_changes", Summary: "create, edit, or delete projects and initiatives; milestones, status updates, and cycle names, descriptions and links", NeedsChange: true,
 		Tools:  []string{"save_project", "save_milestone", "save_status_update", "save_initiative", "create_initiative_label", "list_project_labels", "list_initiative_labels", "delete_project", "delete_initiative", "save_cycle"},

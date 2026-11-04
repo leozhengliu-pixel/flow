@@ -224,6 +224,32 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 	call("list_agent_sessions", map[string]any{"issueId": issue})
 	call("get_agent_session", map[string]any{"id": "mention_sdk"})
 	call("archive_agent_session", map[string]any{"id": "mention_sdk"})
+	// Comment actions: read a persisted proposal, then accept it through the SDK.
+	proposalIssue := created["id"].(string)
+	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.contract", proposalIssue, nil, func(d *domain.Bootstrap) error {
+		settings := d.UserSettings[d.Viewer.ID]
+		settings.AgentEnabled = true
+		d.UserSettings[d.Viewer.ID] = settings
+		priority := 1
+		d.Comments[proposalIssue] = append(d.Comments[proposalIssue], domain.Comment{ID: "sdk-action-comment", Body: "Please make this urgent.", User: d.Viewer, Version: 1, CreatedAt: time.Now().UTC()})
+		d.CommentActions = append(d.CommentActions, domain.CommentAction{ID: "sdk-action", IssueID: proposalIssue, CommentID: "sdk-action-comment", CommentVersion: 1, TargetUserID: d.Viewer.ID, Status: "pending", Action: "priority", Arguments: domain.CommentActionArguments{Priority: &priority}, CreatedAt: time.Now().UTC()})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	f.service.agent.Enabled, f.service.agent.ToolsEnabled, f.service.agent.WriteTools = true, true, true
+	proposals := object("list_comment_actions", map[string]any{"issueId": proposalIssue})
+	items := proposals["items"].([]any)
+	if len(items) != 1 || items[0].(map[string]any)["id"] != "sdk-action" {
+		t.Fatalf("SDK comment proposals: %v", proposals)
+	}
+	var resolved domain.CommentActionResult
+	if err := jsonClone(object("resolve_comment_action", map[string]any{"issueId": proposalIssue, "id": "sdk-action", "status": "accepted"}), &resolved); err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Suggestion.Status != "accepted" || resolved.Suggestion.ResolvedBy != f.data.Viewer.ID || resolved.Issue.Priority != 1 {
+		t.Fatalf("SDK comment action acceptance: %+v", resolved)
+	}
 	listed, err := session.ListTools(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)

@@ -8,6 +8,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 - Keep browser checks aligned with the shared desktop toolbar palette, Auto-closed filter inventory and composer position, using an isolated workspace for shell commands.
+- Offer comment action tools in Agent chat, translate their Chinese step subjects, and synchronize the web tool fixture and exact MCP inventory contracts.
 - Finish closing the desktop workspace menu and return focus even when an exit animation completion event is lost, preserving its divider and row spacing.
 - Restore shared phone picker content widths and consistent search/list insets while preserving Team filter row sizing.
 - Cover the MCP count filter tree with a matching team predicate in the schema fast-path check.

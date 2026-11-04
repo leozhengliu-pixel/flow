@@ -102,6 +102,8 @@ func TestAgentChatToolsetPicksToolsForTheRequest(t *testing.T) {
 	}
 	// Deletes and customer writes come with their groups (Chinese and English requests).
 	for request, want := range map[string][]string{
+		"Accept the suggested comment action":         {"list_comment_actions", "resolve_comment_action"},
+		"接受评论建议":                                      {"list_comment_actions", "resolve_comment_action"},
 		"把项目 QA fix – Roadmap 删掉":                     {"delete_project", "delete_initiative", "save_cycle"},
 		"删除目标 QA fix – Goals":                         {"delete_initiative"},
 		"Delete the view QA fix – Board":              {"delete_view"},

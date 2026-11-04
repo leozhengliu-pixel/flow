@@ -218,8 +218,14 @@ func TestMCPRealSDKConnectsAndCallsTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listed.Tools) != 96 {
+	// New tools must update this exact count, their named assertions, and docs/api.md.
+	if len(listed.Tools) != 98 {
 		t.Fatalf("inventory changed: %d", len(listed.Tools))
+	}
+	for _, name := range []string{"list_comment_actions", "resolve_comment_action"} {
+		if !slices.ContainsFunc(listed.Tools, func(tool *mcp.Tool) bool { return tool.Name == name }) {
+			t.Errorf("SDK inventory missing %s", name)
+		}
 	}
 	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "get_workspace", Arguments: map[string]any{}})
 	if err != nil || result.IsError {
