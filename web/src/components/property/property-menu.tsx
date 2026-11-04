@@ -22,6 +22,7 @@ import { TooltipBody } from '@/components/ui/tooltip'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { PhoneMenu } from '@/components/ui/phone-menu'
+import { usePhoneSheetRecord } from './phone-sheet-context'
 
 export interface PropertyOption {
   searchOnly?: boolean
@@ -119,6 +120,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
 }) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
+  const sheetRecord = usePhoneSheetRecord()
   const directory = usePeopleDirectory()
   const menuOptions = useMemo(() => options.map(option => {
     const person = option.person ?? (isPeopleProperty(label) && option.id && !option.id.startsWith('__') && !['*','me','none','all'].includes(option.id) ? directoryPerson(directory.users, option.id) ?? { id: option.id, label: option.label } : undefined)
@@ -182,6 +184,9 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     command.onKeyDown(event)
   }
   const placeholder = searchPlaceholder ?? (kind === 'labels' ? 'Change or add labels…' : kind === 'project' ? 'Add to project…' : `Change ${label.toLowerCase()}…`)
+  // The sheet's title is the search prompt without its ellipsis, translated whole when the prompt has an entry ("Set priority to…").
+  const translatedPlaceholder = t(placeholder)
+  const sheetLabel = (translatedPlaceholder === placeholder ? t(placeholder.replace(/…$/, '')) : translatedPlaceholder).replace(/…$/, '')
   const triggerButton = <button type="button" data-property={label.toLowerCase()} data-empty={selected.every(id => !id)} role={triggerRole === 'combobox' ? 'combobox' : undefined} className={triggerClassName ?? (compact ? 'mini-property-trigger' : 'property-row')} aria-label={ariaLabel ?? `Change ${label}. Current value is ${value || 'none'}`} aria-haspopup="dialog" aria-expanded={open} data-state={open ? 'open' : 'closed'}>
         {trigger ?? (compact ? <>{icon ?? iconFor(label)}<span data-i18n-ignore={valueIsEntityName || undefined}>{value || label}</span></> : <><span>{icon ?? iconFor(label)}</span><span className="property-label">{label}</span><span className="property-value" data-i18n-ignore={valueIsEntityName || undefined}>{value || `Add ${label.toLowerCase()}`}</span></>)}
       </button>
@@ -209,7 +214,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   if (phone) return <>{customTrigger
     ? customTrigger({ open, activeTrigger, openMenu: triggerId => { setActiveTrigger(triggerId); setOpen(true) } })
     : <span className="phone-property-trigger" onClick={() => setOpen(true)}>{triggerButton}</span>}
-    <PhoneMenu heading={menuContext ? t(menuContext) : true} open={open} onOpenChange={setOpen} label={t(placeholder.replace(/…$/, ''))} className={`property-command-surface property-command-${kind}${phoneSurfaceClassName ? ` ${phoneSurfaceClassName}` : ''}`}>
+    <PhoneMenu heading={menuContext ? t(menuContext) : sheetRecord ? <><span className="phone-menu-context-key">{sheetRecord.key} ⋅</span> {sheetRecord.title}</> : true} open={open} onOpenChange={setOpen} label={sheetLabel} className={`property-command-surface property-command-${kind}${phoneSurfaceClassName ? ` ${phoneSurfaceClassName}` : ''}`}>
       {content}
     </PhoneMenu>
   </>

@@ -4,6 +4,8 @@ import type { ActivityEvent, ProjectSummary, User, WorkspaceMember, WorkflowStat
 import { NoAssigneeIcon, PriorityIcon, StatusIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
 import { TRIAGE_STATUS } from '@/components/triage/triage-model'
 import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
+import { ComposerStatusGlyph } from '@/components/create-issue/composer-status-glyph'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { AssigneeHoverPreview, PropertyShortcutTooltip, StatusHoverPreview } from '@/components/property/issue-property-hover'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
@@ -24,8 +26,10 @@ import './issue-assignee-menu.css'
 
 /** `triage` shows the reference app's orange "Triage" status for an issue still in the team's triage queue. */
 export function StatusPicker({ value, states, onChange, hoverHistory, triage = false }: { value: WorkflowState; states: WorkflowState[]; onChange: (id: string) => void | Promise<void>; hoverHistory?: { activities: ActivityEvent[]; issueCreatedAt: string; triagedAt?: string | null }; triage?: boolean }) {
+  const phone = usePhoneLayout()
   const displayName = triage ? TRIAGE_STATUS.name : value.name
-  const options = [...states].sort((left,right)=>(left.position??0)-(right.position??0)).map((state, index) => ({ id: state.id, label: state.name, icon: <StatusIcon state={state}/>, shortcut: String(index + 1) }))
+  // The phone sheet lists the reference's static command-menu glyphs, as the composer's status sheet does.
+  const options = [...states].sort((left,right)=>(left.position??0)-(right.position??0)).map((state, index) => ({ id: state.id, label: state.name, icon: phone ? <ComposerStatusGlyph state={state}/> : <StatusIcon state={state}/>, shortcut: String(index + 1) }))
   return <div className="core-property-picker"><PropertyMenu
     label="Status"
     value={displayName}
@@ -327,6 +331,7 @@ export function IssueAssigneeMenu({ people, assignee, delegate, viewerId, trigge
     hoverContent={hoverContent}
     hoverPlacement={hoverPlacement}
     label="Assignee"
+    menuContext="Assigned users"
     onChange={choose}
     options={options}
     searchPlaceholder={t('Assign to…')}

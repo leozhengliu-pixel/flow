@@ -8,9 +8,12 @@ import { PropertyMenu } from '@/components/property/property-menu'
 import { LabelHoverPreview } from '@/components/property/label-hover-preview'
 import { PropertyShortcutTooltip } from '@/components/property/issue-property-hover'
 import { useI18n } from '@/i18n/i18n'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import { formatCycleDay } from '@/components/cycles/cycle-model'
 
 export function LabelPicker({ value, labels, labelGroups = [], emptyLabel, onToggle, onCreate, inline = false, searchShortcut, showGroupHeadings, surfaceClassName, summary = false, side = 'bottom', align = 'start', alignOffset = 0 }: { value: IssueLabel[]; labels: IssueLabel[]; labelGroups?: LabelGroup[]; emptyLabel?: string; onToggle: (id: string) => void | Promise<void>; onCreate?: (name: string, groupId?: string) => void | Promise<void>; inline?: boolean; searchShortcut?: string; showGroupHeadings?: boolean; surfaceClassName?: string; summary?: boolean; side?: 'top' | 'right' | 'bottom' | 'left'; align?: 'start' | 'center' | 'end'; alignOffset?: number }) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const groupNames = new Map(labelGroups.map(group => [group.id, group.name]))
   const groupColors = new Map(labelGroups.map(group => [group.id, group.color]))
   const options = labels.map(label => { const groupLabel = label.groupId ? groupNames.get(label.groupId) : undefined; return { id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel, groupColor: label.groupId ? groupColors.get(label.groupId) : undefined, keywords: groupLabel } })
@@ -26,6 +29,7 @@ export function LabelPicker({ value, labels, labelGroups = [], emptyLabel, onTog
       searchPlaceholder={value.length ? 'Change or add labels…' : 'Add labels…'}
       searchShortcut={searchShortcut ?? 'L'}
       showGroupHeadings={showGroupHeadings}
+      groupHeading={phone ? 'Workspace labels' : undefined}
       surfaceClassName={surfaceClassName}
       side={side}
       align={align}
@@ -69,7 +73,11 @@ export function CyclePicker({ valueId, cycles, issues = [], teamId, onChange }: 
   const available = cycles.filter(cycle => cycle.teamId === teamId && cycle.status !== 'completed')
   const value = cycles.find(cycle => cycle.id === valueId)
   const nextUpcomingId = [...available].filter(cycle => cycle.status === 'upcoming').sort((left, right) => left.startsAt.localeCompare(right.startsAt))[0]?.id
-  const options = [{ id: '', label: 'No cycle', shortcut: '0', icon: <CycleIcon noCycle/> }, ...available.map(cycle => ({ id: cycle.id, label: cycle.name, icon: <CycleIcon cycle={cycle} nextUpcomingId={nextUpcomingId} progress={cycleProgress(issues,cycle.id)}/>, i18nIgnore: true }))]
+  const { t, formatDate } = useI18n()
+  const phone = usePhoneLayout()
+  // The phone sheet names each cycle's dates and state after its name ("Oct 28 - Nov 15 ・ Current").
+  const subtitle = (cycle: Cycle) => `${formatCycleDay(cycle.startsAt, formatDate).label} - ${formatCycleDay(cycle.endsAt, formatDate).label} ・ ${t(cycle.status === 'current' ? 'Current' : 'Upcoming')}`
+  const options = [{ id: '', label: 'No cycle', shortcut: '0', icon: <CycleIcon noCycle/> }, ...available.map(cycle => ({ id: cycle.id, label: cycle.name, icon: <CycleIcon cycle={cycle} nextUpcomingId={nextUpcomingId} progress={cycleProgress(issues,cycle.id)}/>, i18nIgnore: true, ...(phone ? { labelContent: <span className="property-command-label-with-subtitle"><span>{cycle.name}</span><span className="property-command-subtitle">{subtitle(cycle)}</span></span> } : {}) }))]
   return <div className="label-project-picker cycle-picker"><PropertyMenu label="Cycle" value={value?.name ?? 'Add to cycle'} valueIsEntityName={Boolean(value)} selectedId={valueId ?? ''} options={options} searchPlaceholder={value ? 'Move to cycle…' : 'Add to cycle…'} searchShortcut="⇧ C" ariaLabel={value ? `Change cycle. Current cycle is ${value.name}` : 'Add to cycle'} triggerClassName="label-project-trigger" trigger={<><CycleIcon cycle={value} nextUpcomingId={nextUpcomingId} progress={value?cycleProgress(issues,value.id):0}/><span data-i18n-ignore={value ? true : undefined}>{value?.name ?? 'Add to cycle'}</span></>} onChange={onChange}/></div>
 }
 

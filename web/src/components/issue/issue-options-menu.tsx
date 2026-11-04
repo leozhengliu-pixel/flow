@@ -28,6 +28,7 @@ import { Fragment, createRef, useCallback, useEffect, useMemo, useRef, useState,
 import { toast } from '@/lib/toast'
 
 import { DueDateCommand } from '@/components/issue/due-date-picker'
+import { cycleDueDateOptions } from '@/components/issue/due-date-utils'
 import { FlowFavoriteFilledIcon, FlowFavoriteIcon, FlowOptionsIcon, FlowWorkIcon } from '@/components/issue/flow-header-icons'
 import { CalendarIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { ReleasesIcon } from '@/components/releases/release-icons'
@@ -214,12 +215,9 @@ export function IssueOptionsMenu({
     }
   }, [busy, closeMenu])
   const subscribed = Boolean(data?.viewer.id && issue.subscriberIds.includes(data.viewer.id))
-  const cycles = data?.cycles.filter(cycle => cycle.teamId === issue.team.id).sort((a,b) => a.startsAt.localeCompare(b.startsAt)) ?? []
   const hasReleaseSurface = Boolean(data && (data.releases.length > 0 || data.releasePipelines.length > 0))
   const nowMs = useCurrentTimeMs()
-  const currentCycle = cycles.find(cycle => new Date(cycle.startsAt).getTime() <= nowMs && new Date(cycle.endsAt).getTime() > nowMs)
-  const nextCycle = cycles.find(cycle => new Date(cycle.startsAt).getTime() > nowMs)
-  const cycleDates = [currentCycle && {label:t('End of this cycle'),value:currentCycle.endsAt.slice(0,10)},nextCycle && {label:t('End of next cycle'),value:nextCycle.endsAt.slice(0,10)}].filter((item): item is {label:string;value:string} => Boolean(item))
+  const cycleDates = cycleDueDateOptions(data?.cycles ?? [], issue.team.id, nowMs, t)
   const viewerId = data?.viewer.id
   const toggleSubscription = useCallback(() => {
     if (!viewerId) return

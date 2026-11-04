@@ -279,6 +279,28 @@ test('issue actions are touch-sized and nested actions can return', async ({ pag
   await expect(dueTrigger).toHaveCSS('font-size', '12px')
   await expect(dueTrigger).toHaveCSS('background-color', 'lch(10.149 0.689 272)')
   await expect(dueTrigger).toHaveCSS('padding', '0px 8px 0px 6px')
+  // The chip opens the shared phone sheet under the header (not a popover anchored to the chip), like the property pickers.
+  await dueTrigger.click()
+  const dueSheet = page.locator('.phone-menu-surface')
+  await expect(dueSheet).toBeVisible()
+  const viewportWidth = page.viewportSize()!.width
+  await expect.poll(async () => (await dueSheet.boundingBox())!.x, { message: 'the sheet settles 16px from the left edge' }).toBeCloseTo(16, 0)
+  expect((await dueSheet.boundingBox())!.width).toBeCloseTo(viewportWidth - 32, 0)
+  const dueRow = dueSheet.getByRole('option', { name: /^Tomorrow/ })
+  await expect(dueRow).toHaveCSS('height', '46px')
+  await expect(dueRow).toHaveCSS('font-size', '13px')
+  await expect(dueRow).toHaveCSS('font-weight', '450')
+  await page.keyboard.press('Escape')
+  await expect(dueSheet).toHaveCount(0)
+  // A property sheet names the issue in its heading chip and lists 13px/450 rows.
+  await page.locator('.issue-mobile-properties button[aria-label^="Change status"]').click()
+  const sheet = page.locator('.phone-menu-surface')
+  await expect(sheet.locator('.phone-menu-context')).toContainText(parent.identifier)
+  const sheetRow = sheet.getByRole('option').first()
+  await expect(sheetRow).toHaveCSS('font-size', '13px')
+  await expect(sheetRow).toHaveCSS('font-weight', '450')
+  await expect.poll(async () => (await sheetRow.boundingBox())?.width).toBeCloseTo(viewportWidth - 44, 0)
+  await page.keyboard.press('Escape')
   await noOverflow(page)
 })
 
