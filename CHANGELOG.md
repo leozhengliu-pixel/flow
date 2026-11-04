@@ -23,6 +23,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Protect unsaved skill edits when leaving through navigation, browser history, or a reload.
 - Open the same Edit, Use in chat, and Delete actions from a skill row's right-click and button menus.
 
+- Size the desktop issue document and property rail with the shared container grid, so their gutters and columns adapt together as the pane changes width.
 - Reset phone drawer navigation when focus returns to its pinned header, including on reopen, while preserving the hardware-keyboard skip link.
 - Wait for the label picker's opening animation before hovering its rows in the shared menu browser checks, preserving exact phone geometry assertions.
 - Match the phone issue property sheets to the shared sheet: 13px rows, a heading chip that names the issue ("Assigned users" for assignees), cycle rows with their dates and state, "Workspace labels", the static status glyphs and a due date list that opens as a sheet with the cycle ends. Also draw the not-found page with the phone header and drawer button in the interface language, send `/settings/account` to the profile, show the Documents crumb on phone team documents, fill the project details toggle while the panel is open, translate the "search" tool row and read chat history times in Chinese like every other relative time.
