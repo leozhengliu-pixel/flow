@@ -119,6 +119,12 @@
   color: var(--pk-text);
   outline: none;
 }
+.phone-menu-surface[data-phone-popover]:not(.property-command-surface) {
+  /* Direct menu content shares the command root's width, independent of rounded hairlines. */
+  display: grid;
+  grid-template-columns: calc(100vw - 32px);
+  justify-content: center;
+}
 .phone-menu-surface > [cmdk-root] { width: calc(100vw - 32px); }
 .phone-menu-search { padding: 6px 6px 0; }
 .phone-menu-surface.phone-menu-custom { max-height: calc(100dvh - var(--phone-menu-top) - 16px); overflow: visible; border: 0; background: transparent; box-shadow: none; }
