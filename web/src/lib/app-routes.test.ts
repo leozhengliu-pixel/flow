@@ -117,6 +117,9 @@ describe("application routes", () => {
       workspaceSlug: "acme",
       page: "shortcuts",
     });
+    // The bare personal-settings URL is the profile page, as in the reference app.
+    expect(parseAppRoute("/acme/settings/account")).toEqual(parseAppRoute("/acme/settings/account/profile"));
+    expect(parseAppRoute("/acme/settings/account")).toMatchObject({ kind: "settings", page: "profile" });
 
     expect(parseAppRoute("/acme/settings/asks")).toEqual({
       kind: "settings",

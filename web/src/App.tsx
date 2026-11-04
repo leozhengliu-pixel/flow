@@ -210,6 +210,7 @@ import { useRouteNavigation } from "@/hooks/use-route-navigation";
 import { usePrefilledIssueRoute } from "@/hooks/use-prefilled-issue-route";
 import { applyDocumentTitle, routeInfo } from "@/lib/route-info";
 import { useAccountLanguage, useI18n } from "@/i18n/i18n";
+import { RouteNotFound } from "@/components/layout/route-not-found";
 import {
   agentPath,
   newAgentSkillPath,
@@ -4394,6 +4395,11 @@ function App() {
       canonicalize(settingsPath(workspace, "preferences"), { replace: true });
       return;
     }
+    // The bare personal-settings URL is the profile page.
+    if (route.kind === "settings" && /\/settings\/account\/?$/.test(location.pathname)) {
+      canonicalize(settingsPath(workspace, "profile"), { replace: true });
+      return;
+    }
     // There is no workspace-wide Documents list: old links land on a team's Documents tab.
     if (route.kind === "documents") {
       navigateTo(documentsRedirectPath(data), { replace: true });
@@ -5197,6 +5203,7 @@ function App() {
         {routeScopeValid && issuePane === "loading" && <IssuePanel><LoadingContainer loading label="Loading issue"/></IssuePanel>}
         {routeScopeValid && issuePane === "not-found" && (
           <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
             title="Issue not found"
             description="This issue does not exist or is no longer available."
           />
@@ -5427,6 +5434,7 @@ function App() {
           )}
         {(page === "loops" || (page === "team-overview" && route.kind === "team-loops")) && !loopsEnabled && (
           <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
             title="Loops is unavailable"
             description="This feature is turned off for the workspace."
           />
@@ -5638,6 +5646,7 @@ function App() {
           )}
         {page === "asks" && !asksEnabled && (
           <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
             title="Asks is unavailable"
             description="This feature is turned off for the workspace."
           />
@@ -5775,6 +5784,7 @@ function App() {
         )}
         {page === "customer-detail" && customerRequestsEnabled && !selectedCustomer && workspaceValid && (
           <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
             title="Customer not found"
             description="This customer does not exist or has been deleted."
           />
@@ -5794,6 +5804,7 @@ function App() {
         )}
         {workspaceValid && !teamValid && (
           <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
             title="Team not found"
             description="This team does not exist in the current workspace."
           />
@@ -5801,6 +5812,7 @@ function App() {
         {(page === "customers" || page === "customer-detail") &&
           !customerRequestsEnabled && (
           <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
             title="Customers is unavailable"
             description="This feature is turned off for the workspace."
           />
@@ -5891,6 +5903,7 @@ function App() {
               />
             ) : (
               <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
                 title="Member not found"
                 description="This member is not available in the workspace."
               />
@@ -7083,15 +7096,17 @@ function App() {
             />
           )}
         {page === "issue-detail" && !triageIssueTeam && renderIssuePane(false)}
-        {routeScopeValid && page === "not-found" && <RouteNotFound />}
+        {routeScopeValid && page === "not-found" && <RouteNotFound onOpenSidebar={() => setMobileSidebarOpen(true)} />}
         {routeScopeValid && page === "cycle-detail" && !selectedCycle && (
           <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
             title="Cycle not found"
             description="This cycle does not exist or is no longer available."
           />
         )}
         {routeScopeValid && page === "project-detail" && !selectedProject && (
           <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
             title="Project not found"
             description="This project does not exist or is no longer available."
           />
@@ -7101,6 +7116,7 @@ function App() {
           selectedProject &&
           !selectedProjectFacetView && (
             <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
               title="Project view not found"
               description="This project view does not exist or is no longer available."
             />
@@ -7109,6 +7125,7 @@ function App() {
           page === "initiative-detail" &&
           !selectedInitiative && (
             <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
               title="Initiative not found"
               description="This initiative does not exist or is no longer available."
             />
@@ -7118,6 +7135,7 @@ function App() {
             route.kind === "team-saved-view") &&
           !selectedSavedView && (
             <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
               title="View not found"
               description="This saved view does not exist or is no longer available."
             />
@@ -7126,6 +7144,7 @@ function App() {
           isProjectsSavedRoute &&
           !selectedProjectSavedView && (
             <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
               title="Project view not found"
               description="This project view does not exist or is no longer available."
             />
@@ -7563,23 +7582,6 @@ function isProjectListRoute(route: AppRoute) {
     || route.kind === 'team-projects-new-view'
     || route.kind === 'team-projects-saved-view'
 }
-function RouteNotFound({
-  title = "Page not found",
-  description = "The requested Flow route is not available.",
-}: {
-  title?: string;
-  description?: string;
-}) {
-  return (
-    <main className="main-panel">
-      <div className="state-fill">
-        <strong>{title}</strong>
-        <span>{description}</span>
-      </div>
-    </main>
-  );
-}
-
 function MainIssuePanel({ children, ...props }: React.HTMLAttributes<HTMLElement>) {
   return <main className="main-panel issue-panel" {...props}>{children}</main>;
 }
