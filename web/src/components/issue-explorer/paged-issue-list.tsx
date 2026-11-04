@@ -2,6 +2,7 @@ import { useCallback, useEffect, useInsertionEffect, useMemo, useRef, useState, 
 import { GroupedVirtuoso, Virtuoso } from 'react-virtuoso'
 import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { listIssueRecordGroups, listIssueRecords, type IssueQueryInput } from '@/lib/api'
+import { useIdentifierColumnWidth } from '@/components/my-issues/identifier-column'
 import { MyIssuesGroupHeader, MyIssuesRow, type MyIssuesGroupData, type MyIssuesListProps } from '@/components/my-issues/my-issues-list'
 import { issueToExplorerRow } from './issue-explorer-model'
 import { nestedIssuePage, nestedPageLines } from './paged-issue-cache'
@@ -25,6 +26,9 @@ type Group = IssueListGroup
 function fetchIssuePage(query: IssueQueryInput, signal: AbortSignal) {
   return listIssueRecords(query, signal).then(page => query.nested ? nestedIssuePage(page) : page)
 }
+
+/** One loaded identifier per team key and digit count: the column is sized from these. */
+const EMPTY_IDENTIFIERS: ReadonlyMap<string, string> = new Map()
 
 export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGroupCollapsedChange, onCreateIssue, onOpenIssueRecord, onTotalChange, onLoadedIssuesChange, layout = 'list', onMoveIssueRecord, hiddenGroupIds = [], emptyGroups = [], showEmptyGroups = true, onHideGroup, onShowGroup, nestedSubIssues = false, ...rowProps }: Omit<MyIssuesListProps, 'groups' | 'onOpenIssue'> & {
   data: BootstrapData
@@ -312,13 +316,20 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
       if (!request.abort.signal.aborted) setError(String(error instanceof Error ? error.message : error))
     }
   }
-  // The identifier column fits the longest identifier loaded for this query (like the full list), and only grows
+  // The identifier column fits the widest identifier loaded for this query (like the full list), and only grows
   // while pages load so rows do not shift as the list scrolls.
-  const [identifierWidth, setIdentifierWidth] = useState({ signature, length: 6 })
-  let identifierLength = identifierWidth.signature === signature ? identifierWidth.length : 6
-  for (const issue of cache.records()) identifierLength = Math.max(identifierLength, [...issue.identifier].length)
-  if (identifierWidth.signature !== signature || identifierWidth.length !== identifierLength) setIdentifierWidth({ signature, length: identifierLength })
-  const listStyle = { '--issue-identifier-width': `${identifierLength}ch` } as CSSProperties
+  const [identifierSamples, setIdentifierSamples] = useState<{ signature: string; samples: ReadonlyMap<string, string> }>({ signature, samples: EMPTY_IDENTIFIERS })
+  let identifiers = identifierSamples.signature === signature ? identifierSamples.samples : EMPTY_IDENTIFIERS
+  let grown: Map<string, string> | undefined
+  for (const issue of cache.records()) {
+    const template = issue.identifier.replace(/\d/g, '0')
+    if ((grown ?? identifiers).has(template)) continue
+    grown ??= new Map(identifiers)
+    grown.set(template, issue.identifier)
+  }
+  if (grown || identifierSamples.signature !== signature) { identifiers = grown ?? identifiers; setIdentifierSamples({ signature, samples: identifiers }) }
+  const identifierColumn = useIdentifierColumnWidth(identifiers.values())
+  const listStyle = { '--issue-identifier-width': identifierColumn.width === undefined ? 'max-content' : `${identifierColumn.width}px` } as CSSProperties
   const offsets: number[] = []; let offset = 0
   for (const count of counts) { offsets.push(offset); offset += count }
   const renderList = (): ReactNode => {
@@ -360,7 +371,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
         <HiddenBoardColumns groups={boardGroups.filter(isHidden).map(descriptor)} onShowGroup={id => { setRevealed(current => ({ setting: showEmptyGroups, ids: [...current.ids, id] })); onShowGroup?.(id) }}/>
       </div>
     }
-    return <GroupedVirtuoso className={styles.virtualList} role="list" aria-label="Issues" style={listStyle} groupCounts={counts} context={revision} defaultItemHeight={44} increaseViewportBy={{ top: 176, bottom: 264 }}
+    return <>{identifierColumn.probe}<GroupedVirtuoso className={styles.virtualList} role="list" aria-label="Issues" style={listStyle} groupCounts={counts} context={revision} defaultItemHeight={44} increaseViewportBy={{ top: 176, bottom: 264 }}
       groupContent={index => hideGroupHeaders || hiddenGroupIds.includes(groups[index].value) ? null : <MyIssuesGroupHeader group={descriptor(groups[index])} collapsed={Boolean(collapsedGroupIds?.has(groups[index].value))} createIssueLabel="Create new issue" onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} onCollapseAll={onGroupCollapsedChange ? () => groups.forEach(group => onGroupCollapsedChange(group.value, true)) : undefined} onSelectAll={rowProps.onSelectIssue ? () => void selectGroup(groups[index]) : undefined} onHideGroup={onHideGroup ? () => onHideGroup(groups[index].value) : undefined}/>}
       itemContent={(index, groupIndex) => {
         const group = groups[groupIndex], localIndex = index - offsets[groupIndex]
@@ -370,7 +381,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
         const row = rowFor(issue, page!.items)
         openTargets.current.set(issue.id, { issue, group: group.value })
         return <><StalePageProbe stale={staleKeys.current.has(cache.key(group.value, pageIndex))} revision={revision} run={() => revalidate(group.value, pageIndex)}/><MyIssuesRow issue={row} selected={rowProps.selectedIds?.has(issue.id)} displayProperties={rowProps.displayProperties} nestedLines={nested ? nestedPageLines(page!.items).get(issue.id) : undefined} propertyOptions={rowProps.propertyOptions} mutationError={rowProps.mutationErrors?.get(issue.id)} onOpen={openRow} onPropertyChange={rowProps.onPropertyChange} onSelect={rowProps.onSelectIssue} onContextAction={rowProps.onContextAction} onRetryMutation={rowProps.onRetryMutation}/></>
-      }}/>
+      }}/></>
   }
   // While a query loads, the previous result stays (inert) and fades out after 500ms;
   // a first load is blank. Either way the loader caret shows from 1s, never text.

@@ -23,6 +23,7 @@ import { useIssueRowActions, useTeamEstimateSettings } from './use-issue-row-act
 import { EstimateChip, EstimateIcon } from '@/components/issue/estimate-icon'
 import { formatEstimatePoints, sumEstimatePoints, teamUsesEstimates } from '@/lib/estimates'
 import { useTeamStatusOptions } from './use-team-status-options'
+import { useIdentifierColumnWidth } from './identifier-column'
 import { teamWorkflowStates } from '@/lib/team-workflow'
 import { AvatarImage, UserAvatar } from '@/components/ui/user-avatar'
 import { avatarColor } from '@/components/issue/avatar-color'
@@ -254,6 +255,8 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
   }), [collapsedGroupIds, groups, hideGroupHeaders, nestedSubIssues])
   useSelectHoveredRowWithX(entries, selectedIds, onSelectIssue)
   const estimateSettingsFor = useTeamEstimateSettings()
+  const identifierColumn = useIdentifierColumnWidth(groups.flatMap(group => group.issues.map(issue => issue.identifier)))
+  const listStyle = { '--issue-identifier-width': identifierColumn.width === undefined ? 'max-content' : `${identifierColumn.width}px` } as CSSProperties
   const groupEstimate = (group: MyIssuesGroupData) => displayProperties.has('estimate') ? sumEstimatePoints(group.issues, estimateSettingsFor) : undefined
   const groupMenuActions = (group: MyIssuesGroupData): IssueGroupMenuActions => ({
     onCollapseAll: onGroupCollapsedChange ? () => groups.forEach(item => onGroupCollapsedChange(item.id, true)) : undefined,
@@ -268,7 +271,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
     : entry.kind === 'group'
     ? <div style={{ paddingBottom: !entry.collapsed && !entry.group.issues.length ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(entry.group)}/></div>
     : <div style={{ paddingBottom: entry.groupEnd ? 2 : 0 }}><MyIssuesRow issue={entry.issue} active={activeIssueId === entry.issue.id} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/></div>
-  if (entries.length > VIRTUALIZATION_THRESHOLD) return <Virtuoso
+  if (entries.length > VIRTUALIZATION_THRESHOLD) return <>{identifierColumn.probe}<Virtuoso
     className={styles.virtualList}
     role="list"
     aria-label="Issues"
@@ -279,9 +282,10 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
     increaseViewportBy={{ top: 176, bottom: 440 }}
     itemContent={(_index, entry) => renderEntry(entry)}
     endReached={() => onEndReached?.()}
-    style={{ '--issue-identifier-width': 'max-content' } as CSSProperties}
-  />
-  return <div className={styles.list} role="list" aria-label="Issues" style={{ '--issue-identifier-width': 'max-content' } as CSSProperties}>
+    style={listStyle}
+  /></>
+  return <div className={styles.list} role="list" aria-label="Issues" style={listStyle}>
+    {identifierColumn.probe}
     {groups.map((group, index) => {
       const collapsed = collapsedGroupIds.has(group.id)
       const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
@@ -507,7 +511,7 @@ export function IssueContextMenu({ editable, issue, options, onPropertyChange, o
   return <ContextMenu.Content data-flow-motion="floating" data-phone-menu={phone ? '' : undefined} className={styles.contextMenu} collisionPadding={10}>
     {phone && <MenuFilter/>}
     <div className={styles.contextMenuList}>
-    {editable&&<><ContextPropertySub label="Status" icon={<StatusIcon state={issue.state} size={16}/>} shortcut="S" options={statusOptions} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
+    {editable&&<><ContextPropertySub label="Status" icon={<FlowGlyph name="rowStatus"/>} shortcut="S" options={statusOptions} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
     <ContextPropertySub label="Priority" shortcut="P" options={options.priority} selectedIds={[String(issue.priority)]} onSelect={id => onPropertyChange('priority', id)}/>
     <ContextPropertySub label="Assignee" shortcut="A" options={options.assignee} selectedIds={[issue.assignee?.id ?? '']} onSelect={id => onPropertyChange('assignee', id)}/>
     <ContextPropertySub label="Due date" shortcut="⇧ D" options={options.dueDate} selectedIds={[issue.dueDate ?? '']} onSelect={id => onPropertyChange('dueDate', id)}/>

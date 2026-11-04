@@ -4,7 +4,7 @@ import * as Popover from '@radix-ui/react-popover'
 import { Command, defaultFilter } from 'cmdk'
 import { Diamond, Link2, Rocket } from 'lucide-react'
 import { EstimateIcon } from '@/components/issue/estimate-icon'
-import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surface'
 import { usePropertyCommand } from '@/components/property/use-property-command'
@@ -445,7 +445,7 @@ function OptionAvatar({ option }: { option: { avatarUrl?: string; label: string 
 
 const FIELD_GLYPHS: Partial<Record<MyIssuesFilterKey, FlowGlyphName>> = {
   ai: 'aiFilter', advanced: 'advancedFilter', status: 'status', assignee: 'assignee', agent: 'agent', agentSession: 'agent', creator: 'creator',
-  labels: 'labels', suggestedLabel: 'labels', relations: 'relations', triageIntelligence: 'aiBurst', dates: 'dates', addedToCycle: 'dates',
+  labels: 'labels', suggestedLabel: 'labels', relations: 'relations', triageIntelligence: 'aiBurst', dates: 'dates', cycle: 'cycle', addedToCycle: 'cycle',
   projectProperties: 'projectProperties', autoClosed: 'autoClosed', content: 'content', links: 'links',
 }
 /** The reference app's filter-menu glyph for a field (16px; Status and Auto-closed are 14px glyphs centred in the slot). */
@@ -457,7 +457,6 @@ export function FilterFieldIcon({field}:{field:MyIssuesFilterKey}){
   if(field==='projectMilestone')return <ProjectPropertyCategoryIcon kind="milestone"/>
   if(field==='project')return <ViewGlyph icon="Project" color="currentColor" style={{width:16,height:16}}/>
   if(field==='initiative')return <ViewGlyph icon="Initiative" color="currentColor" style={{width:16,height:16}}/>
-  if(field==='cycle')return <CycleIcon noCycle size={16}/>
   if(field==='team')return <ViewGlyph icon="Team" color="currentColor" style={{width:16,height:16}}/>
   if(field==='estimate')return <EstimateIcon size={16}/>
   if(field==='releases')return <IssueActionGlyph label="Release" fallback={<Rocket size={16}/>}/>

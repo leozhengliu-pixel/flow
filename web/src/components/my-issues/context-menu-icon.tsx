@@ -37,7 +37,7 @@ import {
 
 import { IssueActionGlyph } from "@/components/issue/issue-action-glyphs";
 import { CycleIcon, PriorityIcon } from "@/components/issue/issue-icons";
-import { FlowGlyph } from "@/components/ui/menu-glyphs";
+import { FlowGlyph, type FlowGlyphName } from "@/components/ui/menu-glyphs";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import styles from "./my-issues-list.module.css";
 
@@ -91,21 +91,23 @@ const ICONS: Record<string, LucideIcon> = {
 
 /** Flow's own glyphs for items that have one; lucide icons fill the rest. */
 const GLYPHS: Record<string, string> = {
-  "Due date": "Calendar",
   Labels: "Label",
   Project: "Project",
   Favorite: "Favorite",
   Unfavorite: "Favorite",
   "Remove from favorites": "Favorite",
   Subscribe: "Subscribe",
-  Unsubscribe: "Subscribe",
   "Remind me": "Alarm",
   "Team…": "Team",
   "Add link…": "Link",
-  Status: "IssueStatusBacklog",
 };
 
+/** Menu glyphs drawn from the shared set (muted, fixed shape; they do not follow the issue's own state). */
+const MENU_GLYPHS: Record<string, FlowGlyphName> = { Status: "rowStatus", "Due date": "rowDueDate", Move: "rowMove", Unsubscribe: "rowUnsubscribe" };
+
 export function ContextMenuIcon({ label }: { label: string }) {
+  const menuGlyph = MENU_GLYPHS[label];
+  if (menuGlyph) return <span className={styles.menuIcon} aria-hidden="true"><FlowGlyph name={menuGlyph}/></span>;
   const glyph = GLYPHS[label];
   if (glyph) return <span className={styles.menuIcon} aria-hidden="true"><ViewGlyph icon={glyph} color="currentColor" style={{ width: 16, height: 16 }} /></span>;
   if (label === "Priority") return <span className={styles.menuIcon} aria-hidden="true"><PriorityIcon priority={2} size={16} aria-hidden aria-label={undefined} role={undefined}/></span>;

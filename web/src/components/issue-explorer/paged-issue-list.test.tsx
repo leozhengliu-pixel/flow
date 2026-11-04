@@ -88,12 +88,14 @@ describe('server-backed issue groups', () => {
   })
 
   it('sizes the identifier column to the longest loaded identifier', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) { return { width: (this.textContent?.length ?? 0) * 8.4 } as DOMRect })
     vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: 'state-backlog', count: 2 }] })
     vi.mocked(listIssueRecords).mockResolvedValue({ items: [makeIssue({ id: 'issue-a', identifier: 'AIDP-7', title: 'Short' }), makeIssue({ id: 'issue-b', identifier: 'AIDP-17795', title: 'Long' })], hasMore: false, total: -1 })
     const data = makeBootstrap({ issues: [], favorites: [], issueCollectionPaged: true })
     render(<I18nProvider><PagedIssueList data={data} query={{ groupBy: 'status' }} onOpenIssueRecord={vi.fn()}/></I18nProvider>)
     await screen.findByRole('button', { name: 'Long' })
-    expect(screen.getByTestId('paged-list').style.getPropertyValue('--issue-identifier-width')).toBe('10ch')
+    // Each identifier measures 8.4px a character here: the column fits the widest one.
+    await waitFor(() => expect(screen.getByTestId('paged-list').style.getPropertyValue('--issue-identifier-width')).toBe(`${Math.floor(10 * 8.4)}px`))
   })
 
   it('keeps the loaded extent and revalidates only the page on screen when a refresh lands', async () => {

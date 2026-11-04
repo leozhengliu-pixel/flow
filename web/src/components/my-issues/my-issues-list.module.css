@@ -84,7 +84,8 @@
 .contextMenu,.contextSubmenu{border:.5px solid var(--pk-border);background:var(--pk-surface);box-shadow:var(--pk-shadow);color:var(--pk-text)}
 .contextMenu .menuItem,.contextSubmenu .menuItem,.contextSubmenu .submenuItem{margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--pk-text);font-weight:450}
 .contextMenu .menuItem[data-highlighted],.contextMenu .menuItem[data-state=open],.contextSubmenu .menuItem[data-highlighted],.contextSubmenu .menuItem[data-state=open],.contextSubmenu .submenuItem[data-highlighted]{background:var(--pk-hover)}
-.contextMenu .menuItem>.menuIcon{color:var(--pk-text)}
+.contextMenu .menuItem>.menuIcon{color:var(--pk-muted)}
+.contextMenu .menuItem[data-highlighted]>.menuIcon,.contextMenu .menuItem[data-state=open]>.menuIcon{color:inherit}
 .contextMenu .menuItem>kbd,.contextSubmenu .menuItem>kbd,.contextSubmenu .submenuItem>kbd{color:var(--pk-muted);font-size:11px;font-weight:500}
 .contextMenu .menuSeparator:after,.contextSubmenu .menuSeparator:after{left:0;right:0;background:var(--pk-divider)}
 .menuItem>.menuIcon svg{margin:0;color:inherit}
@@ -228,3 +229,4 @@
   .groupHeader:has(.groupEstimate) .groupCount{display:none}
   .groupEstimate{margin-left:3px}
 }
+.identifierProbe{position:absolute;visibility:hidden;pointer-events:none;white-space:nowrap;font-size:13px;font-variant-numeric:tabular-nums;font-feature-settings:"calt","cpsp","tnum";letter-spacing:0}
