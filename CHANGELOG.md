@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Wait for the label picker's opening animation before hovering its rows in the shared menu browser checks, preserving exact phone geometry assertions.
 - Match the phone issue property sheets to the shared sheet: 13px rows, a heading chip that names the issue ("Assigned users" for assignees), cycle rows with their dates and state, "Workspace labels", the static status glyphs and a due date list that opens as a sheet with the cycle ends. Also draw the not-found page with the phone header and drawer button in the interface language, send `/settings/account` to the profile, show the Documents crumb on phone team documents, fill the project details toggle while the panel is open, translate the "search" tool row and read chat history times in Chinese like every other relative time.
 - Show Agent personalization skills as name and created/updated rows with a row menu (Edit, Use in chat, Delete) instead of raw Markdown, and open each skill in the shared rich-text editor so headings, bold, lists, code and links render and save back as Markdown with their line breaks intact; the skill page asks before discarding edits and matches the phone layout.
 - Verify compact composer and clipboard toast styles at the shared 880px boundary, and isolate the desktop route matrix by viewport so its full coverage does not share one test deadline.
