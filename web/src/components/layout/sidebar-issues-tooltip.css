@@ -1,0 +1,6 @@
+.sidebar-issues-shortcuts { display: grid; gap: 4px; font-weight: 400; }
+.sidebar-issues-shortcut { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sidebar-issues-shortcut > span:first-child { line-height: normal; }
+.sidebar-issues-shortcut .flow-tooltip-shortcut { height: auto; margin-right: 0; }
+.sidebar-issues-shortcut .flow-tooltip-key { margin-top: 0; }
+.sidebar-issues-shortcut .flow-tooltip-then { line-height: 11px; }

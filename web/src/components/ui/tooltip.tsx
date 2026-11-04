@@ -58,6 +58,8 @@ export interface FlowTooltipProps {
   contentClassName?: string
   /** Gap between the trigger and the tooltip (8px by default). */
   sideOffset?: number
+  /** Close when leaving the trigger for hints without interactive content. */
+  disableHoverableContent?: boolean
   /** Lightest palette, for tooltips over the agent composer card; also inferred from a `data-tooltip-elevated` ancestor. */
   elevated?: boolean
   /** Lighter palette for tooltips over dialogs and floating panels; also inferred from a `data-tooltip-raised` ancestor. */
@@ -88,7 +90,7 @@ export function FlowTooltip(props: FlowTooltipProps) {
   return provided ? <FlowTooltipBody {...props}/> : <TooltipProvider><FlowTooltipBody {...props}/></TooltipProvider>
 }
 
-function FlowTooltipBody({ label, shortcut, children, side = 'bottom', align = 'center', alignOffset, disabled = false, contentClassName, sideOffset, elevated, raised }: FlowTooltipProps) {
+function FlowTooltipBody({ label, shortcut, children, side = 'bottom', align = 'center', alignOffset, disabled = false, contentClassName, sideOffset, disableHoverableContent, elevated, raised }: FlowTooltipProps) {
   const [open, setOpen] = React.useState(false)
   const [inferredTone, setInferredTone] = React.useState<TooltipTone | undefined>()
   const triggerRef = React.useRef<HTMLButtonElement>(null)
@@ -97,7 +99,7 @@ function FlowTooltipBody({ label, shortcut, children, side = 'bottom', align = '
   // An explicit prop (even `false`) overrides what the surroundings suggest.
   const tone: TooltipTone | undefined = elevated ? 'elevated' : raised ? 'raised' : elevated === false || raised === false ? undefined : inferredTone
   return (
-    <TooltipRoot open={open && !disabled} onOpenChange={next => {
+    <TooltipRoot disableHoverableContent={disableHoverableContent} open={open && !disabled} onOpenChange={next => {
       if (next) setInferredTone(tooltipTone(triggerRef.current))
       setOpen(next && !disabled)
     }}>

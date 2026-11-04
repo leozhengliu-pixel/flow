@@ -2,6 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ProjectGlyph } from "@/components/views/project-glyph";
 import { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog';
 import { SidebarTeamMenu } from './sidebar-team-menu';
+import { SidebarIssuesTooltip } from './sidebar-issues-tooltip';
 import { PhoneInboxIcon, PhoneViewsIcon, PhoneTriageIcon, PhoneTeamBranchIcon } from './sidebar-phone-glyphs';
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { teamHierarchy } from '@/lib/team-hierarchy';
@@ -1671,6 +1672,7 @@ function TeamNavigation({
             active={activeIssues}
             icon={<IssuesIcon />}
             label="Issues"
+            issuesTooltip={!phone}
             to={teamIssuesPath(workspaceSlug, team.key)}
             onClick={onNavigate}
           />
@@ -1924,6 +1926,7 @@ function Nav({
   matchPath,
   onClick,
   to,
+  issuesTooltip = false,
 }: {
   /** The sidebar entry this item is, for its right-click menu. */
   entry?: SidebarEntry;
@@ -1945,6 +1948,7 @@ function Nav({
   active?: boolean;
   onClick?: () => void;
   to?: string;
+  issuesTooltip?: boolean;
 }) {
   const contextPath = useContext(SidebarRouteContext);
   const { t } = useI18n();
@@ -1969,7 +1973,7 @@ function Nav({
     <button
       type="button"
       className={`nav-item ${active ? "active" : ""}`}
-      title={title}
+      title={issuesTooltip ? undefined : title}
       data-tooltip-side="right"
       onClick={onClick}
     >
@@ -1978,11 +1982,11 @@ function Nav({
   ) : (
     <NavLink
       end={false}
-      className={({ isActive }) =>
+      className={issuesTooltip ? `nav-item ${active ? 'active' : ''}` : ({ isActive }) =>
         `nav-item ${(contextPath ? contextPath.toLowerCase() === activePath : active || isActive) ? "active" : ""}`
       }
       to={to}
-      title={title}
+      title={issuesTooltip ? undefined : title}
       data-tooltip-side="right"
       onClick={onClick}
     >
@@ -1991,7 +1995,7 @@ function Nav({
   );
   return (
     <SidebarItemMenu entry={entry} href={to}>
-      {item}
+      {issuesTooltip ? <SidebarIssuesTooltip>{item}</SidebarIssuesTooltip> : item}
     </SidebarItemMenu>
   );
 }
