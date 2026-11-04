@@ -8,7 +8,7 @@ import { Plus } from "lucide-react";
 import { useI18n } from "@/i18n/i18n";
 import { agentSkillPath, newAgentSkillPath } from "@/lib/app-routes";
 import type { BootstrapData, PersonalAgentSkill } from "@/types/flow";
-import { AgentSkillActionsMenu } from "./agent-skill-actions";
+import { AgentSkillActionsMenu, AgentSkillContextMenu } from "./agent-skill-actions";
 import { useAgentSkillActions } from "./use-agent-skill-actions";
 import "./agent-skills.css";
 
@@ -41,15 +41,17 @@ export function AgentSkillsList({ data, onReload }: { data: BootstrapData; onRel
           {skills.map((skill) => {
             const edited = Date.parse(skill.updatedAt) - Date.parse(skill.createdAt) > 1000;
             return (
-              <li key={skill.id} className="agent-skills-row">
-                <NavLink className="agent-skill-link" to={agentSkillPath(data.workspace.urlKey, skill.id)} aria-label={skill.name}>
-                  <strong>{skill.name}</strong>
-                  <small title={formatDate(edited ? skill.updatedAt : skill.createdAt, { dateStyle: "medium", timeStyle: "short" })}>
-                    {skillTimestampLabel(skill, t, formatRelative)}
-                  </small>
-                </NavLink>
-                <AgentSkillActionsMenu skill={skill} actions={actions} />
-              </li>
+              <AgentSkillContextMenu key={skill.id} skill={skill} actions={actions}>
+                <li className="agent-skills-row">
+                  <NavLink className="agent-skill-link" to={agentSkillPath(data.workspace.urlKey, skill.id)} aria-label={skill.name}>
+                    <strong>{skill.name}</strong>
+                    <small title={formatDate(edited ? skill.updatedAt : skill.createdAt, { dateStyle: "medium", timeStyle: "short" })}>
+                      {skillTimestampLabel(skill, t, formatRelative)}
+                    </small>
+                  </NavLink>
+                  <AgentSkillActionsMenu skill={skill} actions={actions} />
+                </li>
+              </AgentSkillContextMenu>
             );
           })}
         </ul>

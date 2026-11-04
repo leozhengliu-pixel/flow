@@ -17,6 +17,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Share assignee profile cards across issue rows, boards and details, with visible profile and team links, live presence, known local time and out-of-office status; keep inactive people identifiable without active links.
 
 - Show the sidebar Issues shortcut card on hover and keyboard focus, with shared tooltip styling and pointer dismissal.
+- Open the same Edit, Use in chat, and Delete actions from a skill row's right-click and button menus.
 
 - Reset phone drawer navigation when focus returns to its pinned header, including on reopen, while preserving the hardware-keyboard skip link.
 - Wait for the label picker's opening animation before hovering its rows in the shared menu browser checks, preserving exact phone geometry assertions.
