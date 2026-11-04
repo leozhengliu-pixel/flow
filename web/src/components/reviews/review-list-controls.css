@@ -14,7 +14,7 @@
 .review-list-options__properties button[aria-pressed=true] { color: var(--theme-text-primary); background: var(--theme-control-active); }
 .review-list-options footer { display: flex; justify-content: flex-end; padding: 8px 16px; border-top: .5px solid var(--theme-border); }
 .review-list-options footer button { border: 0; padding: 4px 0; background: transparent; color: var(--theme-text-secondary); font-size: 12px; }
-.review-list-options button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.review-list-options button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 .review-filter-host { flex: 0 0 auto; min-width: 0; max-height: 160px; overflow-y: auto; }
 .review-filter-host:empty { display: none; }
 .review-applied-filters > div { flex-wrap: wrap; padding: 6px 8px; }

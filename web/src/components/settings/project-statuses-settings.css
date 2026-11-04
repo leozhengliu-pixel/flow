@@ -15,7 +15,7 @@
 .pst-more:hover:not(:disabled),.pst-more[data-state=open]{background:var(--project-status-more-hover-bg)}
 .pst-icon-button:hover:not(:disabled) svg,.pst-icon-button[data-state=open] svg{fill:var(--project-status-control-hover-fg)}
 .pst-icon-button:disabled{opacity:.5}
-.pst-icon-button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.pst-icon-button:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .pst-add{width:24px;height:24px}
 .pst-add svg{width:14px;height:14px}
 

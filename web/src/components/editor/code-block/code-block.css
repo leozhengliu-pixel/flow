@@ -58,7 +58,7 @@ button.flow-code-block__language:hover,
 .flow-code-block__icon[data-copied] { color: var(--syntax-string); }
 .flow-code-block__language:focus-visible,
 .flow-code-block__icon:focus-visible,
-.flow-code-block__expander:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.flow-code-block__expander:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 
 .flow-code-block__body {
   --flow-code-lines: 15;

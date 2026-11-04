@@ -25,7 +25,7 @@
 }
 .flow-issue-toast__issue:hover,
 .flow-issue-toast__issue:focus-visible { background: var(--toast-hover-bg); }
-.flow-issue-toast__issue:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+.flow-issue-toast__issue:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: 0; }
 .flow-issue-toast__issue > svg { flex: none; }
 .flow-issue-toast__identifier { flex: none; color: var(--toast-issue-identifier); }
 .flow-issue-toast__issue-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -74,7 +74,7 @@
 .flow-issue-toast__icon > svg { width: 14px; height: 14px; }
 .flow-issue-toast__icon:hover { background: var(--toast-issue-icon-hover-bg); color: var(--toast-issue-title); }
 .flow-issue-toast__ask:focus-visible,
-.flow-issue-toast__icon:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+.flow-issue-toast__icon:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .flow-issue-toast__issue,

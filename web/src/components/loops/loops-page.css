@@ -1125,7 +1125,7 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 }
 .loops-display-direction:hover { background: var(--project-display-select-hover-bg); color: var(--project-display-select-hover-fg); }
 .loops-display-direction svg { width: 14px; height: 14px; }
-.loops-display-direction:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.loops-display-direction:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 .loops-display-separator { height: 0.5px; margin-top: 12px; background: var(--popover-border); }
 .loops-display-toggles { padding: 0 16px; }
 .loops-display-toggles label { height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--theme-text-secondary); font-size: 12px; font-weight: 500; cursor: pointer; }
@@ -1173,7 +1173,7 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-contract-placeholder code { flex: none; font-size: 12px; }
 .loops-contract-stale { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 10px; border: 0.5px solid var(--theme-border); border-radius: 7px; background: var(--theme-surface-1); font-size: 12px; color: var(--theme-text-secondary); }
 .loops-contract-stale.is-neutral { cursor: pointer; }
-.loops-contract-stale.is-neutral:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.loops-contract-stale.is-neutral:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 .loops-contract-stale strong { color: var(--theme-text-primary); font-weight: 500; }
 .loops-contract-review-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .loops-contract-review-toolbar .loops-contract-hint { margin: 0; }

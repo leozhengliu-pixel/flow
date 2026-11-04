@@ -47,7 +47,6 @@
   html:root .settings-app .settings-main .personal-avatar { width: 32px; height: 32px; font: 400 14px/normal var(--font); font-size: 14px !important; }
   html:root .settings-app .settings-main .personal-input { background: var(--set-card); }
   html:root .settings-app .settings-main[data-settings-page=profile] .personal-input { border: .5px solid var(--set-input-border); color: var(--set-text); font: 400 13px/normal var(--font); }
-  html:root .settings-app .settings-main[data-settings-page=profile] .personal-input:focus { border-color: var(--focus-ring); }
   html:root .settings-app .settings-main[data-settings-page=profile] .personal-action.danger { color: var(--set-danger); }
   html:root body .settings-app .settings-main .personal-action { font: 500 13px/normal var(--font); }
   html:root body .settings-app .settings-main .settings-row:not(.personal-security-empty-row) .personal-action { margin-right: -6px; }

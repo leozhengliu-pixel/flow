@@ -631,8 +631,8 @@
   color: var(--theme-text-primary);
 }
 .workspace-directory-display-menu button:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
+  outline: var(--control-focus-width) solid var(--focus-ring);
+  outline-offset:var(--control-focus-inset);
 }
 .workspace-filter-bar {
   min-height: 44px;

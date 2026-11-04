@@ -30,7 +30,7 @@
 .iconButton > svg { width: 14px; height: 14px; color: var(--insight-header-text); }
 .fullscreen .iconButton > svg { color: var(--insight-muted-text); }
 .iconButton:hover, .iconButton[data-state="open"], .iconButton[aria-expanded="true"] { background: var(--theme-surface-hover); }
-.iconButton:focus-visible, .filterButton:focus-visible, .select:focus-visible, .setDefault:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.iconButton:focus-visible, .filterButton:focus-visible, .select:focus-visible, .setDefault:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 .intro, .card {
   border: .5px solid var(--insight-card-border);
   border-radius: 10px;

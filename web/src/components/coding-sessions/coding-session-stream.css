@@ -44,7 +44,7 @@
 .cs-action-header{display:flex;align-items:center;gap:6px;min-width:0;min-height:16px;color:var(--cs-label-muted);font:500 12px/16px var(--font);transition:color .15s}
 .cs-action-header:hover{color:var(--cs-label-base)}
 .cs-action-header.is-disclosure{align-self:flex-start;max-width:calc(100% + 16px);margin:0 -8px;padding:0 8px;border-radius:4px;cursor:pointer}
-.cs-action-header.is-disclosure:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.cs-action-header.is-disclosure:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .cs-action-label{flex:none;white-space:nowrap}
 .cs-action-detail{min-width:0;overflow:hidden;font-family:var(--cs-terminal-font);text-overflow:ellipsis;white-space:nowrap}
 .cs-group[data-loading]>.cs-group-header .cs-action-detail{color:var(--cs-label-faint)}
@@ -149,7 +149,7 @@
 .cs-pr-card{position:relative;display:flex;flex-direction:column;gap:4px;margin:0 2px;padding:8px;border:1px solid var(--cs-border-solid);border-radius:8px;background:var(--cs-control-tertiary);transition:background-color .15s}
 .cs-pr-card:hover{background:var(--cs-control-tertiary-hover)}
 .cs-pr-card-link{position:absolute;inset:0;border-radius:inherit}
-.cs-pr-card-link:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.cs-pr-card-link:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .cs-pr-card-stats{display:flex;align-items:center;justify-content:space-between;min-height:22px;color:var(--cs-label-base);font:450 12px/normal var(--font)}
 .cs-pr-card-stats strong{margin-right:4px;font-weight:500}
 .cs-tabular{font-variant-numeric:tabular-nums}
@@ -250,5 +250,5 @@
    tall, zoom-in cursor, opening the image viewer). */
 .cs-shots{display:flex;flex-direction:column;gap:8px;padding:0 10px}
 .cs-shot{display:block;width:100%;padding:0;border:0;border-radius:6px;background:none;cursor:zoom-in}
-.cs-shot:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.cs-shot:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .cs-shot img{display:block;width:100%;height:auto;max-height:600px;object-fit:contain;border-radius:6px}

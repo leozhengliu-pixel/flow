@@ -3,7 +3,7 @@
 /* Chips flow with the text's (they wrap across lines and keep their tint), with the icon glued to the first word. */
 a.entityChip{display:inline;margin:0 1px;padding:1.5px 4.5px 1.5px 3px;border-radius:4px;background:var(--theme-surface-hover);color:var(--theme-text-primary);text-decoration:none;box-decoration-break:clone;-webkit-box-decoration-break:clone;cursor:pointer}
 a.entityChip:hover{background:var(--theme-surface-active)}
-a.entityChip:focus-visible{background:var(--theme-surface-active);outline:2px solid var(--focus-ring);outline-offset:0}
+a.entityChip:focus-visible{background:var(--theme-surface-active);outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:0}
 a.entityMention{padding:0;background:transparent;color:var(--text);font-weight:500;text-decoration:none}
 a.entityMention:hover{background:transparent;text-decoration:underline}
 .entityLead{white-space:nowrap}
@@ -21,7 +21,7 @@ a.entityMissing:hover{color:var(--theme-text-secondary)}
 .references li{display:contents}
 a.referenceRow{grid-column:1/-1;height:32px;display:grid;grid-template-columns:subgrid;column-gap:6px;align-items:center;padding:0;border-radius:5px;color:var(--agent-thread-name);font-size:12px;font-weight:450;text-decoration:none;white-space:nowrap;cursor:default}
 a.referenceRow:hover,a.referenceRow:focus-visible{background:var(--agent-action-hover-bg);outline:0}
-a.referenceRow:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+a.referenceRow:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-inset)}
 .referenceTitleCell{min-width:0;display:flex;align-items:center;gap:6px}
 .referenceTitleCell>svg{flex:0 0 auto;width:14px;height:14px}
 .referenceTitle{min-width:0;overflow:hidden;color:var(--agent-thread-name);font-weight:500;text-overflow:ellipsis}
@@ -30,7 +30,7 @@ a.referenceRow:focus-visible{outline:2px solid var(--focus-ring);outline-offset:
 /* The reference app's embedded document / view card. */
 a.referenceCard{display:flex;flex-direction:column;gap:8px;box-sizing:border-box;align-self:stretch;max-width:504px;margin:8px 0 0;padding:12px;border:.5px solid var(--theme-border);border-radius:8px;color:var(--text);font-size:12px;font-weight:450;line-height:16px;text-decoration:none}
 a.referenceCard:hover{background:var(--theme-surface-hover)}
-a.referenceCard:focus-visible{outline:2px solid var(--focus-ring);outline-offset:0}
+a.referenceCard:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:0}
 .referenceCardTitle{display:flex;align-items:center;gap:8px;padding-bottom:8px;border-bottom:.5px solid var(--theme-border);font-size:13px;font-weight:500}
 .referenceCardTitle svg,.referenceCardRow svg{flex:0 0 auto;width:16px;height:16px}
 .dim{color:var(--theme-text-secondary)}

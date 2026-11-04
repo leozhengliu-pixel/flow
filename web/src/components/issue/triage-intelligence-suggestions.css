@@ -133,8 +133,8 @@
 .triage-intelligence-show-more:focus-visible,
 .triage-intelligence-issue-chip:focus-visible,
 .triage-intelligence-chip:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
+  outline: var(--control-focus-width) solid var(--focus-ring);
+  outline-offset:var(--control-focus-offset);
 }
 
 .triage-intelligence-menu {
@@ -569,8 +569,8 @@
 }
 
 .triage-intelligence-popover-actions button:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
+  outline: var(--control-focus-width) solid var(--focus-ring);
+  outline-offset:var(--control-focus-offset);
 }
 
 /* "Show thinking…" dialog. */

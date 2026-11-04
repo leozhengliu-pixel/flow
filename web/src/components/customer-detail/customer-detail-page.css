@@ -51,7 +51,7 @@
 
 .customer-page__crumb { flex: none; padding: 0 4px; border-radius: 6px; }
 .customer-page__crumb:hover { background: var(--theme-surface-hover); }
-.customer-page__crumb:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+.customer-page__crumb:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: 0; }
 
 .customer-page__chevron {
   flex: none;
@@ -91,7 +91,7 @@
 .customer-page__action[data-state=open] { background: var(--theme-surface-hover); }
 .customer-page__action:hover svg,
 .customer-page__action[data-state=open] svg { color: var(--theme-text-primary); }
-.customer-page__action:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+.customer-page__action:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: 0; }
 .customer-page__action[data-active] svg { color: var(--theme-text-primary); }
 .customer-page__favorite { color: var(--description-callout-yellow) !important; }
 
@@ -169,7 +169,7 @@
 .customer-top__edit:focus-visible,
 .customer-top__edit[data-state=open] { opacity: 1; transition-duration: 0s; }
 .customer-top__edit:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
-.customer-top__edit:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+.customer-top__edit:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: 0; }
 
 .customer-top__properties {
   display: flex;
@@ -210,7 +210,7 @@
 .customer-top__button:hover:not([aria-disabled]),
 .customer-top__button[data-state=open] { background: var(--theme-surface-hover); }
 .customer-top__button[aria-disabled] { cursor: default; }
-.customer-top__button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+.customer-top__button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: 0; }
 .customer-top__static > svg,
 .customer-top__button > svg { flex: none; color: var(--theme-text-secondary); }
 .customer-top__static .customer-tier-icon { color: var(--theme-text-secondary); }

@@ -43,7 +43,7 @@
 .team-defaults .settings-icon-action:hover { background: var(--bg-hover); color: var(--text); }
 .team-defaults .settings-icon-action:disabled { opacity: .4; }
 .team-defaults button:focus-visible,
-.team-defaults-dialog button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.team-defaults-dialog button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: var(--control-focus-offset); }
 .team-defaults-state {
   display: flex;
   flex-direction: column;

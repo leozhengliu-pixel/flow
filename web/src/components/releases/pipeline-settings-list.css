@@ -61,7 +61,7 @@ html:root[data-theme] .settings-app .flow-pipelines-toolbar .feature-select:is(:
 .flow-pipelines-bulk-bar__button.is-ghost svg{fill:var(--release-details-muted-fg)}
 .flow-pipelines-bulk-bar__button.is-ghost:hover{background:var(--release-details-hover-bg)}
 .flow-pipelines-bulk-bar__button.is-ghost:hover svg{fill:var(--release-details-fg)}
-.flow-pipelines-bulk-bar__button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.flow-pipelines-bulk-bar__button:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 body .flow-pipelines-settings-menu{min-width:180px}
 .flow-pipelines-settings-menu .menu-item{gap:8px}
 .flow-pipelines-settings-menu .menu-item svg{width:14px;height:14px;flex:none;color:var(--set-desc)}

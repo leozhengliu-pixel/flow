@@ -8,7 +8,7 @@
 
 .gitlab-settings-back{position:absolute;top:10px;left:8px;z-index:2;height:28px;display:inline-flex;align-items:center;gap:6px;padding:0 8px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--set-group-desc);font:500 13px/normal var(--font);cursor:pointer}
 .gitlab-settings-back:hover{background:var(--bg-hover);color:var(--set-text)}
-.gitlab-settings-back:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring)}
+.gitlab-settings-back:focus-visible{outline:0;box-shadow:0 0 0 var(--control-focus-width) var(--focus-ring)}
 .gitlab-settings-back svg{width:14px;height:14px;flex:none}
 
 .gitlab-settings-hero{display:flex;align-items:flex-start;gap:16px;margin-bottom:24px}
@@ -37,7 +37,7 @@
 
 .gitlab-settings-button{box-sizing:border-box;height:32px;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 12px;border:.5px solid transparent;border-radius:9999px;background:var(--set-button);box-shadow:0 0 0 .5px var(--set-search-border),var(--set-primary-shadow);color:var(--set-button-text);font-size:13px;font-weight:500;line-height:normal;white-space:nowrap;cursor:pointer;transition:background-color var(--fade),opacity var(--fade)}
 .gitlab-settings-button:hover{background:var(--bg-hover)}
-.gitlab-settings-button:focus-visible,.gitlab-settings-icon-button:focus-visible,.gitlab-settings-status-button:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring)}
+.gitlab-settings-button:focus-visible,.gitlab-settings-icon-button:focus-visible,.gitlab-settings-status-button:focus-visible{outline:0;box-shadow:0 0 0 var(--control-focus-width) var(--focus-ring)}
 .gitlab-settings-button.primary{background:var(--set-primary);box-shadow:var(--set-primary-shadow);color:var(--set-primary-text)}
 .gitlab-settings-button.primary:hover{background:var(--set-primary);filter:brightness(1.06)}
 .gitlab-settings-button.borderless{background:transparent;box-shadow:none;color:var(--set-control-text)}

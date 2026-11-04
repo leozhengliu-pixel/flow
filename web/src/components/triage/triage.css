@@ -77,7 +77,7 @@
 .flow-triage-icon-button:hover,
 .flow-triage-icon-button[data-state='open'],
 .flow-triage-icon-button[data-active] { background: var(--triage-icon-hover-bg); color: var(--triage-icon-hover-fg); }
-.flow-triage-icon-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.flow-triage-icon-button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 .flow-triage-icon-button__count {
   position: absolute;
   top: -2px;
@@ -122,7 +122,7 @@
 .flow-triage-row:hover::before { background: var(--triage-row-hover-bg); }
 .flow-triage-row[data-selected]::before,
 .flow-triage-row[data-state='open']::before { background: var(--triage-row-selected-bg); }
-.flow-triage-row:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.flow-triage-row:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-inset); }
 .flow-triage-row__line { min-width: 0; display: flex; align-items: center; gap: 8px; line-height: 16px; }
 .flow-triage-row__line.is-meta { gap: 6px; }
 .flow-triage-row__title {
@@ -293,7 +293,7 @@
 .flow-triage-display__direction:hover { background: var(--project-display-select-hover-bg); color: var(--project-display-select-hover-fg); }
 .flow-triage-display__direction svg { width: 14px; height: 14px; }
 .flow-triage-display__direction:focus-visible,
-.flow-triage-display__properties button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.flow-triage-display__properties button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 .flow-triage-display__separator { height: 0.5px; margin: 8px 0; background: var(--project-display-separator); }
 .flow-triage-display__properties { padding: 0 16px 8px; }
 .flow-triage-display__properties h3 { height: 32px; display: flex; align-items: center; margin: 0; color: var(--project-display-label-fg); font-size: 12px; font-weight: 500; }
@@ -354,7 +354,7 @@
 }
 .flow-triage-not-selected__cta svg { width: 14px; height: 14px; }
 .flow-triage-not-selected__cta:hover { background: var(--triage-cta-hover-bg); }
-.flow-triage-not-selected__cta:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.flow-triage-not-selected__cta:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 @media (--desktop-layout) {
   .flow-triage-not-selected__body h2 { color: var(--text); }
   .flow-triage-not-selected__cta { gap: 0; padding: 0 8px 0 6px; border: .5px solid transparent; background: var(--ui-pill-bg); color: var(--text); }
@@ -472,7 +472,7 @@ html:root body .triage-snooze-dialog [cmdk-item]:not(#_) { font-size: 15px; }
 .issue-triage-header-button.is-text { width: auto; display: inline-flex; gap: 6px; padding: 0 10px; border-color: var(--border); font-size: 12px; font-weight: 500; white-space: nowrap; }
 .issue-triage-header-button:hover,
 .issue-triage-header-button[data-state='open'] { background: var(--triage-icon-hover-bg); color: var(--triage-icon-hover-fg); }
-.issue-triage-header-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.issue-triage-header-button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 .issue-triage-header-button:disabled { opacity: 0.5; cursor: default; }
 .issue-triage-embedded-actions { margin: 4px 0 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--issue-muted); font-size: 13px; }
 .issue-triage-embedded-actions .issue-triage-header-actions { margin-left: 0; padding-left: 0; }

@@ -98,7 +98,7 @@
 .flow-diagram__button:hover:not([data-disabled]),
 .flow-diagram__button[aria-pressed="true"] { background: var(--description-media-toolbar-hover); }
 .flow-diagram__button[data-disabled] { opacity: .6; cursor: default; }
-.flow-diagram__button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.flow-diagram__button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-inset); }
 .flow-diagram__separator { flex: none; width: 1px; height: 18px; margin: 0 3px 0 4px; background: var(--description-toolbar-separator); }
 
 /* Invalid source: a round marker at the bottom-right of the source opens Mermaid's message underneath. */

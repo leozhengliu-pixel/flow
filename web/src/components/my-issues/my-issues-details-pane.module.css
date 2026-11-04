@@ -40,7 +40,7 @@
   background:var(--border);
 }
 .resizer:hover:after,.pane[data-dragging=true] .resizer:after{width:2px;background:var(--accent-primary)}
-.resizer:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+.resizer:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-inset)}
 .scroller{min-height:0;flex:1;overflow:visible}
 .fullPreview{min-height:0;flex:1;overflow:hidden;margin-right:8px;border:.5px solid var(--theme-border);border-radius:10px;background:var(--theme-surface-1);box-shadow:0 .5px 1px 1px var(--shadow-color-card)}
 .fullPreview :global(.issue-layout){width:100%;max-width:none;padding:0;display:block}
@@ -83,7 +83,7 @@
   cursor:default;
 }
 .summaryTabs button[aria-selected=true]{background:var(--theme-surface-active);color:var(--bright)}
-.summaryTabs button:focus-visible,.summaryItem:focus-visible,.previewHeader button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.summaryTabs button:focus-visible,.summaryItem:focus-visible,.previewHeader button:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .summaryList{margin-top:8px;outline:0}
 .summaryItem{
   width:100%;
