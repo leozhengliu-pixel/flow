@@ -4388,7 +4388,7 @@ function App() {
       if (!to.includes("?") && !to.includes("#")) navigateTo(to + location.search + location.hash, { ...options, state: location.state });
       else navigateTo(to, options);
     };
-    if (route.kind === "settings" && /\/settings\/billing\/?$/.test(location.pathname)) {
+    if (route.kind === "settings" && /\/settings(\/billing)?\/?$/.test(location.pathname)) {
       canonicalize(settingsPath(workspace, "preferences"), { replace: true });
       return;
     }
