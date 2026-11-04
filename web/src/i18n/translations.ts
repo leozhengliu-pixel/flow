@@ -3593,6 +3593,7 @@ export const zhCN: Record<string, string> = {
   "Issue templates": "事项模板",
   Issues: "事项",
   "Join a team": "加入团队",
+  "Join or create a team": "加入或创建团队",
   "Join workspace": "加入工作区",
   Labels: "标签",
   "Workspace labels": "工作区标签",

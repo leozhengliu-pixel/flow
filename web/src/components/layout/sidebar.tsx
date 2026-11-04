@@ -6,6 +6,7 @@ import { SidebarIssuesTooltip } from './sidebar-issues-tooltip';
 import { PhoneInboxIcon, PhoneViewsIcon, PhoneTriageIcon, PhoneTeamBranchIcon } from './sidebar-phone-glyphs';
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { teamHierarchy } from '@/lib/team-hierarchy';
+import { roleAllowed } from '@/lib/settings-access';
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Select from "@radix-ui/react-select";
 import {
@@ -251,6 +252,9 @@ export function Sidebar({
     const viewerTeamIds = new Set(data.teamMembers.filter(member => member.userId === data.viewer.id).map(member => member.teamId));
     return teamHierarchy(data.teams, data.teamSettings, data.teamParents).rows(data.teams.filter(team => !team.retiredAt && viewerTeamIds.has(team.id)));
   }, [data.teamMembers, data.teamParents, data.teams, data.teamSettings, data.viewer.id]);
+  const canCreateTeam = roleAllowed(data.viewerRole, data.workspaceSettings?.teamCreatePermission);
+  const canJoinTeam = data.viewerRole !== 'guest' && data.teams.some(team => !team.retiredAt && !team.private && !data.teamMembers.some(member => member.teamId === team.id && member.userId === data.viewer.id) && data.teamSettings[team.id]?.access !== 'private' && (!data.teamSettings[team.id]?.membershipRestriction || data.teamSettings[team.id]?.membershipRestriction === 'open'));
+  const emptyTeamsLabel = canCreateTeam && canJoinTeam ? 'Join or create a team' : canCreateTeam ? 'Create a team' : canJoinTeam ? 'Join a team' : undefined;
   const currentCycleTeamIds = useMemo(() => new Set(data.cycles.filter(cycle => cycle.status === "current").map(cycle => cycle.teamId)), [data.cycles]);
   const upcomingCycleTeamIds = useMemo(() => new Set(data.cycles.filter(cycle => cycle.status === "upcoming").map(cycle => cycle.teamId)), [data.cycles]);
 
@@ -781,10 +785,10 @@ export function Sidebar({
             />
           )}
 
-          <Section
+          {(sidebarTeams.length > 0 || emptyTeamsLabel) && <Section
             label="Your teams"
             storageKey="teams"
-            action={
+            action={canCreateTeam || canJoinTeam ?
               <NavLink
                 className="section-action"
                 aria-label="Join a team"
@@ -794,9 +798,10 @@ export function Sidebar({
               >
                 {phone ? <FlowGlyph name="plus" size={14} /> : <Plus />}
               </NavLink>
-            }
+            : undefined}
           >
             <div className="sidebar-team-list">
+              {!sidebarTeams.length && emptyTeamsLabel && <Nav icon={<Plus/>} label={translate(emptyTeamsLabel)} to={teamsPath(workspaceSlug)} onClick={close}/>}
               {sidebarTeams.map(({team, depth}) => {
                 return (
                   <div key={team.id} className="sidebar-team-node" data-team-depth={depth} style={{paddingInlineStart: Math.min(depth, 4) * 12, minWidth: 0, '--team-depth': Math.min(depth, 4)} as CSSProperties}><TeamNavigation
@@ -821,7 +826,7 @@ export function Sidebar({
                 );
               })}
             </div>
-          </Section>
+          </Section>}
 
           <Section label="Try" storageKey="try">
             {phone && !dismissedTry.includes("import") && (

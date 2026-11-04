@@ -98,6 +98,29 @@ function sidebarTree(data: BootstrapData) {
   )
 }
 
+describe('sidebar without joined teams', () => {
+  it('offers joining or creating beneath Your teams when both are allowed', () => {
+    const data = sidebarData({})
+    render(sidebarTree({ ...data, teamMembers: [], workspaceSettings: { ...data.workspaceSettings, teamCreatePermission: 'members' } as WorkspaceSettings }))
+    const link = screen.getByRole('link', { name: 'Join or create a team' })
+    expect(link).toHaveAttribute('href', `/${data.workspace.urlKey}/teams`)
+    expect(link.closest('.sidebar-section-teams')).toHaveTextContent('Your teams')
+  })
+
+  it('offers only joining when team creation is restricted', () => {
+    const data = sidebarData({})
+    render(sidebarTree({ ...data, teamMembers: [], workspaceSettings: { ...data.workspaceSettings, teamCreatePermission: 'admins' } as WorkspaceSettings }))
+    expect(screen.getAllByRole('link', { name: 'Join a team' })).toHaveLength(2)
+    expect(screen.queryByText('Join or create a team')).not.toBeInTheDocument()
+  })
+
+  it('hides an empty team section when neither action is permitted', () => {
+    const data = sidebarData({})
+    const { container } = render(sidebarTree({ ...data, viewerRole: 'guest', teamMembers: [] }))
+    expect(container.querySelector('.sidebar-section-teams')).toBeNull()
+  })
+})
+
 function renderSidebar(flags: Record<string, boolean>, locale: 'en-US' | 'zh-CN' = 'en-US') {
   localStorage.setItem('flow:locale', locale)
   return render(sidebarTree(sidebarData(flags)))
