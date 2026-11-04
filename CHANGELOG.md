@@ -26,6 +26,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Check the desktop label picker's exact 60px text offset after its opening animation finishes.
 - Share 1px keyboard focus rings across controls, with inset navigation rings and spaced checkbox and toggle rings.
 - Expose Skip to content to hardware keyboards on phones, with Enter moving focus into the main content.
+- Start the slow workspace hint's 0.8s fade 8.8s after DOM readiness and preserve its clock when React takes over the startup screen.
 
 - Show cycle dates in the interface language, use tabular numerals for cycle percentages, align the cycle page breadcrumb and item list with the directory, keep the phone cycle insights panel inside the viewport, translate the Loops template cards, and stop partial translations of sentences that end in "issue views".
 

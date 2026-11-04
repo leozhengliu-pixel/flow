@@ -44,6 +44,11 @@
         location.reload();
       }, true);
     </script>
+    <script>
+      addEventListener('DOMContentLoaded', () => {
+        document.documentElement.dataset.startupReady = '';
+      }, { once: true });
+    </script>
     <style>
       /* Also used by AppStartup while authentication and bootstrap are pending: the shell the app is about to draw
          (a blank sidebar column and the main card) with a small loading mark at the card centre. */
@@ -58,7 +63,8 @@
       .flow-startup__disc { width: 32px; height: 32px; margin-right: -8px; }
       /* A slow load adds a hint under the disc. */
       .flow-startup__card { position: relative; }
-      .flow-startup__text { position: absolute; top: calc(50% + 40px); left: 0; right: -8px; text-align: center; font-family: "Inter Variable", "SF Pro Display", -apple-system, system-ui, sans-serif; font-size: 13px; font-weight: 500; line-height: 19.5px; opacity: 0; animation: flow-startup-text .4s ease-out 8s forwards; }
+      .flow-startup__text { position: absolute; top: calc(50% + 40px); left: 0; right: -8px; text-align: center; font-family: "Inter Variable", "SF Pro Display", -apple-system, system-ui, sans-serif; font-size: 13px; font-weight: 500; line-height: 19.5px; opacity: 0; animation: flow-startup-text .8s ease-out var(--flow-startup-hint-delay, 8.8s) both paused; }
+      [data-startup-ready] .flow-startup__text { animation-play-state: running; }
       @keyframes flow-startup-text { to { opacity: 1; } }
       @media (prefers-reduced-motion: reduce) { .flow-startup__text { animation: none; opacity: 1; } }
       .flow-startup__accessible { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
