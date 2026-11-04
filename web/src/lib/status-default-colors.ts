@@ -17,9 +17,12 @@ const WORKFLOW_STROKE_OVERRIDES: Record<string, string> = {
   '#5e6ad2': 'lch(48% 59.31 288.43)',
 }
 
+// Workflow icons use a darker light-surface ceiling than project icons.
+const WORKFLOW_LIGHT_SURFACE_MAX_LIGHTNESS = 67.969
+
 export function workflowStatusStrokeColor(color: string, teamId?: string, theme: 'light' | 'dark' = 'dark'): string {
   // Team colors are saved choices, even when they match a legacy global default.
   const hex = normalizeHexColor(color)
   const stroke = !teamId && hex ? WORKFLOW_STROKE_OVERRIDES[hex] ?? color : color
-  return theme === 'light' ? lightSurfaceStatusColor(stroke) : stroke
+  return theme === 'light' ? lightSurfaceStatusColor(stroke, WORKFLOW_LIGHT_SURFACE_MAX_LIGHTNESS) : stroke
 }

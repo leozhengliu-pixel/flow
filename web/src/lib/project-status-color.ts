@@ -61,10 +61,10 @@ export function projectStatusStrokeColor(color: string, theme: 'light' | 'dark')
   return lightSurfaceStatusColor(color)
 }
 
-export function lightSurfaceStatusColor(color: string): string {
+export function lightSurfaceStatusColor(color: string, maxLightness = LIGHT_SURFACE_MAX_LIGHTNESS): string {
   const hex = normalizeHexColor(color)
   if (!hex) return color
   const lch = hexToLch(hex)
-  if (!lch || lch[0] <= LIGHT_SURFACE_MAX_LIGHTNESS) return color
-  return `lch(${LIGHT_SURFACE_MAX_LIGHTNESS}% ${round(lch[1])} ${round(lch[2])})`
+  if (!lch || lch[0] <= maxLightness) return color
+  return `lch(${maxLightness}% ${round(lch[1])} ${round(lch[2])})`
 }

@@ -15,7 +15,7 @@ describe('ISSUE_STATUS_COLORS', () => {
 
 describe('workflowStatusStrokeColor', () => {
   it('darkens a pale Todo ring on light surfaces without changing its saved color', () => {
-    expect(workflowStatusStrokeColor('#e2e2e2', 'team-custom', 'light')).toMatch(/^lch\(70\.313% /)
+    expect(workflowStatusStrokeColor('#e2e2e2', 'team-custom', 'light')).toMatch(/^lch\(67\.969% /)
     expect(workflowStatusStrokeColor('#e2e2e2', 'team-custom', 'dark')).toBe('#e2e2e2')
     expect(workflowStatusStrokeColor('#606060', 'team-custom', 'light')).toBe('#606060')
   })
