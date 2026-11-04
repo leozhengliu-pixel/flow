@@ -76,8 +76,9 @@ test('keeps issue properties readable, toggles labels, and searches short and lo
   for (const name of await labels.locator('.property-command-label').all()) await expect(name).toHaveCSS('color', 'lch(100 0 272)')
   const labelBox = (await labels.boundingBox())!
   expect(labelBox.x + labelBox.width).toBeLessThan((await rail.boundingBox())!.x + 5)
-  await expect(labels.locator('.property-command-checkbox').first()).toBeHidden()
   const uncheckedLabel = labels.getByRole('option', { name: '[audit] Label', exact: true })
+  await expect(uncheckedLabel.locator('.property-command-checkbox')).toBeHidden()
+  await expect(uncheckedLabel.locator('.property-command-checkbox')).toHaveCSS('opacity', '0')
   const uncheckedGeometry = await uncheckedLabel.evaluate(option => {
     const label = option.querySelector<HTMLElement>('.property-command-label')!
     const optionBox = option.getBoundingClientRect()
@@ -89,10 +90,14 @@ test('keeps issue properties readable, toggles labels, and searches short and lo
   expect(uncheckedGeometry.labelWidth).toBeGreaterThan(100)
   if (process.env.FLOW_CI_SHOTS) await labels.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/issue-labels-desktop-unchecked.png`, animations: 'disabled' })
   await uncheckedLabel.hover()
+  await expect(uncheckedLabel.locator('.property-command-checkbox')).toBeVisible()
+  await expect(uncheckedLabel.locator('.property-command-checkbox')).toHaveCSS('opacity', '1')
   if (process.env.FLOW_CI_SHOTS) await uncheckedLabel.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/issue-labels-desktop-hover.png`, animations: 'disabled' })
   await uncheckedLabel.click()
   const selectedLabel = labels.getByRole('option', { name: '[audit] Label', exact: true })
   await expect(selectedLabel).toHaveAttribute('aria-checked','true')
+  await expect(selectedLabel.locator('.property-command-checkbox')).toBeVisible()
+  await expect(selectedLabel.locator('.property-command-checkbox')).toHaveCSS('opacity', '1')
   await expect(selectedLabel.locator('.property-command-checkbox')).toHaveCSS('border-top-width','0px')
   if (process.env.FLOW_CI_SHOTS) await labels.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/issue-labels-desktop-checked.png`, animations: 'disabled' })
   await page.keyboard.press('Escape')

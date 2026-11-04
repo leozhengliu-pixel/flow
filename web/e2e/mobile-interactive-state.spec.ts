@@ -51,7 +51,7 @@ test('skill keyboard highlight fits long labels and restores its trigger', async
   await expect(trigger).toBeFocused()
 })
 
-test('team phone menu and subscription level share row geometry and return focus', async ({ page, request, workspaceKey }) => {
+test('team phone menu and subscription level share row geometry and return to the parent filter', async ({ page, request, workspaceKey }) => {
   const data = await (await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })).json() as BootstrapData
   await page.goto(`/${workspaceKey}/team/${data.teams[0].key}/all`)
   await page.getByRole('button', { name: 'Open sidebar', exact: true }).click()
@@ -66,13 +66,26 @@ test('team phone menu and subscription level share row geometry and return focus
   const submenu = page.locator('.sidebar-team-subscribe-menu[role=menu]')
   await expect(submenu).toBeVisible()
   await submenu.evaluate(async e => { await Promise.all(e.getAnimations().map(a => a.finished)) })
-  const row = submenu.getByRole('menuitemcheckbox').first()
+  const row = submenu.getByRole('menuitemcheckbox', { name: 'An issue is added to the team', exact: true, includeHidden: true })
   expect((await row.boundingBox())!.height).toBe(46)
-  await row.focus()
+  const filter = submenu.getByRole('textbox', { name: 'Filter…', exact: true })
+  await expect(filter).toBeFocused()
+  await filter.fill('triage')
+  await expect(row).toBeHidden()
+  await expect(submenu.getByRole('menuitemcheckbox')).toHaveCount(1)
+  await expect(submenu.getByRole('menuitemcheckbox', { name: 'An issue is added to the triage queue', exact: true })).toBeVisible()
+  if (process.env.FLOW_CI_SHOTS) await submenu.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/team-subscription-filtered.png`, animations: 'disabled' })
+  await filter.fill('')
+  await expect(row).toBeVisible()
+  await filter.press('ArrowDown')
+  await expect(row).toBeFocused()
   await expect.poll(() => row.evaluate(e => getComputedStyle(e, '::before').backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
-  await submenu.getByRole('button', { name: 'Back', exact: true }).click()
+  if (process.env.FLOW_CI_SHOTS) await submenu.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/team-subscription-keyboard.png`, animations: 'disabled' })
+  await page.keyboard.press('ArrowLeft')
+  await expect(submenu).not.toBeVisible()
   await expect(menu).toBeVisible()
-  await expect(subscribe).toBeFocused()
+  await expect(menu.getByRole('textbox', { name: 'Filter…', exact: true })).toBeFocused()
+  if (process.env.FLOW_CI_SHOTS) await menu.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/team-menu-parent-filter.png`, animations: 'disabled' })
 })
 
 test('checked document subscribers keep the shared highlight under pointer and keyboard', async ({ page, request, workspaceKey }) => {
