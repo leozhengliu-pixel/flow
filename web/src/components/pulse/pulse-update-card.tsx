@@ -3,7 +3,7 @@ import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import type { Editor } from '@tiptap/react'
-import { ArrowUp, BellOff, BellRing, Copy, FileText, HelpCircle, Link2, MessageCircle, MoreHorizontal, Paperclip, SmilePlus, SquareArrowOutUpRight } from 'lucide-react'
+import { ArrowUp, BellOff, BellRing, Copy, FileText, HelpCircle, Link2, MessageCircle, MoreHorizontal, Paperclip, SquareArrowOutUpRight } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { toast } from '@/lib/toast'
@@ -185,7 +185,7 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
       </FlowTooltip>
       <div className="pulse-post-reactions">
         {Object.entries(reactions).filter(([, userIds]) => userIds.length).map(([emoji, userIds]) => <button aria-pressed={userIds.includes(viewer.id)} key={emoji} onClick={() => props.onReact(item, emoji).catch(() => undefined)} type="button"><span>{emoji}</span>{userIds.length}</button>)}
-        <EmojiPicker align="start" onSelect={emoji => props.onReact(item, emoji).catch(() => undefined)}><button aria-label={t('Add reaction')} className="pulse-footer-button" type="button">{phone ? <AddReactionIcon size={14}/> : <SmilePlus size={14}/>}</button></EmojiPicker>
+        <EmojiPicker align="start" onSelect={emoji => props.onReact(item, emoji).catch(() => undefined)}><button aria-label={t('Add reaction')} className="pulse-footer-button" type="button"><AddReactionIcon size={14}/></button></EmojiPicker>
       </div>
     </footer>
     {commentsOpen && <section aria-label={t('Comments')} className="pulse-post-comments">
