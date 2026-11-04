@@ -38,7 +38,7 @@
 /* Skill page: back crumb (shared), title row, instructions card and the action row. */
 .agent-skill-page { display: flex; flex-direction: column; gap: 24px; width: 100%; max-width: 640px; margin: 0 auto; padding-bottom: 96px; }
 .agent-skill-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 0 14px; }
-.agent-skill-title { flex: 1; min-width: 0; height: 32px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--set-text); font: 600 24px/32px var(--font); letter-spacing: -.16px; }
+.agent-skill-title { flex: 1; min-width: 0; height: 32px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--set-text); font: 600 24px/32px var(--font); font-feature-settings: "calt"; font-variation-settings: "opsz" 32; letter-spacing: -.16px; }
 .agent-skill-title::placeholder { color: var(--theme-text-tertiary); }
 .agent-skill-title-row .agent-skill-menu-trigger { margin-top: 2px; }
 .agent-skill-card { box-sizing: border-box; padding: 16px; border-radius: 10px; background: var(--set-card); box-shadow: var(--set-card-shadow); color: var(--set-control-text); font-size: 15px; font-weight: 450; line-height: 24px; }
