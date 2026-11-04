@@ -20,8 +20,6 @@
   .flow-cycle-header [data-content-view-header]{position:relative;border-bottom:0}
   .flow-cycle-header [data-content-view-header]::after{content:"";position:absolute;right:0;bottom:0;left:0;height:.5px;background:var(--theme-border);pointer-events:none}
   .flow-cycle-header [data-content-view-subheader]{border-bottom:0;gap:6px}
-  .flow-cycle-detail [data-content-view-breadcrumb] a,
-  .flow-cycle-detail [data-content-view-breadcrumb] [data-current] strong{color:var(--text)}
   .flow-cycle-detail [data-content-view-breadcrumb] > span:nth-child(2) a > span{display:block;overflow:visible;font-size:13px !important;font-weight:500 !important;line-height:normal !important}
   .flow-cycle-detail [data-content-view-favorite],
   .flow-cycle-detail [data-content-view-header] > .cycle-row-menu{box-sizing:border-box;width:32px !important;height:32px !important;flex:0 0 32px !important;padding:0 2px;border:.5px solid transparent;color:var(--text)}
@@ -43,7 +41,7 @@
   .flow-cycle-issues [data-my-issues-group-header] > span:nth-of-type(3){display:none}
   .flow-cycle-issues .titleProperties{gap:8px}
   .flow-cycle-issues [data-row-title] + button[aria-label*="sub-issues"]{box-sizing:border-box;height:24px;padding:0 8px;border:.5px solid var(--relation-chip-border);border-radius:48px;background:var(--bg-panel);color:var(--bright);font-size:16px !important;font-weight:400 !important;line-height:24px !important;z-index:0}
-  .flow-cycle-issues [data-row-title] + button[aria-label*="sub-issues"] > span{color:var(--issue-muted);font-size:12px !important;font-weight:450 !important;line-height:normal !important}
+  .flow-cycle-issues [data-row-title] + button[aria-label*="sub-issues"] > span{color:var(--cycle-muted);font-size:12px !important;font-weight:450 !important;line-height:normal !important}
   .flow-cycle-issues [data-row-title]:is(:first-child){margin-right:0}
   .flow-cycle-issues [data-row-title] + button[aria-label*="sub-issues"]{margin-left:4px}
   .flow-cycle-issues [data-my-issues-group-header] .estimate-chip__value{transform:translateX(-1px)}
@@ -157,16 +155,29 @@
 /* The cycle switcher in the breadcrumb: the cycle icon, the name and a chevron. */
 .flow-cycle-detail .cycle-switcher { box-sizing: border-box; min-width: 0; }
 .flow-cycle-detail .cycle-switcher strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* The crumb's cycle icon reads like the title next to it on desktop, muted on the phone. */
+/* The crumb's cycle icon reads like the title next to it. */
 /* The detail page's breadcrumb separates its items with a text "›", like the directory's. */
-.cycle-crumb-separator { margin: -2px 8px 0; color: var(--issue-muted); font: 500 13px var(--font); line-height: normal; }
-.flow-cycle-detail { --cycle-crumb-icon: var(--theme-text-secondary); }
-@media (min-width: 768px) { .flow-cycle-detail { --cycle-crumb-icon: var(--text); } }
+.cycle-crumb-separator { margin: -2px 8px 0; color: var(--cycle-muted); font: 500 13px var(--font); line-height: normal; }
+.flow-cycle-detail { --cycle-crumb-icon: var(--issue-breadcrumb-text); }
+.flow-cycle-detail [data-content-view-breadcrumb] a,
+.flow-cycle-detail [data-content-view-breadcrumb] [data-current],
+.flow-cycle-detail [data-content-view-breadcrumb] .cycle-switcher { color: var(--issue-breadcrumb-text); }
+@media (min-width: 768px) {
+  /* The cycle button has its own 4px inset, so the separator before it keeps 4px of margin. */
+  .flow-cycle-detail [data-content-view-breadcrumb] > span:nth-child(3) .cycle-crumb-separator { margin-right: 4px; }
+}
 .flow-cycle-detail .cycle-switcher-play { flex: none; display: grid; place-items: center; width: 16px; height: 16px; margin-right: 8px; color: var(--cycle-crumb-icon); }
 .flow-cycle-detail .cycle-switcher-play svg { width: 16px; height: 16px; overflow: visible; fill: none; }
 .flow-cycle-detail .cycle-switcher-play svg circle { transform-box: fill-box; }
 .flow-cycle-detail .cycle-switcher-play svg circle:first-child { stroke: var(--cycle-crumb-icon) !important; }
 .flow-cycle-detail .cycle-switcher-play svg circle:nth-child(2) { stroke: var(--sub-issue-progress-value) !important; stroke-opacity: .68; }
 .flow-cycle-detail .cycle-switcher-play svg path { fill: currentColor; }
-.flow-cycle-detail .cycle-switcher-chevron { flex: none; display: grid; place-items: center; width: 8px; height: 9px; margin-left: 5px; color: var(--text); }
+.flow-cycle-detail .cycle-switcher-chevron { flex: none; display: grid; place-items: center; width: 8px; height: 9px; margin-left: 5px; color: var(--issue-breadcrumb-text); }
 .flow-cycle-detail .cycle-switcher-chevron svg { width: 8px; height: 9px; fill: currentColor; }
+
+/* On a phone the details and insights panel is a sheet from the right edge: 40px of the dimmed list stays visible on the left. */
+@media (max-width: 767px) {
+  .flow-cycle-scrim { position: absolute; z-index: 499; top: 87.5px; right: 0; bottom: 0; left: 0; background: var(--my-issues-details-overlay); }
+  .flow-cycle-panel { top: 87.5px; right: 0; bottom: 0; width: min(440px, calc(100vw - 40px)); height: auto; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .flow-cycle-panel.details, .flow-cycle-panel.insights { padding: 0 8px 0 4px; }
+}

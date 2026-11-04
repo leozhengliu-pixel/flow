@@ -61,8 +61,8 @@
 .flow-cycles-page .cycle-timeline-capacity > b { margin-right: 5px; color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
 .flow-cycles-page .cycle-timeline-scope > b { margin-right: 5px; color: var(--bright); font-weight: 500; font-variant-numeric: tabular-nums; }
 .flow-cycles-page .cycle-timeline-capacity > em,
-.flow-cycles-page .cycle-timeline-scope > em { color: var(--issue-muted); font-style: normal; }
-.flow-cycles-page .cycle-timeline-scope > svg { margin: 1px 4px 0 0; color: var(--issue-muted); }
+.flow-cycles-page .cycle-timeline-scope > em { color: var(--cycle-muted); font-style: normal; }
+.flow-cycles-page .cycle-timeline-scope > svg { margin: 1px 4px 0 0; color: var(--cycle-muted); }
 .flow-cycles-page .cycle-timeline-capacity .cycle-capacity-ring { margin-right: 8px; }
 
 .flow-cycles-page .cycle-timeline-chart { color: var(--cycle-muted); }
@@ -71,11 +71,11 @@
 .flow-cycles-page .cycle-timeline-metric > i { width: 6px; height: 6px; flex: none; border-radius: 1px; background: var(--issue-dim); }
 .flow-cycles-page .cycle-timeline-metric.is-started > i { background: var(--cycle-started); }
 .flow-cycles-page .cycle-timeline-metric.is-completed > i { background: var(--cycle-completed); }
-.flow-cycles-page .cycle-timeline-metric-label { color: var(--issue-muted); font: 450 13px/normal var(--font); }
-.flow-cycles-page .cycle-timeline-metric-value { display: flex; align-items: center; margin-left: auto; font: 500 12px/normal var(--font); }
-.flow-cycles-page .cycle-timeline-metric-value svg { margin: 0 5px 0 -1px; color: var(--issue-muted); }
+.flow-cycles-page .cycle-timeline-metric-label { color: var(--cycle-muted); font: 450 13px/normal var(--font); }
+.flow-cycles-page .cycle-timeline-metric-value { display: flex; align-items: center; margin-left: auto; font: 500 12px/normal var(--font); font-variant-numeric: tabular-nums; }
+.flow-cycles-page .cycle-timeline-metric-value svg { margin: 0 5px 0 -1px; color: var(--cycle-muted); }
 .flow-cycles-page .cycle-timeline-metric-value strong { font: inherit; }
-.flow-cycles-page .cycle-timeline-percent { margin-left: 3px; color: var(--issue-muted); font-weight: 450; white-space: nowrap; }
+.flow-cycles-page .cycle-timeline-percent { margin-left: 3px; color: var(--cycle-muted); font-weight: 450; white-space: nowrap; }
 .flow-cycles-page .cycle-timeline-percent > b { margin-right: 3px; font-weight: inherit; }
 
 @media (min-width: 768px) {
@@ -137,7 +137,7 @@
   .flow-cycles-page .flow-cycles-header::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: .5px; background: var(--border); }
   html:root body .app .flow-cycles-page [data-sidebar-trigger] > .cycle-phone-glyph { display: block; }
   .flow-cycles-page .flow-cycles-header .cycle-top-icon { margin-left: -6px; transform: none; }
-  .flow-cycles-page .flow-cycles-header button svg { width: 14px; height: 14px; color: var(--issue-muted); }
+  .flow-cycles-page .flow-cycles-header button svg { width: 14px; height: 14px; color: var(--cycle-muted); }
   .flow-cycles-page .flow-cycle-list {
     --cycle-rail: 51.5px;
     --cycle-rail-end: 0px;
