@@ -14,7 +14,7 @@
   .workspace-announcements-dialog > label.workspace-announcements-toggle { flex-direction: row; justify-content: space-between; }
   .workspace-announcements-dialog .settings-input { width: 100%; }
   .workspace-announcements-dialog textarea { box-sizing: border-box; width: 100%; resize: vertical; padding: 10px; border: 1px solid var(--set-sep); border-radius: 8px; background: var(--set-card); color: var(--set-text); font: 13px/20px var(--font); }
-  html:root .settings-app .settings-main > .settings-content { padding-top: 64px; }
+  .settings-main > .settings-content:where(:not(:has(> .settings-shortcuts-not-found))) { padding-top: 64px; }
   html:root .settings-app .settings-main:has(.settings-workspace-members) { scrollbar-gutter: auto; }
   html:root .settings-app .settings-main > .settings-content:has(.settings-teams-page) { padding-top: 64px; }
   html:root .settings-app .settings-sidebar { padding: 0; }

@@ -31,7 +31,6 @@ import {
   ChevronDown,
   ChevronRight,
   Upload,
-  KeyboardOff,
   MoreHorizontal,
   Plus,
   Search,
@@ -1054,7 +1053,7 @@ function SettingsBodyContent(
 ) {
   const { t } = useI18n();
   const { page } = props;
-  if (page === 'shortcuts') return <div className="settings-shortcuts-not-found" role="status"><KeyboardOff size={68} strokeWidth={1}/><strong>{t('Not found')}</strong><span>{t('We could not find the page you were looking for')}</span></div>;
+  if (page === 'shortcuts') return <div className="settings-shortcuts-not-found" role="status"><NotFoundArt/><strong>{t('Not found')}</strong><span>{t('We could not find the page you were looking for')}</span></div>;
   if (props.agentSkillMode)
     return (
       <AgentSkillEditor

@@ -36,6 +36,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Give shared desktop toolbar icon pills their measured resting, hover and open fills separately from text tabs.
 - Size the desktop issue document and property rail with the shared container grid, so their gutters and columns adapt together as the pane changes width.
 - Reset phone drawer navigation when focus returns to its pinned header, including on reopen, while preserving the hardware-keyboard skip link.
+- Show the shared computer artwork on the unavailable Shortcuts page and center not-found content without the regular settings top padding.
 - Give pale workflow status icons their own light-surface lightness ceiling while keeping saved colors and the project palette intact.
 - Align the document subscribers popover with the header's half-pixel button geometry.
 - Use the shared 13px date-command typography in the phone issue options Due date submenu.
