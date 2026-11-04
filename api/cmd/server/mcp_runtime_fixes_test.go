@@ -280,6 +280,7 @@ func TestMCPCountIssuesFastPathAllowListsSchemaFilters(t *testing.T) {
 	values := map[string]any{
 		"assignee": "me", "createdAt": "2026-01-01", "cycle": data.Cycles[0].ID,
 		"delegate": actor.User.ID, "hasAttachments": true, "hasCustomerRequests": true,
+		"filter":       map[string]any{"field": "team", "operator": "is", "values": []string{team}},
 		"hasSubIssues": true, "label": data.Labels[0].ID, "parentId": data.Issues[0].ID,
 		"priority": 2, "project": data.Projects[0].ID, "query": "no matching issue",
 		"release": "no matching release", "state": data.States[0].ID, "updatedAt": "2026-01-01",
@@ -319,6 +320,9 @@ func TestMCPCountIssuesFastPathAllowListsSchemaFilters(t *testing.T) {
 				t.Fatalf("count_issues %s: %v", property, err)
 			}
 			got, want := result.(map[string]any)["count"].(int64), queryCount(args)
+			if property == "filter" && want == 0 {
+				t.Fatal("representative filter must match a fixture issue")
+			}
 			if got != want {
 				t.Fatalf("count_issues %s = %d, query path = %d", property, got, want)
 			}
