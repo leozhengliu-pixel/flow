@@ -285,5 +285,9 @@ function fill(template: string, values: Record<string, ReactNode>): ReactNode {
   return parts.map((part, index) => /^\{\w+\}$/.test(part) ? <Fragment key={index}>{values[part.slice(1, -1)]}</Fragment> : part)
 }
 
-/** Only http(s) URLs from the OAuth client are loaded as images. */
-function safeHttpUrl(value?: string) { if (!value) return undefined; try { const url = new URL(value); return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : undefined } catch { return undefined } }
+/** Only http(s) URLs from the OAuth client, or an icon uploaded to Flow (/uploads/oauth_app_icon_…), are loaded as images. */
+function safeHttpUrl(value?: string) {
+  if (!value) return undefined
+  if (/^\/uploads\/oauth_app_icon_[A-Za-z0-9_-]+\.(?:png|jpe?g|webp|svg)$/.test(value)) return value
+  try { const url = new URL(value); return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : undefined } catch { return undefined }
+}

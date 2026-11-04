@@ -107,6 +107,18 @@ describe('OAuth consent page', () => {
     expect(own.querySelector('[data-known-app]')).toBeNull()
   })
 
+  it('shows an icon uploaded to Flow and no other relative path', async () => {
+    const icon = '/uploads/oauth_app_icon_1793776859349808000_wbp7rzapjy.svg'
+    api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent({ client: { client_id: 'c6', client_name: 'Icon agent', logo_uri: icon, token_endpoint_auth_method: 'client_secret_basic' } }))
+    const { unmount } = renderAt('?client_id=c6&redirect_uri=x&response_type=code&scope=read')
+    expect((await screen.findByRole('img', { name: 'Icon agent icon' })).querySelector('img')).toHaveAttribute('src', icon)
+    unmount()
+
+    api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent({ client: { client_id: 'c7', client_name: 'Other file', logo_uri: '/uploads/attachment_1_secret.png', token_endpoint_auth_method: 'client_secret_basic' } }))
+    renderAt('?client_id=c7&redirect_uri=x&response_type=code&scope=read')
+    expect((await screen.findByRole('img', { name: 'Other file icon' })).querySelector('img')).toBeNull()
+  })
+
   it('lists the realtime permission last when the application has a webhook', async () => {
     api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent({ realtime: true }))
     renderAt('?client_id=c1&redirect_uri=x&response_type=code&scope=read,write')
