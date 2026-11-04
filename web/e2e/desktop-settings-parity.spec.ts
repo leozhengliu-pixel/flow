@@ -83,11 +83,14 @@ test('teams sort by supported columns, expose member links, and show live overvi
   await expect(page.getByRole('button', { name: 'Create new team', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Order by Description', exact: true })).toHaveCount(0)
   for (const column of ['Visibility', 'Members', 'Issues', 'Created', 'Name']) {
-    const button = page.getByRole('button', { name: `Order by ${column}`, exact: true })
+    const button = page.getByRole('button', { name: new RegExp(`^Order by ${column}(, sorted (ascending|descending))?$`) })
+    const descending = column === 'Members' || column === 'Issues'
     await button.click()
-    const before = await button.locator('..').getAttribute('aria-sort')
+    await expect(button).toHaveAccessibleName(`Order by ${column}, sorted ${descending ? 'descending' : 'ascending'}`)
+    await expect(button.locator('..')).toHaveAttribute('aria-sort', descending ? 'descending' : 'ascending')
     await button.click()
-    expect(await button.locator('..').getAttribute('aria-sort')).not.toBe(before)
+    await expect(button).toHaveAccessibleName(`Order by ${column}, sorted ${descending ? 'ascending' : 'descending'}`)
+    await expect(button.locator('..')).toHaveAttribute('aria-sort', descending ? 'ascending' : 'descending')
   }
   const directory = page.locator('.settings-teams-row')
   const names = await directory.locator('strong').allTextContents()

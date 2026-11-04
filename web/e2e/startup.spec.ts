@@ -1,12 +1,8 @@
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './workspace-fixture'
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`keeps the ${theme} startup shell through slow entry, auth and bootstrap`, async ({ page, request }, testInfo) => {
-    const workspace = `startup-${theme}-${testInfo.project.name}-${Date.now()}`
-    const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
-      data: { name: 'Startup verification', urlKey: workspace, region: 'us' },
-    })
-    expect(response.status()).toBe(201)
+  test(`keeps the ${theme} startup shell through slow entry, auth and bootstrap`, async ({ page, workspaceKey }) => {
     await page.addInitScript(value => {
       localStorage.setItem('flow.theme', JSON.stringify({ interfaceTheme: value }))
       localStorage.setItem('flow:locale', 'en-US')
@@ -28,7 +24,7 @@ for (const theme of ['light', 'dark'] as const) {
       })
     }
     try {
-      await page.goto(`/${workspace}/projects/all`, { waitUntil: 'commit' })
+      await page.goto(`/${workspaceKey}/projects/all`, { waitUntil: 'commit' })
       for (const gate of gates) {
         await gate.reached
         const loader = page.locator('.flow-startup')
@@ -42,16 +38,19 @@ for (const theme of ['light', 'dark'] as const) {
           const disc = element.querySelector('.flow-startup__disc')!.getBoundingClientRect()
           return { rail: rail.width, card: [card.x, card.y, card.width, card.height], disc: [disc.width, disc.height], dx: disc.x + disc.width / 2 - (card.x + card.width / 2), dy: disc.y + disc.height / 2 - (card.y + card.height / 2), overflow: document.documentElement.scrollWidth > innerWidth }
         })
-        // The loading surface is the shell the app draws next: a blank sidebar column, the main card and a 32px disc at its centre.
-        expect(geometry.rail).toBe(244)
-        expect(geometry.card[0]).toBe(244)
-        expect(geometry.card[1]).toBe(8)
+        const phone = page.viewportSize()!.width <= 1024
+        // Narrow screens hide the sidebar and let the loading card fill the viewport.
+        expect(geometry.rail).toBe(phone ? 0 : 244)
+        expect(geometry.card[0]).toBe(phone ? 0 : 244)
+        expect(geometry.card[1]).toBe(phone ? 0 : 8)
+        if (phone) expect(geometry.card.slice(2)).toEqual([page.viewportSize()!.width, page.viewportSize()!.height])
         expect(geometry.disc).toEqual([32, 32])
         // Centred between the sidebar column and the window edge, so 4px right of the card's own centre.
-        expect(geometry.dx).toBeCloseTo(4, 0)
+        expect(geometry.dx).toBeCloseTo(phone ? 0 : 4, 0)
         expect(geometry.dy).toBeCloseTo(0, 0)
         expect(geometry.overflow).toBe(false)
         await expect(page.locator('.flow-startup__pulse')).toHaveCount(0)
+        if (process.env.FLOW_CI_SHOTS && gate.path === '/api/bootstrap') await loader.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/startup-${phone ? 'phone' : 'desktop'}-${theme}.png`, animations: 'disabled' })
         gate.release()
       }
       await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()

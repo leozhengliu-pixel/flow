@@ -34,13 +34,18 @@ it('sorts the available team columns in both directions using the displayed data
   const first = () => container.querySelector('.settings-teams-row strong')?.textContent
   expect(first()).toBe('Alpha')
   expect(screen.queryByRole('button', { name: 'Order by Description' })).not.toBeInTheDocument()
+  const sortButton = (column: string) => screen.getByRole('button', { name: new RegExp(`^Order by ${column}(, sorted (ascending|descending))?$`) })
+  expect(sortButton('Name')).toHaveAccessibleName('Order by Name, sorted ascending')
   for (const label of ['Name', 'Visibility', 'Members', 'Issues', 'Created']) {
-    expect(screen.getByRole('button', { name: `Order by ${label}` }).querySelector('svg')).toHaveAttribute('width', '12')
+    expect(sortButton(label).querySelector('svg')).toHaveAttribute('width', '12')
   }
   for (const [column, expected] of [['Visibility', 'Zulu'], ['Members', 'Alpha'], ['Issues', 'Zulu'], ['Created', 'Alpha'], ['Name', 'Alpha']]) {
-    await userEvent.click(screen.getByRole('button', { name: `Order by ${column}` }))
+    const descending = column === 'Members' || column === 'Issues'
+    await userEvent.click(sortButton(column))
+    expect(sortButton(column)).toHaveAccessibleName(`Order by ${column}, sorted ${descending ? 'descending' : 'ascending'}`)
     expect(first()).toBe(expected)
-    await userEvent.click(screen.getByRole('button', { name: `Order by ${column}` }))
+    await userEvent.click(sortButton(column))
+    expect(sortButton(column)).toHaveAccessibleName(`Order by ${column}, sorted ${descending ? 'ascending' : 'descending'}`)
     expect(first()).not.toBe(expected)
   }
   expect(screen.getAllByRole('link', { name: '-' }).length).toBeGreaterThan(0)

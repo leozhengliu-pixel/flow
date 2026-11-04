@@ -98,11 +98,15 @@ for (const width of [1440, 375, 390]) for (const theme of ['dark', 'light'] as c
     }
     let releaseSave!: () => void
     const saveHeld = new Promise<void>(resolve => { releaseSave = resolve })
-    await page.route('**/api/subscriptions', async route => { await saveHeld; await route.continue() })
+    const savePath = `**/api/subscriptions/team/${boot.teams[0].id}`
+    await page.route(savePath, async route => { await saveHeld; await route.continue() })
     try {
+      const saveStarted = page.waitForRequest(savePath)
       await checkbox.click()
+      expect((await saveStarted).method()).toBe('PUT')
       await expect(checkbox).toHaveAttribute('data-disabled')
       await capture(subscriptions, `subscribe-disabled-${key}`)
+      if (process.env.FLOW_CI_SHOTS && width === 390 && zh) await subscriptions.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/subscribe-disabled-${key}.png`, animations: 'disabled' })
     } finally { releaseSave() }
     await expect(checkbox).not.toHaveAttribute('data-disabled')
     await expect(checkbox).toHaveAttribute('aria-checked', 'true')

@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Verify team sort announcements in both directions, hold the actual subscription save request while checking disabled menu states, and assert the phone startup shell geometry independently of the desktop sidebar.
+
 - Show cycle dates in the interface language, use tabular numerals for cycle percentages, align the cycle page breadcrumb and item list with the directory, keep the phone cycle insights panel inside the viewport, translate the Loops template cards, and stop partial translations of sentences that end in "issue views".
 
 - Align browser regressions with label checkbox opacity states and searchable phone subscription submenu navigation.
