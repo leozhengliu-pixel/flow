@@ -8,6 +8,10 @@
   min-height: 0;
 }
 .issue-properties > .issue-team-property.core-property-picker { display: none; }
+/* A long value stays inside the property column: the row is the column's full width, the trigger is as wide as its content up
+   to that, and the text (not the icon) is what clips, with an ellipsis. */
+.issue-properties :is(.core-property-picker, .issue-assignee-group) { min-width: 0; max-width: 100%; }
+.issue-properties :is(.core-property-trigger, .label-project-trigger) > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (min-width: 1024px) {
   .issue-view.full:not(.issue-view--triage):not(.issue-view--embedded) .issue-layout {
     width: calc(100% - 95px);

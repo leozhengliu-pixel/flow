@@ -1,6 +1,6 @@
 /*
  * The reference app IssueDetailsPaneSidebar assignee + delegate (values from the reference app's bundle):
- * - wrapper: flex column, width 100%;
+ * - wrapper: flex column filling the sidebar column (no explicit width: the column's 4px row margin would push it past the edge);
  * - avatars are "micro" (14px) — the assignee's with 1px either side, the delegated agent's only 1px right;
  * - delegate block: 32px tall, 4px above the trigger, padding-left 23px, position relative;
  * - its NestingLine: left 14px (under the assignee avatar's centre), from the assignee row's bottom, 10px stem.
@@ -9,7 +9,6 @@
  */
 .issue-assignee-group {
   display: flex;
-  width: 100%;
   min-width: 0;
   flex-direction: column;
 }
