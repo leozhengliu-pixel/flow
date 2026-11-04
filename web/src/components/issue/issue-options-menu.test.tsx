@@ -24,6 +24,19 @@ function setup(releasePipelines: ReleasePipeline[] = []) {
 describe('issue action menu', () => {
   beforeEach(() => { localStorage.clear(); vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }) })
   afterEach(() => vi.unstubAllGlobals())
+  it('restores an archived issue in a separate write and disables property changes',async()=>{
+    const user=userEvent.setup()
+    const issue=makeIssue({archivedAt:'2026-11-03T00:00:00Z'})
+    const onUpdate=vi.fn().mockResolvedValue(undefined)
+    render(<I18nProvider><IssueOptionsMenu issue={issue} data={makeBootstrap({reviews:[]})} onRelation={vi.fn()} onUpdate={onUpdate} onDelete={vi.fn()}/></I18nProvider>)
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    const due=screen.getByRole('option',{name:/^Due date/})
+    expect(due).toHaveAttribute('aria-disabled','true')
+    await user.hover(due)
+    expect(screen.queryByRole('dialog',{name:'Due date'})).not.toBeInTheDocument()
+    await user.click(screen.getByRole('option',{name:'Restore'}))
+    await waitFor(()=>expect(onUpdate).toHaveBeenCalledExactlyOnceWith({archived:false}))
+  })
   it('offers the release picker on phones when a release pipeline exists',async()=>{
     const media=vi.spyOn(window,'matchMedia').mockImplementation(query=>({matches:query==='(max-width: 767px)',addEventListener:vi.fn(),removeEventListener:vi.fn()}) as unknown as MediaQueryList)
     try {

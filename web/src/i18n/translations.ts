@@ -69,6 +69,7 @@ import { chatIntegrationsZhCN } from './translations-chat-integrations';
 import { coverageGapsZhCN } from './translations-coverage-gaps';
 
 export const zhCN: Record<string, string> = {
+  "invalid input: restore this archived issue before editing it": "请先恢复此已归档事项，再进行编辑",
   "Assigned users": "已分配用户",
   "Other agents": "其他代理",
   "Show {count} events": "显示 {count} 个事件",

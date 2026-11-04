@@ -1,3 +1,9 @@
+.issue-property-fields {
+  display: contents;
+}
+.issue-property-fields:disabled :is(button, .phone-property-trigger) {
+  pointer-events: none;
+}
 .issue-properties-rail {
   min-width: 0;
   display: flex;

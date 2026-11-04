@@ -9,6 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Verify compact composer and clipboard toast styles at the shared 880px boundary, and isolate the desktop route matrix by viewport so its full coverage does not share one test deadline.
 - Check unsafe translation placeholder replacements per source file so the full repository scan stays within individual test deadlines in coverage runs.
+- Require archived issues to be restored before changing their content or properties, make their editors and property controls read-only, and offer Restore in issue options.
+
 - Verify team sort announcements in both directions, hold the actual subscription save request while checking disabled menu states, and assert the phone startup shell geometry independently of the desktop sidebar.
 - Fix regressions: restore the phone team settings page padding and width, keep empty columns on project, cycle and My issues boards in the Hidden columns panel unless "Show empty columns" is on, list the phone cycle figures as label and value rows so "Days remaining" no longer wraps, insert names containing `$&` or `$'` into translated text as written, space the inbox row Snooze key and submenu triangle 6px apart, draw the workspace menu submenu triangle like every other menu, keep the issue composer title at the measured offset without padding, and restore the 120px Lead column on the projects list.
 

@@ -93,7 +93,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   const copyShortcut=(value:string)=>{void navigator.clipboard.writeText(value).then(()=>toast.success(t('Copied to clipboard'))).catch(()=>toast.error(t('Could not write to clipboard')))}
   useFlowHotkeys({
     A:()=>openProperty('assignee'), S:()=>openProperty('status'), P:()=>openProperty('priority'), L:()=>openProperty('labels'),
-    I:()=>{void onUpdate({assigneeId:issue.assignee?.id===data.viewer.id?'':data.viewer.id}).catch(error=>toast.error(error instanceof Error?error.message:t('Could not update issue')))},
+    I:()=>{if(!issue.archivedAt)void onUpdate({assigneeId:issue.assignee?.id===data.viewer.id?'':data.viewer.id}).catch(error=>toast.error(error instanceof Error?error.message:t('Could not update issue')))},
     '⇧ E':()=>openProperty('estimate'), '⇧ C':()=>openProperty('cycle'),
     '⇧ R':()=>viewRef.current?.querySelector<HTMLElement>('.title-editor[contenteditable="true"]')?.focus(),
     'Ctrl ⇧ I':()=>viewRef.current?.querySelector<HTMLElement>('.description-editor[contenteditable="true"]')?.focus(),
@@ -161,11 +161,11 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
     />}
     <div className="issue-scroll"><div className="issue-layout">
       <IssueAgentTasksProvider key={`${data.workspace.id}:${issue.id}`} issue={issue} data={data} onUpload={uploadCommentFile}><article className="issue-document">
-        <IssueTitleEditor value={title} onChange={value=>{setTitle(value);schedule({title:value})}} onBlur={()=>void flush()}/>
+        <IssueTitleEditor readOnly={Boolean(issue.archivedAt)} value={title} onChange={value=>{setTitle(value);schedule({title:value})}} onBlur={()=>void flush()}/>
         {parentIssue&&<IssueParentContext parent={parentIssue} issues={data.issues} workspaceKey={data.workspace.urlKey} onOpen={()=>openIssue(parentIssue)}/>}
         {embedded&&triageActions&&<div className="issue-triage-embedded-actions"><span>{t('Triage')}</span>{triageActions}</div>}
         {!triageView&&<TriageIntelligenceSuggestions issue={issue} data={data} inTriage={inTriage} onIssueUpdated={onIssueUpdated}/>}
-        <div className="issue-mobile-properties" aria-label={t('Issue properties')}>
+        <fieldset disabled={Boolean(issue.archivedAt)} className="issue-property-fields"><div className="issue-mobile-properties" aria-label={t('Issue properties')}>
           <StatusPicker value={issue.state} states={availableStates} triage={inTriage} onChange={stateId=>onUpdate({stateId})}/>
           <div className="issue-mobile-priority" data-empty={issue.priority===0}><PriorityPicker value={issue.priority} emptyTriggerLabel={t('Priority')} onChange={priority=>onUpdate({priority})}/></div>
           <div className="issue-mobile-assignee" data-empty={!issue.assignee&&!issue.delegate}><AssigneePicker value={issue.assignee} delegate={issue.delegate} emptyTriggerLabel="Assignee" allowAgents={agentsAvailable(data)} users={data.users} teamId={issue.team.id} hoverContext={{ member: issue.assignee ? data.members.find(item=>item.user.id===issue.assignee?.id) : undefined, online: Boolean(issue.assignee && (issue.assignee.id===data.viewer.id || peoplePresence.some(item=>item.user.id===issue.assignee?.id))), workspaceName: issue.team.name }} onChange={assigneeId=>onUpdate({assigneeId})} onDelegate={delegateId=>onUpdate({delegateId})}/></div>
@@ -177,10 +177,11 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
           <IssueRecurrenceProperty issue={issue} timeZone={data.teamSettings?.[issue.team.id]?.timezone} onUpdate={onUpdate}/>
           <IssueMobileRelations issue={issue} data={data} activities={activities} onOpenIssue={openIssue}/>
           {releasesEnabled&&data.releases.some(release=>release.issueIds.includes(issue.id))&&<IssueReleasePicker data={data} issue={issue}/>}
-        </div>
+        </div></fieldset>
         {triageView&&<TriageIntelligenceSuggestions issue={issue} data={data} inTriage={inTriage} onIssueUpdated={onIssueUpdated}/>}
         <IssueDescriptionEditor
-          selectionActions={descriptionSelection.actions}
+          readOnly={Boolean(issue.archivedAt)}
+          selectionActions={issue.archivedAt?undefined:descriptionSelection.actions}
           loading={issue.isSummary}
           users={data.users}
           onInsertImage={async file => {
@@ -223,9 +224,9 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         </SelectionIssueProvider>
       </article></IssueAgentTasksProvider>
       {/* The issue page has no docked agent: the floating chat (⌘J) is the agent, with this issue as context. */}
-      <div className="issue-properties-rail">
+      <fieldset disabled={Boolean(issue.archivedAt)} className="issue-property-fields"><div className="issue-properties-rail">
         <IssueProperties issue={issue} data={data} activities={activities} onOpenIssue={openIssue} onDeleteRelation={onDeleteRelation} presence={peoplePresence} releasesEnabled={releasesEnabled} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onCreateLabel={createLabel} onUpdate={onUpdate} onToggleLabel={toggleLabel}/>
-      </div>
+      </div></fieldset>
     </div></div>
     {relationType&&<RelationPicker open onOpenChange={open=>!open&&setRelationType(null)} type={relationType} issueId={issue.id} issues={data.issues} onSelect={id=>onRelation(relationType,id)}/>}
   </section>

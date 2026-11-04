@@ -5874,6 +5874,9 @@ func applyNotificationUpdate(notification *domain.Notification, input domain.Not
 }
 
 func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.IssueUpdateInput) (map[string]string, error) {
+	if err := checkArchivedIssueUpdate(*issue, input); err != nil {
+		return nil, err
+	}
 	// Cycle graphs replay membership history, so every cycle change records its previous cycle.
 	cycleBeforeUpdate := optionalID(issue.CycleID)
 	triageSettings := teamSettings(data, issue.Team.ID)

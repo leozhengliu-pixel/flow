@@ -271,6 +271,7 @@ export function IssueOptionsMenu({
     const onKeyDown = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) return
       const key = event.key.toLowerCase()
+      if (issue.archivedAt && (key === 'm' || key === 'd' || key === 's')) return
       if (!mobile && (event.metaKey || event.ctrlKey) && event.shiftKey && !event.altKey && key === 'm' && data && data.teams.filter(team => !team.retiredAt && !team.archivedAt).length > 1) {
         event.preventDefault()
         setOpen(true)
@@ -306,7 +307,7 @@ export function IssueOptionsMenu({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [actions, beginAddLink, confirmDelete, data, mobile, onFavoriteChange, onRemind, perform, toggleSubscription])
+  }, [actions, beginAddLink, confirmDelete, data, issue.archivedAt, mobile, onFavoriteChange, onRemind, perform, toggleSubscription])
 
   const url = issueUrl ?? `${window.location.origin}/${data?.workspace.urlKey ?? ''}/issue/${issue.identifier}`
   const titleLink = `[${issue.title}](${url})`
@@ -346,9 +347,10 @@ export function IssueOptionsMenu({
             <div className="issue-options-list-surface">
               <Command.List>
                 <Command.Empty className="issue-options-empty">{t('No results')}</Command.Empty>
-                {(mobile || data && data.teams.filter(team => !team.retiredAt && !team.archivedAt).length > 1) && <Option icon={<FlowGlyph name="leadTeam" size={16}/>} label="Team" shortcut={mobile ? undefined : 'Command Shift M'} nested="team" anchor={anchors.team} expanded={submenu === 'team'} onHover={() => openNested('team')} onSelect={() => openNested('team', true)}/>}
-                <Option icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested="due" anchor={anchors.due} expanded={datePickerOpen} onHover={() => openNested('due')} onSelect={() => openNested('due', true)}/>
-                {data?.workspaceSettings.featureFlags.releases !== false && hasReleaseSurface && <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
+                {issue.archivedAt && <Option icon={<RefreshCw/>} label="Restore" disabled={busy} onSelect={() => void perform(() => onUpdate({ archived: false }))}/>}
+                {(mobile || data && data.teams.filter(team => !team.retiredAt && !team.archivedAt).length > 1) && <Option disabled={Boolean(issue.archivedAt)} icon={<FlowGlyph name="leadTeam" size={16}/>} label="Team" shortcut={mobile ? undefined : 'Command Shift M'} nested="team" anchor={anchors.team} expanded={submenu === 'team'} onHover={() => openNested('team')} onSelect={() => openNested('team', true)}/>}
+                <Option disabled={Boolean(issue.archivedAt)} icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested="due" anchor={anchors.due} expanded={datePickerOpen} onHover={() => openNested('due')} onSelect={() => openNested('due', true)}/>
+                {data?.workspaceSettings.featureFlags.releases !== false && hasReleaseSurface && <Option disabled={Boolean(issue.archivedAt)} icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
                 <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
                 {data?.workspaceSettings.featureFlags['customer-requests'] !== false && <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut={isMacPlatform() ? 'Ctrl R' : 'Ctrl Option R'} onSelect={() => {
                   // The issue page shows "Select customer…" and its inline composer; elsewhere the composer opens in a dialog.
@@ -363,7 +365,7 @@ export function IssueOptionsMenu({
                 {removableMenuLinks.length > 0 && <Option icon={<X/>} label="Remove" nested="remove" anchor={anchors.remove} expanded={submenu === 'remove'} onHover={() => openNested('remove')} onSelect={() => openNested('remove', true)}/>}
                 <Separator/>
                 <Option icon={<Copy/>} label="Copy" nested="copy" anchor={anchors.copy} expanded={submenu === 'copy'} onHover={() => openNested('copy')} onSelect={() => openNested('copy', true)}/>
-                <Option icon={<RefreshCw/>} label="Convert to" nested="convert" anchor={anchors.convert} expanded={submenu === 'convert'} onHover={() => openNested('convert')} onSelect={() => openNested('convert', true)}/>
+                <Option disabled={Boolean(issue.archivedAt)} icon={<RefreshCw/>} label="Convert to" nested="convert" anchor={anchors.convert} expanded={submenu === 'convert'} onHover={() => openNested('convert')} onSelect={() => openNested('convert', true)}/>
                 {actions && <Option icon={<Copy/>} label="Make a copy…" onSelect={() => actions.makeCopy ? void perform(actions.makeCopy) : beginRelated('copy')}/>}
                 <Separator/>
                 <Option icon={<Star/>} glyph={favorited ? <FlowFavoriteFilledIcon/> : <FlowFavoriteIcon/>} label={favorited ? 'Remove from favorites' : 'Favorite'} shortcut="Option F" onSelect={() => {
@@ -374,7 +376,7 @@ export function IssueOptionsMenu({
                   }
                 }}/>
                 <Option icon={<Bell/>} label="Remind me" shortcut="Shift H" nested="remind" anchor={anchors.remind} expanded={submenu === 'remind'} onHover={() => { if (actions) openNested('remind') }} onSelect={() => actions ? openNested('remind', true) : (closeMenu(), onRemind?.())}/>
-                {data?.viewer.id && <Option icon={<Bell/>} label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="Shift S" onSelect={toggleSubscription}/>}
+                {data?.viewer.id && <Option disabled={Boolean(issue.archivedAt)} icon={<Bell/>} label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="Shift S" onSelect={toggleSubscription}/>}
                 <Separator/>
                 {data?.workspaceSettings.featureFlags['triage-intelligence'] && <Option icon={<Search/>} label="Find suggestions" onSelect={findSuggestions}/>}
                 {data?.workspaceSettings.featureFlags.loops !== false && <Option icon={<Repeat2/>} label="Run loop…" onSelect={() => {
@@ -563,10 +565,10 @@ function PhonePullRequestIcon() {
   </svg>
 }
 
-function Option({ icon, glyph, label, detail, shortcut, nested, anchor, expanded, danger, checked, onHover, onSelect }: { icon: ReactNode; /** Replaces the label's action glyph. */ glyph?: ReactNode; label: string; detail?: string; shortcut?: string; nested?: Submenu | 'due'; anchor?: RefObject<HTMLDivElement | null>; expanded?: boolean; danger?: boolean; checked?: boolean; onHover?: () => void; onSelect?: () => void }) {
+function Option({ icon, glyph, label, detail, shortcut, nested, anchor, expanded, danger, checked, disabled, onHover, onSelect }: { icon: ReactNode; /** Replaces the label's action glyph. */ glyph?: ReactNode; label: string; detail?: string; shortcut?: string; nested?: Submenu | 'due'; anchor?: RefObject<HTMLDivElement | null>; expanded?: boolean; danger?: boolean; checked?: boolean; disabled?: boolean; onHover?: () => void; onSelect?: () => void }) {
   const { t } = useI18n()
   const text = t(label.replaceAll('...', '…'))
-  return <Command.Item ref={anchor} className={`issue-options-item${danger ? ' danger' : ''}`} value={label} keywords={[text]} data-submenu={nested} data-submenu-open={expanded || undefined} aria-expanded={nested ? Boolean(expanded) : undefined} onPointerEnter={onHover} onSelect={onSelect}>
+  return <Command.Item ref={anchor} disabled={disabled} className={`issue-options-item${danger ? ' danger' : ''}`} value={label} keywords={[text]} data-submenu={nested} data-submenu-open={expanded || undefined} aria-expanded={nested ? Boolean(expanded) : undefined} onPointerEnter={disabled?undefined:onHover} onSelect={onSelect}>
     <span className="issue-options-icon" aria-hidden="true">{glyph ?? <IssueActionGlyph label={label} fallback={icon}/>}</span>
     <span className="issue-options-label">{text}</span>
     {detail && <small className="issue-options-detail">{detail}</small>}

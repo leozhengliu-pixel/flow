@@ -15,15 +15,17 @@ interface IssueTitleEditorProps {
   autoFocus?: boolean
   className?: string
   editorRef?: (editor: Editor | null) => void
+  readOnly?: boolean
 }
 
-export function IssueTitleEditor({ value, onChange, onBlur, onEnter, onSubmit, autoFocus = false, className, editorRef }: IssueTitleEditorProps) {
+export function IssueTitleEditor({ value, onChange, onBlur, onEnter, onSubmit, autoFocus = false, className, editorRef, readOnly = false }: IssueTitleEditorProps) {
   const { t } = useI18n()
   const titleLabel = t('Issue title')
   const enterRef = useLatestRef(onEnter)
   const submitRef = useLatestRef(onSubmit)
   const editor = useEditor({
     immediatelyRender: false,
+    editable: !readOnly,
     extensions: [
       FlowStarterKit.configure({
         blockquote: false,
@@ -66,10 +68,15 @@ export function IssueTitleEditor({ value, onChange, onBlur, onEnter, onSubmit, a
   }, [editor, value])
 
   useEffect(() => {
-    if (!editor || !autoFocus) return
+    if (!editor || !autoFocus || readOnly) return
     const frame = requestAnimationFrame(() => editor.commands.focus('end'))
     return () => cancelAnimationFrame(frame)
-  }, [autoFocus, editor])
+  }, [autoFocus, editor, readOnly])
+  useEffect(() => {
+    if (!editor) return
+    editor.setEditable(!readOnly, false)
+    editor.view.dom.setAttribute('aria-readonly', String(readOnly))
+  }, [editor, readOnly])
   useEffect(() => {
     if (!editor) return
     editor.view.dom.setAttribute('aria-label', titleLabel)

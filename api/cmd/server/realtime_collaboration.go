@@ -586,7 +586,7 @@ func (s *server) socketIssue(r *http.Request, issueID string) (domain.Issue, boo
 		return domain.Issue{}, false, false, nil
 	}
 	issue := data.Issues[index]
-	canEdit := s.authDisabled || issuePermissionRank(issueRole(s, data, issue)) >= issuePermissionRank("editor") && socketCredentialMayWrite(r, path.Path)
+	canEdit := issue.ArchivedAt == nil && (s.authDisabled || issuePermissionRank(issueRole(s, data, issue)) >= issuePermissionRank("editor") && socketCredentialMayWrite(r, path.Path))
 	return issue, true, canEdit, nil
 }
 

@@ -160,10 +160,13 @@ func collaborationAccessScope(event domain.RealtimeEvent) (socketAccessScope, bo
 		if json.Unmarshal(event.Payload, &payload) == nil && payload.Entity != nil {
 			team = payload.Entity.Team.ID
 		}
-		if issueUpdateChangedParent(event.Payload) {
+		if issueUpdateIncludesField(event.Payload, "parentId") {
 			// Sub-issues inherit their parents' grants: re-parenting can
 			// change who may read or edit the issue and its descendants.
 			return socketAccessScope{issues: map[string]string{"*": ""}}, true
+		}
+		if issueUpdateIncludesField(event.Payload, "archived") {
+			team = ""
 		}
 		return socketAccessScope{issues: map[string]string{event.AggregateID: team}}, true
 	case kind == "issue.relation_removed":
@@ -199,21 +202,19 @@ func collaborationAccessScope(event domain.RealtimeEvent) (socketAccessScope, bo
 	return socketAccessScope{}, false
 }
 
-// issueUpdateChangedParent reports whether an issue.updated payload changes
-// the issue's parent: the update input names parentId (at the top level, as
-// the records path stores it, or under changes/input).
-func issueUpdateChangedParent(payload json.RawMessage) bool {
+// Update inputs may be at the top level (records), or under changes/input.
+func issueUpdateIncludesField(payload json.RawMessage, field string) bool {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(payload, &fields) != nil {
 		return false
 	}
-	if _, ok := fields["parentId"]; ok {
+	if _, ok := fields[field]; ok {
 		return true
 	}
 	for _, key := range []string{"changes", "input"} {
 		var nested map[string]json.RawMessage
 		if json.Unmarshal(fields[key], &nested) == nil {
-			if _, ok := nested["parentId"]; ok {
+			if _, ok := nested[field]; ok {
 				return true
 			}
 		}

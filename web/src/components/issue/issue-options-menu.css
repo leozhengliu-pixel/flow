@@ -6,6 +6,7 @@
 .issue-options-item{position:relative;display:flex;align-items:center;gap:8px;height:32px;min-width:0;padding:0 18px 0 14px;border:0;background:transparent;color:var(--issue-menu-text);font-size:13px;font-weight:450;line-height:normal;outline:0;cursor:default}
 .issue-options-item::before{content:"";position:absolute;inset:0 6px;border-radius:8px;background:transparent;pointer-events:none}
 .issue-options-item>*{position:relative;z-index:1}
+.issue-options-item[data-disabled=true]{opacity:.5}
 [data-highlight=true]>.issue-options-item[data-selected=true]::before,.issue-options-popover[data-highlight=true] .issue-options-item[data-selected=true]::before,.issue-options-submenu[data-highlight=true] .issue-options-item[data-selected=true]::before,.issue-options-item[data-submenu-open=true]::before{background:var(--issue-menu-active-bg)}
 .issue-options-popover[data-highlight=true] .issue-options-item[data-selected=true],.issue-options-submenu[data-highlight=true] .issue-options-item[data-selected=true],.issue-options-item[data-submenu-open=true]{color:var(--issue-menu-active-text)}
 .issue-options-icon{display:grid;place-items:center;width:16px;height:16px;flex:0 0 16px;color:var(--issue-menu-muted)}

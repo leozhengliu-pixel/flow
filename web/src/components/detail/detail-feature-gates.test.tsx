@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -7,7 +7,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import type { User } from '@/types/flow'
 import { makeBootstrap } from '@/test/fixtures'
 import { DetailPane } from './detail-pane'
-vi.mock('@/components/issue/issue-description-editor',()=>({IssueDescriptionEditor:()=> <div/>}))
+vi.mock('@/components/issue/issue-description-editor',()=>({IssueDescriptionEditor:({readOnly}:{readOnly?:boolean})=> <div data-testid="description" data-readonly={Boolean(readOnly)}/>}))
 vi.mock('@/components/editor/composer',()=>({Composer:()=> <div/>}))
 const layout=vi.hoisted(()=>({desktop:false}))
 vi.mock('@/hooks/use-desktop-layout',()=>({useDesktopLayout:()=>layout.desktop}))
@@ -15,6 +15,21 @@ vi.mock('./similar-issues',()=>({SimilarIssues:()=> <section aria-label="Similar
 
 describe('issue detail feature gates',()=>{
   beforeEach(()=>{layout.desktop=false})
+  it('keeps archived title, description and properties read-only until restoration',async()=>{
+    const data=makeBootstrap({cycleSettings:{},teamSettings:{},documents:[],members:[],drafts:[],reviews:[],favorites:[],customers:[],teamMembers:[],userSettings:{},projectTemplates:[],agentSkills:[],customerRequests:[],issueSlas:[],slaRules:[]})
+    data.workspaceSettings={...data.workspaceSettings,featureFlags:{releases:false,'customer-requests':false,'triage-intelligence':false}}
+    const props={issue:{...data.issues[0],archivedAt:'2026-11-03T00:00:00Z'},data,comments:[],activities:[],onClose:vi.fn(),onUpdate:vi.fn(),onDelete:vi.fn(),onCreateSubIssue:vi.fn(),onReactIssue:vi.fn(),onComment:vi.fn(),onEditComment:vi.fn(),onDeleteComment:vi.fn(),onReactComment:vi.fn(),onRelation:vi.fn(),onDeleteRelation:vi.fn(),onUpload:vi.fn(),onDeleteAttachment:vi.fn()} as ComponentProps<typeof DetailPane>
+    const view=(issue=props.issue)=><MemoryRouter><I18nProvider><TooltipProvider><DetailPane {...props} issue={issue}/></TooltipProvider></I18nProvider></MemoryRouter>
+    const {rerender}=render(view())
+    await waitFor(()=>expect(screen.getByLabelText('Issue title')).toHaveAttribute('contenteditable','false'))
+    expect(screen.getByTestId('description')).toHaveAttribute('data-readonly','true')
+    for(const trigger of screen.getAllByRole('combobox',{name:/^Change priority\./}))expect(trigger).toBeDisabled()
+    rerender(view({...props.issue,archivedAt:undefined}))
+    await waitFor(()=>expect(screen.getByLabelText('Issue title')).toHaveAttribute('contenteditable','true'))
+    expect(screen.getByTestId('description')).toHaveAttribute('data-readonly','false')
+    for(const trigger of screen.getAllByRole('combobox',{name:/^Change priority\./}))expect(trigger).not.toBeDisabled()
+    expect(props.onUpdate).not.toHaveBeenCalled()
+  })
   it.each([false,true])('keeps automatic similarity suggestions off desktop without changing phones: %s',desktop=>{
     layout.desktop=desktop
     const data=makeBootstrap({cycleSettings:{},teamSettings:{},documents:[],members:[],drafts:[],reviews:[],favorites:[],customers:[],teamMembers:[],userSettings:{},projectTemplates:[],agentSkills:[],customerRequests:[],issueSlas:[],slaRules:[]})
