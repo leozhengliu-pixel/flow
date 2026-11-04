@@ -13,6 +13,7 @@ import { useMentionOptions } from "@/components/editor/mentions/use-mention-opti
 import { MentionMenu } from "@/components/issue/editor/mention-menu";
 import "@/components/issue/issue-description-editor.css";
 import type { BootstrapData } from "@/types/flow";
+import { mentionTriggerBeforeCaret } from "@/lib/mention-trigger";
 import { LoopEntityNode } from "./loop-entity-node";
 
 type MentionState = { query: string; from: number; to: number; index: number };
@@ -86,7 +87,7 @@ function LoopInstructionsEditorBody({
 
   const detect = (editor: Editor) => {
     const { $from, empty } = editor.state.selection;
-    const match = empty && editor.isEditable && $from.parent.type.name !== "codeBlock" ? $from.parent.textBetween(0, $from.parentOffset, " ", " ").match(/(?:^|\s)@([^\s@]{0,40})$/) : null;
+    const match = empty && editor.isEditable && $from.parent.type.name !== "codeBlock" ? $from.parent.textBetween(0, $from.parentOffset, " ", " ").match(mentionTriggerBeforeCaret(40)) : null;
     if (!match) {
       if (mentionRef.current) close();
       return;

@@ -19,6 +19,7 @@ import embedStyles from '@/components/editor/embeds/embed.module.css'
 import type { EmbedSource } from '@/components/editor/embeds/embed-providers'
 import { formattingMarkdown, planPaste } from './agent-paste'
 import type { BootstrapData, WorkflowState } from '@/types/flow'
+import { mentionTriggerBeforeCaret } from '@/lib/mention-trigger'
 import styles from './agent-mention-input.module.css'
 import { AgentSelectedTextIcon } from './agent-icons'
 
@@ -271,7 +272,7 @@ export function AgentMentionInput({
     const node = selection?.anchorNode
     if (!selection || !node || node.nodeType !== Node.TEXT_NODE || !editorRef.current?.contains(node)) { setQuery(null); return }
     const before = (node.textContent ?? '').slice(0, selection.anchorOffset)
-    const match = before.match(/(?:^|\s)@([^\s@]{0,40})$/)
+    const match = before.match(mentionTriggerBeforeCaret(40))
     setQuery(match ? match[1] : null)
   }
 

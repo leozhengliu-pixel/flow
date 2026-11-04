@@ -37,6 +37,7 @@ import { bindImageUpload } from './image-upload-binding'
 import { commentShortcutMatches } from '@/lib/runtime-preferences'
 import { handleEmoticonInput } from './emoticon-input'
 import { useI18n } from '@/i18n/i18n'
+import { mentionTriggerBeforeCaret } from '@/lib/mention-trigger'
 
 export function Composer({ placeholder = 'Leave a comment…', initialValue = '', initialData, compact = false, mobileIssue = false, onCancel, onSubmit, onAttach, onUpload, draftType, draftResourceId, drafts = [], draftTitle = '', draftMetadata, users }: { users?:User[]; placeholder?: string; initialValue?: string; initialData?: Record<string,unknown>; compact?: boolean; mobileIssue?: boolean; onCancel?: () => void; onSubmit?: (body: string, bodyData?: Record<string, unknown>) => Promise<void>; onAttach?:()=>void; onUpload?: (file: File) => Promise<string>; draftType?: ComposerDraftType; draftResourceId?: string; drafts?: Draft[]; draftTitle?: string; draftMetadata?: Record<string, unknown> }) {
   const { t } = useI18n()
@@ -49,7 +50,7 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
   const [getEntityData]=useState(()=>()=>entityDataRef.current)
   const mentionOptionList=useMentionOptions({active:Boolean(mention),query:mention?.query??'',users:mentionUsers})
   const optionsRef=useLatestRef(mentionOptionList)
-  const updateMention=(editor:Editor)=>{const {$from,empty}=editor.state.selection;const match=empty&&!$from.parent.type.spec.code?$from.parent.textBetween(0,$from.parentOffset,' ',' ').match(/(?:^|\s)@([^\s@]*)$/):null;const next=match?{query:match[1],from:$from.pos-match[1].length-1,to:$from.pos,index:0}:undefined;mentionRef.current=next;setMention(next)}
+  const updateMention=(editor:Editor)=>{const {$from,empty}=editor.state.selection;const match=empty&&!$from.parent.type.spec.code?$from.parent.textBetween(0,$from.parentOffset,' ',' ').match(mentionTriggerBeforeCaret()):null;const next=match?{query:match[1],from:$from.pos-match[1].length-1,to:$from.pos,index:0}:undefined;mentionRef.current=next;setMention(next)}
   const insertMention=(editor:Editor,option:MentionOption)=>{const range=mentionRef.current;if(!range)return;insertMentionOption(editor.view,range,option);editor.commands.focus();mentionRef.current=undefined;setMention(undefined)}
   const persistedDraft = useMemo(() => draftType && draftResourceId ? drafts.find(item => item.type === draftType && item.resourceId === draftResourceId) ?? readComposerDraft(draftType, draftResourceId) : undefined, [draftResourceId, draftType, drafts])
   const initialBody = persistedDraft?.body ?? initialValue

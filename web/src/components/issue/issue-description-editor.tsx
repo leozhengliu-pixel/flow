@@ -54,6 +54,7 @@ import { CollabEditing, CollabSyncBeforeAppend } from '@/components/editor/colla
 import { IssueCollaborationProvider } from '@/lib/issue-collaboration'
 import type { User } from '@/types/flow'
 import { clearDescriptionRecovery, descriptionRecoveryKey, downloadDescriptionRecovery, readDescriptionRecovery, writeDescriptionRecovery } from './editor/description-recovery'
+import { mentionTriggerBeforeCaret } from '@/lib/mention-trigger'
 import './issue-description-editor.css'
 import '@/components/editor/rich-text-body.css'
 
@@ -748,7 +749,7 @@ function getMentionState(state: EditorState): MentionState {
   if (!state.selection.empty || state.selection.$from.parent.type.spec.code) return closedMention
   const { $from } = state.selection
   const text = $from.parent.textContent.slice(0, $from.pos - $from.start($from.depth))
-  const match = text.match(/(?:^|\s)@([^\s@]*)$/)
+  const match = text.match(mentionTriggerBeforeCaret())
   if (!match) return closedMention
   const query = match[1] ?? ''
   const from = $from.pos - query.length - 1

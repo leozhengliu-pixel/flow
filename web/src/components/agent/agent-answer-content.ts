@@ -1,4 +1,5 @@
 import type { BootstrapData, Issue, User } from '@/types/flow'
+import { MENTION_LEAD_SOURCE } from '@/lib/mention-trigger'
 import { splitAgentDraft } from './agent-draft'
 import { findAgentIssue, isAgentIdentifier, parseAgentEntityUrl, resolveAgentEntity, type AgentEntityTarget } from './agent-entity-refs'
 
@@ -124,12 +125,15 @@ export function userMentionPattern(data: BootstrapData) {
     if (user.active === false || user.app) continue
     for (const name of [user.displayName, user.name, user.username]) {
       const key = name?.trim().toLowerCase()
-      if (key && key.length > 1 && !byName.has(key)) byName.set(key, user)
+      if (key && !byName.has(key)) byName.set(key, user)
     }
   }
   if (!byName.size) return undefined
-  const names = [...byName.keys()].sort((a, b) => b.length - a.length).map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  return { byName, pattern: new RegExp(`(^|[\\s(])@(${names.join('|')})(?![\\w-])`, 'gi') }
+  // A one-character name ("李") also ends at the first letter or digit after it, so "@李白" is not a mention of 李, and it is not
+  // the start of an address ("王@b.com"). Longer names keep the plain word boundary: "@王伟说" is still a mention of 王伟.
+  const names = [...byName.keys()].sort((a, b) => [...b].length - [...a].length)
+    .map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ([...name].length === 1 ? '(?![\\p{L}\\p{N}_-]|[.@][\\p{L}\\p{N}])' : ''))
+  return { byName, pattern: new RegExp(`${MENTION_LEAD_SOURCE}@(${names.join('|')})(?![\\w-])`, 'giu') }
 }
 
 function shortcodeValue(value: string) {
