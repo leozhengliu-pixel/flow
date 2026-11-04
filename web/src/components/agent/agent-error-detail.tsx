@@ -61,7 +61,7 @@ export function ErrorDetails({ className, detail }: { className?: string; detail
   const { t } = useI18n()
   return (
     <details className={`${styles.details}${className ? ` ${className}` : ''}`}>
-      <summary>{t('Details')}</summary>
+      <summary>{t('Details')}<svg aria-hidden="true" viewBox="0 0 16 16"><path d="M6.5 5.2v5.6a.4.4 0 0 0 .65.3l3.5-2.8a.4.4 0 0 0 0-.6l-3.5-2.8a.4.4 0 0 0-.65.3Z" fill="currentColor"/></svg></summary>
       <code data-i18n-ignore>{detail}</code>
     </details>
   )

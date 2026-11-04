@@ -100,7 +100,8 @@
   .coding-session-page .cs-turn-footer:not([data-links]) .cs-composer-spacer{display:none}
   .coding-session-page .cs-turn-footer .cs-copy{color:var(--cs-label-base)}
 }
-.coding-agent-panel{flex:0 0 clamp(360px,45%,640px);width:clamp(360px,45%,640px);max-width:100%;min-height:0;display:flex;flex-direction:column;margin:12px 8px 8px 4px;border:.5px solid var(--cs-panel-border);border-radius:8px;background:var(--cs-bg-base);overflow:hidden}
+/* The chat column is 560px wide with its 4px + 8px margins (a fixed width, like the reference), and gives way on narrow pages. */
+.coding-agent-panel{--cs-agent-panel-width:clamp(360px,calc(560px - 12px),60%);flex:0 0 var(--cs-agent-panel-width);width:var(--cs-agent-panel-width);max-width:100%;min-height:0;display:flex;flex-direction:column;margin:12px 8px 8px 4px;border:.5px solid var(--cs-panel-border);border-radius:8px;background:var(--cs-bg-base);overflow:hidden}
 .coding-agent-panel[hidden]{display:none}
 .coding-agent-panel-surface{display:contents}
 .coding-agent-panel-header{flex:none;display:flex;align-items:center;gap:8px;min-width:0;height:48px;box-sizing:border-box;padding:8px 6px 8px 15px}

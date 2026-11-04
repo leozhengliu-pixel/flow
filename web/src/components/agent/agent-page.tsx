@@ -1038,7 +1038,7 @@ function AgentMessageParts({ attachments, changes, draftContext, draftProject, m
     {work.length > 0 && <AgentWorkGroup attachments={attachments} message={message} parts={work} onToolApproval={onToolApproval} approvalBusy={approvalBusy} running={Boolean(answer.streaming) && !text} collapseWhenDone/>}
     <AgentElicitationResponseQueue answeredCount={queue.answeredCount} elicitationCount={queue.elicitationCount} isSubmitting={submitting} />
     {other.map(part => part.type === "elicitation" ? <AgentElicitation key={part.id} part={part}/> : part.type === "error"
-      ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><AgentErrorDetail error={part.text ?? ""}/>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
+      ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><AgentErrorDetail className={styles.partErrorBody} error={part.text ?? ""}/>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
       : <div className={styles.eventPart} key={part.id}><span>{part.text}</span></div>)}
     {text ? <AgentMessageText {...answer} changeCards={changeCards} changedKeys={changedKeys} onSuggestion={question ? undefined : answer.onSuggestion} content={text} draftContext={draftContext} draftProject={draftProject}/> : changeCards}
     {/* coding sessions (track G) */}

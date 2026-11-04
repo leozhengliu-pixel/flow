@@ -76,8 +76,8 @@
 .suggestions button svg{color:var(--chip-text)}
 .composerArea>.context{max-height:82px;margin:0 8px;padding:4px 4px 4px 8px;display:flex;flex-direction:column;gap:2px}
 .composerArea>.context>span{height:15px;display:flex;align-items:center;gap:5px;padding:0;background:transparent;color:var(--chip-text)}
-.composerArea>.context small{font-size:12px;font-weight:500;color:var(--chip-text)}
-.composerArea>.context b{font-size:12px;font-weight:500;color:var(--pk-text)}
+.composerArea>.context small{flex:none;font-size:12px;font-weight:500;color:var(--chip-text);white-space:nowrap}
+.composerArea>.context b{min-width:0;overflow:hidden;font-size:12px;font-weight:500;color:var(--pk-text);text-overflow:ellipsis;white-space:nowrap}
 .composer:not(#_){margin:6px 8px 8px;padding:8px 10px 6px;border:0;border-radius:8px;background:var(--chip-bg);box-shadow:var(--chip-ring)}
 .composer:not(#_) textarea{min-height:21px;padding:2px 0;font:450 13px/21px var(--font)}
 .composer:not(#_) textarea::placeholder{color:var(--pk-faint)}

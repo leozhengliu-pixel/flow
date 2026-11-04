@@ -758,7 +758,10 @@
   color: var(--theme-text-secondary);
   font-size: 12px;
 }
-.partError > svg { width: 14px; height: 14px; flex: 0 0 auto; }
+/* The icon and Retry stay level with the message's first line, so opening "Details" below it does not move them. */
+.partError { align-items: flex-start; }
+.partError > svg { width: 14px; height: 14px; flex: 0 0 auto; margin-top: 5px; }
+.partErrorBody > span:first-child { min-height: 24px; display: flex; align-items: center; }
 .partError > span { min-width: 0; flex: 1; }
 .partError > button {
   height: 24px;
@@ -1063,7 +1066,7 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: inherit;
+  color: var(--pk-text);
   text-align: left;
 }
 .skillsMenu [role="option"] > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -15,10 +15,22 @@
 }
 .details > summary {
   width: fit-content;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
   color: var(--theme-text-secondary);
   cursor: pointer;
-  list-style-position: inside;
+  list-style: none;
 }
+.details > summary::-webkit-details-marker { display: none; }
+.details > summary > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  transition: transform 120ms ease;
+}
+.details[open] > summary > svg { transform: rotate(90deg); }
 .details > summary:hover { color: var(--theme-text-primary); }
 .details > code {
   display: block;
