@@ -141,6 +141,19 @@ records, sort by `createdAt` rather than by id. Issue identifiers such as
 
 ## Filtering
 
+Issue filter trees accept `{"field":"team","operator":"in","values":["team-id","other-team-id"]}`.
+`teamId` is an alias. Use `is`, `isNot`, `in` (any of), or `notIn` (none of), with
+nonempty team IDs. A parent team matches only its own issues; its sub-teams must
+be selected explicitly. Team predicates compose with `and`, `or`, and `not` and
+never broaden the caller's team access. The TypeScript SDK's `IssueFilter` uses
+the same shape. MCP `list_issues`, `count_issues`, and `search_issues` accept this
+tree in `filter`, combined with their other arguments using AND.
+
+The web search endpoints `/api/search` and `/api/search/semantic` accept the same
+JSON tree in the `filter` query parameter. For non-issue search results, Team
+matches the teams of projects, documents, and team views; unrelated resource
+types do not match either positive or negative Team predicates.
+
 `filter` is a JSON object. Conditions in one
 object must all match; `and`/`or` take arrays of filters.
 

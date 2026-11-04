@@ -301,7 +301,7 @@ func (s *SQLiteStore) searchJSONArrayMember(column, field string) string {
 }
 
 func (s *SQLiteStore) searchMetadataFilter(kind string, node IssueFilter, depth int) (string, []any, error) {
-	if field, ok := map[string]string{"state": "status", "stateid": "stateId", "statustype": "statusType", "assigneeid": "assigneeId", "creatorid": "creatorId", "createdat": "createdAt", "updatedat": "updatedAt"}[strings.ToLower(node.Field)]; ok {
+	if field, ok := map[string]string{"teamid": "team", "state": "status", "stateid": "stateId", "statustype": "statusType", "assigneeid": "assigneeId", "creatorid": "creatorId", "createdat": "createdAt", "updatedat": "updatedAt"}[strings.ToLower(node.Field)]; ok {
 		node.Field = field
 	}
 	if depth > 8 {
@@ -325,7 +325,38 @@ func (s *SQLiteStore) searchMetadataFilter(kind string, node IssueFilter, depth 
 			clauses = append(clauses, "("+strings.Join(parts, group.join)+")")
 		}
 	}
+	if node.Not != nil {
+		clause, values, err := s.searchMetadataFilter(kind, *node.Not, depth+1)
+		if err != nil {
+			return "", nil, err
+		}
+		clauses = append(clauses, "NOT ("+clause+")")
+		args = append(args, values...)
+	}
 	if node.Field != "" {
+		if node.Field == "team" {
+			if err := ValidateIssueFilter(IssueFilter{Field: "team", Operator: node.Operator, Values: node.Values}); err != nil {
+				return "", nil, err
+			}
+			if kind != "project" && kind != "document" && kind != "view" {
+				return "0=1", nil, nil
+			}
+			parts := []string{}
+			for _, id := range node.Values {
+				if kind == "view" {
+					parts = append(parts, "COALESCE("+s.jsonText("data", "teamId")+",'')=?")
+				} else {
+					parts = append(parts, s.searchJSONArrayMember("data", "teamIds"))
+				}
+				args = append(args, id)
+			}
+			clause := "(" + strings.Join(parts, " OR ") + ")"
+			if strings.EqualFold(node.Operator, "isNot") || strings.EqualFold(node.Operator, "notIn") {
+				clause = "NOT (" + clause + ")"
+			}
+			clauses = append(clauses, clause)
+			return "(" + strings.Join(clauses, " AND ") + ")", args, nil
+		}
 		switch node.Field {
 		case "status", "stateId", "statusType":
 			if kind != "project" {

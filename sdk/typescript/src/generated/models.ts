@@ -1403,7 +1403,7 @@ export interface IssueCreateInput {
   title: string
 }
 
-/** IssueFilter is the filter tree of the issue query API: and, or, not, or a condition on one field. Fields are id, identifier, team, status (state id or type), statusType, project, assignee, creator, cycle, parent, priority, createdAt, updatedAt, title, sortOrder, labels, subscribers, myActivity, sharedWith, customerId, agentSessionState and the indexed attributes projectMilestoneId, estimate, dueDate, completedAt, canceledAt, startedAt, templateId, delegateId and others. Operators (case-insensitive) are is, in, isNot, notIn, includesAll, excludesAll, isEmpty, isNotEmpty, before, after, gt, gte, lt, lte, contains and doesNotContain. */
+/** IssueFilter is the filter tree of the issue query API: and, or, not, or a condition on one field. Fields are id, identifier, team, status (state id or type), statusType, project, assignee, creator, cycle, parent, priority, createdAt, updatedAt, title, sortOrder, labels, subscribers, myActivity, sharedWith, customerId, agentSessionState and the indexed attributes projectMilestoneId, estimate, dueDate, completedAt, canceledAt, startedAt, templateId, delegateId and others. Operators (case-insensitive) are is, in, isNot, notIn, includesAll, excludesAll, isEmpty, isNotEmpty, before, after, gt, gte, lt, lte, contains and doesNotContain. Team (or teamId) accepts nonempty team IDs with is / isNot / in / notIn. Teams match exactly; selecting a parent does not implicitly include its sub-teams. */
 export interface IssueFilter {
   and?: IssueFilter[]
   /** Field names the property to compare. */

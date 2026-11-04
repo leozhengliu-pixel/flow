@@ -429,6 +429,9 @@ func (s *server) searchMCPIssues(ctx context.Context, actor mcpActor, data domai
 	if err != nil {
 		return nil, err
 	}
+	if err := applyMCPIssueFilterTree(&q, args); err != nil {
+		return nil, err
+	}
 	if !boolArg(args, "includeArchived") {
 		q.Archived = "false"
 	}

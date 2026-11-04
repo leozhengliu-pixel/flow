@@ -862,6 +862,9 @@ func (s *server) visibleActiveMCPSubIssueIDs(ctx context.Context, query store.Is
 // applyMCPIssueFilters adds list_issues' filters (team, state, assignee, project, dates…) to an issue query; dates
 // relative to now (-P1D) are resolved against anchor.
 func (s *server) applyMCPIssueFilters(ctx context.Context, q *store.IssueRecordQuery, data domain.Bootstrap, args map[string]any, anchor time.Time) error {
+	if err := applyMCPIssueFilterTree(q, args); err != nil {
+		return err
+	}
 	q.SearchText = stringArg(args, "query")
 	if !boolArg(args, "includeArchived") {
 		q.Archived = "false"
@@ -973,6 +976,27 @@ func (s *server) applyMCPIssueFilters(ctx context.Context, q *store.IssueRecordQ
 			q.Filter.And = append(q.Filter.And, store.IssueFilter{Field: field, Operator: "gte", Values: []string{date.Format(time.RFC3339Nano)}})
 		}
 	}
+	return nil
+}
+
+func applyMCPIssueFilterTree(q *store.IssueRecordQuery, args map[string]any) error {
+	value, ok := args["filter"]
+	if !ok {
+		return nil
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return store.ErrIssueQuery
+	}
+	node, err := decodeIssueQuery(string(raw))
+	if err != nil {
+		return err
+	}
+	filter := node.storeFilter()
+	if err := store.ValidateIssueFilter(filter); err != nil {
+		return err
+	}
+	q.Filter.And = append(q.Filter.And, filter)
 	return nil
 }
 

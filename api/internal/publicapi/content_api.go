@@ -67,7 +67,9 @@ type ProjectMilestoneReorderInput struct {
 // projectMilestoneId, estimate, dueDate, completedAt, canceledAt, startedAt,
 // templateId, delegateId and others. Operators (case-insensitive) are is,
 // in, isNot, notIn, includesAll, excludesAll, isEmpty, isNotEmpty, before,
-// after, gt, gte, lt, lte, contains and doesNotContain.
+// after, gt, gte, lt, lte, contains and doesNotContain. Team (or teamId)
+// accepts nonempty team IDs with is / isNot / in / notIn. Teams match exactly;
+// selecting a parent does not implicitly include its sub-teams.
 type IssueFilter struct {
 	And []IssueFilter `json:"and,omitempty"`
 	Or  []IssueFilter `json:"or,omitempty"`

@@ -456,6 +456,12 @@ func compileIssueFilterScoped(node IssueFilter, depth int, remaining *int, query
 		args = append(args, values...)
 	}
 	if node.Field != "" {
+		if node.Field == "team" {
+			op := strings.ToLower(node.Operator)
+			if !slices.Contains([]string{"", "is", "isnot", "in", "notin"}, op) || len(node.Values) == 0 || slices.ContainsFunc(node.Values, func(value string) bool { return strings.TrimSpace(value) == "" }) {
+				return "", nil, ErrIssueQuery
+			}
+		}
 		if node.Field == "sharedWith" {
 			// Issues explicitly shared with these users (issue permission grants).
 			if len(node.Values) == 0 || len(node.Values) > 100 {

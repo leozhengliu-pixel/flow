@@ -459,6 +459,7 @@
       "type": "object",
       "required": [],
       "properties": {
+        "filter": { "type": "object", "additionalProperties": true, "description": "Issue filter AST (and/or/not or field/operator/values), using IDs. Team predicates use field team (or teamId), operator is/isNot/in/notIn, and nonempty team IDs in values. Matches exact teams, without sub-teams. Combined with the other filters using AND." },
         "assignee": { "type": ["string", "null"], "description": "User ID, name, email, or \"me\"" },
         "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
         "cursor": { "type": "string", "description": "Next page cursor" },
@@ -491,6 +492,7 @@
       "type": "object",
       "required": [],
       "properties": {
+        "filter": { "type": "object", "additionalProperties": true, "description": "Issue filter AST (and/or/not or field/operator/values), using IDs. Team predicates use field team (or teamId), operator is/isNot/in/notIn, and nonempty team IDs in values. Matches exact teams, without sub-teams. Combined with the other filters using AND." },
         "assignee": { "type": ["string", "null"], "description": "User ID, name, email, or \"me\"" },
         "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
         "cycle": { "type": "string", "description": "Cycle name, number, or ID" },
@@ -955,6 +957,7 @@
       "type": "object",
       "required": ["queries"],
       "properties": {
+        "filter": { "type": "object", "additionalProperties": true, "description": "Issue filter AST (and/or/not or field/operator/values), using IDs. Team predicates use field team (or teamId), operator is/isNot/in/notIn, and nonempty team IDs in values. Matches exact teams, without sub-teams. Combined with the other filters using AND." },
         "includeArchived": { "type": "boolean", "description": "Include archived issues" },
         "limit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20, "description": "Max results (default 20, max 50)" },
         "project": { "type": "string", "description": "Project name, ID, or slug" },

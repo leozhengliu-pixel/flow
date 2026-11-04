@@ -81,22 +81,7 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 	if err != nil {
 		return data, query, store.ErrIssueQuery
 	}
-	var convert func(issueQueryNode) store.IssueFilter
-	convert = func(node issueQueryNode) store.IssueFilter {
-		result := store.IssueFilter{Field: node.Field, Operator: node.Operator, Values: node.values()}
-		for _, child := range node.And {
-			result.And = append(result.And, convert(child))
-		}
-		for _, child := range node.Or {
-			result.Or = append(result.Or, convert(child))
-		}
-		if node.Not != nil {
-			negated := convert(*node.Not)
-			result.Not = &negated
-		}
-		return result
-	}
-	query.Filter = convert(root)
+	query.Filter = root.storeFilter()
 	if query.GroupBy == "cases" {
 		// groupCases: [{"value": "…", "filter": <filter expression>}, …], the groups in order.
 		cases, err := decodeIssueGroupCases(r.URL.Query().Get("groupCases"))
@@ -104,10 +89,25 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 			return data, query, store.ErrIssueQuery
 		}
 		for _, item := range cases {
-			query.GroupCases = append(query.GroupCases, store.IssueGroupCase{Value: item.Value, Filter: convert(item.Filter)})
+			query.GroupCases = append(query.GroupCases, store.IssueGroupCase{Value: item.Value, Filter: item.Filter.storeFilter()})
 		}
 	}
 	return data, query, nil
+}
+
+func (node issueQueryNode) storeFilter() store.IssueFilter {
+	result := store.IssueFilter{Field: node.Field, Operator: node.Operator, Values: node.values()}
+	for _, child := range node.And {
+		result.And = append(result.And, child.storeFilter())
+	}
+	for _, child := range node.Or {
+		result.Or = append(result.Or, child.storeFilter())
+	}
+	if node.Not != nil {
+		negated := node.Not.storeFilter()
+		result.Not = &negated
+	}
+	return result
 }
 
 type issueGroupCaseNode struct {
