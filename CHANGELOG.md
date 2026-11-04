@@ -17,7 +17,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Wrap long project names in the editable overview title and commit with Enter or blur.
 
-- Fit the phone Teams search, group band and table to the viewport, keep Issued keys descriptions inside their card, and dim the default home-view suffix in the open menu.
+- Keep Issued keys descriptions inside their card on phone and dim the default home-view suffix in the open menu.
 
 - Check the desktop label picker's exact 60px text offset after its opening animation finishes.
 
