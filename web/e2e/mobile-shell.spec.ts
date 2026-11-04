@@ -778,7 +778,8 @@ test.describe('team issues phone toolbar', () => {
     await geometry(page.locator('[data-my-issues-group-header]').first(), { x: 8, y: 87.5, width: 374, height: 36 })
     await expect(page.locator('[data-my-issues-group-title]').first()).toHaveText('In Progress')
     await expect(page.locator('[data-my-issues-group-header]').first().locator('[class*="groupCount"]')).toHaveText('7')
-    await expect(page.locator('[data-issue-display-trigger] span[aria-hidden="true"]')).toBeVisible()
+    // The dot marks display options that differ from the view's defaults, so a fresh view has none.
+    await expect(page.locator('[data-issue-display-trigger] span[aria-hidden="true"]')).toBeHidden()
     await expect(page.locator('.bottom-agent')).toBeHidden()
     await noOverflow(page)
     if (shots) await page.screenshot({ path: `${shots}/flow-team-topbar-390.png` })
