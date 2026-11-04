@@ -1,5 +1,5 @@
 @media (--desktop-layout) {
-  .lp-project-timeline { --timeline-label-width: 0px; --project-timeline-bar-bg: var(--theme-control); --project-timeline-bar-progress: var(--theme-border-strong); --project-timeline-bar-border: var(--theme-border); position: relative; }
+  .lp-project-timeline { --timeline-label-width: 0px; --timeline-names-width: 320px; --project-timeline-grid: var(--project-timeline-desktop-grid); --project-timeline-bar-bg: var(--project-timeline-desktop-bar-bg); --project-timeline-bar-progress: var(--theme-border-strong); --project-timeline-bar-border: var(--project-timeline-desktop-bar-border); --project-timeline-axis-tick: var(--theme-border); --project-timeline-today-line: color-mix(in srgb, var(--project-timeline-today) 60%, transparent); position: relative; }
   .lp-project-timeline__toolbar { position: absolute; top: 5px; right: 10px; z-index: 8; gap: 4px; padding: 0; }
   .lp-project-timeline__today,
   .lp-project-timeline__zoom-menu { box-sizing: border-box; height: 24px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: .5px solid transparent; border-radius: 9999px; background: var(--project-toolbar-bg); color: var(--text); font: 500 12px var(--font); }
@@ -10,26 +10,58 @@
   .lp-project-timeline__today { justify-content: center; }
   .lp-project-timeline__zoom-menu { justify-content: center; gap: 6px; }
   .lp-project-timeline__zoom-menu > svg { width: 8px; height: 9px; }
-  .lp-project-timeline__header { height: 32px; }
-  .lp-project-timeline__corner { display: none; }
+
+  /* Axis: month names over one tick per week. Ticks and labels hang off their day (zero-width spans); day numbers centre on it. */
+  .lp-project-timeline__header { height: 32px; border-bottom: 0; }
+  /* Covers the axis' dashed month lines over the names column; ticks, labels and the chip sit above it. */
+  .lp-project-timeline__corner { border: 0; flex: 0 0 var(--timeline-names-width); margin-right: calc(-1 * var(--timeline-names-width)); padding: 0; }
+  .lp-project-timeline__major, .lp-project-timeline__minor, .lp-project-timeline__today-chip { z-index: 3; }
   .lp-project-timeline__major, .lp-project-timeline__minor { height: 16px; }
   .lp-project-timeline__minor { top: 16px; }
-  .lp-project-timeline__major > span, .lp-project-timeline__minor > span { height: 16px; line-height: 16px; }
-  .lp-project-timeline__major > span { padding-left: 0; border-left: 0; }
-  .lp-project-timeline__major > span > b { left: 0; text-transform: uppercase; }
-  .lp-project-timeline__minor > span { font-size: 13px; }
-  .lp-project-timeline__today-chip { top: 16px; padding: 1px 4px; border-radius: 9999px; color: var(--on-accent); font: 500 11px var(--font); line-height: normal; text-transform: uppercase; }
+  .lp-project-timeline__major > span, .lp-project-timeline__minor > span { display: flex; height: 16px; line-height: 16px; overflow: visible; padding: 0; width: 0; }
+  .lp-project-timeline__major > span { border-left: 0; }
+  .lp-project-timeline__minor > span { justify-content: center; }
+  .lp-project-timeline__minor > span > b { font-weight: 500; }
+  .lp-project-timeline__major > span > b { left: auto; position: static; text-transform: uppercase; }
+  .lp-project-timeline__major > span::before, .lp-project-timeline__minor > span::before { background: var(--project-timeline-axis-tick); border-radius: 2px; content: ''; left: 0; position: absolute; width: 1px; }
+  .lp-project-timeline__major > span::before { height: 2px; top: 0; }
+  .lp-project-timeline__minor > span::before { height: 3px; top: -6px; }
+  .lp-project-timeline__today-header-line { background: var(--project-timeline-today-line); height: 32px; position: absolute; top: 0; width: 1px; }
+  .lp-project-timeline__today-header-line::before { background: var(--project-timeline-today); content: ''; height: 2px; inset: 0 0 auto; position: absolute; }
+  .lp-project-timeline__today-chip { top: calc(16px + .5px); padding: 1px 4px; border-radius: 9999px; color: var(--on-accent); font: 500 11px var(--font); line-height: normal; text-transform: uppercase; }
+
   .lp-project-timeline__canvas { display: flex; flex-direction: column; min-height: 100%; }
   .lp-project-timeline__header { flex-shrink: 0; }
-  .lp-project-timeline__body { flex: 1 0 auto; }
-  .lp-project-timeline__grid > i { border-left-style: dashed; }
-  .lp-project-timeline__label { box-sizing: border-box; width: 320px; flex: 0 0 320px; padding: 0 13px; border: 0; }
-  .lp-project-timeline__label > button { gap: 4px; padding: 0; color: var(--text); font-weight: 500; }
-  .lp-project-timeline__icon { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 28px; }
+  .lp-project-timeline__body { display: flex; flex: 1 0 auto; }
+  /* The names column covers the grid, links and bars down the whole pane, rows or not. */
+  .lp-project-timeline__names-backdrop { align-self: stretch; background: var(--bg-panel); flex: 0 0 var(--timeline-names-width); left: 0; position: sticky; z-index: 5; }
+  .lp-project-timeline__header-grid { bottom: 0; left: 0; pointer-events: none; position: absolute; top: 0; }
+  .lp-project-timeline__grid > i, .lp-project-timeline__header-grid > i { border-left: 1px dashed var(--project-timeline-grid); bottom: 0; margin-left: -.5px; position: absolute; top: 0; }
+  .lp-project-timeline__today-line { background: linear-gradient(var(--project-timeline-today-line), color-mix(in srgb, var(--project-timeline-today) 26%, transparent)); border-left: 0; width: 1px; }
+
+  .lp-project-timeline__label { box-sizing: border-box; width: var(--timeline-names-width); flex: 0 0 var(--timeline-names-width); padding: 0 18px 0 13px; border: 0; gap: 6px; }
+  .lp-project-timeline__name { align-items: center; display: flex; flex: 1; gap: 4px; min-width: 0; }
+  .lp-project-timeline__name > button { align-items: center; background: transparent; border: 0; border-radius: 6px; color: var(--text); cursor: pointer; display: flex; flex: 1; font-size: 13px; font-weight: 500; height: 28px; line-height: normal; min-width: 0; padding: 0; text-align: left; }
+  .lp-project-timeline__name > button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lp-project-timeline__name > button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .lp-project-timeline__name .lp-project-timeline__icon { align-items: center; background: transparent; border: 0; border-radius: 8px; box-sizing: border-box; display: flex; flex: 0 0 28px; height: 28px; justify-content: center; padding: 6px; width: 28px; }
+  .lp-project-timeline__name .lp-project-timeline__icon:hover,
+  .lp-project-timeline__name .lp-project-timeline__icon[aria-expanded="true"] { background: var(--theme-control-hover); }
+  .lp-project-timeline__cells { display: flex; flex: none; gap: 6px; }
+  .lp-project-timeline__cells .lp-project-timeline__cell { align-items: center; background: transparent; border: .5px solid transparent; border-radius: 9999px; box-sizing: border-box; color: inherit; cursor: pointer; display: flex; height: 28px; justify-content: center; padding: 3px 6px; width: 28px; }
+  .lp-project-timeline__cells .lp-project-timeline__cell svg { height: 16px; width: 16px; }
+  .lp-project-timeline__cells .lp-project-health { height: 14px; width: 14px; }
+  .lp-project-timeline__cells .lp-project-health svg { height: 14px; width: 14px; }
+  .lp-project-timeline__cells .lp-project-timeline__cell:hover,
+  .lp-project-timeline__cells .lp-project-timeline__cell:focus-visible,
+  .lp-project-timeline__cells .lp-project-timeline__cell[aria-expanded="true"] { background: var(--theme-control-hover); outline: none; }
   .lp-project-timeline__track { position: absolute; inset: 0; }
   .lp-project-timeline__bar { top: 24px; }
-  .lp-project-timeline__bar > button { font-size: 0; }
-  .lp-project-timeline__bar::before { content: attr(data-project-name); position: absolute; bottom: 28px; left: 0; color: var(--theme-text-primary); font: 450 13px var(--font); white-space: nowrap; }
+  .lp-project-timeline__bar > button { box-shadow: var(--project-timeline-desktop-bar-shadow); display: block; font-size: 0; }
+  /* The name sits above its bar and slides along it, clear of the names column, so a bar that starts off-screen still reads. */
+  .lp-project-timeline__bar-label { color: var(--theme-text-primary); display: block; font: 450 13px/16px var(--font); height: 16px; left: var(--timeline-names-width); margin: -19px 0 3px; pointer-events: none; position: sticky; white-space: nowrap; width: max-content; }
+  /* Group headers keep to the names column, above its backdrop. */
+  .lp-project-timeline__group h2 { box-sizing: border-box; padding: 0 13px; width: var(--timeline-names-width); z-index: 6; }
   .lp-project-timeline__milestone { top: 29px; }
   .lp-project-timeline__add-dates { top: 24px; }
 }

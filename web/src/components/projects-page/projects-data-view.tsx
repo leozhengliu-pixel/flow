@@ -313,7 +313,9 @@ export function ProjectsDataView({
     </div>
   }
 
-  if (layout === 'timeline') return <div className="lp-project-timeline-shell"><ProjectTimeline grouping={grouping} groupCount={projectCount} groups={groups} onCreateDependency={onCreateProjectDependency} onOpenMilestone={onOpenMilestone} onOpenProject={onOpenProject} onUpdateMilestone={onUpdateMilestone} onUpdateProject={onUpdateProject} onZoomChange={onTimelineZoomChange} renderGroupIcon={group => <ProjectGroupStatus color={group.color} compact name={group.name} propertyOptions={propertyOptions}/>} zoom={timelineZoom}/>{hasMore && <button className="lp-project-timeline__load-more" disabled={loadingMore} onClick={onLoadMore} type="button">{loadingMore ? 'Loading…' : 'Load more projects'}</button>}</div>
+  const renderTimelineCells = (project: ProjectPageItem) => <ProjectTimelineCells onOpenUpdates={onOpenProjectUpdates} onPropertyChange={onPropertyChange} project={project} propertyOptions={propertyOptions} visible={visible}/>
+
+  if (layout === 'timeline') return <div className="lp-project-timeline-shell"><ProjectTimeline grouping={grouping} groupCount={projectCount} groups={groups} onCreateDependency={onCreateProjectDependency} onOpenMilestone={onOpenMilestone} onOpenProject={onOpenProject} onProjectVisualChange={onProjectVisualChange} onUpdateMilestone={onUpdateMilestone} onUpdateProject={onUpdateProject} onZoomChange={onTimelineZoomChange} renderCells={renderTimelineCells} renderGroupIcon={group => <ProjectGroupStatus color={group.color} compact name={group.name} propertyOptions={propertyOptions}/>} zoom={timelineZoom}/>{hasMore && <button className="lp-project-timeline__load-more" disabled={loadingMore} onClick={onLoadMore} type="button">{loadingMore ? 'Loading…' : 'Load more projects'}</button>}</div>
 
   const customerSettings = groups.flatMap(group => [...group.projects, ...(group.subgroups ?? []).flatMap(subgroup => subgroup.projects)]).find(project => project.customerSettings)?.customerSettings
   const renderProject = (project: ProjectPageItem) => <ProjectListRow
@@ -673,6 +675,17 @@ function openRowMenu(event: MouseEvent<HTMLButtonElement>) {
   event.currentTarget.closest('[data-flow-menu-row]')?.dispatchEvent(new globalThis.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: event.clientX, clientY: event.clientY }))
 }
 
+/** The property buttons after a project's name in the desktop timeline, in the reference's order. */
+function ProjectTimelineCells({ onOpenUpdates, onPropertyChange, project, propertyOptions, visible }: Pick<ProjectItemActions, 'onOpenUpdates' | 'onPropertyChange' | 'project' | 'propertyOptions'> & { visible: Set<string> }) {
+  const statusOption = (propertyOptions?.status ?? PROPERTY_OPTIONS.status).find(option => option.value === project.status)
+  return <>
+    {visible.has('Health') && <button aria-label={project.healthLabel ?? `${healthText(project.health)}. Click to open updates.`} className="lp-project-timeline__cell" onClick={() => onOpenUpdates?.(project)} type="button"><HealthIcon value={project.health}/></button>}
+    {visible.has('Status') && <ProjectPropertyPicker buttonClassName="lp-project-timeline__cell" label={`${project.progress}%`} onChange={value => onPropertyChange?.(project, 'status', value)} options={propertyOptions?.status ?? PROPERTY_OPTIONS.status} property="status" value={project.status}><ProjectStatusGlyph color={statusOption?.color} name={project.status} progress={project.progress / 100} type={statusOption?.statusType}/></ProjectPropertyPicker>}
+    {visible.has('Priority') && <ProjectPropertyPicker buttonClassName="lp-project-timeline__cell" label={`${priorityText(project.priority)} Priority`} onChange={value => onPropertyChange?.(project, 'priority', value)} options={propertyOptions?.priority ?? PROPERTY_OPTIONS.priority} property="priority" value={project.priority}><DataViewPriorityIcon value={project.priority}/></ProjectPropertyPicker>}
+    {visible.has('Lead') && <ProjectPropertyPicker buttonClassName="lp-project-timeline__cell" label={project.lead?.name ?? 'No lead'} onChange={value => onPropertyChange?.(project, 'lead', value)} options={propertyOptions?.lead ?? PROPERTY_OPTIONS.lead} property="lead" value={project.lead?.id ?? ''}><ProjectAvatar lead={project.lead}/></ProjectPropertyPicker>}
+  </>
+}
+
 function LeadPropertyButton({ lead, onChange, options }: {
   lead?: ProjectPageItem['lead']
   onChange: (value: string) => void
@@ -690,7 +703,7 @@ function HealthIcon({ value }: { value: ProjectPageItem['health'] }) {
 
 function DataViewPriorityIcon({ value }: { value: ProjectPageItem['priority'] }) {
   const bars = value === 'none' ? 0 : value === 'low' ? 1 : value === 'medium' ? 2 : 3
-  return <span aria-hidden="true" className={`lp-project-priority is-${value}`}><svg viewBox="0 0 16 16">{[0, 1, 2].map(index => <rect fill={index < bars ? 'currentColor' : 'currentColor'} opacity={index < bars ? 1 : .25} height={[6, 9, 12][index]} key={index} rx="1" width="3" x={1.5 + index * 5} y={[9, 6, 3][index]} />)}</svg></span>
+  return <span aria-hidden="true" className={`lp-project-priority is-${value}`}><svg viewBox="0 0 16 16">{[0, 1, 2].map(index => <rect fill={index < bars ? 'currentColor' : 'currentColor'} opacity={index < bars ? 1 : .25} height={[6, 9, 12][index]} key={index} rx="1" width="3" x={1.5 + index * 5} y={[8, 5, 2][index]} />)}</svg></span>
 }
 
 function ProjectAvatar({ lead }: { lead?: ProjectPageItem['lead'] }) {
