@@ -5395,6 +5395,7 @@ function App() {
             onOpenResult={openSearchResult}
             getResultHref={result=>searchResultLink(data,result)}
             users={data.users}
+            fiscalMonthName={data.workspaceSettings.fiscalMonth ?? 'January'}
           />
         )}
         {page === "team-overview" &&

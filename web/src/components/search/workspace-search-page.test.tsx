@@ -35,6 +35,16 @@ describe('workspace search',()=>{
     expect(screen.getByLabelText('Active filters')).toHaveTextContent('2025')
     setWorkspaceRuntimePreferences({fiscalMonth:'January'})
   })
+  it('sends only the fiscal-year request when the loaded workspace settings name the fiscal month',async()=>{
+    setWorkspaceRuntimePreferences({fiscalMonth:'January'})
+    const filters=[{id:'year',field:'createdAt',operator:'on',value:'2026-02-01',granularity:'year'}]
+    render(<I18nProvider><MemoryRouter initialEntries={[`/test/search?q=flow&filters=${encodeURIComponent(JSON.stringify(filters))}`]}><WorkspaceSearchPage fiscalMonthName="April" onOpenResult={vi.fn()} getResultHref={item=>`/test/issue/${item.identifier}`} users={[viewer]}/></MemoryRouter></I18nProvider>)
+    await screen.findByRole('link')
+    await act(async()=>setWorkspaceRuntimePreferences({fiscalMonth:'April'}))
+    expect(semanticSearch).toHaveBeenCalledTimes(1)
+    expect(semanticSearch).toHaveBeenCalledWith('flow',[],expect.objectContaining({filter:{and:[{and:[{field:'createdAt',operator:'gte',values:[new Date(2025,3,1).toISOString()]},{field:'createdAt',operator:'before',values:[new Date(2026,3,1).toISOString()]}]}]}}),expect.any(AbortSignal))
+    setWorkspaceRuntimePreferences({fiscalMonth:'January'})
+  })
   it('treats whitespace as recents and ignores aborted in-flight search errors',async()=>{
     setup('/test/search?q=%20%20')
     await waitFor(()=>expect(searchWorkspace).toHaveBeenCalled())

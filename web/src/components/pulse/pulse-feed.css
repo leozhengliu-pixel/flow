@@ -74,7 +74,8 @@
 .pulse-byline-avatar{width:16px;height:16px;flex:0 0 16px;font-size:7px}
 .pulse-post-health{display:inline-flex;align-items:center;gap:5px;margin-right:4px;font-weight:500}
 .pulse-health-glyph{width:14px;height:14px;flex-shrink:0}
-.pulse-post-health.is-onTrack,.pulse-health-glyph.is-onTrack{color:var(--project-health-on-track)}
+.pulse-health-glyph.is-onTrack{color:var(--project-health-on-track)}
+.pulse-post-health.is-onTrack{color:var(--pulse-post-health-on-track)}
 .pulse-post-health.is-atRisk,.pulse-health-glyph.is-atRisk{color:var(--project-health-at-risk)}
 .pulse-post-health.is-offTrack,.pulse-health-glyph.is-offTrack{color:var(--project-health-off-track)}
 .pulse-post-health.is-noUpdate,.pulse-health-glyph.is-noUpdate{color:var(--theme-text-tertiary)}
@@ -180,7 +181,7 @@
 .flow-framed-workspace.pulse-page .pulse-welcome-banner__label>strong{color:var(--set-label);font-size:13px;font-weight:500;line-height:normal}
 .flow-framed-workspace.pulse-page .pulse-welcome-banner__label>span{color:var(--set-desc);font-size:12px;font-weight:450;line-height:normal}
 .flow-framed-workspace.pulse-page .pulse-welcome-banner__controls{display:flex;align-items:center;gap:8px}
-.flow-framed-workspace.pulse-page .pulse-welcome-banner__select{position:relative;box-sizing:border-box;height:30px;display:inline-flex;align-items:center;padding:1px 28px 1px 10px;border:.5px solid transparent;border-radius:8px;background:var(--set-control);box-shadow:var(--set-control-shadow);color:var(--set-control-text);font-size:13px;font-weight:400;line-height:normal;transition:background-color .15s,border .15s,color .15s}
+.flow-framed-workspace.pulse-page .pulse-welcome-banner__select{position:relative;box-sizing:border-box;height:30px;display:inline-flex;align-items:center;padding:1px 28px 1px 10px;border:.5px solid var(--pulse-select-border);border-radius:8px;background:var(--set-control);box-shadow:var(--pulse-select-shadow);color:var(--set-control-text);font-size:13px;font-weight:400;line-height:normal;transition:background-color .15s,border .15s,color .15s}
 .flow-framed-workspace.pulse-page .pulse-welcome-banner__select>svg{position:absolute;top:0;right:10px;width:10px;height:29px}
 .flow-framed-workspace.pulse-page .pulse-welcome-banner__select:hover,.flow-framed-workspace.pulse-page .pulse-welcome-banner__select[data-state=open]{background:var(--dropdown-hover)}
 .flow-framed-workspace.pulse-page .pulse-welcome-banner__select:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
@@ -374,7 +375,7 @@
     border-style: none;
   }
   html:root body .app .pulse-page .pulse-post-health.is-onTrack {
-    color: var(--project-health-on-track);
+    color: var(--pulse-post-health-on-track);
   }
   html:root body .app .pulse-page .pulse-post-health > span {
     line-height: normal;

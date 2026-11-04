@@ -20,16 +20,16 @@ export function PulseSparkLogo() {
   const id = useId().replace(/:/g, '')
   const fill = `url(#${id}-fill)`
   return (
-    <svg aria-hidden="true" fill="none" focusable="false" height="44" viewBox="0 0 44 44" width="44">
+    <svg aria-hidden="true" fill="none" focusable="false" height="44" style={{ overflow: 'visible' }} viewBox="0 0 44 44" width="44">
       <g filter={`url(#${id}-glow-near)`} opacity=".3"><path d={SPARK_PATH} fill={fill}/></g>
-      <g filter={`url(#${id}-glow-far)`} opacity=".15"><path d={SPARK_PATH} fill={fill}/></g>
+      <g filter={`url(#${id}-glow-far)`} opacity=".4"><path d={SPARK_PATH} fill={fill}/></g>
       <path d={SPARK_PATH} fill={fill}/>
       <defs>
         <filter colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse" height="35.001" id={`${id}-glow-near`} width="36" x="4" y="4.35742"><feGaussianBlur stdDeviation="2"/></filter>
-        <filter colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse" height="43.001" id={`${id}-glow-far`} width="44" x="0" y="0.357422"><feGaussianBlur stdDeviation="4"/></filter>
+        <filter colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse" height="83.001" id={`${id}-glow-far`} width="84" x="-20" y="-19.6426"><feGaussianBlur stdDeviation="10"/></filter>
         <linearGradient gradientUnits="userSpaceOnUse" id={`${id}-fill`} x1="22" x2="22" y1="8.35742" y2="35.3579">
-          <stop style={{ stopColor: 'var(--text-strong)' }}/>
-          <stop offset="1" style={{ stopColor: 'var(--set-group-desc)' }}/>
+          <stop style={{ stopColor: 'var(--pulse-logo-fill-top)' }}/>
+          <stop offset="1" style={{ stopColor: 'var(--pulse-logo-fill-bottom)' }}/>
         </linearGradient>
       </defs>
     </svg>

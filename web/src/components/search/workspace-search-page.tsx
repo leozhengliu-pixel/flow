@@ -21,7 +21,7 @@ import { readSearchState, writeSearchState, searchFilterAST, type SearchTab, typ
 import { SearchMenus, SearchFilterChips } from './search-menus'
 
 import { markdownPlainText } from '@/lib/markdown-plain-text'
-import { fiscalMonth, useWorkspacePreferences } from '@/lib/runtime-preferences'
+import { fiscalMonth, fiscalMonthIndex, useWorkspacePreferences } from '@/lib/runtime-preferences'
 import './workspace-search-page.css'
 import phoneSearchArtwork from '@/assets/search-empty-mobile.svg?raw'
 
@@ -32,7 +32,9 @@ const tabs: Array<{ id: SearchTab; label: string }> = [
   { id: 'initiative', label: 'Initiatives' },
   { id: 'document', label: 'Documents' },
 ]
-export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref, users }: {
+export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref, users, fiscalMonthName }: {
+  /** The workspace's fiscal-year start month from the loaded settings; the shared runtime preferences only follow in an effect after the first render, so the first request would use January. */
+  fiscalMonthName?: string
   onOpenSidebar?: () => void
   onOpenResult: (result: SearchResult) => void
   getResultHref: (result: SearchResult) => string
@@ -40,7 +42,7 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
 }) {
   const {t,locale}=useI18n()
   useWorkspacePreferences()
-  const firstFiscalMonth=fiscalMonth()
+  const firstFiscalMonth=fiscalMonthName===undefined?fiscalMonth():fiscalMonthIndex(fiscalMonthName)
   const phone = usePhoneLayout()
   const [params,setParams]=useSearchParams()
   const state=useMemo(()=>readSearchState(params),[params])
