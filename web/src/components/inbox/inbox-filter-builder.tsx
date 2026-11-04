@@ -959,7 +959,7 @@ function InboxFilterPropertyGlyph({ property }: { property: InboxFilterProperty 
 }
 
 function OptionVisual({ option, property }: { option: InboxFilterOption; property: InboxFilterProperty }) {
-  if (property === 'from') return <UserAvatar className={styles.avatar} avatarUrl={option.avatarUrl} name={option.label}/>
+  if (property === 'from') return <UserAvatar className={styles.avatar} avatarUrl={option.avatarUrl} name={option.label} userId={option.id}/>
   if (option.avatarUrl) return <AvatarImage className={styles.avatar} src={option.avatarUrl} alt="" />
   if (option.icon) return <span className={styles.optionIcon} aria-hidden="true">{option.icon}</span>
   // Review status values use the filled branch glyph from the review bundle,

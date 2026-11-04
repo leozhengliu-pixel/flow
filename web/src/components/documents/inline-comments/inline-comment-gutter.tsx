@@ -355,7 +355,7 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
   return <TooltipProvider><div className={`document-inline-gutter${popover ? ' is-popover' : ''}`} aria-label={t('Comments')} role="complementary">
     {draft && <div className="document-thread-card is-draft is-active" data-draft-card="draft" ref={cardRegistry.attach('draft')} style={popover ? popoverStyle(draft) : { top: tops.get('draft') ?? anchorTop(draft) }}>
       <div className="document-thread-draft">
-        <UserAvatar avatarUrl={viewer.avatarUrl} className="document-thread-avatar" name={viewer.displayName || viewer.name}/>
+        <UserAvatar avatarUrl={viewer.avatarUrl} className="document-thread-avatar" name={viewer.displayName || viewer.name} userId={viewer.id}/>
         <div className="document-thread-draft-composer" ref={focusComposer}>
           <Composer compact users={users} placeholder={t('Add a comment…')} onCancel={() => onDraftChange(undefined)} onSubmit={submitDraft}/>
         </div>

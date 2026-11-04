@@ -473,7 +473,7 @@ function RelatedIssueHoverCard({ suggestion, issue, data, duplicate, disabled, o
             <span className="triage-intelligence-issue-card__meta">
               <span><StatusIcon state={issue.state} size={14} /><span data-i18n-ignore>{issue.state.name}</span></span>
               <span>
-                {issue.assignee ? <UserAvatar className="triage-intelligence-avatar" name={issue.assignee.displayName} avatarUrl={issue.assignee.avatarUrl} /> : <NoAssigneeIcon size={16} />}
+                {issue.assignee ? <UserAvatar className="triage-intelligence-avatar" name={issue.assignee.displayName} avatarUrl={issue.assignee.avatarUrl} userId={issue.assignee.id} /> : <NoAssigneeIcon size={16} />}
                 <span data-i18n-ignore={issue.assignee ? true : undefined}>{issue.assignee?.displayName ?? t('Unassigned')}</span>
               </span>
               <span><PriorityIcon priority={issue.priority} size={16} /><span>{t(issue.priorityLabel || 'No priority')}</span></span>
@@ -653,10 +653,10 @@ function propertySuggestionTarget(
           chip: user.displayName,
           label: 'Assign to user',
           whyTitle: 'Why this assignee was suggested',
-          icon: <UserAvatar className="triage-intelligence-avatar" name={user.displayName} avatarUrl={user.avatarUrl} />,
+          icon: <UserAvatar className="triage-intelligence-avatar" name={user.displayName} avatarUrl={user.avatarUrl} userId={user.id} />,
           header: (
             <div className="triage-intelligence-entity">
-              <UserAvatar className="triage-intelligence-avatar is-large" name={user.displayName} avatarUrl={user.avatarUrl} />
+              <UserAvatar className="triage-intelligence-avatar is-large" name={user.displayName} avatarUrl={user.avatarUrl} userId={user.id} />
               <div data-i18n-ignore>
                 <strong>{user.displayName}</strong>
                 {user.email ? <span>{user.email}</span> : null}

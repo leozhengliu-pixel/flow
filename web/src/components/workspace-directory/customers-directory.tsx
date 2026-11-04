@@ -93,8 +93,8 @@ export function CustomersDirectory({ data, onCreate, onUpdate, onDelete, onOpen,
   const viewer = data.viewer
   const ownerChoices = [
     { id: NO_OWNER, label: t('No owner'), icon: <NoAssigneeIcon size={16}/> },
-    { id: CURRENT_USER, label: t('Current user'), icon: <UserAvatar avatarUrl={viewer.avatarUrl} className="flow-menu__avatar" name={viewer.displayName}/> },
-    ...data.users.filter(user => !user.app).map(user => ({ id: user.id, label: user.displayName || user.name, entity: true, keywords: `${user.name} ${user.email ?? ''}`, person: user, icon: <UserAvatar avatarUrl={user.avatarUrl} className="flow-menu__avatar" name={user.displayName}/> })),
+    { id: CURRENT_USER, label: t('Current user'), icon: <UserAvatar avatarUrl={viewer.avatarUrl} className="flow-menu__avatar" userId={viewer.id} name={viewer.displayName}/> },
+    ...data.users.filter(user => !user.app).map(user => ({ id: user.id, label: user.displayName || user.name, entity: true, keywords: `${user.name} ${user.email ?? ''}`, person: user, icon: <UserAvatar avatarUrl={user.avatarUrl} className="flow-menu__avatar" userId={user.id} name={user.displayName}/> })),
   ]
   const filterGroups: DirectoryFilterGroup[] = [
     { id: 'owner', label: t('Owner'), icon: <FlowGlyph name="owner" size={16}/>, choices: ownerChoices, hideSearch: true },
@@ -300,12 +300,12 @@ function CustomerOwnerPicker({ customer, owner, users, onUpdate }: { customer: C
   const people = users.filter(user => !user.app)
   const options: FlowMenuOption[] = [
     { id: '', label: 'No owner', icon: <NoAssigneeIcon size={16}/>, shortcut: '0' },
-    ...people.map((user, index) => ({ id: user.id, label: user.displayName || user.name, translate: false, keywords: `${user.name} ${user.email ?? ''}`, icon: <UserAvatar avatarUrl={user.avatarUrl} className="flow-menu__avatar" name={user.displayName}/>, shortcut: index < 9 ? String(index + 1) : undefined })),
+    ...people.map((user, index) => ({ id: user.id, label: user.displayName || user.name, translate: false, keywords: `${user.name} ${user.email ?? ''}`, icon: <UserAvatar avatarUrl={user.avatarUrl} className="flow-menu__avatar" userId={user.id} name={user.displayName}/>, shortcut: index < 9 ? String(index + 1) : undefined })),
   ]
   return <DropdownMenu.Root>
     <DropdownMenu.Trigger asChild>
       <button aria-label={owner ? `${t('Owner')}: ${owner.displayName}` : t('Change customer owner')} className="customers-picker is-icon" title={owner?.displayName} type="button" onClick={stop} onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
-        {owner ? <UserAvatar avatarUrl={owner.avatarUrl} className="avatar customers-avatar" name={owner.displayName}/> : <NoAssigneeIcon size={16}/>}
+        {owner ? <UserAvatar avatarUrl={owner.avatarUrl} className="avatar customers-avatar" userId={owner.id} name={owner.displayName}/> : <NoAssigneeIcon size={16}/>}
       </button>
     </DropdownMenu.Trigger>
     <DropdownMenu.Portal>

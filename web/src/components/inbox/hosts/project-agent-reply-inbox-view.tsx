@@ -32,12 +32,12 @@ export function ProjectAgentReplyInboxView({ workspaceKey, project, notification
       <AppLink className="flow-inbox-document__open" href={agentReplyProjectPath(workspaceKey, project, notification.commentId)}>{t('Open project')}<ArrowUpRight size={13}/></AppLink>
     </header>
     <p className="flow-inbox-document__line">
-      <UserAvatar avatarUrl={notification.actor.avatarUrl} className="flow-inbox-document__avatar" name={notification.actor.displayName || notification.actor.name}/>
+      <UserAvatar avatarUrl={notification.actor.avatarUrl} className="flow-inbox-document__avatar" name={notification.actor.displayName || notification.actor.name} userId={notification.actor.id}/>
       <span>{agentReplyLine({ ...notification, payload: { ...notification.payload, excerpt: '' } }, t)}</span>
       <time dateTime={notification.updatedAt}>{formatDate(notification.updatedAt, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time>
     </p>
     {thread.length > 0 && <div className="flow-inbox-document__thread">{thread.map(item => { const author = liveActorUser(item.user); return <article key={item.id} className={item.id === notification.commentId ? 'is-target' : undefined}>
-      <header><UserAvatar avatarUrl={author.avatarUrl} className="flow-inbox-document__avatar" name={author.displayName || author.name}/><strong data-i18n-ignore>{author.displayName || author.name}</strong><time dateTime={item.createdAt}>{formatDate(item.createdAt, { month: 'short', day: 'numeric' })}</time></header>
+      <header><UserAvatar avatarUrl={author.avatarUrl} className="flow-inbox-document__avatar" name={author.displayName || author.name} userId={author.id}/><strong data-i18n-ignore>{author.displayName || author.name}</strong><time dateTime={item.createdAt}>{formatDate(item.createdAt, { month: 'short', day: 'numeric' })}</time></header>
       <RichComment body={item.body} data={item.bodyData}/>
     </article> })}</div>}
     {excerpt && <p className="flow-inbox-document__excerpt" data-i18n-ignore>{excerpt}</p>}

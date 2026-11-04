@@ -288,7 +288,7 @@ function CardHeader({ item, resolved, canOpenSource, onOpenSource, menu }: CardP
           </span>
         ) : null}
         {author && authorName ? <>
-          <UserAvatar className="avatar flow-pulse-summary-card__avatar" name={authorName} avatarUrl={author.avatarUrl} />
+          <UserAvatar className="avatar flow-pulse-summary-card__avatar" name={authorName} avatarUrl={author.avatarUrl} userId={author.id} />
           <span className="flow-pulse-summary-card__author" data-i18n-ignore>{authorName}</span>
         </> : null}
         {resolved ? <time dateTime={resolved.update.createdAt} title={new Date(resolved.update.createdAt).toLocaleString()}>{formatDistanceToNowStrict(new Date(resolved.update.createdAt), { addSuffix: true })}</time> : null}

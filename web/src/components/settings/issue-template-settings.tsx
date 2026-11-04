@@ -852,11 +852,11 @@ export function TemplatePropertyPills({
         value={assignee?.displayName ?? t("Assignee")}
         valueIsEntityName={Boolean(assignee)}
         selectedId={assigneeId}
-        icon={assignee ? <Avatar name={assignee.displayName} /> : <TemplateGlyph name="noAssignee" size={14} />}
+        icon={assignee ? <Avatar id={assignee.id} name={assignee.displayName} /> : <TemplateGlyph name="noAssignee" size={14} />}
         triggerClassName={pillClass(Boolean(assignee))}
         options={[
           { id: "", label: t("No assignee"), icon: <NoAssigneeIcon /> },
-          ...data.users.filter((user) => user.active !== false).map((user) => ({ id: user.id, label: user.displayName, keywords: user.email, icon: <Avatar name={user.displayName} />, i18nIgnore: true })),
+          ...data.users.filter((user) => user.active !== false).map((user) => ({ id: user.id, label: user.displayName, keywords: user.email, icon: <Avatar id={user.id} name={user.displayName} />, i18nIgnore: true })),
         ]}
         onChange={onAssignee}
       />

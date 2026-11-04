@@ -361,11 +361,11 @@ function CustomerTopSection({ data, customer, manualEditsDisabled, onEdit, onSav
         <DropdownMenu.Root>
           <FlowTooltip label={disabledReason}>
             <DropdownMenu.Trigger asChild disabled={manualEditsDisabled}>
-              <button type="button" className="customer-top__button" aria-label={t('Change customer owner…')} aria-disabled={manualEditsDisabled || undefined}><UserAvatar className="customer-top__avatar" avatarUrl={owner.avatarUrl} name={owner.displayName || owner.name}/><span data-i18n-ignore>{owner.displayName || owner.name}</span></button>
+              <button type="button" className="customer-top__button" aria-label={t('Change customer owner…')} aria-disabled={manualEditsDisabled || undefined}><UserAvatar className="customer-top__avatar" avatarUrl={owner.avatarUrl} userId={owner.id} name={owner.displayName || owner.name}/><span data-i18n-ignore>{owner.displayName || owner.name}</span></button>
             </DropdownMenu.Trigger>
           </FlowTooltip>
           <FlowDropdownMenuContent label={t('Owner')}>
-            <FlowMenuOptions placeholder="Change customer owner…" selected={new Set([owner.id])} options={[{ id: '', label: 'No owner', shortcut: '0', icon: <FlowGlyph name="owner"/> }, ...owners.map((user, index) => ({ id: user.id, label: user.displayName || user.name, translate: false, shortcut: index === 0 ? '1' : undefined, icon: <UserAvatar className="flow-menu__avatar" avatarUrl={user.avatarUrl} name={user.displayName || user.name}/> }))]} onChoose={id => { if (id !== owner.id) saveQuietly({ ownerId: id }) }}/>
+            <FlowMenuOptions placeholder="Change customer owner…" selected={new Set([owner.id])} options={[{ id: '', label: 'No owner', shortcut: '0', icon: <FlowGlyph name="owner"/> }, ...owners.map((user, index) => ({ id: user.id, label: user.displayName || user.name, translate: false, shortcut: index === 0 ? '1' : undefined, icon: <UserAvatar className="flow-menu__avatar" avatarUrl={user.avatarUrl} userId={user.id} name={user.displayName || user.name}/> }))]} onChoose={id => { if (id !== owner.id) saveQuietly({ ownerId: id }) }}/>
           </FlowDropdownMenuContent>
         </DropdownMenu.Root>
       </Property>}

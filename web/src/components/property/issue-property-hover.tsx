@@ -27,7 +27,7 @@ export function AssigneeHoverPreview({ user, member, online, workspaceName, proj
   const name = personDisplayName(user) || t('Unknown user')
   const isOnline = online && user.active && member?.status !== 'suspended'
   return <div className="assignee-hover-preview">
-    <header><Avatar name={name}/><div><strong data-i18n-ignore>{name}</strong>{user.name && user.name !== user.id && <span data-i18n-ignore>{user.name}</span>}</div></header>
+    <header><Avatar id={user.id} name={name}/><div><strong data-i18n-ignore>{name}</strong>{user.name && user.name !== user.id && <span data-i18n-ignore>{user.name}</span>}</div></header>
     <PersonIdentityDetails person={user}/>
     <div className="assignee-hover-preview__details">
       {member?.status === 'suspended' ? <span>Suspended</span> : !user.active ? <span>Inactive</span> : online !== undefined ? <span><i className={isOnline ? undefined : 'offline'}/>{isOnline ? 'Online' : 'Offline'}</span> : null}

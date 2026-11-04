@@ -1,8 +1,10 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, Copy, MessageCircle, MoreHorizontal, Pencil, SmilePlus, SquarePen, Trash2 } from 'lucide-react'
-import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
+import { avatarColor } from '@/lib/avatar-color'
+import { avatarInitials } from '@/lib/avatar-initials'
 import { toast } from '@/lib/toast'
 import { NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { EmojiPicker } from '@/components/reactions/emoji-picker'
@@ -193,7 +195,7 @@ function NoProjectUpdatesIllustration() {
 function UpdateAuthorAvatar({ user }: { user: User }) {
   if (user.avatarUrl) return <AvatarImage alt="" className="lp-project-updates-preview__avatar" src={user.avatarUrl}/>
   if (!user.displayName) return <NoAssigneeIcon size={16}/>
-  return <span className="lp-project-updates-preview__avatar">{user.displayName.split(/\s|@/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('')}</span>
+  return <span className="lp-project-updates-preview__avatar" style={{ '--avatar': avatarColor(user.id) } as CSSProperties}>{avatarInitials(user.displayName, '')}</span>
 }
 function healthLabel(value: Project['health']) { return ({ onTrack: 'On track', atRisk: 'At risk', offTrack: 'Off track', noUpdate: 'No update' })[value] }
 function formatRelative(value: string) { const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000)); if (seconds < 60) return 'just now'; if (seconds < 3600) return `${Math.floor(seconds / 60)}m`; if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`; return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(new Date(value)) }

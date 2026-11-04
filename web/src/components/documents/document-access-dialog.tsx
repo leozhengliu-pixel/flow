@@ -7,6 +7,7 @@ import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui
 import { SelectControl } from '@/components/ui/select-control'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
+import { leadingCharacters } from '@/lib/avatar-initials'
 import type { BootstrapData, DocumentPermission, FlowDocument } from '@/types/flow'
 
 export type DocumentAccessChange = { subjectType: string; subjectId: string; role: string }
@@ -85,7 +86,7 @@ function AccessBody({ data, document, permissions, onSave, onClose, saving, setS
         const role = staged[key] ?? savedRole(subject.type, subject.id)
         return <div aria-busy={pending && saving ? true : undefined} className="document-access-row" data-error={failed !== null && pending ? '' : undefined} data-pending={pending ? '' : undefined} key={key}>
           <span className="document-access-person">
-            {subject.type === 'user' ? <UserAvatar className="document-meta-avatar" name={subject.label}/> : <span className="document-access-team-mark">{subject.type === 'team' ? subject.label.slice(0, 1).toUpperCase() : '@'}</span>}
+            {subject.type === 'user' ? <UserAvatar className="document-meta-avatar" name={subject.label} userId={subject.id}/> : <span className="document-access-team-mark">{subject.type === 'team' ? leadingCharacters(subject.label).toUpperCase() : '@'}</span>}
             <span className="document-access-text"><strong data-i18n-ignore={!subject.entity || undefined}>{subject.label}</strong>{subject.type === 'user' && subject.email ? <span data-i18n-ignore>{subject.email}</span> : null}</span>
           </span>
           {pending ? <span aria-label={t('Unsaved change')} className="document-access-pending" role="img" title={t('Unsaved change')}/> : null}

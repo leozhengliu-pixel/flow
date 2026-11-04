@@ -180,7 +180,7 @@ export function LoopActionsMenu({
           <DropdownMenuSubContent className="loops-menu loops-value-menu">
             {people.map((user) => (
               <DropdownMenuItem key={user.id} disabled={(loop.ownerId ?? loop.creator?.id) === user.id} onSelect={() => void patch({ ownerId: user.id }, "Owner changed")}>
-                <UserAvatar avatarUrl={user.avatarUrl} className="avatar loops-avatar" name={user.displayName || user.name} />
+                <UserAvatar avatarUrl={user.avatarUrl} className="avatar loops-avatar" name={user.displayName || user.name} userId={user.id} />
                 <span data-i18n-ignore>{user.displayName || user.name}</span>
               </DropdownMenuItem>
             ))}
@@ -338,7 +338,7 @@ export function LoopBulkActionsMenu({
           <DropdownMenuSubContent className="loops-menu loops-value-menu">
             {people.map((user) => (
               <DropdownMenuItem key={user.id} onSelect={() => void apply(loops, { ownerId: user.id }, "Owner changed for {count} loops")}>
-                <UserAvatar avatarUrl={user.avatarUrl} className="avatar loops-avatar" name={user.displayName || user.name} />
+                <UserAvatar avatarUrl={user.avatarUrl} className="avatar loops-avatar" name={user.displayName || user.name} userId={user.id} />
                 <span data-i18n-ignore>{user.displayName || user.name}</span>
               </DropdownMenuItem>
             ))}

@@ -27,7 +27,7 @@ export function ReviewFilters({ data, items, filters, onChange, filterBarHost }:
       add('author', review.author.id); add('repository', reviewRepository(review)); add('status', reviewStatus(review))
       for (const id of new Set(review.reviewerIds)) add('reviewer', id)
     }
-    const people = (field: 'author' | 'reviewer') => [...users.values()].filter(user => counts[field].has(user.id)).map(user => ({ id: user.id, label: user.displayName, keywords: personSearchText(user), person: user, count: counts[field].get(user.id), meta: String(counts[field].get(user.id)), icon: <UserAvatar name={user.displayName} avatarUrl={user.avatarUrl} className="review-filter-avatar"/> }))
+    const people = (field: 'author' | 'reviewer') => [...users.values()].filter(user => counts[field].has(user.id)).map(user => ({ id: user.id, label: user.displayName, keywords: personSearchText(user), person: user, count: counts[field].get(user.id), meta: String(counts[field].get(user.id)), icon: <UserAvatar name={user.displayName} avatarUrl={user.avatarUrl} className="review-filter-avatar" userId={user.id}/> }))
     return [
       { id: 'status', label: t('Status'), icon: <GitPullRequest/>, choices: reviewStatuses.map(id => ({ id, label: t(reviewStatusLabels[id]), count: counts.status.get(id) ?? 0, meta: String(counts.status.get(id) ?? 0) })) },
       { id: 'author', label: t('Author'), icon: <UserRound/>, choices: people('author') },

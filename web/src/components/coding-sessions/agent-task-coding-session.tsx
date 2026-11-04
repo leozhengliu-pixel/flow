@@ -84,7 +84,7 @@ export function CodingSessionActivityCard({ task, data, agentName }: { task: Anc
   }
   return <article className="coding-session-activity-card" data-state={session?.state} aria-label={t('Coding session')}>
     <header className="coding-session-activity-header">
-      <span className="coding-session-activity-avatar" aria-label={agentName}><UserAvatar className="coding-session-activity-avatar-image" name={agentName} avatarUrl={agent?.avatarUrl}/></span>
+      <span className="coding-session-activity-avatar" aria-label={agentName}><UserAvatar className="coding-session-activity-avatar-image" name={agentName} avatarUrl={agent?.avatarUrl} userId={agent?.id}/></span>
       <span className="coding-session-activity-byline">
         <strong data-i18n-ignore>{agentName}</strong>
         {creator && <><span>{t('started by')}</span><strong data-i18n-ignore>{creator.displayName || creator.name}</strong></>}

@@ -292,7 +292,7 @@ function EntityMeta({ data, entity }: { data: BootstrapData; entity: AgentEntity
     const owner = (data.users ?? []).find(user => user.id === entity.view.ownerId)
     return (
       <div className={styles.pills}>
-        {owner && <span className={styles.pill} data-i18n-ignore><UserAvatar avatarUrl={owner.avatarUrl} className={answerStyles.referenceAvatar} name={owner.displayName || owner.name}/>{owner.displayName || owner.name}</span>}
+        {owner && <span className={styles.pill} data-i18n-ignore><UserAvatar avatarUrl={owner.avatarUrl} className={answerStyles.referenceAvatar} name={owner.displayName || owner.name} userId={owner.id}/>{owner.displayName || owner.name}</span>}
         {entity.view.updatedAt && <span className={styles.pill}>{t('Last updated {date}').replace('{date}', date(entity.view.updatedAt))}</span>}
       </div>
     )
@@ -324,7 +324,7 @@ function ResolvedIssueRow({ card, data }: { card: AgentChangeCard; data: Bootstr
           <span className={answerStyles.entityIdentifier}>{issue.identifier}</span>
           <StatusIcon size={14} state={issue.state}/>
           <span className={answerStyles.referenceTitle}>{issue.title}</span>
-          {assignee ? <UserAvatar avatarUrl={issue.assignee?.avatarUrl} className={answerStyles.referenceAvatar} name={assignee}/> : <NoAssigneeIcon className={answerStyles.dim} size={16}/>}
+          {assignee ? <UserAvatar avatarUrl={issue.assignee?.avatarUrl} className={answerStyles.referenceAvatar} name={assignee} userId={issue.assignee?.id}/> : <NoAssigneeIcon className={answerStyles.dim} size={16}/>}
         </AppLink>
       </AgentEntityHover>
     </li>

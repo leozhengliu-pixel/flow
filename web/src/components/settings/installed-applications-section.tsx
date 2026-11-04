@@ -214,7 +214,7 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
         const user = data.users.find(member => member.id === item.userId)
         const authorized = t('Authorized on {date}').replace('{date}', formatDate(item.authorizedAt, { month: 'short', day: 'numeric' }))
         return <div key={item.userId} className="oauth-app-member">
-          <UserAvatar className="oauth-app-member-avatar" name={user?.displayName || user?.name || '?'} avatarUrl={user?.avatarUrl}/>
+          <UserAvatar className="oauth-app-member-avatar" name={user?.displayName || user?.name || '?'} avatarUrl={user?.avatarUrl} userId={user?.id}/>
           <div className="oauth-app-member-copy">
             <span data-i18n-ignore>{user?.displayName || user?.name || t('Unknown user')}{user?.username && <em>({user.username})</em>}</span>
             <span data-i18n-ignore>{item.lastUsedAt ? `${authorized} · ${t('Last used on {date}').replace('{date}', formatDate(item.lastUsedAt, { month: 'short', day: 'numeric' }))}` : authorized}</span>
@@ -226,7 +226,7 @@ export function InstalledApplicationPage({ data, clientId, onReload }: { data: B
       {authorizations.map(item => {
         const user = data.users.find(member => member.id === item.userId)
         return <div key={item.id} className="oauth-app-member">
-          <UserAvatar className="oauth-app-member-avatar" name={user?.displayName || user?.name || '?'} avatarUrl={user?.avatarUrl}/>
+          <UserAvatar className="oauth-app-member-avatar" name={user?.displayName || user?.name || '?'} avatarUrl={user?.avatarUrl} userId={user?.id}/>
           <div className="oauth-app-member-copy">
             <span data-i18n-ignore>{user?.displayName || user?.name || t('Unknown user')}{user?.username && <em>({user.username})</em>}</span>
             <span>{t('Authorized on {date}').replace('{date}', formatDate(item.createdAt, { month: 'short', day: 'numeric' }))}</span>
@@ -273,7 +273,7 @@ function AppUserSection({ data, name, installation, onRevoke, onSaved }: { data:
   const options: [TeamMode, string][] = [['public', 'All public teams'], ['mixed', 'All public teams and select other teams…'], ['selected', 'Only select teams…']]
   return <Section className="oauth-app-section" title={t('App user')} description={t('This application can take actions as a workspace user within teams it can access')}>
     <div className="oauth-app-member">
-      <UserAvatar className="oauth-app-member-avatar" name={appUser?.displayName || name} avatarUrl={appUser?.avatarUrl || installation.avatarUrl}/>
+      <UserAvatar className="oauth-app-member-avatar" name={appUser?.displayName || name} avatarUrl={appUser?.avatarUrl || installation.avatarUrl} userId={appUser?.id}/>
       <div className="oauth-app-member-copy">
         <span data-i18n-ignore>{appUser?.displayName || name}{appUser?.username && <em>({appUser.username})</em>}<span className="oauth-app-badge">{t('Agent')}</span></span>
         <span>

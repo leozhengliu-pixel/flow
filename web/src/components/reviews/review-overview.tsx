@@ -99,7 +99,7 @@ export function ReviewOverview({
           <ReviewTitle title={review.title} />
         </h1>
         <div className="review-byline">
-          <UserAvatar className="avatar review-byline-avatar" name={author} avatarUrl={review.author.avatarUrl} />
+          <UserAvatar className="avatar review-byline-avatar" name={author} avatarUrl={review.author.avatarUrl} userId={review.author.id} />
           <PersonHover person={review.author}>
             <span className="review-byline-author" data-i18n-ignore>
               {author}
@@ -178,7 +178,7 @@ export function ReviewOverview({
         <SidebarSection label={t("Reviewers")}>
           {reviewers.map((user) => (
             <button type="button" key={user.id} className="review-sidebar-button" onClick={() => onOpenPicker("reviewers")}>
-              <UserAvatar className="avatar review-sidebar-avatar" name={user.displayName} avatarUrl={user.avatarUrl} />
+              <UserAvatar className="avatar review-sidebar-avatar" name={user.displayName} avatarUrl={user.avatarUrl} userId={user.id} />
               <span data-i18n-ignore>{user.displayName}</span>
             </button>
           ))}
@@ -261,7 +261,7 @@ function ReviewMobileProperties({
         <div className="review-mobile-values">
         {reviewers.map((user) => (
           <button type="button" key={user.id} className="review-sidebar-button" onClick={() => onOpenPicker("reviewers")}>
-            <UserAvatar className="avatar review-sidebar-avatar" name={user.displayName} avatarUrl={user.avatarUrl} />
+            <UserAvatar className="avatar review-sidebar-avatar" name={user.displayName} avatarUrl={user.avatarUrl} userId={user.id} />
             <span data-i18n-ignore>{user.displayName}</span>
           </button>
         ))}
@@ -608,7 +608,7 @@ function ReviewActivityCard({
         return (
           <div key={comment.id} className={`review-activity-comment-entry${index ? " is-reply" : ""}`} id={targetCommentHash(comment.id)} data-review-comment-id={comment.id}>
             <header>
-              <UserAvatar className="avatar review-activity-avatar" name={actor} avatarUrl={comment.actor.avatarUrl} />
+              <UserAvatar className="avatar review-activity-avatar" name={actor} avatarUrl={comment.actor.avatarUrl} userId={comment.actor.id} />
               <strong data-i18n-ignore>{actor}</strong>
               <time dateTime={comment.createdAt} title={new Date(comment.createdAt).toLocaleString()}>
                 {timeAgo(comment.createdAt)}
@@ -641,7 +641,7 @@ function ReviewActivityCard({
         );
       })}
       <div className="review-activity-reply">
-        <UserAvatar className="avatar review-activity-avatar" name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} />
+        <UserAvatar className="avatar review-activity-avatar" name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} userId={data.viewer.id} />
         <textarea
           aria-label={t("Reply")}
           placeholder={t("Leave a reply…")}
@@ -764,7 +764,7 @@ function ReviewCommentComposer({ data, review, onReload, value, onValueChange, p
   };
   return (
     <div className="review-comment">
-      <UserAvatar className="avatar review-comment-avatar" name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} />
+      <UserAvatar className="avatar review-comment-avatar" name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} userId={data.viewer.id} />
       <textarea
         aria-label={t("Comment")}
         placeholder={t("Leave a comment…")}

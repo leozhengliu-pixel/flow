@@ -91,11 +91,11 @@ export const InlineThreadCard = forwardRef<HTMLDivElement, ThreadCardProps>(func
     {thread.replies.map(reply => <ThreadComment key={reply.id} comment={reply} viewer={viewer} users={users} canComment={canComment} canModerate={canModerate} actions={actions} thread={thread}/>)}
     {agentThread ?? (!resolved && canComment && (active
       ? <div className="document-thread-reply">
-        <UserAvatar avatarUrl={viewer.avatarUrl} className="document-thread-avatar" name={viewer.displayName || viewer.name}/>
+        <UserAvatar avatarUrl={viewer.avatarUrl} className="document-thread-avatar" name={viewer.displayName || viewer.name} userId={viewer.id}/>
         <div className="document-thread-reply-composer"><Composer compact users={users} placeholder={t('Reply…')} onSubmit={(body, bodyData) => actions.reply(thread, body, bodyData)}/></div>
       </div>
       : <button aria-label={t('Reply…')} className="document-thread-reply-trigger" onClick={onActivate} type="button">
-        <UserAvatar avatarUrl={viewer.avatarUrl} className="document-thread-avatar" name={viewer.displayName || viewer.name}/>
+        <UserAvatar avatarUrl={viewer.avatarUrl} className="document-thread-avatar" name={viewer.displayName || viewer.name} userId={viewer.id}/>
         <span>{t('Reply…')}</span>
         <span aria-hidden className="document-thread-send"><ArrowUp size={14}/></span>
       </button>))}
@@ -125,7 +125,7 @@ function ThreadComment({ comment, viewer, users, canComment, canModerate, action
   }
   return <div className={`document-thread-comment${root ? ' is-root' : ''}`} id={`comment-${comment.id}`}>
     <header>
-      <UserAvatar avatarUrl={attributedActorAvatar(comment.user, comment.botActor)} className="document-thread-avatar" name={name}/>
+      <UserAvatar avatarUrl={attributedActorAvatar(comment.user, comment.botActor)} className="document-thread-avatar" name={name} userId={comment.user.id}/>
       <strong data-i18n-ignore>{name}</strong><ViaApp user={comment.user} botActor={comment.botActor}/>
       <time dateTime={comment.createdAt} title={formatDate(comment.createdAt, { dateStyle: 'full', timeStyle: 'short' })}>{formatRelative(comment.createdAt)}</time>
       {comment.editedAt && <span className="document-thread-edited">{t('(edited)')}</span>}

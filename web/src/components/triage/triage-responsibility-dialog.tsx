@@ -41,7 +41,7 @@ export function TriageResponsibilityMembers({ data, teamId, multiple, value, dis
     closeOnSelect={!multiple}
     selectedId={value[0]}
     selectedIds={value}
-    options={members.map(user => ({ id: user.id, label: user.displayName, i18nIgnore: true, icon: <UserAvatar className="user-avatar" name={user.displayName} avatarUrl={user.avatarUrl}/> }))}
+    options={members.map(user => ({ id: user.id, label: user.displayName, i18nIgnore: true, icon: <UserAvatar className="user-avatar" name={user.displayName} avatarUrl={user.avatarUrl} userId={user.id}/> }))}
     searchPlaceholder={t('Search people…')}
     triggerClassName="select-control triage-responsibility-members"
     trigger={<span data-i18n-ignore={selected.length ? true : undefined} aria-disabled={disabled || undefined}>{selected.length ? selected.map(user => user.displayName).join(', ') : t('Select members…')}</span>}

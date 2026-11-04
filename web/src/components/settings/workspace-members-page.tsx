@@ -426,6 +426,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
             className={`settings-member-avatar${inactive && !app ? " is-inactive" : ""}`}
             name={member.user.displayName || member.user.name}
             avatarUrl={member.user.avatarUrl}
+            userId={member.user.id}
           />
           <i>
             {linked ? (

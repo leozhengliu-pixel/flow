@@ -47,14 +47,14 @@ export function DocumentInboxView({ data, notification }: { data: BootstrapData;
       {document && <AppLink className="flow-inbox-document__open" href={documentNotificationPath(data.workspace.urlKey, notification, document)}>{t('Open document')}<ArrowUpRight size={13}/></AppLink>}
     </header>
     <p className="flow-inbox-document__line">
-      <UserAvatar avatarUrl={notification.actor.avatarUrl} className="flow-inbox-document__avatar" name={notification.actor.displayName || notification.actor.name}/>
+      <UserAvatar avatarUrl={notification.actor.avatarUrl} className="flow-inbox-document__avatar" name={notification.actor.displayName || notification.actor.name} userId={notification.actor.id}/>
       <span>{documentNotificationLine({ ...notification, payload: { ...notification.payload, excerpt: '' } }, t)}</span>
       <time dateTime={notification.updatedAt}>{formatDate(notification.updatedAt, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time>
     </p>
     {quote && <blockquote className="flow-inbox-document__quote" data-i18n-ignore>{quote}</blockquote>}
     {thread.length > 0
       ? <div className="flow-inbox-document__thread">{thread.map(item => <article key={item.id} className={item.id === notification.commentId ? 'is-target' : undefined}>
-        <header><UserAvatar avatarUrl={item.user.avatarUrl} className="flow-inbox-document__avatar" name={item.user.displayName || item.user.name}/><strong data-i18n-ignore>{item.user.displayName || item.user.name}</strong><time dateTime={item.createdAt}>{formatDate(item.createdAt, { month: 'short', day: 'numeric' })}</time></header>
+        <header><UserAvatar avatarUrl={item.user.avatarUrl} className="flow-inbox-document__avatar" name={item.user.displayName || item.user.name} userId={item.user.id}/><strong data-i18n-ignore>{item.user.displayName || item.user.name}</strong><time dateTime={item.createdAt}>{formatDate(item.createdAt, { month: 'short', day: 'numeric' })}</time></header>
         <RichComment body={item.body} data={item.bodyData}/>
       </article>)}</div>
       : null}

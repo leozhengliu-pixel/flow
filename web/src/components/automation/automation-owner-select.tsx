@@ -69,6 +69,7 @@ export function AutomationOwnerSelect({
         className="automation-owner-avatar"
         avatarUrl={owner.avatarUrl}
         name={owner.displayName}
+        userId={owner.id}
       />
       <span data-i18n-ignore className="automation-owner-name">
         {owner.displayName}

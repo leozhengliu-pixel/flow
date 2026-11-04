@@ -620,7 +620,7 @@ function RunReply({ data, reply }: { data: BootstrapData; reply: LoopRunReply })
   return (
     <div className="loops-run-reply">
       <div className="loops-run-reply-message">
-        <UserAvatar avatarUrl={author?.avatarUrl} className="avatar loops-avatar" name={author ? author.displayName || author.name : t("Unknown user")} />
+        <UserAvatar avatarUrl={author?.avatarUrl} className="avatar loops-avatar" name={author ? author.displayName || author.name : t("Unknown user")} userId={author?.id} />
         <p data-i18n-ignore>{reply.body}</p>
       </div>
       {(reply.attachments ?? []).length > 0 && (

@@ -51,7 +51,8 @@ function DiffValue({ field, value }: { field: Field; value?: PulseDiffValue }) {
   }
   if (field === 'lead' || field === 'owner') {
     const avatarUrl = value && typeof value === 'object' ? value.avatarUrl : undefined
-    return <span className="pulse-diff-value"><UserAvatar avatarUrl={avatarUrl} className="avatar pulse-diff-avatar" name={name}/><span data-i18n-ignore>{name}</span></span>
+    const userId = value && typeof value === 'object' ? value.id : undefined
+    return <span className="pulse-diff-value"><UserAvatar avatarUrl={avatarUrl} className="avatar pulse-diff-avatar" name={name} userId={userId}/><span data-i18n-ignore>{name}</span></span>
   }
   return <span className="pulse-diff-value">{formatDay(name)}</span>
 }

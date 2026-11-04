@@ -462,10 +462,10 @@ function NewRecurringIssuePage({ data, team, sourceId, onNavigateSubPath, onRelo
               valueIsEntityName={Boolean(assignee)}
               selectedId={assigneeId}
               triggerClassName="it-property"
-              icon={assignee ? <Avatar name={assignee.displayName} /> : <NoAssigneeIcon size={14} />}
+              icon={assignee ? <Avatar id={assignee.id} name={assignee.displayName} /> : <NoAssigneeIcon size={14} />}
               options={[
                 { id: "", label: t("No assignee"), icon: <NoAssigneeIcon size={14} /> },
-                ...data.users.filter((user) => user.active).map((user) => ({ id: user.id, label: user.displayName, keywords: `${user.name} ${user.email}`, icon: <Avatar name={user.displayName} />, i18nIgnore: true })),
+                ...data.users.filter((user) => user.active).map((user) => ({ id: user.id, label: user.displayName, keywords: `${user.name} ${user.email}`, icon: <Avatar id={user.id} name={user.displayName} />, i18nIgnore: true })),
               ]}
               onChange={setAssigneeId}
             />

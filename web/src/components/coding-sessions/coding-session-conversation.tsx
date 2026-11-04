@@ -239,7 +239,7 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
   return <>
     <div ref={scroller} className="coding-agent-stream cs-stream" role="group" aria-label={t('Session stream')}>
       {startedByAgent && !issuePrompt && <p className="cs-start-line">
-        <UserAvatar className="coding-session-prompt-avatar" name={creator?.displayName || creator?.name || t('Flow')} avatarUrl={creator?.avatarUrl}/>
+        <UserAvatar className="coding-session-prompt-avatar" name={creator?.displayName || creator?.name || t('Flow')} avatarUrl={creator?.avatarUrl} userId={creator?.id}/>
         <span><strong data-i18n-ignore>{creator ? creator.displayName || creator.name : t('Flow')}</strong> {issue ? <>{t('started the session from')} <AppLink href={issuePath(data.workspace.urlKey, issue)} data-i18n-ignore>{issue.identifier}</AppLink></> : t('started the session')}</span>
       </p>}
       {routed && !turns[0]?.prompt && !issuePrompt && routed}
@@ -250,14 +250,14 @@ export function CodingSessionConversation({ session, data, onChange, onOpenChang
           {turn.showTime && turn.at && <CodingTimeMarker at={turn.at}/>}
           {turn.prompt && <div className="cs-prompt-row">
             <div className="coding-session-prompt">
-              <header><UserAvatar className="coding-session-prompt-avatar" name={userName(turn.prompt.activity.actorId)} avatarUrl={data.users.find(user => user.id === turn.prompt!.activity.actorId)?.avatarUrl}/><strong data-i18n-ignore>{userName(turn.prompt.activity.actorId)}</strong><PromptTime at={turn.prompt.activity.createdAt}/></header>
+              <header><UserAvatar className="coding-session-prompt-avatar" name={userName(turn.prompt.activity.actorId)} avatarUrl={data.users.find(user => user.id === turn.prompt!.activity.actorId)?.avatarUrl} userId={turn.prompt!.activity.actorId}/><strong data-i18n-ignore>{userName(turn.prompt.activity.actorId)}</strong><PromptTime at={turn.prompt.activity.createdAt}/></header>
               {turn.prompt.stop ? <p><em>{t('Stop requested')}</em></p> : turn.prompt.activity.body && <p data-i18n-ignore><PromptText text={turn.prompt.activity.body}/></p>}
               <AgentMessageAttachments attachments={turn.prompt.activity.metadata?.attachments}/>
             </div>
           </div>}
           {index === 0 && !turn.prompt && issuePrompt && issue && <div className="cs-prompt-row">
             <div className="coding-session-prompt">
-              <header><UserAvatar className="coding-session-prompt-avatar" name={userName(session.creatorId)} avatarUrl={creator?.avatarUrl}/><strong data-i18n-ignore>{userName(session.creatorId)}</strong><PromptTime at={session.createdAt}/></header>
+              <header><UserAvatar className="coding-session-prompt-avatar" name={userName(session.creatorId)} avatarUrl={creator?.avatarUrl} userId={creator?.id}/><strong data-i18n-ignore>{userName(session.creatorId)}</strong><PromptTime at={session.createdAt}/></header>
               <p>{t('Work on {issue}').split('{issue}').map((part, position) => position ? <Fragment key={position}><AppLink href={issuePath(data.workspace.urlKey, issue)} data-i18n-ignore>{issue.identifier}</AppLink>{part}</Fragment> : part)}</p>
             </div>
           </div>}

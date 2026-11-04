@@ -167,6 +167,7 @@ export function GitLabIntegrationSettings({
                 <UserAvatar
                   avatarUrl={enabledBy.avatarUrl}
                   className="avatar gitlab-settings-avatar"
+                  userId={enabledBy.id}
                   name={enabledBy.displayName || enabledBy.name}
                 />
                 <div>

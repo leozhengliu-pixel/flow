@@ -113,7 +113,7 @@ export function SavedViewDetailsPanel({ belowFilterBar = false, favorite, inline
           const label = item.id ? item.label : t(tab === 'assignee' ? 'No assignee' : tab === 'project' ? 'No project' : tab === 'team' ? 'No team' : 'No labels')
           const points = queryKey ? remotePoints.key === estimatesKey ? remotePoints.values?.[item.id] : undefined : sumEstimatePoints(rowsForDimension(rows, tab, item.id), estimateSettingsFor)
           return <button aria-label={`${label} ${item.count}`} className={styles.summaryItem} key={item.id} onClick={() => onSummaryItemSelect(tab, item.id, label, item.color)} type="button">
-          <SummaryMark color={item.color} kind={tab} name={label} avatarUrl={item.avatarUrl} unassigned={!item.id} inline={inline}/><span data-i18n-ignore>{label}</span><small>{t('See issues')}</small><b>{points !== undefined && <EstimateIcon size={14}/>}<span>{points !== undefined ? formatEstimatePoints(points) : item.count}</span></b>
+          <SummaryMark color={item.color} userId={item.id} kind={tab} name={label} avatarUrl={item.avatarUrl} unassigned={!item.id} inline={inline}/><span data-i18n-ignore>{label}</span><small>{t('See issues')}</small><b>{points !== undefined && <EstimateIcon size={14}/>}<span>{points !== undefined ? formatEstimatePoints(points) : item.count}</span></b>
         </button>}) : <div className={styles.empty}>{t('No matching data')}</div>}
       </div>
     </section>
@@ -147,8 +147,8 @@ function summaryItems(rows: MyIssuesRowData[], dimension: SummaryDimension, incl
   return [...counts.values()].sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
 }
 
-function SummaryMark({ color, kind, name, avatarUrl, unassigned, inline }: { color?: string; kind: string; name: string; avatarUrl?: string; unassigned: boolean; inline: boolean }) {
+function SummaryMark({ color, userId, kind, name, avatarUrl, unassigned, inline }: { color?: string; userId?: string; kind: string; name: string; avatarUrl?: string; unassigned: boolean; inline: boolean }) {
   if (kind === 'team') return <ViewGlyph color={color} icon="Team"/>
-  return kind === 'assignee' ? !inline ? <span className={styles.avatarMark} style={{ backgroundColor: color }}>•</span> : unassigned ? <NoAssigneeIcon size={18}/> : <UserAvatar className={styles.avatarMark} name={name} avatarUrl={avatarUrl} color={color}/> : kind === 'project' ? <span className={styles.projectMark}>◇</span> : <i className={styles.dot} style={{ backgroundColor: color }}/>
+  return kind === 'assignee' ? !inline ? <span className={styles.avatarMark} style={{ backgroundColor: color }}>•</span> : unassigned ? <NoAssigneeIcon size={18}/> : <UserAvatar className={styles.avatarMark} name={name} avatarUrl={avatarUrl} color={color} userId={userId || undefined}/> : kind === 'project' ? <span className={styles.projectMark}>◇</span> : <i className={styles.dot} style={{ backgroundColor: color }}/>
 }
 function InsightOwnerAvatar({ user }: { user?: User }) { const { t } = useI18n(); return <UserAvatar avatarUrl={user?.avatarUrl} className={styles.avatar} color={user ? avatarColor(user.id) : undefined} name={user?.displayName ?? t('Unknown user')}/> }

@@ -108,7 +108,7 @@ function ProjectRowMenuContent({ project, options, integration, manualOrdering, 
     label: option.label,
     translate: !option.value,
     keywords: option.keywords,
-    icon: option.value ? <UserAvatar className="flow-menu__avatar" avatarUrl={option.avatarUrl} color={option.color} name={option.label}/> : <NoAssigneeIcon size={16}/>,
+    icon: option.value ? <UserAvatar className="flow-menu__avatar" avatarUrl={option.avatarUrl} color={option.color} userId={option.value} name={option.label}/> : <NoAssigneeIcon size={16}/>,
   }))
   const matchesPerson = (option: FlowMenuOption, query: string) => {
     const person = option.id ? directoryPerson(directory.users, option.id) : undefined

@@ -173,7 +173,7 @@ export function LoopVersionsDialog({
                         </time>
                       </span>
                       <span className="loops-version-row-meta">
-                        <UserAvatar avatarUrl={author?.avatarUrl} className="avatar loops-avatar" name={authorName} />
+                        <UserAvatar avatarUrl={author?.avatarUrl} className="avatar loops-avatar" name={authorName} userId={author?.id} />
                         <span data-i18n-ignore>{authorName}</span>
                         <span aria-hidden="true">·</span>
                         <span>{versionSummary(version, t)}</span>

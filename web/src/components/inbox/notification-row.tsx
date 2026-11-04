@@ -11,6 +11,8 @@ import { PulseIcon } from '@/components/pulse/pulse-icon'
 import { DateTimeControl } from '@/components/ui/date-time-control'
 import { MenuSubmenu } from '@/components/ui/menu-submenu'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
+import { avatarColor } from '@/lib/avatar-color'
+import { avatarInitials } from '@/lib/avatar-initials'
 import type { WorkflowState } from '@/types/flow'
 
 import { PulseFrequencyContextSubmenu } from './pulse-frequency-menu'
@@ -293,8 +295,8 @@ function ActorVisual({ notification }: { notification: InboxNotificationRowData 
         {notification.actorAvatarUrl ? (
           <AvatarImage className="flow-inbox-row__avatar" src={notification.actorAvatarUrl} alt="" aria-label={notification.actor} />
         ) : (
-          <span className="flow-inbox-row__avatar flow-inbox-row__initials" aria-label={notification.actor} style={{ '--flow-inbox-avatar': actorColor(notification.actorId ?? notification.actor) } as CSSProperties}>
-            {notification.actorInitials ?? initials(notification.actor)}
+          <span className="flow-inbox-row__avatar flow-inbox-row__initials" aria-label={notification.actor} style={{ '--flow-inbox-avatar': avatarColor(notification.actorId ?? notification.actor) } as CSSProperties}>
+            {notification.actorInitials ?? avatarInitials(notification.actor)}
           </span>
         )}
       </span>
@@ -553,15 +555,6 @@ function cssAttributeValue(value: string) {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
-function initials(value: string) {
-  return value.split(/\s|@/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || '?'
-}
-
-function actorColor(value: string) {
-  const colors = ['lch(40% 60 0)', 'lch(55% 60 40)', 'lch(62% 45 145)', 'lch(70% 60 220)', 'lch(55% 55 285)', 'lch(60% 55 335)']
-  const index = [...value].reduce((sum, character) => sum + character.charCodeAt(0), 0) % colors.length
-  return colors[index]
-}
 
 function KindIcon({ kind, state }: { kind: InboxNotificationKind; state?: Pick<WorkflowState, 'id' | 'name' | 'color' | 'type'> }) {
   if (kind === 'review') return <svg viewBox="0 0 16 16"><path d="M9.897 1.085a.75.75 0 0 1 .588.883l-2.5 12.5a.75.75 0 0 1-1.47-.295l2.5-12.5a.75.75 0 0 1 .882-.588m1.844 3.185a.75.75 0 0 1 1.06.042l3 3.25a.75.75 0 0 1 0 1.017l-3 3.25a.75.75 0 1 1-1.102-1.017l2.53-2.742L11.7 5.33a.75.75 0 0 1 .042-1.06m-7.543.042A.75.75 0 1 1 5.3 5.329L2.771 8.07l2.53 2.742A.75.75 0 1 1 4.2 11.829l-3-3.25a.75.75 0 0 1 0-1.017z" /></svg>

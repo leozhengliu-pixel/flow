@@ -43,11 +43,11 @@ function Prop({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
   return <span className={styles.prop}>{icon}<span>{children}</span></span>
 }
 
-function Person({ user }: { user?: { avatarUrl?: string; displayName?: string; name: string } }) {
+function Person({ user }: { user?: { avatarUrl?: string; displayName?: string; id?: string; name: string } }) {
   const { t } = useI18n()
   if (!user) return <Prop icon={<NoAssigneeIcon className={styles.dim} size={16}/>}>{t('Unassigned')}</Prop>
   const name = user.displayName || user.name
-  return <span className={styles.prop}><UserAvatar avatarUrl={user.avatarUrl} className={styles.avatar} name={name}/><span data-i18n-ignore>{name}</span></span>
+  return <span className={styles.prop}><UserAvatar avatarUrl={user.avatarUrl} className={styles.avatar} name={name} userId={user.id}/><span data-i18n-ignore>{name}</span></span>
 }
 
 function Progress({ percent }: { percent: number }) {
@@ -91,8 +91,8 @@ function DelegateStack({ assignee, delegate }: { assignee?: Issue['assignee']; d
   const agentName = delegate.displayName || delegate.name
   const label = assignee ? `${assignee.displayName || assignee.name} · ${t('Delegated to {name}').replace('{name}', agentName)}` : t('Delegated to {name}').replace('{name}', agentName)
   return <span aria-label={label} className={styles.facepile} data-i18n-ignore role="img">
-    <UserAvatar avatarUrl={delegate.avatarUrl} className={styles.avatar} name={agentName}/>
-    {assignee ? <UserAvatar avatarUrl={assignee.avatarUrl} className={styles.avatar} name={assignee.displayName || assignee.name}/> : <NoAssigneeIcon className={styles.dim} size={16}/>}
+    <UserAvatar avatarUrl={delegate.avatarUrl} className={styles.avatar} name={agentName} userId={delegate.id}/>
+    {assignee ? <UserAvatar avatarUrl={assignee.avatarUrl} className={styles.avatar} name={assignee.displayName || assignee.name} userId={assignee.id}/> : <NoAssigneeIcon className={styles.dim} size={16}/>}
   </span>
 }
 
@@ -204,7 +204,7 @@ export function AgentEntityCardBody({ data, entity }: { data: BootstrapData; ent
       const teams = (data.teams ?? []).filter(team => teamIds.has(team.id))
       return <>
         <div className={styles.person}>
-          <UserAvatar avatarUrl={user.avatarUrl} className={`${styles.avatar} ${styles.avatarLarge}`} name={name}/>
+          <UserAvatar avatarUrl={user.avatarUrl} className={`${styles.avatar} ${styles.avatarLarge}`} name={name} userId={user.id}/>
           <div><strong data-i18n-ignore>{name}</strong><span data-i18n-ignore>{user.username ? `@${user.username}` : user.email}</span></div>
         </div>
         {(user.jobTitle || teams.length > 0) && <hr className={styles.rule}/>}
@@ -223,7 +223,7 @@ export function AgentEntityCardBody({ data, entity }: { data: BootstrapData; ent
       return <>
         <div className={styles.titleRow}>
           <div className={styles.title}><TeamIcon size={16} team={team}/><span data-i18n-ignore>{team.name} <span className={styles.muted}>({team.key})</span></span></div>
-          {members.length > 0 && <span className={styles.facepile}>{members.map(user => <UserAvatar avatarUrl={user.avatarUrl} className={styles.avatar} key={user.id} name={user.displayName || user.name}/>)}</span>}
+          {members.length > 0 && <span className={styles.facepile}>{members.map(user => <UserAvatar avatarUrl={user.avatarUrl} className={styles.avatar} key={user.id} name={user.displayName || user.name} userId={user.id}/>)}</span>}
         </div>
         <hr className={styles.rule}/>
         <div className={styles.column}>

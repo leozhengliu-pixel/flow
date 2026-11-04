@@ -656,7 +656,7 @@ function userOptions(data: BootstrapData, emptyLabel?: string): PropertyOption[]
         id: item.id,
         label: item.displayName,
         keywords: `${item.name} ${item.email}`,
-        icon: <UserAvatar className="avatar" name={item.displayName} avatarUrl={item.avatarUrl} />,
+        icon: <UserAvatar className="avatar" name={item.displayName} avatarUrl={item.avatarUrl} userId={item.id} />,
         i18nIgnore: true,
       })),
   ];
@@ -794,7 +794,7 @@ function TemplatePills({
         triggerClassName={pill(Boolean(lead))}
         trigger={
           <>
-            {lead ? <UserAvatar className="avatar" name={lead.displayName} avatarUrl={lead.avatarUrl} /> : <TemplateGlyph name="lead" size={14} />}
+            {lead ? <UserAvatar className="avatar" name={lead.displayName} avatarUrl={lead.avatarUrl} userId={lead.id} /> : <TemplateGlyph name="lead" size={14} />}
             <span data-i18n-ignore={lead ? "" : undefined}>{lead ? lead.displayName : t("Lead")}</span>
           </>
         }
@@ -814,7 +814,7 @@ function TemplatePills({
         triggerClassName={pill(members.length > 0)}
         trigger={
           <>
-            {members[0] ? <UserAvatar className="avatar" name={members[0].displayName} avatarUrl={members[0].avatarUrl} /> : <FlowGlyph name="members" width={14} height={14} />}
+            {members[0] ? <UserAvatar className="avatar" name={members[0].displayName} avatarUrl={members[0].avatarUrl} userId={members[0].id} /> : <FlowGlyph name="members" width={14} height={14} />}
             <span data-i18n-ignore={members.length === 1 ? "" : undefined}>
               {members.length === 1 ? members[0].displayName : members.length ? countLabel(t, members.length, "1 member", "{count} members") : t("Members")}
             </span>
@@ -1290,7 +1290,7 @@ function IssueRow({
           triggerClassName="pt-assignee-trigger"
           trigger={
             assignee ? (
-              <UserAvatar className="avatar" name={assignee.displayName} avatarUrl={assignee.avatarUrl} />
+              <UserAvatar className="avatar" name={assignee.displayName} avatarUrl={assignee.avatarUrl} userId={assignee.id} />
             ) : (
               <TemplateGlyph name="lead" size={18} />
             )
@@ -1318,7 +1318,7 @@ function IssueRow({
                         label: item.displayName,
                         translate: false,
                         keywords: `${item.name} ${item.email}`,
-                        icon: <UserAvatar className="avatar" name={item.displayName} avatarUrl={item.avatarUrl} />,
+                        icon: <UserAvatar className="avatar" name={item.displayName} avatarUrl={item.avatarUrl} userId={item.id} />,
                       })),
                   ]}
                   selected={new Set([issue.assigneeId ?? ""])}
@@ -1520,7 +1520,7 @@ function IssueComposer({
               valueIsEntityName={Boolean(assignee)}
               selectedId={value.assigneeId}
               triggerClassName={pill(Boolean(assignee))}
-              icon={assignee ? <UserAvatar className="avatar" name={assignee.displayName} avatarUrl={assignee.avatarUrl} /> : <TemplateGlyph name="lead" size={14} />}
+              icon={assignee ? <UserAvatar className="avatar" name={assignee.displayName} avatarUrl={assignee.avatarUrl} userId={assignee.id} /> : <TemplateGlyph name="lead" size={14} />}
               options={userOptions(data, t("No assignee"))}
               onChange={(id) => patch({ assigneeId: id })}
             />

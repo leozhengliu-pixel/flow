@@ -156,7 +156,7 @@ export const PulseUpdateCard = memo(function PulseUpdateCard(props: Props) {
         {/* The whole status line is the link to the update (the reference app wraps it in one anchor). */}
         <a className="pulse-post-byline" href={pulseUpdateLink(item)} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); props.onNavigate(`${item.source.url}#update-${update.id}`) }}>
           <span className={`pulse-post-health is-${update.health}`}>{phone && update.health === 'onTrack' ? <PulsePhoneHealthGlyph/> : <HealthGlyph className="pulse-health-glyph" health={update.health}/>}<span>{t(PULSE_HEALTH_LABELS[item.kind][update.health])}</span></span>
-          <UserAvatar avatarUrl={author.avatarUrl} className="avatar pulse-byline-avatar" name={userName(author)}/>
+          <UserAvatar avatarUrl={author.avatarUrl} className="avatar pulse-byline-avatar" name={userName(author)} userId={author.id}/>
           <span className="pulse-post-author" data-i18n-ignore>{userName(author)}</span>
           <FlowTooltip label={formatDate(created, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}>
             <time dateTime={update.createdAt}>{relativeTime(created, t('just now'))}{update.editedAt ? ` · ${t('edited')}` : ''}</time>
@@ -212,7 +212,7 @@ function PulseComment({ comment }: { comment: Comment }) {
   const created = new Date(comment.createdAt)
   const author = liveActorUser(comment.user)
   return <article className="pulse-post-comment">
-    <UserAvatar avatarUrl={author.avatarUrl} className="avatar pulse-byline-avatar" name={userName(author)}/>
+    <UserAvatar avatarUrl={author.avatarUrl} className="avatar pulse-byline-avatar" name={userName(author)} userId={author.id}/>
     <div>
       <header><strong data-i18n-ignore>{userName(author)}</strong><time dateTime={comment.createdAt} title={formatDate(created, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}>{relativeTime(created, t('just now'))}</time></header>
       <div className="pulse-post-comment-body"><RichComment body={comment.body} data={comment.bodyData} version={comment.version}/></div>

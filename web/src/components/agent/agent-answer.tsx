@@ -76,7 +76,7 @@ function AgentReferencedIssueRow({ data, reference }: { data: BootstrapData; ref
             <StatusIcon size={14} state={issue.state}/>
             <span className={styles.referenceTitle}>{issue.title}</span>
           </span>
-          {assignee ? <UserAvatar avatarUrl={issue.assignee?.avatarUrl} className={styles.referenceAvatar} name={assignee}/> : <NoAssigneeIcon className={styles.dim} size={16}/>}
+          {assignee ? <UserAvatar avatarUrl={issue.assignee?.avatarUrl} className={styles.referenceAvatar} name={assignee} userId={issue.assignee?.id}/> : <NoAssigneeIcon className={styles.dim} size={16}/>}
           <span aria-hidden="true"/>
         </AppLink>
       </AgentEntityHover>
@@ -125,7 +125,7 @@ function AgentReferencedCard({ data, reference }: { data: BootstrapData; referen
         <span className={styles.referenceCardTitle}>{parts.icon}<span>{parts.title}</span></span>
         <span className={styles.referenceCardMeta}>
           {project && <span className={styles.referenceCardRow}><ProjectIcon size={16} style={{ color: project.color }}/>{project.name}</span>}
-          {owner && <span className={styles.referenceCardRow}><UserAvatar avatarUrl={owner.avatarUrl} className={styles.referenceAvatar} name={owner.displayName || owner.name}/>{owner.displayName || owner.name}</span>}
+          {owner && <span className={styles.referenceCardRow}><UserAvatar avatarUrl={owner.avatarUrl} className={styles.referenceAvatar} name={owner.displayName || owner.name} userId={owner.id}/>{owner.displayName || owner.name}</span>}
           <span className={styles.referenceCardRow}><CalendarIcon className={styles.dim} size={16} variant="start"/>{parts.detail}</span>
         </span>
       </AppLink>

@@ -90,7 +90,7 @@ export function CollaborativeEditor({
                     title={`${name} is editing`}
                     type="button"
                   >
-                    <UserAvatar className="collaborative-editor__avatar" name={name} />
+                    <UserAvatar className="collaborative-editor__avatar" name={name} userId={user.id} />
                   </button>
                 </Popover.Trigger>
                 <Popover.Portal>
@@ -101,7 +101,7 @@ export function CollaborativeEditor({
                     side="bottom"
                     sideOffset={6}
                   >
-                    <UserAvatar className="collaborative-editor__avatar" name={name} />
+                    <UserAvatar className="collaborative-editor__avatar" name={name} userId={user.id} />
                     <div>
                       <strong data-i18n-ignore>{name}</strong>
                       <span>Editing now</span>

@@ -87,7 +87,7 @@ export function InitiativeRowMenu({ children, ...props }: InitiativeRowMenuProps
 
 function InitiativeRowMenuContent({ initiative, href, initiatives, canParent, users, teams, labels, onCreateLabel, onCreateReminder, onCreateSubInitiative, onDelete, onEdit, onNewComment, onNewUpdate, onUpdate, onUpdateInitiative, onSelect, selected, onPickDate, onCloseAutoFocus }: Omit<InitiativeRowMenuProps, 'children'> & { onPickDate: (kind: DatePick['kind']) => void; onCloseAutoFocus: (event: Event) => void }) {
   const { t } = useI18n()
-  const people: FlowMenuOption[] = [{ id: '', label: 'No owner', icon: <NoAssigneeIcon size={16}/> }, ...users.map(user => ({ id: user.id, label: user.displayName || user.name, translate: false, keywords: personSearchText(user), icon: <UserAvatar className="flow-menu__avatar" avatarUrl={user.avatarUrl} name={user.displayName || user.name}/> }))]
+  const people: FlowMenuOption[] = [{ id: '', label: 'No owner', icon: <NoAssigneeIcon size={16}/> }, ...users.map(user => ({ id: user.id, label: user.displayName || user.name, translate: false, keywords: personSearchText(user), icon: <UserAvatar className="flow-menu__avatar" avatarUrl={user.avatarUrl} userId={user.id} name={user.displayName || user.name}/> }))]
   const matchesPerson = (option: FlowMenuOption, query: string) => {
     const user = users.find(item => item.id === option.id)
     return user ? personMatchesQuery(user, query) : `${option.label} ${t(option.label)}`.toLocaleLowerCase().includes(query)

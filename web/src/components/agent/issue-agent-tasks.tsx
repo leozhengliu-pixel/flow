@@ -300,7 +300,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
       {replying || reply ? (
         <form onSubmit={event => { event.preventDefault(); if (replyBody) void submit('prompt', replyBody) }} data-tooltip-elevated="">
           <div className="issue-agent-reply-input">
-            <UserAvatar name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} className="avatar"/>
+            <UserAvatar name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} className="avatar" userId={data.viewer.id}/>
             <textarea autoFocus={replying} aria-label={t('Reply to agent')} placeholder={replyPlaceholder} value={reply} disabled={busy} onChange={event => setReply(event.target.value)} onKeyDown={event => {
               if (event.key === 'Escape' && !reply.trim()) setReplying(false)
               if (commentShortcutMatches(event) && replyBody) { event.preventDefault(); void submit('prompt', replyBody) }
@@ -313,7 +313,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
           </div>
         </form>
       ) : <>
-        <button type="button" className="issue-agent-start-reply" onClick={() => setReplying(true)}><UserAvatar name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} className="avatar"/><span>{replyPlaceholder}</span></button>
+        <button type="button" className="issue-agent-start-reply" onClick={() => setReplying(true)}><UserAvatar name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} className="avatar" userId={data.viewer.id}/><span>{replyPlaceholder}</span></button>
         <div className="issue-agent-idle-tools">
           {/* A session with no row to carry its menu (stopped before the agent replied) offers it here. */}
           {sessionMenu && !delegator && !shown.length && !generating && !unresponsive && current.status !== 'stale' && sessionMenu}
@@ -434,5 +434,5 @@ function AgentMessageHeader({ user, name, time, anchor }: { user?: User; name: s
   const { locale } = useI18n()
   const now = useCurrentTimeMs()
   const label = time && !Number.isNaN(Date.parse(time)) ? activityTimeLabel(time, now, locale).replace(/m(?= ago$)/, 'min') : ''
-  return <header className="issue-agent-message-header"><UserAvatar className="avatar" name={name} avatarUrl={user?.avatarUrl}/><strong data-i18n-ignore>{name}</strong>{label && (anchor ? <a href={`#${anchor}`}><time dateTime={time}>{label}</time></a> : <time dateTime={time}>{label}</time>)}</header>
+  return <header className="issue-agent-message-header"><UserAvatar className="avatar" name={name} avatarUrl={user?.avatarUrl} userId={user?.id}/><strong data-i18n-ignore>{name}</strong>{label && (anchor ? <a href={`#${anchor}`}><time dateTime={time}>{label}</time></a> : <time dateTime={time}>{label}</time>)}</header>
 }

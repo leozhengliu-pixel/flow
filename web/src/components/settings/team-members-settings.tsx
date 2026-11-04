@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { MoreHorizontal, Search } from "lucide-react";
 import { toast } from "@/lib/toast";
 
@@ -11,6 +11,8 @@ import {
 import { PropertyMenu } from "@/components/property/property-menu";
 import { useI18n } from "@/i18n/i18n";
 import { setTeamMembership } from "@/lib/api";
+import { avatarColor } from "@/lib/avatar-color";
+import { avatarInitials } from "@/lib/avatar-initials";
 import { personUsername } from "@/lib/people";
 import { canManageTeamSettings } from "@/lib/settings-permissions";
 import { ScopedFlowTooltip } from "@/components/ui/tooltip";
@@ -221,7 +223,7 @@ export function TeamMembersSettings({
           return (
             <div className="settings-member-directory-row" key={member.user.id}>
               <span>
-                <b className="settings-member-avatar">{initials(member.user.displayName)}</b>
+                <b className="settings-member-avatar" style={{ '--avatar': avatarColor(member.user.id) } as CSSProperties}>{avatarInitials(member.user.displayName)}</b>
                 <i>
                   <strong>{member.user.displayName}</strong>
                   <small>
@@ -297,13 +299,3 @@ function roleLabel(member: WorkspaceMember, owner: boolean) {
   return "Member";
 }
 
-function initials(name: string) {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase())
-      .join("") || "?"
-  );
-}

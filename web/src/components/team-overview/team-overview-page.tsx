@@ -651,10 +651,10 @@ export function TeamOverviewPage({
                   }}
                 >
                   <span className="team-home-avatar-stack">
-                    {teamMembers.slice(0, 8).map((user, index) => (
+                    {teamMembers.slice(0, 8).map((user) => (
                       <UserAvatar
                         avatarUrl={user!.avatarUrl}
-                        color={memberColor(index)}
+                        userId={user!.id}
                         key={user!.id}
                         name={user!.displayName}
                       />
@@ -825,10 +825,6 @@ function TeamShortcut({
       <ChevronHomeIcon />
     </a>
   );
-}
-
-function memberColor(index: number) {
-  return ["#a84665", "#d68a3a", "#21aab8", "#5e6ad2"][index % 4];
 }
 
 function SvgIcon({
@@ -1470,7 +1466,7 @@ function AddMembersDialog({
                   <Search />
                 </label>
                 <div>
-                  {candidates.map((user, index) => {
+                  {candidates.map((user) => {
                     const checked = selected.includes(user.id);
                     return (
                       <DropdownMenu.CheckboxItem
@@ -1491,7 +1487,7 @@ function AddMembersDialog({
                         </span>
                         <UserAvatar
                           avatarUrl={user.avatarUrl}
-                          color={memberColor(index)}
+                          userId={user.id}
                           name={user.displayName}
                         />
                         <span className="team-members-candidate-copy"><strong data-i18n-ignore>{user.displayName}</strong><small data-i18n-ignore>{personUsername(user)}{user.email ? ` · ${user.email}` : ""}</small></span>
@@ -1656,10 +1652,10 @@ function TeamMembersDirectory({
         const role = teamMemberRoleBadge(value);
         return <div aria-busy={busyUserId === value.user.id || undefined} className={`team-member-row${invited ? " is-invited" : ""}`} role="listitem" style={gridStyle}>
           {invited ? <span className="team-members-person">
-            <UserAvatar avatarUrl={value.user.avatarUrl} color={memberColor(index)} name={value.user.displayName}/>
+            <UserAvatar avatarUrl={value.user.avatarUrl} userId={value.user.id} name={value.user.displayName}/>
             <span><strong data-i18n-ignore>{value.user.displayName}</strong></span>
           </span> : <a className="team-members-person" href={profile} onClick={event => { event.preventDefault(); onNavigate(profile) }}>
-            <UserAvatar avatarUrl={value.user.avatarUrl} color={memberColor(index)} name={value.user.displayName}/>
+            <UserAvatar avatarUrl={value.user.avatarUrl} userId={value.user.id} name={value.user.displayName}/>
             <span><strong data-i18n-ignore>{value.user.displayName || value.user.name}</strong><small data-i18n-ignore>{personUsername(value.user)}</small></span>
           </a>}
           {columns.has("email") && <span className="team-members-email" data-i18n-ignore>{value.user.email}</span>}

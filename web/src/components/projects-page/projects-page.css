@@ -1672,7 +1672,7 @@
 .lp-project-updates-preview__item + .lp-project-updates-preview__item { border-top: .5px solid var(--theme-border-strong); }
 .lp-project-updates-preview__item.is-active { background: rgb(255 255 255 / 1.2%); }
 .lp-project-updates-preview__item > header { height: 24px; display: flex; align-items: center; gap: 7px; color: #85858a; font-size: 11px; }
-.lp-project-updates-preview__avatar { width: 18px; height: 18px; display: grid; place-items: center; flex: 0 0 18px; border-radius: 50%; background: #d15f5f; color: #fff; object-fit: cover; font-size: 8px; }
+.lp-project-updates-preview__avatar { width: 18px; height: 18px; display: grid; place-items: center; flex: 0 0 18px; border-radius: 50%; background: var(--avatar, #d15f5f); color: #fff; object-fit: cover; font-size: 8px; }
 .lp-project-updates-preview__item > header strong { color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; }
 .lp-project-updates-preview__item > header time { color: #77777c; }
 .lp-project-updates-preview__health { display: flex; align-items: center; gap: 5px; margin-right: 1px; font-size: 12px; }

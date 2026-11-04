@@ -28,7 +28,7 @@ export function ReviewThread({
   review: CodeReview;
   thread: ReviewThreadModel;
   /** The person replying (shown next to the reply box). */
-  viewer?: Pick<User, "displayName" | "avatarUrl">;
+  viewer?: Pick<User, "id" | "displayName" | "avatarUrl">;
   /** The commented line's current content, shown as the removed side of suggestions. */
   originalLine?: string;
   onReload: () => Promise<void>;
@@ -85,7 +85,7 @@ export function ReviewThread({
             />
           ))}
           <div className="review-thread-reply">
-            {viewer && <UserAvatar className="avatar review-thread-avatar" name={viewer.displayName} avatarUrl={viewer.avatarUrl} />}
+            {viewer && <UserAvatar className="avatar review-thread-avatar" name={viewer.displayName} avatarUrl={viewer.avatarUrl} userId={viewer.id} />}
             <textarea
               aria-label={t("Reply")}
               placeholder={t("Leave a reply…")}
@@ -130,7 +130,7 @@ function ReviewThreadComment({
   return (
     <div className={`review-thread-comment${reply ? " is-reply" : ""}`} id={targetCommentHash(comment.id)} data-review-comment-id={comment.id}>
       <header>
-        <UserAvatar className="avatar review-thread-avatar" name={actor} avatarUrl={comment.actor.avatarUrl} />
+        <UserAvatar className="avatar review-thread-avatar" name={actor} avatarUrl={comment.actor.avatarUrl} userId={comment.actor.id} />
         <strong data-i18n-ignore>{actor}</strong>
         <time dateTime={comment.createdAt} title={new Date(comment.createdAt).toLocaleString()}>
           {age === "just now" ? t("just now") : age.replace(/ ago$/, ` ${t("ago")}`)}

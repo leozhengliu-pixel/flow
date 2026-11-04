@@ -72,11 +72,11 @@ function MentionOptionBody({ option }: { option: MentionOption }) {
     const user = liveActorUser(option.entity.user)
     const name = personDisplayName(user) || t('Unknown user')
     if (user.app) return <>
-      <UserAvatar avatarUrl={user.avatarUrl} className="description-mention-avatar" name={name}/>
+      <UserAvatar avatarUrl={user.avatarUrl} className="description-mention-avatar" name={name} userId={user.id}/>
       <span className="description-command-copy description-mention-agent"><strong data-i18n-ignore>{name}</strong><AgentBadge/></span>
     </>
     return <>
-      <UserAvatar avatarUrl={user.avatarUrl} className="description-mention-avatar" name={name}/>
+      <UserAvatar avatarUrl={user.avatarUrl} className="description-mention-avatar" name={name} userId={user.id}/>
       <span className="description-command-copy"><strong data-i18n-ignore>{name}</strong>{(personIdentifier(user) || user.email) && <small data-i18n-ignore>{[...new Set([personIdentifier(user), user.email].filter(Boolean))].join(' · ')}</small>}</span>
     </>
   }

@@ -62,7 +62,7 @@ export function DiffView({
 }: {
   review: CodeReview;
   /** The signed-in person, shown next to thread reply boxes. */
-  viewer?: Pick<User, "displayName" | "avatarUrl">;
+  viewer?: Pick<User, "id" | "displayName" | "avatarUrl">;
   onReload: () => Promise<void>;
   editable?: boolean;
   onEditableChange?: (editable: boolean) => void;

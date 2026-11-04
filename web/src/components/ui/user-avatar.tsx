@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from 'react'
 import { AgentAvatarMark } from '@/components/ui/agent-glyph'
 import { isBuiltinAgentAvatarUrl } from '@/components/ui/agent-avatar-url'
+import { avatarColor } from '@/lib/avatar-color'
 import { avatarInitials } from '@/lib/avatar-initials'
 import { FittedInitials } from './fitted-initials'
 import './user-avatar.css'
@@ -14,10 +15,15 @@ export function AvatarImage({ alt = '', className, src, ...props }: { alt?: stri
   return <img alt={alt} className={className} src={src} {...props}/>
 }
 
-export function UserAvatar({ avatarUrl, className, color, name, title }: { avatarUrl?: string; className?: string; color?: string; name: string; title?: string }) {
+/**
+ * A person's avatar. Pass `userId` and the initials background is the shared per-person colour (`avatarColor`), the same on
+ * every surface; `color` overrides it for an explicit colour (an agent's, a team's).
+ */
+export function UserAvatar({ avatarUrl, className, color, name, title, userId }: { avatarUrl?: string; className?: string; color?: string; name: string; title?: string; userId?: string }) {
   const initials = avatarInitials(name)
   const script = /[㐀-鿿豈-﫿]/.test(initials) ? 'cjk' : 'latin'
-  const style = color ? ({ '--avatar': color } as CSSProperties) : undefined
+  const background = color ?? (userId ? avatarColor(userId) : undefined)
+  const style = background ? ({ '--avatar': background } as CSSProperties) : undefined
   const agent = isBuiltinAgentAvatarUrl(avatarUrl)
   const [imageFailed, setImageFailed] = useState(false)
   const [failedFor, setFailedFor] = useState(avatarUrl)

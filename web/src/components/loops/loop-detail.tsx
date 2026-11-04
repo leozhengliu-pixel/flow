@@ -232,7 +232,7 @@ export function LoopDetail({
               <span className="loops-detail-owner">
                 {t("Owned by")}
                 <span className="loops-detail-owner-chip">
-                  <UserAvatar avatarUrl={owner.avatarUrl} className="avatar loops-avatar" name={owner.displayName || owner.name} />
+                  <UserAvatar avatarUrl={owner.avatarUrl} className="avatar loops-avatar" name={owner.displayName || owner.name} userId={owner.id} />
                   <span data-i18n-ignore>{owner.displayName || owner.name}</span>
                 </span>
               </span>

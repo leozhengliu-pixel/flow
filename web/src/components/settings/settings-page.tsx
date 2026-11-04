@@ -13,6 +13,8 @@ import {
   type ReactNode,
 } from "react";
 import { persistUserSettings } from '@/lib/settings-persistence';
+import { avatarColor } from '@/lib/avatar-color';
+import { avatarInitials } from '@/lib/avatar-initials';
 import { WorkspaceInitials } from '@/components/workspace/workspace-initials';
 import { settingsSidebarTeams } from './settings-sidebar-teams';
 import { UploadPolicyDialog } from './upload-policy-dialog';
@@ -1983,8 +1985,8 @@ export function MembersPage({
                 return (
                   <div key={member.user.id}>
                     <span>
-                      <b className="settings-member-avatar">
-                        {initials(member.user.displayName)}
+                      <b className="settings-member-avatar" style={{ '--avatar': avatarColor(member.user.id) } as CSSProperties}>
+                        {avatarInitials(member.user.displayName, 'W')}
                       </b>
                       <i>
                         <strong>{member.user.displayName}</strong>
@@ -3422,17 +3424,6 @@ function useUserStoredSettings(data: BootstrapData) {
   return [state, setState] as const;
 }
 
-function initials(value: string) {
-  return (
-    value
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((part) => part[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || "W"
-  );
-}
 function title(value: string) {
   return value ? value[0].toUpperCase() + value.slice(1) : value;
 }

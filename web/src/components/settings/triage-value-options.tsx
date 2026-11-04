@@ -10,7 +10,7 @@ export function triageValueOptions(data: BootstrapData, kind: TriageValueRuleKin
     case "assignee":
       return data.users
         .filter((user) => !user.app && user.active !== false)
-        .map((user) => ({ value: user.id, label: user.displayName || user.name, icon: <UserAvatar className="feature-value-avatar" name={user.displayName || user.name} avatarUrl={user.avatarUrl} /> }));
+        .map((user) => ({ value: user.id, label: user.displayName || user.name, icon: <UserAvatar className="feature-value-avatar" name={user.displayName || user.name} avatarUrl={user.avatarUrl} userId={user.id} /> }));
     case "project":
       return (data.projects ?? []).filter((project) => !project.archivedAt).map((project) => ({ value: project.id, label: project.name, icon: <span className="feature-value-dot" style={{ background: project.color }} aria-hidden="true" /> }));
     case "label":

@@ -146,7 +146,7 @@ function BreadcrumbLink({crumb,data,onClick}:{crumb:IssueBreadcrumb;data:Bootstr
 
 function IssuePresence({viewers,label}:{viewers:Presence[];label:string}){
   const shown=viewers.slice(0,3), extra=viewers.length-shown.length
-  return <div className="issue-presence" role="group" aria-label={label}>{shown.map(item=><FlowTooltip key={item.user.id} label={<span data-i18n-ignore>{item.user.displayName}</span>}><span className="issue-presence-item"><UserAvatar className="issue-presence-avatar" name={item.user.displayName} avatarUrl={item.user.avatarUrl}/></span></FlowTooltip>)}{extra>0&&<span className="issue-presence-more">+{extra}</span>}</div>
+  return <div className="issue-presence" role="group" aria-label={label}>{shown.map(item=><FlowTooltip key={item.user.id} label={<span data-i18n-ignore>{item.user.displayName}</span>}><span className="issue-presence-item"><UserAvatar className="issue-presence-avatar" name={item.user.displayName} avatarUrl={item.user.avatarUrl} userId={item.user.id}/></span></FlowTooltip>)}{extra>0&&<span className="issue-presence-more">+{extra}</span>}</div>
 }
 
 /** Full issue page keys: Esc closes (back to the list), J / K walk the list the issue was opened from. */

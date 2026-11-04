@@ -89,12 +89,12 @@ function valueOptions(data: TriggerData, field: string): ValueOption[] {
     case "creator":
       return [
         ...(field === "assignee" ? [{ id: NONE, label: "No assignee", icon: <NoAssigneeIcon size={14} /> }] : []),
-        ...data.users.filter((user) => user.active !== false && !user.app).map((user) => ({ id: user.id, label: user.displayName || user.name, icon: <UserAvatar avatarUrl={user.avatarUrl} className="avatar loops-avatar" name={user.displayName || user.name} />, entity: true })),
+        ...data.users.filter((user) => user.active !== false && !user.app).map((user) => ({ id: user.id, label: user.displayName || user.name, icon: <UserAvatar avatarUrl={user.avatarUrl} className="avatar loops-avatar" name={user.displayName || user.name} userId={user.id} />, entity: true })),
       ];
     case "agent":
       return [
         { id: NONE, label: "No agent", icon: <NoAssigneeIcon size={14} /> },
-        ...data.users.filter((user) => user.app || user.builtinAgent).map((user) => ({ id: user.id, label: user.displayName || user.name, icon: <UserAvatar avatarUrl={user.avatarUrl} className="avatar loops-avatar" name={user.displayName || user.name} />, entity: true })),
+        ...data.users.filter((user) => user.app || user.builtinAgent).map((user) => ({ id: user.id, label: user.displayName || user.name, icon: <UserAvatar avatarUrl={user.avatarUrl} className="avatar loops-avatar" name={user.displayName || user.name} userId={user.id} />, entity: true })),
       ];
     case "project":
       return [

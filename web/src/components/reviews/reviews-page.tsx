@@ -388,7 +388,7 @@ function ReviewRow({ item, href, onOpen, display }: { item: CodeReview; href: st
         {display.properties.includes("author") && (
           <PersonHover person={item.author}>
             <span>
-              <UserAvatar name={item.author.displayName} avatarUrl={item.author.avatarUrl} className="review-filter-avatar" />
+              <UserAvatar name={item.author.displayName} avatarUrl={item.author.avatarUrl} className="review-filter-avatar" userId={item.author.id} />
             </span>
           </PersonHover>
         )}
@@ -761,7 +761,7 @@ function PeopleIssuePicker({
                 </span>
                 {user ? (
                   <>
-                    <Avatar name={user.displayName} />
+                    <Avatar id={user.id} name={user.displayName} />
                     <strong data-i18n-ignore>{user.displayName}</strong>
                   </>
                 ) : (

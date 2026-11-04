@@ -39,7 +39,7 @@ export function PeopleMenuItems({ users, selectedId, selectedIds, onSelect, empt
     onSelect={option => option.id === ASSIGNEE_INVITE_ID ? onInvite() : onSelect(option.id)}
     wrapOption={(option, row) => option.person?.app ? <AgentHover agent={option.person}>{row}</AgentHover> : <PersonHover person={option.person}>{row}</PersonHover>}
     renderOption={option => <>
-      {option.person && <span aria-hidden="true"><UserAvatar className={`people-menu-avatar${assignee ? ' is-compact' : ''}`} avatarUrl={option.person.avatarUrl} name={option.label}/></span>}
+      {option.person && <span aria-hidden="true"><UserAvatar className={`people-menu-avatar${assignee ? ' is-compact' : ''}`} avatarUrl={option.person.avatarUrl} name={option.label} userId={option.person.id}/></span>}
       {assignee && !option.person && (option.id === ASSIGNEE_INVITE_ID ? <FlowGlyph className="property-command-invite-icon" name="invitePlane" size={16}/> : <NoAssigneeIcon size={16}/>)}
       <span data-menu-label data-i18n-ignore={option.entity || undefined}>{option.entity ? option.label : t(option.label)}</span>
       {checked.includes(option.id) && <Check size={assignee ? 16 : 14}/>}

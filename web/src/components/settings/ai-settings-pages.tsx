@@ -108,7 +108,7 @@ export function AiSettingsHub({ data, settings, busy, setEnabled, onNavigateSett
           {applications.map((item) => (
             <FeatureCard key={item.id}>
               <button type="button" className="feature-row feature-row-link feature-agent-row" onClick={() => navigate(`${settingsPath(workspace, "applications")}/${encodeURIComponent(item.clientId)}`)}>
-                <UserAvatar className="feature-row-icon feature-agent-avatar" name={item.name} avatarUrl={item.avatarUrl}/>
+                <UserAvatar className="feature-row-icon feature-agent-avatar" name={item.name} avatarUrl={item.avatarUrl} userId={item.userId}/>
                 <div>
                   <strong data-i18n-ignore>{item.name}</strong>
                   <span>{item.allPublicTeams ? t("Access to all public teams") : t("Access to {count} teams").replace("{count}", String(item.teamIds.length))}</span>
@@ -376,7 +376,7 @@ export function InstalledAgentsSettings({ data, settings, busy, onReload, onNavi
   const open = (item: ApplicationInstallation) => navigate(`${settingsPath(workspace, "applications")}/${encodeURIComponent(item.clientId)}`);
   const rows: ReactNode = applications.map((item) => (
     <button key={item.id} type="button" className="feature-row feature-row-link feature-agent-row" onClick={() => open(item)}>
-      <UserAvatar className="feature-row-icon feature-agent-avatar" name={item.name} avatarUrl={item.avatarUrl}/>
+      <UserAvatar className="feature-row-icon feature-agent-avatar" name={item.name} avatarUrl={item.avatarUrl} userId={item.userId}/>
       <div>
         <strong data-i18n-ignore>{item.name}</strong>
         <span>{item.allPublicTeams ? t("Access to all public teams") : t("Access to {count} teams").replace("{count}", String(item.teamIds.length))}</span>

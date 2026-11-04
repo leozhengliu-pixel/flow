@@ -85,7 +85,7 @@ export function UpdatesFloatingPanel({
         {composing && (
           <div className="li-update-panel-composer">
             <div>
-              <Avatar name={viewer.displayName || viewer.name} />
+              <Avatar id={viewer.id} name={viewer.displayName || viewer.name} />
               <strong>{viewer.displayName || viewer.name}</strong>
               <SelectControl
                 label="Update health"
@@ -137,7 +137,7 @@ export function UpdatesFloatingPanel({
             {updates.map(update => (
               <article key={update.id}>
                 <header>
-                  <Avatar name={update.user.displayName} />
+                  <Avatar id={update.user.id} name={update.user.displayName} />
                   <strong data-i18n-ignore>{update.user.displayName}</strong>
                   <time>
                     {new Date(update.createdAt).toLocaleDateString('en', {

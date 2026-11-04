@@ -38,6 +38,7 @@ export type ProjectDependencyPreviewData = {
   member?: string
   memberAvatarUrl?: string
   memberColor?: string
+  memberId?: string
   priority?: string
   targetDate?: string
   progress?: number
@@ -341,7 +342,7 @@ function ProjectDependencyPreview({ project }: { project: ProjectDependencyOptio
       {details?.milestone && <span><PreviewMetaIcon kind="milestone"/><span data-i18n-ignore>{details.milestone}</span></span>}
       {details?.team && <span><PreviewMetaIcon kind="team"/><span data-i18n-ignore>{details.team}</span></span>}
       {details?.lead && <span><PreviewMetaIcon kind="lead"/><span data-i18n-ignore>{details.lead}</span></span>}
-      {details?.member && <span><UserAvatar avatarUrl={details.memberAvatarUrl} className="avatar project-dependency-picker__preview-member" color={details.memberColor ?? previewAvatarColor(details.member)} name={details.member}/><span data-i18n-ignore>{details.member}</span></span>}
+      {details?.member && <span><UserAvatar avatarUrl={details.memberAvatarUrl} className="avatar project-dependency-picker__preview-member" color={details.memberColor} userId={details.memberId} name={details.member}/><span data-i18n-ignore>{details.member}</span></span>}
       {details?.priority && <span><PreviewMetaIcon kind="priority" value={details.priority}/>{t(details.priority)}</span>}
       {details?.targetDate && <span><PreviewMetaIcon kind="date"/><span data-i18n-ignore>{formatPreviewDate(details.targetDate, locale, formatDate)}</span></span>}
       {details?.progress !== undefined && <span><PreviewMetaIcon kind="progress" value={String(details.progress)}/>{details.progress}%{details.issueCount !== undefined ? ` ${t('of')} ${details.issueCount}` : ''}</span>}
@@ -363,11 +364,6 @@ function PreviewMetaIcon({ kind, value }: { kind: 'status' | 'milestone' | 'team
 
 function priorityNumber(value?: string) {
   return ({ Urgent: 1, High: 2, Medium: 3, Low: 4 } as Record<string, number>)[value ?? ''] ?? 0
-}
-
-function previewAvatarColor(value: string) {
-  const colors = ['#d15f5f', '#5e6ad2', '#4c9a67', '#d09b42']
-  return colors[[...value].reduce((sum, character) => sum + character.charCodeAt(0), 0) % colors.length]
 }
 
 function formatPreviewDate(value: string, locale: string, formatDate: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string) {

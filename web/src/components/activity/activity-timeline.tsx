@@ -235,7 +235,7 @@ export function ActivityTimeline({
                 <div className="comment-thread" data-has-replies={(replies.get(item.id) ?? []).length > 0 || undefined}>
                   <article className="comment-card" data-activity-anchor={`comment-${item.id}`}>
                     <header>
-                      <Avatar name={attributedActorName(item.user, item.botActor)} avatarUrl={attributedActorAvatar(item.user, item.botActor)} />
+                      <Avatar id={item.user.id} name={attributedActorName(item.user, item.botActor)} avatarUrl={attributedActorAvatar(item.user, item.botActor)} />
                       <strong data-i18n-ignore>{attributedActorName(item.user, item.botActor)}</strong><ViaApp user={item.user} botActor={item.botActor} />
                       <a href={`#comment-${item.id}`} title={format(new Date(item.createdAt), 'PPpp')}>
                         {desktop ? activityTimeLabel(item.createdAt, now, locale) : formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
@@ -301,7 +301,7 @@ export function ActivityTimeline({
                   {(replies.get(item.id) ?? []).map((reply) => (
                     <article className="comment-card comment-reply" id={`comment-${reply.id}`} data-activity-anchor={`comment-${reply.id}`} key={reply.id}>
                       <header>
-                        <Avatar name={attributedActorName(reply.user, reply.botActor)} avatarUrl={attributedActorAvatar(reply.user, reply.botActor)} />
+                        <Avatar id={reply.user.id} name={attributedActorName(reply.user, reply.botActor)} avatarUrl={attributedActorAvatar(reply.user, reply.botActor)} />
                         <strong data-i18n-ignore>{attributedActorName(reply.user, reply.botActor)}</strong><ViaApp user={reply.user} botActor={reply.botActor} />
                         <a href={`#comment-${reply.id}`} title={format(new Date(reply.createdAt), 'PPpp')}>
                           {desktop ? activityTimeLabel(reply.createdAt, now, locale) : formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true })}
@@ -359,7 +359,7 @@ export function ActivityTimeline({
                     </div>
                   ) : (
                     <button type="button" className="comment-thread__reply" aria-label={t('Reply')} onClick={() => setReplying(item.id)}>
-                      {desktop && replyUser && <Avatar name={replyUser.displayName} avatarUrl={replyUser.avatarUrl}/>}
+                      {desktop && replyUser && <Avatar id={replyUser.id} name={replyUser.displayName} avatarUrl={replyUser.avatarUrl}/>}
                       <span>{t('Leave a reply…')}</span>
                     </button>
                   )}
@@ -467,7 +467,7 @@ function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?:
   }
   if (event.type.includes('review')) return <Link2 size={14} />
   const actor = activityActor(event.actor, event.botActor, context?.users)
-  const avatar = <Avatar name={actor.name} avatarUrl={actor.avatarUrl} />
+  const avatar = <Avatar id={event.actor?.id} name={actor.name} avatarUrl={actor.avatarUrl} />
   return phone ? <span className="activity-actor-avatar">{avatar}</span> : avatar
 }
 

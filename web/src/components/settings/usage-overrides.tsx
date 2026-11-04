@@ -124,7 +124,7 @@ export function UsageOverrides({ data, kind, onBack, onReload }: { data: Bootstr
           {visible.map((entry) => (
             <div className="usage-tr" role="row" key={entry.id}>
               <span className="usage-col-name" role="cell">
-                {entry.avatar && <UserAvatar className="usage-avatar" name={entry.avatar.name} avatarUrl={entry.avatar.url} />}
+                {entry.avatar && <UserAvatar className="usage-avatar" name={entry.avatar.name} avatarUrl={entry.avatar.url} userId={entry.id} />}
                 <span>
                   <strong data-i18n-ignore>{entry.name}</strong>
                   {entry.email && <small data-i18n-ignore>{entry.email}</small>}

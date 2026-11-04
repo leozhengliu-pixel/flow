@@ -1,5 +1,7 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
+import { avatarColor } from '@/lib/avatar-color';
+import { avatarInitials } from '@/lib/avatar-initials';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import { personMatchesQuery, personSearchText, personUsername } from '@/lib/people';
 import { memberProfileHandle, memberProfilePath } from '@/lib/app-routes';
@@ -427,7 +429,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
       const invitedTeams = data.teams.filter(item => invitation.teamIds.includes(item.id));
       const invited = new Date(invitation.createdAt);
       return <div className="workspace-directory-member-row is-invited">
-        <div className="workspace-member-identity"><span className="workspace-directory-avatar is-invited">{initials(invitation.email)}</span><span><strong data-i18n-ignore>{invitation.email}</strong></span></div>
+        <div className="workspace-member-identity"><span className="workspace-directory-avatar is-invited">{avatarInitials(invitation.email)}</span><span><strong data-i18n-ignore>{invitation.email}</strong></span></div>
         {columns.has("status") && renderStatus(entry)}
         {columns.has("joined") && <time className="workspace-member-date" dateTime={invitation.createdAt} title={`Invited ${dateTimeTitle(invited)}`}>{shortDate(invited)}</time>}
         {columns.has("teams") && renderTeams(invitedTeams)}
@@ -1087,21 +1089,6 @@ function FlowProjectIcon() {
       <use href="#Project" />
     </svg>
   );
-}
-function initials(value: string) {
-  return value
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-function avatarColor(value: string) {
-  const colors = ["#e56663", "#4f8d78", "#c09a43", "#6874d7", "#9b65a5"];
-  return colors[
-    [...value].reduce((sum, char) => sum + char.charCodeAt(0), 0) %
-      colors.length
-  ];
 }
 function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);

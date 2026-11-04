@@ -23,6 +23,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { TeamIcon } from "@/components/issue/issue-icons";
+import { leadingCharacters } from "@/lib/avatar-initials";
 import { toast } from "@/lib/toast";
 import type {
   BootstrapData,
@@ -911,7 +912,7 @@ function ScopeAvatar({
       ) : kind === "team" ? (
         <TeamIcon team={team} size={13} />
       ) : (
-        label.slice(0, 2).toUpperCase()
+        leadingCharacters(label, 2).toUpperCase()
       )}
     </span></span></span>
   );
@@ -921,6 +922,7 @@ function ViewOwnerAvatar({ user }: { user: User }) {
     <UserAvatar
       avatarUrl={user.avatarUrl}
       className={styles.avatar}
+      userId={user.id}
       name={user.displayName}
     />
   );

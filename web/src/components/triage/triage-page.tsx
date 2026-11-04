@@ -264,7 +264,7 @@ function TriageRow({ issue, data, selected, showId, showDue, formatDate, t, onOp
           {showId ? <span className="flow-triage-row__id" data-i18n-ignore><span>{issue.identifier}</span></span> : null}
         </span>
         <span className="flow-triage-row__line is-meta">
-          <span className="flow-triage-row__avatar-slot"><UserAvatar className="flow-triage-row__avatar" name={creator} avatarUrl={attributedActorAvatar(issue.creator, issue.botActor)}/></span>
+          <span className="flow-triage-row__avatar-slot"><UserAvatar className="flow-triage-row__avatar" name={creator} avatarUrl={attributedActorAvatar(issue.creator, issue.botActor)} userId={issue.creator?.id}/></span>
           <span className="flow-triage-row__creator" data-i18n-ignore>{creator}<ViaApp user={issue.creator} botActor={issue.botActor}/></span>
           {showDue && issue.dueDate ? <span className="flow-triage-row__due"><CalendarIcon/>{formatDate(issue.dueDate.length === 10 ? `${issue.dueDate}T00:00:00` : issue.dueDate, { month: 'short', day: 'numeric' })}</span> : null}
           {snoozed && issue.snoozedUntil ? <span className="flow-triage-row__snoozed"><Clock3 size={12}/>{formatSnoozeDate(new Date(issue.snoozedUntil))}</span> : null}

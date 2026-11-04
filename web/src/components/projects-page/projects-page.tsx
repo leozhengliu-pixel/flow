@@ -28,6 +28,7 @@ import { projectLabelOptions } from '@/components/property/project-label-menu-mo
 import { ProjectStatusGlyph } from './project-property-picker'
 import { confirmAction, promptAction } from '@/components/ui/action-dialog-service'
 import { listProjectRecords, type ProjectCustomerSummary, type ProjectQueryPage } from '@/lib/api'
+import { avatarColor } from '@/lib/avatar-color'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { dependencyRelationsWithBlocker, isTimelineZoom, projectDependencyEdges } from './project-timeline-model'
 import { projectTemplateChoices } from '@/lib/project-template-choice'
@@ -731,7 +732,7 @@ export function ProjectsPage({
       agentSkills={agentSkills}
       initialTemplateId={initialTemplateId ?? (scopeTeamId ? teamSettings?.[scopeTeamId]?.defaultProjectTemplateId || undefined : undefined)}
       defaultStatus={createStatus}
-      dependencies={projects.filter(project => !project.archivedAt).map(project => ({ id: project.id, label: project.name, icon: normalizeProjectIcon(project.icon), color: project.color, group: viewerId && (project.lead?.id === viewerId || (project.memberIds ?? []).includes(viewerId)) ? 'your' : 'other', previewData: { summary: project.summary || project.description, status: project.status.name, milestone: (project.milestones ?? [])[0]?.name, team: (project.teamIds ?? []).map(id => teams.find(team => team.id === id)?.name).filter(Boolean).join(', '), lead: project.lead?.displayName, member: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.displayName).find(Boolean), memberAvatarUrl: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.avatarUrl).find(Boolean), priority: project.priorityLabel, targetDate: project.targetDate, progress: Math.round(project.progress * 100), issueCount: project.issueCount } }))}
+      dependencies={projects.filter(project => !project.archivedAt).map(project => ({ id: project.id, label: project.name, icon: normalizeProjectIcon(project.icon), color: project.color, group: viewerId && (project.lead?.id === viewerId || (project.memberIds ?? []).includes(viewerId)) ? 'your' : 'other', previewData: { summary: project.summary || project.description, status: project.status.name, milestone: (project.milestones ?? [])[0]?.name, team: (project.teamIds ?? []).map(id => teams.find(team => team.id === id)?.name).filter(Boolean).join(', '), lead: project.lead?.displayName, member: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.displayName).find(Boolean), memberId: (project.memberIds ?? []).find(id => users.some(user => user.id === id)), memberAvatarUrl: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.avatarUrl).find(Boolean), priority: project.priorityLabel, targetDate: project.targetDate, progress: Math.round(project.progress * 100), issueCount: project.issueCount } }))}
       initiatives={initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, color: initiative.color, groupLabel: initiative.status ? `${initiative.status[0].toUpperCase()}${initiative.status.slice(1)}` : undefined }))}
       labels={projectLabelOptions(projectLabels, labelGroups)}
       leads={peopleChoices}
@@ -770,7 +771,7 @@ function toPageItem(project: Project, href: string | undefined, indexes: Project
     slugId: project.slugId,
     href,
     issueCount: project.issueCount,
-    lead: project.lead ? { avatarUrl: project.lead.avatarUrl, id: project.lead.id, name: project.lead.displayName } : undefined,
+    lead: project.lead ? { avatarUrl: project.lead.avatarUrl, color: avatarColor(project.lead.id), id: project.lead.id, name: project.lead.displayName } : undefined,
     milestone: milestone?.name,
     milestoneDate: milestone?.targetDate ? formatDay(milestone.targetDate) : undefined,
     milestoneProgress: milestone ? milestoneIssueProgress(issues, project.id, milestone.id) : undefined,

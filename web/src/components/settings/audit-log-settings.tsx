@@ -1,8 +1,10 @@
 import { Filter, MoreHorizontal, Search, ShieldCheck, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { toast } from "@/lib/toast";
 import type { AuditLogEntry, BootstrapData } from "@/types/flow";
 import { listAuditLog } from "@/lib/api";
+import { avatarColor } from "@/lib/avatar-color";
+import { avatarInitials } from "@/lib/avatar-initials";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
 import { AuditLogStreaming } from "./audit-log-streaming";
 import { Toggle } from "@/components/ui/toggle";
@@ -156,8 +158,8 @@ export function AuditLogSettings({ data }: { data: BootstrapData }) {
           </div>
           {rows.map((item) => (
             <div className="settings-audit-row" key={item.id}>
-              <span className="settings-audit-avatar">
-                {initials(item.actor.displayName)}
+              <span className="settings-audit-avatar" style={{ '--avatar': avatarColor(item.actor.id) } as CSSProperties}>
+                {avatarInitials(item.actor.displayName, "U")}
               </span>
               <div>
                 <strong>{item.actor.displayName}</strong>
@@ -216,16 +218,5 @@ function matches(query: string, ...values: string[]) {
   const needle = query.trim().toLowerCase();
   return (
     !needle || values.some((value) => value.toLowerCase().includes(needle))
-  );
-}
-function initials(value: string) {
-  return (
-    value
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((part) => part[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || "U"
   );
 }

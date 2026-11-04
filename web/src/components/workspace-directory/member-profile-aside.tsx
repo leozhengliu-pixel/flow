@@ -43,7 +43,7 @@ export function MemberProfileAside({ data, user, timeZone }: { data: BootstrapDa
   const workspaceKey = data.workspace.urlKey
   return <aside className="member-profile-aside" aria-label="Member details">
     <section className="member-profile-aside__card member-profile-aside__identity">
-      <UserAvatar className="member-profile-aside__avatar" avatarUrl={user.avatarUrl} name={user.displayName}/>
+      <UserAvatar className="member-profile-aside__avatar" avatarUrl={user.avatarUrl} userId={user.id} name={user.displayName}/>
       <div className="member-profile-aside__identity-text">
         <h2 data-i18n-ignore>{user.displayName}</h2>
         <p><span data-i18n-ignore>{personUsername(user)}</span>{online && <> <span aria-hidden>⋅</span> Online <i className="member-profile-aside__online" aria-hidden/></>}</p>

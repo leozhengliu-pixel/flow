@@ -52,7 +52,7 @@ export function ProjectPropertiesMenu({ data, featureFlags, initiatives, labels,
   const labelIds = (project.labelIds ?? []).filter(id => labels.some(label => label.id === id))
   const memberIds = [...new Set([...(project.memberIds ?? []), ...(project.lead ? [project.lead.id] : [])])]
   const memberOptions: PropertyOption[] = [
-    ...users.map(user => ({id:user.id,label:user.displayName,person:user,icon:<Avatar name={user.displayName}/>,end:project.lead?.id === user.id ? 'Project lead' : user.active ? undefined : 'Invited',i18nIgnore:true})),
+    ...users.map(user => ({id:user.id,label:user.displayName,person:user,icon:<Avatar id={user.id} name={user.displayName}/>,end:project.lead?.id === user.id ? 'Project lead' : user.active ? undefined : 'Invited',i18nIgnore:true})),
     ...(viewerCanInvite() ? [{id:'__invite__',label:'Invite and add…',icon:<Send size={16}/>,groupLabel:'New user',action:true}] : []),
   ]
   const updateMember = (id: string) => {

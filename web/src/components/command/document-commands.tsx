@@ -229,7 +229,7 @@ function pageOptions({ ctx, data, docs, page: current, query, t, open, choose }:
       const owner = docs.every(item => documentOwner(item, data.users)?.id === documentOwner(doc, data.users)?.id) ? documentOwner(doc, data.users) : undefined
       return documentOwnerOptions(ctx, doc).map(option => ({
         id: option.id, label: option.label, entity: true, group: option.groupLabel, keywords: option.id ? option.person?.name : 'unassign none remove',
-        icon: option.person ? <UserAvatar className="command-avatar" avatarUrl={option.person.avatarUrl} name={option.label}/> : <NoAssigneeIcon/>,
+        icon: option.person ? <UserAvatar className="command-avatar" avatarUrl={option.person.avatarUrl} userId={option.person.id} name={option.label}/> : <NoAssigneeIcon/>,
         current: option.id === (owner?.id ?? ''), select: each(item => (option.id || null) === (documentOwner(item, data.users)?.id ?? null) ? undefined : changeDocumentOwner(ctx, item, option.id || null)),
       }))
     }
@@ -264,7 +264,7 @@ function pageOptions({ ctx, data, docs, page: current, query, t, open, choose }:
     case 'documentSubscribers':
       return data.users.filter(user => user.active !== false && !user.app).map(user => {
         const checked = doc.subscriberIds.includes(user.id)
-        return { id: user.id, label: user.displayName || user.name, entity: true, keywords: `${user.name} ${user.email ?? ''}`, icon: <UserAvatar className="command-avatar" avatarUrl={user.avatarUrl} name={user.displayName || user.name}/>, checked,
+        return { id: user.id, label: user.displayName || user.name, entity: true, keywords: `${user.name} ${user.email ?? ''}`, icon: <UserAvatar className="command-avatar" avatarUrl={user.avatarUrl} userId={user.id} name={user.displayName || user.name}/>, checked,
           select: () => setDocumentSubscribers(ctx, doc, checked ? doc.subscriberIds.filter(id => id !== user.id) : [...doc.subscriberIds, user.id]) }
       })
     default:

@@ -31,7 +31,7 @@ export function cyclePlanningRows(issues: readonly Issue[], tab: CyclePlanningTa
     const value = teamUsesEstimates(settings) ? estimatePoints(issue.estimate, settings) : 1
     done = issue.state.type === 'completed' ? value : 0
     if (tab === 'assignees') {
-      if (issue.assignee) add(issue.assignee.id, issue.assignee.displayName || issue.assignee.name, <UserAvatar className="cycle-planning-avatar" avatarUrl={issue.assignee.avatarUrl} name={issue.assignee.displayName || issue.assignee.name}/>, value)
+      if (issue.assignee) add(issue.assignee.id, issue.assignee.displayName || issue.assignee.name, <UserAvatar className="cycle-planning-avatar" avatarUrl={issue.assignee.avatarUrl} userId={issue.assignee.id} name={issue.assignee.displayName || issue.assignee.name}/>, value)
       else add('', 'No assignee', <NoAssigneeIcon size={20}/>, value)
     } else if (tab === 'labels') {
       if (!issue.labels.length) add('', 'No label', <LabelIcon size={20}/>, value)

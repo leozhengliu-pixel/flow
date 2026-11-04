@@ -184,7 +184,7 @@ export function LoopList({
         if (owner) owners.set(owner.id, owner);
       }
       for (const owner of [...owners.values()].sort((left, right) => (left.displayName || left.name).localeCompare(right.displayName || right.name)))
-        add(owner.id, { label: owner.displayName || owner.name, entityName: true, icon: <UserAvatar avatarUrl={owner.avatarUrl} className="avatar loops-avatar" name={owner.displayName || owner.name} /> });
+        add(owner.id, { label: owner.displayName || owner.name, entityName: true, icon: <UserAvatar avatarUrl={owner.avatarUrl} className="avatar loops-avatar" name={owner.displayName || owner.name} userId={owner.id} /> });
       add("none", { label: t("No owner"), icon: <UserRound size={14} /> });
     } else {
       add("workspace", { label: t("Workspace"), icon: <ViewGlyph color="currentColor" icon="Team" /> });
@@ -588,7 +588,7 @@ function LoopRow({
         ) : column === "owner" ? (
           <span key={column} role="cell" className="loops-cell-owner">
             <PropertyMenu label="Owner" ariaLabel="Change owner" selectedId={owner?.id} triggerClassName="loops-owner-button" triggerRole="button"
-              trigger={<>{owner && <UserAvatar avatarUrl={owner.avatarUrl} className="avatar loops-avatar" name={owner.displayName || owner.name}/>}<span data-i18n-ignore>{owner?.displayName || owner?.name}</span></>}
+              trigger={<>{owner && <UserAvatar avatarUrl={owner.avatarUrl} className="avatar loops-avatar" name={owner.displayName || owner.name} userId={owner.id}/>}<span data-i18n-ignore>{owner?.displayName || owner?.name}</span></>}
               options={data.users.filter(user => user.active !== false && !user.app).map(user => ({ id: user.id, label: user.displayName || user.name, person: user, i18nIgnore: true }))}
               onChange={async ownerId => { try { onChanged(await updateLoop(loop.id, { ownerId })); } catch (error) { toast.error(error instanceof Error ? error.message : t("Could not update loop")); } }}/>
           </span>

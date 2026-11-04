@@ -24,10 +24,10 @@ export function InitiativeHistoryRows({ initiative, users }: { initiative: Initi
   const rows = useMemo(() => {
     const changes = coalesceHistoryEntries(history).flatMap(entry => {
       const text = entry.action === 'created' ? null : describeHistoryEntry(entry, 'initiative', t, locale)
-      return text ? [{ id: entry.id, actor: activityActor(entry.actor, entry.botActor, users), text, createdAt: entry.createdAt, created: false }] : []
+      return text ? [{ id: entry.id, actor: activityActor(entry.actor, entry.botActor, users), actorId: entry.actor?.id, text, createdAt: entry.createdAt, created: false }] : []
     })
     const creator = initiative.creator?.id ? initiative.creator : undefined
-    const created = { id: `created-${initiative.id}`, actor: activityActor(creator, initiative.botActor, users), text: t('created the initiative'), createdAt: initiative.createdAt, created: true }
+    const created = { id: `created-${initiative.id}`, actor: activityActor(creator, initiative.botActor, users), actorId: creator?.id, text: t('created the initiative'), createdAt: initiative.createdAt, created: true }
     return [...changes.reverse(), created]
   }, [history, initiative.botActor, initiative.createdAt, initiative.creator, initiative.id, locale, t, users])
   const day = (value: string) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(date) }
@@ -35,7 +35,7 @@ export function InitiativeHistoryRows({ initiative, users }: { initiative: Initi
     <div className="li-created-event" data-history-row={row.created ? 'created' : 'change'} key={row.id}>
       {row.created
         ? <ViewGlyph color={initiative.color} icon={initiative.icon || 'Initiative'}/>
-        : <span className="li-history-avatar"><Avatar name={row.actor.name} avatarUrl={row.actor.avatarUrl}/></span>}
+        : <span className="li-history-avatar"><Avatar id={row.actorId} name={row.actor.name} avatarUrl={row.actor.avatarUrl}/></span>}
       <span>{row.actor.name ? <AttributedAction actor={row.actor}>{row.text}</AttributedAction> : row.text}{day(row.createdAt) && ` · ${day(row.createdAt)}`}</span>
     </div>
   ))}</>

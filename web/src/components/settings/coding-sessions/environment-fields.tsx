@@ -295,7 +295,7 @@ export function OwnersEditor({ ownerIds, users, canManage, onChange }: { ownerId
             {candidates.map((user) => (
               <DropdownMenuItem key={user.id} data-i18n-ignore onSelect={() => onChange([...ownerIds, user.id])}>
                 <span className="cs-owner-option">
-                  <UserAvatar className="cs-owner-avatar" name={userName(user, user.id)} avatarUrl={user.avatarUrl} />
+                  <UserAvatar className="cs-owner-avatar" name={userName(user, user.id)} avatarUrl={user.avatarUrl} userId={user.id} />
                   <span>{userName(user, user.id)}</span>
                 </span>
               </DropdownMenuItem>
@@ -308,7 +308,7 @@ export function OwnersEditor({ ownerIds, users, canManage, onChange }: { ownerId
         const name = userName(user, id);
         return (
           <div key={id} className="cs-owner-row" data-testid={`owner-${id}`}>
-            <UserAvatar className="cs-owner-avatar" name={name} avatarUrl={user?.avatarUrl} />
+            <UserAvatar className="cs-owner-avatar" name={name} avatarUrl={user?.avatarUrl} userId={id} />
             <div>
               <strong data-i18n-ignore>{name}</strong>
               {user?.email && <span data-i18n-ignore>{user.email}</span>}

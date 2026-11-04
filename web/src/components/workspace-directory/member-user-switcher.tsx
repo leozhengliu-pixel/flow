@@ -23,7 +23,7 @@ export function MemberUserSwitcher({ user, users, open, onOpenChange, onSelect }
     id: item.id,
     label: item.displayName,
     keywords: `${item.name} ${item.email}`,
-    icon: <UserAvatar className="people-menu-avatar member-profile-switcher__avatar" avatarUrl={item.avatarUrl} name={item.displayName}/>,
+    icon: <UserAvatar className="people-menu-avatar member-profile-switcher__avatar" avatarUrl={item.avatarUrl} userId={item.id} name={item.displayName}/>,
     end: memberAppKind(item),
     i18nIgnore: true,
   })), [choices])
@@ -34,7 +34,7 @@ export function MemberUserSwitcher({ user, users, open, onOpenChange, onSelect }
     triggerClassName="member-profile-user-button"
     surfaceClassName="member-profile-switcher"
     trigger={<>
-      <UserAvatar className="people-menu-avatar member-profile-user-button__avatar" avatarUrl={user.avatarUrl} name={user.displayName}/>
+      <UserAvatar className="people-menu-avatar member-profile-user-button__avatar" avatarUrl={user.avatarUrl} userId={user.id} name={user.displayName}/>
       <span className="member-profile-user-button__name" data-i18n-ignore>{user.displayName}</span>
       <ChevronDown className="member-profile-user-button__chevron" size={12} aria-hidden/>
     </>}

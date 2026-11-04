@@ -317,6 +317,7 @@ function MeetingDetail({
                 <UserAvatar
                   name={user.displayName || user.name}
                   avatarUrl={user.avatarUrl}
+                  userId={user.id}
                 />
                 <span data-i18n-ignore>{user.displayName || user.name}</span>
               </button>
