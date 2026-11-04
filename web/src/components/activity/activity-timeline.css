@@ -96,7 +96,7 @@
   background: var(--surface-card);
   color: var(--theme-text-primary);
 }
-:root[data-theme="light"] .composer-submit .composer-send:hover {
+:root[data-theme="light"] .composer-submit .composer-send:hover:not(:disabled) {
   background: var(--theme-surface-hover);
   color: var(--theme-text-primary);
 }
