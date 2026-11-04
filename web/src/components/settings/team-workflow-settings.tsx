@@ -34,6 +34,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { markdownPlainText } from "@/lib/markdown-plain-text";
 import { RecurringIssuesSettingsPage } from "./recurring-issues-settings";
 import { ParentTeamPicker } from '@/components/property/parent-team-picker';
 import { RetireTeamForm } from '@/components/team/retire-team-form';
@@ -2214,7 +2215,7 @@ function AgentSkillsSettings({
             <AgentSkillsIcon size={16} />
             <span data-i18n-ignore>
               <strong>{skill.name}</strong>
-              <small>{skill.instructions}</small>
+              <small>{markdownPlainText(skill.instructions)}</small>
             </span>
             <SettingsToggle
               checked={skill.enabled}

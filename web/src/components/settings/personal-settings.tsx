@@ -32,7 +32,6 @@ import {
   MessageCircle,
   Monitor,
   ShieldCheck,
-  Plus,
   Smartphone,
 } from "lucide-react";
 import * as Popover from "@radix-ui/react-popover";
@@ -73,7 +72,7 @@ import {
   updatePasskey,
 } from "@/lib/api";
 import type { NotificationSettingsView, SettingsPageId } from "@/lib/app-routes";
-import { agentSkillPath, newAgentSkillPath, settingsPath } from "@/lib/app-routes";
+import { settingsPath } from "@/lib/app-routes";
 import type {
   APIKey,
   AccountSessionInfo,
@@ -114,7 +113,7 @@ import {
   parseThemeTransfer,
   serializeThemeTransfer,
 } from "@/lib/theme-transfer";
-import { AgentSkillsIcon } from '@/components/agent/agent-icons'
+import { AgentSkillsList } from './agent-skills-list'
 
 export type PersonalSettingsValues = Record<string, string | boolean>;
 
@@ -3762,7 +3761,7 @@ function Connections({ data, onNavigate, p }: PersonalProps) {
   );
 }
 
-function Agents({ data, values, setValue, onNavigate, p }: PersonalProps) {
+function Agents({ data, values, setValue, onNavigate, onReload, p }: PersonalProps) {
   const [draft, setDraft] = useState(String(values.agentInstructions || ""));
   const mcpAnchor = useRef<HTMLDivElement>(null);
   const [mcpTargeted, setMcpTargeted] = useState(() => window.location.hash === "#mcp-connectors");
@@ -3807,35 +3806,7 @@ function Agents({ data, values, setValue, onNavigate, p }: PersonalProps) {
             "Reusable prompts auto-selected by the agent or invoked via slash commands",
           )}
         >
-          {data.agentSkills.length > 0 && (
-            <div className="personal-agent-skills">
-              {data.agentSkills.map((skill) => (
-                <NavLink
-                  data-i18n-ignore
-                  key={skill.id}
-                  to={agentSkillPath(data.workspace.urlKey, skill.id)}
-                >
-                  <AgentSkillsIcon />
-                  <span>
-                    <strong>{skill.name}</strong>
-                    <small>{skill.instructions}</small>
-                  </span>
-                </NavLink>
-              ))}
-            </div>
-          )}
-          <PersonalRow
-            className="settings-row--action"
-            title={data.agentSkills.length ? "" : p("No skills created")}
-          >
-            <NavLink
-              className="personal-skill-create"
-              to={newAgentSkillPath(data.workspace.urlKey)}
-              aria-label={p("Create skill")}
-            >
-              <Plus size={14} />
-            </NavLink>
-          </PersonalRow>
+          <AgentSkillsList data={data} onReload={onReload} />
         </SettingsGroup>
         <div id="mcp-connectors" ref={mcpAnchor} className={`personal-mcp-anchor${mcpTargeted ? " is-targeted" : ""}`}>
         {mcpConnectorsEnabled(data.workspaceSettings) ? (

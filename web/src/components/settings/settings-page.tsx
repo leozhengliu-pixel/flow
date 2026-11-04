@@ -60,7 +60,6 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import {
   connectIntegration,
-  createAgentSkill,
   createIdentityProvider,
   deleteIdentityProvider,
   disconnectIntegration,
@@ -71,7 +70,6 @@ import {
   revokeInvitation,
   setTeamMembership,
   suspendMember,
-  updateAgentSkill,
   updateIdentityProvider,
   updateMemberRole,
   updateWebhook,
@@ -96,7 +94,7 @@ import {
   settingsPath,
   webhookSettingsPath,
 } from "@/lib/app-routes";
-import { agentSkillsSettingsBackLink } from "@/lib/agent-skills-settings-back-link";
+import { AgentSkillEditor } from "./agent-skill-page";
 import { Link, useNavigate } from "react-router-dom";
 import type {
   APIKey,
@@ -1441,90 +1439,6 @@ function SettingsBodyContent(
   );
 }
 
-function AgentSkillEditor({
-  data,
-  id,
-  mode,
-  onCancel,
-  onReload,
-}: {
-  data: BootstrapData;
-  id?: string;
-  mode: "new" | "edit";
-  onCancel: () => void;
-  onReload: () => Promise<void>;
-}) {
-  const existing =
-    mode === "edit"
-      ? data.agentSkills.find((item) => item.id === id)
-      : undefined;
-  const [name, setName] = useState(existing?.name ?? ""),
-    [instructions, setInstructions] = useState(existing?.instructions ?? ""),
-    [saving, setSaving] = useState(false);
-  const save = async () => {
-    if (!name.trim() || !instructions.trim() || saving) return;
-    setSaving(true);
-    try {
-      if (existing)
-        await updateAgentSkill(existing.id, {
-          name: name.trim(),
-          instructions: instructions.trim(),
-        });
-      else
-        await createAgentSkill({
-          name: name.trim(),
-          instructions: instructions.trim(),
-        });
-      await onReload();
-      onCancel();
-    } finally {
-      setSaving(false);
-    }
-  };
-  return (
-    <div className="agent-skill-editor-page">
-      <nav>
-        <button onClick={onCancel}>{agentSkillsSettingsBackLink(data.workspace.urlKey).label}</button>
-        <span>›</span>
-        <span>{existing ? existing.name : "New skill"}</span>
-      </nav>
-      <div
-        className="agent-skill-name"
-        contentEditable
-        suppressContentEditableWarning
-        role="textbox"
-        aria-label="Skill name"
-        data-placeholder="Skill name"
-        onInput={(event) => setName(event.currentTarget.textContent ?? "")}
-      >
-        {name}
-      </div>
-      <div
-        className="agent-skill-instructions"
-        contentEditable
-        suppressContentEditableWarning
-        role="textbox"
-        aria-label="Skill instructions"
-        data-placeholder="Add instructions…"
-        onInput={(event) =>
-          setInstructions(event.currentTarget.textContent ?? "")
-        }
-      >
-        {instructions}
-      </div>
-      <footer>
-        <button onClick={onCancel}>Cancel</button>
-        <button
-          className="primary"
-          disabled={!name.trim() || !instructions.trim() || saving}
-          onClick={() => void save()}
-        >
-          {saving ? "Creating…" : existing ? "Save" : "Create"}
-        </button>
-      </footer>
-    </div>
-  );
-}
 function ActionButton({
   children,
   onClick,

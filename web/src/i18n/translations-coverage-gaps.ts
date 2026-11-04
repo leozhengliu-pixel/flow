@@ -164,4 +164,13 @@ export const coverageGapsZhCN: Record<string, string> = {
   "Open view details": "打开视图详情",
   "Open initiative updates": "打开目标更新",
   "Close initiative updates": "关闭目标更新",
+  // Agent skills (list, menu and page)
+  "Skill menu": "技能菜单",
+  'Delete the skill "{name}"?': "删除技能“{name}”？",
+  "Use in chat": "在聊天中使用",
+  "Could not delete skill": "无法删除技能",
+  "Could not save skill": "无法保存技能",
+  "Title cannot be empty": "标题不能为空",
+  "Instructions cannot be empty": "指令不能为空",
+  "No changes to save": "没有需要保存的更改",
 }
