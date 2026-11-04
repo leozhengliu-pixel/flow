@@ -130,4 +130,38 @@ test.describe('agent skills in Agent personalization', () => {
     await header.getByRole('link', { name: 'Create skill' }).click()
     await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/settings/skill/new$`))
   })
+
+  test('shares the row actions on right-click and guards sidebar and browser navigation', async ({ page, request, workspaceKey }) => {
+    const [first] = await seed(request, workspaceKey)
+    const listPath = `/${workspaceKey}/settings/account/agents`
+    const skillPath = `/${workspaceKey}/settings/skill/${first.id}`
+    await page.goto(listPath)
+    await page.locator('.agent-skills-row', { hasText: first.name }).click({ button: 'right' })
+    await expect(page.getByRole('menuitem')).toHaveText(['Edit', 'Use in chat', 'Delete'])
+    await page.getByRole('menuitem', { name: 'Edit', exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`${skillPath}$`))
+    await page.getByRole('textbox', { name: 'Skill name' }).fill('Unsaved title')
+    await page.locator('.settings-sidebar').getByRole('link', { name: 'Preferences', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: 'Discard changes?' })).toBeVisible()
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`${skillPath}$`))
+    await expect(page.getByRole('textbox', { name: 'Skill name' })).toHaveValue('Unsaved title')
+
+    // Native history bypasses the router's push/go methods.
+    await page.evaluate(() => window.history.back())
+    await expect(page.getByRole('dialog', { name: 'Discard changes?' })).toBeVisible()
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`${skillPath}$`))
+    await expect(page.getByRole('textbox', { name: 'Skill name' })).toHaveValue('Unsaved title')
+    await page.evaluate(() => window.history.back())
+    await page.getByRole('dialog').getByRole('button', { name: 'Discard', exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`${listPath}$`))
+    expect((await skillsOf(request, workspaceKey)).find(skill => skill.id === first.id)?.name).toBe(first.name)
+
+    await page.locator('.agent-skills-row', { hasText: first.name }).getByRole('link').click()
+    await page.getByRole('textbox', { name: 'Skill name' }).fill('Saved title')
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`${listPath}$`))
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+  })
 })

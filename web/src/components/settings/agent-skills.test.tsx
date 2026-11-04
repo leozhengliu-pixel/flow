@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const api = vi.hoisted(() => ({ createAgentSkill: vi.fn(), updateAgentSkill: vi.fn(), deleteAgentSkill: vi.fn() }))
@@ -36,7 +36,8 @@ function renderPage(agentSkills: PersonalAgentSkill[], mode: 'new' | 'edit', id?
   localStorage.setItem('flow:locale', 'en')
   const onCancel = vi.fn()
   const onReload = vi.fn().mockResolvedValue(undefined)
-  render(<MemoryRouter><I18nProvider><AgentSkillEditor data={data(agentSkills)} id={id} mode={mode} onCancel={onCancel} onReload={onReload} /></I18nProvider></MemoryRouter>)
+  const router = createMemoryRouter([{ path: '*', element: <I18nProvider><AgentSkillEditor data={data(agentSkills)} id={id} mode={mode} onCancel={onCancel} onReload={onReload} /></I18nProvider> }])
+  render(<RouterProvider router={router} />)
   return { onCancel, onReload }
 }
 

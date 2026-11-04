@@ -6,7 +6,7 @@ import App from './App.tsx'
 import './styles/pill-overrides.css'
 import './styles/micro-audit-overrides.css'
 import './components/ui/tooltip.css'
-import { BrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { I18nProvider } from './i18n/i18n'
 import { prepareInitialLocale } from './i18n/locale'
 import { initializeTheme } from './lib/theme'
@@ -37,20 +37,23 @@ initializeTheme()
 window.__flowMermaidPreview = renderMermaidPreview
 
 // Await the (lazily loaded) Chinese dictionary when the saved locale needs it so the first paint is never English.
-void prepareInitialLocale().then(() => createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <FlowMotionProvider><I18nProvider>
-      <BrowserRouter>
-        <LightboxEditorProvider>
-          <TooltipProvider>
-            <App />
-          </TooltipProvider>
-          <TitleTooltipBridge />
-          <ThemedToaster />
-          <ActionDialogHost />
-          <DueDateDialogHost />
-        </LightboxEditorProvider>
-      </BrowserRouter>
-    </I18nProvider></FlowMotionProvider>
-  </StrictMode>,
-))
+void prepareInitialLocale().then(() => {
+  const router = createBrowserRouter([{ path: '*', element: (
+    <LightboxEditorProvider>
+      <TooltipProvider>
+        <App />
+      </TooltipProvider>
+      <TitleTooltipBridge />
+      <ThemedToaster />
+      <ActionDialogHost />
+      <DueDateDialogHost />
+    </LightboxEditorProvider>
+  ) }])
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <FlowMotionProvider><I18nProvider>
+        <RouterProvider router={router} />
+      </I18nProvider></FlowMotionProvider>
+    </StrictMode>,
+  )
+})
