@@ -61,7 +61,19 @@ func moveIssueToTeam(data *domain.Bootstrap, issue *domain.Issue, team domain.Te
 	moveIssueDocuments(data, issue.ID, team.ID)
 
 	if state == nil {
-		state = teamMoveState(data, issue.State, team.ID)
+		if issue.State.Type != "completed" && issue.State.Type != "canceled" && teamSettings(data, team.ID).TriageEnabled && !viewerOnTeam(*data, team.ID) {
+			state = stateForTeam(data, team.ID, teamSettings(data, team.ID).DefaultStateID)
+			if state == nil || state.Type != "backlog" {
+				state = stateForTeamByType(data, team.ID, "backlog")
+			}
+			issue.TriagedAt = nil
+			issue.SuggestionsGeneratedAt = nil
+			data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool { return item.IssueID == issue.ID })
+			syncIssueSuggestionTargets(data, issue)
+		}
+		if state == nil {
+			state = teamMoveState(data, issue.State, team.ID)
+		}
 	}
 	if state != nil && state.ID != issue.State.ID {
 		previous := issue.State

@@ -9,10 +9,72 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
+
+func TestTeamMoveTriageForNonMembers(t *testing.T) {
+	for _, tc := range []struct {
+		name, current, want string
+		member, enabled     bool
+	}{
+		{"outsider open", "started", "backlog", false, true},
+		{"outsider accepted backlog", "backlog", "backlog", false, true},
+		{"member open", "started", "started", true, true},
+		{"without triage", "started", "started", false, false},
+		{"completed stays closed", "completed", "completed", false, true},
+		{"canceled stays closed", "canceled", "canceled", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			target := domain.Team{ID: "target", Key: "DST"}
+			data := domain.Bootstrap{Viewer: domain.User{ID: "actor"}, TeamSettings: map[string]domain.TeamSettings{"target": {TeamID: "target", TriageEnabled: tc.enabled}}}
+			for _, kind := range []string{"backlog", "started", "completed", "canceled"} {
+				data.States = append(data.States, domain.WorkflowState{ID: "target-" + kind, TeamID: target.ID, Name: kind, Type: kind})
+			}
+			if tc.member {
+				data.ViewerTeamIDs = []string{target.ID}
+			}
+			now := time.Now().UTC()
+			issue := domain.Issue{ID: "issue", Team: domain.Team{ID: "source"}, Identifier: "SRC-1", State: domain.WorkflowState{ID: "old", Name: tc.current, Type: tc.current}, TriagedAt: &now}
+			changes := map[string]string{}
+			moveIssueToTeam(&data, &issue, target, nil, changes)
+			if issue.State.ID != "target-"+tc.want || changes["stateType"] != tc.want {
+				t.Fatalf("state = %+v, changes = %v", issue.State, changes)
+			}
+			if tc.enabled && !tc.member && tc.want == "backlog" && issue.TriagedAt != nil {
+				t.Fatal("incoming issue was already triaged")
+			}
+		})
+	}
+}
+
+func TestIssueTeamMoveUsesActingMembershipForTriage(t *testing.T) {
+	server := newSingleAuthServer(t)
+	admin := peerAdmin(t, server.URL)
+	source := authRequest[domain.Team](t, admin, http.MethodPost, server.URL+"/api/workspaces/test-workspace/teams", map[string]any{"name": "Source", "key": "SRC"}, "", http.StatusCreated)
+	target := authRequest[domain.Team](t, admin, http.MethodPost, server.URL+"/api/workspaces/test-workspace/teams", map[string]any{"name": "Incoming", "key": "INC"}, "", http.StatusCreated)
+	authRequest[domain.TeamSettings](t, admin, http.MethodPatch, server.URL+"/api/teams/"+target.ID+"/settings", map[string]any{"triageEnabled": true}, "test-workspace", http.StatusOK)
+	member, user := verifiedAuthClient(t, server.URL, "Mover", "mover@example.com")
+	invitations := authRequest[[]domain.Invitation](t, admin, http.MethodPost, server.URL+"/api/workspaces/test-workspace/invitations", map[string]any{"emails": []string{user.Email}, "role": "member", "teamIds": []string{source.ID}}, "", http.StatusCreated)
+	authRequest[domain.WorkspaceMembership](t, member, http.MethodPost, server.URL+"/api/invitations/accept", map[string]string{"token": invitations[0].Token}, "", http.StatusOK)
+	states := authRequest[[]domain.WorkflowState](t, member, http.MethodGet, server.URL+"/api/teams/"+source.ID+"/states", nil, "test-workspace", http.StatusOK)
+	started := stateNamed(t, states, "In Progress")
+	for _, actor := range []struct {
+		name   string
+		client *http.Client
+		want   string
+	}{{"non-member", member, "backlog"}, {"member", admin, "started"}} {
+		t.Run(actor.name, func(t *testing.T) {
+			issue := authRequest[domain.Issue](t, actor.client, http.MethodPost, server.URL+"/api/issues", map[string]any{"title": "Move to intake", "teamId": source.ID, "stateId": started.ID}, "test-workspace", http.StatusCreated)
+			moved := authRequest[domain.Issue](t, actor.client, http.MethodPatch, server.URL+"/api/issues/"+issue.ID, map[string]any{"teamId": target.ID}, "test-workspace", http.StatusOK)
+			if moved.State.Type != actor.want || actor.want == "backlog" && moved.TriagedAt != nil {
+				t.Fatalf("move by %s: status = %+v, triaged = %v", actor.name, moved.State, moved.TriagedAt)
+			}
+		})
+	}
+}
 
 func stateNamed(t *testing.T, states []domain.WorkflowState, name string) domain.WorkflowState {
 	t.Helper()
