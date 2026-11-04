@@ -253,9 +253,9 @@ func (s *server) cleanupFileUploads(ctx context.Context) {
 }
 
 // serveUploadOrAsset serves REST-uploaded assets to the uploader and to the
-// active members of the upload's workspace, OAuth application icons to the
-// people who see the application (oauthAppIconReadable), then falls back to
-// the existing attachment visibility rules.
+// active members of the upload's workspace, owned images (OAuth application
+// icons, workspace logos) to the people who see their record, then falls back
+// to the existing attachment visibility rules.
 func (s *server) serveUploadOrAsset(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if strings.HasPrefix(name, "asset_") && filepath.Base(name) == name {
@@ -265,12 +265,12 @@ func (s *server) serveUploadOrAsset(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if name != "" && filepath.Base(name) == name {
-		if icon, ok := s.resolveOAuthAppIcon(r.Context(), name); ok {
-			if !s.authDisabled && !s.oauthAppIconReadable(r.Context(), icon, authUser(r).ID) {
+		if image, ok := s.resolveOwnedImage(r.Context(), name); ok {
+			if !s.authDisabled && !image.readable(r.Context(), authUser(r).ID) {
 				http.NotFound(w, r)
 				return
 			}
-			s.serveOAuthAppIcon(w, r, icon)
+			s.serveOwnedImage(w, r, image)
 			return
 		}
 	}
@@ -313,7 +313,7 @@ func (s *server) writeStoredObject(w http.ResponseWriter, r *http.Request, name 
 	if contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
-	if !safeInlineUploadType(contentType, name) {
+	if !safeInlineUploadType(contentType) {
 		w.Header().Set("Content-Disposition", `attachment; filename="download"`)
 	}
 	if size >= 0 {
@@ -370,6 +370,10 @@ func (s *server) serveSignedFile(w http.ResponseWriter, r *http.Request) {
 	}
 	if !hmac.Equal([]byte(fileURLSignature(key, name, expires)), []byte(strings.ToLower(signature))) {
 		writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "Invalid file URL signature")
+		return
+	}
+	if image, ok := s.resolveOwnedImage(r.Context(), name); ok {
+		s.serveOwnedImage(w, r, image)
 		return
 	}
 	s.writeStoredObject(w, r, name)
@@ -435,8 +439,8 @@ func (s *server) fileReadable(r *http.Request, name string) bool {
 	if upload, err := s.store.FileUploadByObject(r.Context(), name); err == nil && upload.Purpose == "asset" && s.assetReadable(r, upload) {
 		return true
 	}
-	if icon, ok := s.resolveOAuthAppIcon(r.Context(), name); ok {
-		return s.oauthAppIconReadable(r.Context(), icon, authUser(r).ID)
+	if image, ok := s.resolveOwnedImage(r.Context(), name); ok {
+		return image.readable(r.Context(), authUser(r).ID)
 	}
 	user := authUser(r)
 	account, err := s.store.AccountForUser(r.Context(), user.ID)

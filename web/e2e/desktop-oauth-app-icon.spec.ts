@@ -42,3 +42,19 @@ test('an uploaded OAuth application icon loads as the app logo and agent avatar'
   await loaded(`.app-logo img[src="${url}"]`)
   await loaded(`.oauth-app-member-avatar img[src="${url}"]`)
 })
+
+test('an uploaded workspace logo loads in workspace settings', async ({ page, request, workspaceKey }) => {
+  const upload = await request.post(`/api/workspaces/${workspaceKey}/logo`, { multipart: { file: { name: 'logo.svg', mimeType: 'image/svg+xml', buffer: icon } } })
+  expect(upload.status()).toBe(200)
+  const { workspace } = await upload.json() as { workspace: { logoUrl: string } }
+  expect(workspace.logoUrl).toMatch(/^\/uploads\/workspace_logo_[A-Za-z0-9_-]+\.svg$/)
+  const image = await request.get(workspace.logoUrl)
+  expect(image.status()).toBe(200)
+  expect(image.headers()['content-type']).toBe('image/svg+xml')
+  expect(Buffer.compare(await image.body(), icon)).toBe(0)
+
+  await page.goto(`/${workspaceKey}/settings/workspace`)
+  const logo = page.getByRole('img', { name: 'Workspace logo' })
+  await expect(logo).toHaveAttribute('src', workspace.logoUrl)
+  await expect.poll(() => logo.evaluate((img: HTMLImageElement) => img.complete ? img.naturalWidth : 0)).toBe(256)
+})

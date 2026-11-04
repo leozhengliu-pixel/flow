@@ -2126,6 +2126,10 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 				return domain.Bootstrap{}, err
 			}
 		}
+		// Uploads (assets, owned icons and logos) keep their workspace.
+		if _, err := tx.ExecContext(ctx, `UPDATE file_uploads SET workspace_key=? WHERE workspace_key=?`, workspace.URLKey, workspaceKey); err != nil {
+			return domain.Bootstrap{}, err
+		}
 	}
 	if workspace.URLKey != workspaceKey {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_states WHERE workspace_key = ?`, workspaceKey); err != nil {

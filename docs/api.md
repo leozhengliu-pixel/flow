@@ -335,6 +335,24 @@ API call (session or `Authorization` header). Uploaded assets are readable by
 the uploader and the workspace's members (not guests); attachment files follow
 the visibility of the issue, document or update they belong to.
 
+Images that represent a record are served by their record's audience:
+
+- A workspace logo (`POST /api/workspaces/{workspaceKey}/logo`) is readable by
+  the workspace's active members, guests included, while it is the
+  workspace's logo. Another workspace's user gets `404`; an anonymous request
+  `401`. Invitation and invite-link previews, which people see before they
+  join (often before they sign in), return the logo as a signed URL valid for
+  15 minutes instead. `logoUrl` on `PATCH /api/workspaces/{workspaceKey}`
+  accepts only a logo the workspace uploaded (or an external URL).
+- An OAuth application icon follows the rules in [OAuth](oauth.md).
+
+Both are served inline with the type validated at upload, `nosniff`, a
+`default-src 'none'; sandbox` Content-Security-Policy and
+`Cross-Origin-Resource-Policy: same-origin`. Icons and logos uploaded before
+Flow recorded their owners get one at startup from the application or
+workspace using them; an icon no application uses stays ownerless and is not
+served.
+
 For clients that cannot send headers (an `<img>` tag, a chat unfurl), request
 short-lived signed URLs, valid for 1 second to 7 days:
 

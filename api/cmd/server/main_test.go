@@ -241,7 +241,7 @@ func TestWorkspaceLogoUploadAndRemoval(t *testing.T) {
 	}
 	inlineSVG := httptest.NewRecorder()
 	handler.ServeHTTP(inlineSVG, httptest.NewRequest(http.MethodGet, safeSVGWorkspace.Workspace.LogoURL, nil))
-	if inlineSVG.Code != http.StatusOK || inlineSVG.Header().Get("Content-Type") != "image/svg+xml" || inlineSVG.Header().Get("Content-Disposition") != "" {
+	if inlineSVG.Code != http.StatusOK || inlineSVG.Header().Get("Content-Type") != "image/svg+xml" || !strings.HasPrefix(inlineSVG.Header().Get("Content-Disposition"), "inline") {
 		t.Fatalf("safe SVG response headers = %#v", inlineSVG.Header())
 	}
 	upload("unsafe.svg", "image/svg+xml", `<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`, http.StatusBadRequest)

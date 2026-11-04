@@ -239,6 +239,12 @@ func main() {
 		if err := s.store.SyncAllApplicationIdentities(ctx); err != nil {
 			log.Printf("sync application identities: %v", err)
 		}
+		// Icons and logos uploaded before owners were recorded.
+		if recorded, err := s.store.BackfillUploadOwners(ctx); err != nil {
+			log.Printf("backfill upload owners: %v", err)
+		} else if recorded > 0 {
+			log.Printf("backfill upload owners: recorded %d", recorded)
+		}
 		return nil
 	}); err != nil {
 		log.Fatal(err)
@@ -1684,6 +1690,10 @@ func (s *server) updateWorkspace(w http.ResponseWriter, r *http.Request) {
 		workspace.Icon = *input.Icon
 	}
 	if input.LogoURL != nil {
+		if err := s.checkWorkspaceLogoInput(r.Context(), data.Workspace, *input.LogoURL); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		workspace.LogoURL = strings.TrimSpace(*input.LogoURL)
 	}
 	if input.Color != nil {
@@ -1760,15 +1770,42 @@ func (s *server) uploadWorkspaceLogo(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "logo upload incomplete")
 		return
 	}
+	// The owner row makes the object this workspace's logo (owned_images.go).
+	owner := store.FileUpload{WorkspaceKey: data.Workspace.URLKey, UserID: requestActor(s, r).ID, ObjectKey: objectKey, Filename: "logo" + extension, ContentType: contentType, ActualSize: size, Purpose: store.FileUploadPurposeWorkspaceLogo}
+	if err := s.store.RecordStoredUpload(r.Context(), owner, time.Now().UTC()); err != nil {
+		_ = storage.Delete(r.Context(), objectKey)
+		writeError(w, http.StatusInternalServerError, "logo upload failed")
+		return
+	}
 	previous := data.Workspace.LogoURL
 	data.Workspace.LogoURL = "/uploads/" + objectKey
 	updated, err := s.store.UpdateWorkspace(r.Context(), key, data.Workspace)
 	if err != nil {
 		_ = storage.Delete(r.Context(), objectKey)
-	} else if strings.HasPrefix(previous, "/uploads/") {
-		_ = storage.Delete(r.Context(), strings.TrimPrefix(previous, "/uploads/"))
+		_ = s.store.DeleteStoredUpload(r.Context(), objectKey)
+	} else {
+		s.deleteWorkspaceLogoObject(r.Context(), data.Workspace, previous)
 	}
 	respondMutation(w, err, http.StatusOK, updated)
+}
+
+// deleteWorkspaceLogoObject deletes a replaced or removed workspace logo's
+// object and owner row, when it is a logo this workspace uploaded (a logo URL
+// naming any other file leaves that file alone).
+func (s *server) deleteWorkspaceLogoObject(ctx context.Context, workspace domain.Workspace, logoURL string) {
+	name, ok := strings.CutPrefix(logoURL, "/uploads/")
+	if !ok || name == "" || filepath.Base(name) != name {
+		return
+	}
+	owner, err := s.store.FileUploadByObject(ctx, name)
+	owned := err == nil && owner.Purpose == store.FileUploadPurposeWorkspaceLogo && owner.WorkspaceKey == workspace.URLKey
+	if !owned && !(errors.Is(err, store.ErrFileUploadNotFound) && strings.HasPrefix(name, "workspace_logo_"+workspace.ID+"_")) {
+		return
+	}
+	if storage, storageErr := s.storage(); storageErr == nil {
+		_ = storage.Delete(ctx, name)
+	}
+	_ = s.store.DeleteStoredUpload(ctx, name)
 }
 
 func validateWorkspaceLogo(extension string, payload []byte) (string, error) {
@@ -1857,10 +1894,8 @@ func (s *server) deleteWorkspaceLogo(w http.ResponseWriter, r *http.Request) {
 	previous := data.Workspace.LogoURL
 	data.Workspace.LogoURL = ""
 	updated, err := s.store.UpdateWorkspace(r.Context(), key, data.Workspace)
-	if err == nil && strings.HasPrefix(previous, "/uploads/") {
-		if storage, storageErr := s.storage(); storageErr == nil {
-			_ = storage.Delete(r.Context(), strings.TrimPrefix(previous, "/uploads/"))
-		}
+	if err == nil {
+		s.deleteWorkspaceLogoObject(r.Context(), data.Workspace, previous)
 	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
@@ -5665,7 +5700,7 @@ func (s *server) serveUpload(w http.ResponseWriter, r *http.Request) {
 	if contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
-	if !safeInlineUploadType(contentType, name) {
+	if !safeInlineUploadType(contentType) {
 		w.Header().Set("Content-Disposition", `attachment; filename="download"`)
 	}
 	if size >= 0 {
@@ -5678,14 +5713,15 @@ func (s *server) serveUpload(w http.ResponseWriter, r *http.Request) {
 // inlineUploadTypes are the media types a browser may show in place from the
 // upload routes: raster images, audio, video and PDF. Matching is exact on the
 // media type, so a type that only starts with one of these (image/png-x) is a
-// download like every other type.
+// download like every other type. SVG is always a download here: sanitized
+// SVGs (application icons, workspace logos) are served by serveOwnedImage.
 var inlineUploadTypes = map[string]bool{
 	"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true, "image/avif": true, "application/pdf": true,
 }
 
-func safeInlineUploadType(value, name string) bool {
+func safeInlineUploadType(value string) bool {
 	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(value, ";")[0]))
-	return inlineUploadTypes[mediaType] || mediaType == "image/svg+xml" && strings.HasPrefix(name, "workspace_logo_") || strings.HasPrefix(mediaType, "audio/") || strings.HasPrefix(mediaType, "video/")
+	return inlineUploadTypes[mediaType] || strings.HasPrefix(mediaType, "audio/") || strings.HasPrefix(mediaType, "video/")
 }
 
 func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBootstrap, userID, url string) bool {

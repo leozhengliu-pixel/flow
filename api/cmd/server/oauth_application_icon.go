@@ -3,15 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -46,10 +43,6 @@ func validApplicationIconURL(raw string, uploads bool) bool {
 	}
 	return validOAuthMetadataURI(raw)
 }
-
-// oauthAppIconTypes are the formats an application icon is stored and served
-// as, by file extension.
-var oauthAppIconTypes = map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".svg": "image/svg+xml"}
 
 // POST /api/oauth-applications/icon stores an application icon picked on the
 // create/edit page (the reference app's "Application icon · At least 256x256px") and
@@ -105,10 +98,8 @@ func (s *server) uploadOAuthApplicationIcon(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, "icon upload failed")
 		return
 	}
-	now := time.Now().UTC()
-	id := sha256.Sum256([]byte(objectKey))
-	owner := store.FileUpload{ID: hex.EncodeToString(id[:]), WorkspaceKey: workspace.Workspace.URLKey, UserID: requestActor(s, r).ID, ObjectKey: objectKey, Filename: "icon" + extension, ContentType: contentType, ActualSize: size, Purpose: store.FileUploadPurposeOAuthAppIcon, ExpiresAt: now}
-	if err := s.store.RecordStoredUpload(r.Context(), owner, now); err != nil {
+	owner := store.FileUpload{WorkspaceKey: workspace.Workspace.URLKey, UserID: requestActor(s, r).ID, ObjectKey: objectKey, Filename: "icon" + extension, ContentType: contentType, ActualSize: size, Purpose: store.FileUploadPurposeOAuthAppIcon}
+	if err := s.store.RecordStoredUpload(r.Context(), owner, time.Now().UTC()); err != nil {
 		_ = storage.Delete(r.Context(), objectKey)
 		writeError(w, http.StatusInternalServerError, "icon upload failed")
 		return
@@ -163,18 +154,19 @@ type oauthAppIcon struct {
 	apps        []store.OAuthApplicationLogoRef
 }
 
-// resolveOAuthAppIcon identifies an uploaded application icon. An object is
-// one when its upload was recorded as an application icon or, for an icon
-// stored before owners were recorded, when it has the icon upload's name and
-// an application uses it. Only an owning workspace's applications count as
+// resolveOAuthAppIcon identifies an uploaded application icon from its owner
+// row (nil when the object has none). An object is one when its upload was
+// recorded as an application icon or, for an icon stored before owners were
+// recorded (and not backfilled), when it has the icon upload's name and an
+// application uses it. Only an owning workspace's applications count as
 // references, so a logo copied into another workspace grants nothing.
-func (s *server) resolveOAuthAppIcon(ctx context.Context, name string) (oauthAppIcon, bool) {
-	icon := oauthAppIcon{name: name, contentType: oauthAppIconTypes[strings.ToLower(filepath.Ext(name))]}
-	if owner, err := s.store.FileUploadByObject(ctx, name); err == nil {
+func (s *server) resolveOAuthAppIcon(name string, owner *store.FileUpload) (oauthAppIcon, bool) {
+	icon := oauthAppIcon{name: name, contentType: store.OwnedUploadTypes[strings.ToLower(filepath.Ext(name))]}
+	if owner != nil {
 		if owner.Purpose != store.FileUploadPurposeOAuthAppIcon {
 			return icon, false
 		}
-		icon.owner = &owner
+		icon.owner = owner
 		if owner.ContentType != "" {
 			icon.contentType = owner.ContentType
 		}
@@ -241,41 +233,4 @@ func (s *server) activeWorkspaceMember(ctx context.Context, workspace, userID st
 	}
 	role, status, err := s.store.WorkspaceRole(ctx, workspaceID, userID)
 	return err == nil && status == "active" && (!admin || workspaceAdminRole(role))
-}
-
-// serveOAuthAppIcon writes an application icon. The media type comes from
-// the upload (validated then), never from the stored object or the bytes.
-// Icons are images shown inline; an SVG passed the upload's sanitizer and
-// is still sandboxed without scripts, and nothing is sniffed.
-func (s *server) serveOAuthAppIcon(w http.ResponseWriter, r *http.Request, icon oauthAppIcon) {
-	storage, err := s.storage()
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	reader, _, size, err := storage.Open(r.Context(), icon.name)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	defer reader.Close()
-	header := w.Header()
-	header.Set("Content-Type", icon.contentType)
-	header.Set("X-Content-Type-Options", "nosniff")
-	header.Set("Content-Disposition", `inline; filename="`+icon.name+`"`)
-	policy := "default-src 'none'; sandbox"
-	if icon.contentType == "image/svg+xml" {
-		// Opened directly, an SVG may use its presentation styles only.
-		policy = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
-	}
-	header.Set("Content-Security-Policy", policy)
-	header.Set("Cross-Origin-Resource-Policy", "same-origin")
-	header.Set("Cache-Control", "private, max-age=3600")
-	if size >= 0 {
-		header.Set("Content-Length", strconv.FormatInt(size, 10))
-	}
-	if r.Method == http.MethodHead {
-		return
-	}
-	_, _ = io.Copy(w, reader)
 }

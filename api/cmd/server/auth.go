@@ -2123,7 +2123,7 @@ func (s *server) invitationPreview(w http.ResponseWriter, r *http.Request) {
 				return item.Token == r.PathValue("token") && item.Status == "pending" && item.ExpiresAt.After(time.Now())
 			}); index >= 0 {
 				item := data.Invitations[index]
-				writeJSON(w, http.StatusOK, map[string]any{"id": item.ID, "email": item.Email, "role": item.Role, "teamIds": item.TeamIDs, "expiresAt": item.ExpiresAt, "workspace": data.Workspace})
+				writeJSON(w, http.StatusOK, map[string]any{"id": item.ID, "email": item.Email, "role": item.Role, "teamIds": item.TeamIDs, "expiresAt": item.ExpiresAt, "workspace": s.signedWorkspaceLogo(r.Context(), data.Workspace)})
 				return
 			}
 		}
@@ -2137,7 +2137,7 @@ func (s *server) invitationPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": invitation.ID, "email": invitation.Email, "role": invitation.Role,
-		"teamIds": invitation.TeamIDs, "expiresAt": invitation.ExpiresAt, "workspace": workspace,
+		"teamIds": invitation.TeamIDs, "expiresAt": invitation.ExpiresAt, "workspace": s.signedWorkspaceLogo(r.Context(), workspace),
 	})
 }
 

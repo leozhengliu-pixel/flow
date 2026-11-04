@@ -119,7 +119,7 @@ func (s *server) inviteLinkPreview(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, inviteLinkPreview{
 			Token:               token,
-			Workspace:           data.Workspace,
+			Workspace:           s.signedWorkspaceLogo(r.Context(), data.Workspace),
 			AllowedAuthServices: allowed,
 			AlreadyMember:       already,
 		})
