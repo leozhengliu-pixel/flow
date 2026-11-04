@@ -6,6 +6,7 @@ import { MilestoneProgressIcon } from "@/components/issue/milestone-progress-ico
 import { isMilestoneDateOverdue, milestoneIssueProgress } from "@/components/issue/milestone-progress";
 import { toast } from "@/lib/toast";
 import { DisplayMenuActionRow, MyIssuesDisplayMenu } from "@/components/my-issues/my-issues-display-menu";
+import { issueDisplayEqual } from "@/components/my-issues/my-issues-display-defaults";
 import { MyIssuesFilterMenu } from "@/components/my-issues/my-issues-filter-menu";
 import { FilterIcon as Filter } from "@/components/ui/view-action-icons";
 import { MyIssuesFilterBar } from "@/components/my-issues/my-issues-filter-bar";
@@ -143,6 +144,7 @@ export function ProjectIssueDisplayMenu({
       toggles={projectDisplayToggles}
       groups={groups}
       labelGroupOptions={issueData ? labelGroups(issueData.labels) : []}
+      modified={!issueDisplayEqual(display, DEFAULT_PROJECT_ISSUE_DISPLAY)}
       onReset={() => onChange(DEFAULT_PROJECT_ISSUE_DISPLAY)}
       phoneIssueMenu
       phoneExtraActions={<DisplayMenuActionRow label="Insights" checked={insightsOpen} onChange={value => onInsightsOpenChange?.(value)} />}

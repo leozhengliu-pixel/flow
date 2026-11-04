@@ -11,7 +11,7 @@ import { MyIssuesBulkActionBar, type MyIssuesBulkAction, type MyIssuesBulkAction
 import { MyIssuesDetailsPane, type MyIssuesSummaryItem, type MyIssuesSummaryTab } from './my-issues-details-pane'
 import { MyIssuesFilterBar, type MyIssuesAppliedFilter } from './my-issues-filter-bar'
 import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from './my-issues-list'
-import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
+import { defaultMyIssuesDisplayOptions, issueDisplayEqual } from './my-issues-display-defaults'
 import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, type MyIssuesFilterOption, type MyIssuesView } from './my-issues-surface'
 import { useMyIssuesController } from './use-my-issues-controller'
 import { assigneeUpdate } from '@/lib/agent-members'
@@ -223,6 +223,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         myIssuesPhoneMenu: true,
         groups: groupSummaries(displayedGroups),
         labelGroupOptions: labelGroups(data.labels),
+        modified: !issueDisplayEqual(controller.display, defaultMyIssuesDisplayOptions),
         onReset: () => controller.changeDisplay(defaultMyIssuesDisplayOptions),
         resetLabel: 'Reset to default',
       }}

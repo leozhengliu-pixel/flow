@@ -78,7 +78,7 @@ describe('display options: nested sub-issues', () => {
     expect(screen.getByRole('checkbox', { name: 'Show empty columns' })).toBeInTheDocument()
   })
 
-  it('changes the same sub-team option on desktop and keeps group controls accessible', async () => {
+  it('changes the same sub-team option on desktop and has no Groups section', async () => {
     const onChange = vi.fn()
     const onReset = vi.fn(), onSaveDefault = vi.fn()
     render(<I18nProvider><MyIssuesDisplayMenu open desktopIssueMenu onOpenChange={vi.fn()} options={createIssueDisplayOptions({ layout: 'board' })} onChange={onChange} toggles={['subTeam']} groups={[{ id: 'one', label: 'One', count: 1 }, { id: 'two', label: 'Two', count: 2 }]} onReset={onReset} onSaveDefault={onSaveDefault} saveDefaultLabel="Set default for everyone"/></I18nProvider>)
@@ -86,13 +86,17 @@ describe('display options: nested sub-issues', () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ showSubTeamIssues: false }))
     expect(screen.getByText('Columns')).toBeVisible()
     expect(screen.getByText('Rows')).toBeVisible()
-    expect(screen.getByText('Groups', { selector: 'summary' }).parentElement).not.toHaveAttribute('open')
-    await userEvent.click(screen.getByText('Groups', { selector: 'summary' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Hide group One' }))
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ hiddenGroupIds: ['one'] }))
+    // The desktop reference menu has no Groups section: groups are hidden from the column or group header menu.
+    expect(screen.queryByText('Groups')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Reset' }))
     await userEvent.click(screen.getByRole('button', { name: 'Set default for everyone' }))
     expect(onReset).toHaveBeenCalledOnce()
     expect(onSaveDefault).toHaveBeenCalledOnce()
+  })
+  it('marks the Display button only when the options differ from the view defaults', () => {
+    const { rerender } = render(<I18nProvider><MyIssuesDisplayMenu open={false} onOpenChange={vi.fn()} options={createIssueDisplayOptions({ grouping: 'status' })} onChange={vi.fn()}/></I18nProvider>)
+    expect(screen.getByRole('button', { name: 'Display options' }).querySelector('[class*=triggerDot]')).toBeNull()
+    rerender(<I18nProvider><MyIssuesDisplayMenu open={false} modified onOpenChange={vi.fn()} options={createIssueDisplayOptions({ grouping: 'status' })} onChange={vi.fn()}/></I18nProvider>)
+    expect(screen.getByRole('button', { name: 'Display options' }).querySelector('[class*=triggerDot]')).not.toBeNull()
   })
 })

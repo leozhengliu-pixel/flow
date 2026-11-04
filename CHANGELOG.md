@@ -14,6 +14,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Give primary buttons a hover fill (Create issue), stop disabled comment buttons from painting hover, and draw sidebar, header and bottom-bar focus rings as a 1px accent ring (none on section toggles and team rows).
 - Show whole-character initials for emoji-led names, colour every person avatar by user id, truncate long assignee names in the issue property column, and mention people written next to CJK text or with one-character names.
+- Match the desktop issue board to the reference: card and pill fills, hover fill and default cursor, a sticky column header over a column panel, sub-issue progress as an inline pill, the shared column menu surface, no top padding, and rows that fit their content.
+
+- Match the issue display menu to the reference: wider layout tabs, flat controls, the 10x23 select chevron, tighter section captions and an 8px-inset footer; the Groups section is phone-only.
+
+- Restore the submenu triangle stylesheet so the triangle is right-aligned in every shared menu, and show the phone Display dot only when the options differ from the view defaults.
 
 - Open search date presets before a custom date dialog, with two desktop calendars, typed periods, all five precisions and draft Apply or Cancel actions.
 

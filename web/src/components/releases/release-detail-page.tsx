@@ -9,7 +9,7 @@ import { MentionTextField } from '@/components/editor/mention-text-field'
 import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { MyIssuesDisplayMenu } from '@/components/my-issues/my-issues-display-menu'
-import { defaultMyIssuesDisplayOptions } from '@/components/my-issues/my-issues-display-defaults'
+import { defaultMyIssuesDisplayOptions, issueDisplayEqual } from '@/components/my-issues/my-issues-display-defaults'
 import { MyIssuesFilterBar, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-bar'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
 import { MyIssuesList, type MyIssuesEditableProperty } from '@/components/my-issues/my-issues-list'
@@ -42,6 +42,8 @@ import { useReleaseActions } from './use-release-actions'
 type Props = { data: BootstrapData; pipeline: ReleasePipeline; release: Release; tab: ReleaseRouteTab; onNavigate: (path: string) => void; onOpenSidebar: () => void; onReload: () => Promise<void> }
 
 /** The reference app ReleasePage: Issues / Release notes tabs plus the release details card. */
+const releaseDefaultDisplay = (): MyIssuesDisplayOptions => ({ ...defaultMyIssuesDisplayOptions, grouping: 'status', completedWindow: 'all', properties: new Set(defaultMyIssuesDisplayOptions.properties) })
+
 export function ReleaseDetailPage({ data, pipeline, release, tab, onNavigate, onOpenSidebar, onReload }: Props) {
   const { t } = useI18n()
   const workspace = data.workspace.urlKey
@@ -73,7 +75,7 @@ export function ReleaseDetailPage({ data, pipeline, release, tab, onNavigate, on
   const [filterOpen, setFilterOpen] = useState(false)
   const [displayOpen, setDisplayOpen] = useState(false)
   const [filters, setFilters] = useState<MyIssuesAppliedFilter[]>([])
-  const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => ({ ...defaultMyIssuesDisplayOptions, grouping: 'status', completedWindow: 'all', properties: new Set(defaultMyIssuesDisplayOptions.properties) }))
+  const [display, setDisplay] = useState<MyIssuesDisplayOptions>(releaseDefaultDisplay)
   const issueOptions = useMemo(() => explorerPropertyOptions(data, issuesState.issues), [data, issuesState.issues])
   const toggleIssueFilter = (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => { const label = ISSUE_FILTER_LABELS[field]; if (label) setFilters(current => toggleFilterOption(current, field, label, option)) }
   return <main className="main-panel flow-releases-page flow-release-page" aria-label={`${pipeline.name} ${release.name}`}>
@@ -87,7 +89,7 @@ export function ReleaseDetailPage({ data, pipeline, release, tab, onNavigate, on
       <div className="flow-releases-subheader__actions">
         {tab === 'issues' && <>
           <MyIssuesFilterMenu open={filterOpen} onOpenChange={open => { setFilterOpen(open); if (open) setDisplayOpen(false) }} filters={filters} options={field => explorerFilterOptions(field, issueOptions)} onToggle={toggleIssueFilter} trigger={<ToolbarPillButton label={t('Add filter')} tooltip={t('Filter')} shortcut="F"><FilterIcon/></ToolbarPillButton>}/>
-          <MyIssuesDisplayMenu open={displayOpen} onOpenChange={open => { setDisplayOpen(open); if (open) setFilterOpen(false) }} options={display} onChange={setDisplay}/>
+          <MyIssuesDisplayMenu open={displayOpen} onOpenChange={open => { setDisplayOpen(open); if (open) setFilterOpen(false) }} options={display} modified={!issueDisplayEqual(display, releaseDefaultDisplay())} onChange={setDisplay}/>
         </>}
         <ToolbarPillButton aria-pressed={detailsOpen} label={t(detailsOpen ? 'Close release details' : 'Open release details')} onClick={() => setDetailsOpen(value => !value)}><DetailsPanelIcon/></ToolbarPillButton>
       </div>

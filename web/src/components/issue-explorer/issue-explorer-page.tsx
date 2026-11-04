@@ -330,6 +330,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
     availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
     toggles: displayToggles(scope.kind === 'team' ? scope.team.id : undefined, data),
+    modified: displayModified,
     onReset: displayModified ? resetDisplay : undefined,
     resetLabel: desktop ? 'Reset' : savedView ? 'Reset to view default' : teamDefault ? 'Reset to team default' : 'Reset to default',
     onSaveDefault: displayModified ? saveDisplayAsViewDefault : undefined,

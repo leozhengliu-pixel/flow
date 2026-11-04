@@ -2,7 +2,7 @@
 .triggerDot{display:none}.trigger:hover,.trigger[aria-pressed=true],.trigger[data-state=open]{background:var(--bg-active);color:var(--text)}.trigger:focus-visible{outline:1px solid var(--focus-ring);outline-offset:0}.trigger svg{width:16px;height:16px}
 .popover,.selectMenu{z-index:650;outline:0;border:.5px solid var(--theme-border-strong);background:var(--theme-surface-2);box-shadow:0 3px 8px var(--shadow-color-heavy),0 2px 5px var(--shadow-color-heavy),0 1px 1px var(--shadow-color-heavy);color:var(--theme-text-primary);font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif}
 .popover{width:301px;height:min(531px,calc(100vh - 103px));padding:8px 0 0;overflow:auto;border-radius:12px;scrollbar-width:none;animation:popoverIn 120ms ease-out}.popover::-webkit-scrollbar{display:none}
-.layoutTabs{height:32px;margin:6px 16px 8px;display:flex;align-items:center;gap:6px;border-radius:5px}.layoutTabs button{height:28px;flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 8px;border:.5px solid transparent;border-radius:9999px;background:var(--control-muted-bg);color:var(--theme-text-secondary);font:500 12px/20px inherit;cursor:pointer}.layoutTabs button[aria-selected=true]{background:var(--theme-surface-active);box-shadow:0 1px 2px var(--shadow-color-deep);color:var(--bright)}.layoutTabs button:disabled{opacity:1;cursor:not-allowed}
+.layoutTabs{height:32px;margin:6px 16px 8px;display:flex;align-items:center;gap:6px;border-radius:5px}.layoutTabs button{height:28px;flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 8px;border:.5px solid transparent;border-radius:9999px;background:var(--control-muted-bg);color:var(--theme-text-secondary);font:500 12px/20px inherit;cursor:pointer}.layoutTabs button[aria-selected=true]{background:var(--theme-surface-active);color:var(--bright)}.layoutTabs button:disabled{opacity:1;cursor:not-allowed}
 .desktopModeIcon,.desktopSortIcon{display:none}.phoneModeIcon,.phoneSortIcon{display:block;width:14px;height:14px;flex:0 0 14px;fill:currentColor}.desktopSelectChevron{display:block}.phoneSelectChevron{display:none}
 .popover .nestedSelectRow{display:none}.popover[data-issue-display-menu="true"] .nestedSelectRow{display:grid}
 .section{padding:8px 16px}.section+.section{border-top:.5px solid var(--theme-border)}
@@ -44,15 +44,19 @@
 .rowLabel,.selectField>span,.switchRow{color:var(--pk-muted);font-size:12px;font-weight:500}
 .sectionLabel{height:auto;padding:6px 0 7px;color:var(--pk-muted);font-size:12px;font-weight:500}
 .section>.sectionLabel:first-child{color:var(--pk-text)}
-.layoutTabs button{position:relative;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-muted);font-size:12px;font-weight:500}
-.layoutTabs button[aria-selected=true]{background:var(--pk-control-selected);box-shadow:var(--pk-control-ring-selected);color:var(--pk-text-strong)}
-.selectTrigger{position:relative;padding:1px 18px 1px 8px;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-text);font-size:12px;font-weight:400}
+.layoutTabs button{position:relative;background:var(--pk-control);color:var(--pk-muted);font-size:12px;font-weight:500}
+.layoutTabs button[aria-selected=true]{background:var(--pk-control-selected);color:var(--pk-text-strong)}
+.selectTrigger{position:relative;padding:1px 18px 1px 8px;background:var(--pk-select);color:var(--pk-text);font-size:12px;font-weight:400}
 .selectTrigger>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .selectTrigger>span:last-child{position:absolute;right:6px;top:50%;transform:translateY(-50%)}
 .selectTrigger:hover:not(:disabled),.selectTrigger[data-state=open]{background:var(--pk-control-selected)}
-.propertyGrid button{background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-muted);font-size:12px;font-weight:500}
+.propertyGrid button{background:var(--pk-control);color:var(--pk-muted);font-size:12px;font-weight:500}
 .propertyGrid button[data-active=false]:hover:not(:disabled){background:var(--control-chip-hover-bg);color:var(--pk-text)}
-.propertyGrid button[data-active=true]{background:var(--pk-chip-on);box-shadow:var(--pk-chip-on-ring);color:var(--pk-text-strong)}
+.propertyGrid button[data-active=true]{background:var(--pk-chip-on);color:var(--pk-text-strong)}
+/* The dark reference controls are flat fills; the light controls keep their hairline ring. */
+:global(:root[data-theme="light"]) :is(.layoutTabs button,.selectTrigger,.propertyGrid button){box-shadow:var(--pk-control-ring)}
+:global(:root[data-theme="light"]) .layoutTabs button[aria-selected=true]{box-shadow:var(--pk-control-ring-selected)}
+:global(:root[data-theme="light"]) .propertyGrid button[data-active=true]{box-shadow:var(--pk-chip-on-ring)}
 .footer{background:var(--pk-surface);border-top:.5px solid var(--pk-divider)}
 /* The list popover has no leading "List options" label: its single section label reads as a muted caption. */
 .popover[data-list-display] .section>.sectionLabel:first-child{color:var(--pk-muted)}
@@ -73,16 +77,28 @@
 
 @media (min-width: 1024px) {
   .popover[data-my-issues-display-menu="true"] .nestedSelectRow { display: none; }
-  .layoutTabs button{padding-block:6px}
+  /* The tab field is 284px wide (8px in from the menu edge) with 141px cells; each tab sits 2px inside its cell. */
+  .layoutTabs{margin:6px 8px;gap:2px;padding:0}
+  .layoutTabs button{margin:0 2px;padding-block:6px}
   .selectTrigger{width:116px;line-height:normal}
   .popover[data-layout=board] .selectTrigger{width:160px}
   .desktopModeIcon,.desktopSortIcon{display:none}
   .phoneModeIcon,.phoneSortIcon{display:block}
   .popover { max-height: calc(100dvh - 103px); }
   .footerButton { font-family: inherit; font-size: 12px; font-weight: 500; line-height: normal; }
-  .footerButton:not(.footerPrimary) { color: var(--text); }
+  .footerButton:not(.footerPrimary) { color: var(--theme-text-primary); }
   .footerPrimary { color: var(--issue-display-default-link); }
-  details.section > summary { display: list-item; cursor: pointer; }
+  /* Section captions sit 8px under the divider on a 14.5px line; the chips start 12px under their caption. */
+  .popover[data-issue-display-menu="true"] .sectionLabel { padding: 8px 0 2px; line-height: normal; }
+  .popover[data-issue-display-menu="true"] .sectionLabel + .propertyGrid { margin-top: 10px; }
+  .footer { box-sizing: border-box; height: 36px; align-items: center; gap: 4px; padding: 0 8px; border-top-color: var(--pk-border); }
+}
+
+@media (min-width: 768px) {
+  /* The reference chevron is a 10x23 box: the 9x5 glyph centred in the select's height. */
+  .selectTrigger>span:last-child{top:0;transform:none}
+  .desktopSelectChevron{color:var(--pk-muted);line-height:0}
+  .desktopSelectChevron svg{display:block;width:10px;height:23px;color:inherit}
 }
 
 @media (max-width: 767px) {

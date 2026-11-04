@@ -11,6 +11,7 @@ import { formatEstimatePoints, sumEstimatePoints, teamUsesEstimates } from '@/li
 import { IssueReleaseChip } from '@/components/issue/issue-release-chip'
 import { Virtuoso } from 'react-virtuoso'
 import { toast } from '@/lib/toast'
+import { FlowDropdownMenuContent, FlowMenuItem, FlowMenuSeparator } from '@/components/ui/row-context-menu'
 import { IssueAssigneeSlot } from '@/components/my-issues/issue-assignee-slot'
 import { useTeamStatusOptions } from '@/components/my-issues/use-team-status-options'
 import { IssueContextMenu, IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
@@ -73,13 +74,13 @@ function SwimlaneMenu({ collapsed, onSelectAll, onToggle, onExpandAll, onCollaps
   const { t } = useI18n()
   return <DropdownMenu.Root>
     <DropdownMenu.Trigger asChild><button className={styles.headerButton} type="button" aria-label={t('Row options')}><Ellipsis size={14}/></button></DropdownMenu.Trigger>
-    <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" aria-label={t('Row options')} className={styles.columnMenu} align="start" sideOffset={4}>
-      <DropdownMenu.Item className={styles.columnMenuItem} onSelect={onSelectAll}>{t('Select all in row')}</DropdownMenu.Item>
-      <DropdownMenu.Separator className={styles.columnMenuSeparator}/>
-      <DropdownMenu.Item className={styles.columnMenuItem} onSelect={onToggle}>{t(collapsed ? 'Expand row' : 'Collapse row')}</DropdownMenu.Item>
-      <DropdownMenu.Item className={styles.columnMenuItem} onSelect={onExpandAll}>{t('Expand all rows')}</DropdownMenu.Item>
-      <DropdownMenu.Item className={styles.columnMenuItem} onSelect={onCollapseAll}>{t('Collapse all rows')}</DropdownMenu.Item>
-    </DropdownMenu.Content></DropdownMenu.Portal>
+    <DropdownMenu.Portal><FlowDropdownMenuContent label={t('Row options')} align="start" sideOffset={4}>
+      <FlowMenuItem label="Select all in row" onSelect={onSelectAll}/>
+      <FlowMenuSeparator/>
+      <FlowMenuItem label={collapsed ? 'Expand row' : 'Collapse row'} onSelect={onToggle}/>
+      <FlowMenuItem label="Expand all rows" onSelect={onExpandAll}/>
+      <FlowMenuItem label="Collapse all rows" onSelect={onCollapseAll}/>
+    </FlowDropdownMenuContent></DropdownMenu.Portal>
   </DropdownMenu.Root>
 }
 
@@ -271,7 +272,7 @@ export function IssueBoardGroupHeader({group,estimateSum,createIssueLabel='Add n
         />}
         <strong data-board-column-title data-i18n-ignore>{group.label}</strong><button className={styles.count} data-board-column-count type="button" aria-label={[t(`${count} issues`), pointsLabel].filter(Boolean).join(', ')}>{estimateSum !== undefined && <EstimateIcon className={styles.countEstimate} size={14}/>}<span className={styles.countValue}><span className={styles.issueCount}>{count}</span>{estimateSum !== undefined && <span className={styles.estimateValue} aria-label={pointsLabel}>{formatEstimatePoints(estimateSum)}</span>}</span></button>
         <div className={styles.columnActions}>
-        <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.headerButton} type="button" aria-label={t('Open menu')}><span className={styles.desktopIcon}><Ellipsis size={14}/></span><span className={styles.phoneIcon}><BoardEllipsisIcon/></span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" aria-label={t('Open menu')} className={styles.columnMenu} align="end" sideOffset={4}><DropdownMenu.Item className={styles.columnMenuItem} onSelect={()=>group.issues.forEach(issue=>onSelectIssue?.(issue.id,true,false))}>{t(count>group.issues.length?'Select loaded issues':'Select all in column')}</DropdownMenu.Item><DropdownMenu.Item className={styles.columnMenuItem} onSelect={()=>onHideGroup?.(group.id)}>{t('Hide column')}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+        <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.headerButton} type="button" aria-label={t('Open menu')}><span className={styles.desktopIcon}><Ellipsis size={14}/></span><span className={styles.phoneIcon}><BoardEllipsisIcon/></span></button></DropdownMenu.Trigger><DropdownMenu.Portal><FlowDropdownMenuContent label={t('Open menu')} align="start" sideOffset={4}><FlowMenuItem label={count>group.issues.length?'Select loaded issues':'Select all in column'} onSelect={()=>group.issues.forEach(issue=>onSelectIssue?.(issue.id,true,false))}/><FlowMenuItem label="Hide column" onSelect={()=>onHideGroup?.(group.id)}/></FlowDropdownMenuContent></DropdownMenu.Portal></DropdownMenu.Root>
         <button className={styles.headerButton} type="button" aria-label={t(createIssueLabel)} onClick={() => onCreateIssue?.(group)}><span className={styles.desktopIcon}><Plus size={15}/></span><span className={styles.phoneIcon}><BoardPlusIcon/></span></button>
         </div>
       </header>
@@ -306,28 +307,30 @@ export function IssueBoardCard({ issue, properties, propertyOptions, selected, d
       {properties.has('status') && <RowCommandPicker propertyLabel="Status" label={`Change status. Current status is ${issue.state.name}`} searchLabel="Change status..." searchShortcut="S" selectedIds={[issue.state.id]} options={scopedOptions.status} onSelect={value => change('status', value)} triggerClassName={styles.status} trigger={<StatusIcon state={issue.state} size={14}/>}/>}
       <strong className={styles.title} data-board-card-title data-single-line={Boolean(issue.ancestors?.length) && !properties.has('id')} data-i18n-ignore>{issue.title}</strong>
     </div>
-    <div className={styles.cardFooter}><CardProperties issue={issue} properties={properties} propertyOptions={propertyOptions} onPropertyChange={change}/>{issue.subIssueProgress&&issue.subIssues?.length?<SubIssueProgress progress={issue.subIssueProgress} subIssues={issue.subIssues} onOpenSubIssue={onOpenSubIssue}/>:null}</div>
+    <CardProperties issue={issue} properties={properties} propertyOptions={propertyOptions} onPropertyChange={change} onOpenSubIssue={onOpenSubIssue}/>
     {(properties.has('created') || properties.has('updated')) && <div className={styles.dateBadges}>{properties.has('created') && <span className={styles.created} data-board-card-date>Created {formatDate(issue.createdAt)}</span>}{properties.has('updated') && <span className={styles.created} data-board-card-date>Updated {formatDate(issue.updatedAt)}</span>}</div>}
     </div>
   </a></ContextMenu.Trigger><ContextMenu.Portal><IssueContextMenu editable issue={issue} options={scopedOptions} onPropertyChange={change}/></ContextMenu.Portal></ContextMenu.Root>
 }
 
-function CardProperties({ issue, properties, propertyOptions, onPropertyChange }: { issue: MyIssuesRowData; properties: ReadonlySet<MyIssuesProperty>; propertyOptions: MyIssuesRowPropertyOptions; onPropertyChange: (property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void> }) {
+function CardProperties({ issue, properties, propertyOptions, onPropertyChange, onOpenSubIssue }: { issue: MyIssuesRowData; properties: ReadonlySet<MyIssuesProperty>; propertyOptions: MyIssuesRowPropertyOptions; onPropertyChange: (property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onOpenSubIssue: (issue: MyIssuesRowData) => void }) {
   const labels = properties.has('labels') ? issue.labels ?? [] : []
   const shownLabels = labels.slice(0, 4)
   const hiddenLabelCount = labels.length - shownLabels.length
   const estimateSettings = useTeamEstimateSettings()(issue.teamId)
   const hasEstimateContext = Boolean(useIssueRowActions())
   const showEstimate = properties.has('estimate') && issue.estimate != null && issue.estimate >= 0 && (hasEstimateContext ? teamUsesEstimates(estimateSettings) : issue.estimate > 0)
-  const visible = properties.has('priority') || showEstimate || Boolean(properties.has('sla') && issue.sla) || Boolean(properties.has('project') && issue.project) || Boolean(properties.has('cycle') && issue.cycleId) || shownLabels.length > 0 || Boolean(properties.has('dueDate') && issue.dueDate) || Boolean(properties.has('release') && issue.releaseCount) || Boolean(properties.has('links') && issue.linkCount) || Boolean((properties.has('pullRequests') && issue.pullRequestCount) || issue.blockedByCount || issue.blockingCount) || Boolean(properties.has('timeInStatus') && issue.timeInStatusMinutes != null) || Boolean(properties.has('myActivity') && issue.myActivityAt) || Boolean(properties.has('customers') && issue.customerCount) || Boolean(properties.has('customerRevenue') && issue.customers?.some(customer => (customer.annualRevenue ?? 0) > 0))
+  const hasSubIssues = Boolean(issue.subIssueProgress && issue.subIssues?.length)
+  const visible = properties.has('priority') || showEstimate || hasSubIssues || Boolean(properties.has('sla') && issue.sla) || Boolean(properties.has('project') && issue.project) || Boolean(properties.has('cycle') && issue.cycleId) || shownLabels.length > 0 || Boolean(properties.has('dueDate') && issue.dueDate) || Boolean(properties.has('release') && issue.releaseCount) || Boolean(properties.has('links') && issue.linkCount) || Boolean((properties.has('pullRequests') && issue.pullRequestCount) || issue.blockedByCount || issue.blockingCount) || Boolean(properties.has('timeInStatus') && issue.timeInStatusMinutes != null) || Boolean(properties.has('myActivity') && issue.myActivityAt) || Boolean(properties.has('customers') && issue.customerCount) || Boolean(properties.has('customerRevenue') && issue.customers?.some(customer => (customer.annualRevenue ?? 0) > 0))
   if (!visible) return null
   return <div className={styles.cardMeta}>
     {properties.has('priority') && <RowCommandPicker propertyLabel="Priority" label={`${priorityName(issue.priority)} priority`} searchLabel="Change priority to..." selectedIds={[String(issue.priority)]} options={propertyOptions.priority} onSelect={value => onPropertyChange('priority', value)} triggerClassName={`${styles.metaTrigger} ${styles.iconBadge}`} trigger={<PriorityIcon priority={issue.priority} size={14}/>}/>}
     {showEstimate && <span className={styles.cardBadge} data-board-card-badge><EstimateChip className={styles.badge} value={issue.estimate!} settings={estimateSettings} label={`Estimate ${issue.estimate}`} board/></span>}
+    {hasSubIssues && <SubIssueProgress className={styles.subIssueBadge} progress={issue.subIssueProgress!} subIssues={issue.subIssues!} onOpenSubIssue={onOpenSubIssue}/>}
     {properties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
     {properties.has('release') && issue.releases?.length ? <IssueReleaseChip className={styles.badge} iconSize={12} releases={issue.releases}/> : null}
     {properties.has('links') && issue.linkCount ? <span className={styles.badge}><Link2 size={12}/><span>{issue.linkCount}</span></span> : null}
-    {(properties.has('pullRequests') || issue.blockedByCount || issue.blockingCount) ? <span className={styles.badge}><IssueWidgetAdornments showPullRequests={properties.has('pullRequests')} pullRequestLifecycle={issue.pullRequestLifecycle} pullRequestCount={issue.pullRequestCount ?? 0} blockedByCount={issue.blockedByCount ?? 0} blockingCount={issue.blockingCount ?? 0} blockedByIds={issue.blockedByIds} blockingIds={issue.blockingIds} compact/></span> : null}
+    {((properties.has('pullRequests') && issue.pullRequestCount) || issue.blockedByCount || issue.blockingCount) ? <span className={styles.badge}><IssueWidgetAdornments showPullRequests={properties.has('pullRequests')} pullRequestLifecycle={issue.pullRequestLifecycle} pullRequestCount={issue.pullRequestCount ?? 0} blockedByCount={issue.blockedByCount ?? 0} blockingCount={issue.blockingCount ?? 0} blockedByIds={issue.blockedByIds} blockingIds={issue.blockingIds} compact/></span> : null}
     {properties.has('timeInStatus') && issue.timeInStatusMinutes != null ? <span className={styles.badge}><Clock3 size={12}/><span>{formatTimeInStatus(issue.timeInStatusMinutes)}</span></span> : null}
     {properties.has('myActivity') && issue.myActivityAt ? <span className={styles.badge}><span>{formatDate(issue.myActivityAt)}</span></span> : null}
     {properties.has('project') && issue.project && <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => onPropertyChange('project', value)} triggerClassName={`${styles.metaTrigger} ${styles.projectBadge}`} trigger={<><ProjectGlyph project={issue.project} size={14}/><span data-i18n-ignore>{issue.project.name}</span></>}/>}

@@ -22,6 +22,8 @@ export interface MyIssuesDisplayMenuProps {
   /** View toggles this surface can honor (the reference app showTriageIssues / showArchivedItems / showSubTeamIssues). */
   toggles?: ('triage' | 'archived' | 'subTeam')[]
   hideSubGrouping?: boolean
+  /** The options differ from the view's defaults: the phone Display button carries a dot. */
+  modified?: boolean
   /** Surfaces without an issue preview pane cannot offer the split layout. */
   hideSplit?: boolean
   /** Current groups for the Group ordering panel (the reference app ViewOptionsGroupsPanel): hide / show each group. */
@@ -86,7 +88,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'pullRequests', label: 'Pull requests' },
 ]
 
-export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, hideCompletedIssues = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false, desktopIssueMenu = false, myIssuesPhoneMenu = false, phoneExtraActions, extraActions }: MyIssuesDisplayMenuProps) {
+export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, hideCompletedIssues = false, modified = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view', phoneIssueMenu = false, desktopIssueMenu = false, myIssuesPhoneMenu = false, phoneExtraActions, extraActions }: MyIssuesDisplayMenuProps) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
   const popoverRef = useRef<HTMLDivElement>(null)
@@ -104,18 +106,17 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
   const visibleSubGroupingOptions = (availableGroupings ? subGroupingOptions.filter(option => availableGroupings.includes(option.value)) : subGroupingOptions).filter(option => option.value === 'none' || option.value !== options.grouping)
   const visibleOrderingOptions = availableOrderings ? orderingOptions.filter(option => availableOrderings.includes(option.value)) : orderingOptions
   const direction = options.orderDirection ?? defaultOrderDirection(options.ordering)
-  const GroupsSection = desktopIssueMenu ? 'details' : 'section'
   const issueNesting = (desktopIssueMenu || phoneIssueMenu) && !myIssuesPhoneMenu
 
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>
       <button type="button" data-issue-display-trigger={phoneIssueMenu ? 'true' : undefined} className={`${styles.trigger} ui-pill`} aria-label={t('Display options')} aria-pressed={open}>
         <DisplayIcon />
-        {(options.layout !== 'list' || options.grouping !== 'focus') && <span className={styles.triggerDot} aria-hidden="true"/>}
+        {modified && <span className={styles.triggerDot} aria-hidden="true"/>}
       </button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content ref={popoverRef} data-flow-motion="floating" data-phone-popover data-issue-display-menu={phoneIssueMenu ? 'true' : undefined} data-my-issues-display-menu={myIssuesPhoneMenu ? 'true' : undefined} data-layout={phoneIssueMenu ? options.layout : undefined} className={styles.popover} side="bottom" align="end" sideOffset={3} collisionPadding={11} avoidCollisions={phone ? false : undefined} aria-label={t('Display options')}>
+      <Popover.Content ref={popoverRef} data-flow-motion="floating" data-phone-popover data-issue-display-menu={phoneIssueMenu ? 'true' : undefined} data-my-issues-display-menu={myIssuesPhoneMenu ? 'true' : undefined} data-layout={phoneIssueMenu ? options.layout : undefined} className={styles.popover} side="bottom" align="end" sideOffset={phone ? 3 : 4} collisionPadding={11} avoidCollisions={phone ? false : undefined} aria-label={t('Display options')}>
         <div className={styles.layoutTabs} role="tablist" aria-label="Layout">
           <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><span className={styles.desktopModeIcon}><List size={14} /></span><PhoneModeIcon kind="list" />{t('List')}</button>
           <button type="button" role="tab" aria-selected={options.layout === 'board'} disabled={options.grouping === 'focus'} onClick={() => change({ layout: 'board' })}><span className={styles.desktopModeIcon}><LayoutGrid size={13} /></span><PhoneModeIcon kind="board" />{t('Board')}</button>
@@ -198,8 +199,9 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
             })}
           </div>
         </section>
-        {groups.length > 1 && options.grouping !== 'none' && <GroupsSection className={styles.section} aria-label={t('Group ordering')}>
-          {desktopIssueMenu ? <summary className={styles.sectionLabel}>{t('Groups')}</summary> : <span className={styles.sectionLabel}>{t('Groups')}</span>}
+        {/* Hiding a group is a group header / column menu command on desktop; the phone sheet lists the groups. */}
+        {phone && groups.length > 1 && options.grouping !== 'none' && <section className={styles.section} aria-label={t('Group ordering')}>
+          <span className={styles.sectionLabel}>{t('Groups')}</span>
           <div className={styles.groupList}>
             {groups.map(group => {
               const hidden = options.hiddenGroupIds.includes(group.id)
@@ -211,7 +213,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
             })}
           </div>
           {!options.showEmptyGroups && <p className={styles.groupHint}>{t('Empty groups are hidden')}</p>}
-        </GroupsSection>}
+        </section>}
         {phone && phoneExtraActions && <section className={styles.section} aria-label={t('Additional options')}>{phoneExtraActions}</section>}
         {(onReset || onSaveDefault) && <footer className={styles.footer}>
           {onReset && <button type="button" className={styles.footerButton} onClick={onReset}>{t(resetLabel)}</button>}

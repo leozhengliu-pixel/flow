@@ -14,23 +14,20 @@
   flex:1 1 auto;
 }
 .board{
-  --board-card-background:var(--theme-surface-1);
-  /* The reference app board cards keep their fill on hover (measured: same colour hovered and at rest). */
-  --board-card-hover:var(--board-card-background);
-  --board-card-border:color-mix(in srgb,var(--theme-text-primary) 8.3%,transparent);
-  --board-card-border-hover:color-mix(in srgb,var(--theme-text-primary) 8.3%,transparent);
+  /* The reference board card keeps pills on the resting fill while the card itself takes the hover fill. */
+  --board-card-background:var(--board-card-surface);
+  --board-card-hover:var(--board-card-surface-hover);
+  --board-card-border:var(--board-card-outline);
   --board-card-shadow:0 .5px 1px 1px var(--shadow-color-card);
   min-width:max-content;
   height:100%;
   display:flex;
   gap:0;
-  padding:8px 0 0 4px;
+  padding:0 0 0 4px;
   overflow:auto;
   scrollbar-color:var(--scrollbar-thumb) transparent;
   background:var(--bg-panel);
 }
-.columnMenu{z-index:600;width:175px;padding:6px 0;border:.5px solid var(--theme-border-strong);border-radius:12px;outline:0;background:var(--theme-surface-2);box-shadow:var(--menu-shadow);color:var(--theme-text-primary)}
-.columnMenuItem{height:32px;display:flex;align-items:center;padding:0 18px 0 14px;border-radius:8px;outline:0;font-size:13px}.columnMenuItem[data-highlighted]{background:var(--theme-surface-hover)}
 .hiddenColumns{width:164px;min-width:164px;min-height:100%;padding:15px 8px;border-left:.5px solid var(--theme-border);color:var(--theme-text-secondary);scroll-margin-left:40px}
 .hiddenHeader{height:28px;display:flex;align-items:center}
 .hiddenToggle{height:28px;display:flex;align-items:center;gap:0;padding:0 8px;border:0;background:transparent;color:inherit;font-size:12px;font-weight:500;cursor:pointer}
@@ -43,7 +40,6 @@
 .hiddenStatus b{display:inline-flex;align-items:center;gap:4px;color:var(--theme-text-secondary);font-weight:500}
 .hiddenStatus b svg{display:none}
 @media(min-width:1024px){
-  .board:has(>.hiddenColumns){padding-top:0}
   .hiddenColumns{width:350px;min-width:350px;flex:none;margin-left:auto;padding:0 12px 0 0;border-left:0}
   .hiddenHeader{height:50px;display:flex;align-items:center;gap:4px;background:var(--bg-panel)}
   .hiddenToggle{height:24px;gap:4px;margin-left:1px;padding:0 8px 0 6px;border:.5px solid transparent;border-radius:9999px;color:var(--issue-fg);line-height:normal}
@@ -59,10 +55,6 @@
   .hiddenStatus:focus-visible,.hiddenToggle:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
 }
 :global(:root[data-theme="light"]) .board{
-  --board-card-background:var(--theme-surface-2);
-  --board-card-hover:var(--board-card-background);
-  --board-card-border:var(--shadow-color-outline);
-  --board-card-border-hover:var(--shadow-color-outline);
   --board-card-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft);
   scrollbar-color:var(--scrollbar-thumb) transparent;
 }
@@ -123,10 +115,17 @@
   .columnHeaderWrap,.cards{margin-inline:4px}
   .columnHeader strong{margin-left:2px}
   .headerButton{padding-inline:2px}
-  .columnHeader{padding:2px 12px 0 18px}
+  /* The sticky header keeps a 50px row below its 2px top inset (the row overflows the 50px wrapper by 2px) over the column panel. */
+  .columnHeaderWrap{height:50px;position:sticky;top:0;z-index:14;background:var(--bg-panel)}
+  .columnHeader{position:relative;z-index:0;box-sizing:content-box;height:50px;padding:2px 12px 0 18px}
+  .columnHeader::before{content:"";position:absolute;z-index:-1;left:4px;right:4px;top:4px;height:46px;border-radius:5px 5px 0 0;background:color-mix(in srgb,var(--bg-sidebar) 40%,transparent)}
+  .column{display:flex;flex-direction:column}
+  .cards{flex:1 1 auto;z-index:0}
+  .cards::before{content:"";position:absolute;z-index:-1;left:4px;right:4px;top:0;bottom:0;background:linear-gradient(color-mix(in srgb,var(--bg-sidebar) 40%,transparent),color-mix(in srgb,var(--bg-sidebar) 10%,transparent))}
   .columnActions{gap:2px}
   .columnActions .headerButton{border-radius:9999px}
-  .count{display:flex;align-items:center;gap:4px;line-height:normal}
+  .count{display:flex;align-items:center;gap:4px;line-height:normal;font-variant-numeric:tabular-nums}
+  .countEstimate{margin-left:-1px}
 }
 .headerButton:hover{background:var(--bg-active);color:var(--bright)}
 .cards{
@@ -146,7 +145,7 @@
   background:var(--accent-primary);
   box-shadow:0 0 0 1px var(--accent-soft);
 }
-.cardBody{padding:8px 8px 13.5px}
+.cardBody{padding:8px 8px 12.75px}
 .card{
   display:block;
   text-decoration:none;
@@ -160,11 +159,11 @@
   background:var(--board-card-background);
   box-shadow:0 0 0 .5px var(--board-card-border),var(--board-card-shadow);
   color:var(--issue-fg);
-  cursor:grab;
+  cursor:default;
   outline:0;
-  transition:background-color .1s,box-shadow .1s,opacity .1s;
+  transition:box-shadow .1s,opacity .1s;
 }
-.card:hover,.card[data-selected=true]{background:var(--board-card-hover);box-shadow:0 0 0 .5px var(--board-card-border-hover),var(--board-card-shadow)}
+@media(hover:hover){.card:hover{background:var(--board-card-hover)}}
 .card[data-selected=true]{box-shadow:0 0 0 1px var(--selection-border),var(--board-card-shadow)}
 .card:focus-visible{box-shadow:0 0 0 1px var(--accent-primary),var(--board-card-shadow)}
 .card[data-dragging=true]{opacity:.38;cursor:grabbing}
@@ -183,7 +182,7 @@
 .cardTop{
   min-height:14.5px;
   display:flex;
-  align-items:flex-start;
+  align-items:baseline;
   padding:0 0 0 4px;
   color:var(--theme-text-secondary);
   font-size:12px;
@@ -194,11 +193,11 @@
 /* The assignee cell grows leftwards to hold the delegated agent's avatar. */
 .card:has(:global(.issue-assignee-cluster[data-delegated])) .cardTop{padding-right:46px}
 .assigneeTrigger:has(:global(.issue-assignee-cluster[data-delegated])){width:auto;border-radius:12px}
-.cardTop>span:first-child{flex:none}.cardFooter{display:flex;align-items:flex-end;gap:5px}.cardFooter>.cardMeta{min-width:0;flex:1}.cardFooter>button{margin-top:10px}
+.cardTop>span:first-child{flex:none}
 .assigneeTrigger{
   position:absolute;
   top:8px;
-  right:12px;
+  right:8px;
   width:18px;
   height:18px;
   display:grid;
@@ -270,7 +269,7 @@
   gap:6px;
   padding:0 8px;
   overflow:hidden;
-  border:.5px solid var(--theme-border);
+  border:.5px solid var(--board-card-pill-border);
   border-radius:48px;
   background:var(--board-card-background);
   color:var(--theme-text-secondary);
@@ -280,8 +279,12 @@
   white-space:nowrap;
 }
 .metaTrigger{margin:0;cursor:pointer}
+.cardMeta .subIssueBadge{max-width:100%;gap:6px;padding:0 8px;border-color:var(--board-card-pill-border);background:var(--board-card-background);color:var(--theme-text-secondary);font-size:12px;font-weight:450;line-height:normal}
+.cardMeta .subIssueBadge:hover,.cardMeta .subIssueBadge:focus-visible,.cardMeta .subIssueBadge[data-state=open]{border-color:var(--theme-border-strong);background:var(--theme-surface-hover);color:var(--theme-text-secondary)}
+.cardMeta .subIssueBadge:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
 .metaTrigger:hover,.labelsTrigger:hover .badge{border-color:var(--theme-border-strong);background:var(--theme-surface-hover)}
-.badge>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* The reference app leaves 1px after the text of every pill. */
+.badge>span:last-child,.metaTrigger>span:last-child,.cardMeta .subIssueBadge>span:last-child{min-width:0;margin-right:1px;overflow:hidden;text-overflow:ellipsis}
 .iconBadge{width:24px;padding:0 4.5px;justify-content:center;color:var(--issue-muted)}
 .projectBadge{max-width:230px}
 .labelsTrigger{
@@ -337,7 +340,7 @@
 .noAssignee{color:var(--theme-text-tertiary)}
 .created{
   display:block;
-  margin:10px 1px 0;
+  margin:10.75px 1.5px 0;
   color:var(--theme-text-secondary);
   font-size:12px;
   font-weight:450;
@@ -365,11 +368,9 @@
 }
 .column:hover .addIssue,.addIssue:focus-visible{opacity:1}
 .addIssue:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
-:global(:root[data-theme="light"]) .columnMenu{border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-control);color:var(--theme-text-primary)}
 :global(:root[data-theme="light"]) .columnHeader strong,:global(:root[data-theme="light"]) .card,:global(:root[data-theme="light"]) .title{color:var(--issue-fg)}
 :global(:root[data-theme="light"]) .cardTop,:global(:root[data-theme="light"]) .created{color:var(--muted)}
 :global(:root[data-theme="light"]) .headerButton:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
-:global(:root[data-theme="light"]) .badge,:global(:root[data-theme="light"]) .metaTrigger{border-color:var(--theme-border-strong)}
 @media(max-width:800px){
   .board{padding-left:0}
   .column{width:332px;min-width:332px}
@@ -382,10 +383,11 @@
 .swimlane{flex:0 0 auto}
 .swimlaneHeader{position:sticky;left:0;height:32px;display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--theme-text-primary);font-size:13px;font-weight:500}
 .swimlaneHeader .swimlaneCount{color:var(--issue-muted);font-size:12px;font-weight:400}
-.columnMenuSeparator{height:1px;margin:4px 0;background:var(--theme-border-subtle)}
 .swimlaneHeader>button:first-child{width:20px;height:20px;border:0;border-radius:999px;background:transparent;color:var(--theme-text-secondary);cursor:pointer}
 .swimlaneHeader>button:first-child[aria-expanded=false]{transform:rotate(-90deg)}
-.swimlaneBoard{height:min(560px,70vh)}
+/* A row is as tall as its tallest column, up to a cap; only longer rows scroll inside. */
+.swimlaneBoard{display:flex;flex-direction:column;max-height:min(560px,70vh)}
+.swimlaneBoard>.board{flex:1 1 auto;height:auto;min-height:0}
 
 /* Phone board: a fixed 298px column leaves the next column peeking in from the right. */
 @media(max-width:767px){
@@ -408,12 +410,10 @@
   .columnHeader strong{line-height:normal}
   .countValue{line-height:normal}
   .cardBody{padding-bottom:12.25px}
-  .board{--board-card-background:var(--board-card-surface);--board-card-border:var(--board-card-outline)}
   .cardTop{letter-spacing:-.24px;line-height:normal;color:var(--board-card-muted)}
   .title{color:var(--theme-text-primary)}
-  .created{margin-top:11.25px;line-height:normal;color:var(--board-card-muted)}
+  .created{margin:11.25px 1px 0;line-height:normal;color:var(--board-card-muted)}
   .noAssignee{color:var(--theme-text-primary);font-size:16px;font-weight:400;line-height:24px;opacity:.34}
-  .assigneeTrigger{right:8px}
   .column:hover .addIssue{opacity:0}
   .addIssue{opacity:0;width:calc(100% - 4px);height:28px;margin:0 2px;padding:6px 8px;line-height:normal;border:.5px solid var(--board-add-issue-border);border-radius:9999px;background:var(--board-add-issue-bg);color:var(--board-add-issue-fg);font-size:12px;font-weight:500}
   .addIssue:hover{background:var(--board-add-issue-bg);color:var(--board-add-issue-fg)}
