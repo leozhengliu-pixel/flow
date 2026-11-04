@@ -1095,6 +1095,12 @@ html:root body .agent-skills-trigger:not(#_) svg { width: 14px; height: 14px; }
     display: grid;
     grid-column: 1;
     border: 1px solid var(--menu-checkbox-hover-border);
+    visibility: hidden;
+  }
+  /* The empty box appears only under the pointer; checked rows always show their check. */
+  .property-command-surface.issue-labels-menu .property-command-options [role=option]:hover .property-command-checkbox,
+  .property-command-surface.issue-labels-menu .property-command-options [role=option][aria-checked=true] .property-command-checkbox {
+    visibility: visible;
   }
   .property-command-surface.issue-labels-menu .property-command-options [role=option][aria-checked=true] .property-command-checkbox {
     border: 0;
