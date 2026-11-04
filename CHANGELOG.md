@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Fix regressions: restore the phone team settings page padding and width, keep empty columns on project, cycle and My issues boards in the Hidden columns panel unless "Show empty columns" is on, list the phone cycle figures as label and value rows so "Days remaining" no longer wraps, insert names containing `$&` or `$'` into translated text as written, space the inbox row Snooze key and submenu triangle 6px apart, draw the workspace menu submenu triangle like every other menu, keep the issue composer title at the measured offset without padding, and restore the 120px Lead column on the projects list.
 
 - Keep the desktop sidebar and page controls docked above 880px, using one shared CSS and React layout boundary so 1024px no longer mixes a drawer with desktop controls.
+- Keep phone issue labels rounded and ellipsized within their slots, and preserve Error session pills and full assignee avatar clusters in My issues and team lists.
+
 - Wrap long project names in the editable overview title and commit with Enter or blur.
 
 - Fit the phone Teams search, group band and table to the viewport, keep Issued keys descriptions inside their card, and dim the default home-view suffix in the open menu.

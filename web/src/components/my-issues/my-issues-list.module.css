@@ -116,7 +116,10 @@
      right of its parent; the priority icon stays flush with the column's end. */
   .row{padding:0;grid-template-columns:10px calc(16px + var(--nested-depth,0) * 24px) 16px minmax(0,1fr);column-gap:8px;border-style:none}
   .row>.identifier,.row>.rowDate,.row>span[aria-hidden="true"]:last-child{display:none}
-  .badges{display:flex}
+  .badges{display:flex;flex-shrink:0}
+  .badgeSlot:last-child{flex-shrink:1}
+  .badgeSlot>.badge{flex:0 1 auto;min-width:0}
+  .badges .sessionPillTrigger{flex:0 0 auto}
   /* The avatar's 3px trigger padding sits inside the badge gap, so an estimate
      chip 5px from the trigger lands 8px from the avatar like the reference. */
   .badges:has(.estimateChip){gap:5px}
