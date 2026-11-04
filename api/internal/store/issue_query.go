@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strconv"
@@ -120,6 +121,7 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 	reviews := slices.Clone(data.Reviews)
 	for i := range reviews {
 		reviews[i].IssueIDs = slices.Clone(reviews[i].IssueIDs)
+		reviews[i].IssueLinkTypes = maps.Clone(reviews[i].IssueLinkTypes)
 		reviews[i].TeamReviewers = slices.Clone(reviews[i].TeamReviewers)
 	}
 	// Customer requests linked to issues: the team filter below only sees the
@@ -186,6 +188,7 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 				continue
 			}
 			review.IssueIDs = slices.DeleteFunc(review.IssueIDs, func(id string) bool { return !visible[id] })
+			maps.DeleteFunc(review.IssueLinkTypes, func(id, _ string) bool { return !visible[id] })
 			review.TeamReviewers = slices.DeleteFunc(review.TeamReviewers, func(id string) bool {
 				return !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == id })
 			})

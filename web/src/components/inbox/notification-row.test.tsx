@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -35,12 +35,40 @@ describe('inbox row hover actions', () => {
     const input = within(menu).getByRole('textbox', { name: 'Snooze time' })
     await user.type(input, 'not a date{Enter}')
     expect(onSnooze).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a valid date and time.')
     await user.clear(input)
     const start = Date.now()
     await user.type(input, 'in 3 hours{Enter}')
     expect(onSnooze).toHaveBeenCalledWith(notification, expect.objectContaining({ kind: 'custom' }))
     const chosen = new Date(onSnooze.mock.calls[0][1].snoozedUntil).getTime()
     expect(Math.abs(chosen - start - 3 * 60 * 60 * 1000)).toBeLessThan(5000)
+  })
+
+  it.each(['下午 4 点','2 天后','5 周后','两周后','下周','明年','下个月'])('accepts the Chinese snooze input %s',async query=>{
+    const user=userEvent.setup()
+    const onSnooze=vi.fn()
+    render(<InboxNotificationRow notification={notification} onOpen={vi.fn()} onReadChange={vi.fn()} onDelete={vi.fn()} onSnooze={onSnooze}/>)
+    screen.getByRole('link').focus()
+    await user.keyboard('h')
+    const menu=screen.getByRole('menu',{name:'Snooze notification'})
+    await waitFor(()=>expect(within(menu).getByRole('menuitem',{name:'An hour from now'})).toHaveFocus())
+    await user.type(within(menu).getByRole('textbox',{name:'Snooze time'}),`${query}{Enter}`)
+    expect(onSnooze).toHaveBeenCalledWith(notification,expect.objectContaining({kind:'custom'}))
+    expect(Date.parse(onSnooze.mock.calls[0][1].snoozedUntil)).toBeGreaterThan(Date.now())
+  })
+  it('keeps IME confirmation separate from submitting the snooze query',async()=>{
+    const user=userEvent.setup(),onSnooze=vi.fn()
+    render(<InboxNotificationRow notification={notification} onOpen={vi.fn()} onReadChange={vi.fn()} onDelete={vi.fn()} onSnooze={onSnooze}/>)
+    screen.getByRole('link').focus()
+    await user.keyboard('h')
+    const menu=screen.getByRole('menu',{name:'Snooze notification'})
+    await waitFor(()=>expect(within(menu).getByRole('menuitem',{name:'An hour from now'})).toHaveFocus())
+    const input=within(menu).getByRole('textbox',{name:'Snooze time'})
+    await user.type(input,'2 天后')
+    fireEvent.keyDown(input,{key:'Enter',isComposing:true})
+    expect(onSnooze).not.toHaveBeenCalled()
+    await user.keyboard('{Enter}')
+    expect(onSnooze).toHaveBeenCalledWith(notification,expect.objectContaining({kind:'custom'}))
   })
 
   it('retains the favorite keyboard action after simplifying the row menu', async () => {

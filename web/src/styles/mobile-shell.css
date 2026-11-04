@@ -120,6 +120,7 @@
   outline: none;
 }
 .phone-menu-search { padding: 6px 6px 0; }
+.phone-menu-surface.phone-menu-custom { max-height: calc(100dvh - var(--phone-menu-top) - 16px); overflow: visible; border: 0; background: transparent; box-shadow: none; }
 .phone-menu-search input {
   width: 100%; height: 40px; padding: 11px 12px; border: 0; border-radius: 12px;
   outline: none; background: transparent; color: var(--pk-text); font: 400 13px/normal var(--font);
@@ -154,6 +155,9 @@
   html:root body .phone-menu-surface:not(#_) .property-command-search-shortcut { display: none; }
   html:root body .phone-menu-surface:not(#_) .property-command-options:not(.virtual-property-options) { max-height: min(403px, calc(100dvh - var(--phone-menu-top) - 63px)); padding: 6px; overscroll-behavior: contain; }
   html:root body .phone-menu-surface:not(#_) .property-command-options [role="option"] { height: 46px; padding-inline: 12px; font-size: 15px; font-weight: 400; line-height: 22.5px; }
+  .phone-menu-surface.property-command-labels .property-command-options [role="option"] { grid-template-columns: 20px 16px minmax(0,1fr); gap: 8px; }
+  .phone-menu-surface.property-command-labels .property-command-checkbox { justify-self: start; margin-left: 1px; }
+  .phone-menu-surface.property-command-labels .option-dot { width: 9px; height: 9px; flex-basis: 9px; }
   html:root body .phone-menu-surface:not(#_) .property-command-group { font-size: 13px; }
   html:root body .phone-menu-surface:not(#_):has(.phone-menu-heading) .property-command-options:not(.virtual-property-options) { max-height: min(369px, calc(100dvh - var(--phone-menu-top) - 97px)); }
 }

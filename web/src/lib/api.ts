@@ -1324,6 +1324,7 @@ export function updateReview(
       | "status"
       | "reviewerIds"
       | "issueIds"
+      | "issueLinkTypes"
       | "favorite"
       | "draft"
       | "branchState"

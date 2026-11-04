@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Check, ChevronRight } from 'lucide-react'
+import { Check, ChevronRight, Settings as TeamSettingsIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { toast } from '@/lib/toast'
@@ -12,7 +12,7 @@ import { confirmAction } from '@/components/ui/action-dialog-service'
 import { PULSE_EVENT, sessionPulseChoice, teamPulseSubscribed, usePulseSubscription } from '@/lib/pulse-subscriptions'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { SlackIcon } from '@/components/issue/issue-icons'
-import { TeamSettingsIcon, TeamArchiveIcon } from './team-menu-icons'
+import { TeamArchiveIcon } from './team-menu-icons'
 import { teamLeaveDisabledReason } from '@/lib/team-access'
 import type { BootstrapData, Team } from '@/types/flow'
 import { IntegrationBrandIcon } from '@/components/settings/integration-brand-icon'
@@ -105,7 +105,7 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
     else if (label === 'Leave team…') void leave()
     else if (label === 'Copy URL') void navigator.clipboard.writeText(`${location.origin}${teamHomePath(data.workspace.urlKey, team.key)}`).then(() => toast.success(t('Team URL copied to clipboard'))).catch(error => toast.error(t('Could not copy URL'), { description: String(error) }))
   }
-  const icon = (label: string) => label === 'Team settings' ? <TeamSettingsIcon/> : label === 'Open archive' ? <TeamArchiveIcon/> : label === notifyLabel ? (chat.provider ? <IntegrationBrandIcon provider={chat.provider} size={16}/> : <SlackIcon/>) : label === 'Leave team…' ? <span className="sidebar-team-menu-icon-spacer"/> : <ViewGlyph color="currentColor" icon={label === 'Copy URL' ? 'Link' : label === 'Subscribe' ? 'Subscribe' : 'Favorite'}/>
+  const icon = (label: string) => label === 'Team settings' ? <TeamSettingsIcon/> : label === 'Open archive' ? <TeamArchiveIcon/> : label === notifyLabel ? (chat.provider ? <IntegrationBrandIcon provider={chat.provider} size={16}/> : <SlackIcon monochrome/>) : label === 'Leave team…' ? <span className="sidebar-team-menu-icon-spacer"/> : <ViewGlyph color="currentColor" icon={label === 'Copy URL' ? 'Link' : label === 'Subscribe' ? 'Subscribe' : 'Favorite'}/>
   return <DropdownMenu.Root open={open} onOpenChange={value => { setOpen(value); if (!value) setQuery('') }}>
     <DropdownMenu.Trigger asChild onPointerDown={event => {
       // Opening on pointerdown can put a menu item under the same pointerup.
@@ -128,8 +128,8 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
       }}/></div>
       {!groups.length && <div className="sidebar-team-menu-empty" role="status">{t('No results')}</div>}
       {groups.map((group, index) => <div className="sidebar-team-menu-group" key={index}>{index > 0 && <DropdownMenu.Separator/>}{group.map(label => {
-        if (label === 'Subscribe') return <MenuSubmenu key={label} kit={DropdownMenu} label={t(label)} trigger={<>{icon(label)}<span>{t(label)}</span><ChevronRight className="menu-chevron"/></>} contentProps={{ 'data-flow-motion': 'floating', className: 'sidebar-popover sidebar-team-subscribe-menu', sideOffset: -2, collisionPadding: 8 }}>
-          {notifications.map(([event, label], index) => <div className="sidebar-team-subscribe-group" key={event}>{index === 0 && <DropdownMenu.Label>{t('Inbox notifications')}</DropdownMenu.Label>}{index === 3 && <DropdownMenu.Label>{t('Pulse updates')}</DropdownMenu.Label>}<DropdownMenu.CheckboxItem disabled={pending} checked={event === PULSE_EVENT ? pulse.subscribed : events.includes(event)} onCheckedChange={checked => void (event === PULSE_EVENT ? updatePulse(checked === true) : updateEvent(event, checked === true))} onSelect={event => event.preventDefault()}><span className="sidebar-team-subscribe-check"><DropdownMenu.ItemIndicator><Check size={10}/></DropdownMenu.ItemIndicator></span><span>{t(label)}</span></DropdownMenu.CheckboxItem></div>)}
+        if (label === 'Subscribe') return <MenuSubmenu key={label} kit={DropdownMenu} label={t(label)} phoneFilter trigger={<>{icon(label)}<span>{t(label)}</span><ChevronRight className="menu-chevron"/></>} contentProps={{ 'data-flow-motion': 'floating', className: 'sidebar-popover sidebar-team-subscribe-menu', sideOffset: -2, collisionPadding: 8 }}>
+          {notifications.map(([event, label], index) => <div className="sidebar-team-subscribe-group" key={event}>{index === 0 && <DropdownMenu.Label data-menu-heading>{t('Inbox notifications')}</DropdownMenu.Label>}{index === 3 && <DropdownMenu.Label data-menu-heading>{t('Pulse updates')}</DropdownMenu.Label>}<DropdownMenu.CheckboxItem disabled={pending} checked={event === PULSE_EVENT ? pulse.subscribed : events.includes(event)} onCheckedChange={checked => void (event === PULSE_EVENT ? updatePulse(checked === true) : updateEvent(event, checked === true))} onSelect={event => event.preventDefault()}><span className="sidebar-team-subscribe-check"><DropdownMenu.ItemIndicator><Check size={10}/></DropdownMenu.ItemIndicator></span><span>{t(label)}</span></DropdownMenu.CheckboxItem></div>)}
         </MenuSubmenu>
         const href = label === 'Team settings' ? settingsPath(data.workspace.urlKey, 'team', team.key) : label === 'Open archive' ? teamArchivePath(data.workspace.urlKey, team.key) : label === notifyLabel ? settingsPath(data.workspace.urlKey, 'team', team.key, 'notifications') : undefined
         const body = <>{icon(label)}<span>{display(label)}</span>{(label === 'Favorite' || label === 'Unfavorite') && <kbd>⌥ F</kbd>}{label === 'Copy URL' && <kbd>⌘ ⇧ ,</kbd>}</>

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, type KeyboardEvent, type RefObject, type 
 import { toast } from '@/lib/toast'
 
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
+import { PhoneSubmenuBack } from '@/components/ui/menu-submenu'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { AgentEntityHover } from '@/components/agent/agent-entity-hover'
 import { ReleasePipelineIcon, ReleaseStatusIcon } from '@/components/releases/release-icons'
 import { useI18n } from '@/i18n/i18n'
@@ -18,6 +20,7 @@ const groupOrder: Release['status'][] = ['inProgress', 'planned', 'released', 'c
 
 export function IssueReleasePicker({ data, issue, grouped = false, externalAnchor, popoverOpen, onPopoverOpenChange, onMenuEscape }: { data: BootstrapData; issue: Issue; grouped?: boolean; externalAnchor?: RefObject<HTMLElement | null>; popoverOpen?: boolean; onPopoverOpenChange?: (open: boolean) => void; onMenuEscape?: () => void }) {
   const { t, formatDate } = useI18n()
+  const phoneSubmenu = usePhoneLayout() && Boolean(externalAnchor)
   const [internalOpen, setInternalOpen] = useState(false)
   const open = popoverOpen ?? internalOpen
   const setOpen = (next: SetStateAction<boolean>) => { const value = typeof next === 'function' ? next(open) : next; setInternalOpen(value); onPopoverOpenChange?.(value) }
@@ -160,7 +163,8 @@ export function IssueReleasePicker({ data, issue, grouped = false, externalAncho
 
   return <Popover.Root open={open} onOpenChange={value => { if (value) setOpen(true); else close() }}>
     {externalAnchor ? <Popover.Anchor virtualRef={externalAnchor}/> : <Popover.Anchor asChild>{anchor}</Popover.Anchor>}
-    <Popover.Portal><Popover.Content data-flow-motion="floating" className="issue-release-picker issue-release-picker--root" align="start" side={externalAnchor ? 'right' : 'bottom'} alignOffset={externalAnchor ? -43 : 0} sideOffset={externalAnchor ? -1.5 : grouped ? -36 : 4} collisionPadding={16} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { if (onMenuEscape) { event.preventDefault(); onMenuEscape() } }} onKeyDown={event => { if (externalAnchor && event.key === 'ArrowLeft') { event.preventDefault(); onPopoverOpenChange?.(false); return }; onKeyDown(event) }}>
+    <Popover.Portal><Popover.Content data-flow-motion="floating" data-phone-submenu={phoneSubmenu ? '' : undefined} className="issue-release-picker issue-release-picker--root" align="start" side={externalAnchor ? 'right' : 'bottom'} alignOffset={externalAnchor ? -43 : 0} sideOffset={externalAnchor ? -1.5 : grouped ? -36 : 4} collisionPadding={16} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { if (onMenuEscape) { event.preventDefault(); onMenuEscape() } }} onKeyDown={event => { if (externalAnchor && event.key === 'ArrowLeft') { event.preventDefault(); onPopoverOpenChange?.(false); return }; onKeyDown(event) }}>
+      {phoneSubmenu && <PhoneSubmenuBack label={t('Release')} onBack={() => onPopoverOpenChange?.(false)}/>}
       <ReleaseSearch autoFocus value={query} placeholder={t('Add to release…')} shortcut={externalAnchor ? undefined : '⌥ R'} activeId={activeId} onChange={value => { setQuery(value); setPipelinesOpen(false); setCreateOpen(false) }}/>
       <div className="issue-release-results" role="listbox" aria-multiselectable="true">
         {selectedOptions.map(item => <ReleaseOption active={activeId === item.id} checked disabled={saving} item={item} key={item.id} pipeline={pipelines.find(value => value.id === item.pipelineId)} onActive={() => { setActiveId(item.id); setPipelinesOpen(false) }} onChoose={() => void toggle(item.id)}/>)}

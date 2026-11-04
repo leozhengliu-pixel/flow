@@ -76,7 +76,7 @@ export function DueDateCommand({ value, onSelect, className = '', autoFocus = tr
 
   return <div className={`due-date-command ${className}`} role="dialog" aria-label={t('Due date')}>
     <div className="due-date-head">
-      <input autoFocus={autoFocus} className="due-date-search" aria-label={t('Try: 24h, 7 days, Feb 9')} placeholder={t('Try: 24h, 7 days, Feb 9')} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && query.trim()) { event.preventDefault(); submitQuery() } }}/>
+      <input autoFocus={autoFocus} className="due-date-search" aria-label={t('Try: 24h, 7 days, Feb 9')} placeholder={t('Try: 24h, 7 days, Feb 9')} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing && query.trim()) { event.preventDefault(); submitQuery() } }}/>
       <span className="due-date-shortcut" aria-hidden="true"><kbd>⇧</kbd><kbd>D</kbd></span>
     </div>
     {error ? <p className="due-date-error" role="alert">{error}</p> : null}

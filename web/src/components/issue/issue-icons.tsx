@@ -105,8 +105,10 @@ export function CalendarIcon({ variant = 'target', ...props }: FlowIconProps & {
   return <AssetIcon asset={variant === 'start' ? 'StartDate' : 'TargetDate'} {...props}/>
 }
 
-export function SlackIcon(props: FlowIconProps) {
-  return <AssetIcon asset="Slack" {...props}/>
+export function SlackIcon({ monochrome = false, size = 16, ...props }: FlowIconProps & { monochrome?: boolean }) {
+  const maskId = useId()
+  if (!monochrome) return <AssetIcon asset="Slack" size={size} {...props}/>
+  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 16 16" {...props}><defs><mask id={maskId} style={{ maskType: 'alpha' }}><use href="#Slack"/></mask></defs><rect width="16" height="16" fill="currentColor" mask={`url(#${maskId})`}/></svg>
 }
 
 type ProjectStatusKind = 'backlog'|'planned'|'started'|'completed'|'canceled'

@@ -1,6 +1,6 @@
 import * as RadixMenu from "@radix-ui/react-dropdown-menu";
 import { Command } from "cmdk";
-import { ArrowUp, ChevronDown, CircleCheck, CircleDashed, CircleX, CornerDownRight, FileCode2, GitBranch, Link2, MessageSquare, Plus, X } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, CircleCheck, CircleDashed, CircleX, CornerDownRight, FileCode2, GitBranch, Link2, MessageSquare, MessageSquareCheck, MessageSquareDashed, Plus, X } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { MentionBody } from "@/components/editor/mentions/mention-body";
@@ -30,7 +30,14 @@ import { PostedAsCaption } from "./posted-as-caption";
 import { ReviewStateIcon, ReviewTitle } from "./review-state-icon";
 import "@/components/project-detail/project-action-menu.css";
 
-type Mutation = { draft?: boolean; status?: CodeReview["status"]; branchState?: CodeReview["branchState"]; issueIds?: string[] };
+type Mutation = { draft?: boolean; status?: CodeReview["status"]; branchState?: CodeReview["branchState"]; issueIds?: string[]; issueLinkTypes?: CodeReview["issueLinkTypes"] };
+const issueLinkLabels = { resolves: 'Resolves', contributes: 'Contributes', related: 'Related' } as const;
+const issueLinkIcons = { resolves: MessageSquareCheck, contributes: MessageSquareDashed, related: MessageSquare };
+type IssueLinkType = keyof typeof issueLinkLabels;
+
+function reviewIssueGroups(review: CodeReview, issues: Issue[]) {
+  return (Object.keys(issueLinkLabels) as IssueLinkType[]).map(type => ({ type, issues: issues.filter(issue => (review.issueLinkTypes?.[issue.id] ?? 'resolves') === type) })).filter(group => group.issues.length || !issues.length && group.type === 'resolves');
+}
 
 /** Overview tab: title, byline, description and activity, with the properties sidebar. */
 export function ReviewOverview({
@@ -148,8 +155,8 @@ export function ReviewOverview({
         <SidebarSection label={t("Status")}>
           <ReviewStatusMenu review={review} busy={busy} onMutate={onMutate} />
         </SidebarSection>
-        <SidebarSection label={t("Resolves")}>
-          {issues.map((issue) => (
+        {reviewIssueGroups(review, issues).map((group, index) => <SidebarSection key={group.type} label={t(issueLinkLabels[group.type])}>
+          {group.issues.map((issue) => (
             <a
               key={issue.id}
               className="review-sidebar-issue"
@@ -163,11 +170,11 @@ export function ReviewOverview({
               <span data-i18n-ignore>{issue.title}</span>
             </a>
           ))}
-          <button type="button" className="review-sidebar-button is-muted" onClick={() => onOpenPicker("issues")}>
+          {index === 0 && <button type="button" className="review-sidebar-button is-muted" onClick={() => onOpenPicker("issues")}>
             <Plus />
             <span>{t("Link issue")}</span>
-          </button>
-        </SidebarSection>
+          </button>}
+        </SidebarSection>)}
         <SidebarSection label={t("Reviewers")}>
           {reviewers.map((user) => (
             <button type="button" key={user.id} className="review-sidebar-button" onClick={() => onOpenPicker("reviewers")}>
@@ -273,14 +280,14 @@ function ReviewMobileProperties({
         <span className="review-mobile-label">{t("Branch")}</span>
         <ReviewBranchState review={review} busy={busy} onMutate={onMutate} phone />
       </div>
-      <div className="review-mobile-resolves" data-mobile-property="resolves">
+      {reviewIssueGroups(review, issues).map((group, index) => <div key={group.type} className="review-mobile-resolves" data-mobile-property={group.type}>
         <div className="review-mobile-resolves-head">
-          <span className="review-mobile-label">{t("Resolves")}</span>
-          <button type="button" className="review-mobile-icon-button" aria-label={t("Link issue")} onClick={() => onOpenPicker("issues")}>
+          <span className="review-mobile-label">{t(issueLinkLabels[group.type])}</span>
+          {index === 0 && <button type="button" className="review-mobile-icon-button" aria-label={t("Link issue")} onClick={() => onOpenPicker("issues")}>
             <PlusIcon />
-          </button>
+          </button>}
         </div>
-        {issues.map((issue) => (
+        {group.issues.map((issue) => (
           <div className="review-mobile-issue" key={issue.id}>
             <a
               className="review-mobile-issue-link"
@@ -295,23 +302,29 @@ function ReviewMobileProperties({
                 {issue.title}
               </span>
             </a>
-            <ReviewLinkedIssueActions busy={busy} onManage={() => onOpenPicker("issues")} onUnlink={() => onMutate({ issueIds: review.issueIds.filter(id => id !== issue.id) })}/>
+            <ReviewLinkedIssueActions busy={busy} linkType={group.type} onChangeType={type => onMutate({ issueLinkTypes: { ...review.issueLinkTypes, [issue.id]: type } })} onUnlink={() => onMutate({ issueIds: review.issueIds.filter(id => id !== issue.id) })}/>
           </div>
         ))}
-      </div>
+      </div>)}
     </div>
   );
 }
 
-function ReviewLinkedIssueActions({ busy, onManage, onUnlink }: { busy: boolean; onManage: () => void; onUnlink: () => Promise<void> }) {
+function ReviewLinkedIssueActions({ busy, linkType, onChangeType, onUnlink }: { busy: boolean; linkType: IssueLinkType; onChangeType: (type: IssueLinkType) => Promise<void>; onUnlink: () => Promise<void> }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  const [changingType, setChangingType] = useState(false);
   return <>
-    <button type="button" className="review-mobile-icon-button" disabled={busy} aria-label={t("Issue actions")} aria-expanded={open} onClick={() => setOpen(true)}><FlowOptionsIcon/></button>
-    <PhoneCommandMenu open={open} onOpenChange={setOpen} label={t("Issue actions")} placeholder="Filter…">
-      <Command.Item onSelect={() => { setOpen(false); onManage(); }}><Link2 aria-hidden="true" color="var(--pk-muted)"/><span>{t("Link issues")}</span></Command.Item>
-      <Command.Separator/>
-      <Command.Item disabled={busy} onSelect={() => { setOpen(false); void onUnlink(); }}><X aria-hidden="true" color="var(--pk-muted)"/><span>{t("Unlink issue from pull request")}</span></Command.Item>
+    <button type="button" className="review-mobile-icon-button" disabled={busy} aria-label={t("Issue actions")} aria-expanded={open} onClick={() => { setChangingType(false); setOpen(true); }}><FlowOptionsIcon/></button>
+    <PhoneCommandMenu key={changingType ? 'types' : 'actions'} open={open} onOpenChange={setOpen} label={t(changingType ? "Change link type" : "Issue actions")} placeholder="Filter…">
+      {changingType ? (Object.keys(issueLinkLabels) as IssueLinkType[]).map(type => {
+        const Icon = issueLinkIcons[type];
+        return <Command.Item key={type} disabled={busy} onSelect={() => { setOpen(false); void onChangeType(type); }}><Icon aria-hidden="true" color="var(--pk-muted)"/><span>{t(issueLinkLabels[type])}</span>{linkType === type && <Check aria-hidden="true" className="phone-menu-current"/>}</Command.Item>;
+      }) : <>
+        <Command.Item disabled={busy} onSelect={() => setChangingType(true)}><Link2 aria-hidden="true" color="var(--pk-muted)"/><span>{t("Change link type")}</span></Command.Item>
+        <Command.Separator/>
+        <Command.Item disabled={busy} onSelect={() => { setOpen(false); void onUnlink(); }}><X aria-hidden="true" color="var(--pk-muted)"/><span>{t("Unlink issue from pull request")}</span></Command.Item>
+      </>}
     </PhoneCommandMenu>
   </>;
 }

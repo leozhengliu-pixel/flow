@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -42,4 +42,31 @@ it('opens nested phone menus and honors keep-open checkbox selections', async ()
   expect(screen.getByRole('option', { name: 'Show archived' })).toBeVisible()
   await user.keyboard('{Escape}')
   expect(screen.getByRole('option', { name: 'Visibility' })).toBeVisible()
+})
+
+it('hosts custom interactive content without an unused command input or listbox',async()=>{
+  const user=userEvent.setup(),apply=vi.fn()
+  render(<I18nProvider><DropdownMenu><DropdownMenuTrigger>Actions</DropdownMenuTrigger><DropdownMenuContent>
+    <DropdownMenuSub><DropdownMenuSubTrigger>Updated date</DropdownMenuSubTrigger><DropdownMenuSubContent phoneCustomContent aria-label="Updated date">
+      <button type="button" onClick={apply}>Apply</button>
+    </DropdownMenuSubContent></DropdownMenuSub>
+  </DropdownMenuContent></DropdownMenu></I18nProvider>)
+  await user.click(screen.getByRole('button',{name:'Actions'}))
+  await user.click(screen.getByRole('option',{name:'Updated date'}))
+  const dialog=screen.getByRole('dialog',{name:'Updated date'})
+  expect(within(dialog).queryByRole('combobox')).toBeNull()
+  expect(within(dialog).queryByRole('listbox')).toBeNull()
+  await user.click(within(dialog).getByRole('button',{name:'Apply'}))
+  expect(apply).toHaveBeenCalledOnce()
+})
+
+it('defaults phone submenu triggers to menu semantics and preserves explicit dialog semantics', async () => {
+  const user = userEvent.setup()
+  render(<I18nProvider><DropdownMenu><DropdownMenuTrigger>Actions</DropdownMenuTrigger><DropdownMenuContent>
+    <DropdownMenuSub><DropdownMenuSubTrigger>Plain submenu</DropdownMenuSubTrigger><DropdownMenuSubContent><DropdownMenuItem>One</DropdownMenuItem></DropdownMenuSubContent></DropdownMenuSub>
+    <DropdownMenuSub><DropdownMenuSubTrigger aria-haspopup="dialog">Dialog submenu</DropdownMenuSubTrigger><DropdownMenuSubContent><DropdownMenuItem>Two</DropdownMenuItem></DropdownMenuSubContent></DropdownMenuSub>
+  </DropdownMenuContent></DropdownMenu></I18nProvider>)
+  await user.click(screen.getByRole('button', { name: 'Actions' }))
+  expect(screen.getByRole('option', { name: 'Plain submenu' })).toHaveAttribute('aria-haspopup', 'menu')
+  expect(screen.getByRole('option', { name: 'Dialog submenu' })).toHaveAttribute('aria-haspopup', 'dialog')
 })

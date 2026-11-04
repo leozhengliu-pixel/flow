@@ -546,6 +546,23 @@ func TestFilterBootstrapTeamsHidesPrivateTeamDocuments(t *testing.T) {
 	}
 }
 
+func TestFilterBootstrapTeamsHidesPrivateReviewLinkTypes(t *testing.T) {
+	linkTypes := map[string]string{"public-issue": "related", "private-issue": "contributes"}
+	data := domain.Bootstrap{
+		ViewerRole: "member",
+		Teams:      []domain.Team{{ID: "public-team"}, {ID: "private-team", Private: true}},
+		Issues:     []domain.Issue{{ID: "public-issue", Team: domain.Team{ID: "public-team"}}, {ID: "private-issue", Team: domain.Team{ID: "private-team"}}},
+		Reviews:    []domain.CodeReview{{ID: "review", IssueIDs: []string{"public-issue", "private-issue"}, IssueLinkTypes: linkTypes}},
+	}
+	filterBootstrapTeams(&data, sameTeamScope(map[string]bool{"public-team": true}), false)
+	if len(data.Reviews) != 1 || len(data.Reviews[0].IssueLinkTypes) != 1 || data.Reviews[0].IssueLinkTypes["public-issue"] != "related" {
+		t.Fatalf("review link types were not projected: %#v", data.Reviews)
+	}
+	if len(linkTypes) != 2 {
+		t.Fatal("projection changed the source review metadata")
+	}
+}
+
 func TestFilterBootstrapTeamsRedactsHiddenCollaborationData(t *testing.T) {
 	privateParent := "private-parent"
 	data := domain.Bootstrap{

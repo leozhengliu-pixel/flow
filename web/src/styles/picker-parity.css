@@ -840,21 +840,6 @@ html:root body .pulse-filter-builder .pulse-filter-chevron:not(#_) {
 }
 
 /* ── Issue options (…) menu ────────────────────────────────────────────── */
-html:root body .issue-options-popover:not(#_),
-html:root body .issue-options-submenu:not(#_) {
-  border: .5px solid var(--pk-border);
-  background: var(--pk-surface);
-  box-shadow: var(--pk-shadow);
-  color: var(--pk-text);
-}
-html:root body .issue-options-popover:not(#_) {
-  width: max-content;
-  min-width: 242px;
-}
-/* Submenus float above the menu with the reference's heavier card shadow. */
-html:root body .issue-options-submenu:not(#_) {
-  box-shadow: var(--pk-card-shadow);
-}
 html:root body .issue-options-popover .issue-options-item:not(#_),
 html:root body .issue-options-submenu .issue-options-item:not(#_) {
   color: var(--pk-text);
@@ -910,22 +895,20 @@ html:root body .issue-options-submenu .issue-options-item[data-selected=true]:no
 }
 
 /* ── Workspace menu ────────────────────────────────────────────────────── */
-html:root body .workspace-primary-menu:not(#_),
-html:root body .workspace-switch-menu:not(#_) {
+.menu-content:is(.workspace-primary-menu,.workspace-switch-menu) {
   border: .5px solid var(--pk-border);
   background: var(--pk-surface);
   box-shadow: var(--pk-shadow);
   color: var(--pk-text);
 }
-html:root body .workspace-primary-menu [role=menuitem]:not(#_),
-html:root body .workspace-switch-menu [role=menuitem]:not(#_) {
+.menu-content:is(.workspace-primary-menu,.workspace-switch-menu) [role=menuitem] {
   color: var(--pk-text);
   font-size: 13px;
   font-weight: 450;
 }
-html:root body .workspace-primary-menu [role=menuitem]:not(#_)[data-highlighted],
-html:root body .workspace-switch-menu [role=menuitem]:not(#_)[data-highlighted] {
+.menu-content:is(.workspace-primary-menu,.workspace-switch-menu) [role=menuitem][data-highlighted] {
   background: var(--pk-hover);
+  color: var(--pk-text-strong);
 }
 html:root body .workspace-shortcut:not(#_),
 html:root body .workspace-shortcut:not(#_) * {
@@ -1107,17 +1090,19 @@ html:root body .agent-skills-trigger:not(#_) svg { width: 14px; height: 14px; }
 
 /* Pickers whose search stays hidden until you type. */
 @media (min-width: 1024px) {
-  html:root body .property-command-surface.issue-labels-menu .property-command-options [role=option] { grid-template-columns: 16px 18px minmax(0,1fr); gap: 6px; padding: 0 18px 0 14px; }
-  html:root body .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-checkbox { display: none; }
-  html:root body .property-command-surface.issue-labels-menu .property-command-options [role=option][aria-checked=true] .property-command-checkbox {
+  .property-command-surface.issue-labels-menu .property-command-options [role=option] { grid-template-columns: 16px 18px minmax(0,1fr); gap: 6px; padding: 0 18px 0 14px; }
+  .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-checkbox {
     display: grid;
     grid-column: 1;
+    border: 1px solid var(--menu-checkbox-hover-border);
+  }
+  .property-command-surface.issue-labels-menu .property-command-options [role=option][aria-checked=true] .property-command-checkbox {
     border: 0;
     background: transparent;
     box-shadow: none;
   }
-  html:root body .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-icon { grid-column: 2; }
-  html:root body .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-label { grid-column: 3; }
+  .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-icon { grid-column: 2; }
+  .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-label { grid-column: 3; }
 }
 html:root body .property-command-surface .property-command-search.is-visually-hidden:not(#_) {
   position: fixed;
@@ -1171,7 +1156,7 @@ html:root body .sub-issues-add-menu__item:not(#_) > kbd { margin-left: auto; col
 html:root body .sub-issues-collapse:not(#_) { gap: 3px; color: var(--sub-caret); }
 html:root body .sub-issues-collapse:not(#_) > svg { width: 14px; height: 14px; flex: 0 0 14px; transform: rotate(90deg); }
 html:root body .sub-issues-collapse:not(#_)[aria-expanded=false] > svg { transform: none; }
-html:root body .sub-issues-collapse:not(#_) > span { color: var(--sub-label); }
+.flow-sub-issues .sub-issues-collapse > span { color: var(--sub-label); }
 html:root body .sub-issues-progress:not(#_) { color: var(--sub-label); font-weight: 450; }
 html:root body .sub-issues-display:not(#_),
 html:root body .sub-issues-create:not(#_) { border: 0; background: var(--sub-button); box-shadow: var(--sub-button-ring); color: var(--sub-button-text); }

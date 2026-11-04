@@ -761,9 +761,9 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-mobile-row .review-sidebar-button svg{width:14px;height:14px;flex:none;margin:0 8px 0 2.5px}
   html:root body .app .review-mobile-row .review-sidebar-button.is-strong{height:28px;padding:0 8px 0 4px}
   html:root body .app .review-mobile-row .review-sidebar-button.is-muted{color:var(--text);padding:0 8px 0 6px}
-  html:root body .app .review-mobile-row .review-sidebar-button.is-muted>span{color:var(--issue-muted)}
   html:root body .app .review-mobile-row .review-sidebar-button.is-muted svg{margin:0 6px 0 0;color:var(--text);opacity:.6}
-  html:root body .app .review-mobile-row .review-sidebar-button>span:not(.avatar){font:450 12px/normal var(--font);color:var(--text)}
+  .review-mobile-row .review-sidebar-button>span:not(.avatar){font:450 12px/normal var(--font);color:inherit}
+  .review-mobile-row .review-sidebar-button.is-muted>span{color:var(--issue-muted)}
   html:root body .app .review-mobile-row .review-sidebar-button.is-strong>span{font-weight:500}
   html:root body .app .review-mobile-row .review-sidebar-button.is-strong svg{color:var(--issue-muted)}
   html:root body .app .review-mobile-row .review-sidebar-button.is-strong svg:is([data-review-state=open],[data-review-state=draft]) path{fill:var(--issue-muted)}

@@ -241,12 +241,12 @@ html:root .settings-app .settings-main .personal-channel > svg { transform: rota
 /* Top-left crumb inside the panel ("‹ [icon] Team"), measured at panel +9/+11 */
 html:root .settings-app .settings-main { position: relative; }
 html:root .settings-app .settings-main .settings-crumb {
-  position: absolute;
+  position: var(--settings-crumb-position, absolute);
   z-index: 2;
   top: 10px;
   left: 8px;
   height: 28px;
-  display: inline-flex;
+  display: var(--settings-crumb-display, inline-flex);
   align-items: center;
   gap: 6px;
   padding: 0 8px;
@@ -1003,7 +1003,7 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
     font: 400 13px/normal var(--font);
   }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > span { display: none; }
-  html:root .settings-app .settings-main .settings-members-page > .settings-members-toolbar > .settings-action:not(.primary) { display: none; }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-action:not(.primary) { display: none; }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-action:not(.primary) { justify-self: start; }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-action.primary {
     height: 36px;
@@ -1362,21 +1362,25 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
     gap: 6px;
   }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-settings-header {
-    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 4px 8px;
     min-height: 72px;
     margin: 0 16px 24px;
   }
-  html:root .settings-app .settings-content:has(.team-overview-page) .team-settings-header > div { gap: 0; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-settings-header > div { display: contents; }
+  html:root .settings-app .settings-content:has(.team-overview-page) .team-settings-header h1 { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-settings-header > div > p {
-    margin-top: 4px;
+    margin: 0;
     line-height: 18px;
-    width: 200px;
+    min-width: 0;
     color: var(--set-group-desc);
   }
   html:root .settings-app .settings-content:has(.team-overview-page) .team-overview-shortcut {
-    position: absolute;
-    top: 40px;
-    right: -6px;
+    grid-column: 2;
+    align-self: center;
+    margin-right: -6px;
     height: 28px;
     display: inline-flex;
     align-items: center;

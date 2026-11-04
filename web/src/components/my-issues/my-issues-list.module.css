@@ -158,7 +158,9 @@
   :global(:root[data-theme="dark"]) .createButton{color:var(--phone-group-title);background:transparent}
   /* A sub-issue row puts the parent title flush after the issue title, like the reference app. */
   .titleProperties:has(.parentTrail){gap:0}
-  .parentTrail{line-height:normal}
+  .titleProperties:has(.parentTrail)>.badges{flex-shrink:0}
+  .parentTrail{line-height:normal;flex-shrink:1;margin-right:8px}
+  .parentTrail>span{display:block;text-overflow:ellipsis}
   /* The unassigned avatar keeps the muted glyph but matches the reference avatar metrics. */
   .noAssignee svg{color:var(--bright);border-style:none;fill:var(--bright);opacity:.22}
   .row[data-context="true"] .noAssignee svg{opacity:.15}

@@ -51,4 +51,10 @@ describe('command menu search in Chinese', () => {
     await user.type(input(), 'copy current page')
     await waitFor(() => expect(items().some(text => text.includes('复制当前页面链接'))).toBe(true))
   })
+
+  it.each(['前往计划', '前往视图', '前往成员'])('finds %s by its translated label', async label => {
+    const user = renderMenu()
+    await user.type(input(), label)
+    await waitFor(() => expect(items().some(text => text.includes(label))).toBe(true))
+  })
 })

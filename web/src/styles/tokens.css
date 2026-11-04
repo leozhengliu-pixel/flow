@@ -2,8 +2,12 @@
 @import "../components/workspace/workspace.css";
 :root{--menu-option-hover-bg:lch(25.69% 1.975 272);--control-chip-hover-bg:lch(21.206% 1.043 272);--control-button-hover-bg:lch(21.977% 1.525 272)}
 :root[data-theme="light"]{--menu-option-hover-bg:var(--pk-hover);--control-chip-hover-bg:var(--pk-control-selected);--control-button-hover-bg:var(--theme-surface-active)}
-:root{--workspace-trigger-fg:lch(90.155% 1.2 272);--workspace-trigger-hover-bg:lch(8.445% 1.3 272)}
-:root[data-theme="light"]{--workspace-trigger-fg:var(--text);--workspace-trigger-hover-bg:var(--bg-hover)}
+:root{--calendar-surface:lch(9.232% .85 272);--calendar-border:lch(22.193% 1.93 272);--calendar-control:lch(13.861% 1.043 272);--calendar-control-selected:lch(20.418% 1.429 272)}
+:root[data-theme="light"]{--calendar-surface:var(--theme-surface-2);--calendar-border:var(--theme-border-strong);--calendar-control:var(--theme-control-hover);--calendar-control-selected:var(--theme-control-active)}
+:root{--workspace-trigger-fg:lch(90.155% 1.2 272);--workspace-trigger-hover-bg:lch(8.445% 1.3 272);--workspace-trigger-chevron:lch(60.621% 1.2 272)}
+:root[data-theme="light"]{--workspace-trigger-fg:var(--text);--workspace-trigger-hover-bg:var(--bg-hover);--workspace-trigger-chevron:lch(40% 1 282)}
+:root{--menu-checkbox-hover-border:lch(55.92% 1.48 272)}
+:root[data-theme="light"]{--menu-checkbox-hover-border:var(--sub-checkbox-border)}
 :root{--shortcut-muted:lch(63.304% 1.425 272)}
 :root[data-theme="light"]{--shortcut-muted:lch(40% 1 282)}
 :root{--document-desktop-send-bg:lch(17.349 1.139 272);--document-desktop-avatar-bg:lch(70 60 30)}
@@ -99,7 +103,7 @@
 :root[data-theme="light"]{--surface-page:lch(97.94% .5 282);--surface-card:lch(100% 0 282);--surface-elevated:lch(100% 0 282);--border-card:lch(89.84% 0 282);--border-subtle:lch(92.8% 0 282);--text-strong:lch(9.794% 0 282);--text-body:lch(19.588% 1.25 282);--text-label:lch(40% 1 282);--text-placeholder:lch(64.64% 1.25 282)}
 :root[data-theme="light"] .menu-content{border-color:var(--border-card);background:var(--surface-elevated);box-shadow:var(--menu-shadow)}
 :root[data-theme="light"] .menu-separator{background:var(--border-subtle)}
-:root[data-theme="light"] .dialog-content{border-color:var(--dialog-border);background:var(--dialog-bg);box-shadow:var(--dialog-shadow)}
+:root[data-theme="light"] .dialog-content:not(.search-date-dialog){border-color:var(--dialog-border);background:var(--dialog-bg);box-shadow:var(--dialog-shadow)}
 :root[data-theme="light"] .command-dialog{background:var(--theme-surface-2)}
 :root[data-theme="light"] .command-input{height:44px}
 :root[data-theme="light"] .command-input input{color:var(--theme-text-primary)}

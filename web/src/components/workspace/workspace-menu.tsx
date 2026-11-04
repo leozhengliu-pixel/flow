@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FocusEvent } from "react";
 import { Check } from "lucide-react";
 import { Command } from 'cmdk';
-import { PhoneMenu } from '@/components/ui/phone-menu';
+import { PhoneMenu, PhoneMenuCommand } from '@/components/ui/phone-menu';
 import { usePhoneLayout } from '@/hooks/use-phone-layout';
 import { useOptionalTranslate } from '@/i18n/i18n';
 import { WorkspaceInitials } from './workspace-initials';
@@ -100,7 +100,7 @@ export function WorkspaceMenu({
       <WorkspaceAvatar workspace={workspace}/><strong data-i18n-ignore>{workspace.name}</strong><WorkspaceChevronIcon phone/>
     </button>
     <PhoneMenu className="workspace-phone-menu" open={open} onOpenChange={setOpen} label={t(switching ? 'Switch workspace' : 'Workspace Menu')}>
-      <Command key={switching ? 'switch' : 'workspace'} label={t(switching ? 'Switch workspace' : 'Workspace Menu')}>
+      <PhoneMenuCommand key={switching ? 'switch' : 'workspace'} label={t(switching ? 'Switch workspace' : 'Workspace Menu')}>
         <div className="phone-menu-search"><div className="workspace-phone-menu-input"><Command.Input aria-label={t('Command menu')} placeholder={t('Filter...')}/></div></div>
         <Command.List>
           {switching ? <>
@@ -120,9 +120,12 @@ export function WorkspaceMenu({
             <WorkspacePhoneItem onSelect={() => choose(() => { void onLogout() })}>{t('Log out')}</WorkspacePhoneItem>
           </>}
         </Command.List>
-      </Command>
+      </PhoneMenuCommand>
     </PhoneMenu>
   </>;
+  const closeCascadeFromSibling = (event: FocusEvent<HTMLDivElement>) => {
+    if (event.relatedTarget instanceof Element && event.relatedTarget.closest('.workspace-primary-menu,.workspace-switch-menu')) setSwitching(false)
+  };
   return (
     <>
       <DropdownMenu open={open} onOpenChange={next => { setOpen(next); if (!next) { window.cancelAnimationFrame(switchFrame.current ?? 0); setSwitching(false) } }}>
@@ -138,14 +141,18 @@ export function WorkspaceMenu({
           align="start"
           sideOffset={4}
           className="workspace-primary-menu"
+          onPointerMove={event => {
+            const item = (event.target as Element).closest<HTMLElement>('[role="menuitem"]')
+            if (switching && item && !item.hasAttribute('data-workspace-switch-trigger') && !item.hasAttribute('data-disabled')) { setSwitching(false); item.focus({ preventScroll: true }) }
+          }}
         >
           <div className="workspace-menu-list">
-            <DropdownMenuItem onSelect={() => onSettings("workspace")}>
+            <DropdownMenuItem onFocus={closeCascadeFromSibling} onSelect={() => onSettings("workspace")}>
               {t('Settings')}<WorkspaceMenuShortcut>{t('G then S')}</WorkspaceMenuShortcut>
             </DropdownMenuItem>
             {/* Settings › Members is an administration page: the reference app only lists it for admins. */}
             {(data.viewerRole === "admin" || data.viewerRole === "owner") && (
-              <DropdownMenuItem onSelect={() => onSettings("members")}>
+              <DropdownMenuItem onFocus={closeCascadeFromSibling} onSelect={() => onSettings("members")}>
                 {t('Invite and manage members')}
               </DropdownMenuItem>
             )}
@@ -185,7 +192,7 @@ export function WorkspaceMenu({
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
-            <DropdownMenuItem onSelect={() => void onLogout()}>
+            <DropdownMenuItem onFocus={closeCascadeFromSibling} onSelect={() => void onLogout()}>
               {t('Log out')}<WorkspaceMenuShortcut>⌥ ⇧ Q</WorkspaceMenuShortcut>
             </DropdownMenuItem>
           </div>

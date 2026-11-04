@@ -7,6 +7,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Open search date presets before a custom date dialog, with two desktop calendars, typed periods, all five precisions and draft Apply or Cancel actions.
+
+- Apply issue-menu surface tokens at the shared component rule so phone shadows and rounded submenu headers remain intact.
+
+- Recompute shared search date ranges when fiscal settings arrive and discard invalid date chips with their requests.
+
+- Keep the project date picker at its full calendar height, fit all seven weekday columns inside its padding, and keep phone popovers within the viewport.
+
+- Share English and Chinese typed-date parsing across snooze, reminders, due dates and command pages, preserving IME confirmation.
+
+- Use the same first-weekday preference for Pulse groups and calendars, including Tuesday through Friday.
+
+- Restore the desktop issue-options due-date submenu width and hidden shortcut, and size search date filter menus to their content with date precisions on one row.
 - Use the shared settings search magnifier and match its visible icon fill in both themes.
 
 - Keep the shortcut search's neutral border and restore its accent focus outline.
@@ -29,6 +42,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Match regular dark toggle thumbs to the shared 14px geometry without a shadow.
 
+- Open phone command sheets without selecting the first row until pointer, keyboard or search input.
+
 - Keep Chinese phrases whole: verb catch-alls no longer leave an untranslated noun in a translated sentence, and picker labels, retire-team copy, row dates and status group names read in Chinese. A coverage test now fails when a `t()` key has no Chinese entry.
 - List cycles on a timeline on desktop, as on the phone: dates and dots on a rail, a Current/Upcoming status pill, a capacity ring and the scope in aligned columns, and the started cycle opened with its chart and the Scope, Started and Completed legend. Hovering the chart reads a day's figures.
 
@@ -43,6 +58,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Restore project row hover and selection paint, respect ungrouped project displays on desktop, and reveal empty target-date controls on interaction.
 - Match document heading interaction states and tinted groups, and use natural actor spacing and property-row geometry in initiative details.
 
+- Restore avatar sizes and fit initials using measured text bounds, including wide Latin and CJK pairs.
+
+- Match workspace, team, label and phone context menu interaction states, and complete Chinese navigation labels.
+
+- Preserve phone issue breadcrumbs, wrapped project activity and composer spacing, and muted reviewer prompts.
+
+- Restore review issue link-type choices and persist Resolves, Contributes and Related associations with each linked issue.
+
 - Match subscribed document rows to the shared menu highlight color and phone inset in pointer and keyboard states.
 
 - Translate command navigation and saved-chat feedback labels into Chinese.
@@ -56,6 +79,31 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Let filter value menus size to their labels within the shared maximum width.
 
 - Keep small avatar initials on one line and preserve avatar proportions beside long member names.
+- Share issue title and sub-issue label styling and remove special due-date menu sizing and hidden shortcuts.
+
+- Use the shared phone menu surface for issue options and its submenus.
+
+- Honor every first-weekday preference in settings and calendar controls.
+
+- Add drafted search date filters with on/before/after comparisons, five date precisions, Cancel and Apply, using existing API range filters.
+
+- Keep phone property submenus above their parent overlay so grouped project labels and Back remain tappable.
+
+- Let team label headings wrap beside actions and keep their breadcrumb in normal phone layout.
+
+- Place the phone team overview shortcut below wrapping team titles.
+
+- Keep team member CSV export available on phones.
+
+- Reveal label row actions on hover, keyboard focus and while their menu is open.
+
+- Restore desktop display choices for release, SLA and personal activity dates.
+
+- Offer Release in issue options before a workspace has releases or pipelines.
+
+- Parse Chinese snooze examples and report invalid dates in both notification snooze menus.
+
+- Keep review onboarding features reachable at narrow desktop widths.
 
 - Separate the property and value in phone inbox filter search results with a chevron.
 

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -1883,6 +1884,8 @@ func filterBootstrapTeams(data *domain.Bootstrap, scope bootstrapTeamScope, gues
 	})
 	for index := range data.Reviews {
 		data.Reviews[index].IssueIDs = slices.DeleteFunc(data.Reviews[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
+		data.Reviews[index].IssueLinkTypes = maps.Clone(data.Reviews[index].IssueLinkTypes)
+		maps.DeleteFunc(data.Reviews[index].IssueLinkTypes, func(id, _ string) bool { return !visibleIssues[id] })
 		data.Reviews[index].TeamReviewers = slices.DeleteFunc(data.Reviews[index].TeamReviewers, func(id string) bool { return !allowed[id] })
 	}
 	data.IssueSLAs = slices.DeleteFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return !visibleIssues[item.IssueID] })

@@ -436,7 +436,7 @@ it('opens linked issue actions and removes only the selected issue', async () =>
   try {
     renderDetail({ ...review, issueIds: [issue.id] });
     await user.click(screen.getByRole('button', { name: 'Issue actions' }));
-    expect(screen.getByRole('option', { name: 'Link issues' })).toBeVisible();
+    expect(screen.getByRole('option', { name: 'Change link type' })).toBeVisible();
     await user.click(screen.getByRole('option', { name: 'Unlink issue from pull request' }));
     await waitFor(() => expect(api.updateReview).toHaveBeenCalledWith(review.id, { issueIds: [] }));
   } finally {

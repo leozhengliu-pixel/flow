@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -13,14 +14,15 @@ import (
 )
 
 type reviewInput struct {
-	Title       *string   `json:"title,omitempty"`
-	Status      *string   `json:"status,omitempty"`
-	ReviewerIDs *[]string `json:"reviewerIds,omitempty"`
-	IssueIDs    *[]string `json:"issueIds,omitempty"`
-	Favorite    *bool     `json:"favorite,omitempty"`
-	Draft       *bool     `json:"draft,omitempty"`
-	BranchState *string   `json:"branchState,omitempty"`
-	MergeMethod *string   `json:"mergeMethod,omitempty"`
+	Title          *string            `json:"title,omitempty"`
+	Status         *string            `json:"status,omitempty"`
+	ReviewerIDs    *[]string          `json:"reviewerIds,omitempty"`
+	IssueIDs       *[]string          `json:"issueIds,omitempty"`
+	IssueLinkTypes *map[string]string `json:"issueLinkTypes,omitempty"`
+	Favorite       *bool              `json:"favorite,omitempty"`
+	Draft          *bool              `json:"draft,omitempty"`
+	BranchState    *string            `json:"branchState,omitempty"`
+	MergeMethod    *string            `json:"mergeMethod,omitempty"`
 }
 
 func (s *server) listReviews(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +48,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if slices.Contains([]string{"open", "merged", "closed"}, *input.Status) {
-			if input.Title != nil || input.ReviewerIDs != nil || input.IssueIDs != nil || input.Favorite != nil || input.Draft != nil || input.BranchState != nil {
+			if input.Title != nil || input.ReviewerIDs != nil || input.IssueIDs != nil || input.IssueLinkTypes != nil || input.Favorite != nil || input.Draft != nil || input.BranchState != nil {
 				writeError(w, 400, "submit repository status changes separately from metadata edits")
 				return
 			}
@@ -87,7 +89,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if data.UserSettings[data.Viewer.ID].AutoConvertDrafts && review.Draft {
-			if input.Title != nil || input.Status != nil || input.Draft != nil || input.IssueIDs != nil || input.Favorite != nil || input.BranchState != nil {
+			if input.Title != nil || input.Status != nil || input.Draft != nil || input.IssueIDs != nil || input.IssueLinkTypes != nil || input.Favorite != nil || input.BranchState != nil {
 				writeError(w, 400, "submit draft review requests separately from metadata edits")
 				return
 			}
@@ -161,6 +163,17 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 					appendActivity(data, issueID, "issue.review_unlinked", data.Viewer, map[string]string{"reviewId": review.ID, "reviewTitle": review.Title, "reviewNumber": fmt.Sprint(review.Number), "repository": review.RepositoryOwner + "/" + review.RepositoryName})
 				}
 			}
+		}
+		if input.IssueLinkTypes != nil {
+			for issueID, linkType := range *input.IssueLinkTypes {
+				if !slices.Contains(review.IssueIDs, issueID) || !slices.Contains([]string{"resolves", "contributes", "related"}, linkType) {
+					return errInvalid
+				}
+			}
+			review.IssueLinkTypes = maps.Clone(*input.IssueLinkTypes)
+		} else if input.IssueIDs != nil {
+			review.IssueLinkTypes = maps.Clone(review.IssueLinkTypes)
+			maps.DeleteFunc(review.IssueLinkTypes, func(issueID, _ string) bool { return !slices.Contains(review.IssueIDs, issueID) })
 		}
 		if input.Favorite != nil {
 			review.Favorite = *input.Favorite

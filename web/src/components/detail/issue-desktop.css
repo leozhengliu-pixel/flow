@@ -8,13 +8,11 @@
   .issue-view .issue-work-control { width: 56.5px; height: 28px; border: 0; }
   .issue-view .issue-work-control .issue-work-prompt { margin-right: .5px; }
   .issue-view .issue-header-icon:is([data-state=open], [aria-expanded=true]) { background: var(--issue-desktop-header-open-bg); color: var(--issue-header-icon-hover); }
-  :root .issue-view .title-editor p { letter-spacing: -.16px; }
   .issue-view .document-actions .issue-document-action { padding: 0 2px; color: var(--issue-fg); }
   .issue-view .document-actions .issue-document-action svg { width: 14px; height: 14px; }
   .issue-view .flow-sub-issues { margin-top: 9px; }
   .issue-view .flow-sub-issues::after { content: ""; display: block; margin: 16px 0 0 6px; border-bottom: .5px solid var(--border); }
   .issue-view .flow-sub-issues > header span { font-size: 12px; line-height: normal; }
-  html:root body .issue-view .sub-issues-collapse:not(#_) > span { color: var(--issue-muted); }
   .issue-view :is(.sub-issues-display, .sub-issues-create) { padding: 0 2px; }
   .issue-view .flow-sub-issues .sub-issues-progress > span { color: var(--issue-muted); }
   .issue-view .detail-sub-issue-row { grid-template-columns: 30px 16px minmax(80px,1fr) auto; padding-left: calc(var(--sub-depth, 0) * 28px); padding-right: 0; }
