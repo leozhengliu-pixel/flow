@@ -5,17 +5,17 @@ import { fiscalMonth, fiscalMonthOffset, fiscalYear } from '@/lib/runtime-prefer
 
 export type SearchTab = 'all' | SearchResourceType
 export type SearchOrder = 'relevance' | 'createdAt' | 'updatedAt' | 'title'
-export type SearchFilterField = 'statusType' | 'assigneeId' | 'creatorId' | 'createdAt' | 'updatedAt'
-export interface SearchCondition { id: string; field: SearchFilterField; operator: 'is' | 'isNot' | 'on' | 'before' | 'after'; value: string; granularity?: DateMode }
+export type SearchFilterField = 'team' | 'statusType' | 'assigneeId' | 'creatorId' | 'createdAt' | 'updatedAt'
+export interface SearchCondition { id: string; field: SearchFilterField; operator: 'is' | 'isNot' | 'in' | 'notIn' | 'on' | 'before' | 'after'; value: string; values?: string[]; granularity?: DateMode }
 export interface SearchPageState { query: string; tab: SearchTab; order: SearchOrder; includeArchived: boolean; showId: boolean; match: 'and' | 'or'; filters: SearchCondition[] }
-export const searchFields: Array<{id: SearchFilterField; label: string}> = [{id:'statusType',label:'Status type'},{id:'assigneeId',label:'Assignee / Lead'},{id:'creatorId',label:'Creator'},{id:'updatedAt',label:'Updated date'},{id:'createdAt',label:'Created date'}]
+export const searchFields: Array<{id: SearchFilterField; label: string}> = [{id:'team',label:'Team'},{id:'statusType',label:'Status type'},{id:'assigneeId',label:'Assignee / Lead'},{id:'creatorId',label:'Creator'},{id:'updatedAt',label:'Updated date'},{id:'createdAt',label:'Created date'}]
 const resourceTypes = ['all', 'issue', 'project', 'initiative', 'document', 'customer', 'release', 'view', 'member']
 
 export function readSearchState(params: URLSearchParams): SearchPageState {
   let filters: SearchCondition[] = []
   try {
     const parsed: unknown = JSON.parse(params.get('filters') ?? '[]')
-    if (Array.isArray(parsed)) filters = parsed.filter((item): item is SearchCondition => item && typeof item.id === 'string' && searchFields.some(field => field.id === item.field) && ['is','isNot','on','before','after'].includes(item.operator) && typeof item.value === 'string' && (item.granularity===undefined||['day','month','quarter','half-year','year'].includes(item.granularity))).filter(isSearchConditionValid).slice(0, 20)
+    if (Array.isArray(parsed)) filters = parsed.filter((item): item is SearchCondition => item && typeof item.id === 'string' && searchFields.some(field => field.id === item.field) && ['is','isNot','in','notIn','on','before','after'].includes(item.operator) && typeof item.value === 'string' && (item.values===undefined||Array.isArray(item.values)&&item.values.length<=1000&&item.values.every((value:unknown)=>typeof value==='string')) && (item.granularity===undefined||['day','month','quarter','half-year','year'].includes(item.granularity))).filter(isSearchConditionValid).slice(0, 20)
   } catch { /* Invalid shared filters do not prevent opening search. */ }
   const tab = params.get('type') ?? params.get('tab') ?? 'all'
   const order = params.get('sort') ?? 'relevance'
@@ -35,6 +35,7 @@ export function writeSearchState(state: SearchPageState) {
 
 export function searchFilterAST(state: Pick<SearchPageState,'filters'|'match'>, firstFiscalMonth = fiscalMonth()): Record<string,unknown> | undefined {
   const conditions = state.filters.filter(isSearchConditionValid).map(filter=>{
+    if(filter.field==='team')return {field:'team',operator:filter.operator,values:searchConditionValues(filter)}
     if(!filter.field.endsWith('At')||!filter.granularity&&filter.operator!=='on')return {field:filter.field,operator:filter.operator,values:[filter.value]}
     const [start,end]=searchDateRange(filter.value,filter.granularity??'day',firstFiscalMonth)
     if(filter.operator==='before')return {field:filter.field,operator:'before',values:[start.toISOString()]}
@@ -45,7 +46,16 @@ export function searchFilterAST(state: Pick<SearchPageState,'filters'|'match'>, 
 }
 
 export function isSearchConditionValid(filter: SearchCondition) {
+  if(filter.field==='team')return ['is','isNot','in','notIn'].includes(filter.operator)&&searchConditionValues(filter).length>0&&searchConditionValues(filter).every(value=>value.trim().length>0)
+  if(filter.operator==='in'||filter.operator==='notIn'||filter.values!==undefined)return false
   return Boolean(filter.value && (!filter.field.endsWith('At') || /^\d{4}-\d{2}-\d{2}$/.test(filter.value) && !Number.isNaN(parseISO(filter.value).getTime())))
+}
+
+export function searchConditionValues(filter: SearchCondition) { return filter.values ?? (filter.value ? [filter.value] : []) }
+
+export function teamSelection(filter: SearchCondition, values: string[]): SearchCondition {
+  const negative=filter.operator==='isNot'||filter.operator==='notIn'
+  return {...filter,value:values[0]??'',values,operator:values.length>1?(negative?'notIn':'in'):(negative?'isNot':'is')}
 }
 
 export function searchDateRange(value:string,mode:DateMode,firstFiscalMonth = fiscalMonth()):[Date,Date] {

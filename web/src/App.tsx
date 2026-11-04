@@ -5403,6 +5403,7 @@ function App() {
             getResultHref={result=>searchResultLink(data,result)}
             users={data.users}
             fiscalMonthName={data.workspaceSettings.fiscalMonth ?? 'January'}
+            teams={data.teams}
           />
         )}
         {page === "team-overview" &&

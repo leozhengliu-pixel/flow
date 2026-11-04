@@ -1,0 +1,57 @@
+import { expect } from '@playwright/test'
+import { test } from './workspace-fixture'
+
+test('search Team filter sends exact team sets, returns matching issues and survives reload',async({page,request,workspaceKey},testInfo)=>{
+  const headers={'X-Workspace-Key':workspaceKey}
+  const bootstrap=await request.get('/api/bootstrap',{headers})
+  expect(bootstrap.ok()).toBe(true)
+  const data=await bootstrap.json() as {teams:Array<{id:string;name:string;key:string}>}
+  const first=data.teams[0]
+  const created=await request.post(`/api/workspaces/${workspaceKey}/teams`,{headers,data:{name:'研发',key:'RND'}})
+  expect(created.status()).toBe(201)
+  const second=await created.json() as {id:string;name:string;key:string}
+  for(const [team,title] of [[first,'TeamPredicateNeedle first'],[second,'TeamPredicateNeedle second']] as const){
+    const response=await request.post('/api/issues',{headers,data:{title,teamId:team.id}})
+    expect(response.status()).toBe(201)
+  }
+  const requests:string[]=[]
+  page.on('request',request=>{if(request.url().includes('/api/search/semantic?'))requests.push(request.url())})
+  await page.goto(`/${workspaceKey}/search?q=TeamPredicateNeedle&type=issue`)
+  await expect(page.locator('a[data-result-index]')).toHaveCount(2)
+  const phone=testInfo.project.name.includes('mobile')
+  await page.getByRole('button',{name:'Add filter',exact:true}).click()
+  await page.getByRole(phone?'option':'menuitem',{name:'Team',exact:true}).click()
+  const search=page.getByRole('textbox',{name:'Search teams…'})
+  await search.fill(first.key)
+  const firstOption=page.getByRole('option',{name:new RegExp(first.name)})
+  await expect(firstOption).toContainText(first.key)
+  await firstOption.click()
+  await expect.poll(()=>JSON.parse(new URL(requests.at(-1)!).searchParams.get('filter')!)).toEqual({and:[{field:'team',operator:'is',values:[first.id]}]})
+  await search.fill(second.key)
+  await page.getByRole('option',{name:/研发/}).click()
+  await expect.poll(()=>JSON.parse(new URL(requests.at(-1)!).searchParams.get('filter')!)).toEqual({and:[{field:'team',operator:'in',values:[first.id,second.id]}]})
+  await page.keyboard.press('Escape')
+  await expect(search).toBeHidden()
+  await page.reload()
+  await expect(page.locator('a[data-result-index]')).toHaveCount(2)
+  await expect(page.getByRole('button',{name:'Team values'})).toHaveText('2 teams')
+  await page.getByRole('button',{name:'Team operator'}).click()
+  await page.getByRole('menuitemradio',{name:'is none of',exact:true}).click()
+  await expect(page.locator('a[data-result-index]')).toHaveCount(0)
+  await expect.poll(()=>JSON.parse(new URL(requests.at(-1)!).searchParams.get('filter')!)).toEqual({and:[{field:'team',operator:'notIn',values:[first.id,second.id]}]})
+  await page.getByRole('button',{name:'Team operator'}).click()
+  await page.getByRole('menuitemradio',{name:'is any of',exact:true}).click()
+  await page.getByRole('button',{name:'Team values'}).click()
+  await page.getByRole('option',{name:/研发/}).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('a[data-result-index]')).toHaveCount(1)
+  await expect(page.locator('a[data-result-index]')).toContainText('TeamPredicateNeedle first')
+  await expect(page.getByRole('button',{name:'Team values'})).toHaveText(first.name)
+  await page.getByRole('button',{name:'Team operator'}).click()
+  await page.getByRole('menuitemradio',{name:'is not',exact:true}).click()
+  await expect(page.locator('a[data-result-index]')).toHaveCount(1)
+  await expect(page.locator('a[data-result-index]')).toContainText('TeamPredicateNeedle second')
+  await page.getByRole('button',{name:'Remove Team filter'}).click()
+  await expect(page.locator('[data-filter-chip]')).toHaveCount(0)
+  await expect(page.locator('a[data-result-index]')).toHaveCount(2)
+})

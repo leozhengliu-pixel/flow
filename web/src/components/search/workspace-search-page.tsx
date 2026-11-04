@@ -12,7 +12,7 @@ import { DocumentGlyph } from '@/components/documents/document-icon'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 
 import { clearSearchHistory, searchWorkspace, semanticSearch } from '@/lib/api'
-import type { SearchHistoryEntry, SearchResourceType, SearchResponse, SearchResult, User, WorkflowState } from '@/types/flow'
+import type { SearchHistoryEntry, SearchResourceType, SearchResponse, SearchResult, Team, User, WorkflowState } from '@/types/flow'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
@@ -32,13 +32,14 @@ const tabs: Array<{ id: SearchTab; label: string }> = [
   { id: 'initiative', label: 'Initiatives' },
   { id: 'document', label: 'Documents' },
 ]
-export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref, users, fiscalMonthName }: {
+export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref, users, fiscalMonthName, teams }: {
   /** The workspace's fiscal-year start month from the loaded settings; the shared runtime preferences only follow in an effect after the first render, so the first request would use January. */
   fiscalMonthName?: string
   onOpenSidebar?: () => void
   onOpenResult: (result: SearchResult) => void
   getResultHref: (result: SearchResult) => string
   users?: User[]
+  teams?: Team[]
 }) {
   const {t,locale}=useI18n()
   useWorkspacePreferences()
@@ -155,11 +156,11 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
           <span>{tabs.slice(3).find(item => item.id === tab) ? t(tabs.find(item => item.id === tab)!.label) : t('{count} more').replace('{count}', () => String(tabs.length - 3))}</span><TabsOverflowIcon/>
         </DropdownMenuTrigger><DropdownMenuContent>{tabs.slice(3).map(item => <DropdownMenuItem key={item.id} onSelect={() => updateState({...state,tab:item.id})}>{t(item.label)}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>}
       </nav>
-      <div className="workspace-search-tools"><SearchMenus state={state} users={users} onChange={updateState}/></div>
+      <div className="workspace-search-tools"><SearchMenus state={state} users={users} teams={teams} onChange={updateState}/></div>
     </div>
     </div>
     <section className="workspace-search-content" aria-live="polite">
-      {state.filters.length>0&&<SearchFilterChips state={state} users={users} onChange={updateState}/>}
+      {state.filters.length>0&&<SearchFilterChips state={state} users={users} teams={teams} onChange={updateState}/>}
       {inputPending&&<div className="workspace-search-pending" role="status">{t('Press Enter to search')}</div>}
       {identifierList.length>1&&<a className="workspace-search-identifiers" href={`${location.pathname.replace(/\/search.*$/,'')}/issues/all?ids=${encodeURIComponent(identifierList.join(','))}`}>{t('View {count} issues').replace('{count}',() => String(identifierList.length))}<span data-i18n-ignore>{identifierList.join(', ')}</span></a>}
       {!normalizedQuery && resultsReady && <RecentSearches history={response.history} onSearch={runSearch} onClear={async () => { try{await clearSearchHistory(); setResponse(current => ({ ...current, history: [] }))}catch(reason){setError(reason instanceof Error?reason.message:t('Could not clear search history'))} }}/>}
