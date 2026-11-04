@@ -75,7 +75,7 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
       </Popover.Trigger>
     </ScopedFlowTooltip>
     <Popover.Portal>
-      <Popover.Content align="end" className="document-subscribers" collisionPadding={10} data-flow-motion="floating" onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
+      <Popover.Content align="end" className="document-subscribers" collisionPadding={10} data-flow-motion="floating" onCloseAutoFocus={event => event.preventDefault()} sideOffset={3.5}>
         <div className="document-subscribers__document">
           <span className="document-subscribers__chip" data-testid="document-subscriber-chip"><span className="document-subscribers__label" data-testid="document-subscriber-chip-text">{t('Document ⋅')}</span>{' '}<span data-i18n-ignore>{document.title}</span></span>
         </div>

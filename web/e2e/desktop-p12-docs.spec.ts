@@ -74,6 +74,8 @@ test('document list aligns its metadata and opens intrinsic metadata and subscri
   await page.getByRole('button', { name: 'Change document subscribers' }).click()
   const search = page.getByRole('textbox', { name: 'Change subscribers…', exact: true })
   await expect(search).toBeVisible()
+  await page.locator('.document-subscribers').evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
+  expect((await page.locator('.document-subscribers').boundingBox())!.y).toBe(48)
   await expect(search).toHaveCSS('padding', '10px 0px 9px')
   const otherSubscriber = page.getByRole('checkbox', { name: 'zheng liu', exact: true })
   const agentBadge = otherSubscriber.getByText('Agent', { exact: true })
