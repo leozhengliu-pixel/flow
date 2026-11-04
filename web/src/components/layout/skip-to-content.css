@@ -1,7 +1,4 @@
-/* Visually hidden until focused, then drawn at the top left of the window. Desktop only: the phone layout is keyboardless. */
-@media (max-width: 767px) {
-  .skip-to-content { display: none; }
-}
+/* Also available to hardware keyboards on phones. */
 .skip-to-content {
   position: absolute;
   width: 1px;
