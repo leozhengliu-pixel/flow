@@ -99,10 +99,10 @@ test('clipboard toast uses a neutral desktop copy icon while compact styles stay
   await expect(toast).toHaveCSS('background-color', 'lch(12.72 0.85 272)')
   await expect(toast.locator('.flow-toast__copy-icon')).toBeVisible()
   await expect(toast.locator('.flow-toast__icon')).toBeHidden()
-  for (const width of [375, 390, 1023]) {
+  for (const width of [375, 390, 880, 881, 1023]) {
     await page.setViewportSize({ width, height: 900 })
-    await expect(toast.locator('.flow-toast__copy-icon')).toBeHidden()
-    await expect(toast.locator('.flow-toast__icon')).toBeVisible()
+    await expect(toast.locator('.flow-toast__copy-icon')).toBeVisible({ visible: width > 880 })
+    await expect(toast.locator('.flow-toast__icon')).toBeVisible({ visible: width <= 880 })
     await expect(toast).toHaveCSS('padding', '12px')
   }
 })

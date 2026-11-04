@@ -65,7 +65,7 @@ test('uses the desktop composer glyphs, bright team text and an undivided footer
 })
 
 test('preserves the compact composer glyphs below the desktop breakpoint', async ({ page, issueRoute }) => {
-  for (const width of [375, 390, 1023]) {
+  for (const width of [375, 390, 880]) {
     await page.setViewportSize({ width, height: 900 })
     await page.goto(issueRoute)
     await expect(page.locator('[data-content-view-header]')).toBeVisible()

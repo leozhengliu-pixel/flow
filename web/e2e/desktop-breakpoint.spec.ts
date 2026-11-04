@@ -19,23 +19,23 @@ test('uses the same boundary in the HTML shell before JavaScript loads', async (
   } finally { await context.close() }
 })
 
-test('docks every desktop surface at 881px and keeps the drawer below the boundary', async ({ page, request, workspaceKey }) => {
-  test.setTimeout(120_000)
-  const headers = { 'X-Workspace-Key': workspaceKey }
-  const bootstrap = await (await request.get('/api/bootstrap', { headers })).json()
-  const team = bootstrap.teams[0]
-  const issueResponse = await request.post('/api/issues', { headers, data: { title: 'Breakpoint issue', teamId: team.id } })
-  expect(issueResponse.status()).toBe(201)
-  const issue = await issueResponse.json()
-  const projectResponse = await request.post('/api/projects', { headers, data: { name: 'Breakpoint project', teamIds: [team.id] } })
-  expect(projectResponse.status()).toBe(201)
-  const project = await projectResponse.json()
-  const documentResponse = await request.post('/api/documents', { headers, data: { title: 'Breakpoint document', content: 'Layout verification' } })
-  expect(documentResponse.status()).toBe(201)
-  const document = await documentResponse.json()
-  const routes = ['my-issues/assigned', `team/${team.key}/all`, `issue/${issue.identifier}`, 'projects/all', `project/${project.slugId}/overview`, 'inbox', `document/${document.slugId}`, `team/${team.key}/documents`]
+for (const width of [881, 900, 1000, 1024, 1280]) {
+  test(`docks every desktop surface at ${width}px`, async ({ page, request, workspaceKey }) => {
+    test.setTimeout(120_000)
+    const headers = { 'X-Workspace-Key': workspaceKey }
+    const bootstrap = await (await request.get('/api/bootstrap', { headers })).json()
+    const team = bootstrap.teams[0]
+    const issueResponse = await request.post('/api/issues', { headers, data: { title: 'Breakpoint issue', teamId: team.id } })
+    expect(issueResponse.status()).toBe(201)
+    const issue = await issueResponse.json()
+    const projectResponse = await request.post('/api/projects', { headers, data: { name: 'Breakpoint project', teamIds: [team.id] } })
+    expect(projectResponse.status()).toBe(201)
+    const project = await projectResponse.json()
+    const documentResponse = await request.post('/api/documents', { headers, data: { title: 'Breakpoint document', content: 'Layout verification' } })
+    expect(documentResponse.status()).toBe(201)
+    const document = await documentResponse.json()
+    const routes = ['my-issues/assigned', `team/${team.key}/all`, `issue/${issue.identifier}`, 'projects/all', `project/${project.slugId}/overview`, 'inbox', `document/${document.slugId}`, `team/${team.key}/documents`]
 
-  for (const width of [881, 900, 1000, 1024, 1280]) {
     await page.setViewportSize({ width, height: 900 })
     for (const route of routes) {
       await page.goto(`/${workspaceKey}/${route}`)
@@ -58,8 +58,10 @@ test('docks every desktop surface at 881px and keeps the drawer below the bounda
     await page.keyboard.press('ControlOrMeta+k')
     await expect(page.locator('.command-dialog')).toBeVisible()
     await page.keyboard.press('Escape')
-  }
+  })
+}
 
+test('keeps the drawer below the boundary and docks again on resize', async ({ page, workspaceKey }) => {
   for (const width of [880, 390, 375, 881]) {
     await page.setViewportSize({ width, height: 900 })
     await page.goto(`/${workspaceKey}/my-issues/assigned`)

@@ -1,5 +1,36 @@
 # CI guard delivery
 
+## Continuation: run 41782547112
+
+The handover contained clean commit `84492ea9`, the placeholder deadline correction below, based on main `5771bac1`. It was retained. The previous session had also downloaded failed logs for runs `41780533623` and `41782547112` and started a desktop-boundary reproduction, but had not recorded or committed that follow-up.
+
+Run [41782547112](https://github.com/leozhengliu-pixel/flow/actions/runs/41782547112) has the same whole-source placeholder deadline failure and three browser failures following `e6dee935`, which deliberately moved the desktop layout boundary to above 880px:
+
+- `desktop-shell-polish.spec.ts` still used 1023px as a compact composer. It now uses 880px, retaining the separate 767px phone-density color assertion and both glyph assertions.
+- `desktop-shell-remaining.spec.ts` still expected the compact clipboard icon at 1023px. It now checks compact icons at 375/390/880 and desktop icons at 881/1023, retaining padding and desktop background assertions.
+- `desktop-breakpoint.spec.ts` placed 40 route/width combinations, five settings/composer/command-menu checks, and compact drawer interactions inside one 120-second case. CI exhausted that deadline during navigation/loading; the inherited local reproduction also reached it partway through the matrix. Each desktop width now has its own fresh-workspace case with the same 120-second deadline, all eight routes and every original assertion. The original resize sequence remains a separate drawer case. No retry, longer timeout, removed route or product workaround was added.
+
+Changed files in this follow-up are the three specs above, `CHANGELOG.md`, and this report. The preceding commit changes `web/src/i18n/placeholder-replace.test.ts` and those two documentation files. No product, Go, REST, schema, translation or UI code changed; this test-only CI correction follows the task's direct-main delivery instruction.
+
+The resumed diagnostic run exited 1: the toast reproduced the stale desktop icon expectation, while the composer stopped at the startup loader during the first cold load. Its failure screenshot shows only that loader, not a verified composer. The inherited boundary screenshot shows a loaded document at the point the aggregate deadline expired; the toast screenshot shows the desktop copy icon at 1023px. All three diagnostic screenshots were opened and are failure evidence only, under `/tmp/codex-ci-guard/results-{stale-resume,boundary-baseline}/`. The inherited trace was incomplete after the outage and is not claimed as verification.
+
+Final validation used Node 24.7.0 and the machine-wide `~/.flow-local/heavy.sh` lock. All web commands ran from `web/`:
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| `npm run typecheck` | 0 | Explicit final check |
+| `npm run lint` | 0 | Complete lint command and all architecture, token and motion gates |
+| `npx vitest run --maxWorkers=2 layout-media.test.ts src/components/layout/use-sidebar-layout.test.tsx src/components/create-issue/create-issue-team-state.test.tsx src/components/ui/toast.test.tsx` | 0 | Four related files, 50 tests |
+| `npx vitest run --maxWorkers=2 src/i18n/placeholder-replace.test.ts --coverage --coverage.thresholds.branches=0 --coverage.thresholds.functions=0 --coverage.thresholds.lines=0 --coverage.thresholds.statements=0 --coverage.reportsDirectory=/tmp/codex-ci-guard/placeholder-final-resume-coverage --reporter=json --outputFile=/tmp/codex-ci-guard/placeholder-final-resume.json` | 0 | 1,306 cases; maximum individual duration 230ms. Targeted coverage floor overrides are explained in the preceding fix's section below; repository/CI floors remain unchanged. |
+| `npm run test:e2e -- --retries=0 --reporter=list --output=/tmp/codex-ci-guard/results-boundary-fixed e2e/desktop-breakpoint.spec.ts e2e/desktop-shell-polish.spec.ts e2e/desktop-shell-remaining.spec.ts` | 0 | All 13 tests, bundled Chromium, zero retries, 3.1 minutes |
+| Repository root: `git diff --check` | 0 | No whitespace errors |
+
+Browser environment: `CI=1`, `FLOW_E2E_DATABASE_PATH=/tmp/codex-ci-guard/e2e-boundary-fixed.db`, `FLOW_E2E_API_LOG=/tmp/codex-ci-guard/api-boundary-fixed.log`, and `FLOW_E2E_API_BIN=/tmp/codex-ci-guard/flow-server-resume` (the inherited scratch binary). The harness starts an auth-disabled scratch API, scripted provider and Vite. The inherited task-owned server PIDs were stopped before the resumed diagnostic; ports 4173/4180/4190 were checked free before the successful run and were clear after harness shutdown. No user's browser, reference browser, real model, production database or other agent's server was used.
+
+The final browser run covers dark/English desktop widths 881, 900, 1000, 1024 and 1280; compact drawer/composer at 375, 390 and 880; return to docked mode at 881; and toast icon changes through 1023. There are no new UI controls or product changes, so a full UI state matrix and reviewer click walkthrough are not applicable. No successful screenshots were requested from this test-only run; its assertions passed. The three opened diagnostic screenshots described above are explicitly not pass evidence.
+
+Final logs: `/tmp/codex-ci-guard/{typecheck-final-resume,lint-final-resume,vitest-final-resume,placeholder-final-resume,e2e-boundary-fixed}.log`. Only affected/related tests were run. No Go package, REST contract or browser spec outside these three changed, so Go checks and generation do not apply. Dependencies are removed before handoff. No post-push CI result is claimed; the user requested delivery without waiting for CI.
+
 ## Continuation: run 41777655254
 
 Commit `879483f8` added a TypeScript AST check for unsafe translation placeholder replacements. Run [41777655254](https://github.com/leozhengliu-pixel/flow/actions/runs/41777655254) exceeded the 15-second test deadline in the critical and whole-source coverage jobs because one test synchronously parsed all 1,305 non-test source files. The unchanged test passed locally under coverage, but spent about 11.5 seconds in that single case, consistent with the timing failure under CI load.
