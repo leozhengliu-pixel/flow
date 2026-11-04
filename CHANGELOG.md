@@ -53,6 +53,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Give shared desktop toolbar icon pills their measured resting, hover and open fills separately from text tabs.
 - Size the desktop issue document and property rail with the shared container grid, so their gutters and columns adapt together as the pane changes width.
 - Keep the labels sheet's half-pixel content alignment across browser scales without widening other phone menus.
+- Move issues from the desktop or phone Team property, issue options, row menus or the shared Command-Shift-M shortcut. Search team paths and keys, show the current selection, hide forbidden destinations, and confirm moves with the destination name and updated identifier.
 - Remove an issue's project and milestone on a team move when the project does not include the destination team; retain projects shared with that team.
 - Put open issues moved by a non-member into the destination team's triage, while retaining closed states and the existing team-move event path.
 - Reset phone drawer navigation when focus returns to its pinned header, including on reopen, while preserving the hardware-keyboard skip link.

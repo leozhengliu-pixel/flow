@@ -50,6 +50,7 @@ import { RecurrenceDialog } from './recurrence-picker'
 import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
 import { teamHierarchy } from '@/lib/team-hierarchy'
+import { issueMoveTeams } from '@/lib/issue-team-move'
 import { deleteRelation, refreshIssueSuggestions } from '@/lib/api'
 import { issueRemovableLinks, issueEverythingMarkdown, issueMarkdown, type IssueRemovableLink } from './issue-options-model'
 import { useIssuesById } from './use-issues-by-id'
@@ -270,12 +271,7 @@ export function IssueOptionsMenu({
       if (isEditableTarget(event.target)) return
       const key = event.key.toLowerCase()
       if (issue.archivedAt && (key === 'm' || key === 'd' || key === 's')) return
-      if (!mobile && (event.metaKey || event.ctrlKey) && event.shiftKey && !event.altKey && key === 'm' && data && data.teams.filter(team => !team.retiredAt && !team.archivedAt).length > 1) {
-        event.preventDefault()
-        setOpen(true)
-        setSubmenu('team')
-        setFocusNested(true)
-      } else if (!event.metaKey && !event.ctrlKey && !event.altKey && event.shiftKey && key === 'd') {
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && event.shiftKey && key === 'd') {
         event.preventDefault()
         setSubmenu(null)
         setOpen(true)
@@ -346,7 +342,7 @@ export function IssueOptionsMenu({
               <Command.List>
                 <Command.Empty className="issue-options-empty">{t('No results')}</Command.Empty>
                 {issue.archivedAt && <Option icon={<RefreshCw/>} label="Restore" disabled={busy} onSelect={() => void perform(() => onUpdate({ archived: false }))}/>}
-                {(mobile || data && data.teams.filter(team => !team.retiredAt && !team.archivedAt).length > 1) && <Option disabled={Boolean(issue.archivedAt)} icon={<FlowGlyph name="leadTeam" size={16}/>} label="Team" shortcut={mobile ? undefined : 'Command Shift M'} nested="team" anchor={anchors.team} expanded={submenu === 'team'} onHover={() => openNested('team')} onSelect={() => openNested('team', true)}/>}
+                {data && <Option disabled={Boolean(issue.archivedAt) || data.viewerRole === 'guest'} icon={<FlowGlyph name="leadTeam" size={16}/>} label="Team" shortcut={mobile ? undefined : 'Command Shift M'} nested="team" anchor={anchors.team} expanded={submenu === 'team'} onHover={() => openNested('team')} onSelect={() => openNested('team', true)}/>}
                 <Option disabled={Boolean(issue.archivedAt)} icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested="due" anchor={anchors.due} expanded={datePickerOpen} onHover={() => openNested('due')} onSelect={() => openNested('due', true)}/>
                 {data?.workspaceSettings.featureFlags.releases !== false && hasReleaseSurface && <Option disabled={Boolean(issue.archivedAt)} icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
                 <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
@@ -398,7 +394,7 @@ export function IssueOptionsMenu({
           </Command>
 
           {submenu === 'team' && <SubmenuSurface label="Team" anchor={anchors.team} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
-            {mobile ? data?.teams.map(team => <Option key={team.id} icon={<TeamIcon team={team}/>} label={team.name} onSelect={() => { if (team.id === issue.team.id) closeMenu(); else void perform(() => onUpdate({ teamId: team.id }), t('Team changed')) }}/>) : data && <IssueTeamChoices data={data} teamId={issue.team.id} onSelect={teamId => { if (teamId === issue.team.id) closeMenu(); else void perform(() => onUpdate({ teamId }), t('Team changed')) }}/>}
+            {data && <IssueTeamChoices data={data} teamId={issue.team.id} onSelect={teamId => { if (teamId === issue.team.id) closeMenu(); else void perform(() => onUpdate({ teamId }), t('Moved to {name}').replace('{name}', () => data.teams.find(team => team.id === teamId)!.name)) }}/>}
           </SubmenuSurface>}
           {submenu === 'release' && (data ? <IssueReleasePicker data={data} issue={issue} externalAnchor={anchors.release} popoverOpen onPopoverOpenChange={next => !next && returnToParent()} onMenuEscape={closeMenu}/> : <SubmenuSurface label="Release" anchor={anchors.release} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}><div className="issue-options-empty">{t('No releases')}</div></SubmenuSurface>)}
           {submenu === 'create' && <SubmenuSurface label="Create related" anchor={anchors.create} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
@@ -512,12 +508,13 @@ export function IssueOptionsMenu({
 }
 
 function IssueTeamChoices({ data, teamId, onSelect }: { data: BootstrapData; teamId: string; onSelect: (id: string) => void }) {
+  const { t } = useI18n()
   const hierarchy = teamHierarchy(data.teams, data.teamSettings, data.teamParents)
-  const active = data.teams.filter(team => !team.retiredAt && !team.archivedAt)
+  const active = issueMoveTeams(data).map(item => item.team)
   const joinedIds = new Set((data.teamMembers ?? []).filter(member => member.userId === data.viewer.id).map(member => member.teamId))
   const joined = active.filter(team => joinedIds.has(team.id) || team.id === teamId)
   const others = active.filter(team => !joined.includes(team))
-  return [joined, others].map((teams, index) => <Fragment key={index}>
+  return <><h3 className="sr-only">{t('Showing all items')}</h3>{[joined, others].map((teams, index) => <Fragment key={index}>
     {index > 0 && joined.length > 0 && teams.length > 0 && <Command.Separator className="issue-options-separator"><span className="issue-options-separator-line"/></Command.Separator>}
     <Command.Group className="issue-options-team-group">
     {hierarchy.rows(teams).map(({ team }) => {
@@ -529,7 +526,7 @@ function IssueTeamChoices({ data, teamId, onSelect }: { data: BootstrapData; tea
       </Command.Item>
     })}
     </Command.Group>
-  </Fragment>)
+  </Fragment>)}</>
 }
 
 function SubmenuSurface({ label, anchor, children, searchable = false, bare = false, autoFocus, onReturn, onCloseAll }: { label: string; anchor: RefObject<HTMLDivElement | null>; children: ReactNode; searchable?: boolean; bare?: boolean; autoFocus: boolean; onReturn: () => void; onCloseAll: () => void }) {

@@ -34,6 +34,7 @@ import { EstimateIcon, EstimateValueIcon } from '@/components/issue/estimate-ico
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
 import { labelTeamScopeIds, labelsForResource, setGroupedLabelSelected } from '@/lib/labels'
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
+import { issueMoveTeams } from '@/lib/issue-team-move'
 import { statesForTeams, teamStateChanges } from '@/lib/team-workflow'
 import type { BootstrapData, Issue, IssueRelationType, IssueUpdateInput, WorkflowState } from '@/types/flow'
 import type { CommandContext, CommandIssueRef, IssueCommandContext } from './command-context'
@@ -266,7 +267,7 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
     { id: 'ctx-copy-title', label: 'Copy issue title', icon: <Copy/>, shortcut: ['⌘', '⇧', "'"], run: choose(() => copyIssues(issue => issue.title, 'Copied issue title')) },
     ...(single && first ? [{ id: 'ctx-copy-prefilled-url', label: 'Copy prefilled create issue URL', icon: <Link2/>, keywords: 'new template link prefill create', run: choose(() => copyText(buildPrefilledIssueURL(first, data, location.origin), t('Copied prefilled create issue URL'))) }] : []),
     ...(single && first && handlers.onCreateIssueWith ? [{ id: 'ctx-make-copy', label: 'Make a copy…', icon: <CopyPlus/>, keywords: 'duplicate clone', run: () => { close(); handlers.onCreateIssueWith?.(copyContext(first)) } }] : []),
-    { id: 'ctx-team', label: 'Move to team…', icon: <Users/>, keywords: 'transfer', page: { id: 'team', label: 'Move to team…' } },
+    ...(data.viewerRole !== 'guest' ? [{ id: 'ctx-team', label: 'Move to team…', icon: <Users/>, shortcut: ['⌘', '⇧', 'M'], keywords: 'transfer', page: { id: 'team' as const, label: 'Move to team…' } }] : []),
     { id: 'ctx-archive', label: 'Archive', icon: <Archive/>, keywords: 'close', run: choose(() => apply({ archived: true })) },
     ...(handlers.onDeleteIssues || (single && context.onDelete) ? [{ id: 'ctx-delete', label: 'Delete', icon: <Trash2/>, shortcut: ['⌘', '⌫'], keywords: 'remove', run: choose(async () => {
       const title = single && first ? issueDeleteConfirmation(first, t).title : `${t('Delete')} ${ids.length} ${t('issues')}?`
@@ -335,7 +336,15 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
       return estimatePickerOptions(teamSettings).map(option => ({ id: option.id, label: option.label, icon: <EstimateValueIcon value={option.value}/>, current: current === option.value, select: choose(() => apply({ estimate: option.value })) }))
     }
     if (page.id === 'team') {
-      return data.teams.filter(team => !team.archivedAt).map(team => ({ id: team.id, label: team.name, entity: true, keywords: team.key, icon: <TeamIcon team={team}/>, current: oneTeam === team.id, select: choose(() => apply({ teamId: team.id })) }))
+      return issueMoveTeams(data).map(({ team, path }) => ({ id: team.id, label: `${path} ${team.key}`, entity: true, group: 'Showing all items', keywords: team.key, icon: <TeamIcon team={team}/>, current: oneTeam === team.id, select: choose(async () => {
+        if (oneTeam === team.id) return
+        try {
+          if (single && context.onUpdate) remember(await context.onUpdate({ teamId: team.id }))
+          else if (single && handlers.onUpdateIssue) remember(await handlers.onUpdateIssue(ids[0], { teamId: team.id }))
+          else if (handlers.onUpdateIssues) remember(await handlers.onUpdateIssues(ids, { teamId: team.id }))
+          toast.success(t('Moved to {name}').replace('{name}', () => team.name))
+        } catch (error) { toast.error(error instanceof Error ? error.message : t('Could not update issue')) }
+      }) }))
     }
     if (page.id === 'relation') return RELATION_PAGES.map(relation => ({ id: relation.type, label: relation.label, icon: relation.icon, page: { id: 'relatedIssue', label: relation.label, relationType: relation.type } }))
     const targets = candidates.filter(issue => !ids.includes(issue.id)).slice(0, 50)

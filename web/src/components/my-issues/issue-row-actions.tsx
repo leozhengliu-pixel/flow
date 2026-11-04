@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/lib/toast'
@@ -11,7 +11,10 @@ import { configuredIssueBranch, issueWorkPrompt } from '@/lib/issue-work-actions
 import { estimateLabel, estimateValues } from '@/lib/estimates'
 import { EstimateIcon, EstimateValueIcon } from '@/components/issue/estimate-icon'
 import { usePropertyCommand } from '@/components/property/use-property-command'
-import { StatusIcon } from '@/components/issue/issue-icons'
+import { StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
+import { issueMoveTeams } from '@/lib/issue-team-move'
+import { takeQueuedShortcut } from '@/components/ui/menu-shortcuts'
+import { useI18n } from '@/i18n/i18n'
 import { useIssueCandidates } from '@/components/issue/use-issue-candidates'
 import type { BootstrapData, Issue, IssueRelation, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 import type { MyIssuesCreateContext, MyIssuesRowData } from './my-issues-list'
@@ -22,6 +25,7 @@ import { SubmenuChevron } from '@/components/ui/submenu-chevron'
 import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { FlowCodingToolsIcon } from '@/components/issue/flow-header-icons'
 import { MenuSubmenu } from '@/components/ui/menu-submenu'
+import '@/components/issue/issue-team-picker.css'
 
 export function IssueRowActionsProvider({ value, children }: { value: IssueRowActionContextValue; children: ReactNode }) {
   return <IssueRowActionContext.Provider value={value}>{children}</IssueRowActionContext.Provider>
@@ -73,13 +77,43 @@ export function IssueRowMoreProperties({ row }: { row: MyIssuesRowData }) {
 
 function MoreProperties({ row }: { row: MyIssuesRowData }) {
   const { data, update } = useRowHelpers(row)
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const [teamOpen, setTeamOpen] = useState(false)
+  const shortcutPending = useRef(false)
+  useEffect(() => {
+    shortcutPending.current ||= takeQueuedShortcut() === '⌘ ⇧ M'
+    if (!shortcutPending.current) return
+    const frame = requestAnimationFrame(() => setOpen(true))
+    return () => cancelAnimationFrame(frame)
+  }, [])
+  useEffect(() => {
+    if (!open || !shortcutPending.current) return
+    const frame = requestAnimationFrame(() => { shortcutPending.current = false; setTeamOpen(true) })
+    return () => cancelAnimationFrame(frame)
+  }, [open])
   const milestones = row.project ? data.projects.find(project => project.id === row.project!.id)?.milestones ?? [] : []
-  const teams = data.teams.filter(team => team.id !== row.teamId)
-  return <Sub label="More properties">
-    {teams.length > 0 && <Sub label="Team…">{teams.map(team => <Item key={team.id} label={team.name} onSelect={() => void update({ teamId: team.id }, `Moved to ${team.name}`)}/>)}</Sub>}
+  return <Sub label="More properties" open={open} onOpenChange={setOpen}>
+    <Sub label="Team" shortcut="⌘ ⇧ M" disabled={data.viewerRole === 'guest'} open={teamOpen} onOpenChange={setTeamOpen} issueSearch><RowTeamChoices data={data} teamId={row.teamId} onSelect={teamId => {
+      if (teamId !== row.teamId) void update({ teamId }, t('Moved to {name}').replace('{name}', () => data.teams.find(team => team.id === teamId)!.name))
+    }}/></Sub>
     {milestones.length > 0 && <Sub label="Milestone">{[{ id: '', name: 'No milestone' }, ...milestones].map(milestone => <Item key={milestone.id || 'none'} label={milestone.name} checked={(row.projectMilestoneId ?? '') === milestone.id} onSelect={() => void update({ projectMilestoneId: milestone.id })}/>)}</Sub>}
     <Sub label="Add link…" shortcut="Ctrl L" issueSearch><AddLink issueId={row.id}/></Sub>
   </Sub>
+}
+
+function RowTeamChoices({ data, teamId, onSelect }: { data: BootstrapData; teamId?: string; onSelect: (id: string) => void }) {
+  const { t } = useI18n()
+  const options = issueMoveTeams(data).map(({ team, path }) => ({ id: team.id, label: `${path} ${team.key}`, team }))
+  const { inputRef, ...command } = usePropertyCommand({ open: true, options, selectedIds: [teamId ?? ''], closeOnSelect: false, onOpenChange: () => undefined, onSelect: option => {
+    document.querySelector<HTMLElement>(`[data-team-choice="${option.id}"]`)?.click()
+  } })
+  return <div className="issue-row-team-choices">
+    <h3 className="sr-only">{t('Showing all items')}</h3>
+    <div className={command.query ? 'property-command-search' : 'issue-team-filter'}><input ref={inputRef} aria-label={t('Move to team…')} placeholder={t('Move to team…')} value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event => { if (event.key !== 'Escape') { event.stopPropagation(); command.onKeyDown(event) } }}/></div>
+    {command.filteredOptions.map(option => <ContextMenu.Item key={option.id} data-team-choice={option.id} className={styles.submenuItem} onSelect={() => onSelect(option.id)}><TeamIcon team={option.team}/><span data-i18n-ignore>{option.label}</span>{teamId === option.id && <span aria-label={t('Current')}>✓</span>}</ContextMenu.Item>)}
+    {!command.filteredOptions.length && <div className={styles.issueEmpty}>{t('No results')}</div>}
+  </div>
 }
 
 /** Everything after the property items: create related, mark as, copy, open in, subscribe, remind and delete. */
@@ -91,6 +125,7 @@ export function IssueRowActionGroups({ row, onDelete }: { row: MyIssuesRowData; 
 
 function ActionGroups({ row, onDelete }: { row: MyIssuesRowData; onDelete?: () => void }) {
   const { context, data, issue, update } = useRowHelpers(row)
+  const { t } = useI18n()
   const viewerId = data.viewer.id
   const subscribed = Boolean(issue?.subscriberIds.includes(viewerId))
   const favorite = Boolean(findFavorite(data.favorites, viewerId, 'issue', row.id))
@@ -125,7 +160,7 @@ function ActionGroups({ row, onDelete }: { row: MyIssuesRowData; onDelete?: () =
     return `${(outgoing ? RELATION_LABEL[relation.type] : INVERSE_LABEL[relation.type]) ?? 'Related to'} ${other?.identifier ?? ''}`.trim()
   }
   const remove = onDelete ?? (context.onDeleteIssues ? () => void context.onDeleteIssues!([row.id]).catch(() => toast.error('Could not delete issue')) : undefined)
-  const moveTeams = data.teams.filter(team => team.id !== row.teamId && !team.retiredAt && !team.archivedAt)
+  const moveTeams = issueMoveTeams(data).map(item => item.team).filter(team => team.id !== row.teamId)
   const onConvertIssue = context.onConvertIssue
   const resolveIssue = () => issue ? Promise.resolve(issue) : fetchIssueRecord(row.id, undefined, data.workspace.urlKey)
   const convert = onConvertIssue ? (kind: 'project' | 'template') => {
@@ -165,7 +200,9 @@ function ActionGroups({ row, onDelete }: { row: MyIssuesRowData; onDelete?: () =
     </Sub>}
     <Item top label="Make a copy…" onSelect={() => makeCopy()}/>
     {moveTeams.length > 0 && <Sub label="Move">
-      <Sub label="Team…">{moveTeams.map(team => <Item key={team.id} label={team.name} onSelect={() => void update({ teamId: team.id }, `Moved to ${team.name}`)}/>)}</Sub>
+      <Sub label="Team" shortcut="⌘ ⇧ M" issueSearch><RowTeamChoices data={data} teamId={row.teamId} onSelect={teamId => {
+        if (teamId !== row.teamId) void update({ teamId }, t('Moved to {name}').replace('{name}', () => data.teams.find(team => team.id === teamId)!.name))
+      }}/></Sub>
     </Sub>}
     <Sub label="Open in">
       {tools.map(tool => <Item key={tool.id} label={tool.name} onSelect={() => { const link = tool.link(prompt(), settings ?? {}); if (link) window.open(link, '_blank', 'noopener'); else toast.error(`${tool.name} is not configured`) }}/>)}
@@ -214,9 +251,10 @@ function Item({ label, icon, shortcut, checked, top = false, onSelect }: { label
   return <ContextMenu.Item className={top ? styles.menuItem : styles.submenuItem} onSelect={onSelect}>{top ? <ContextMenuIcon label={label}/> : icon}<span>{label}</span>{checked ? <span aria-label="Selected">✓</span> : shortcut ? <kbd>{shortcut}</kbd> : null}</ContextMenu.Item>
 }
 
-function Sub({ label, shortcut, issueSearch = false, children }: { label: string; shortcut?: string; issueSearch?: boolean; children: ReactNode }) {
+function Sub({ label, shortcut, issueSearch = false, children, disabled, open, onOpenChange }: { label: string; shortcut?: string; issueSearch?: boolean; children: ReactNode; disabled?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const desktop = useDesktopLayout()
-  return <MenuSubmenu label={label} triggerProps={{ className: styles.menuItem }} trigger={<><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true"><SubmenuChevron/></span></>} contentProps={{ 'data-flow-motion': 'floating', className: issueSearch ? `${styles.contextSubmenu} ${styles.issueSubmenu}` : styles.contextSubmenu, sideOffset: desktop ? 4.5 : 3, alignOffset: desktop ? -6.5 : -5 }}>{issueSearch ? children : <div className={styles.contextMenuList}>{children}</div>}</MenuSubmenu>
+  const { t } = useI18n()
+  return <MenuSubmenu label={t(label)} open={open} onOpenChange={onOpenChange} triggerProps={{ className: styles.menuItem, disabled, title: disabled ? t('Guests cannot move issues to another team') : undefined }} trigger={<><ContextMenuIcon label={label}/><span>{t(label)}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true"><SubmenuChevron/></span></>} contentProps={{ 'data-flow-motion': 'floating', className: issueSearch ? `${styles.contextSubmenu} ${styles.issueSubmenu}` : styles.contextSubmenu, sideOffset: desktop ? 4.5 : 3, alignOffset: desktop ? -6.5 : -5 }}>{issueSearch ? children : <div className={styles.contextMenuList}>{children}</div>}</MenuSubmenu>
 }
 
 function IssueSearch({ data, exclude, onPick }: { data: BootstrapData; exclude: string; onPick: (issue: Issue) => void }) {

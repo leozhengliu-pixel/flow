@@ -47,9 +47,7 @@
     margin-bottom: 10.25px;
     color: var(--issue-muted);
   }
-  html:root body .issue-properties > .issue-team-property.core-property-picker { display: flex; align-items: center; gap: 4px; }
-  .issue-team-property .issue-assignee-profile svg { transform: rotate(-90deg); }
-  .issue-team-property:hover .issue-assignee-profile { opacity: 1; transform: none; }
+  .issue-properties > .issue-team-property.core-property-picker { display: flex; align-items: center; gap: 4px; }
   .issue-properties .core-property-trigger.muted { color: var(--issue-muted); }
   .issue-properties :is(.core-property-picker, .estimate-picker, .cycle-picker, .issue-project-row) { padding-left: 1px; }
   .issue-properties > .estimate-picker,

@@ -77,6 +77,15 @@ describe('issue action menu', () => {
     await waitFor(()=>expect(onUpdate).toHaveBeenCalledWith({teamId:target.id}))
   })
 
+  it('puts Team first and disables it for guests', async () => {
+    const issue = makeIssue()
+    render(<I18nProvider><IssueOptionsMenu issue={issue} data={makeBootstrap({ viewerRole: 'guest', reviews: [] })} onRelation={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()}/></I18nProvider>)
+    await userEvent.click(screen.getByRole('button', { name: 'Issue options' }))
+    const options = screen.getAllByRole('option')
+    expect(options[0]).toHaveTextContent('Team')
+    expect(options[0]).toHaveAttribute('aria-disabled', 'true')
+  })
+
   it('separates other teams and includes the muted ancestor path when filtering', async () => {
     const user = userEvent.setup()
     const issue = makeIssue()
@@ -277,7 +286,7 @@ describe('issue action menu', () => {
     await user.click(screen.getByRole('button',{name:'Issue options'}))
     const root = screen.getByRole('dialog',{name:'Issue options'})
     const labels = within(root).getAllByRole('option').map(option => option.querySelector('.issue-options-label')?.textContent)
-    expect(labels).toEqual(['Due date','Release','Add link…','Add customer request…','Add document…','Create related','Mark as','Copy','Convert to','Make a copy…','Favorite','Remind me','Unsubscribe','Find suggestions','Run loop…','Show description history','Delete'])
+    expect(labels).toEqual(['Team','Due date','Release','Add link…','Add customer request…','Add document…','Create related','Mark as','Copy','Convert to','Make a copy…','Favorite','Remind me','Unsubscribe','Find suggestions','Run loop…','Show description history','Delete'])
     const addLink = within(root).getByRole('option',{name:/Add link/})
     expect([...addLink.querySelectorAll('kbd')].map(key => key.textContent)).toEqual(['Ctrl','L'])
     expect(within(root).getByRole('option',{name:/^Unsubscribe/}).querySelector('svg[data-action-glyph=unsubscribe]')).not.toBeNull()

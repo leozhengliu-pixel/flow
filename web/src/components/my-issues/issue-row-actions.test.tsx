@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { StrictMode } from 'react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, makeIssue } from '@/test/fixtures'
 import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
@@ -9,6 +10,25 @@ const layout=vi.hoisted(()=>({desktop:false}))
 vi.mock('@/hooks/use-desktop-layout',()=>({useDesktopLayout:()=>layout.desktop}))
 
 describe('row context menu', () => {
+  it('opens searchable Team choices from a focused row shortcut and filters forbidden teams', async () => {
+    layout.desktop = true
+    const issue = makeIssue()
+    const target = { ...issue.team, id: 'target', name: 'Destination', key: 'DST' }
+    const privateTeam = { ...issue.team, id: 'private', name: 'Private', private: true }
+    const data = makeBootstrap({ issues: [issue], teams: [issue.team, target, privateTeam] })
+    const onUpdateIssue = vi.fn().mockResolvedValue(issue)
+    const row = issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data)
+    render(<StrictMode><I18nProvider><IssueRowActionsProvider value={{ data, onUpdateIssue }}><MyIssuesList groups={[{ id: 'all', label: 'All', issues: [row] }]} onPropertyChange={vi.fn()}/></IssueRowActionsProvider></I18nProvider></StrictMode>)
+    const link = screen.getByRole('link', { name: new RegExp(issue.identifier) })
+    link.focus()
+    fireEvent.keyDown(link, { key: 'M', code: 'KeyM', ctrlKey: true, shiftKey: true })
+    const search = await screen.findByPlaceholderText('Move to team…')
+    expect(screen.queryByText('Private TST')).not.toBeInTheDocument()
+    fireEvent.change(search, { target: { value: 'DST' } })
+    fireEvent.keyDown(search, { key: 'ArrowDown' })
+    fireEvent.keyDown(search, { key: 'Enter' })
+    await waitFor(() => expect(onUpdateIssue).toHaveBeenCalledExactlyOnceWith(issue.id, { teamId: target.id }))
+  })
   it.each([false,true])('keeps subscription and relation removal after the standard actions: %s', async desktop => {
     layout.desktop=desktop
     const issue = makeIssue({ assignee: undefined, parentId: 'parent', subscriberIds: [] })

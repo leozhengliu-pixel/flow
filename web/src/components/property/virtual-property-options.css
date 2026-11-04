@@ -10,6 +10,7 @@
 [data-property-multiple=standard] [role=option][aria-checked=true] .property-command-checkbox{background:var(--checkbox-selected-fill);border-color:var(--checkbox-selected-border)}
 [data-property-multiple=standard] .property-command-option-end{grid-column:4}
 .property-command-ancestor{display:inline-flex;align-items:center;gap:6px;margin-right:6px;color:var(--theme-text-secondary)}
+.property-command-section + .property-command-section[data-unlabelled] { margin-top: 5.5px; padding-top: 6px; border-top: .5px solid var(--pk-divider); }
 .property-command-standard>div{display:flex;flex-direction:column;max-height:inherit;min-height:0;overflow:hidden}
 .property-command-standard .property-command-search{flex:0 0 40px}
 .property-command-standard .property-command-options{min-height:0;max-height:min(319px,calc(100dvh - 62px),calc(var(--radix-popover-content-available-height,100dvh) - 42px));overscroll-behavior:contain;scrollbar-width:thin}

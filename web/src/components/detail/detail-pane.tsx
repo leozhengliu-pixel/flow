@@ -23,7 +23,7 @@ import type { ActivityHighlightTarget } from '@/components/activity/activity-hig
 import { Composer } from '@/components/editor/composer'
 import { SelectionIssueProvider } from '@/components/editor/selection-issue-provider'
 import { Avatar } from '@/components/issue/issue-row'
-import { AddReactionIcon, AttachmentIcon, NoAssigneeIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
+import { AddReactionIcon, AttachmentIcon, NoAssigneeIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { LinkExistingSubIssue } from './link-existing-sub-issue'
 import { SimilarIssues } from './similar-issues'
 import { TriageHeaderActions } from '@/components/triage/triage-actions'
@@ -35,7 +35,7 @@ import { IssueTitleEditor } from '@/components/issue/issue-title-editor'
 import { agentsAvailable } from '@/lib/agent-members'
 import { AssigneePicker, PriorityPicker, StatusPicker } from '@/components/issue/core-property-pickers'
 import { IssueAssigneeProperty } from '@/components/issue/issue-assignee-property'
-import { PropertyMenu } from '@/components/property/property-menu'
+import { IssueTeamPicker } from '@/components/issue/issue-team-picker'
 // coding sessions (track G)
 import { useDelegateCodingSession } from '@/components/coding-sessions/coding-session-start'
 import { IssueCodingDiffs } from '@/components/coding-sessions/issue-coding-diffs'
@@ -61,7 +61,7 @@ import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import type { IssueOptionsActions } from '@/components/issue/issue-options-menu'
-import { documentPath, teamHomePath } from '@/lib/app-routes'
+import { documentPath } from '@/lib/app-routes'
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
 import { useI18n } from '@/i18n/i18n'
 import { Toggle } from '@/components/ui/toggle'
@@ -97,7 +97,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   useFlowHotkeys({
     A:()=>openProperty('assignee'), S:()=>openProperty('status'), P:()=>openProperty('priority'), L:()=>openProperty('labels'),
     I:()=>{if(!issue.archivedAt)void onUpdate({assigneeId:issue.assignee?.id===data.viewer.id?'':data.viewer.id}).catch(error=>toast.error(error instanceof Error?error.message:t('Could not update issue')))},
-    '⇧ E':()=>openProperty('estimate'), '⇧ C':()=>openProperty('cycle'),
+    '⇧ E':()=>openProperty('estimate'), '⇧ C':()=>openProperty('cycle'), '⌘ ⇧ M':()=>openProperty('team'),
     '⇧ R':()=>viewRef.current?.querySelector<HTMLElement>('.title-editor[contenteditable="true"]')?.focus(),
     'Ctrl ⇧ I':()=>viewRef.current?.querySelector<HTMLElement>('.description-editor[contenteditable="true"]')?.focus(),
     '⌘ ⇧ O':()=>setSubOpen(true),
@@ -170,6 +170,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         {!triageView&&<TriageIntelligenceSuggestions issue={issue} data={data} inTriage={inTriage} onIssueUpdated={onIssueUpdated}/>}
         <PhoneSheetRecordProvider value={{ key: issue.identifier, title }}><fieldset disabled={Boolean(issue.archivedAt)} className="issue-property-fields"><div className="issue-mobile-properties" aria-label={t('Issue properties')}>
           <StatusPicker value={issue.state} states={availableStates} triage={inTriage} onChange={stateId=>onUpdate({stateId})}/>
+          <IssueTeamPicker issue={issue} data={data} onUpdate={onUpdate}/>
           <div className="issue-mobile-priority" data-empty={issue.priority===0}><PriorityPicker value={issue.priority} emptyTriggerLabel={t('Priority')} onChange={priority=>onUpdate({priority})}/></div>
           <div className="issue-mobile-assignee" data-empty={!issue.assignee&&!issue.delegate}><AssigneePicker value={issue.assignee} delegate={issue.delegate} emptyTriggerLabel="Assignee" allowAgents={agentsAvailable(data)} users={data.users} teamId={issue.team.id} hoverContext={{ member: issue.assignee ? data.members.find(item=>item.user.id===issue.assignee?.id) : undefined, online: Boolean(issue.assignee && (issue.assignee.id===data.viewer.id || peoplePresence.some(item=>item.user.id===issue.assignee?.id))), workspaceName: issue.team.name }} onChange={assigneeId=>onUpdate({assigneeId})} onDelegate={delegateId=>onUpdate({delegateId})}/></div>
           <IssueProjectPicker data={data} issue={issue} emptyTriggerLabel="Project" presence={peoplePresence} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onUpdate={onUpdate}/>
@@ -282,8 +283,7 @@ function IssueRecurrenceProperty({issue,timeZone,onUpdate}:{issue:Issue;timeZone
   return <div className="issue-recurrence-row"><button type="button" className="issue-recurrence-trigger" aria-label={summary} title={summary} onClick={()=>setOpen(true)}><Repeat2 size={14} aria-hidden="true"/><span>{summary}</span></button><RecurrenceDialog open={open} onOpenChange={setOpen} busy={busy} value={issue.recurrence} dueDate={issue.dueDate} nextOccurrenceAt={issue.nextOccurrenceAt} timeZone={timeZone} onSave={(recurrence,firstDue)=>save({recurrence,dueDate:firstDue})} onStop={()=>save({recurrence:''})}/></div>
 }
 function IssueTeamProperty({issue,data,onUpdate}:{issue:Issue;data:BootstrapData;onUpdate:(input:IssueUpdateInput)=>Promise<void>}){
-  const {t}=useI18n()
-  return <div className="issue-team-property core-property-picker"><PropertyMenu label="Team" value={issue.team.name} valueIsEntityName selectedId={issue.team.id} options={data.teams.filter(team=>!team.retiredAt&&!team.archivedAt).map(team=>({id:team.id,label:team.name,icon:<TeamIcon team={team}/>,i18nIgnore:true}))} ariaLabel={t('Change team')} searchPlaceholder={t('Change team…')} triggerClassName="core-property-trigger" trigger={<><TeamIcon team={issue.team}/><span data-i18n-ignore>{issue.team.name}</span></>} onChange={teamId=>teamId===issue.team.id?undefined:onUpdate({teamId})}/><a className="issue-assignee-profile" href={teamHomePath(data.workspace.urlKey,issue.team.key)} aria-label={t('Open team overview')}><ChevronDown size={15}/></a></div>
+  return <IssueTeamPicker issue={issue} data={data} onUpdate={onUpdate}/>
 }
 function PropertyGroup({title,children}:{title:string;children:React.ReactNode}){return <section className="property-group"><h4>{title}</h4>{children}</section>}
 function IssueParentContext({parent,issues,workspaceKey,onOpen}:{parent:Issue;issues:Issue[];workspaceKey:string;onOpen:()=>void}){const children=parent.subIssueIds.map(id=>issues.find(issue=>issue.id===id)).filter((issue):issue is Issue=>Boolean(issue)&&!issue!.archivedAt),completed=children.filter(issue=>issue.state.type==='completed'||issue.state.type==='canceled').length;return <div className="issue-parent-context"><span>Sub-issue of</span><a href={`/${workspaceKey}/issue/${parent.identifier}`} onClick={event=>{if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();onOpen()}}><StatusIcon state={parent.state} size={14}/><strong data-i18n-ignore>{parent.identifier}</strong><span data-i18n-ignore>{parent.title}</span></a>{children.length>0&&<button aria-label={`Open sub-issues of ${parent.identifier}`} onClick={onOpen}><SubIssueProgressRing completed={completed} total={children.length}/><span>{completed}/{children.length}</span></button>}</div>}

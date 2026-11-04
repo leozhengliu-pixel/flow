@@ -8,6 +8,7 @@ import { Check, ChevronDown, Clock3, Link2 } from 'lucide-react'
 import { PlusIcon } from '@/components/ui/view-action-icons'
 import { SubmenuChevron } from '@/components/ui/submenu-chevron'
 import { MenuSubmenu } from '@/components/ui/menu-submenu'
+import { useFlowRowShortcuts } from '@/components/ui/menu-shortcuts'
 import { IssueReleaseChip, type IssueReleaseEntry } from '@/components/issue/issue-release-chip'
 import type { MyIssuesProperty } from './my-issues-surface'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
@@ -244,6 +245,8 @@ function MyIssuesVirtualFooter({ context }: { context: MyIssuesListContext }) {
 }
 
 export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onHideGroup, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached, emptyState, hideGroupHeaders = false }: MyIssuesListProps) {
+  const rowActions = useIssueRowActions()
+  useFlowRowShortcuts(['⌘ ⇧ M'], Boolean(rowActions && rowActions.data.viewerRole !== 'guest'))
   const entries = useMemo<MyIssuesListEntry[]>(() => groups.flatMap((group, index) => {
     const collapsed = collapsedGroupIds.has(group.id)
     const header: MyIssuesListEntry = { key: `group:${group.id}`, kind: 'group', group, collapsed }
@@ -378,7 +381,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
   const statusOptions = useTeamStatusOptions(propertyOptions.status, issue.teamId)
   return <ContextMenu.Root>
     <ContextMenu.Trigger asChild>
-      <div data-issue-row-container>
+      <div data-issue-row-container data-flow-menu-row>
       <a className={styles.row} style={{'--row-columns':columns,'--nested-depth':nestedDepth} as CSSProperties} data-issue-row-id={issue.id} data-selected={selected} data-active={active || undefined} aria-current={active || undefined} data-nested={nestedDepth>0} data-context={issue.viewMatch === false || undefined} href={issue.href} aria-label={rowAriaLabel(issue)} onClick={click} onKeyDown={keydown}>
         {nestedDepth>0&&<NestedIssueGuide lines={nestedLines}/>}
         <span aria-hidden="true"/><IssueCheckbox checked={selected} onChange={(checked, range) => onSelect?.(issue.id, checked, range)}/>
