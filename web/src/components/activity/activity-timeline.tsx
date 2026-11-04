@@ -29,6 +29,8 @@ import { IntegrationBrandIcon } from '@/components/settings/integration-brand-ic
 import { inlineCommentsState } from '@/lib/inline-comments-state'
 import { issueEventGroups } from './issue-event-groups'
 import './activity-timeline.css'
+import { CommentActions } from './comment-actions'
+import { useCommentActions } from '@/hooks/use-comment-actions'
 
 export function ActivityTimeline({
   events,
@@ -74,6 +76,7 @@ export function ActivityTimeline({
 }) {
   const { t, locale } = useI18n()
   const desktop = useDesktopLayout()
+  const commentActions = useCommentActions(parentType === 'issue' ? parentId : undefined, comments.map(comment => `${comment.id}:${comment.version}`).join(','), viewerId)
   const now = useCurrentTimeMs()
   const agentCommentIds = useAgentCommentThreadIds()
   const standaloneSessions = useStandaloneAgentSessions()
@@ -297,6 +300,7 @@ export function ActivityTimeline({
                       viewerId={viewerId}
                       onToggle={(emoji) => run(item.id, () => onReaction(item.id, emoji))}
                     />
+                    <CommentActions commentId={item.id} model={commentActions} context={context} />
                   </article>
                   {(replies.get(item.id) ?? []).map((reply) => (
                     <article className="comment-card comment-reply" id={`comment-${reply.id}`} data-activity-anchor={`comment-${reply.id}`} key={reply.id}>
@@ -342,6 +346,7 @@ export function ActivityTimeline({
                         viewerId={viewerId}
                         onToggle={(emoji) => run(reply.id, () => onReaction(reply.id, emoji))}
                       />
+                      <CommentActions commentId={reply.id} model={commentActions} context={context} />
                     </article>
                   ))}
                   {renderAgentThread && hasAgentThread(agentCommentIds, threadIdsOf(item.id)) ? renderAgentThread(item, agentThreadControls(item), threadIdsOf(item.id)) : replying === item.id ? (

@@ -1,4 +1,5 @@
 import { overlayUserSettings, USER_SETTINGS_OVERRIDES_EVENT } from "@/lib/user-settings-overrides";
+import { COMMENT_ACTION_RESOLVED, COMMENT_ACTIONS_CHANGED, type CommentActionResolution } from '@/lib/comment-actions';
 import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints';
 import {
   Suspense,
@@ -1308,6 +1309,14 @@ function App() {
     window.addEventListener('flow-issue-history-changed', listener);
     return () => { active?.abort(); window.removeEventListener('flow-issue-history-changed', listener) };
   }, [historyIssueId, data?.workspace.urlKey, data?.viewer.id]);
+  useEffect(() => {
+    const resolved = (event: Event) => {
+      const { issue, workspaceKey, viewerId } = (event as CustomEvent<CommentActionResolution>).detail;
+      setData(current => current?.workspace.urlKey === workspaceKey && current.viewer.id === viewerId ? { ...current, issues: current.issues.map(item => item.id === issue.id ? issue : item) } : current);
+    };
+    window.addEventListener(COMMENT_ACTION_RESOLVED, resolved);
+    return () => window.removeEventListener(COMMENT_ACTION_RESOLVED, resolved);
+  }, []);
   const selectedDocument =
     !data?.resourceDetailsOmitted && route.kind === "document"
       ? (data?.documents.find(
@@ -1476,6 +1485,14 @@ function App() {
       const workspace = data?.workspace.urlKey;
       if (!workspace) return;
       const viewerId=data.viewer.id;
+      if (event.type === 'workspace_preferences.updated' || event.type === 'user_settings.updated' && event.aggregateId === viewerId || /^(workspace_member|team_member|membership)\./.test(event.type)) {
+        window.dispatchEvent(new CustomEvent(COMMENT_ACTIONS_CHANGED));
+      }
+      if (event.type === 'issue.permissions_updated') window.dispatchEvent(new CustomEvent(COMMENT_ACTIONS_CHANGED, { detail: event.aggregateId }));
+      if (event.type.startsWith('comment.actions_') || event.payload?.commentActionsChanged) {
+        window.dispatchEvent(new CustomEvent(COMMENT_ACTIONS_CHANGED, { detail: event.aggregateId }));
+        if (event.type.startsWith('comment.actions_')) return;
+      }
       if (data.issueCollectionPaged && inboxRealtimeRelevant(event, viewerId)) {
         // Paged inbox rows and the sidebar badge read /api/notifications, not the bootstrap.
         inboxUnread.schedule(workspace, /^notifications?\./.test(event.type) ? 300 : 2000);

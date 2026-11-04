@@ -57,7 +57,7 @@ export function apiFetch(url: string, { quiet, ...init }: ApiRequestInit = {}) {
   })
 }
 
-function currentWorkspaceKey() {
+export function currentWorkspaceKey() {
   if (typeof window === 'undefined') return ''
   const key = decodeURIComponent(window.location.pathname.split('/').filter(Boolean)[0] ?? '')
   return ['join', 'login', 'signup', 'verify-email', 'forgot-password', 'reset-password', 'invite', 'oauth'].includes(key) ? '' : key

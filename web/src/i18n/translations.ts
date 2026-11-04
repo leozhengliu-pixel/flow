@@ -69,6 +69,21 @@ import { chatIntegrationsZhCN } from './translations-chat-integrations';
 import { coverageGapsZhCN } from './translations-coverage-gaps';
 
 export const zhCN: Record<string, string> = {
+  "Enable suggested actions on comments": "启用评论建议操作",
+  "Allow the Flow Agent to identify and suggest next steps on comment threads": "允许 Flow Agent 识别评论会话中的后续步骤并提出建议",
+  "Suggested actions": "建议操作",
+  "Accept": "接受",
+  "Accepted": "已接受",
+  "Change status to {value}": "将状态更改为{value}",
+  "Assign to {value}": "分配给{value}",
+  "Remove assignee": "移除负责人",
+  "Set priority to {value}": "将优先级设为{value}",
+  "Set labels to {value}": "将标签设为{value}",
+  "Remove labels": "移除标签",
+  "Create sub-issue: {value}": "创建子事项：{value}",
+  "Add link: {value}": "添加链接：{value}",
+  "Dismiss suggestion": "忽略建议",
+  "Could not update suggestion. Try again.": "无法更新建议，请重试。",
   "invalid input: restore this archived issue before editing it": "请先恢复此已归档事项，再进行编辑",
   "Assigned users": "已分配用户",
   "Other agents": "其他代理",

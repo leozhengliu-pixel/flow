@@ -54,6 +54,20 @@ function props(page: SettingsPageId) {
   } as unknown as ComponentProps<typeof PersonalSettings>
 }
 
+it('places personal comment suggestions between guidance and skills and saves the choice', async () => {
+  const input = props('agents')
+  render(<MemoryRouter><I18nProvider><PersonalSettings {...input} /></I18nProvider></MemoryRouter>)
+  const toggle = screen.getByRole('checkbox', { name: 'Enable suggested actions on comments' })
+  expect(toggle).toBeChecked()
+  expect(screen.getByText('Allow the Flow Agent to identify and suggest next steps on comment threads')).toBeInTheDocument()
+  const guidance = screen.getByRole('textbox', { name: 'AI prompt rules' })
+  const skills = screen.getByText('Skills')
+  expect(guidance.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(toggle.compareDocumentPosition(skills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  await userEvent.click(screen.getByText('Enable suggested actions on comments', { selector: 'label' }))
+  expect(input.setValue).toHaveBeenCalledWith('suggestedActionsOnComments', false)
+})
+
 describe('personal settings workflows', () => {
   it('keeps the desktop sidebar action compact with a descriptive accessible name', async () => {
     const media = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: query === DESKTOP_LAYOUT_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as MediaQueryList)

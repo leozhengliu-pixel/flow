@@ -16,9 +16,23 @@ http.createServer(async (request, response) => {
   const continued = raw.includes('function_call_output')
   const projectDraft = raw.includes('Draft a new project from the request below.')
   const inviteConversation = raw.includes('Create a team called Invite Test and add 3 people')
+  const commentActions = raw.includes('Suggest next steps on an issue comment.')
   response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' })
   send(response, 'response.created', { response: { id: continued ? 'resp_2' : 'resp_1' } })
-  if (inviteConversation) {
+  if (commentActions) {
+    const payload = JSON.parse(raw)
+    const message = payload.input.find(item => item.role === 'user')
+    const text = typeof message?.content === 'string' ? message.content : message?.content?.find(item => item.type === 'input_text')?.text
+    const context = text ? JSON.parse(text) : {}
+    const priority = raw.includes('make this high priority') ? 2 : 1
+    const proposal = context.comment?.startsWith('Create follow-up: ')
+      ? { action: 'subIssue', arguments: { title: context.comment.slice('Create follow-up: '.length) } }
+      : context.comment?.includes('Assign this to me') && context.people?.length
+        ? { action: 'assignee', arguments: { assigneeId: context.people[0].id } }
+        : { action: 'priority', arguments: { priority } }
+    send(response, 'response.output_item.added', { item: { id: 'comment_action', call_id: 'comment_action', type: 'function_call', name: 'propose_comment_action', arguments: '' } })
+    send(response, 'response.function_call_arguments.done', { item_id: 'comment_action', arguments: JSON.stringify(proposal) })
+  } else if (inviteConversation) {
     // The phone conversation screen: one team write, one documentation search, then the answer.
     const toolCalls = (raw.match(/"type":"function_call"/g) || []).length
     if (toolCalls === 0) {
@@ -46,4 +60,4 @@ http.createServer(async (request, response) => {
   }
   send(response, 'response.completed', { response: { status: 'completed' } })
   response.end()
-}).listen(4190, '127.0.0.1')
+}).listen(Number(process.env.FLOW_AGENT_PROVIDER_PORT ?? 4190), '127.0.0.1')

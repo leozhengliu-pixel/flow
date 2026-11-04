@@ -1468,6 +1468,7 @@ export interface UserSettings {
   dpaUpdates?: boolean;
   agentEnabled: boolean;
   agentInstructions: string;
+  suggestedActionsOnComments?: boolean;
   pulseSchedule?: "default" | "daily" | "weekly" | "never";
   /** LS-0767 — first-run Pulse welcome banner dismissed. */
   pulseWelcomeDismissed?: boolean;
@@ -3307,6 +3308,7 @@ export interface RealtimeEvent {
     issueIds?: string[];
     /** Issues the viewer must drop (hidden by a permission change or batch move). */
     removedIssueIds?: string[];
+    commentActionsChanged?: boolean;
     /** Projected issues of a small batch update. */
     issues?: Issue[];
   };

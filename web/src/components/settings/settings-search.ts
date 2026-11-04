@@ -387,6 +387,7 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
     keywords: ['ai', 'agent', 'mcp', 'skills'],
     groups: [
       { title: 'Guidance', items: [{ title: 'Guidance', keywords: ['instructions'] }] },
+      { title: 'Suggested actions', items: [{ title: 'Enable suggested actions on comments', keywords: ['comment threads', 'next steps'] }] },
       { title: 'Skills', items: [{ title: 'Skills', keywords: ['agent skills'] }] },
       { title: 'MCP connectors', items: [{ title: 'MCP connectors', keywords: ['model context protocol'] }] },
     ],

@@ -3800,6 +3800,19 @@ function Agents({ data, values, setValue, onNavigate, onReload, p }: PersonalPro
             }}
           />
         </SettingsGroup>
+        <div className="settings-card">
+          <PersonalRow
+            title={<label htmlFor="comment-actions-preference">{p("Enable suggested actions on comments")}</label>}
+            description={p("Allow the Flow Agent to identify and suggest next steps on comment threads")}
+          >
+            <SettingsToggle
+              id="comment-actions-preference"
+              label={p("Enable suggested actions on comments")}
+              checked={values.suggestedActionsOnComments !== false}
+              onChange={(v) => setValue("suggestedActionsOnComments", v)}
+            />
+          </PersonalRow>
+        </div>
         <SettingsGroup
           title={p("Skills")}
           description={p(

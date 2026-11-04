@@ -1,0 +1,16 @@
+.comment-suggested-actions { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); display: grid; gap: 8px; color: var(--theme-text-secondary); font-size: 12px; line-height: 18px; }
+.comment-suggested-actions__heading { display: flex; align-items: center; gap: 6px; }
+.comment-suggested-action { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.comment-suggested-action > svg { flex: 0 0 14px; }
+.comment-suggested-action__label { flex: 1 1 120px; min-width: 0; overflow-wrap: anywhere; color: var(--theme-text-primary); }
+.comment-suggested-action__controls { display: flex; gap: 4px; align-items: center; }
+.comment-suggested-action button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 28px; min-width: 28px; padding: 4px 6px; border: 1px solid var(--border-subtle); border-radius: 4px; background: var(--bg-panel); color: var(--theme-text-secondary); font: inherit; }
+.comment-suggested-action button:hover { background: var(--bg-hover); color: var(--theme-text-primary); }
+.comment-suggested-action button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: var(--control-focus-offset); }
+.comment-suggested-action button:active { background: var(--bg-active); }
+.comment-suggested-action button:disabled { opacity: .5; cursor: default; }
+.comment-suggested-action__accepted { display: inline-flex; gap: 4px; align-items: center; color: var(--theme-text-secondary); }
+.comment-suggested-action__error { flex-basis: 100%; color: var(--danger); }
+@media (max-width: 767px) {
+  .comment-suggested-action button { min-height: 32px; min-width: 32px; }
+}

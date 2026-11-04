@@ -154,11 +154,13 @@ export function SettingsRow({
 export function SettingsToggle({
   checked,
   disabled,
+  id,
   label,
   onChange,
 }: {
   checked: boolean;
   disabled?: boolean;
+  id?: string;
   label: string;
   onChange: (value: boolean) => void | Promise<void>;
 }) {
@@ -166,6 +168,7 @@ export function SettingsToggle({
     <Toggle
       checked={checked}
       disabled={disabled}
+      id={id}
       label={label}
       onChange={onChange}
       size="regular"

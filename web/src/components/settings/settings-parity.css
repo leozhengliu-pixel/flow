@@ -204,10 +204,10 @@ html:root .settings-app .settings-main .settings-group > header strong {
   line-height: normal;
 }
 html:root .settings-app .settings-main .settings-group > header p {
-  margin: 3px 0 0;
+  margin: var(--settings-group-description-gap, 3px) 0 0;
   color: var(--set-group-desc);
   font-size: 13px;
-  line-height: 22px;
+  line-height: var(--settings-group-description-line-height, 22px);
 }
 
 /* A row that opens a sub-page (e.g. Priority notifications) */
@@ -665,9 +665,15 @@ html:root .settings-app .settings-main .team-settings-header > div > p { margin:
 html:root .settings-app .settings-main .team-access-note { margin: -16px 16px 28px; padding: 0; color: var(--set-desc); }
 
 /* Agent personalization: groups spaced like sections */
-html:root .settings-app .settings-main .personal-agent-groups .settings-group + .settings-group,
-html:root .settings-app .settings-main .personal-agent-groups .settings-group + * { margin-top: 40px; }
-html:root .settings-app .settings-main .personal-agent-groups .personal-agent-guidance { border: 0; border-radius: 10px; background: transparent; }
+.personal-agent-groups { --settings-group-description-gap: 4px; }
+html:root .settings-app .settings-main .personal-agent-groups > * + * { margin-top: 48px; }
+html:root .settings-app .settings-main .personal-agent-groups .personal-agent-guidance { display: block; height: 180px; border: 0; border-radius: 10px; background: transparent; }
+.personal-page-header:has(+ .personal-agent-groups) p { line-height: 22px; }
+@media (max-width: 880px) {
+  .personal-agent-groups { --settings-group-description-line-height: 18px; }
+  html:root .settings-app .settings-main .personal-agent-groups > * + * { margin-top: 24px; }
+  .personal-page-header:has(+ .personal-agent-groups) p { line-height: 18px; }
+}
 /* Row titles may wrap entity names in a span; keep the title styling. */
 html:root .settings-app .settings-main .settings-row strong span { color: inherit; font: inherit; }
 
