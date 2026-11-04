@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -67,5 +67,27 @@ describe("workspace menu", () => {
     expect(onLogout).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(window, { key: "Œ", code: "KeyQ", altKey: true, shiftKey: true });
     expect(onLogout).toHaveBeenCalledTimes(2);
+  });
+
+  it('replaces the workspace name with an Offline pill while the browser is offline', () => {
+    const data = makeBootstrap({ viewerRole: 'member' });
+    const account = { viewer, workspaces: [{ workspace: data.workspace, role: 'Member', joinedAt: '' }] } as unknown as AccountBootstrap;
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+    try {
+      render(<WorkspaceMenu account={account} data={data} onSettings={vi.fn()} onSwitch={vi.fn()} onCreate={vi.fn()} onLogout={vi.fn().mockResolvedValue(undefined)} />);
+      const trigger = screen.getByRole('button', { name: /Workspace Menu/ });
+      expect(trigger).toHaveTextContent(data.workspace.name);
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+      online.mockReturnValue(false);
+      act(() => { window.dispatchEvent(new Event('offline')) });
+      expect(screen.getByRole('status')).toHaveTextContent('Offline');
+      expect(trigger).not.toHaveTextContent(data.workspace.name);
+
+      online.mockReturnValue(true);
+      act(() => { window.dispatchEvent(new Event('online')) });
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+      expect(trigger).toHaveTextContent(data.workspace.name);
+    } finally { online.mockRestore() }
   });
 });

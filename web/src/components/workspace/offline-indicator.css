@@ -1,0 +1,24 @@
+/* The sidebar header pill that replaces the workspace name while the browser is offline. */
+.workspace-offline {
+  box-sizing: border-box;
+  height: 24px;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--offline-pill-bg);
+  box-shadow: var(--offline-pill-shadow);
+  color: var(--offline-pill-fg);
+  font-size: 12px;
+  font-weight: 450;
+  line-height: normal;
+  white-space: nowrap;
+}
+.workspace-offline__icon { width: 16px; height: 16px; flex: 0 0 16px; fill: var(--offline-pill-dot); }
+.workspace-offline__icon .is-bright { fill: var(--offline-pill-fg); }
+.workspace-offline + .sidebar-top-action,
+.workspace-offline + button { margin-left: auto; }

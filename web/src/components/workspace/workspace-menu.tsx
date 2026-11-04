@@ -4,6 +4,8 @@ import { Command } from 'cmdk';
 import { PhoneMenu, PhoneMenuCommand } from '@/components/ui/phone-menu';
 import { usePhoneLayout } from '@/hooks/use-phone-layout';
 import { useOptionalTranslate } from '@/i18n/i18n';
+import { useOnlineStatus } from '@/hooks/use-online-status';
+import { OfflineIndicator } from './offline-indicator';
 import { WorkspaceInitials } from './workspace-initials';
 import type { AccountBootstrap, BootstrapData, Workspace } from "@/types/flow";
 import {
@@ -36,6 +38,7 @@ export function WorkspaceMenu({
   const [open, setOpen] = useState(false);
   const phone = usePhoneLayout();
   const t = useOptionalTranslate();
+  const online = useOnlineStatus();
   const [switching, setSwitching] = useState(false);
   const switchFrame = useRef<number | undefined>(undefined);
   const sequence = useRef<{ key: string; at: number }>({ key: "", at: 0 });
@@ -134,7 +137,7 @@ export function WorkspaceMenu({
           aria-label={`${workspace.name} ${t('Workspace Menu')}`}
         >
           <WorkspaceAvatar workspace={workspace} />
-          <strong data-i18n-ignore>{workspace.name}</strong>
+          {online && <strong data-i18n-ignore>{workspace.name}</strong>}
           <WorkspaceChevronIcon />
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -198,6 +201,7 @@ export function WorkspaceMenu({
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
+      {!online && <OfflineIndicator />}
     </>
   );
 }
