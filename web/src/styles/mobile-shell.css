@@ -105,7 +105,6 @@
 
 .phone-menu-overlay { position: fixed; inset: 0; z-index: 1200; background: transparent; }
 .phone-menu-surface[data-phone-popover] {
-  box-sizing: content-box;
   position: fixed;
   top: var(--phone-menu-top);
   left: 16px;
@@ -120,6 +119,7 @@
   color: var(--pk-text);
   outline: none;
 }
+.phone-menu-surface > [cmdk-root] { width: calc(100vw - 32px); }
 .phone-menu-search { padding: 6px 6px 0; }
 .phone-menu-surface.phone-menu-custom { max-height: calc(100dvh - var(--phone-menu-top) - 16px); overflow: visible; border: 0; background: transparent; box-shadow: none; }
 .phone-menu-search input {

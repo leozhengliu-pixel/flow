@@ -100,3 +100,35 @@ also offers Team and all four operators.
 The remaining limit is reference chip parity: its dimensions and selected-menu
 behavior were not measured without approval to select a temporary reference search
 filter. Flow's chip behavior, states, serialization, and results were verified.
+
+## Review Continuation
+
+The MCP schema coverage now supplies a real Team filter and requires a nonzero
+fixture count while retaining the assertion that filter trees bypass the counter
+fast path. `go test ./cmd/server ./internal/store` and `go vet ./...` pass.
+
+Phone surfaces retain border-box sizing; their command body follows the shared
+viewport width, and Inbox filter/action searches and lists use the shared 6px
+inset. Both the generic Team entry and Inbox content measure exactly 331px at
+375 and 346px at 390. The reference dark desktop Team entry remains 206 x 32;
+phone Team entries and choices remain 46px tall. The e2e now checks the entry
+geometry after its opening animation, using the reference device scale.
+
+All five requested phone gates pass, along with the Inbox actions gate (182
+element checks total). Full web lint/typecheck, the targeted picker/Inbox unit
+tests, and desktop/phone `search-team-filter.spec.ts` pass. The browser review
+again covered 1440/375/390, both themes, English/zh-CN, resting, hover,
+focus-visible, open, keyboard-active and selected states, short/long names and a
+two-character CJK chip. Team controls have no disabled state or avatar.
+
+Continuation artifacts are `/tmp/codex-team-filter/continuation-measurements.json`,
+`continuation-go-tests.log`, and `shots/continuation-*.png` in the same directory.
+The shared picker sheets show Inbox filters/actions, labels, assignee, status and
+display options at both phone widths. The theme/language sheets show the Team
+states, and `continuation-desktop-full.png` shows the entire open submenu with
+short, long and CJK team names. Earlier failed e2e captures are not verification.
+
+Review the width corrections at `/{workspace}/inbox` > Add filter and notification
+actions; `/{workspace}/my-issues/assigned` > New issue > Labels, Assignee and Status;
+and `/{workspace}/team/{teamKey}/all` > Display options. Review Team at
+`/{workspace}/search` > Add filter > Team, then select a team and edit its chip.

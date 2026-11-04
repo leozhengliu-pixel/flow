@@ -1000,12 +1000,12 @@
 /* Phone notification actions sheet: the reference's search field, three delete rows, divider and settings link. */
 @media (max-width: 767px) {
   .phone-menu-surface.inbox-actions-phone-menu .phone-menu-search {
-    padding-right: 5px;
-    padding-left: 5px;
+    padding-right: 6px;
+    padding-left: 6px;
   }
   .inbox-actions-phone-menu__list {
     position: relative;
-    margin: 0 5px;
+    margin: 0 6px;
     padding: 0;
   }
   .inbox-actions-phone-menu__row {

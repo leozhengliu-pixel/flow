@@ -1,6 +1,8 @@
 import { expect } from '@playwright/test'
 import { test } from './workspace-fixture'
 
+test.use({colorScheme:'dark',launchOptions:{args:['--force-device-scale-factor=2']}})
+
 test('search Team filter sends exact team sets, returns matching issues and survives reload',async({page,request,workspaceKey},testInfo)=>{
   const headers={'X-Workspace-Key':workspaceKey}
   const bootstrap=await request.get('/api/bootstrap',{headers})
@@ -20,7 +22,12 @@ test('search Team filter sends exact team sets, returns matching issues and surv
   await expect(page.locator('a[data-result-index]')).toHaveCount(2)
   const phone=testInfo.project.name.includes('mobile')
   await page.getByRole('button',{name:'Add filter',exact:true}).click()
-  await page.getByRole(phone?'option':'menuitem',{name:'Team',exact:true}).click()
+  const teamEntry=page.getByRole(phone?'option':'menuitem',{name:'Team',exact:true})
+  await expect.poll(async()=>(await teamEntry.boundingBox())!.width).toBe(phone?page.viewportSize()!.width-44:206)
+  const entryBox=await teamEntry.boundingBox()
+  expect(entryBox!.width).toBeCloseTo(phone?page.viewportSize()!.width-44:206,0)
+  expect(entryBox!.height).toBe(phone?46:32)
+  await teamEntry.click()
   const search=page.getByRole('textbox',{name:'Search teams…'})
   await search.fill(first.key)
   const firstOption=page.getByRole('option',{name:new RegExp(first.name)})

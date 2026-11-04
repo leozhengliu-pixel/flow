@@ -97,15 +97,15 @@
 .phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-list]:not(#_)) {
   position: relative;
   height: auto;
-  margin: 0 5px;
+  margin: 0 6px;
   padding: 6px 0 5px;
   overflow-y: auto;
   border-style: none;
   background: var(--inbox-filter-list-bg);
 }
 .phoneMenu :global(.phone-menu-search:not(#_)) {
-  padding-right: 5px;
-  padding-left: 5px;
+  padding-right: 6px;
+  padding-left: 6px;
 }
 .phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-item]:not(#_)) {
   position: relative;
