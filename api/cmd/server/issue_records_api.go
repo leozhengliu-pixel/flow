@@ -208,6 +208,7 @@ func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 		filterBootstrapForAPIKey(&data, r)
 	}
 	data.IssueCollectionPaged = true
+	data.CommentActions = nil
 	if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
 		issueRecordsError(w, err)
 		return

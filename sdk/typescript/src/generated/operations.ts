@@ -13,6 +13,9 @@ import type {
   AuditLogEntry,
   AuditLogEntryConnection,
   Comment,
+  CommentAction,
+  CommentActionResolveInput,
+  CommentActionResult,
   CommentConnection,
   CommentCreateInput,
   CommentUpdateInput,
@@ -578,6 +581,17 @@ export interface DeleteIssuesIdAttachmentsAttachmentIdRequest {
 export interface PatchIssuesIdAttachmentsAttachmentIdRequest {
   path: { id: string; attachmentId: string }
   body: LinkAttachmentInput
+}
+
+/** Arguments of `getIssuesIdCommentActions`. */
+export interface GetIssuesIdCommentActionsRequest {
+  path: { id: string }
+}
+
+/** Arguments of `postIssuesIdCommentActionsActionId`. */
+export interface PostIssuesIdCommentActionsActionIdRequest {
+  path: { id: string; actionId: string }
+  body: CommentActionResolveInput
 }
 
 /** Arguments of `postIssuesIdComments`. */
@@ -1217,6 +1231,8 @@ export const operations = {
   patchIssuesId: { method: "PATCH", path: "/api/issues/{id}", operationId: "patch_issues_id", successStatuses: [200] },
   deleteIssuesIdAttachmentsAttachmentId: { method: "DELETE", path: "/api/issues/{id}/attachments/{attachmentId}", operationId: "delete_issues_id_attachments_attachmentId", successStatuses: [204] },
   patchIssuesIdAttachmentsAttachmentId: { method: "PATCH", path: "/api/issues/{id}/attachments/{attachmentId}", operationId: "patch_issues_id_attachments_attachmentId", successStatuses: [200] },
+  getIssuesIdCommentActions: { method: "GET", path: "/api/issues/{id}/comment-actions", operationId: "get_issues_id_comment_actions", successStatuses: [200] },
+  postIssuesIdCommentActionsActionId: { method: "POST", path: "/api/issues/{id}/comment-actions/{actionId}", operationId: "post_issues_id_comment_actions_actionId", successStatuses: [200] },
   postIssuesIdComments: { method: "POST", path: "/api/issues/{id}/comments", operationId: "post_issues_id_comments", successStatuses: [201] },
   deleteIssuesIdCommentsCommentId: { method: "DELETE", path: "/api/issues/{id}/comments/{commentId}", operationId: "delete_issues_id_comments_commentId", successStatuses: [204] },
   patchIssuesIdCommentsCommentId: { method: "PATCH", path: "/api/issues/{id}/comments/{commentId}", operationId: "patch_issues_id_comments_commentId", successStatuses: [200] },
@@ -1663,6 +1679,24 @@ export class FlowApi {
    */
   patchIssuesIdAttachmentsAttachmentId(request: PatchIssuesIdAttachmentsAttachmentIdRequest, options?: RequestOptions): Promise<Attachment> {
     return this.transport.request({ method: "PATCH", path: "/api/issues/{id}/attachments/{attachmentId}", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `GET /api/issues/{id}/comment-actions`
+   * List suggested comment actions
+   * Returns pending and accepted proposals for an issue editor with personal comment suggestions enabled. Dismissed, deleted-comment and no-longer-valid pending actions are omitted. Generation runs asynchronously after human comments, without executing mutations.
+   */
+  getIssuesIdCommentActions(request: GetIssuesIdCommentActionsRequest, options?: RequestOptions): Promise<CommentAction[]> {
+    return this.transport.request({ method: "GET", path: "/api/issues/{id}/comment-actions", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `POST /api/issues/{id}/comment-actions/{actionId}`
+   * Resolve a suggested comment action
+   * An editor with suggestions enabled can accept or dismiss. Acceptance revalidates and applies the proposal atomically with its resolution through normal issue mutation helpers, including activity and notifications. Repeating the same resolution returns the saved result; a competing resolution or stale proposal returns 409. A proposal executes at most once.
+   */
+  postIssuesIdCommentActionsActionId(request: PostIssuesIdCommentActionsActionIdRequest, options?: RequestOptions): Promise<CommentActionResult> {
+    return this.transport.request({ method: "POST", path: "/api/issues/{id}/comment-actions/{actionId}", pathParams: request.path, body: request.body, ...options })
   }
 
   /**

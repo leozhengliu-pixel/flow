@@ -322,6 +322,7 @@ export interface AuditLogEntryConnection {
 }
 
 export interface Comment {
+  actionsGeneratedAt?: string | null
   /** AnchorID names the inline comment that anchors a thread to text: the comment mark (data-comment-id) in a document, or the selection in a project or initiative description. QuotedText is the selection it was created on. Both are empty for page-level comments and replies. */
   anchorId?: string
   body: string
@@ -337,6 +338,41 @@ export interface Comment {
   threadSummary?: CommentThreadSummary | null
   user: User
   version: number
+}
+
+/** CommentAction is an inert proposal. Resolution and its mutation commit together. */
+export interface CommentAction {
+  action: "status" | "assignee" | "priority" | "labels" | "subIssue" | "link"
+  arguments: CommentActionArguments
+  commentId: string
+  commentVersion: number
+  createdAt: string
+  id: string
+  issueId: string
+  resolvedAt?: string | null
+  resolvedBy?: string
+  resultIssueId?: string
+  status: "pending" | "accepted" | "dismissed"
+  targetUserId: string
+}
+
+export interface CommentActionArguments {
+  assigneeId?: string | null
+  description?: string
+  labelIds?: string[] | null
+  priority?: number | null
+  stateId?: string | null
+  title?: string
+  url?: string
+}
+
+export interface CommentActionResolveInput {
+  status: "accepted" | "dismissed"
+}
+
+export interface CommentActionResult {
+  issue: Issue
+  suggestion: CommentAction
 }
 
 export interface CommentConnection {
@@ -360,6 +396,7 @@ export interface CommentCreateInput {
 }
 
 export interface CommentPartial {
+  actionsGeneratedAt?: string | null
   /** AnchorID names the inline comment that anchors a thread to text: the comment mark (data-comment-id) in a document, or the selection in a project or initiative description. QuotedText is the selection it was created on. Both are empty for page-level comments and replies. */
   anchorId?: string
   body?: string
@@ -397,6 +434,7 @@ export interface CommentUpdateInput {
 
 /** CommentWebhookData is a comment with the resource it belongs to. In webhook payloads only id is guaranteed. */
 export interface CommentWebhookDataPartial {
+  actionsGeneratedAt?: string | null
   /** AnchorID names the inline comment that anchors a thread to text: the comment mark (data-comment-id) in a document, or the selection in a project or initiative description. QuotedText is the selection it was created on. Both are empty for page-level comments and replies. */
   anchorId?: string
   body?: string

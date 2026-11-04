@@ -1,5 +1,17 @@
 [
   {
+    "name": "mcp__flow.list_comment_actions",
+    "access": "read",
+    "description": "List pending and accepted suggested actions on issue comments. Requires editor access and the user's comment suggestions preference. Dismissed or invalid pending proposals are omitted.",
+    "input_schema": { "type": "object", "required": ["issueId"], "properties": { "issueId": { "type": "string" } }, "additionalProperties": false }
+  },
+  {
+    "name": "mcp__flow.resolve_comment_action",
+    "access": "write",
+    "description": "Accept or dismiss a comment suggestion explicitly requested by the user. Acceptance atomically applies its validated action and records normal issue activity. Repeating the same resolution is idempotent; competing resolutions return a conflict.",
+    "input_schema": { "type": "object", "required": ["issueId", "id", "status"], "properties": { "issueId": { "type": "string" }, "id": { "type": "string" }, "status": { "type": "string", "enum": ["accepted", "dismissed"] } }, "additionalProperties": false }
+  },
+  {
     "name": "mcp__flow.list_comments",
     "access": "read",
     "description": "List comments on a Flow issue, project, initiative, document, project milestone, or project/initiative status update. Provide exactly one of `issueId`, `projectId`, `initiativeId`, `documentId`, `milestoneId`, or `statusUpdateId`. For issues, projects, initiatives, and documents this returns both top-level discussion threads and inline description comments. Inline (anchored) comments carry a non-null `quotedText` set to the snippet of description text they reference. Document comments also carry `anchorId` (the inline comment mark in the document body, null for page-level comments and replies) and `resolved`. Returned comments include `author` and nullable `onBehalfOf`; when set, `onBehalfOf` identifies the user the agent author acted for.",

@@ -11,7 +11,7 @@ import (
 func boundedLegacyIssueWrites(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if (r.URL.Path == "/api/issues" || strings.HasPrefix(r.URL.Path, "/api/issues/")) &&
-			(r.Method == http.MethodPost || r.Method == http.MethodPatch || r.Method == http.MethodPut || r.Method == http.MethodDelete) {
+			(r.Method == http.MethodPost || r.Method == http.MethodPatch || r.Method == http.MethodPut || r.Method == http.MethodDelete || r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/comment-actions")) {
 			copy := r.Clone(r.Context())
 			copy.URL.Path = "/api/issue-records" + strings.TrimPrefix(r.URL.Path, "/api/issues")
 			copy.URL.RawPath = ""

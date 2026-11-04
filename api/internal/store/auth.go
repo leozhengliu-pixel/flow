@@ -831,6 +831,7 @@ func (s *SQLiteStore) BootstrapForUser(ctx context.Context, workspaceKey, userID
 }
 
 func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.Bootstrap, userID string) (domain.Bootstrap, bool, error) {
+	data.CommentActions = nil // Proposals are returned only by their permission-checked issue endpoint.
 	role, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, userID)
 	if err != nil || status != "active" {
 		return domain.Bootstrap{}, false, ErrAuthForbidden

@@ -344,6 +344,8 @@ var InternalRoutes = []string{
 	"GET /api/invite-links/preview/{token}",
 	"POST /api/invite-links/join",
 	// /api/issue-records
+	"GET /api/issue-records/{id}/comment-actions",
+	"POST /api/issue-records/{id}/comment-actions/{actionId}",
 	"DELETE /api/issue-records/{id}",
 	"DELETE /api/issue-records/{id}/attachments/{attachmentId}",
 	"DELETE /api/issue-records/{id}/comments/{commentId}",

@@ -15020,6 +15020,84 @@
         "x-flow-source": "coding_triggers_api.go"
       }
     },
+    "/api/issue-records/{id}/comment-actions": {
+      "get": {
+        "operationId": "get_issue_records_id_comment_actions",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "GET /api/issue-records/{id}/comment-actions",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issue-records/{id}/comment-actions/{actionId}": {
+      "post": {
+        "operationId": "post_issue_records_id_comment_actions_actionId",
+        "tags": [
+          "issue-records"
+        ],
+        "summary": "POST /api/issue-records/{id}/comment-actions/{actionId}",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/issue-records/{id}/comments": {
       "post": {
         "operationId": "post_issue_records_id_comments",
@@ -16947,6 +17025,203 @@
         },
         "x-flow-internal": true,
         "x-flow-source": "coding_triggers_api.go"
+      }
+    },
+    "/api/issues/{id}/comment-actions": {
+      "get": {
+        "description": "Returns pending and accepted proposals for an issue editor with personal comment suggestions enabled. Dismissed, deleted-comment and no-longer-valid pending actions are omitted. Generation runs asynchronously after human comments, without executing mutations.",
+        "operationId": "get_issues_id_comment_actions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CommentAction"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "List suggested comment actions",
+        "tags": [
+          "comments"
+        ],
+        "x-flow-typed": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/issues/{id}/comment-actions/{actionId}": {
+      "post": {
+        "description": "An editor with suggestions enabled can accept or dismiss. Acceptance revalidates and applies the proposal atomically with its resolution through normal issue mutation helpers, including activity and notifications. Repeating the same resolution returns the saved result; a competing resolution or stale proposal returns 409. A proposal executes at most once.",
+        "operationId": "post_issues_id_comment_actions_actionId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "actionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentActionResolveInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentActionResult"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "summary": "Resolve a suggested comment action",
+        "tags": [
+          "comments"
+        ],
+        "x-flow-typed": true,
+        "x-flow-source": "main.go"
       }
     },
     "/api/issues/{id}/comments": {
@@ -38851,6 +39126,13 @@
       },
       "Comment": {
         "properties": {
+          "actionsGeneratedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "anchorId": {
             "description": "AnchorID names the inline comment that anchors a thread to text: the comment mark (data-comment-id) in a document, or the selection in a project or initiative description. QuotedText is the selection it was created on. Both are empty for page-level comments and replies.",
             "type": "string"
@@ -38935,6 +39217,149 @@
         ],
         "type": "object"
       },
+      "CommentAction": {
+        "description": "CommentAction is an inert proposal. Resolution and its mutation commit together.",
+        "properties": {
+          "action": {
+            "enum": [
+              "status",
+              "assignee",
+              "priority",
+              "labels",
+              "subIssue",
+              "link"
+            ],
+            "type": "string"
+          },
+          "arguments": {
+            "$ref": "#/components/schemas/CommentActionArguments"
+          },
+          "commentId": {
+            "type": "string"
+          },
+          "commentVersion": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "issueId": {
+            "type": "string"
+          },
+          "resolvedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resolvedBy": {
+            "type": "string"
+          },
+          "resultIssueId": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "accepted",
+              "dismissed"
+            ],
+            "type": "string"
+          },
+          "targetUserId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "arguments",
+          "commentId",
+          "commentVersion",
+          "createdAt",
+          "id",
+          "issueId",
+          "status",
+          "targetUserId"
+        ],
+        "type": "object"
+      },
+      "CommentActionArguments": {
+        "properties": {
+          "assigneeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "labelIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "stateId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CommentActionResolveInput": {
+        "properties": {
+          "status": {
+            "enum": [
+              "accepted",
+              "dismissed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "CommentActionResult": {
+        "properties": {
+          "issue": {
+            "$ref": "#/components/schemas/Issue"
+          },
+          "suggestion": {
+            "$ref": "#/components/schemas/CommentAction"
+          }
+        },
+        "required": [
+          "issue",
+          "suggestion"
+        ],
+        "type": "object"
+      },
       "CommentConnection": {
         "properties": {
           "nodes": {
@@ -39002,6 +39427,13 @@
       },
       "CommentPartial": {
         "properties": {
+          "actionsGeneratedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "anchorId": {
             "description": "AnchorID names the inline comment that anchors a thread to text: the comment mark (data-comment-id) in a document, or the selection in a project or initiative description. QuotedText is the selection it was created on. Both are empty for page-level comments and replies.",
             "type": "string"
@@ -39147,6 +39579,13 @@
       "CommentWebhookDataPartial": {
         "description": "CommentWebhookData is a comment with the resource it belongs to. In webhook payloads only id is guaranteed.",
         "properties": {
+          "actionsGeneratedAt": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "anchorId": {
             "description": "AnchorID names the inline comment that anchors a thread to text: the comment mark (data-comment-id) in a document, or the selection in a project or initiative description. QuotedText is the selection it was created on. Both are empty for page-level comments and replies.",
             "type": "string"

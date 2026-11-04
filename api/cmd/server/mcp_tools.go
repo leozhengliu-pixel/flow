@@ -308,6 +308,18 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 		return s.getMCPDocumentPermissions(ctx, actor, data, args)
 	case "list_comments":
 		return s.listMCPComments(ctx, data, args)
+	case "list_comment_actions", "resolve_comment_action":
+		issue, err := mcpFindIssue(data, stringArg(args, "issueId"))
+		if err != nil {
+			return nil, err
+		}
+		path := "/api/issue-records/" + issue.ID + "/comment-actions"
+		values := map[string]string{"id": issue.ID}
+		if name == "list_comment_actions" {
+			return s.invokeMCPRoute(ctx, actor, "GET", path, values, nil, s.issueRecordAlias(s.listCommentActions))
+		}
+		values["actionId"] = stringArg(args, "id")
+		return s.invokeMCPRoute(ctx, actor, "POST", path+"/"+values["actionId"], values, domain.CommentActionResolveInput{Status: stringArg(args, "status")}, s.issueRecordAlias(s.resolveCommentAction))
 	case "get_status_updates":
 		return statusUpdates(data, args)
 	case "list_release_pipelines":

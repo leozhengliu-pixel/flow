@@ -1318,6 +1318,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		}
 		issue := data.Issues[issueIndex]
 		roleRank := issuePermissionRank(issueRole(s, data, issue))
+		if len(parts) >= 4 && parts[3] == "comment-actions" {
+			return roleRank >= issuePermissionRank("editor")
+		}
 		canComment := roleRank >= issuePermissionRank("commenter")
 		if !canComment && roleRank >= issuePermissionRank("viewer") && data.ViewerRole != "guest" {
 			// Public teams are readable by every workspace member, and those

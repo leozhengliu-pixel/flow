@@ -1696,6 +1696,8 @@ type UserSettings struct {
 	JobTitle  string    `json:"jobTitle,omitempty"`
 	Username  string    `json:"username,omitempty"`
 	UpdatedAt time.Time `json:"updatedAt"`
+
+	SuggestedActionsOnComments *bool `json:"suggestedActionsOnComments,omitempty"`
 }
 
 // CommitSigningKey describes the key used by coding sessions to sign commits.
@@ -2754,6 +2756,8 @@ type Comment struct {
 	// created on. Both are empty for page-level comments and replies.
 	AnchorID   string `json:"anchorId,omitempty"`
 	QuotedText string `json:"quotedText,omitempty"`
+
+	ActionsGeneratedAt *time.Time `json:"actionsGeneratedAt,omitempty"`
 }
 
 type ActivityEvent struct {
@@ -2914,6 +2918,7 @@ type Bootstrap struct {
 	AIConversations               []AIConversation                   `json:"aiConversations"`
 	AIPromptProgress              []AIPromptProgress                 `json:"aiPromptProgress"`
 	IssueSuggestions              []IssueSuggestion                  `json:"issueSuggestions"`
+	CommentActions                []CommentAction                    `json:"commentActions,omitempty"`
 	Projects                      []Project                          `json:"projects"`
 	ProjectStatuses               []ProjectStatus                    `json:"projectStatuses"`
 	ProjectDisplayDefault         json.RawMessage                    `json:"projectDisplayDefault,omitempty"`

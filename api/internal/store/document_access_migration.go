@@ -38,6 +38,7 @@ func (s *SQLiteStore) dataMigrations() []struct {
 		{version: documentInheritedScopeMigrationVersion, name: "inherited document scope", apply: s.migrateDocumentInheritedScope},
 		{version: cycleCapacityOverrideMigrationVersion, name: "cycle capacity overrides", apply: s.migrateCycleCapacityOverrides},
 		{version: memberDirectoryMigrationVersion, name: "joined members in the workspace directory", apply: s.migrateMemberDirectory},
+		{version: commentActionsMigrationVersion, name: "personal comment action preference", apply: s.migrateCommentActions},
 		// coding sessions (track K)
 		{version: codingEnvironmentsMigrationVersion, name: "coding environments table", apply: s.migrateLegacyCodingEnvironments},
 	}
