@@ -101,11 +101,11 @@ test('shows group rows only for a real grouping and keeps the names column whole
     expect(box.height).toBe(28)
     if (index) expect(box.x - (cellBoxes[index - 1].x + 28)).toBe(6)
   }
-  const nameBox = (await row.locator('.lp-project-timeline__name > button').boundingBox())!
+  const nameBox = (await row.locator('.lp-project-timeline__name > button[aria-label^="Open "]').boundingBox())!
   expect(cellBoxes[0].x - (nameBox.x + nameBox.width)).toBe(6)
   // The long name truncates in the names column instead of pushing the cells away.
   const longRow = rows.filter({ hasText: LONG_NAME })
-  await expect(longRow.locator('.lp-project-timeline__name > button > span').last()).toHaveCSS('text-overflow', 'ellipsis')
+  await expect(longRow.locator('.lp-project-timeline__name > button[aria-label^="Open "] > span').last()).toHaveCSS('text-overflow', 'ellipsis')
   expect((await longRow.locator('.lp-project-timeline__cells').boundingBox())!.x).toBeCloseTo(cellBoxes[0].x, 0)
 
   timeline = await openTimeline(page, workspaceKey, { grouping: 'Status' })
