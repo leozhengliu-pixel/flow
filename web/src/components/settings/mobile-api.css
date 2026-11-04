@@ -30,9 +30,9 @@
     .api-webhooks-section .settings-row--action .settings-action { height: 36px; margin-right: -6px; padding: 0 12px 0 10px; gap: 6px; border: .5px solid transparent; border-radius: 9999px; background: transparent; box-shadow: none; color: var(--set-control-text); font: 500 13px/normal var(--font); }
     .api-keys-section .settings-card > .settings-row { gap: 8px; padding: 16px 10.6667px; }
     .api-keys-section .settings-card > .settings-row:first-child { flex-direction: column; align-items: stretch; }
-    .api-keys-section .settings-row-copy { flex: none; }
+    .api-keys-section .settings-row:first-child .settings-row-copy { flex: none; }
     .api-keys-section .settings-row-copy > span { font: 450 12px/normal var(--font); }
-    .api-keys-section .settings-control { width: 100%; }
+    .api-keys-section .settings-row:first-child .settings-control { width: 100%; }
     .api-keys-section .settings-control > .settings-select-native-wrap { width: 100%; }
     .api-keys-section .settings-select { width: 100%; min-width: 0; height: 36px; font: 400 13px/normal var(--font); }
     .api-keys-section .settings-select .settings-select-value > span { color: var(--set-text); }

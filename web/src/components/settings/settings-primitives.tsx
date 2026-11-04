@@ -175,7 +175,7 @@ export function SettingsToggle({
 
 export type SettingsSelectOption =
   | string
-  | { value: string; label: string; disabled?: boolean; entityName?: boolean; icon?: ReactNode; /** Draws a separator above the option. */ divider?: boolean; /** Muted text after the label, shown in the menu only. */ hint?: string; /** Dimmed text after the label in the trigger, e.g. "(default)"; the menu and native picker show it as plain text. */ suffix?: string };
+  | { value: string; label: string; disabled?: boolean; entityName?: boolean; icon?: ReactNode; /** Draws a separator above the option. */ divider?: boolean; /** Muted text after the label, shown in the menu only. */ hint?: string; /** Dimmed text after the label, e.g. "(default)". */ suffix?: string };
 
 const suffixGap = (suffix: string) => (suffix.startsWith("（") ? "" : " ");
 const withSuffix = (option: { label: string; suffix?: string }) =>
@@ -259,7 +259,8 @@ export function SettingsSelect({
                   <span className="settings-select-option-content">
                     {option.icon}
                     <span data-i18n-ignore={option.entityName || undefined}>
-                      {withSuffix(option)}
+                      {option.label}
+                      {option.suffix && <>{suffixGap(option.suffix)}<span className="settings-select-suffix">{option.suffix}</span></>}
                     </span>
                     {"hint" in option && option.hint && <span className="settings-select-option-hint" data-i18n-ignore>{option.hint}</span>}
                   </span>
