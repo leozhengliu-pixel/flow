@@ -143,6 +143,7 @@ function projectStatusGroups<T extends { status: { id?: string; name: string; ty
 
 export function InitiativeDetailPage(props: Props) {
   const { initiative, tab, onTabChange, onUpdate } = props
+  const { t } = useI18n()
   const onlineUserIds = useMemo(() => {
     const ids = new Set(props.presence?.map(item => item.user.id))
     if (props.viewer.active) ids.add(props.viewer.id)
@@ -236,7 +237,7 @@ export function InitiativeDetailPage(props: Props) {
       <button aria-label="Open sidebar" className="li-mobile-menu" data-sidebar-trigger onClick={props.onOpenSidebar} type="button"><SidebarLeftIcon/></button>
       <button className="li-detail-all" onClick={props.onBack} type="button">Initiatives</button><ChevronRight className="li-detail-separator" size={12}/>
       <button className="li-detail-crumb" data-i18n-ignore onClick={() => onTabChange('overview')} type="button"><ViewGlyph color={initiative.color} icon={initiative.icon || 'Initiative'}/><strong>{initiative.name}</strong></button>
-      <button aria-checked={initiative.favorite} aria-label="Add to favorites" className={initiative.favorite ? 'is-active' : ''} onClick={() => update({ favorite: !initiative.favorite })} role="switch" type="button"><Star className="li-detail-desktop-icon" fill={initiative.favorite ? 'currentColor' : 'none'} size={14}/>{initiative.favorite ? <FlowFavoriteFilledIcon className="li-detail-phone-icon"/> : <FlowFavoriteIcon className="li-detail-phone-icon"/>}</button>
+      <button aria-checked={initiative.favorite} aria-label={t(initiative.favorite ? 'Remove from favorites' : 'Add to favorites')} title={initiative.favorite ? t('Remove from favorites') : undefined} className={initiative.favorite ? 'is-active' : ''} onClick={() => update({ favorite: !initiative.favorite })} role="switch" type="button"><Star className="li-detail-desktop-icon" fill={initiative.favorite ? 'currentColor' : 'none'} size={14}/>{initiative.favorite ? <FlowFavoriteFilledIcon className="li-detail-phone-icon"/> : <FlowFavoriteIcon className="li-detail-phone-icon"/>}</button>
       <InitiativeActionsMenu initiative={initiative} initiatives={props.initiatives} users={props.users} teams={props.teams} labels={props.labels} viewer={props.viewer} onCreateInitiative={props.onCreateInitiative} onCreateLabel={props.onCreateLabel} onUpdateInitiative={props.onUpdate} pulseSubscribed={pulseSubscribed} onCreateReminder={remindAt => props.onCreateReminder(initiative.id, remindAt)} onCreateSubInitiative={() => { if (tab !== 'overview') onTabChange('overview'); setCreatingSubParentId(initiative.id) }} onDelete={() => setDeleteOpen(true)} onNewUpdate={() => setUpdatesOpen(true)} onShowActivity={() => onTabChange('activity')} onUpdate={update}/>
       <span/>
       <button aria-label="Copy page URL" className="li-detail-copy" onClick={() => void navigator.clipboard.writeText(window.location.href).then(() => toast.success('Initiative URL copied'))} type="button"><Link2 className="li-detail-desktop-icon" size={14}/><FlowUrlIcon className="li-detail-phone-icon"/></button>

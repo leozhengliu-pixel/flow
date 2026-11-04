@@ -10,6 +10,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Finish closing the desktop workspace menu and return focus even when an exit animation completion event is lost, preserving its divider and row spacing.
 - Restore shared phone picker content widths and consistent search/list insets while preserving Team filter row sizing.
 - Cover the MCP count filter tree with a matching team predicate in the schema fast-path check.
+- Give a favorited initiative star the removal label and tooltip, and cover the sidebar shortcuts, assignee profile links and filled star in isolated browser workspaces.
+
 - Offer joining or creating a team beneath Your teams when no teams are joined, respecting team creation and membership permissions and translating the empty prompt.
 
 - Share assignee profile cards across issue rows, boards and details, with visible profile and team links, live presence, known local time and out-of-office status; keep inactive people identifiable without active links.
