@@ -1,5 +1,32 @@
 # CI guard delivery
 
+## Continuation: run 41805518838
+
+Run [41805518838](https://github.com/leozhengliu-pixel/flow/actions/runs/41805518838) failed at `983b0b92` in the shared menu state matrix: phone label text intermittently started at x=86 or 85.5 instead of the asserted 86.5. The previous green run, `41796501428`, passed at `c50eba6b`. Commit `e5ed54d5` deliberately made the phone property list viewport-wide inside its bordered sheet to match the measured rows. The newer main commit `bf194bf9` corrects unrelated timeline locators and does not address this failure.
+
+The local reproduction failed twice in three attempts. Instrumentation showed the sheet at scale 1 after hover, with `scrollLeft=0.5`, while the same passing case had `scrollLeft=0`. Hovering before the opening scale animation finished caused browser scrolling to retain that offset. Awaiting the sheet's actual animation before hover, using the existing pattern in `desktop-issue-detail-properties.spec.ts`, passed three consecutive confirmation cases, with `scrollLeft=0` and label x=86.5. The diagnosis captured pre-wait scales of 0.993612 and 0.999247; both finished at 1 before hover.
+
+The correction adds that animation wait and an explanatory comment to `web/e2e/desktop-menu-review-states.spec.ts`. All exact coordinate, size, color, focus, disabled and selected assertions remain unchanged. No retries, arbitrary delay, longer timeout, product styling or UI copy changes are included. Other changed files are `CHANGELOG.md` and this report; this test-only correction follows the task's direct-main delivery instruction.
+
+Validation uses Node 24.7.0 and the machine-wide `~/.flow-local/heavy.sh` lock. An untracked temporary config imports the repository config, changes its three ports to 24773/24780/24790, selects bundled Chromium through `CI=1`, and sets every `reuseExistingServer` to false. Port 4190 was occupied by another agent, whose process was left alone. The scripted provider, auth-disabled scratch API, database and Vite are isolated under `/tmp/codex-ci-guard/`. The current API was built with `env GOMAXPROCS=2 go build -p 1 -o /tmp/codex-ci-guard/flow-server-41805518838 ./cmd/server` through the heavy lock (exit 0). No Go source or REST shape changed.
+
+Both diagnostic screenshots were opened and inspected: `/tmp/codex-ci-guard/results-41805518838-diagnosis/desktop-menu-review-states-efe8e-menu-states-375-light-zh-CN-chromium/test-failed-1.png` and its `chromium-repeat1` counterpart. Each shows the light Chinese phone label sheet, issue context chip, short and long labels, and hovered unchecked label. These screenshots accompany a failed coordinate assertion and are failure evidence only. No successful screenshot or full product UI review is claimed for this test-only change.
+
+Final commands, from `web/` unless stated, all through the heavy lock:
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| `npm ci` | 0 | Worktree-local dependencies, no lockfile change |
+| `npm run typecheck` | 0 | Explicit TypeScript check |
+| `npm run lint` | 0 | Full lint including all design, picker, foundation, control and motion gates |
+| `npx vitest run --maxWorkers=2 src/components/issue/label-project-pickers.test.tsx src/components/ui/phone-menu.test.tsx src/components/property/use-property-command.test.tsx src/components/layout/sidebar-team-menu.test.tsx` | 0 | Four files, 21 tests |
+| `npx playwright test --config=playwright.ci-guard.tmp.config.ts --retries=0 --reporter=list --output=/tmp/codex-ci-guard/results-41805518838-fixed e2e/desktop-menu-review-states.spec.ts` | 0 | All 12 cases, 2.2 minutes, zero retries |
+| Repository root: `git diff --check` | 0 | No whitespace errors |
+
+The browser matrix covers 1440x900, 375x667 and 390x844, light/dark and English/Chinese, retaining the existing resting, hover, focus-visible, open, disabled, selected, long/short label and CJK skill-name assertions. The final run generated no screenshots. The browser environment also sets `FLOW_E2E_DATABASE_PATH=/tmp/codex-ci-guard/e2e-41805518838-fixed.db`, `FLOW_E2E_API_BIN=/tmp/codex-ci-guard/flow-server-41805518838` and `FLOW_E2E_API_LOG=/tmp/codex-ci-guard/api-41805518838-fixed.log`. Logs are `/tmp/codex-ci-guard/{npm-ci,typecheck,lint,vitest,e2e}-41805518838*.log`. The diagnostic reproduction exited 1 (two failures, one pass); the animation-wait confirmation exited 0 (three passes). No failure is counted as verification. No full suite, Go tests/vet or generation was needed for this test-only change. The temporary config and installed dependencies are removed before handoff.
+
+After rebasing onto `739c37b5`, which includes concurrent agent-skill settings work, the explicit typecheck, full lint, all four related Vitest files (21 tests) and the complete changed browser spec (12 cases, 1.7 minutes, zero retries) were rerun and exited 0. Those logs use the suffix `-41805518838-rebased.log`; the scratch database, API log and browser results likewise use `-rebased` instead of `-fixed`. The harness stopped normally, and all three task-owned scratch ports had no listeners afterward. The latest poll before delivery listed `41807655181` in progress, `41809849449` pending, and `41805518838` failed. No post-push CI success is claimed.
+
 ## Continuation: run 41782547112
 
 The handover contained clean commit `84492ea9`, the placeholder deadline correction below, based on main `5771bac1`. It was retained. The previous session had also downloaded failed logs for runs `41780533623` and `41782547112` and started a desktop-boundary reproduction, but had not recorded or committed that follow-up.

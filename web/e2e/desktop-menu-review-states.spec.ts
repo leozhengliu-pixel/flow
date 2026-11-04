@@ -139,6 +139,8 @@ for (const width of [1440, 375, 390]) for (const theme of ['dark', 'light'] as c
     await page.getByRole('button', { name: phone ? /Change labels|更改标签/ : /Add label|添加标签/ }).first().click()
     const labels = page.locator(phone ? '.phone-menu-surface.property-command-labels' : '.issue-labels-menu')
     await expect(labels).toBeVisible()
+    // Hovering during the sheet's scale animation can scroll its clipped content sideways.
+    await labels.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
     const option = labels.getByRole('option', { name: longLabel, exact: true }), mark = option.locator('.property-command-checkbox')
     await option.hover()
     await expect(labels.getByRole('option', { name: 'A', exact: true })).toBeVisible()
