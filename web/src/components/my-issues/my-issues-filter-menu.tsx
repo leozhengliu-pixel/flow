@@ -1,4 +1,4 @@
-import { cloneElement, Fragment, isValidElement, useInsertionEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from 'react'
+import { cloneElement, Fragment, isValidElement, useInsertionEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
 import { Command, defaultFilter } from 'cmdk'
@@ -10,6 +10,7 @@ import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surfac
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { matchesSearch, translatedKeywords } from '@/lib/search-match'
 import { avatarInitials } from '@/lib/avatar-initials'
+import { partialMenuHeight } from '@/lib/menu-height'
 import { useI18n } from '@/i18n/i18n'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { useDesktopLayout } from '@/hooks/use-desktop-layout'
@@ -99,6 +100,8 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
   const phoneRoot = phone && surface === 'my-issues' && variant === 'root'
   const [activeField, setActiveField] = useState<MyIssuesFilterKey>()
   const [query, setQuery] = useState('')
+  const [rootElement, setRootElement] = useState<HTMLDivElement | null>(null)
+  const menuMaxHeight = useFilterMenuHeight(rootElement, desktop && open, query)
   const [aiPending, setAiPending] = useState(false)
   const [textCondition, setTextCondition] = useState<{ field: MyIssuesFilterKey; option: MyIssuesFilterOption }>()
   // The advanced editor opens as the menu closes; handing focus back to the trigger would dismiss it.
@@ -170,7 +173,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
   return <><Popover.Root open={open} onOpenChange={close}>
     <Popover.Trigger asChild>{isValidElement(trigger) ? cloneElement(trigger, { 'aria-expanded': open } as object) : trigger}</Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-layout={layout} data-surface={surface} data-variant={variant} data-submenu-open={activeField ? true : undefined} style={{ zIndex: rootLayer }} side="bottom" align={flushEnd ? 'end' : align} alignOffset={flushEnd ? -4000 : align === 'center' ? -15 : 0} sideOffset={3} collisionPadding={collisionPadding} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (keepFocus.current) { keepFocus.current = false; event.preventDefault() } }} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
+      <Popover.Content ref={setRootElement} aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-layout={layout} data-surface={surface} data-variant={variant} data-submenu-open={activeField ? true : undefined} style={{ zIndex: rootLayer, maxHeight: menuMaxHeight }} side="bottom" align={flushEnd ? 'end' : align} alignOffset={flushEnd ? -4000 : align === 'center' ? -15 : 0} sideOffset={desktop ? 3.5 : 3} collisionPadding={collisionPadding} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (keepFocus.current) { keepFocus.current = false; event.preventDefault() } }} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
         <Command label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} className={styles.rootCommand} defaultValue={phone && variant === 'root' ? '__none__' : undefined} loop filter={(value, search, keywords) => value.startsWith('__ai__') ? 0.0001 : defaultFilter(value, search, keywords)}>
           <div className={styles.rootSearch}>
             <Command.Input aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} placeholder={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} autoFocus value={query} onValueChange={setQuery}/>
@@ -231,6 +234,36 @@ import { PersonHover } from '@/components/property/person-info'
 import { resolveAIFilter } from './natural-language-filter'
 import { isPeopleProperty } from '@/lib/people'
 import { agentSessionStateOption } from '@/lib/agent-members'
+
+function useFilterMenuHeight(element: HTMLDivElement | null, enabled: boolean, query: string) {
+  const [height, setHeight] = useState<number>()
+  useLayoutEffect(() => {
+    if (!element || !enabled) return
+    const list = element.querySelector<HTMLElement>('[cmdk-list]')
+    const search = element.querySelector<HTMLElement>('[cmdk-input]')?.parentElement
+    if (!list || !search) return
+    const measure = () => {
+      const surface = getComputedStyle(element), listStyle = getComputedStyle(list)
+      const available = Math.min(innerHeight - 20, parseFloat(surface.getPropertyValue('--radix-popover-content-available-height')))
+      if (!Number.isFinite(available)) return
+      const border = parseFloat(surface.borderTopWidth)
+      const leading = parseFloat(getComputedStyle(search).height) + parseFloat(listStyle.paddingTop) + border * 2
+      const rows = [...list.querySelectorAll<HTMLElement>('[cmdk-item],[cmdk-separator]')]
+        .filter(row => row.getClientRects().length)
+        .map(row => parseFloat(getComputedStyle(row).height))
+      setHeight(partialMenuHeight(rows, leading, parseFloat(listStyle.paddingBottom), available))
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    observer.observe(list)
+    const placement = new MutationObserver(measure)
+    if (element.parentElement) placement.observe(element.parentElement, { attributes: true, attributeFilter: ['style'] })
+    placement.observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'style'] })
+    measure()
+    return () => { observer.disconnect(); placement.disconnect() }
+  }, [element, enabled, query])
+  return enabled ? height : undefined
+}
 
 function ValueMenu({ field, filters, label, layer, minSearchOptions, onClose, onToggle, onToggleAny, options, optionsFor }: { field: MyIssuesFilterKey; filters: MyIssuesAppliedFilter[]; label: string; layer: number; minSearchOptions?: number; onClose: () => void; onToggle: MyIssuesFilterMenuProps['onToggle']; onToggleAny: MyIssuesFilterMenuProps['onToggle']; options: MyIssuesFilterOption[]; optionsFor: (field: MyIssuesFilterKey) => MyIssuesFilterOption[] | undefined }) {
   const { t } = useI18n()
