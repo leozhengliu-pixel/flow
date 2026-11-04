@@ -2,6 +2,10 @@ import { expect } from '@playwright/test'
 import { test } from './workspace-fixture'
 import { bootstrap, preferences } from './review-findings-fixture'
 
+// Same device as the phone gate and the other phone specs: an iPhone at device scale 3.
+const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+test.use({ deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent })
+
 for (const width of [375, 390]) for (const theme of ['Dark', 'Light'] as const) for (const locale of ['en-US', 'zh-CN']) {
   test(`labels use the shared phone row geometry ${width} ${theme} ${locale}`, async ({ page, request, workspaceKey }) => {
     await page.setViewportSize({ width, height: width === 375 ? 667 : 844 })
