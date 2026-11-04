@@ -159,7 +159,6 @@ export function translateToChinese(source: string): string {
     [/^(Group ordering|Ordering direction): (ascending|descending)$/, (field, direction) => `${field === 'Group ordering' ? '分组排序' : '排序方向'}：${direction === 'ascending' ? '升序' : '降序'}`],
     [/^(Created|Updated|My activity|Joined) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2}), (\d{1,2}):(\d{2}):(\d{2}) (AM|PM)$/, (kind, month, day, hour, minute, second, meridiem) => `${({ Created: '创建于', Updated: '更新于', 'My activity': '我的活动：', Joined: '加入于' } as Record<string, string>)[kind]} ${shortMonth(month)}月${day}日 ${meridiem === 'AM' ? '上午' : '下午'}${hour}:${minute}:${second}`],
     [/^Open team (.+)$/, name => `打开团队 ${name}`],
-    [/^(.+) issue views$/, name => `${name} 事项视图`],
     [/^Sub-issue of (.+)$/, identifier => `子事项隶属于 ${identifier}`],
     [/^Order by (.+), sorted (ascending|descending)$/, (field, direction) => withNoun(field, noun => `按${noun}排序，${direction === 'ascending' ? '升序' : '降序'}`)],
     [/^Restore (.+)\?$/, name => `恢复 ${name}？`],

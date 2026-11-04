@@ -195,9 +195,9 @@ export function LoopCreateHub({
                     <span className="loops-template-icon" style={{ color: loopIconColor({ templateId: item.id, icon: item.icon, color: item.color, template: true }) }}>
                       <LoopIcon source={{ templateId: item.id, icon: item.icon, color: item.color, template: true }} size={14} />
                     </span>
-                    <strong data-i18n-ignore>{item.name}</strong>
-                    <span className="loops-template-description" data-i18n-ignore>
-                      {item.description}
+                    <strong>{t(item.name)}</strong>
+                    <span className="loops-template-description">
+                      {t(item.description)}
                     </span>
                   </span>
                   <span className="loops-template-footer">
@@ -208,7 +208,7 @@ export function LoopCreateHub({
                     <ArrowRight aria-hidden="true" size={14} />
                     <span className="loops-template-action">
                       <LoopGlyph icon={item.actionIcon || item.actionLabel} size={14} />
-                      <span data-i18n-ignore>{item.actionLabel}</span>
+                      <span>{t(item.actionLabel)}</span>
                     </span>
                   </span>
                 </button>

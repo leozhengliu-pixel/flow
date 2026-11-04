@@ -192,7 +192,7 @@ export function IssueExplorerSurface({
         ) : savedView || resourceHeader ? (
           <span className={styles.viewCount}>{itemCount} {itemCount === 1 ? 'issue' : 'issues'}</span>
         ) : (
-          <nav className={styles.tabs} aria-label={`${scopeName} issue views`}>
+          <nav className={styles.tabs} aria-label={t('{name} issue views').replace('{name}', scopeName)}>
             {VIEWS.map(view => (
               <a
                 key={view.id}

@@ -43,6 +43,26 @@ describe('lazy Chinese dictionary', () => {
     expect(translateToChinese('Open RVI-1')).toBe('打开 RVI-1')
   })
 
+  it('translates sentences that end in "issue views" whole, never as a name plus a Chinese noun', async () => {
+    vi.resetModules()
+    const { translateToChinese, loadChineseDictionary } = await import('./translate')
+    await loadChineseDictionary()
+    expect(translateToChinese('Track service level agreements across issue views')).toBe('跨事项视图追踪服务级别协议')
+    expect(translateToChinese('Custom issue views')).toBe('自定义事项视图')
+    expect(translateToChinese('{name} issue views')).toBe('{name} 事项视图')
+    // A phrase with no entry stays whole English.
+    expect(translateToChinese('Frobnicate across issue views')).toBe('Frobnicate across issue views')
+  })
+
+  it('translates the loop template cards', async () => {
+    vi.resetModules()
+    const { translateToChinese, loadChineseDictionary } = await import('./translate')
+    await loadChineseDictionary()
+    for (const text of ['Autofix bugs', 'Triage agent', 'Slack Q&A assistant', 'Weekly wrap', 'Feature request report', 'Security alerts', 'Start a coding session', 'Route the issue to an owner', 'Reply in the Slack thread', 'Share the highlights', 'Post a weekly report', 'Alert the Slack channel', 'Cycle options']) {
+      expect(translateToChinese(text)).not.toBe(text)
+    }
+  })
+
   it('translates property picker phrases as whole sentences', async () => {
     vi.resetModules()
     const { translateToChinese, loadChineseDictionary } = await import('./translate')
