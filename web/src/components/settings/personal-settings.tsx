@@ -754,7 +754,7 @@ function Preferences({
           <PersonalSelect
             label={p("Default home view")}
             value={String(values.homeView)}
-            options={localizedOptions(p, [
+            options={localizedOptionsWithNote(p, [
               "Flow Agent (default)",
               "Inbox",
               "My issues",
@@ -4264,6 +4264,22 @@ function localizedOptions(
     label: p(value),
     entityName: isBusinessName(value),
   }));
+}
+/** Options whose label ends in a parenthesised note, e.g. "Flow Agent (default)": the note is dimmed in the trigger. */
+function localizedOptionsWithNote(
+  p: PersonalTranslate,
+  values: string[],
+): SettingsSelectOption[] {
+  return values.map((value) => {
+    const text = p(value);
+    const match = /^(.*?)\s*([(（][^)）]*[)）])$/.exec(text);
+    return {
+      value,
+      label: match ? match[1] : text,
+      suffix: match?.[2],
+      entityName: isBusinessName(value),
+    };
+  });
 }
 function isBusinessName(value: string) {
   return /Flow|GitHub|GitLab|Slack|Notion|Google Calendar|MCP/.test(value);

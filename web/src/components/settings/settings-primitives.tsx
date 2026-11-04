@@ -175,7 +175,11 @@ export function SettingsToggle({
 
 export type SettingsSelectOption =
   | string
-  | { value: string; label: string; disabled?: boolean; entityName?: boolean; icon?: ReactNode; /** Draws a separator above the option. */ divider?: boolean; /** Muted text after the label, shown in the menu only. */ hint?: string };
+  | { value: string; label: string; disabled?: boolean; entityName?: boolean; icon?: ReactNode; /** Draws a separator above the option. */ divider?: boolean; /** Muted text after the label, shown in the menu only. */ hint?: string; /** Dimmed text after the label in the trigger, e.g. "(default)"; the menu and native picker show it as plain text. */ suffix?: string };
+
+const suffixGap = (suffix: string) => (suffix.startsWith("（") ? "" : " ");
+const withSuffix = (option: { label: string; suffix?: string }) =>
+  option.suffix ? `${option.label}${suffixGap(option.suffix)}${option.suffix}` : option.label;
 
 export function SettingsSelect({
   align = "end",
@@ -204,7 +208,7 @@ export function SettingsSelect({
   const phone = usePhoneLayout();
   const normalized = options.map((option) =>
     typeof option === "string"
-      ? { value: option, label: option, entityName: entityName?.(option) }
+      ? { value: option, label: option, entityName: entityName?.(option), suffix: undefined }
       : option,
   );
   const selected = normalized.find((option) => option.value === value);
@@ -218,7 +222,7 @@ export function SettingsSelect({
     >
       <SelectPrimitive.Trigger
         aria-label={label}
-        data-select-size={normalized.reduce((widest, option) => option.label.length > widest.length ? option.label : widest, "")}
+        data-select-size={normalized.reduce((widest, option) => withSuffix(option).length > widest.length ? withSuffix(option) : widest, "")}
         className={`${className || "settings-select"} settings-select-radix`}
       >
         <SelectPrimitive.Value>
@@ -226,6 +230,7 @@ export function SettingsSelect({
             {selected?.icon}
             <span data-i18n-ignore={selected?.entityName || undefined}>
               {selected?.label ?? (placeholder || value)}
+              {selected?.suffix && <>{suffixGap(selected.suffix)}<span className="settings-select-suffix">{selected.suffix}</span></>}
             </span>
           </span>
         </SelectPrimitive.Value>
@@ -254,7 +259,7 @@ export function SettingsSelect({
                   <span className="settings-select-option-content">
                     {option.icon}
                     <span data-i18n-ignore={option.entityName || undefined}>
-                      {option.label}
+                      {withSuffix(option)}
                     </span>
                     {"hint" in option && option.hint && <span className="settings-select-option-hint" data-i18n-ignore>{option.hint}</span>}
                   </span>
@@ -278,7 +283,7 @@ export function SettingsSelect({
           value={value}
         >
           {normalized.map((option) => (
-            <option disabled={option.disabled} key={option.value} value={option.value}>{option.label}</option>
+            <option disabled={option.disabled} key={option.value} value={option.value}>{withSuffix(option)}</option>
           ))}
         </select>
         <span aria-hidden="true"><SettingsChevron /></span>

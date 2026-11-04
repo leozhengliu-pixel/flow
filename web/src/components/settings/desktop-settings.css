@@ -111,7 +111,6 @@
   html:root .settings-app .settings-main[data-settings-page=workspace] .settings-url > span { font: 400 13px/normal var(--font); }
   html:root .settings-app .settings-main[data-settings-page=workspace] .settings-section:has(> h3) .settings-row { min-height: 65px; height: 65px; padding-block: 16px; }
   html:root .settings-app .settings-main[data-settings-page=workspace] .settings-section:nth-of-type(3) .settings-row { min-height: 64px; height: 64px; }
-  html:root .settings-app .settings-main[data-settings-page=workspace] .workspace-logo-control > button { width: 32px; height: 32px; font-size: 11px; font-weight: 400; }
   html:root .settings-app .settings-main .settings-action.danger { height: 32px; border-radius: 9999px; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns,
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row { grid-template-columns: minmax(0, 408.6fr) minmax(0, 266.4fr) 146px 82px 82px 82px 32px; padding: 0 20px 0 52px; }
