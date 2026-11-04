@@ -105,6 +105,7 @@
 
 .phone-menu-overlay { position: fixed; inset: 0; z-index: 1200; background: transparent; }
 .phone-menu-surface[data-phone-popover] {
+  box-sizing: content-box;
   position: fixed;
   top: var(--phone-menu-top);
   left: 16px;
@@ -129,6 +130,7 @@
 .phone-menu-search input::placeholder { color: var(--pk-faint); }
 .phone-menu-surface [cmdk-list] { max-height: min(403px, calc(100dvh - var(--phone-menu-top) - 63px)); padding: 6px; overflow: auto; overscroll-behavior: contain; }
 .phone-menu-compact-text { --phone-menu-item-font: 450 13px/15.6px var(--font); --phone-menu-item-color: var(--pk-text); --phone-menu-highlight-color: var(--pk-text); }
+.phone-menu-surface .property-command-label { font: var(--phone-menu-item-font, 450 13px/15.6px var(--font)); }
 .phone-menu-surface [cmdk-item] { position: relative; isolation: isolate; min-width: 0; height: 46px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 0; background: transparent; color: var(--phone-menu-item-color, inherit); font: var(--phone-menu-item-font, 400 15px/22.5px var(--font)); outline: none; }
 .phone-menu-surface [cmdk-item]::before { content: ''; position: absolute; z-index: -1; inset: var(--phone-menu-highlight-inset); border-radius: 8px; pointer-events: none; }
 .phone-menu-surface [cmdk-item]:is([data-selected="true"],:focus-visible):not([data-disabled="true"]) { color: var(--phone-menu-highlight-color, var(--pk-text-strong)); }

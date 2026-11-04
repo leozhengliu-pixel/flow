@@ -139,7 +139,7 @@
   html:root body .labelsMenu { height: auto !important; box-shadow: var(--pk-card-shadow) !important; }
   html:root body .labelsMenu :global(.phone-menu-heading) { height: 40px; }
   html:root body .labelsMenu :global(.phone-menu-context) { padding: 2px 6px; font: 400 12px/18px var(--font); }
-  html:root body .labelsMenu :global(.property-command-search) { box-sizing: border-box !important; width: calc(100% - 10px) !important; height: 40px !important; margin: 0 6px !important; padding: 0 !important; border: 0 !important; border-radius: 12px; font: 400 13px/19.5px var(--font); }
+  html:root body .labelsMenu :global(.property-command-search) { box-sizing: border-box !important; height: 40px !important; margin: 0 6px !important; padding: 0 !important; border: 0 !important; border-radius: 12px; font: 400 13px/19.5px var(--font); }
   html:root body .labelsMenu :global(.property-command-search input) { height: 40px !important; padding: 10px 12px !important; border-radius: 12px; }
   html:root body .labelsMenu :global(.property-command-options) { flex: 1 1 auto !important; min-height: 0 !important; width: calc(100vw - 32px); }
   html:root body .labelsMenu :global(.property-command-group) { padding: 8px 12px; font-size: 12px !important; }

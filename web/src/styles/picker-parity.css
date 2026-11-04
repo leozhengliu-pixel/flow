@@ -1094,11 +1094,12 @@ html:root body .agent-skills-trigger:not(#_) svg { width: 14px; height: 14px; }
   .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-checkbox {
     display: grid;
     grid-column: 1;
-    border: 1px solid var(--menu-checkbox-hover-border);
+    margin: 0 1px;
+    border: 1px solid var(--label-picker-checkbox-border);
     visibility: hidden;
   }
-  /* The empty box appears only under the pointer; checked rows always show their check. */
-  .property-command-surface.issue-labels-menu .property-command-options [role=option]:hover .property-command-checkbox,
+  /* Pointer and keyboard highlights reveal the empty box. */
+  .property-command-surface.issue-labels-menu .property-command-options [role=option]:is(:hover, [aria-selected=true]) .property-command-checkbox,
   .property-command-surface.issue-labels-menu .property-command-options [role=option][aria-checked=true] .property-command-checkbox {
     visibility: visible;
   }
@@ -1108,6 +1109,7 @@ html:root body .agent-skills-trigger:not(#_) svg { width: 14px; height: 14px; }
     box-shadow: none;
   }
   .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-icon { grid-column: 2; }
+  .property-command-surface.issue-labels-menu .option-dot { width: 9px; height: 9px; flex-basis: 9px; }
   .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-label { grid-column: 3; }
 }
 html:root body .property-command-surface .property-command-search.is-visually-hidden:not(#_) {

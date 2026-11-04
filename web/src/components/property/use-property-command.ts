@@ -15,8 +15,9 @@ export interface PropertyCommandOption {
   searchOnly?: boolean
 }
 
-export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus = true, closeOnSelect = true, keepSelectedVisible = false, pinnedIds, intercept, onOpenChange, onSelect, open, options, resetKey, selectedIds = [], personOptions = false }: {
+export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus = true, highlightOnOpen = true, closeOnSelect = true, keepSelectedVisible = false, pinnedIds, intercept, onOpenChange, onSelect, open, options, resetKey, selectedIds = [], personOptions = false }: {
   autoFocus?: boolean
+  highlightOnOpen?: boolean
   closeOnSelect?: boolean
   keepSelectedVisible?: boolean
   /** Options that stay listed whatever the search says (a "Custom…" row); they are highlighted when nothing else matches. */
@@ -51,13 +52,13 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
 
   // Opening (or re-keying) the picker clears the search and highlights the selected option. Compared during render
   // rather than in an effect; the first render counts as a change.
-  const [seenOpening, setSeenOpening] = useState<{ autoFocus: boolean; open: boolean; resetKey?: string }>()
-  const openingChanged = !seenOpening || seenOpening.autoFocus !== autoFocus || seenOpening.open !== open || seenOpening.resetKey !== resetKey
+  const [seenOpening, setSeenOpening] = useState<{ autoFocus: boolean; highlightOnOpen: boolean; open: boolean; resetKey?: string }>()
+  const openingChanged = !seenOpening || seenOpening.autoFocus !== autoFocus || seenOpening.highlightOnOpen !== highlightOnOpen || seenOpening.open !== open || seenOpening.resetKey !== resetKey
   if (openingChanged) {
-    setSeenOpening({ autoFocus, open, resetKey })
+    setSeenOpening({ autoFocus, highlightOnOpen, open, resetKey })
     if (open) {
       setQuery('')
-      setActiveId(options.find(option => selectedIds.includes(option.id) && !option.disabled)?.id ?? options.find(option => !option.disabled && !option.searchOnly)?.id)
+      setActiveId(highlightOnOpen ? options.find(option => selectedIds.includes(option.id) && !option.disabled)?.id ?? options.find(option => !option.disabled && !option.searchOnly)?.id : undefined)
     }
   }
   useEffect(() => {
@@ -66,7 +67,7 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   }, [autoFocus, inputRef, open, resetKey])
 
   // Fetched options can arrive after opening; preserve the opening selection first.
-  if (!openingChanged && open && activeId === undefined) {
+  if (!openingChanged && open && highlightOnOpen && activeId === undefined) {
     const first = filteredOptions.find(option => selectedSet.has(option.id) && !option.disabled) ?? filteredOptions.find(option => !option.disabled && !option.searchOnly)
     if (first) setActiveId(first.id)
   }

@@ -147,6 +147,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   const kind = explicitKind ?? (multiple && label === 'Labels' ? 'labels' : label === 'Project' ? 'project' : 'standard')
   const orderedOptions = useMemo(() => multiple && kind !== 'labels' ? [...menuOptions.filter(option => selectedSet.has(option.id)), ...menuOptions.filter(option => !selectedSet.has(option.id))] : menuOptions, [menuOptions, multiple, kind, selectedSet])
   const { inputRef: commandInputRef, ...command } = usePropertyCommand({
+    highlightOnOpen: kind !== 'labels',
     autoFocus: kind !== 'project-labels',
     closeOnSelect: closeOnSelect ?? !multiple,
     keepSelectedVisible,

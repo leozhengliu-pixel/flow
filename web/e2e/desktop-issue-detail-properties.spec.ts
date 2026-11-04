@@ -78,6 +78,7 @@ test('keeps issue properties readable, toggles labels, and searches short and lo
   const labelBox = (await labels.boundingBox())!
   expect(labelBox.x + labelBox.width).toBeLessThan((await rail.boundingBox())!.x + 5)
   const uncheckedLabel = labels.getByRole('option', { name: '[audit] Label', exact: true })
+  await expect(labels.locator('[role=option][aria-selected=true]')).toHaveCount(0)
   await expect(uncheckedLabel.locator('.property-command-checkbox')).toBeHidden()
   await expect(uncheckedLabel.locator('.property-command-checkbox')).toHaveCSS('opacity', '0')
   const uncheckedGeometry = await uncheckedLabel.evaluate(option => {
@@ -89,6 +90,13 @@ test('keeps issue properties readable, toggles labels, and searches short and lo
   expect(uncheckedGeometry.labelX).toBe(60)
   expect(uncheckedGeometry.labelWidth).toBeGreaterThan(100)
   if (process.env.FLOW_CI_SHOTS) await labels.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/issue-labels-desktop-unchecked.png`, animations: 'disabled' })
+  for (let index = 0; index < await labels.getByRole('option').count(); index++) {
+    await labels.getByRole('textbox').press('ArrowDown')
+    if (await uncheckedLabel.getAttribute('aria-selected') === 'true') break
+  }
+  await expect(uncheckedLabel).toHaveAttribute('aria-selected', 'true')
+  await expect(uncheckedLabel.locator('.property-command-checkbox')).toBeVisible()
+  await expect(uncheckedLabel.locator('.property-command-checkbox')).toHaveCSS('opacity', '1')
   await uncheckedLabel.hover()
   await expect(uncheckedLabel.locator('.property-command-checkbox')).toBeVisible()
   await expect(uncheckedLabel.locator('.property-command-checkbox')).toHaveCSS('opacity', '1')

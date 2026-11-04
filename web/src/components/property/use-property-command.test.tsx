@@ -10,9 +10,9 @@ const options = [
   { id: 'two', label: 'Second option', keywords: 'beta', shortcut: '2' },
 ]
 
-function CommandHarness({ onSelect, onOpenChange }: { onSelect: (id: string) => void; onOpenChange: (open: boolean) => void }) {
+function CommandHarness({ onSelect, onOpenChange, highlightOnOpen = true }: { onSelect: (id: string) => void; onOpenChange: (open: boolean) => void; highlightOnOpen?: boolean }) {
   const [open, setOpen] = useState(true)
-  const command = usePropertyCommand({ autoFocus: false, open, options, selectedIds: ['one'], onOpenChange: next => { setOpen(next); onOpenChange(next) }, onSelect: option => onSelect(option.id) })
+  const command = usePropertyCommand({ autoFocus: false, highlightOnOpen, open, options, selectedIds: ['one'], onOpenChange: next => { setOpen(next); onOpenChange(next) }, onSelect: option => onSelect(option.id) })
   return <div>
     <input aria-label="Search options" value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown}/>
     <output>{command.activeId}</output>
@@ -22,6 +22,21 @@ function CommandHarness({ onSelect, onOpenChange }: { onSelect: (id: string) => 
 }
 
 describe('property command keyboard behavior', () => {
+  it('can wait for keyboard navigation before highlighting a row', async () => {
+    const user = userEvent.setup()
+    render(<CommandHarness highlightOnOpen={false} onSelect={vi.fn()} onOpenChange={vi.fn()}/>)
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    await user.click(screen.getByRole('textbox', { name: 'Search options' }))
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('status')).toHaveTextContent('one')
+  })
+
+  it('keeps a fetched list unhighlighted when opening highlights are disabled', () => {
+    const { result, rerender } = renderHook(({ rows }) => usePropertyCommand({ autoFocus: false, highlightOnOpen: false, open: true, options: rows, selectedIds: ['two'], onOpenChange: vi.fn(), onSelect: vi.fn() }), { initialProps: { rows: [] as typeof options } })
+    rerender({ rows: options })
+    expect(result.current.activeId).toBeUndefined()
+  })
+
   it.each([true, false])('keeps the selected option highlighted when opening from %s', initiallyOpen => {
     const { result, rerender } = renderHook(({ open, rows }) => usePropertyCommand({ autoFocus: false, open, options: rows, selectedIds: ['two'], onOpenChange: vi.fn(), onSelect: vi.fn() }), { initialProps: { open: initiallyOpen, rows: options } })
     if (!initiallyOpen) rerender({ open: true, rows: options })
