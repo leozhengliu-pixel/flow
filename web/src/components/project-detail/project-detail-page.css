@@ -1383,7 +1383,6 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   }
   .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-button svg { width: 14px; height: 14px; }
   .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-button svg { color: var(--phone-icon-fg); }
-  .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-button.ui-pill:is([aria-pressed=true],[aria-expanded=true],[data-state=open]),
   .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-button:hover {
     background-color: var(--project-toolbar-bg) !important;
     background-clip: padding-box !important;
@@ -1409,7 +1408,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   }
   .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-button[aria-label="Add filter"] svg,
   .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-actions > button[aria-label="Display options"] svg { width: 14px; height: 14px; color: var(--phone-icon-fg); }
-  .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-actions > button[aria-label*="project details"] { background-color: var(--project-toolbar-bg); background-clip: padding-box; }
+  .project-detail-page__top > .project-detail-page__toolbar .project-detail-page__toolbar-actions > button[aria-label*="project details"]:not([aria-pressed=true]) { background-color: var(--project-toolbar-bg); background-clip: padding-box; }
   .project-issues { min-width: 0; min-height: 100%; display: flex; flex-direction: column; padding: 0; }
   .project-issues__intro {
     box-sizing: border-box;
@@ -1634,6 +1633,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-detail-page__toolbar .project-detail-page__add-view svg { color: var(--text); }
   .project-detail-page__toolbar .project-detail-page__toolbar-button svg { color: var(--text); }
   .project-detail-page__toolbar .project-detail-page__toolbar-button[aria-label*="project details"] { background: var(--project-toolbar-bg); }
+  .project-detail-page__toolbar .project-detail-page__toolbar-button[aria-pressed=true] svg { color: var(--ui-pill-active-fg); }
   .project-activity { padding-top: 38px; }
   .project-activity__composer {
     box-sizing: border-box;

@@ -98,8 +98,11 @@ describe('project detail header and tabs', () => {
     expect(screen.getByRole('button', { name: 'Setup project notifications' }).querySelector('path')?.getAttribute('d')).toContain('13.8076')
   })
 
-  it('uses the panel-right glyph for the phone details toggle', () => {
+  it('uses the panel-right glyph for the phone details toggle, filled while the panel is open', async () => {
+    const user = userEvent.setup()
     const { container } = renderPage()
+    expect(container.querySelector('.project-overview__mobile-icon rect')?.getAttribute('x')).toBe('7')
+    await user.click(screen.getByRole('button', { name: 'Close project details' }))
     expect(container.querySelector('.project-overview__mobile-icon rect')?.getAttribute('x')).toBe('10')
   })
 

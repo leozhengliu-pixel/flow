@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match the phone issue property sheets to the shared sheet: 13px rows, a heading chip that names the issue ("Assigned users" for assignees), cycle rows with their dates and state, "Workspace labels", the static status glyphs and a due date list that opens as a sheet with the cycle ends. Also draw the not-found page with the phone header and drawer button in the interface language, send `/settings/account` to the profile, show the Documents crumb on phone team documents, fill the project details toggle while the panel is open, translate the "search" tool row and read chat history times in Chinese like every other relative time.
 - Verify compact composer and clipboard toast styles at the shared 880px boundary, and isolate the desktop route matrix by viewport so its full coverage does not share one test deadline.
 - Check unsafe translation placeholder replacements per source file so the full repository scan stays within individual test deadlines in coverage runs.
 - Require archived issues to be restored before changing their content or properties, make their editors and property controls read-only, and offer Restore in issue options.

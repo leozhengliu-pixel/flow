@@ -735,7 +735,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               type="button"
             >
               <SidebarIcon className="project-overview__desktop-icon" />
-              <SidebarRightIcon className="project-overview__mobile-icon" />
+              <SidebarRightIcon className="project-overview__mobile-icon" open={detailsOpen} />
             </button>
           </FlowTooltip>
         </div>
