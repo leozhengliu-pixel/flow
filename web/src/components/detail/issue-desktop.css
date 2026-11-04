@@ -20,6 +20,7 @@
   .issue-view .detail-sub-title { max-width: 100%; justify-self: start; line-height: normal; }
   .issue-view .activity-heading { margin-top: 34.5px; }
   .issue-view .issue-empty-sub-issue-row + .activity-heading { margin-top: 44.5px; }
+  .issue-view .flow-sub-issues + .activity-heading { margin-top: 18px; }
   .issue-view .activity-heading > span { color: var(--bright); }
   .issue-view .activity-heading .subscriber-avatars { background: transparent; }
   .issue-view .subscriber-avatars .avatar { font-size: 9px; font-weight: 500; }

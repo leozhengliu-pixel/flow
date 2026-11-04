@@ -156,9 +156,12 @@ export function WorkspaceMenu({
             </DropdownMenuItem>
             {/* Settings › Members is an administration page: the reference app only lists it for admins. */}
             {(data.viewerRole === "admin" || data.viewerRole === "owner") && (
-              <DropdownMenuItem onFocus={closeCascadeFromSibling} onSelect={() => onSettings("members")}>
-                {t('Invite and manage members')}
-              </DropdownMenuItem>
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onFocus={closeCascadeFromSibling} onSelect={() => onSettings("members")}>
+                  {t('Invite and manage members')}
+                </DropdownMenuItem>
+              </>
             )}
             <DropdownMenuSeparator />
             <DropdownMenuSub open={switching} onOpenChange={setSwitching}>
