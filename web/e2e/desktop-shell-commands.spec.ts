@@ -1,19 +1,17 @@
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './workspace-fixture'
+import type { BootstrapData } from '../src/types/flow'
 
-const apiBase = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
-
-test('desktop shell commands keep commands first, list real shortcuts and open the create dialog', async ({ page, request }, testInfo) => {
+test('desktop shell commands keep commands first, list real shortcuts and open the create dialog', async ({ page, request, workspaceKey }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'desktop-only parity spec')
-  const workspaceKey = `audit-e2e-shell-commands-${Date.now()}`
-  const created = await request.post(`${apiBase}/api/workspaces`, {
-    data: { name: '[audit] Shell commands workspace', urlKey: workspaceKey, region: 'us' },
-  })
-  expect(created.status()).toBe(201)
-  const workspace = await created.json() as { teams?: Array<{ id: string }> }
-  const teamId = workspace.teams?.[0]?.id
+  const headers = { 'X-Workspace-Key': workspaceKey }
+  const bootstrap = await request.get('/api/bootstrap', { headers })
+  expect(bootstrap.status()).toBe(200)
+  const workspace = await bootstrap.json() as BootstrapData
+  const teamId = workspace.teams[0]?.id
   expect(teamId).toBeTruthy()
-  const issue = await request.post(`${apiBase}/api/issues`, {
-    headers: { 'X-Workspace-Key': workspaceKey },
+  const issue = await request.post('/api/issues', {
+    headers,
     data: { title: '[audit] Project launch notes', description: 'Quick result for the command menu', teamId, stateId: 'state_todo' },
   })
   expect(issue.status()).toBe(201)
@@ -65,9 +63,9 @@ test('desktop shell commands keep commands first, list real shortcuts and open t
   await page.getByRole('button', { name: 'Create new issue' }).click()
   const dialog = page.getByRole('dialog', { name: 'New issue' })
   await expect(dialog).toBeVisible()
-  await page.waitForTimeout(500)
+  await dialog.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
   const box = await dialog.boundingBox()
-  expect(box?.y).toBeCloseTo(117.5, 1)
+  expect(box?.y).toBeCloseTo(117, 1)
   const radius = await dialog.evaluate(element => getComputedStyle(element).borderRadius)
   expect(radius).toBe('21px')
   const chips = await dialog.locator('.properties [data-property], .properties button[aria-label="More actions"]').evaluateAll(elements => elements.map(element => element.getAttribute('data-property') ?? 'more'))
