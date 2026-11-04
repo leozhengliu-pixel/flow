@@ -164,8 +164,16 @@ func TestMCPEveryToolRejectsWrongArgumentTypes(t *testing.T) {
 			}
 			json.Unmarshal(tool.InputSchema, &schema)
 			args := map[string]any{}
-			for field := range schema.Properties {
+			for field, raw := range schema.Properties {
+				var property map[string]any
+				if err := json.Unmarshal(raw, &property); err != nil {
+					t.Fatal(err)
+				}
 				args[field] = map[string]any{"wrong": "type"}
+				// Filter trees accept objects, so their wrong-type input must be a scalar.
+				if property["type"] == "object" {
+					args[field] = "not-an-object"
+				}
 				break
 			}
 			if len(args) == 0 {
