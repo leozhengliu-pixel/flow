@@ -1049,6 +1049,8 @@ export const zhCN: Record<string, string> = {
   "Last seen": "最近在线",
   Online: "在线",
   Offline: "离线",
+  "Skip to content": "跳到主要内容",
+  "Loading your workspace...": "正在加载工作区...",
   "local time": "当地时间",
   "Invitation pending": "邀请待处理",
   dependencies: "依赖项",

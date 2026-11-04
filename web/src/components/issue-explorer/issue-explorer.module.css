@@ -23,7 +23,8 @@
 .body[data-saved-panel-open=true]>:first-child:not([data-aside-layout]){margin-right:400px}
 .body[data-insights-open=true]>:first-child{margin-right:440px}
 @media(max-width:800px){.body[data-insights-open=true]>:first-child{margin-right:0}}
-.tab:focus-visible,.addView:focus-visible,.iconButton:focus-visible,.headerAction:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.tab,.addView{--control-focus-offset:-1px}
+.tab:focus-visible,.addView:focus-visible,.iconButton:focus-visible,.headerAction:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 @media(max-width:800px){.surface{width:100%;height:calc(100% - 36px);margin:0 0 36px;border:0;border-radius:0;box-shadow:none}.mobileSidebarButton{display:flex;flex-direction:column;justify-content:center}.header{padding:0 8px}.toolbar{overflow:visible}.tabs{min-width:0;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain;padding-right:2px}.tabs::-webkit-scrollbar{display:none}.actions{margin-left:8px}.headerAction:last-child{display:none}.body[data-saved-panel-open=true]>:first-child{margin-right:0}}
 @media(max-width:767px){.toolbar{gap:4px}.tabs{flex:1}.actions{flex:0 0 auto}}
 @media(max-width:767px){.insightsButton{display:none}}
@@ -83,12 +84,12 @@
 .phoneTeamFavorite{margin-left:8px}
 .phoneTeamNotifications{margin-left:auto}
 .phoneTeamFavorite:hover,.phoneTeamNotifications:hover{background:var(--theme-surface-hover);color:var(--text)}
-.phoneTeamFavorite:focus-visible,.phoneTeamNotifications:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.phoneTeamFavorite:focus-visible,.phoneTeamNotifications:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .phoneTeamFavorite svg,.phoneTeamNotifications svg{width:14px;height:14px}
 .phoneTeamNotifications + .headerNewIssue{margin-left:4px}
 .headerNewIssue{height:28px;display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 10px 0 8px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--muted);font-family:inherit;font-size:12px;font-weight:500;line-height:normal;cursor:pointer}
 .headerNewIssue:hover{background:var(--theme-surface-hover);color:var(--text)}
-.headerNewIssue:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.headerNewIssue:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .headerNewIssue svg{width:14px;height:14px}
 [data-toolbar-buttons-navigation].actions{gap:6px}
 @media(min-width:801px){

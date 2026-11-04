@@ -81,6 +81,7 @@
 }
 .breadcrumbItem[data-muted=true]{color:var(--issue-muted,var(--muted))}
 .breadcrumbItem[href]:hover{color:var(--theme-text-primary)}
+.breadcrumbItem:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:1px}
 .breadcrumbItem[data-current=true]{
   overflow:hidden;
   text-overflow:ellipsis;

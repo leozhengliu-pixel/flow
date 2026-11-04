@@ -1,0 +1,35 @@
+/* Visually hidden until focused, then drawn at the top left of the window. Desktop only: the phone layout is keyboardless. */
+@media (max-width: 767px) {
+  .skip-to-content { display: none; }
+}
+.skip-to-content {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  color: var(--bright);
+  transition: color .15s;
+}
+.skip-to-content:focus-visible {
+  position: fixed;
+  top: 11px;
+  left: 11px;
+  z-index: 1200;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 16px;
+  overflow: visible;
+  clip-path: none;
+  border-radius: 8px;
+  background: var(--skip-link-bg);
+  box-shadow: 0 0 0 1px var(--focus-ring);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 19.5px;
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 1px;
+}
