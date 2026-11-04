@@ -37,7 +37,7 @@ html:root .settings-app .settings-main .settings-card>.settings-row.pipeline-set
 .pipeline-settings-type-cards>button{box-sizing:border-box;min-width:0;min-height:130px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:12px;border:.5px solid var(--set-search-border);border-radius:8px;background:var(--set-card);color:var(--set-desc);font:inherit;text-align:left;transition:background-color .15s ease,color .15s ease}
 .pipeline-settings-type-cards>button:hover{background:var(--bg-hover)}
 .pipeline-settings-type-cards>button.is-selected{background:var(--set-control);color:var(--set-control-text)}
-.pipeline-settings-type-cards>button:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring)}
+.pipeline-settings-type-cards>button:focus-visible{outline:0;box-shadow:0 0 0 var(--control-focus-width) var(--focus-ring)}
 .pipeline-settings-type-title{display:flex;align-items:center;gap:8px}
 .pipeline-settings-type-title svg{width:16px;height:16px;flex:none;color:var(--set-desc)}
 .pipeline-settings-type-title b{font-size:13px;font-weight:500;line-height:16px}
@@ -112,7 +112,7 @@ body .flow-pipeline-team-menu{width:149px;padding:0;animation-duration:.15s!impo
 .flow-pipeline-stage-edit-actions{display:flex;align-items:center;gap:8px}
 .flow-pipeline-stage-edit-actions>button{box-sizing:border-box;height:32px;padding:0 12px;border:.5px solid transparent;border-radius:9999px;outline:0;background:transparent;color:var(--theme-text-primary);font:500 13px "Inter Variable","SF Pro Display",system-ui,sans-serif;letter-spacing:0;white-space:nowrap;transition:background-color .15s ease,opacity .15s ease}
 .flow-pipeline-stage-edit-actions>button:hover:not(:disabled){background:var(--theme-surface-hover)}
-.flow-pipeline-stage-edit-actions>button:focus-visible{box-shadow:0 0 0 2px var(--focus-ring)}
+.flow-pipeline-stage-edit-actions>button:focus-visible{box-shadow:0 0 0 var(--control-focus-width) var(--focus-ring)}
 .flow-pipeline-stage-edit-actions>button.primary{background:var(--set-primary);box-shadow:var(--set-primary-shadow);color:var(--set-primary-text)}
 .flow-pipeline-stage-edit-actions>button.primary:hover:not(:disabled){background:var(--accent-primary-hover)}
 .flow-pipeline-stage-edit-actions>button:disabled{opacity:.5;cursor:default}

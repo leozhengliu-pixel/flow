@@ -76,7 +76,7 @@
 .customer-needs__display[data-state=open],
 .customer-needs__add:hover { background: var(--ui-pill-hover-bg); box-shadow: 0 0 0 .5px var(--ui-pill-hover-ring), var(--ui-pill-shadow); }
 .customer-needs__display:focus-visible,
-.customer-needs__add:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.customer-needs__add:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 
 .customer-needs__composer { padding-bottom: 24px; }
 
@@ -291,7 +291,7 @@
 .customer-need__menu svg { width: 14px; height: 14px; }
 .customer-need__menu:hover,
 .customer-need__menu[data-state=open] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
-.customer-need__menu:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+.customer-need__menu:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: 0; }
 
 /* Expanded row. */
 .customer-need__expanded { display: flex; flex-direction: column; padding: 0 4px 0 26px; }

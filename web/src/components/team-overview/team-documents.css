@@ -132,7 +132,7 @@
 .team-docs-row[data-selected="true"] .team-docs-check span { opacity: 1; }
 .team-docs-row[data-selected="true"] .team-docs-check span { border-color: var(--accent-primary); background: var(--accent-primary); }
 .team-docs-row[data-selected="true"] .team-docs-check span svg { visibility: visible; }
-.team-docs-check input:focus-visible + span { opacity: 1; outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.team-docs-check input:focus-visible + span { opacity: 1; outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 
 .team-docs-title { display: flex; flex: 1 1 0; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
 .team-docs-title > .document-glyph,
@@ -277,7 +277,7 @@
 .team-docs-selection button:focus-visible,
 .team-docs-more:focus-visible,
 .team-docs-owner:focus-visible,
-.team-docs-caret:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.team-docs-caret:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 
 @media (min-width: 768px) {
   .team-documents-toolbar > .team-documents-new { color: var(--issue-header-fg); }

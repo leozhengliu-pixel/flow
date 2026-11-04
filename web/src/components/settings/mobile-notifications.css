@@ -57,7 +57,7 @@
       color: var(--set-text);
       font: 400 16px/24px var(--font);
     }
-    .personal-channel-action:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+    .personal-channel-action:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-inset); }
     .personal-channel:first-child { border-radius: 10px 10px 0 0; }
     .personal-channel:last-child { border-radius: 0 0 10px 10px; }
     .personal-channel > .notification-phone-chevron { transform: none; color: var(--set-desc); }

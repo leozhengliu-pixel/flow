@@ -40,5 +40,5 @@
   .emptyFilterCard button{box-sizing:border-box;display:inline-flex;flex:none;align-items:center;justify-content:center;gap:6px;width:104px;height:24px;padding:0 8px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font-family:inherit;font-size:12px;font-weight:500;line-height:normal;white-space:nowrap;cursor:pointer}
   .emptyFilterCard button svg{flex:none}
   .emptyFilterCard button:hover{background:var(--theme-surface-hover)}
-  .emptyFilterCard button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+  .emptyFilterCard button:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 }

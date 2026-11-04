@@ -185,12 +185,12 @@ html:root .settings-app .settings-main .personal-action.primary:hover:not(:disab
 html:root .settings-app .settings-main .feature-button.primary:hover:not(:disabled) {
   background: color-mix(in lch, var(--set-primary) 88%, white);
 }
-/* The button shadows above would otherwise hide the keyboard focus ring. */
+/* Keep keyboard outlines separate from resting control shadows. */
 html:root .settings-app .settings-main .settings-action:focus-visible,
 html:root .settings-app .settings-main .personal-action:focus-visible,
 html:root .settings-app .settings-main .feature-button:focus-visible {
-  outline: 0;
-  box-shadow: 0 0 0 2px var(--focus-ring);
+  outline: var(--control-focus-width) solid var(--focus-ring);
+  outline-offset: var(--control-focus-offset);
 }
 
 /* Titled groups inside a section: title + description above their own card */

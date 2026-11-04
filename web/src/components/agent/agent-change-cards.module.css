@@ -8,7 +8,7 @@
 .change[data-state="undone"][data-action="created"] .entityLabel,.change:not([data-state])[data-action="deleted"] .entityLabel{text-decoration:line-through;text-decoration-color:var(--theme-text-tertiary,currentColor)}
 .entity{display:flex;align-items:center;gap:8px;min-width:0;color:var(--text);font-size:13px;font-weight:500;text-decoration:none}
 a.entity:hover .entityLabel{text-decoration:underline}
-a.entity:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:4px}
+a.entity:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset);border-radius:4px}
 .entity svg{flex:0 0 auto;width:16px;height:16px}
 .entityIdentifier{flex:0 0 auto;color:var(--theme-text-secondary);font-weight:450}
 .entityLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

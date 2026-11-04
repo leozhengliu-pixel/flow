@@ -14,11 +14,11 @@
 .iu-actions{display:flex;flex:none;gap:8px}
 .iu-select{position:relative;height:24px;display:inline-flex;align-items:center;padding:1px 24px 1px 10px;border:1px solid transparent;border-radius:8px;background:var(--theme-surface-2);box-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft);color:var(--theme-text-primary);font:400 12px var(--font);white-space:nowrap}
 .iu-select:hover,.iu-select[data-state=open]{background:var(--theme-surface-hover)}
-.iu-select:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.iu-select:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .iu-select>svg{position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--theme-text-secondary)}
 .iu-button{height:24px;display:inline-flex;align-items:center;justify-content:center;padding:0 8px;border:1px solid transparent;border-radius:9999px;background:var(--theme-surface-2);color:var(--theme-text-primary);font:500 12px var(--font)}
 .iu-button:hover:not(:disabled){background:var(--theme-surface-hover)}
-.iu-button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.iu-button:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .iu-button:disabled{opacity:.5}
 .iu-button.is-primary{background:var(--accent-primary);color:var(--on-accent);box-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft)}
 .iu-button.is-primary:hover:not(:disabled){background:var(--accent-primary);filter:brightness(1.06)}
@@ -34,6 +34,6 @@
 .iu-slack-info{width:16px;height:16px;flex:none;color:var(--theme-text-secondary)}
 .iu-slack-action{height:32px;display:inline-flex;align-items:center;gap:6px;margin:0 -5px 0 -12px;padding:0 12px;border:1px solid transparent;border-radius:9999px;background:transparent;color:var(--theme-text-primary);font:500 13px var(--font)}
 .iu-slack-action:hover:not(:disabled){background:var(--theme-surface-hover)}
-.iu-slack-action:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.iu-slack-action:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .iu-slack-action:disabled{opacity:.5}
 @media(max-width:760px){.iu-page{width:100%}.iu-row{align-items:flex-start}}

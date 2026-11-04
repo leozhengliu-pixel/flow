@@ -42,7 +42,7 @@ html:root .settings-app .settings-main .feature-ai-settings .feature-agents-summ
 .feature-filter-button{box-sizing:border-box;width:30px;height:30px;display:inline-grid;place-items:center;padding:0;border:1px solid transparent;border-radius:8px;background:var(--theme-surface-1);box-shadow:0 0 0 .5px var(--theme-border-strong),0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft);color:var(--theme-text-secondary);cursor:pointer}
 .feature-filter-button:hover:not(:disabled),.feature-filter-button[data-state=open]{background:var(--dropdown-hover);color:var(--theme-text-primary)}
 .feature-filter-button[data-active]{color:var(--theme-text-primary)}
-.feature-filter-button:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring)}
+.feature-filter-button:focus-visible{outline:0;box-shadow:0 0 0 var(--control-focus-width) var(--focus-ring)}
 .feature-filter-button:disabled{opacity:.45;cursor:default}
 .feature-filter-spacer{width:30px;height:30px;flex:0 0 30px}
 .feature-value-rule{padding-left:28px}

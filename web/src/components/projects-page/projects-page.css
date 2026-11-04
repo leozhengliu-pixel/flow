@@ -251,8 +251,8 @@
 .lp-projects__view:hover { background: var(--theme-control-hover); color: var(--theme-text-primary); }
 .lp-projects__view[aria-current="page"] { background: var(--theme-control-active); color: var(--theme-text-primary); }
 .lp-projects__view[aria-current="page"]:hover { background: var(--theme-surface-active); }
-.lp-projects__view:focus-visible,
-.lp-projects__icon-button:focus-visible { box-shadow: 0 0 0 2px #5e6ad2; outline: none; }
+.lp-projects__view:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: var(--control-focus-inset); }
+.lp-projects__icon-button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: var(--control-focus-offset); }
 
 .lp-projects__icon-button {
   align-items: center;
@@ -508,7 +508,7 @@
 .lp-projects-display-select__trigger:focus-visible,
 .lp-projects-display-select__direction:focus-visible,
 .lp-projects-display__properties button:focus-visible,
-.lp-projects-display__footer button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.lp-projects-display__footer button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 .lp-projects-display-select__menu { background: var(--theme-surface-2); border: .5px solid var(--popover-border); border-radius: 12px; box-shadow: var(--shadow-control); max-height: min(360px, calc(100dvh - 20px)); overflow-y: auto; padding: 4px 0; position: absolute; right: 16px; top: 29px; width: 140px; z-index: 80; }
 .lp-projects-display-select__menu > button { align-items: center; background: transparent; border: 0; color: var(--theme-text-primary); display: flex; font-size: 12px; height: 24px; justify-content: space-between; line-height: 18px; padding: 0 8px 0 12px; text-align: left; width: 100%; }
 .lp-projects-display-select__menu > button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -597,6 +597,7 @@
 .lp-project-table__header > div > span { color: var(--text-label); font-weight: 450; white-space: nowrap; }
 .lp-project-table__header button:hover,
 .lp-project-table__header button:focus-visible { background: var(--ui-pill-hover-bg); color: var(--theme-text-primary); outline: none; }
+.lp-project-table__header button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: var(--control-focus-offset); }
 .lp-project-table__header button.is-sorted { color: var(--theme-text-primary); }
 .lp-project-table__header button > span:first-child { color: var(--text-label); font-weight: 450; }
 .lp-project-table__sort-icon { align-items: center; display: inline-flex; height: 12px; justify-content: center; opacity: 0; width: 12px; }
@@ -746,6 +747,10 @@
 .lp-project-row__health:focus-visible,
 .lp-project-row__issues:hover,
 .lp-project-row__issues:focus-visible { background: var(--theme-control-hover); outline: none; }
+.lp-project-property-trigger:focus-visible,
+.lp-project-row__issues:focus-visible { outline: var(--control-focus-width) solid transparent; outline-offset: var(--control-focus-inset); box-shadow: inset 0 0 0 var(--control-focus-width) var(--focus-ring); }
+.lp-project-row__health:focus-visible,
+.lp-project-row__date:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: var(--control-focus-offset); box-shadow: none; }
 .lp-project-row__lead.is-empty,
 .lp-project-card__lead.is-empty { overflow: visible; }
 .lp-project-row__lead.is-empty .lp-project-property-trigger,
@@ -1556,7 +1561,7 @@
 .lp-new-project__discard-dialog footer button:hover { background: var(--theme-surface-hover); }
 .lp-new-project__discard-dialog footer .is-danger { background: var(--semantic-danger); border-color: var(--semantic-danger); color: var(--on-danger); }
 .lp-new-project__discard-dialog footer .is-danger:hover { background: color-mix(in lch, var(--semantic-danger) 88%, var(--theme-text-primary)); }
-.lp-new-project__discard-dialog footer button:focus-visible { box-shadow: 0 0 0 2px var(--focus-ring); outline: none; }
+.lp-new-project__discard-dialog footer button:focus-visible { box-shadow: 0 0 0 var(--control-focus-width) var(--focus-ring); outline: none; }
 
 
 /* Project people menus use the same 36px search / 32px row rhythm as the core assignee picker. */

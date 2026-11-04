@@ -82,7 +82,7 @@
 .confirmActions button:hover { background: lch(22% 1.5 272); }
 .confirmActions .confirmSave { background: lch(47.918% 59.303 288.421); box-shadow: 0 .5px 1px 1px lch(0 0 0 / .3); color: lch(100% 5 288.421); }
 .confirmActions .confirmSave:hover { background: lch(52% 59.303 288.421); }
-.iconButton:focus-visible, .moreButton:focus-visible, .attachButton:focus-visible, .submit:focus-visible, .saveDraft:focus-visible, .confirmActions button:focus-visible { outline: 2px solid lch(67.6% 34.2 283); outline-offset: 2px; }
+.iconButton:focus-visible, .moreButton:focus-visible, .attachButton:focus-visible, .submit:focus-visible, .saveDraft:focus-visible, .confirmActions button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: var(--control-focus-offset); }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @media (max-width: 800px) {
   /* Narrow windows keep the compact panel (12px side margins, same top) and let the property chips wrap; only the

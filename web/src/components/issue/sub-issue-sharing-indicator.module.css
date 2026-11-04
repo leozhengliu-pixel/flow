@@ -12,7 +12,7 @@
   cursor:pointer;
 }
 .root:hover{color:var(--theme-text-primary,var(--text));background:var(--bg-hover)}
-.root:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.root:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .count{
   min-width:14px;
   height:14px;

@@ -279,7 +279,7 @@
 .asks-intake-primary:focus-visible,
 .asks-intake-borderless:focus-visible,
 .asks-intake-menu-trigger:focus-visible {
-  box-shadow: 0 0 0 2px var(--focus-ring);
+  box-shadow: 0 0 0 var(--control-focus-width) var(--focus-ring);
 }
 
 /* DNS records table. */

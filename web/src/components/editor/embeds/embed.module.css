@@ -12,7 +12,7 @@
 /* The icon sets its own colour: the editor's own link colour (a much more specific rule) would otherwise tint the Open link icon. */
 .toolbarButton svg{color:var(--description-media-toolbar-fg)}
 .embed .toolbarButton.toolbarButton:hover{background:color-mix(in srgb,var(--theme-text-primary) 14%,transparent)}
-.toolbarButton:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+.toolbarButton:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-inset)}
 .toolbarSeparator{flex:none;width:.5px;height:16px;margin:0 4px;background:var(--theme-border-strong)}
 @media (hover:none){.toolbar{opacity:1;pointer-events:auto}}
 .frame{display:block;width:100%;border:0}
@@ -34,7 +34,7 @@
 .previewActions{display:flex;flex:none;align-items:center;gap:4px}
 .embed.cardWrap a.previewOpen.previewOpen.previewOpen,.embed.cardWrap .previewButton.previewButton.previewButton{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--theme-text-secondary);font:450 12px/24px var(--font);text-decoration:none;white-space:nowrap;cursor:pointer}
 .embed.cardWrap a.previewOpen.previewOpen.previewOpen:hover,.embed.cardWrap .previewButton.previewButton.previewButton:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
-.previewOpen:focus-visible,.previewButton:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.previewOpen:focus-visible,.previewButton:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .embed.cardWrap .previewButton.previewButton.previewButton{flex:none;border:.5px solid var(--theme-border-strong);background:var(--theme-surface-2);color:var(--theme-text-primary)}
 .previewLine{display:inline}
 .previewLoading{display:flex;flex-direction:column;gap:8px;padding:14px}
@@ -50,7 +50,7 @@
 .linkWrap{box-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft)}
 .linkWrap:hover{background:color-mix(in srgb,var(--theme-surface-hover) 62%,var(--theme-surface-1))}
 .embed a.linkCard.linkCard.linkCard,.embed div.linkCard.linkCard{display:flex;box-sizing:border-box;height:100px;color:var(--theme-text-primary);text-decoration:none;cursor:pointer}
-.linkCard:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+.linkCard:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-inset)}
 .linkText{display:flex;flex:1;flex-direction:column;gap:6px;min-width:0;padding:12px 20px 12px 16px;overflow:hidden}
 .linkTitle{overflow:hidden;color:var(--theme-text-primary);font:500 13px/normal var(--font);text-overflow:ellipsis;white-space:nowrap}
 .linkDescription{display:-webkit-box;overflow:hidden;color:var(--theme-text-secondary);font:450 13px/normal var(--font);text-overflow:ellipsis;white-space:pre-wrap;-webkit-box-orient:vertical;-webkit-line-clamp:2}
@@ -63,7 +63,7 @@
 .popoverItem{position:relative;display:flex;align-items:center;gap:8px;box-sizing:border-box;width:100%;height:34px;margin:0;padding:0 14px;border:0;background:transparent;color:inherit;font:inherit;text-align:left;white-space:nowrap;cursor:pointer}
 .popoverItem::before{content:"";position:absolute;inset:0 4px;border-radius:6px;background:transparent}
 .popoverItem[data-active="true"]::before{background:var(--theme-surface-hover)}
-.popoverItem:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+.popoverItem:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-inset)}
 .popoverIcon{position:relative;display:grid;flex:none;place-items:center;width:20px;height:16px;color:var(--theme-text-secondary)}
 .popoverLabel{position:relative}
 .popoverSpacer{flex:1 1 0;min-width:0}

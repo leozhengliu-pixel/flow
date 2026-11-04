@@ -25,7 +25,7 @@
   cursor: pointer;
 }
 .retry:hover { background: var(--bg-hover); }
-.retry:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
+.retry:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: var(--control-focus-offset); }
 
 .section { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .turn { margin: 0; color: var(--text-tertiary); font-size: 12px; font-weight: 500; line-height: 16px; }
@@ -63,7 +63,7 @@
 }
 .segmented button:hover { color: var(--text-primary); }
 .segmented button[aria-pressed="true"] { background: var(--bg-panel); color: var(--text-primary); box-shadow: var(--theme-shadow-control); }
-.segmented button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
+.segmented button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: var(--control-focus-inset); }
 
 .sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .sides[data-single] { grid-template-columns: minmax(0, 1fr); }
@@ -81,7 +81,7 @@
   cursor: zoom-in;
 }
 .halfButton:hover, .thumbButton:hover { border-color: var(--border-strong); }
-.halfButton:focus-visible, .thumbButton:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
+.halfButton:focus-visible, .thumbButton:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: var(--control-focus-offset); }
 .halfImage { display: block; width: 100%; height: auto; max-height: 360px; object-fit: contain; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }

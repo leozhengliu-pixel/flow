@@ -14,7 +14,7 @@
 .flow-releases-header-button svg[data-flow-glyph]{fill:var(--release-secondary-fg)}
 .flow-releases-header-button:is(:hover,[data-state=open]){background:var(--release-ghost-hover-bg);color:var(--release-title-fg);transition-duration:0s}
 .flow-releases-header-button:is(:hover,[data-state=open]) svg[data-flow-glyph]{fill:var(--release-title-fg)}
-.flow-releases-header-button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.flow-releases-header-button:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .flow-releases-header-button svg{width:14px;height:14px}
 .flow-releases-header-button.is-small{width:24px;height:24px}
 .flow-releases-favorite[aria-pressed=true]{color:var(--release-icon)}
@@ -276,7 +276,7 @@
 .flow-release-basic-dialog__close svg{width:14px;height:14px}
 .flow-release-basic-dialog label{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;color:var(--theme-text-secondary);font-size:12px}
 .flow-release-basic-dialog input{height:32px;padding:0 10px;border:.5px solid var(--theme-border-strong);border-radius:8px;outline:0;background:var(--theme-surface-1);color:var(--theme-text-primary);font:13px var(--font)}
-.flow-release-basic-dialog input:focus{box-shadow:0 0 0 2px var(--focus-ring)}
+.flow-release-basic-dialog input:focus{box-shadow:0 0 0 var(--control-focus-width) var(--focus-ring)}
 .flow-release-basic-dialog footer{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 .flow-release-basic-dialog footer button{height:28px;padding:0 10px;border:0;border-radius:9999px;background:var(--theme-surface-hover);color:var(--theme-text-primary);font:500 12px/1 var(--font)}
 .flow-release-basic-dialog footer button.is-primary{background:var(--accent-primary);color:var(--theme-on-primary)}

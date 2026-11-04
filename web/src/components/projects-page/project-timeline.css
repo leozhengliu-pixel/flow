@@ -8,7 +8,7 @@
 .lp-project-timeline__zoom-option[aria-checked=true] { background: var(--theme-surface-2); color: var(--theme-text-primary); }
 .lp-project-timeline__today { background: var(--theme-surface-1); border: .5px solid var(--theme-border-strong); border-radius: 6px; color: var(--theme-text-primary); cursor: pointer; font-size: 12px; height: 28px; padding: 0 10px; }
 .lp-project-timeline__today:hover { background: var(--theme-surface-hover); }
-.lp-project-timeline__zoom-option:focus-visible, .lp-project-timeline__today:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.lp-project-timeline__zoom-option:focus-visible, .lp-project-timeline__today:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-inset); }
 
 .lp-project-timeline__scroller { flex: 1; min-height: 0; overflow: auto; overscroll-behavior-x: contain; position: relative; }
 .lp-project-timeline__canvas { min-width: 100%; position: relative; }
@@ -48,7 +48,7 @@
 .lp-project-timeline__bar { --timeline-progress: 0%; height: 24px; position: absolute; top: 6px; z-index: 2; }
 .lp-project-timeline__bar > button { background: linear-gradient(90deg, var(--project-timeline-bar-progress) var(--timeline-progress), var(--project-timeline-bar-bg) var(--timeline-progress)); border: .5px solid var(--project-timeline-bar-border); border-radius: 6px; color: var(--project-timeline-bar-text); cursor: grab; font-size: 12px; height: 100%; overflow: hidden; padding: 0 8px; text-align: left; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
 .lp-project-timeline__bar > button:hover { border-color: var(--project-timeline-dependency-active); }
-.lp-project-timeline__bar > button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.lp-project-timeline__bar > button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 .lp-project-timeline__bar[data-open-start] > button { border-bottom-left-radius: 0; border-left-style: dashed; border-top-left-radius: 0; }
 .lp-project-timeline__bar[data-open-end] > button { border-bottom-right-radius: 0; border-right-style: dashed; border-top-right-radius: 0; }
 .lp-project-timeline__bar[data-dragging] > button { box-shadow: var(--project-timeline-drag-shadow); cursor: grabbing; }
@@ -69,7 +69,7 @@
 .lp-project-timeline__milestone[data-completed] path { fill: currentColor; }
 .lp-project-timeline__milestone[data-dragging] { cursor: grabbing; }
 .lp-project-timeline__milestone:hover path { stroke-width: 2; }
-.lp-project-timeline__milestone:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; border-radius: 3px; }
+.lp-project-timeline__milestone:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); border-radius: 3px; }
 .lp-project-timeline__tooltip { background: var(--theme-menu-bg); border: .5px solid var(--theme-border); border-radius: 8px; box-shadow: var(--theme-shadow-popover); color: var(--theme-text-secondary); display: grid; font-size: 12px; gap: 2px; padding: 6px 8px; z-index: 50; }
 .lp-project-timeline__tooltip strong { color: var(--theme-text-primary); font-weight: 500; }
 
@@ -77,7 +77,7 @@
 .lp-project-timeline__add-dates em { color: var(--theme-text-tertiary); font-size: 12px; display: inline-block; font-style: normal; left: calc(var(--timeline-label-width) + 12px); opacity: 0; position: sticky; transition: opacity .1s ease-out; }
 .lp-project-timeline__row:hover .lp-project-timeline__add-dates em, .lp-project-timeline__add-dates:focus-visible em { opacity: 1; }
 .lp-project-timeline__add-dates:hover { background: var(--theme-surface-hover); }
-.lp-project-timeline__add-dates:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.lp-project-timeline__add-dates:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-inset); }
 .lp-project-timeline__ghost { background: var(--project-timeline-bar-bg); border: .5px dashed var(--project-timeline-bar-border); border-radius: 6px; height: 24px; position: absolute; top: 6px; }
 
 .lp-project-timeline__links { left: var(--timeline-label-width); overflow: visible; pointer-events: none; position: absolute; top: 0; z-index: 1; }

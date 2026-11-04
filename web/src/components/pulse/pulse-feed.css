@@ -115,7 +115,7 @@
 .pulse-post-comment-actions{align-self:flex-end;display:flex;align-items:center;gap:12px;margin-top:auto}
 .pulse-post-comment-attach{width:24px;height:24px;display:grid;place-items:center;padding:0;border:0;border-radius:9999px;background:transparent;color:var(--ui-pill-fg);cursor:pointer}
 .pulse-post-comment-attach:hover{background:var(--theme-control-hover)}
-.pulse-post-comment-attach:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.pulse-post-comment-attach:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .pulse-post-comment-submit{align-self:flex-end;height:26px;padding:0 12px;border:0;border-radius:6px;background:var(--accent-primary);color:var(--on-accent);font-size:12px;font-weight:500}
 .pulse-post-comment-submit:disabled{background:var(--theme-control);color:var(--theme-text-tertiary)}
 
@@ -184,10 +184,10 @@
 .flow-framed-workspace.pulse-page .pulse-welcome-banner__select{position:relative;box-sizing:border-box;height:30px;display:inline-flex;align-items:center;padding:1px 28px 1px 10px;border:.5px solid var(--pulse-select-border);border-radius:8px;background:var(--set-control);box-shadow:var(--pulse-select-shadow);color:var(--set-control-text);font-size:13px;font-weight:400;line-height:normal;transition:background-color .15s,border .15s,color .15s}
 .flow-framed-workspace.pulse-page .pulse-welcome-banner__select>svg{position:absolute;top:0;right:10px;width:10px;height:29px}
 .flow-framed-workspace.pulse-page .pulse-welcome-banner__select:hover,.flow-framed-workspace.pulse-page .pulse-welcome-banner__select[data-state=open]{background:var(--dropdown-hover)}
-.flow-framed-workspace.pulse-page .pulse-welcome-banner__select:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.flow-framed-workspace.pulse-page .pulse-welcome-banner__select:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .flow-framed-workspace.pulse-page .pulse-welcome-banner__native{position:relative;display:inline-flex}
 .flow-framed-workspace.pulse-page .pulse-welcome-banner__native>select{appearance:none;box-sizing:border-box;height:36px;margin:0;padding:6px 24px 6px 12px;border:.5px solid transparent;border-radius:8px;background:var(--set-control);box-shadow:0 0 0 .5px var(--cs-code-ring) inset;color:var(--set-label);font:inherit;font-size:13px;font-weight:400;line-height:normal}
-.flow-framed-workspace.pulse-page .pulse-welcome-banner__native>select:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.flow-framed-workspace.pulse-page .pulse-welcome-banner__native>select:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .flow-framed-workspace.pulse-page .pulse-welcome-banner__native>svg{position:absolute;top:0;right:7px;width:10px;height:36px;color:var(--set-group-desc);pointer-events:none}
 .flow-framed-workspace.pulse-page .pulse-welcome-banner__confirm{box-sizing:border-box;height:30px;margin:0;padding:6px 10px;border:.5px solid transparent;font-size:13px;line-height:normal}
 .pulse-welcome-banner+.pulse-feed{--pulse-feed-top:32px}

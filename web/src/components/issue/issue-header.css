@@ -23,7 +23,7 @@
 .issue-header-icon:hover > svg, .issue-header-icon[data-state=open] > svg, .issue-header-icon[aria-checked=true] > svg { color: var(--issue-header-icon-hover); }
 /* A favorited issue: the reference's filled yellow star, at rest and on hover. */
 .issue-header-icon > svg.issue-header-favorite-filled { color: var(--issue-header-favorite); }
-.issue-header-icon:focus-visible, .issue-sequence-buttons button:focus-visible, .issue-command-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.issue-header-icon:focus-visible, .issue-sequence-buttons button:focus-visible, .issue-command-button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 .issue-header > .save-state { margin-left: 8px; }
 
 /* Right side of the bar: presence, then the list position. */

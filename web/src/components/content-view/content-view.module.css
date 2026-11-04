@@ -57,7 +57,7 @@
   background:var(--issue-muted,var(--muted));
 }
 .mobileSidebarButton:hover{background:var(--bg-hover)}
-.mobileSidebarButton:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.mobileSidebarButton:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 
 .breadcrumb{
   display:inline-flex;
@@ -158,7 +158,7 @@
   text-align:left;
 }
 .titleButton:hover{opacity:.85}
-.titleButton:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.titleButton:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .titleLink{
   color:inherit;
   text-decoration:none;
@@ -201,7 +201,7 @@
 .headerAction[aria-pressed=true]{
   color:var(--theme-text-primary);
 }
-.headerAction:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.headerAction:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .headerAction :global(svg){width:14px;height:14px}
 .title + .headerAction{margin-left:8px}
 
@@ -278,7 +278,7 @@
   cursor:pointer;
 }
 .filterButton:hover{background:var(--bg-hover);color:var(--theme-text-primary,var(--text))}
-.filterButton:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.filterButton:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 .filterButtonActive{
   background:var(--theme-surface-2);
   border-color:var(--theme-border-strong,var(--border));

@@ -7,7 +7,7 @@
 .review-ghost-button{position:relative;box-sizing:border-box;width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;padding:0 2px;border:1px solid transparent;border-radius:9999px;background:transparent;color:var(--review-fg);font:500 12px/normal var(--font)}
 .review-ghost-button:hover,.review-ghost-button[data-state=open],.review-ghost-button[aria-expanded=true]{background:var(--ui-pill-hover-bg);color:var(--review-fg-strong)}
 .review-ghost-button svg{width:14px;height:14px}
-.review-ghost-button:focus-visible,.review-pill-button:focus-visible,.review-round-button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.review-ghost-button:focus-visible,.review-pill-button:focus-visible,.review-round-button:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
 
 /* Secondary / primary pills (28px, 12/500), as the reference buttons. */
 .review-pill-button{position:relative;box-sizing:border-box;height:28px;display:inline-flex;align-items:center;gap:6px;padding:0 10px;border:0;border-radius:9999px;background:var(--ui-pill-bg);box-shadow:0 0 0 .5px var(--ui-pill-ring),var(--ui-pill-shadow);color:var(--review-fg);font:500 12px/normal var(--font);white-space:nowrap}

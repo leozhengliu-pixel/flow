@@ -627,7 +627,7 @@
 .flow-inbox-menu__native-switch::after { position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--toggle-knob-color); box-shadow: var(--toggle-regular-knob-shadow); content: ""; transition: transform 120ms ease; }
 .flow-inbox-menu__native-switch[aria-checked="true"] { background: var(--toggle-regular-on); }
 .flow-inbox-menu__native-switch[aria-checked="true"]::after { transform: translateX(8px); }
-.flow-inbox-menu__native-switch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.flow-inbox-menu__native-switch:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-toggle-offset); }
 :root[data-theme="light"] .flow-inbox-menu__native-switch { background: var(--toggle-compact-off); }
 :root[data-theme="light"] .flow-inbox-menu__native-switch::after { background: var(--toggle-knob-color); box-shadow: var(--toggle-regular-knob-shadow); }
 

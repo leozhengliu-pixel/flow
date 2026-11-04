@@ -42,7 +42,7 @@
   cursor: pointer;
 }
 .close:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
-.close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.close:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 
 .empty {
   display: flex;
@@ -140,8 +140,8 @@
 .footer button:focus-visible,
 .emptyAdd:focus-visible,
 .catalog button:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
+  outline: var(--control-focus-width) solid var(--focus-ring);
+  outline-offset:var(--control-focus-offset);
 }
 
 .row {
@@ -173,7 +173,7 @@
 .row select:hover,
 .row input:hover { background: var(--theme-surface-hover); }
 .row select:focus-visible,
-.row input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+.row input:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: 0; }
 
 .compare {
   color: var(--theme-text-secondary);
