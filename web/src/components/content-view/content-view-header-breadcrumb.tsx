@@ -16,6 +16,8 @@ export interface ContentViewBreadcrumbItem {
 
 export interface ContentViewHeaderBreadcrumbProps {
   items: ContentViewBreadcrumbItem[]
+  /** Replaces the chevron between items (the cycle pages separate with a text "›"). */
+  separator?: ReactNode
   className?: string
   'aria-label'?: string
 }
@@ -89,6 +91,7 @@ export function ContentViewHeaderBreadcrumbLink({
 /** LS-0135 — breadcrumb trail for ContentView headers. */
 export function ContentViewHeaderBreadcrumb({
   items,
+  separator,
   className,
   'aria-label': ariaLabel = 'Breadcrumb',
 }: ContentViewHeaderBreadcrumbProps) {
@@ -99,7 +102,7 @@ export function ContentViewHeaderBreadcrumb({
         const isLast = index === items.length - 1
         return (
           <span key={item.id ?? `${index}-${typeof item.label === 'string' ? item.label : 'item'}`} style={{ display: 'inline-flex', alignItems: 'center', minWidth: 0 }}>
-            {index > 0 ? <ContentViewHeaderBreadcrumbChevron /> : null}
+            {index > 0 ? separator ?? <ContentViewHeaderBreadcrumbChevron /> : null}
             <ContentViewHeaderBreadcrumbLink
               href={item.href}
               icon={item.icon}

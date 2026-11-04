@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Show cycle dates in the interface language, use tabular numerals for cycle percentages, align the cycle page breadcrumb and item list with the directory, keep the phone cycle insights panel inside the viewport, translate the Loops template cards, and stop partial translations of sentences that end in "issue views".
+
 - Open search date presets before a custom date dialog, with two desktop calendars, typed periods, all five precisions and draft Apply or Cancel actions.
 
 - Apply issue-menu surface tokens at the shared component rule so phone shadows and rounded submenu headers remain intact.

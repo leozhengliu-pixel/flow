@@ -21,7 +21,7 @@
 .flow-cycles-page .cycle-timeline-card::before,
 .flow-cycles-page .flow-cycle-cooldown::before { content: ""; position: absolute; left: var(--cycle-rail); top: var(--cycle-rail-start); bottom: var(--cycle-rail-end); width: 1px; background: var(--cycle-completed); }
 .flow-cycles-page .cycle-timeline-card.is-upcoming::before,
-.flow-cycles-page .flow-cycle-cooldown::before { background: var(--cycle-track); }
+.flow-cycles-page .flow-cycle-cooldown::before { background: var(--cycle-rail-track); }
 .flow-cycles-page .cycle-timeline-card::after,
 .flow-cycles-page .flow-cycle-cooldown::after { content: ""; position: absolute; left: calc(var(--cycle-content) + 2px); right: 0; bottom: 0; height: .5px; background: var(--theme-border); }
 .flow-cycles-page .cycle-timeline-open { position: absolute; inset: 0; z-index: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
@@ -55,16 +55,17 @@
 .flow-cycles-page .is-upcoming .cycle-timeline-icon { color: var(--issue-dim); }
 .flow-cycles-page .flow-cycle-cooldown .cycle-cooldown-icon { flex: none; width: 16px; height: 16px; color: var(--issue-dim); }
 
-.flow-cycles-page .cycle-timeline-status { box-sizing: border-box; padding: 0 6px; border-radius: 2px; background: var(--cycle-status-bg); color: var(--issue-muted); font: 450 13px/19.5px var(--font); white-space: nowrap; }
+.flow-cycles-page .cycle-timeline-status { box-sizing: border-box; padding: 0 6px; border-radius: 2px; background: var(--cycle-status-bg); color: var(--cycle-muted); font: 450 13px/19.5px var(--font); white-space: nowrap; }
 .flow-cycles-page .cycle-timeline-capacity,
 .flow-cycles-page .cycle-timeline-scope { display: flex; align-items: center; white-space: nowrap; }
-.flow-cycles-page .cycle-timeline-capacity > b { margin-right: 5px; color: var(--text); font-weight: 500; }
-.flow-cycles-page .cycle-timeline-scope > b { margin-right: 5px; color: var(--bright); font-weight: 500; }
+.flow-cycles-page .cycle-timeline-capacity > b { margin-right: 5px; color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+.flow-cycles-page .cycle-timeline-scope > b { margin-right: 5px; color: var(--bright); font-weight: 500; font-variant-numeric: tabular-nums; }
 .flow-cycles-page .cycle-timeline-capacity > em,
 .flow-cycles-page .cycle-timeline-scope > em { color: var(--issue-muted); font-style: normal; }
 .flow-cycles-page .cycle-timeline-scope > svg { margin: 1px 4px 0 0; color: var(--issue-muted); }
 .flow-cycles-page .cycle-timeline-capacity .cycle-capacity-ring { margin-right: 8px; }
 
+.flow-cycles-page .cycle-timeline-chart { color: var(--cycle-muted); }
 .flow-cycles-page .cycle-timeline-metric { height: 44.5px; display: flex; align-items: center; gap: 14px; border-bottom: .5px solid var(--theme-border); }
 .flow-cycles-page .cycle-timeline-metric:last-child { border: 0; }
 .flow-cycles-page .cycle-timeline-metric > i { width: 6px; height: 6px; flex: none; border-radius: 1px; background: var(--issue-dim); }

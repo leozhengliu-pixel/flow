@@ -3,6 +3,7 @@
  */
 
 import type { Cycle, Issue } from '@/types/flow'
+import { useI18n } from '@/i18n/i18n'
 import { formatCycleDay } from '@/components/cycles/cycle-model'
 import {
   burnUpPath,
@@ -29,14 +30,15 @@ export function BurnUpGraph({
   /** Points an unestimated issue contributes when measuring by estimate. */
   unestimatedValue?: number
 }) {
+  const { formatDate } = useI18n()
   const series = computeBurnUpSeries(cycle, issues, { measure, unestimatedValue })
   const tick = activeTick ?? series.activeTickIndex
   const point = series.days[tick] ?? series.days.at(-1)
   const width = 594
   const height = 138
   const padTop = 22
-  const start = formatCycleDay(cycle.startsAt)
-  const end = formatCycleDay(cycle.endsAt)
+  const start = formatCycleDay(cycle.startsAt, formatDate)
+  const end = formatCycleDay(cycle.endsAt, formatDate)
 
   const scopePath = burnUpPath(series.days.map(d => d.scope), series.maxValue, width, height, 0, padTop)
   const startedPath = burnUpPath(series.days.map(d => d.started), series.maxValue, width, height, 0, padTop)
@@ -77,8 +79,8 @@ export function BurnUpGraph({
         <path d={completedPath} fill="none" stroke="var(--data-vis-1)" strokeWidth="2" />
         <line x1="0" x2={width} y1={padTop + height} y2={padTop + height} stroke="var(--theme-border-strong)" />
         <line x1={tickX} x2={tickX} y1={padTop} y2={padTop + height} stroke="var(--theme-border-strong)" strokeDasharray="3 4" />
-        <text x="0" y="187">{start.month} {start.day}</text>
-        <text x={width} y="187" textAnchor="end">{end.month} {end.day}</text>
+        <text x="0" y="187">{start.label}</text>
+        <text x={width} y="187" textAnchor="end">{end.label}</text>
       </svg>
     </div>
   )

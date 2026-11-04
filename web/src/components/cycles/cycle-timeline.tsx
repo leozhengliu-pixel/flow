@@ -55,7 +55,7 @@ type CardProps = { cycle: Cycle; issues: Issue[]; stats: ReturnType<typeof cycle
  * The whole card opens the cycle; the options menu is a sibling control above it.
  */
 export function CycleTimelineCard({ cycle, issues, stats, derivedStatus = cycle.status, onOpen, actions, className }: CardProps) {
-  const { t } = useI18n()
+  const { t, formatDate } = useI18n()
   const upcoming = cycle.status === 'upcoming'
   const refreshKey = useMemo(() => issues.filter(issue => issue.cycleId === cycle.id).map(issue => `${issue.id}:${issue.state.id}:${issue.estimate ?? ''}:${issue.updatedAt}`).join('|'), [issues, cycle.id])
   const { graph } = useCycleGraph(upcoming ? undefined : cycle.id, refreshKey)
@@ -63,7 +63,7 @@ export function CycleTimelineCard({ cycle, issues, stats, derivedStatus = cycle.
   const series = graph ? cycleGraphSeries(graph, measure) : undefined
   const scope = series?.scope ?? stats.scope
   const completedPercent = series?.completedPercent ?? stats.completedPercent
-  const date = formatCycleDay(cycle.startsAt)
+  const date = formatCycleDay(cycle.startsAt, formatDate)
   // The directory row rounds capacity down ("26% of capacity" for 8 of 30 points).
   const capacityPercent = Math.floor(stats.capacityRatio * 100)
   const [hover, setHover] = useState<number | null>(null)

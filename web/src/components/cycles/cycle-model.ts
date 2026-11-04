@@ -54,16 +54,24 @@ export function cycleStats(cycle: Cycle, issues: Issue[], settings?: CycleEstima
   }
 }
 
+/** The app's locale date formatter (`useI18n().formatDate`); without one, dates read in English. */
+export type CycleDateFormatter = (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string
+const englishDates: CycleDateFormatter = (value, options) => new Intl.DateTimeFormat('en-US', options).format(new Date(value))
+
 // Cycle boundaries are calendar days stored as UTC midnights; format and count
 // them in UTC so the viewer's timezone never shifts a cycle by a day.
-export function formatCycleRange(cycle: Cycle, compact = false) {
-  const formatter = new Intl.DateTimeFormat('en-US', compact ? { month: 'short', day: 'numeric', timeZone: 'UTC' } : { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
-  return `${formatter.format(new Date(cycle.startsAt))} – ${formatter.format(new Date(cycle.endsAt))}`
+export function formatCycleRange(cycle: Cycle, compact = false, format: CycleDateFormatter = englishDates) {
+  const options: Intl.DateTimeFormatOptions = compact ? { month: 'short', day: 'numeric', timeZone: 'UTC' } : { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }
+  return `${format(cycle.startsAt, options)} – ${format(cycle.endsAt, options)}`
 }
 
-export function formatCycleDay(value: string) {
-  const date = new Date(value)
-  return { month: new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' }).format(date), day: date.getUTCDate() }
+/** A cycle day as its month and day parts ("Nov" and "3"; "11月" and "3日") and as one label ("Nov 3"; "11月3日"). */
+export function formatCycleDay(value: string, format: CycleDateFormatter = englishDates) {
+  return {
+    month: format(value, { month: 'short', timeZone: 'UTC' }),
+    day: format(value, { day: 'numeric', timeZone: 'UTC' }),
+    label: format(value, { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+  }
 }
 
 /** Weekdays from the viewer's today through the cycle's last calendar day, inclusive. */

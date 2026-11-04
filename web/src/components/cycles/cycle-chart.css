@@ -1,5 +1,5 @@
 /* The cycle chart: a canvas for the plot, DOM for the scope fill, the week axis and the hover date. */
-.cycle-chart { position: relative; min-width: 0; color: var(--issue-muted); font: 450 12px/24px var(--font); }
+.cycle-chart { position: relative; min-width: 0; color: var(--cycle-panel-muted); font: 450 12px/24px var(--font); }
 .cycle-chart__fill { position: absolute; left: 0; width: calc(100% - 4px); background: linear-gradient(var(--cycle-chart-fill), transparent); pointer-events: none; }
 .cycle-chart__canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; }
 .cycle-chart__axis { position: absolute; left: 0; right: 0; height: 24px; pointer-events: none; }

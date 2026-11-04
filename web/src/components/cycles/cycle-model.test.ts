@@ -109,7 +109,11 @@ describe('cycle model', () => {
   it('formats dates and status labels consistently', () => {
     expect(formatCycleRange(cycle)).toContain('Aug 24, 2026')
     expect(formatCycleRange(cycle, true)).toContain('Sep 4')
-    expect(formatCycleDay(cycle.startsAt)).toEqual({ month: 'Aug', day: 24 })
+    expect(formatCycleDay(cycle.startsAt)).toEqual({ month: 'Aug', day: '24', label: 'Aug 24' })
+    // With the app's locale formatter the parts follow the language: no English month stays in Chinese.
+    const chinese = (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('zh-CN', options).format(new Date(value))
+    expect(formatCycleDay(cycle.startsAt, chinese)).toEqual({ month: '8月', day: '24日', label: '8月24日' })
+    expect(formatCycleRange(cycle, true, chinese)).toBe('8月24日 – 9月4日')
     expect(cycleStatusLabel('upcoming')).toBe('Upcoming')
   })
 
