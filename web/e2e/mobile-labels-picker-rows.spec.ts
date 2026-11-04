@@ -45,3 +45,19 @@ for (const width of [375, 390]) for (const theme of ['Dark', 'Light'] as const) 
     await expect(trigger).toBeFocused()
   })
 }
+
+for (const width of [375, 390]) {
+  test(`labels sizing leaves notification actions at their own width ${width}`, async ({ page, request, workspaceKey }) => {
+    await page.setViewportSize({ width, height: 844 })
+    await preferences(request, workspaceKey, 'Dark')
+    await page.goto(`/${workspaceKey}/inbox`)
+    await page.getByRole('button', { name: 'Notification actions', exact: true }).click()
+    const menu = page.locator('.inbox-actions-phone-menu')
+    await expect(menu).toBeVisible()
+    await menu.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
+    for (const action of ['delete-all', 'delete-all-read', 'delete-all-completed', 'settings']) {
+      expect((await menu.getByTestId(`inbox-actions-${action}`).boundingBox())!.width).toBe(width - 44)
+    }
+    expect((await menu.getByTestId('inbox-actions-divider').boundingBox())!.width).toBe(width - 32)
+  })
+}
