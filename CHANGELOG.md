@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Reset phone drawer navigation when focus returns to its pinned header, including on reopen, while preserving the hardware-keyboard skip link.
 - Verify compact composer and clipboard toast styles at the shared 880px boundary, and isolate the desktop route matrix by viewport so its full coverage does not share one test deadline.
 - Check unsafe translation placeholder replacements per source file so the full repository scan stays within individual test deadlines in coverage runs.
 - Require archived issues to be restored before changing their content or properties, make their editors and property controls read-only, and offer Restore in issue options.

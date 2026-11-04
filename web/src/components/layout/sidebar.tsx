@@ -207,6 +207,7 @@ export function Sidebar({
 }) {
   const { surfaceRef: sidebarSurfaceRef, ...layout } = useSidebarLayout(open, onOpenChange);
   const phone = usePhoneLayout();
+  const navigationRef = useRef<HTMLElement>(null);
   const { t: translate } = useI18n();
   const currentLocation = useLocation();
   const navigationRoute = parseAppRoute(sourcePath?.split(/[?#]/)[0] ?? currentLocation.pathname);
@@ -693,7 +694,10 @@ export function Sidebar({
         data-sidebar-width={layout.width}
         data-sidebar-surface
       >
-        <div className="sidebar-header">
+        <div className="sidebar-header" onFocusCapture={() => {
+          // Returning to the pinned phone header starts navigation at the top.
+          if (phone && navigationRef.current) navigationRef.current.scrollTop = 0;
+        }}>
           <div className="workspace-row">
             <WorkspaceMenu
               account={account}
@@ -726,7 +730,7 @@ export function Sidebar({
           </div>
         </div>
 
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" ref={navigationRef}>
           <div className="sidebar-primary-links">
             {sidebarOrder.personal.map((entry) =>
               show(entry) && available(entry) ? (

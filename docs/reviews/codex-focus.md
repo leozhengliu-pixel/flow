@@ -2,6 +2,24 @@
 
 Review branch: `review/codex-focus`. UI changes are submitted for owner review, not pushed to main.
 
+## Drawer regression correction
+
+The original drawer gate result below used a scroll-reset adapter and did not validate product behavior. That passing claim is withdrawn. The unchanged lead gate exposed a real regression after the phone skip link added a Tab stop.
+
+Focus tracing found that opening More scrolls `.sidebar-nav`, and hiding Drafts and Loops leaves it at `scrollTop=279`. After Customize closes, five Tabs used to reach Inbox and implicitly scroll navigation to the top. The extra skip-link stop makes the fifth Tab reach Compose instead, leaving every navigation row 279px too high. The drawer initially opens at zero; the stale scroll position comes from this customization/focus sequence.
+
+`sidebar.tsx` now resets phone navigation when focus enters its pinned header. The existing open behavior focuses that header, so reopening also resets navigation. Normal navigation scrolling and desktop scroll preservation remain intact. The skip link retains its first-Tab and Enter-to-main behavior. No CSS metrics, gate scripts, expected values, or fixtures are changed.
+
+The new `e2e/mobile-drawer-scroll.spec.ts` creates its own workspace and checks the skip link, header focus boundary, normal lower-navigation scrolling, and reopen behavior at 1440x900, 390x844, and 375x667 in both themes and languages. Its fixture includes short, long, and two-character CJK team names. Current regression evidence is under `/tmp/codex-focus-regression`; the historical drawer adapter and screenshots below are not passing evidence for this correction.
+
+The four requested gates use the shared seeded API at port 18200 and this worktree's Vite at port 15481, with only the supplied `mobile-sweep-setup.mjs` import and no `--seed`. All exit 0: drawer reports 58 element checks, drawer-bottom 26, topbar-myissues 36, and topbar-team 42, each with 0 failures. Logs are `gate-drawer.log` and `gates.log` under the current evidence directory. The standalone browser matrix uses the task's scratch API/database at port 18481 and separate Vite at port 15482.
+
+Reviewer steps: at `/<workspace>/my-issues/assigned` on a 375px or 390px viewport, open navigation, scroll down, then Tab back to Workspace, Search, or Compose in the pinned header. Inbox returns to the top. Scroll down again, close the drawer with the scrim, and reopen it: it starts at the top. Reload, press Tab to reveal Skip to content, then Enter to focus main. Repeat in dark/light and English/zh-CN. At 1440px, focusing the sidebar header preserves its navigation scroll position.
+
+Current validation: `npm run typecheck`, full `npm run lint`, and the targeted Vitest command in `/tmp/codex-focus-regression/checks.sh` all exit 0; 8 files and 51 tests pass. The final bundled-Chromium command, `npx playwright test -c .drawer-playwright.config.ts e2e/mobile-drawer-scroll.spec.ts`, passes all 12 cases, exit 0 (`e2e-settled.log`). The temporary config points exclusively at the task's scratch servers and is removed before delivery. The full lint was repeated after the final browser-test edits, exit 0 (`lint-final.log`). Every heavy command uses `~/.flow-local/heavy.sh`.
+
+All 16 current screenshots were opened and inspected. `shots/drawer-{1440,390,375}-{dark,light}-{en-US,zh-CN}.png` are 12 crop sheets showing the focused skip link, resting/open selected navigation, keyboard-focused header after returning from lower navigation, Search hover, and the fully reopened phone drawer. Short and long workspace names and two CJK avatar characters fit their controls. Desktop sheets intentionally retain the lower navigation scroll after header focus. `shots/gate-drawer-{375,390}.png` show Inbox at y=56 and navigation at scrollTop=0 after the unchanged gate sequence; `shots/gate-drawer-bottom-{375,390}.png` show the intentionally scrolled lower teams, Try section, and pinned footer. No disabled state applies to the changed focus behavior. Earlier failed test setup and animation-frame captures were corrected and are excluded from passing evidence; final sheets wait for the drawer's final position before capture. No model requests or Go/API changes were needed.
+
 ## Measurements and changes
 
 All dimensions below are CSS pixels. Reference browsing used a private task tab through the supplied browser lock wrapper, with keyboard Tab navigation on lists, projects, and settings. Network throttling and focus emulation were restored before closing each owned tab. No reference settings or data were changed.
@@ -57,7 +75,7 @@ All saved screenshots were opened for visual inspection. This inventory distingu
 | `reference-project-inset.png` | Project priority trigger with the inset ring. |
 | `reference-toggle.png` | Checked preference toggle with a separated keyboard ring. |
 | `reference-settings-menu.png`, `reference-settings-select.png` | Preferences screen with focus on the submission-key select and settings navigation, respectively; the filenames are historical and these are not open-menu captures. |
-| `gate-drawer-375.png`, `gate-drawer-390.png` | Final measured drawer at its top scroll position; navigation stays within the phone viewport. |
+| `gate-drawer-375.png`, `gate-drawer-390.png` | Historical adapter-reset captures; excluded from passing regression evidence. |
 | `drawer-parity-375.png`, `drawer-parity-390.png`, `drawer-gate-debug-375.png` | Earlier exploratory drawer frames, including crowded lower navigation under the fixed Help control. Excluded from final passing layout evidence. |
 | `reference-list-focus.png` | Exploratory team list surface with focus on the bottom Agent command, not evidence of an issue checkbox ring. |
 | `reference-loading.png` | Initial startup disc before the hint; not evidence of the hint's final state. |
