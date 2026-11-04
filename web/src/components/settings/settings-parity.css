@@ -245,7 +245,7 @@ html:root .settings-app .settings-main .settings-crumb {
   z-index: 2;
   top: 10px;
   left: 8px;
-  height: 28px;
+  height: var(--settings-crumb-height, 28px);
   display: var(--settings-crumb-display, inline-flex);
   align-items: center;
   gap: 6px;

@@ -44,26 +44,27 @@ export function DocumentBreadcrumb({ data, document, origin, onBack }: {
   const documentsLabel = t('Documents')
   const issue = parent?.type === 'issue' ? data.issues.find(item => item.id === parent.id) : undefined
   const hover = (link: ReactElement, entity: Parameters<typeof AgentEntityHover>[0]['entity']) => <AgentEntityHover data={data} entity={entity} side="bottom" sideOffset={8} alignOffset={4}>{link}</AgentEntityHover>
+  // Each crumb carries its own separator, so on a phone a crumb that collapses takes its chevron with it.
+  const ancestor = (crumb: ReactNode) => <span className="document-breadcrumb-ancestor">{crumb}{separator}</span>
   let crumbs: ReactNode
   if (parent?.type === 'team') {
     crumbs = <>
-      {hover(<AppLink className="document-breadcrumb-link document-breadcrumb-parent document-breadcrumb-team" href={teamHomePath(workspace, parent.team.key)}><ParentGlyph color={parent.team.color}/><span data-i18n-ignore>{parent.team.name}</span></AppLink>, { kind: 'team', team: parent.team })}
-      {separator}
-      <AppLink className="document-breadcrumb-link document-breadcrumb-documents" href={teamDocumentsPath(workspace, parent.team.key)}><span>{documentsLabel}</span></AppLink>
+      {ancestor(hover(<AppLink className="document-breadcrumb-link document-breadcrumb-parent document-breadcrumb-team" href={teamHomePath(workspace, parent.team.key)}><ParentGlyph color={parent.team.color}/><span data-i18n-ignore>{parent.team.name}</span></AppLink>, { kind: 'team', team: parent.team }))}
+      {ancestor(<AppLink className="document-breadcrumb-link document-breadcrumb-documents" href={teamDocumentsPath(workspace, parent.team.key)}><span>{documentsLabel}</span></AppLink>)}
     </>
   } else if (parent?.type === 'project') {
-    crumbs = hover(<AppLink className="document-breadcrumb-link document-breadcrumb-parent" href={projectPath(workspace, parent.project)}><ParentGlyph color={parent.project.color}/><span data-i18n-ignore>{parent.project.name}</span></AppLink>, { kind: 'project', project: parent.project })
+    crumbs = ancestor(hover(<AppLink className="document-breadcrumb-link document-breadcrumb-parent" href={projectPath(workspace, parent.project)}><ParentGlyph color={parent.project.color}/><span data-i18n-ignore>{parent.project.name}</span></AppLink>, { kind: 'project', project: parent.project }))
   } else if (parent?.type === 'initiative') {
-    crumbs = hover(<AppLink className="document-breadcrumb-link document-breadcrumb-parent" href={initiativePath(workspace, parent.initiative)}><ParentGlyph color={parent.initiative.color}/><span data-i18n-ignore>{parent.initiative.name}</span></AppLink>, { kind: 'initiative', initiative: parent.initiative })
+    crumbs = ancestor(hover(<AppLink className="document-breadcrumb-link document-breadcrumb-parent" href={initiativePath(workspace, parent.initiative)}><ParentGlyph color={parent.initiative.color}/><span data-i18n-ignore>{parent.initiative.name}</span></AppLink>, { kind: 'initiative', initiative: parent.initiative }))
   } else if (issue) {
-    crumbs = <AppLink className="document-breadcrumb-link document-breadcrumb-parent" href={issuePath(workspace, issue)}><FileText aria-hidden="true"/><span data-i18n-ignore>{issue.identifier}</span></AppLink>
+    crumbs = ancestor(<AppLink className="document-breadcrumb-link document-breadcrumb-parent" href={issuePath(workspace, issue)}><FileText aria-hidden="true"/><span data-i18n-ignore>{issue.identifier}</span></AppLink>)
   } else if (origin) {
-    crumbs = <button className="document-breadcrumb-link document-breadcrumb-parent" onClick={onBack} type="button"><FileText aria-hidden="true"/><span data-i18n-ignore={origin.entity || undefined}>{origin.label}</span></button>
+    crumbs = ancestor(<button className="document-breadcrumb-link document-breadcrumb-parent" onClick={onBack} type="button"><FileText aria-hidden="true"/><span data-i18n-ignore={origin.entity || undefined}>{origin.label}</span></button>)
   } else {
-    crumbs = <button className="document-breadcrumb-link document-breadcrumb-parent" onClick={onBack} type="button"><FileText aria-hidden="true"/><span>{documentsLabel}</span></button>
+    crumbs = ancestor(<button className="document-breadcrumb-link document-breadcrumb-parent" onClick={onBack} type="button"><FileText aria-hidden="true"/><span>{documentsLabel}</span></button>)
   }
   return <nav aria-label={t('Document breadcrumb')} className="document-breadcrumbs">
-    <span className="document-breadcrumb-ancestors">{crumbs}{separator}</span>
+    <span className="document-breadcrumb-ancestors">{crumbs}</span>
     <strong className="document-breadcrumb-current"><span aria-hidden="true" className="document-breadcrumb-glyph is-document"><DocumentGlyph color={documentCrumbColor(document)} document={document}/></span><span data-i18n-ignore>{documentDisplayTitle(document, t)}</span></strong>
   </nav>
 }

@@ -57,6 +57,16 @@ describe('agent result cards', () => {
     expect(screen.getByRole('link', { name: /TST-1/ })).toHaveAttribute('href', expect.stringContaining('TST-1'))
   })
 
+  it('previews a created skill’s instructions as plain text, not raw Markdown', () => {
+    const skillCard = reply({ action: 'created', entityType: 'skill', entityId: 'skill-1', label: 'Release notes', undoable: false })
+    const call = skillCard.parts![0].toolCall!
+    call.arguments = { instructions: '# Release notes\n\nWrite **user-facing** notes.\n\n- Group by `area`\n- See [the log](https://example.com/log)' }
+    renderCards(skillCard)
+    const preview = screen.getByText(/Release notes Write user-facing notes\./)
+    expect(preview).toHaveTextContent('Release notes Write user-facing notes. Group by area See the log')
+    expect(preview.textContent).not.toMatch(/[#*`]|\]\(/)
+  })
+
   it('Undo reverts the card’s writes and turns into Restore', async () => {
     const message = reply(updatedProject)
     const onSessionChange = vi.fn()

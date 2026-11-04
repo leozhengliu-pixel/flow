@@ -9,7 +9,8 @@ export function PhoneMenu({ open, onOpenChange, label, children, className = '',
   label: string
   children: ReactNode
   className?: string
-  heading?: boolean | string
+  /** `true` titles the sheet with its label; any other node (a string, or the record a picker belongs to) is shown in the context chip. */
+  heading?: boolean | ReactNode
   onCloseAutoFocus?: Dialog.DialogContentProps['onCloseAutoFocus']
 }) {
   const previousFocus = useRef<HTMLElement | null>(null)
@@ -26,7 +27,7 @@ export function PhoneMenu({ open, onOpenChange, label, children, className = '',
           }
         }}>
         <Dialog.Title className="sr-only">{label}</Dialog.Title>
-        {heading && <div className="phone-menu-heading"><span className={typeof heading === 'string' ? 'phone-menu-context' : undefined}>{typeof heading === 'string' ? heading : label}</span></div>}
+        {heading && <div className="phone-menu-heading"><span className={heading === true ? undefined : 'phone-menu-context'} data-i18n-ignore={typeof heading === 'object' ? true : undefined}>{heading === true ? label : heading}</span></div>}
         {children}
       </Dialog.Content>
     </Dialog.Portal>

@@ -551,6 +551,11 @@ describe('DocumentPage header, measured against the reference', () => {
     expect(within(nav).getByRole('link', { name: 'Test team' }).querySelector('svg')).toHaveAttribute('data-icon', 'Page')
     expect(within(nav).getByRole('link', { name: 'Documents' }).querySelector('svg')).toBeNull()
     expect(nav.querySelectorAll('.document-breadcrumb-separator')).toHaveLength(2)
+    // Each crumb carries its own chevron, so a phone shows both crumbs shrunk with their chevrons instead of a bare one.
+    const ancestors = [...nav.querySelectorAll('.document-breadcrumb-ancestor')]
+    expect(ancestors).toHaveLength(2)
+    for (const ancestor of ancestors) expect(ancestor.querySelectorAll('.document-breadcrumb-separator')).toHaveLength(1)
+    expect(ancestors[1]).toContainElement(within(nav).getByRole('link', { name: 'Documents' }))
   })
 
   it('shows the favorite tooltip with ⌥ F and the filled star once favorited', async () => {

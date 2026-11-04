@@ -77,6 +77,8 @@ describe('AgentWorkGroup', () => {
     expect(workingLabel(parts, translateToChinese)).toBe('正在 Code search 中运行 search_code…')
     expect(toolStatusLabel('external_abc', false, source => source, {}, false, { remoteTool: 'search_code' })).toBe('Ran search_code')
     expect(toolStatusLabel('external_abc', true, source => source, {}, false, {})).toBe('Running external abc…')
+    // A connector tool simply called "search" reads as the translated noun, not the raw English word.
+    expect(toolStatusLabel('external_abc', true, translateToChinese, {}, false, { remoteTool: 'search' })).toBe('正在运行搜索…')
   })
 
   it('hides raw provider reasoning, also in older chats, but keeps the agent\'s own narration and step labels', () => {

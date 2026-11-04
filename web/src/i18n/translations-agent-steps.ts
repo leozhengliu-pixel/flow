@@ -291,6 +291,7 @@ export const agentStepsZhCN: Record<string, string> = {
   "subject:customer": "客户",
   "subject:customer request": "客户需求",
   "subject:tool": "工具",
+  "subject:search": "搜索",
 
   // Shown with agent steps and errors.
   "Agent reasoning": "Agent 推理",

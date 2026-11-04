@@ -1,0 +1,69 @@
+/* Agent personalization > Skills: the list card and each skill's page. */
+
+/* List: a 60px header (count or empty text + create button), then rows with a name, a timestamp and a row menu. */
+.agent-skills { width: 100%; }
+.agent-skills-header { box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 60px; padding: 16px; }
+.agent-skills-header h3 { min-width: 0; margin: 0 0 2px; color: var(--set-text); font-size: 13px; font-weight: 500; line-height: 15.5px; }
+.agent-skills-header h3.is-empty { font-weight: 450; }
+.agent-skills-create,
+.agent-skill-menu-trigger { display: grid; flex: none; place-items: center; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--theme-text-secondary); }
+.agent-skills-create { width: 24px; height: 24px; }
+.agent-skills-create:hover,
+.agent-skills-create:focus-visible { background: var(--theme-surface-hover); color: var(--theme-text-primary); outline: 0; }
+:root[data-theme="light"] .agent-skills-create { color: var(--theme-text-primary); }
+.agent-skills-list { margin: 0; padding: 0; box-shadow: inset 0 .5px var(--set-sep); list-style: none; }
+.agent-skills-row { position: relative; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: center; gap: 12px; padding: 16px; }
+/* Separators are drawn over the row's bottom edge, inset by the row padding, so they add no height; they hide beside a hovered row. */
+.agent-skills-row:not(:last-child)::after { content: ""; position: absolute; right: 16px; bottom: 0; left: 16px; border-bottom: .5px solid var(--set-sep); }
+.agent-skills-row:not(:last-child):hover::after,
+.agent-skills-row:has(+ .agent-skills-row:hover)::after { border-bottom-color: transparent; }
+.agent-skills-row:last-child { border-radius: 0 0 10px 10px; }
+.agent-skills-row:hover,
+.agent-skills-row:has(.agent-skill-link:focus-visible) { background: var(--security-api-key-row-hover); }
+.agent-skills-row:has(.agent-skill-link:focus-visible) { box-shadow: inset 0 0 0 2px var(--focus-ring); }
+/* The whole row opens the skill; the menu button sits above the stretched link. */
+.agent-skill-link { min-width: 0; display: flex; flex-direction: column; color: var(--set-text); text-decoration: none; outline: 0; }
+.agent-skill-link::after { content: ""; position: absolute; inset: 0; }
+.agent-skill-link strong,
+.agent-skill-link small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-skill-link strong { font-size: 13px; font-weight: 500; line-height: 15.5px; }
+.agent-skill-link small { margin-top: 1px; padding: 1px; color: var(--set-group-desc); font-size: 12px; font-weight: 450; line-height: 14.5px; }
+.agent-skill-menu-trigger { position: relative; z-index: 1; width: 28px; height: 28px; color: var(--security-api-key-action-fg); }
+.agent-skill-menu-trigger:hover,
+.agent-skill-menu-trigger[data-state="open"] { background: var(--security-api-key-action-active); color: var(--bright); }
+.agent-skill-menu-trigger:focus-visible { outline: 1px solid var(--focus-ring); outline-offset: 1px; }
+.agent-skill-menu-trigger svg { width: 14px; height: 14px; fill: currentColor; }
+.agent-skill-menu .menu-item svg { flex: none; }
+
+/* Skill page: back crumb (shared), title row, instructions card and the action row. */
+.agent-skill-page { display: flex; flex-direction: column; gap: 24px; width: 100%; max-width: 640px; margin: 0 auto; padding-bottom: 96px; }
+.agent-skill-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 0 14px; }
+.agent-skill-title { flex: 1; min-width: 0; height: 32px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--set-text); font: 600 24px/32px var(--font); letter-spacing: -.16px; }
+.agent-skill-title::placeholder { color: var(--theme-text-tertiary); }
+.agent-skill-title-row .agent-skill-menu-trigger { margin-top: 2px; }
+.agent-skill-card { box-sizing: border-box; padding: 16px; border-radius: 10px; background: var(--set-card); box-shadow: var(--set-card-shadow); color: var(--set-control-text); font-size: 15px; font-weight: 450; line-height: 24px; }
+.agent-skill-card .issue-description-root { width: 100%; margin: 0; }
+.agent-skill-card .description-editor { min-height: 240px; margin: 0; padding: 0; outline: 0; font-size: 15px; line-height: 24px; }
+.agent-skill-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.agent-skill-actions button { height: 32px; padding: 0 12px; border: .5px solid transparent; border-radius: 9999px; font: 500 13px var(--font); }
+.agent-skill-cancel { background: var(--set-button); color: var(--set-button-text); box-shadow: var(--set-button-shadow); }
+.agent-skill-cancel:hover { background: var(--theme-surface-hover); }
+.agent-skill-save { background: var(--set-primary); color: var(--set-primary-text); box-shadow: var(--set-primary-shadow); }
+.agent-skill-save:hover:not(:disabled) { filter: brightness(1.08); }
+.agent-skill-save:disabled { opacity: .5; }
+
+/* Phone: the crumb joins the page flow under the app header, the action buttons are 36px tall. */
+@media (max-width: 760px) {
+  .agent-skill-page { --settings-crumb-position: static; --settings-crumb-display: flex; --settings-crumb-height: 32px; margin-top: -6px; }
+  .agent-skill-page > .settings-crumb { width: max-content; margin: 0 0 -14px -14px; }
+  .agent-skill-actions button { height: 36px; }
+}
+
+/* Phone: the list header is 50px tall with a 28px create button (measured on the reference). */
+@media (max-width: 760px) {
+  .agent-skills-header { height: 50px; padding: 11px 10.66px; }
+  .agent-skills-create { width: 28px; height: 28px; }
+  /* Rows keep the header's phone inset so names line up with the count above them. */
+  .agent-skills-row { padding: 10.66px; }
+  .agent-skills-row:not(:last-child)::after { right: 10.66px; left: 10.66px; }
+}

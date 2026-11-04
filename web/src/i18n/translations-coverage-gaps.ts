@@ -121,6 +121,13 @@ export const coverageGapsZhCN: Record<string, string> = {
   "Project not found": "找不到项目",
   "Project view not found": "找不到项目视图",
   "View not found": "找不到视图",
+  "This team does not exist in the current workspace.": "当前工作区中不存在此团队。",
+  "This member is not available in the workspace.": "此成员在工作区中不可用。",
+  "This cycle does not exist or is no longer available.": "此周期不存在或已不可用。",
+  "This project does not exist or is no longer available.": "此项目不存在或已不可用。",
+  "This project view does not exist or is no longer available.": "此项目视图不存在或已不可用。",
+  "This initiative does not exist or is no longer available.": "此目标不存在或已不可用。",
+  "This saved view does not exist or is no longer available.": "此已保存视图不存在或已不可用。",
   "Sub-issue of": "子事项隶属于",
   "Change project start date": "更改项目开始日期",
   // Loop template triggers come from the API.
@@ -157,4 +164,13 @@ export const coverageGapsZhCN: Record<string, string> = {
   "Open view details": "打开视图详情",
   "Open initiative updates": "打开目标更新",
   "Close initiative updates": "关闭目标更新",
+  // Agent skills (list, menu and page)
+  "Skill menu": "技能菜单",
+  'Delete the skill "{name}"?': "删除技能“{name}”？",
+  "Use in chat": "在聊天中使用",
+  "Could not delete skill": "无法删除技能",
+  "Could not save skill": "无法保存技能",
+  "Title cannot be empty": "标题不能为空",
+  "Instructions cannot be empty": "指令不能为空",
+  "No changes to save": "没有需要保存的更改",
 }

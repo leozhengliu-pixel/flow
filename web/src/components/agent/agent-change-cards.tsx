@@ -12,6 +12,7 @@ import { useI18n } from '@/i18n/i18n'
 import { restoreAgentMessageChanges, undoAgentMessageChanges } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import type { AgentChange, AgentMessage, AgentSession, BootstrapData, Project } from '@/types/flow'
+import { markdownPlainText as markdownSnippet } from '@/lib/markdown-plain-text'
 import { agentChangeCards, agentChangeErrorMessage, agentChangeHeader, agentChangeSkippedNote, agentChangeSummary, changedBlockTexts, diffMarkdownBlocks, markdownPlainText, type AgentChangeCard } from './agent-change-model'
 import { highlightAgentChanges, type AgentChangeHighlight } from './agent-change-highlight'
 import { chipParts } from './agent-entity-chip-parts'
@@ -220,7 +221,7 @@ function FallbackEntity({ card }: { card: AgentChangeCard }) {
   return (
     <>
       {linked ? <AppLink className={styles.entity} data-i18n-ignore href={card.url!}>{content}</AppLink> : <span className={styles.entity} data-i18n-ignore>{content}</span>}
-      {(card.preview?.body || card.preview?.instructions) && <p className={styles.preview} data-i18n-ignore>{card.preview.body || card.preview.instructions}</p>}
+      {(card.preview?.body || card.preview?.instructions) && <p className={styles.preview} data-i18n-ignore>{card.preview.body || markdownSnippet(card.preview.instructions)}</p>}
     </>
   )
 }
@@ -250,7 +251,7 @@ function ResolvedChangeEntity({ card, data, kind }: { card: AgentChangeCard; dat
     <>
       <EntityRow data={data} entity={state.entity}/>
       <EntityMeta data={data} entity={state.entity}/>
-      {(card.preview?.body || card.preview?.instructions) && <p className={styles.preview} data-i18n-ignore>{card.preview.body || card.preview.instructions}</p>}
+      {(card.preview?.body || card.preview?.instructions) && <p className={styles.preview} data-i18n-ignore>{card.preview.body || markdownSnippet(card.preview.instructions)}</p>}
     </>
   )
 }

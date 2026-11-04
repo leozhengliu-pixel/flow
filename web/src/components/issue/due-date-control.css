@@ -90,3 +90,15 @@ html:root .due-date-options .due-date-remove small { color: var(--pk-faint); }
 .due-date-options button:disabled { opacity: .5; }
 html:root .due-date-popover,
 html:root .issue-options-date-dialog { width: max-content; overflow: visible; }
+
+/* Phone sheet (`DueDatePicker`): the shared property-sheet geometry. A 46px field row (a 40px field with 6px around it),
+   then 46px rows with 13px/450 text and the date at the right. */
+html:root .due-date-command.is-sheet { width: calc(100vw - 32px); min-width: 0; max-width: none; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+html:root .due-date-command.is-sheet .due-date-head { height: 40px; margin: 6px 6px 0; padding: 0; border: 0; }
+html:root .due-date-command.is-sheet .due-date-search { height: 40px; padding: 11px 12px; border-radius: 12px; font: 400 13px / 19.5px var(--font); }
+html:root .due-date-command.is-sheet .due-date-search::placeholder { color: var(--pk-faint); }
+html:root .due-date-command.is-sheet .due-date-shortcut { display: none; }
+html:root .due-date-command.is-sheet .due-date-options { padding: 6px; }
+html:root .due-date-command.is-sheet .due-date-options button { height: 46px; padding: 0 12px; font: 450 13px / 15.6px var(--font); }
+html:root .due-date-command.is-sheet .due-date-options button small { font: 450 13px / 15.6px var(--font); }
+html:root .due-date-command.is-sheet .due-date-options button::before { inset: 2px 0; }

@@ -140,12 +140,32 @@ export function timelineHeader(range: TimelineRange): { major: TimelineSegment[]
   }
 }
 
+/** Closest two day numbers may sit on the desktop axis before every other label is dropped. */
+export const DESKTOP_AXIS_LABEL_PITCH = 35
+
+/**
+ * Desktop axis: month names over one tick per week (per day at Week zoom). Every tick is drawn, but
+ * when ticks sit closer than DESKTOP_AXIS_LABEL_PITCH only every n-th week carries its day number.
+ * The labelled weeks come from the calendar, not from where the range starts, so scrolling or
+ * changing the range never shifts which weeks are numbered.
+ */
 export function desktopTimelineHeader(range: TimelineRange, locale: string) {
-  const tickDays = range.zoom === 'year' ? 14 : range.zoom === 'quarter' ? 7 : 1
+  const daily = range.zoom === 'week'
+  const tickDays = daily ? 1 : 7
+  const tickWidth = tickDays * range.pxPerDay
+  const labelEvery = Math.max(1, Math.ceil(DESKTOP_AXIS_LABEL_PITCH / tickWidth))
+  const minor: TimelineSegment[] = []
+  for (let cursor = daily ? range.start : startOfWeek(range.start); cursor < range.end && minor.length < 4000; cursor = addTimelineDays(cursor, tickDays)) {
+    if (cursor < range.start) continue
+    // Weeks are counted from the first Monday after the Unix epoch.
+    const index = daily ? dayNumber(cursor) : Math.floor((dayNumber(cursor) - 4) / 7)
+    const labelled = labelEvery === 1 || index % labelEvery === 1 % labelEvery
+    minor.push({ key: isoTimelineDay(cursor), label: labelled ? String(cursor.getDate()) : '', x: timelineX(range, cursor), width: tickWidth })
+  }
   return {
     major: segments(range, date => new Date(date.getFullYear(), date.getMonth() + 1, 1), startOfMonth, date =>
       new Intl.DateTimeFormat(locale, { month: 'short', ...(date.getMonth() === 0 ? { year: 'numeric' } : {}) }).format(date)),
-    minor: segments(range, date => addTimelineDays(date, tickDays), range.zoom === 'week' ? date => date : startOfWeek, date => String(date.getDate())),
+    minor,
   }
 }
 

@@ -7,7 +7,7 @@ import { memo, useCallback, useId, useLayoutEffect, useMemo, useRef, useState, t
 import { useCurrentTime } from '@/hooks/use-current-time'
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { MILESTONE_SHAPE_PATH } from '@/components/issue/milestone-progress'
-import { ViewGlyph } from '@/components/views/view-icon-picker'
+import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
 import type { ProjectDataGroup, ProjectPageItem } from './projects-data-view'
 import {
   addTimelineDays,
@@ -52,9 +52,12 @@ export type ProjectTimelineProps = {
   onZoomChange?: (zoom: TimelineZoom) => void
   onOpenProject?: (project: ProjectPageItem) => void
   onOpenMilestone?: (project: ProjectPageItem, milestoneId: string) => void
+  onProjectVisualChange?: (project: ProjectPageItem, icon: string, color: string) => void
   onUpdateProject?: (projectId: string, input: DateInput) => Promise<unknown>
   onUpdateMilestone?: (projectId: string, milestoneId: string, input: { targetDate: string }) => Promise<unknown>
   onCreateDependency?: (blockerId: string, blockedId: string) => Promise<unknown>
+  /** Desktop only: the property buttons (health, status, priority, lead) shown after each project's name. */
+  renderCells?: (project: ProjectPageItem) => ReactNode
   renderGroupIcon?: (group: ProjectDataGroup) => ReactNode
   groupCount?: (group: ProjectDataGroup) => number
   /** Injectable for tests. */
@@ -71,7 +74,7 @@ type Row =
   | { kind: 'group'; key: string; y: number; group: ProjectDataGroup }
   | { kind: 'project'; key: string; y: number; project: ProjectPageItem; span?: TimelineSpan }
 
-export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange, onOpenProject, onOpenMilestone, onUpdateProject, onUpdateMilestone, onCreateDependency, renderGroupIcon, groupCount, today: todayProp }: ProjectTimelineProps) {
+export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange, onOpenProject, onOpenMilestone, onProjectVisualChange, onUpdateProject, onUpdateMilestone, onCreateDependency, renderCells, renderGroupIcon, groupCount, today: todayProp }: ProjectTimelineProps) {
   const desktop = useDesktopSettings()
   const { t, locale } = useI18n()
   // On desktop the time axis spans the pane; project labels overlay its left edge.
@@ -98,6 +101,7 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
     const output: Row[] = []
     let y = 0
     for (const group of flat) {
+      // An explicit "No grouping" is a flat list on desktop; every other grouping keeps its header rows.
       if (!desktop || grouping !== 'No grouping') {
         output.push({ kind: 'group', key: `group:${group.id}`, y, group })
         y += GROUP_HEIGHT
@@ -121,7 +125,7 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
     return desktop && zoom === 'year' ? { ...range, pxPerDay: 2.5, width: range.days * 2.5 } : range
   }, [rows, today, zoom, desktop])
   const header = useMemo(() => desktop ? desktopTimelineHeader(range, locale) : timelineHeader(range), [range, desktop, locale])
-  const gridLines = useMemo(() => (zoom === 'week' ? header.minor.filter(segment => segment.emphasis) : header.minor), [header, zoom])
+  const gridLines = useMemo(() => desktop ? header.major : zoom === 'week' ? header.minor.filter(segment => segment.emphasis) : header.minor, [header, zoom, desktop])
   const todayX = timelineX(range, today) + range.pxPerDay / 2
 
   const previewSpan = useCallback((projectId: string, span: TimelineSpan): TimelineSpan => {
@@ -325,14 +329,18 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
       <div className="lp-project-timeline__scroller" ref={scrollerRef}>
         <div className="lp-project-timeline__canvas" style={{ width: TIMELINE_LABEL_WIDTH + range.width }}>
           <div className="lp-project-timeline__header">
-            <div className="lp-project-timeline__corner">Projects</div>
+            <div className="lp-project-timeline__corner">{!desktop && 'Projects'}</div>
             <div className="lp-project-timeline__scale" style={{ width: range.width }}>
-              <div className="lp-project-timeline__major">{header.major.map(segment => <span key={segment.key} style={{ left: segment.x, width: segment.width }}><b data-i18n-ignore>{segment.label}</b></span>)}</div>
-              <div className="lp-project-timeline__minor">{header.minor.map(segment => <span data-emphasis={segment.emphasis || undefined} key={segment.key} style={{ left: segment.x, width: segment.width }}>{segment.width >= 14 ? segment.label : ''}</span>)}</div>
-              <span className="lp-project-timeline__today-chip" style={{ left: todayX }}>{today.toLocaleDateString('en', { month: 'short', day: 'numeric' })}</span>
+              {desktop && <div aria-hidden="true" className="lp-project-timeline__header-grid">{gridLines.map(segment => <i key={segment.key} style={{ left: segment.x }}/>)}</div>}
+              {/* Desktop ticks and labels are anchored on their day (the stylesheet centres day numbers on it); the phone layout fills each span. */}
+              <div className="lp-project-timeline__major">{header.major.map(segment => <span key={segment.key} style={desktop ? { left: segment.x } : { left: segment.x, width: segment.width }}><b data-i18n-ignore>{segment.label}</b></span>)}</div>
+              <div className="lp-project-timeline__minor">{header.minor.map(segment => <span data-emphasis={segment.emphasis || undefined} key={segment.key} style={desktop ? { left: segment.x } : { left: segment.x, width: segment.width }}>{desktop ? segment.label && <b data-i18n-ignore>{segment.label}</b> : segment.width >= 14 ? segment.label : ''}</span>)}</div>
+              {desktop && <i aria-hidden="true" className="lp-project-timeline__today-header-line" style={{ left: todayX }}/>}
+              <span className="lp-project-timeline__today-chip" style={{ left: todayX }}>{today.toLocaleDateString(desktop ? locale : 'en', { month: 'short', day: 'numeric' })}</span>
             </div>
           </div>
           <div className="lp-project-timeline__body" data-linking={linkingActive || undefined} onPointerCancel={onPointerCancel} onPointerMove={onPointerMove} onPointerUp={onPointerUp} ref={bodyRef} style={{ height: Math.max(rows.height, ROW_HEIGHT) }}>
+            {desktop && <div aria-hidden="true" className="lp-project-timeline__names-backdrop"/>}
             <div aria-hidden="true" className="lp-project-timeline__grid" style={{ width: range.width }}>{gridLines.map(segment => <i data-emphasis={segment.emphasis || undefined} key={segment.key} style={{ left: segment.x }}/>)}</div>
             {rows.rows.map(row => row.kind === 'group'
               ? <div className="lp-project-timeline__group" key={row.key} style={{ top: row.y, height: GROUP_HEIGHT }}>
@@ -353,12 +361,14 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
                 onNudge={stable.nudge}
                 onOpen={onOpenProject}
                 onOpenMilestone={onOpenMilestone}
+                onProjectVisualChange={onProjectVisualChange}
                 onStartBarDrag={stable.startBarDrag}
                 onStartCreate={stable.startCreate}
                 onStartLink={stable.startLink}
                 onStartMilestoneDrag={stable.startMilestoneDrag}
                 project={row.project}
                 range={range}
+                renderCells={renderCells}
                 span={row.span}
                 y={row.y}
               />)}
@@ -401,6 +411,7 @@ type RowProps = {
   box?: TimelineRowBox
   y: number
   range: TimelineRange
+  renderCells?: (project: ProjectPageItem) => ReactNode
   dragging: boolean
   draggingMilestoneId?: string
   milestoneDelta: number
@@ -413,19 +424,26 @@ type RowProps = {
   onNudge: (project: ProjectPageItem, span: TimelineSpan, days: number) => void
   onOpen?: (project: ProjectPageItem) => void
   onOpenMilestone?: (project: ProjectPageItem, milestoneId: string) => void
+  onProjectVisualChange?: (project: ProjectPageItem, icon: string, color: string) => void
   onStartBarDrag: (event: PointerEvent<HTMLElement>, project: ProjectPageItem, span: TimelineSpan, mode: 'move' | 'resize-start' | 'resize-end') => void
   onStartMilestoneDrag: (event: PointerEvent<HTMLElement>, project: ProjectPageItem, marker: TimelineMilestoneMarker) => void
   onStartCreate: (event: PointerEvent<HTMLElement>, project: ProjectPageItem) => void
   onStartLink: (event: PointerEvent<HTMLElement>, project: ProjectPageItem, side: 'start' | 'end') => void
 }
 
-const TimelineProjectRow = memo(function TimelineProjectRow({ project, span, box, y, range, dragging, draggingMilestoneId, milestoneDelta, linkTarget, canLink, canEdit, createGhost, consumeSuppressedClick, onHover, onNudge, onOpen, onOpenMilestone, onStartBarDrag, onStartMilestoneDrag, onStartCreate, onStartLink }: RowProps) {
+const TimelineProjectRow = memo(function TimelineProjectRow({ project, span, box, y, range, renderCells, dragging, draggingMilestoneId, milestoneDelta, linkTarget, canLink, canEdit, createGhost, consumeSuppressedClick, onHover, onNudge, onOpen, onOpenMilestone, onProjectVisualChange, onStartBarDrag, onStartMilestoneDrag, onStartCreate, onStartLink }: RowProps) {
   const desktop = useDesktopSettings()
   const markers = useMemo(() => timelineMilestoneMarkers(range, project.milestones), [project.milestones, range])
   const open = () => { if (!consumeSuppressedClick()) onOpen?.(project) }
   return <div className="lp-project-timeline__row" data-link-target={linkTarget || undefined} data-timeline-project={project.id} onPointerEnter={() => onHover(project.id)} onPointerLeave={() => onHover(undefined)} style={{ top: y, height: desktop ? 72 : ROW_HEIGHT }}>
     <div className="lp-project-timeline__label">
-      <button aria-label={`Open ${project.name}`} onClick={() => onOpen?.(project)} type="button">{desktop ? <span className="lp-project-timeline__icon"><ViewGlyph color={project.color ?? 'var(--theme-text-tertiary)'} icon={project.icon || 'Project'}/></span> : <ViewGlyph color={project.color ?? 'var(--theme-text-tertiary)'} icon={project.icon || 'Project'}/>}<span data-i18n-ignore>{project.name}</span></button>
+      {desktop
+        ? <div className="lp-project-timeline__name">
+          <ViewIconPicker color={project.color} icon={project.icon || 'Project'} onChange={visual => onProjectVisualChange?.(project, visual.icon, visual.color)} surface="page" triggerClassName="lp-project-timeline__icon"/>
+          <button aria-label={`Open ${project.name}`} onClick={() => onOpen?.(project)} type="button"><span data-i18n-ignore>{project.name}</span></button>
+        </div>
+        : <button aria-label={`Open ${project.name}`} onClick={() => onOpen?.(project)} type="button"><ViewGlyph color={project.color ?? 'var(--theme-text-tertiary)'} icon={project.icon || 'Project'}/><span data-i18n-ignore>{project.name}</span></button>}
+      {desktop && renderCells && <div className="lp-project-timeline__cells">{renderCells(project)}</div>}
     </div>
     <div className="lp-project-timeline__track">
       {!span || !box
@@ -433,7 +451,8 @@ const TimelineProjectRow = memo(function TimelineProjectRow({ project, span, box
           <em>Add dates</em>
           {createGhost && <span aria-hidden="true" className="lp-project-timeline__ghost" style={{ left: createGhost.left, width: createGhost.width }}/>}
         </button>
-        : <div className="lp-project-timeline__bar" data-project-name={project.name} data-dragging={dragging || undefined} data-open-start={!span.hasStart || undefined} data-open-end={!span.hasTarget || undefined} style={{ left: box.left, width: box.width, '--timeline-progress': `${Math.max(0, Math.min(100, project.progress))}%` } as CSSProperties}>
+        : <div className="lp-project-timeline__bar" data-dragging={dragging || undefined} data-open-start={!span.hasStart || undefined} data-open-end={!span.hasTarget || undefined} style={{ left: box.left, width: box.width, '--timeline-progress': `${Math.max(0, Math.min(100, project.progress))}%` } as CSSProperties}>
+          {desktop && <span aria-hidden="true" className="lp-project-timeline__bar-label" data-i18n-ignore><span>{project.name}</span></span>}
           <button aria-label={`${project.name} timeline bar`} onClick={open} onKeyDown={event => { if (!canEdit || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return; event.preventDefault(); onNudge(project, span, event.key === 'ArrowLeft' ? -1 : 1) }} onPointerDown={event => onStartBarDrag(event, project, span, 'move')} type="button">
             <span data-i18n-ignore>{project.name}</span>
           </button>
