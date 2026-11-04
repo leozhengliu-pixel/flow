@@ -82,6 +82,8 @@ test.describe('agent skills in Agent personalization', () => {
     await expect(page.getByRole('textbox', { name: 'Skill name' })).toBeFocused()
     await page.getByRole('textbox', { name: 'Skill name' }).fill('Triage')
     await page.keyboard.press('Enter')
+    // Enter moves focus into the instructions editor; type only once it is there.
+    await expect(page.getByRole('textbox', { name: 'Skill instructions' })).toBeFocused()
     await page.keyboard.type('## Steps')
     await page.keyboard.press('Enter')
     await page.keyboard.type('- read **carefully**')
