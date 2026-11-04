@@ -25,6 +25,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { avatarInitials, leadingCharacters } from "@/lib/avatar-initials";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { confirmAction } from "@/components/ui/action-dialog-service";
@@ -931,14 +932,14 @@ function DashboardGlyph({ dashboard }: { dashboard: Dashboard }) {
 function WorkspaceMark({ label }: { label: string }) {
   return (
     <span className="dashboard-workspace-mark">
-      {label.slice(0, 1).toUpperCase()}
+      {leadingCharacters(label).toUpperCase()}
     </span>
   );
 }
 function Owner({ owner }: { owner?: User }) {
   return (
     <span className="dashboard-owner">
-      <span>{initials(owner?.displayName ?? "?")}</span>
+      <span>{avatarInitials(owner?.displayName ?? "?")}</span>
       <b data-i18n-ignore>{owner?.displayName ?? "Unknown"}</b>
     </span>
   );
@@ -1997,16 +1998,6 @@ function shortDate(value: string) {
 }
 function hash(value: string) {
   return [...value].reduce((total, char) => total + char.charCodeAt(0), 0);
-}
-function initials(value: string) {
-  return (
-    value
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase())
-      .join("") || "?"
-  );
 }
 function relative(value: string) {
   const seconds = Math.max(

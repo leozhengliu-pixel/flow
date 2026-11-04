@@ -18,6 +18,7 @@ import type { AuthProviderConfig } from '@/lib/api'
 import type { AuthSession, InvitationPreview } from '@/types/flow'
 import { LanguageSelect } from '@/i18n/i18n'
 import { createGoogleLoginState, withClientKey } from '@/lib/google-login-state'
+import { avatarInitials } from '@/lib/avatar-initials'
 
 import './auth-page.css'
 import { FlowLogo } from '@/components/ui/flow-logo'
@@ -103,7 +104,7 @@ export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Pro
 
   if (mode === 'invite') {
     return <AuthShell>
-      <div className="auth-invite-mark">{initials(invitation?.workspace.name ?? '')}</div>
+      <div className="auth-invite-mark">{avatarInitials(invitation?.workspace.name ?? '', 'L')}</div>
       <h1>{invitation ? `Join ${invitation.workspace.name}` : 'Workspace invitation'}</h1>
       {pending && !invitation ? <GridLoader className="auth-spinner"/> : invitation && <>
         <p><strong>{invitation.email}</strong> was invited as {invitation.role === 'guest' ? 'a guest' : invitation.role === 'admin' ? 'an admin' : 'a member'}.</p>
@@ -166,4 +167,3 @@ function AuthShell({ children }: { children: React.ReactNode }) {
   return <main className="auth-page"><LanguageSelect className="auth-language"/><div className="auth-brand"><FlowLogo className="auth-brand-mark"/>Flow</div><section className="auth-panel">{children}</section><footer><a href="https://flow.app/privacy" rel="noreferrer" target="_blank">Privacy</a><span>·</span><a href="https://flow.app/terms" rel="noreferrer" target="_blank">Terms</a></footer></main>
 }
 
-function initials(value: string) { return value.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'L' }

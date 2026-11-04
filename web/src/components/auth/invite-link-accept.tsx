@@ -9,6 +9,7 @@ import {
 } from "@/lib/api";
 import type { AuthSession, InviteLinkPreview } from "@/types/flow";
 import { LanguageSelect } from "@/i18n/i18n";
+import { avatarInitials } from "@/lib/avatar-initials";
 
 import "./auth-page.css";
 import "./invite-link-accept.css";
@@ -19,17 +20,6 @@ type Props = {
   session: AuthSession | null;
   onJoined: (workspaceKey: string) => Promise<void>;
 };
-
-function initials(name: string) {
-  return (
-    name
-      .split(/\s+/)
-      .map((part) => part[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || "F"
-  );
-}
 
 export function InviteLinkAccept({ session, onJoined }: Props) {
   const { token = "" } = useParams();
@@ -105,7 +95,7 @@ export function InviteLinkAccept({ session, onJoined }: Props) {
           {preview?.workspace.logoUrl ? (
             <img src={preview.workspace.logoUrl} alt="" />
           ) : (
-            initials(preview?.workspace.name ?? "")
+            avatarInitials(preview?.workspace.name ?? "", "F")
           )}
         </div>
         <h1>

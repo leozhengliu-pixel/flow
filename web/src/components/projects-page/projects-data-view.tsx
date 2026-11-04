@@ -2,6 +2,7 @@ import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { CustomerRevenueRowChip, CustomersRowChip } from '@/components/customer/customer-row-properties'
 import { revenueSuffix } from '@/components/issue-explorer/customer-filter'
 import { currencySymbol } from '@/lib/customer-settings'
+import { avatarInitials } from '@/lib/avatar-initials'
 import type { FeatureSettings } from '@/types/flow'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronDown, MoreHorizontal } from 'lucide-react'
@@ -800,7 +801,7 @@ function stopPropagation(event: MouseEvent<HTMLElement> | ChangeEvent<HTMLInputE
 }
 
 function initials(name: string) {
-  return name.split(/\s|@/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('')
+  return avatarInitials(name, '')
 }
 
 function compactAge(value?: string) {

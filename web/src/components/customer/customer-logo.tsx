@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { leadingCharacters } from '@/lib/avatar-initials'
 import type { Customer } from '@/types/flow'
 import './customer-tile.css'
 
@@ -25,7 +26,7 @@ export function CustomerLogo({ customer, size = 16, withBackground = true, radiu
     ? <span aria-hidden="true" className="customer-tile__default" style={innerStyle}><CustomerDefaultLogoIcon size={Math.round((2 / 3) * size)}/></span>
     : customer.logoUrl
       ? <img alt={customer.name} className="customer-tile__image" height={inner} src={customer.logoUrl} style={innerStyle} width={inner}/>
-      : <span aria-hidden="true" className="customer-tile__letter" data-i18n-ignore style={innerStyle}>{customer.name.slice(0, 1).toUpperCase()}</span>
+      : <span aria-hidden="true" className="customer-tile__letter" data-i18n-ignore style={innerStyle}>{leadingCharacters(customer.name).toUpperCase()}</span>
   const classes = `customer-tile${withBackground ? ' has-background' : ''}${className ? ` ${className}` : ''}`
   if (!withBackground) return <span className={classes} title={title} style={{ width: size, height: size }}>{content}</span>
   return <span className={classes} title={title} style={{ width: size, height: size }}>

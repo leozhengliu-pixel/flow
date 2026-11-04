@@ -9,6 +9,7 @@ import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surface'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { matchesSearch, translatedKeywords } from '@/lib/search-match'
+import { avatarInitials } from '@/lib/avatar-initials'
 import { useI18n } from '@/i18n/i18n'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { useDesktopLayout } from '@/hooks/use-desktop-layout'
@@ -501,7 +502,7 @@ function categoryGlyph(field: MyIssuesFilterKey, option: MyIssuesFilterOption) {
   return undefined
 }
 function priorityColor(priority:number|undefined){return ['var(--theme-text-tertiary)','var(--priority-urgent)','var(--priority-high)','var(--priority-medium)','var(--priority-low)'][priority??0]}
-function initials(value:string){return value.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]).join('').toUpperCase()}
+function initials(value:string){return avatarInitials(value,'')}
 
 function optionCount(option: MyIssuesFilterOption) {
   return 'count' in option && typeof option.count === 'number' ? option.count : undefined

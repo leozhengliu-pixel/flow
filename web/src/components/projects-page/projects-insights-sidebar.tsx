@@ -1,4 +1,5 @@
 import type { ProjectPageItem } from './projects-data-view'
+import { avatarInitials } from '@/lib/avatar-initials'
 import './projects-page.css'
 
 export type ProjectInsightFilter = { kind: 'health' | 'lead', value: string } | null
@@ -63,5 +64,5 @@ function leadRows(projects: ProjectPageItem[]) {
 
 function initials(name?: string) {
   if (!name) return '—'
-  return name.split(/\s|@/).filter(Boolean).slice(0, 2).map(value => value[0]?.toUpperCase()).join('')
+  return avatarInitials(name, '')
 }
