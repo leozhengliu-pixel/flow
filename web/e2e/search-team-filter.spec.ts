@@ -25,6 +25,8 @@ test('search Team filter sends exact team sets, returns matching issues and surv
   await search.fill(first.key)
   const firstOption=page.getByRole('option',{name:new RegExp(first.name)})
   await expect(firstOption).toContainText(first.key)
+  await expect(firstOption).toHaveCSS('height',phone?'46px':'32px')
+  await expect(firstOption).toHaveCSS('font-size',phone?'15px':'13px')
   await firstOption.click()
   await expect.poll(()=>JSON.parse(new URL(requests.at(-1)!).searchParams.get('filter')!)).toEqual({and:[{field:'team',operator:'is',values:[first.id]}]})
   await search.fill(second.key)

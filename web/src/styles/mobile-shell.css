@@ -149,6 +149,12 @@
 .property-command-subtitle { color: var(--pk-faint); line-height: 18.5px; }
 .phone-menu-surface:has(.phone-menu-heading) [cmdk-list] { max-height: min(369px, calc(100dvh - var(--phone-menu-top) - 97px)); }
 .phone-property-trigger { display: contents; }
+.phone-menu-surface.property-command-surface {
+  --phone-property-option-font-size: 13px;
+  --phone-property-option-font-weight: 450;
+  --phone-property-option-line-height: 15.6px;
+  --phone-property-group-font-size: 12px;
+}
 
 @media (max-width: 767px) {
   html:root body .phone-menu-surface.property-command-surface:not(#_) { padding: 0; width: calc(100vw - 32px); border-radius: 12px; }
@@ -160,11 +166,11 @@
   html:root body .phone-menu-surface:not(#_) .property-command-search-shortcut { display: none; }
   html:root body .phone-menu-surface:not(#_) .property-command-options:not(.virtual-property-options) { max-height: min(403px, calc(100dvh - var(--phone-menu-top) - 63px)); padding: 6px; overscroll-behavior: contain; }
   html:root body .phone-menu-surface:not(#_) .property-command-options { width: calc(100vw - 32px); }
-  html:root body .phone-menu-surface:not(#_) .property-command-options [role="option"] { height: 46px; padding-inline: 12px; font-size: 13px; font-weight: 450; line-height: 15.6px; }
+  html:root body .phone-menu-surface:not(#_) .property-command-options [role="option"] { height: 46px; padding-inline: 12px; font-size: var(--phone-property-option-font-size, 15px); font-weight: var(--phone-property-option-font-weight, 400); line-height: var(--phone-property-option-line-height, 22.5px); }
   .phone-menu-surface.property-command-labels .property-command-options [role="option"] { grid-template-columns: 20px 16px minmax(0,1fr); gap: 8px; }
   .phone-menu-surface.property-command-labels .property-command-checkbox { justify-self: start; margin-left: 1px; }
   .phone-menu-surface.property-command-labels .option-dot { width: 9px; height: 9px; flex-basis: 9px; }
-  html:root body .phone-menu-surface:not(#_) .property-command-group { font-size: 12px; font-weight: 500; }
+  html:root body .phone-menu-surface:not(#_) .property-command-group { font-size: var(--phone-property-group-font-size, 13px); font-weight: 500; }
   html:root body .phone-menu-surface:not(#_):has(.phone-menu-heading) .property-command-options:not(.virtual-property-options) { max-height: min(369px, calc(100dvh - var(--phone-menu-top) - 97px)); }
 }
 

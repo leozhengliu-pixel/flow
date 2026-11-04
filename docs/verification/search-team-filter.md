@@ -82,7 +82,7 @@ All heavy commands ran through `~/.flow-local/heavy.sh`; Go commands used
 | `node sdk/typescript/scripts/generate.mjs` and `--check` | 0 | SDK current |
 | `npm run typecheck` | 0 | Also repeated inside full lint |
 | `npm run lint` | 0 | Full lint and all repository UI checks |
-| `npx vitest run --maxWorkers=2` for search-team-filter, workspace-search-page, search-date-filter, person-info, project-overview, and applied-filter-bar test files | 0 | 65 tests, six files |
+| `npx vitest run --maxWorkers=2` for search-team-filter, workspace-search-page, search-date-filter, person-info, project-overview, and applied-filter-bar test files | 0 | 66 tests, six files |
 | `npx playwright test -c team-filter.private.config.ts e2e/search-team-filter.spec.ts` | 0 | Desktop and phone: all operators, request AST, actual results, multi-selection, and reload |
 | Real-browser state review script | 0 | 12 viewport/theme/language combinations; no page errors or horizontal overflow |
 | Required phone gate, `team-menu` | 0 | Two element checks at 375 / 390 |
