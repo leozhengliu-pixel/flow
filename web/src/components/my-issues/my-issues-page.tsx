@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { IssueRowActionsProvider } from './issue-row-actions'
+import { unavailableDisplayProperties } from './display-property-availability'
+import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { useDepsSnapshot } from '@/hooks/use-deps-snapshot'
 import { PAGED_GROUPINGS, PAGED_ORDERINGS, focusCasesKey, groupSummaries, labelGroups, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
 import { boundedIssueSequence } from '@/lib/navigation-context'
@@ -11,7 +13,7 @@ import { MyIssuesBulkActionBar, type MyIssuesBulkAction, type MyIssuesBulkAction
 import { MyIssuesDetailsPane, type MyIssuesSummaryItem, type MyIssuesSummaryTab } from './my-issues-details-pane'
 import { MyIssuesFilterBar, type MyIssuesAppliedFilter } from './my-issues-filter-bar'
 import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from './my-issues-list'
-import { defaultMyIssuesDisplayOptions, issueDisplayEqual } from './my-issues-display-defaults'
+import { defaultMyIssuesDisplayOptions, desktopDisplayDefaults, issueDisplayEqual } from './my-issues-display-defaults'
 import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, type MyIssuesFilterOption, type MyIssuesView } from './my-issues-surface'
 import { useMyIssuesController } from './use-my-issues-controller'
 import { assigneeUpdate } from '@/lib/agent-members'
@@ -76,12 +78,14 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const rowOptions = useMemo(() => explorerPropertyOptions(data, sourceIssues), [data, sourceIssues])
 
   const groupingContext = useMemo(() => ({ data }), [data])
+  const desktop = useDesktopLayout()
+  const displayDefaults = useMemo(() => desktop ? { ...defaultMyIssuesDisplayOptions, ...desktopDisplayDefaults() } : defaultMyIssuesDisplayOptions, [desktop])
   const controller = useMyIssuesController({
     drillRows,
     workspaceSlug,
     initialView,
     initialGroups,
-    initialDisplay: defaultMyIssuesDisplayOptions,
+    initialDisplay: displayDefaults,
     groupingContext,
     adapter: {
       navigate: href => onNavigateView?.(viewFromHref(href), href),
@@ -219,12 +223,13 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
         availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
         toggles: ['triage'],
+        hiddenProperties: desktop ? unavailableDisplayProperties(data, undefined, { activity: controller.view === 'activity' }) : undefined,
         phoneIssueMenu: true,
         myIssuesPhoneMenu: true,
         groups: groupSummaries(displayedGroups),
         labelGroupOptions: labelGroups(data.labels),
-        modified: !issueDisplayEqual(controller.display, defaultMyIssuesDisplayOptions),
-        onReset: () => controller.changeDisplay(defaultMyIssuesDisplayOptions),
+        modified: !issueDisplayEqual(controller.display, displayDefaults),
+        onReset: () => controller.changeDisplay(displayDefaults),
         resetLabel: 'Reset to default',
       }}
       filterOpenSignal={filterOpenSignal}

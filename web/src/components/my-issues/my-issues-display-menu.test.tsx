@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { MyIssuesDisplayMenu } from './my-issues-display-menu'
-import { createIssueDisplayOptions, issueDisplayEqual } from './my-issues-display-defaults'
+import { createIssueDisplayOptions, desktopDisplayDefaults, issueDisplayEqual } from './my-issues-display-defaults'
 import { PAGED_GROUPINGS, PAGED_ORDERINGS } from '@/components/issue-explorer/issue-grouping'
 const layout=vi.hoisted(()=>({desktop:false,phone:false}))
 vi.mock('@/hooks/use-desktop-layout',()=>({useDesktopLayout:()=>layout.desktop}))
@@ -39,7 +39,7 @@ describe('display options: nested sub-issues', () => {
   })
   it('offers Nested sub-issues in list layout, also for server-backed lists, and turns sub-issues on with it', async () => {
     const onChange = vi.fn()
-    const options = createIssueDisplayOptions({ showSubIssues: false })
+    const options = createIssueDisplayOptions({ showSubIssues: false, nestedSubIssues: false })
     render(<I18nProvider><MyIssuesDisplayMenu open phoneIssueMenu onOpenChange={vi.fn()} options={options} onChange={onChange} availableGroupings={PAGED_GROUPINGS} availableOrderings={PAGED_ORDERINGS}/></I18nProvider>)
     expect(screen.getByRole('dialog', { name: 'Display options' })).toHaveAttribute('data-phone-popover')
     const select = screen.getByRole('combobox', { name: 'Nested sub-issues' })
@@ -52,7 +52,7 @@ describe('display options: nested sub-issues', () => {
   it('preserves the desktop My issues nesting toggle and its inclusion of context rows', async () => {
     layout.desktop = true
     const onChange = vi.fn()
-    render(<I18nProvider><MyIssuesDisplayMenu open phoneIssueMenu myIssuesPhoneMenu onOpenChange={vi.fn()} options={createIssueDisplayOptions({ showSubIssues: false })} onChange={onChange}/></I18nProvider>)
+    render(<I18nProvider><MyIssuesDisplayMenu open phoneIssueMenu myIssuesPhoneMenu onOpenChange={vi.fn()} options={createIssueDisplayOptions({ showSubIssues: false, nestedSubIssues: false })} onChange={onChange}/></I18nProvider>)
     await userEvent.click(screen.getByRole('checkbox', { name: 'Nested sub-issues' }))
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ nestedSubIssues: true, showSubIssues: true }))
   })
@@ -60,11 +60,27 @@ describe('display options: nested sub-issues', () => {
   it('keeps the generic phone nesting toggle when the explorer select is not enabled', async () => {
     layout.phone = true
     const onChange = vi.fn()
-    render(<I18nProvider><MyIssuesDisplayMenu open onOpenChange={vi.fn()} options={createIssueDisplayOptions({ showSubIssues: false })} onChange={onChange}/></I18nProvider>)
+    render(<I18nProvider><MyIssuesDisplayMenu open onOpenChange={vi.fn()} options={createIssueDisplayOptions({ showSubIssues: false, nestedSubIssues: false })} onChange={onChange}/></I18nProvider>)
     await userEvent.click(screen.getByRole('checkbox', { name: 'Nested sub-issues' }))
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ nestedSubIssues: true, showSubIssues: true }))
   })
 
+  it('lists Show matching for nested sub-issues on a fresh desktop view and Hide on a fresh phone view', () => {
+    const props = { open: true, phoneIssueMenu: true, onOpenChange: vi.fn(), onChange: vi.fn(), availableGroupings: PAGED_GROUPINGS, availableOrderings: PAGED_ORDERINGS }
+    const { unmount } = render(<I18nProvider><MyIssuesDisplayMenu {...props} options={{ ...createIssueDisplayOptions(), ...desktopDisplayDefaults() }}/></I18nProvider>)
+    expect(screen.getByRole('combobox', { name: 'Nested sub-issues' })).toHaveTextContent('Show matching')
+    unmount()
+    render(<I18nProvider><MyIssuesDisplayMenu {...props} options={createIssueDisplayOptions()}/></I18nProvider>)
+    expect(screen.getByRole('combobox', { name: 'Nested sub-issues' })).toHaveTextContent('Hide')
+  })
+  it('turns Due date, Cycle and Pull requests on by default on desktop and leaves out properties the scope cannot have', () => {
+    const options = { ...createIssueDisplayOptions(), ...desktopDisplayDefaults() }
+    for (const property of ['dueDate', 'cycle', 'pullRequests'] as const) expect(options.properties.has(property)).toBe(true)
+    expect(createIssueDisplayOptions().properties.has('pullRequests')).toBe(false)
+    render(<I18nProvider><MyIssuesDisplayMenu open hiddenProperties={['cycle', 'sla', 'release', 'myActivity']} onOpenChange={vi.fn()} options={options} onChange={vi.fn()}/></I18nProvider>)
+    for (const name of ['Cycle', 'SLA', 'Release', 'My activity date']) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Estimate' })).toBeVisible()
+  })
   it('keeps only the existing nesting select in the compact phone My issues menu', () => {
     layout.phone = true
     render(<I18nProvider><MyIssuesDisplayMenu open phoneIssueMenu myIssuesPhoneMenu onOpenChange={vi.fn()} options={createIssueDisplayOptions()} onChange={vi.fn()}/></I18nProvider>)

@@ -84,7 +84,8 @@
   .popover[data-layout=board] .selectTrigger{width:160px}
   .desktopModeIcon,.desktopSortIcon{display:none}
   .phoneModeIcon,.phoneSortIcon{display:block}
-  .popover { max-height: calc(100dvh - 103px); }
+  .popover { max-height: calc(100dvh - 103px); line-height: normal; }
+  .propertyGrid { padding-bottom: 4px; }
   .footerButton { font-family: inherit; font-size: 12px; font-weight: 500; line-height: normal; }
   .footerButton:not(.footerPrimary) { color: var(--theme-text-primary); }
   .footerPrimary { color: var(--issue-display-default-link); }

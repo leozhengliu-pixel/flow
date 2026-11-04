@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useInsertionEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { IssueRowActionsProvider } from '@/components/my-issues/issue-row-actions'
+import { unavailableDisplayProperties } from '@/components/my-issues/display-property-availability'
 import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 import { useActionGroupsForSelection } from '@/hooks/use-action-groups-for-selection'
 import { clearSelectedModels, setSelectedModels } from '@/lib/selected-models-store'
@@ -13,7 +14,7 @@ import { MyIssuesBulkActionBar } from '@/components/my-issues/my-issues-bulk-act
 import { MyIssuesDetailsPane, type MyIssuesDetailsSummary, type MyIssuesSummaryItem, type MyIssuesSummaryTab } from '@/components/my-issues/my-issues-details-pane'
 import { MyIssuesFilterBar, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-bar'
 import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from '@/components/my-issues/my-issues-list'
-import { defaultMyIssuesDisplayOptions, issueDisplayEqual } from '@/components/my-issues/my-issues-display-defaults'
+import { defaultMyIssuesDisplayOptions, desktopDisplayDefaults, issueDisplayEqual } from '@/components/my-issues/my-issues-display-defaults'
 import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { useMyIssuesSelection } from '@/components/my-issues/use-my-issues-state'
 import { issueFiltersToQueryAst, toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
@@ -325,6 +326,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const displayMenuProps = {
     phoneIssueMenu: true,
     desktopIssueMenu: desktop,
+    hiddenProperties: desktop ? unavailableDisplayProperties(data, scopeTeamIds ? [...scopeTeamIds] : undefined) : undefined,
     hideCompletedIssues: view !== 'all',
     groups: menuGroups,
     labelGroupOptions: labelGroups(data.labels),
@@ -826,7 +828,7 @@ function deriveSummary(groups: MyIssuesGroupData[]): MyIssuesDetailsSummary {
 }
 function countItems(items: Omit<MyIssuesSummaryItem, 'count'>[]) { const values = new Map<string, MyIssuesSummaryItem>(); for (const item of items) values.set(item.id, { ...item, count: (values.get(item.id)?.count ?? 0) + 1 }); return [...values.values()].sort((a, b) => b.count - a.count) }
 /** The reference app defaults: team/workspace/custom views hide triage issues (they live in Triage). */
-function defaultDisplay(view: TeamIssuesRouteView, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { return { ...defaultMyIssuesDisplayOptions, grouping: 'status', completedWindow: view === 'all' ? 'all' : 'none', showTriageIssues: false, properties: new Set(defaultMyIssuesDisplayOptions.properties), ...overrides } }
+function defaultDisplay(view: TeamIssuesRouteView, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { return { ...defaultMyIssuesDisplayOptions, ...(isDesktop() ? desktopDisplayDefaults() : {}), grouping: 'status', completedWindow: view === 'all' ? 'all' : 'none', showTriageIssues: false, ...(isDesktop() ? {} : { properties: new Set(defaultMyIssuesDisplayOptions.properties) }), ...overrides } }
 function initialPropertyFilters(data: BootstrapData, labelId?: string, statusId?: string): MyIssuesAppliedFilter[] | undefined {
   const filters: MyIssuesAppliedFilter[] = []
   const label = data.labels.find(item => item.id === labelId)

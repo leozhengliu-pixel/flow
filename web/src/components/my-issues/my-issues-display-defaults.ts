@@ -22,6 +22,14 @@ export function createIssueDisplayOptions(overrides: Partial<Omit<MyIssuesDispla
 
 export const defaultMyIssuesDisplayOptions = createIssueDisplayOptions()
 
+/**
+ * Where a desktop list starts: Due date, Cycle and Pull requests show as well, and sub-issues nest under a matching
+ * parent ("Show matching"). Phones keep the plain defaults, which list a sub-issue with its parent trail.
+ */
+export function desktopDisplayDefaults(): Pick<MyIssuesDisplayOptions, 'nestedSubIssues' | 'properties'> {
+  return { nestedSubIssues: true, properties: new Set<MyIssuesProperty>([...defaultMyIssuesDisplayOptions.properties, 'dueDate', 'cycle', 'pullRequests']) }
+}
+
 export function issueDisplayEqual(left: MyIssuesDisplayOptions, right: MyIssuesDisplayOptions) {
   const snapshot = (value: MyIssuesDisplayOptions) => Object.fromEntries(Object.entries(value)
     .filter(([, item]) => item !== undefined)
