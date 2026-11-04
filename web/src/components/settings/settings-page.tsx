@@ -30,7 +30,6 @@ import {
   ChevronRight,
   Upload,
   KeyboardOff,
-  MonitorX,
   MoreHorizontal,
   Plus,
   Search,
@@ -85,6 +84,7 @@ import {
 import type { NotificationSettingsView, SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
 import { AgentCursorGlyph, AgentHistoryGlyph } from '@/components/ui/agent-glyph'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
+import { NotFoundArt } from '@/components/ui/not-found-art'
 import { AppLink } from "@/components/ui/app-link";
 import { SettingsBackChevronGlyph, SettingsNavGlyph, SettingsSearchGlyph, type SettingsNavGlyphName } from './settings-nav-glyphs'
 import {
@@ -966,7 +966,7 @@ function SettingsBody(
     ) : (
       // The reference app answers an administration URL a member cannot open with "Not found".
       <div className="settings-shortcuts-not-found" role="status">
-        <MonitorX size={68} strokeWidth={1} />
+        <NotFoundArt />
         <strong>{t("Not found")}</strong>
         <span>{t(hiddenSettingsMessage(props.page))}</span>
       </div>

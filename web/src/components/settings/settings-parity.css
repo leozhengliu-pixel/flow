@@ -489,11 +489,12 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
     height: 100vh;
     background: var(--set-panel-bg);
   }
+  html:root .settings-app { --settings-mobile-header-height: 43.5px; }
   html:root .settings-app .settings-mobile-header {
     position: sticky;
     z-index: 30;
     top: 0;
-    height: 43.5px;
+    height: var(--settings-mobile-header-height);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -539,7 +540,10 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
     display: block;
     height: 16px;
   }
-  html:root .settings-app .settings-content {
+  /* A not-found page fills the space under the header and centres its content there. */
+  html:root .settings-app .settings-mobile-content-gap:has(+ .settings-content > .settings-shortcuts-not-found) { height: 0; }
+  html:root .settings-app .settings-content:has(> .settings-shortcuts-not-found) { min-height: calc(100% - var(--settings-mobile-header-height)); padding-bottom: 0; }
+  html:root .settings-app .settings-content:not(:has(> .settings-shortcuts-not-found)) {
     width: calc(100% - 44px);
     max-width: none;
     margin: 0 22px;
