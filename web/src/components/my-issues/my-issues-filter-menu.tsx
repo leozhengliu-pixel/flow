@@ -117,7 +117,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
     const field = item.id as MyIssuesFilterKey
     if (field === 'advanced' && (variant === 'advanced' || !onAdvanced)) return false
     if (field === 'ai' && variant === 'advanced') return false
-    if (desktop && layout === 'issues' && variant === 'root' && ['triageIntelligence', 'releases', 'autoClosed'].includes(field)) return false
+    if (desktop && layout === 'issues' && variant === 'root' && ['triageIntelligence', 'releases'].includes(field)) return false
     return (!availableFields || availableFields.includes(field)) && !hiddenFields.includes(field)
   })).filter(group => group.length)
   // The reference app's deep search: "Priority › Urgent", "Labels › Bug  1 issue", "Project properties › Project priority › Urgent".

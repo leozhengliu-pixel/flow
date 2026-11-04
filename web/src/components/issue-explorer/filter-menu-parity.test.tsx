@@ -64,8 +64,8 @@ describe('filter menus', () => {
     layout.desktop=true
     const props={open:true,trigger:<button type="button">Filter</button>,options,onOpenChange:vi.fn(),onToggle:vi.fn()}
     const {rerender}=render(<I18nProvider><MyIssuesFilterMenu {...props}/></I18nProvider>)
-    for(const name of ['Team','Estimate','Suggested label'])expect(screen.getByRole('option',{name:new RegExp(`^${name}`)})).toBeVisible()
-    for(const name of ['Triage Intelligence','Releases','Auto-closed'])expect(screen.queryByRole('option',{name:new RegExp(`^${name}`)})).toBeNull()
+    for(const name of ['Team','Estimate','Suggested label','Auto-closed'])expect(screen.getByRole('option',{name:new RegExp(`^${name}`)})).toBeVisible()
+    for(const name of ['Triage Intelligence','Releases'])expect(screen.queryByRole('option',{name:new RegExp(`^${name}`)})).toBeNull()
     rerender(<I18nProvider><MyIssuesFilterMenu {...props} variant="advanced"/></I18nProvider>)
     for(const name of ['Triage Intelligence','Releases','Auto-closed'])expect(screen.getByRole('option',{name:new RegExp(`^${name}`)})).toBeVisible()
   })
