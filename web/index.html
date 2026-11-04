@@ -16,6 +16,12 @@
           if (preference === 'dark' || preference === 'light') theme = preference;
           const language = localStorage.getItem('flow:locale');
           if (language) locale = language === 'zh-CN' ? 'zh-CN' : 'en';
+          // The startup shell keeps the sidebar column the app will draw (src/components/layout/sidebar-shell.tsx).
+          const storedWidth = localStorage.getItem('flow.sidebar.width');
+          const width = storedWidth === null ? 244 : Number(storedWidth);
+          let rail = Number.isFinite(width) && width > 64 ? Math.max(220, Math.min(330, width)) : 244;
+          if (localStorage.getItem('flow.sidebar.collapsed') === 'true') rail = 8;
+          document.documentElement.style.setProperty('--flow-startup-rail', rail + 'px');
         } catch { /* Keep system preferences when storage is unavailable. */ }
         document.documentElement.dataset.theme = theme;
         document.documentElement.style.colorScheme = theme;
@@ -39,33 +45,43 @@
       }, true);
     </script>
     <style>
-      /* Also used by AppStartup while authentication and bootstrap are pending. */
+      /* Also used by AppStartup while authentication and bootstrap are pending: the shell the app is about to draw
+         (a blank sidebar column and the main card) with a small loading mark at the card centre. */
       html { background: #121213; }
       html[data-theme="light"] { background: #f9f9fa; }
-      .flow-startup { position: fixed; inset: 0; display: grid; place-items: center; background: #121213; color: #6b6f76; font: 13px/20px system-ui, sans-serif; }
-      [data-theme="light"] .flow-startup { background: #f9f9fa; color: #b0b5c0; }
-      .flow-startup__content { position: relative; width: 64px; height: 64px; display: grid; place-items: center; }
-      .flow-startup__mark { width: 26px; height: 26px; }
-      .flow-startup__pulse { position: absolute; inset: 0; border: 1px solid currentColor; border-radius: 50%; opacity: 0; animation: flow-startup-pulse 3.2s ease-out infinite; }
-      .flow-startup__text { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); white-space: nowrap; opacity: 0; animation: flow-startup-text .4s ease-out 8s forwards; }
+      .flow-startup { position: fixed; inset: 0; display: flex; background: #09090a; color: #6b6f76; font: 13px/20px system-ui, sans-serif; }
+      [data-theme="light"] .flow-startup { background: #efeff0; color: #b0b5c0; }
+      .flow-startup__rail { flex: 0 0 var(--flow-startup-rail, 244px); }
+      .flow-startup__card { box-sizing: border-box; flex: 1 1 auto; min-width: 0; height: calc(100% - 44px); margin: 8px 8px 8px 0; display: grid; place-items: center; background: #121213; border: .5px solid #212224; border-radius: 12px; box-shadow: 0 .5px 1px 1px rgba(0, 0, 0, .3); }
+      [data-theme="light"] .flow-startup__card { background: #f9f9fa; border-color: #e2e2e2; box-shadow: 0 3px 6px -2px rgba(0, 0, 0, .02), 0 1px 1px rgba(0, 0, 0, .04); }
+      /* Centred between the sidebar column and the window edge (the card's 8px right margin does not count). */
+      .flow-startup__disc { width: 32px; height: 32px; margin-right: -8px; }
+      /* A slow load adds a hint under the disc. */
+      .flow-startup__card { position: relative; }
+      .flow-startup__text { position: absolute; top: calc(50% + 40px); left: 0; right: -8px; text-align: center; font-family: "Inter Variable", "SF Pro Display", -apple-system, system-ui, sans-serif; font-size: 13px; font-weight: 500; line-height: 19.5px; opacity: 0; animation: flow-startup-text .4s ease-out 8s forwards; }
+      @keyframes flow-startup-text { to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { .flow-startup__text { animation: none; opacity: 1; } }
+      .flow-startup__accessible { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
       .flow-startup__zh { display: none; }
       :lang(zh) .flow-startup__en { display: none; }
       :lang(zh) .flow-startup__zh { display: inline; }
-      .flow-startup__accessible { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-      @keyframes flow-startup-pulse { 0% { opacity: 0; transform: scale(.8); } 70% { opacity: .4; } 100% { opacity: 0; transform: scale(1); } }
-      @keyframes flow-startup-text { to { opacity: 1; } }
-      @media (prefers-reduced-motion: reduce) { .flow-startup__pulse { animation: none; opacity: .3; } .flow-startup__text { animation: none; opacity: 1; } }
+      @media (max-width: 1024px) {
+        .flow-startup__rail { display: none; }
+        .flow-startup__card { height: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+        .flow-startup__disc { margin-right: 0; }
+        .flow-startup__text { right: 0; }
+      }
     </style>
   </head>
   <body>
     <div id="root">
       <div class="flow-startup" role="status" aria-live="polite" aria-busy="true">
-        <div class="flow-startup__content">
-          <span class="flow-startup__pulse" aria-hidden="true"></span>
-          <svg class="flow-startup__mark" viewBox="4 4 40 40" fill="currentColor" aria-hidden="true"><mask id="flow-startup-ridge" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48"><rect width="48" height="48" fill="#fff"/><path d="M0 33C11 33 14 13 24 13C31 13 33 26 37 26C40.5 26 42.5 20 48 17" fill="none" stroke="#000" stroke-width="5"/></mask><rect x="4" y="4" width="40" height="40" rx="10" mask="url(#flow-startup-ridge)"/></svg>
-          <span class="flow-startup__accessible"><span class="flow-startup__en">Loading Flow</span><span class="flow-startup__zh">正在加载 Flow</span></span>
-          <span class="flow-startup__text" aria-hidden="true"><span class="flow-startup__en">Loading…</span><span class="flow-startup__zh">加载中…</span></span>
+        <div class="flow-startup__rail"></div>
+        <div class="flow-startup__card">
+          <svg class="flow-startup__disc" viewBox="4 4 40 40" fill="currentColor" aria-hidden="true"><mask id="flow-startup-ridge" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48"><rect width="48" height="48" fill="#fff"/><path d="M0 33C11 33 14 13 24 13C31 13 33 26 37 26C40.5 26 42.5 20 48 17" fill="none" stroke="#000" stroke-width="5"/></mask><rect x="4" y="4" width="40" height="40" rx="10" mask="url(#flow-startup-ridge)"/></svg>
+          <span class="flow-startup__text" aria-hidden="true"><span class="flow-startup__en">Loading your workspace...</span><span class="flow-startup__zh">正在加载工作区...</span></span>
         </div>
+        <span class="flow-startup__accessible"><span class="flow-startup__en">Loading Flow</span><span class="flow-startup__zh">正在加载 Flow</span></span>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

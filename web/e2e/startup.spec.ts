@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`keeps an animated ${theme} startup shell through slow entry, auth and bootstrap`, async ({ page, request }, testInfo) => {
+  test(`keeps the ${theme} startup shell through slow entry, auth and bootstrap`, async ({ page, request }, testInfo) => {
     const workspace = `startup-${theme}-${testInfo.project.name}-${Date.now()}`
     const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
       data: { name: 'Startup verification', urlKey: workspace, region: 'us' },
@@ -37,21 +37,21 @@ for (const theme of ['light', 'dark'] as const) {
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
         await expect(page.locator('.auth-brand')).toHaveCount(0)
         const geometry = await loader.evaluate(element => {
-          const mark = element.querySelector('.flow-startup__mark')!.getBoundingClientRect()
-          const content = element.querySelector('.flow-startup__content')!.getBoundingClientRect()
-          return { mark: mark.width, width: content.width, height: content.height, x: content.x + content.width / 2, y: content.y + content.height / 2, viewportX: innerWidth / 2, viewportY: innerHeight / 2, overflow: document.documentElement.scrollWidth > innerWidth }
+          const rail = element.querySelector('.flow-startup__rail')!.getBoundingClientRect()
+          const card = element.querySelector('.flow-startup__card')!.getBoundingClientRect()
+          const disc = element.querySelector('.flow-startup__disc')!.getBoundingClientRect()
+          return { rail: rail.width, card: [card.x, card.y, card.width, card.height], disc: [disc.width, disc.height], dx: disc.x + disc.width / 2 - (card.x + card.width / 2), dy: disc.y + disc.height / 2 - (card.y + card.height / 2), overflow: document.documentElement.scrollWidth > innerWidth }
         })
-        // The Flow mark (e5e313e3) is drawn at 26px inside the 64px startup tile.
-        expect(geometry.mark).toBe(26)
-        expect(geometry.width).toBe(64)
-        expect(geometry.height).toBe(64)
-        expect(geometry.x).toBeCloseTo(geometry.viewportX, 0)
-        expect(geometry.y).toBeCloseTo(geometry.viewportY, 0)
+        // The loading surface is the shell the app draws next: a blank sidebar column, the main card and a 32px disc at its centre.
+        expect(geometry.rail).toBe(244)
+        expect(geometry.card[0]).toBe(244)
+        expect(geometry.card[1]).toBe(8)
+        expect(geometry.disc).toEqual([32, 32])
+        // Centred between the sidebar column and the window edge, so 4px right of the card's own centre.
+        expect(geometry.dx).toBeCloseTo(4, 0)
+        expect(geometry.dy).toBeCloseTo(0, 0)
         expect(geometry.overflow).toBe(false)
-        const pulse = page.locator('.flow-startup__pulse')
-        await expect(pulse).toHaveCSS('animation-duration', '3.2s')
-        const first = await pulse.evaluate(element => getComputedStyle(element).transform)
-        await expect.poll(() => pulse.evaluate(element => getComputedStyle(element).transform)).not.toBe(first)
+        await expect(page.locator('.flow-startup__pulse')).toHaveCount(0)
         gate.release()
       }
       await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
@@ -65,11 +65,9 @@ for (const theme of ['light', 'dark'] as const) {
   })
 }
 
-test('respects reduced motion before JavaScript starts', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' })
+test('draws the startup shell before JavaScript starts', async ({ page }) => {
   await page.route(url => url.pathname === '/src/main.tsx', route => route.abort())
   await page.goto('/join')
   await expect(page.locator('.flow-startup')).toBeVisible()
-  await expect(page.locator('.flow-startup__pulse')).toHaveCSS('animation-name', 'none')
-  await expect(page.locator('.flow-startup__text')).toHaveCSS('opacity', '1')
+  await expect(page.locator('.flow-startup__disc')).toBeVisible()
 })
