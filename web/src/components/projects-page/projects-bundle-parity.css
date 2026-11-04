@@ -12,7 +12,7 @@
 
 .lp-project-row__date-icon { display: none; }
 
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .lp-projects { --lp-bg: var(--bg-panel); }
   .lp-projects__header { padding-right: 8px; }
   .lp-projects__header h1 { color: var(--text); }

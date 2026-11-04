@@ -281,7 +281,7 @@
 .recurrenceChip:hover { background: var(--bg-active); color: var(--text); }
 .recurrenceChip svg { width: 13px; height: 13px; flex: none; }
 .recurrenceChip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .footer { border-top: 0; }
   .header .team { color: var(--create-issue-fg); }
   .header .team:not(#_) { gap: 0; }

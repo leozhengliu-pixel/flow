@@ -825,7 +825,7 @@
 .flow-inbox-row-menu .flow-inbox-menu__item { line-height: normal; }
 .flow-inbox-snooze-menu { width: 324px; height: 241.5px; box-sizing: border-box; padding-bottom: 7px; }
 .flow-inbox-snooze-menu .flow-inbox-menu__item { line-height: normal; }
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .flow-inbox-page-composition.flow-framed-workspace { border-color: var(--release-frame-border); }
   .flow-inbox-menu { border-color: var(--pk-border); }
   .flow-inbox-menu__shortcut { color: var(--pk-muted); line-height: 12.1px; }
@@ -853,7 +853,7 @@
   .flow-inbox__header-title-actions { gap: 4px; margin-left: 0; }
   .flow-inbox__header h2 { padding: 0 4px 0 10px; }
 }
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .flow-inbox__header { padding: 0; }
   .flow-inbox__header-inner { display: flex; align-items: center; gap: 6px; width: calc(100% - 16px); height: 43.5px; margin: 0 8px; }
 }

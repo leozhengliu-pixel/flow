@@ -228,7 +228,7 @@
 
 /* ---- Titles above the bodies ---- */
 .issue-document .title-editor:not(.sub-issue-editor *) { letter-spacing: -.1px; }
-@media (min-width: 1024px) { .issue-document .title-editor:not(.sub-issue-editor *) { letter-spacing: -.16px; } }
+@media (--desktop-layout) { .issue-document .title-editor:not(.sub-issue-editor *) { letter-spacing: -.16px; } }
 :root .project-overview .project-overview__name { letter-spacing: -0.1px; }
 
 /* ==== Agent answers (Agent page and the floating issue / document chat) ==== */

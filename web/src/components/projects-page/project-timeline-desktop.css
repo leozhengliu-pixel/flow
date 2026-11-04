@@ -1,4 +1,4 @@
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .lp-project-timeline { --timeline-label-width: 0px; --project-timeline-bar-bg: var(--theme-control); --project-timeline-bar-progress: var(--theme-border-strong); --project-timeline-bar-border: var(--theme-border); position: relative; }
   .lp-project-timeline__toolbar { position: absolute; top: 5px; right: 10px; z-index: 8; gap: 4px; padding: 0; }
   .lp-project-timeline__today,

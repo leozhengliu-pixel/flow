@@ -12,7 +12,7 @@
    to that, and the text (not the icon) is what clips, with an ellipsis. */
 .issue-properties :is(.core-property-picker, .issue-assignee-group) { min-width: 0; max-width: 100%; }
 .issue-properties :is(.core-property-trigger, .label-project-trigger) > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .issue-view.full:not(.issue-view--triage):not(.issue-view--embedded) .issue-layout {
     width: calc(100% - 95px);
     grid-template-columns: minmax(0, 667.5px) minmax(0, 1fr);
@@ -39,7 +39,7 @@
   html:root body .issue-properties .estimate-picker .label-project-trigger { margin: 2px 0; line-height: normal; }
   .issue-properties .estimate-picker[data-empty=true] .label-project-trigger:not(:hover):not([aria-expanded=true]) > span { color: var(--issue-muted); }
 }
-@media (min-width: 1024px) and (max-width: 1240px) {
+@media (--desktop-layout) and (max-width: 1240px) {
   .issue-view.full:not(.issue-view--triage):not(.issue-view--embedded) .issue-layout {
     width: calc(100% - 58px);
     grid-template-columns: minmax(0, 1fr) 260px;

@@ -1,6 +1,6 @@
 /* Measured against the directory surface at a 1470px viewport. */
 .cycle-team-breadcrumb { display: none; }
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .flow-cycles-page { height: calc(100% - 44px); margin-bottom: 36px; }
   .flow-cycles-page .flow-cycles-header { height: 44px; padding-inline: 18px; gap: 0; }
   .flow-cycles-page .flow-cycles-header h1 { color: var(--text); transform: none; }

@@ -1,11 +1,12 @@
 import { useLayoutEffect, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { COMPACT_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 import './sidebar.css'
 import './sidebar-shell.css'
 
 const widthKey = 'flow.sidebar.width'
 const collapsedKey = 'flow.sidebar.collapsed'
-const compactQuery = '(max-width: 1024px)'
+const compactQuery = COMPACT_LAYOUT_QUERY
 
 function readShellWidth() {
   try {

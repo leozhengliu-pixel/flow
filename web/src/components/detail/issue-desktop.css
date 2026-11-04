@@ -1,4 +1,4 @@
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   /* Desktop detail geometry is flush to the captured document and rail edges. */
   .issue-view .issue-document { padding-bottom: 0; }
   .issue-view .issue-properties { padding-left: 0; }

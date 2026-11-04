@@ -1,4 +1,4 @@
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .settings-members-columns button[data-sorted="false"] > svg,
   .settings-members-columns button[data-sorted="false"] .settings-members-desktop-sort > svg { opacity: 0; }
   .settings-members-columns button[data-sorted="false"]:is(:hover, :focus-visible) > svg,

@@ -84,7 +84,7 @@
 .valueMenu:not(#_),.conditionValueMenu:not(#_){box-shadow:var(--pk-card-shadow)}
 .propertyItem:not(#_)>span:not(.propertyArrow){color:var(--pk-text)}
 .propertyArrow:not(#_){color:var(--pk-faint)}
-@media(min-width:1024px){
+@media(--desktop-layout){
   .propertyItem:not(#_):is(:hover,[aria-selected=true])>span:not(.propertyArrow),
   .propertyItem:not(#_):is(:hover,[aria-selected=true])>svg:first-child{color:var(--pk-text-strong)}
 }

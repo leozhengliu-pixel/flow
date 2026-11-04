@@ -1,3 +1,4 @@
+import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 import type { ReactNode } from 'react'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { VirtuosoMockContext } from 'react-virtuoso'
@@ -52,7 +53,7 @@ describe('complete issue grouping', () => {
   })
 
   it('defaults saved details open only on desktop and remembers an explicit close independently from team details', () => {
-    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: query.includes('min-width'), addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: query === DESKTOP_LAYOUT_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     const data = dataWithGroups(0, 3)
     const savedView = { id: 'saved', name: 'Saved', resource: 'issues', scope: 'personal', view: 'all', filters: [], display: {} } as unknown as SavedView
     localStorage.setItem(`${data.workspace.urlKey}:issue-explorer:workspace:details`, 'false')

@@ -42,7 +42,7 @@
 
 /* The sidebar search tooltip sits tighter than the default 8px label/shortcut gap. */
 .flow-tooltip-content.sidebar-search-tooltip { gap: 5px; }
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .flow-tooltip-content.sidebar-search-tooltip { font-weight: 450; }
 }
 

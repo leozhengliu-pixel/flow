@@ -1,4 +1,4 @@
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .li-page { --li-select-width: 20px; --li-column-status: 100px; --li-column-priority: 56px; --li-column-owner: 50px; --li-column-target: 100px; --li-column-projects: 59px; --li-column-health: 52px; --li-column-activeProjects: 98px; }
   .li-detail, .li-page { height: calc(100% - 44px); margin-bottom: 36px; }
   .li-detail-header { gap: 4px; padding: 0 8px 0 17px; }
@@ -140,7 +140,7 @@
 
 .li-project-count__value { display: contents; }
 .li-project-count__ring, .li-latest-update > .li-latest-update__desktop-action, .li-sidebar-teams { display: none; }
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .li-project-count__ring { display: inline-flex; }
   .li-project-count { padding-inline: 2.5px; font-weight: 450; }
   .li-project-count__value { display: inline; }

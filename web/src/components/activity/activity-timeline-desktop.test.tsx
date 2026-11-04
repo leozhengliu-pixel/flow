@@ -1,3 +1,4 @@
+import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -11,7 +12,7 @@ const event = (id: string, metadata = { priority: 'High' }): ActivityEvent => ({
 const comment = (id: string, createdAt: string): Comment => ({ id, createdAt, user: viewer, body: 'Comment', reactions: {} }) as Comment
 
 describe('desktop issue activity', () => {
-  beforeEach(() => vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: query === '(min-width: 1024px)', media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as MediaQueryList))
+  beforeEach(() => vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: query === DESKTOP_LAYOUT_QUERY, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as MediaQueryList))
   afterEach(() => vi.restoreAllMocks())
 
   it('collapses consecutive events, expands and collapses them, and leaves comments outside', () => {

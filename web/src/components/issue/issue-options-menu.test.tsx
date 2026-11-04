@@ -1,3 +1,4 @@
+import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -35,7 +36,7 @@ describe('issue action menu', () => {
   })
 
   it('offers a desktop three-hour reminder and sends the chosen timestamp', async () => {
-    const media = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: query === '(min-width: 1024px)', addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as MediaQueryList)
+    const media = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: query === DESKTOP_LAYOUT_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as MediaQueryList)
     try {
       const user = userEvent.setup()
       const { actions } = setup()

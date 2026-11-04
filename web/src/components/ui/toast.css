@@ -143,7 +143,7 @@ button.flow-toast__chip:focus-visible { outline: 2px solid var(--focus-ring); ou
 
 .flow-toast-tooltip { z-index: 2147483647; }
 
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .flow-toast {
     min-height: 41px;
     padding: 12px;

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
+import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 
-const query = '(min-width: 1024px)'
+const query = DESKTOP_LAYOUT_QUERY
 const subscribe = (notify: () => void) => {
   const media = window.matchMedia(query)
   media.addEventListener('change', notify)

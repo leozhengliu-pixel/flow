@@ -157,7 +157,7 @@ html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
 /* Desktop command menu: command groups first, entity quick results last, and the
    reference app's 13px/15.6px rows and 12px group headers. The Ask Flow hint sits
    over the query row's right edge instead of shrinking the input. */
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   html:root body .command-dialog .command-input {
     position: relative;
     padding: 6px 5px 0 6px;

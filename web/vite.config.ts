@@ -5,6 +5,7 @@ import path from 'node:path'
 import { readFileSync } from 'node:fs'
 import { tourMedia } from './tour-media-plugin.ts'
 import { releaseManifest } from './release-assets.ts'
+import { layoutMedia } from './layout-media.ts'
 
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8080'
 
@@ -42,7 +43,7 @@ function chunkSizeBudget() {
 export default defineConfig(async ({ command }) => ({
   // tourMedia: docs/media/*.gif → /tour/ (dev server and build output) for the Getting started issues.
   // releaseManifest: dist/asset-manifest.json, which lets other releases' servers find this build's assets.
-  plugins: [react(), tailwindcss(), inlineIconSprites(),
+  plugins: [layoutMedia(), react(), tailwindcss(), inlineIconSprites(),
     command === 'serve' && process.env.FLOW_E2E_AGENT_PANEL_SEED === '1'
       ? (await import('./e2e/agent-panel-seed-plugin.ts')).agentPanelSeedPlugin(apiProxyTarget)
       : undefined,

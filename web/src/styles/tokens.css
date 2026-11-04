@@ -264,7 +264,7 @@
 .comment-reply strong,.comment-reply span{display:block;font-size:12px;line-height:18px}
 .comment-reply strong{font-weight:500}.comment-reply span{color:var(--muted)}
 
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   :root { --issue-desktop-header-open-bg: rgb(45 45 47); }
   :root[data-theme="light"] { --issue-desktop-header-open-bg: var(--theme-control); }
 }
@@ -387,7 +387,7 @@
 .bottom-agent{right:10px;bottom:4px;height:28px;gap:2px;padding:0;border:0;background:transparent}
 .bottom-agent>button{height:28px;display:flex;align-items:center;justify-content:center;gap:7px;padding:0 12px 0 10px;border:.5px solid transparent;border-radius:8px;background:transparent;color:inherit;font-size:12px;font-weight:500}
 .bottom-agent>button:last-child{width:28px;padding:0 2px;color:var(--sidebar-nav-fg)}
-@media(min-width:1024px){.bottom-agent>button:first-of-type{gap:6px;line-height:normal;color:var(--sidebar-nav-fg)}.bottom-agent>button:first-of-type>span{font-weight:450}}
+@media(--desktop-layout){.bottom-agent>button:first-of-type{gap:6px;line-height:normal;color:var(--sidebar-nav-fg)}.bottom-agent>button:first-of-type>span{font-weight:450}}
 :root[data-theme="light"] .bottom-agent>button:last-child{color:lch(18.888% 1.25 282)}
 .bottom-agent>button:hover,.bottom-agent>button:focus-visible{background:var(--theme-surface-hover);color:var(--theme-text-primary);outline:0}
 .bottom-agent>button:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
@@ -1093,7 +1093,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :root{--phone-workspace-trigger-open-bg:lch(11.37% 1.3 272)}
 :root[data-theme="light"]{--phone-workspace-trigger-open-bg:var(--theme-control)}
 .avatar{background:var(--avatar,var(--avatar-fallback-alt))}
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   :root { --project-sidebar-card-bg: var(--theme-surface-1); --project-sidebar-card-border: var(--theme-control-hover); }
   :root[data-theme-variant="dark"] { --project-sidebar-card-bg: lch(9.232% .85 272); --project-sidebar-card-border: lch(16.793% 1.93 272); }
   :root { --inbox-read-body: lch(65.078% 1.425 272); }

@@ -1,3 +1,4 @@
+import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -8,7 +9,7 @@ describe('DueDateCommand', () => {
   it('keeps the desktop end-of-week preset on Friday and applies it', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-10-30T12:00:00'))
-    const media = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: query === '(min-width: 1024px)', addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as MediaQueryList)
+    const media = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: query === DESKTOP_LAYOUT_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as MediaQueryList)
     try {
       const onSelect = vi.fn().mockResolvedValue(undefined)
       render(<I18nProvider><DueDateCommand onSelect={onSelect}/></I18nProvider>)

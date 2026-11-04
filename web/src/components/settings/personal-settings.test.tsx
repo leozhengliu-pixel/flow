@@ -1,3 +1,4 @@
+import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -55,7 +56,7 @@ function props(page: SettingsPageId) {
 
 describe('personal settings workflows', () => {
   it('keeps the desktop sidebar action compact with a descriptive accessible name', async () => {
-    const media = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: query === '(min-width: 1024px)', addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as MediaQueryList)
+    const media = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: query === DESKTOP_LAYOUT_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as MediaQueryList)
     try {
       const input = props('preferences')
       render(<I18nProvider><PersonalSettings {...input}/></I18nProvider>)
@@ -67,7 +68,7 @@ describe('personal settings workflows', () => {
   })
 
   it('omits the extra Refresh control only on desktop', async () => {
-    const media=vi.spyOn(window,'matchMedia').mockImplementation(query=>({matches:query==='(min-width: 1024px)',addEventListener:vi.fn(),removeEventListener:vi.fn()}) as unknown as MediaQueryList)
+    const media=vi.spyOn(window,'matchMedia').mockImplementation(query=>({matches:query===DESKTOP_LAYOUT_QUERY,addEventListener:vi.fn(),removeEventListener:vi.fn()}) as unknown as MediaQueryList)
     try {
       api.fetchAccountSessions.mockResolvedValue([{id:'audit',current:true,name:'Audit browser',createdAt:'2026-01-01',lastSeenAt:'2026-01-01',expiresAt:'2027-01-01'}])
       render(<MemoryRouter><I18nProvider><PersonalSettings {...props('account-security')}/></I18nProvider></MemoryRouter>)

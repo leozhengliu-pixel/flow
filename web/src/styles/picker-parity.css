@@ -1089,7 +1089,7 @@ html:root body .agent-skills-trigger:not(#_)[data-state=open] {
 html:root body .agent-skills-trigger:not(#_) svg { width: 14px; height: 14px; }
 
 /* Pickers whose search stays hidden until you type. */
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .property-command-surface.issue-labels-menu .property-command-options [role=option] { grid-template-columns: 16px 18px minmax(0,1fr); gap: 6px; padding: 0 18px 0 14px; }
   .property-command-surface.issue-labels-menu .property-command-options [role=option] .property-command-checkbox {
     display: grid;
@@ -1297,7 +1297,7 @@ html:root body .property-command-surface.property-command-estimate:not(#_) .prop
 html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-search-shortcut kbd { width: 18px; min-width: 18px; padding: 2px 0; }
 html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-options [role=option][aria-selected=true] .estimate-icon { color: var(--pk-text-strong); }
 
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   html:root body .property-command-surface .property-command-search { gap: 14px; }
   html:root body .property-command-surface .property-command-search kbd,
   html:root body .property-command-surface.property-command-estimate:not(#_) .property-command-search-shortcut kbd { padding: 2px; }

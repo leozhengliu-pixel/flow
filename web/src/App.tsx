@@ -1,4 +1,5 @@
 import { overlayUserSettings, USER_SETTINGS_OVERRIDES_EVENT } from "@/lib/user-settings-overrides";
+import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints';
 import {
   Suspense,
   lazy,
@@ -979,7 +980,7 @@ function App() {
       const now = Date.now();
       const sequence = shortcutSequence.current;
       const inSequence = now - sequence.at < 1100;
-      if (inSequence && data && window.matchMedia('(min-width: 1024px)').matches) {
+      if (inSequence && data && window.matchMedia(DESKTOP_LAYOUT_QUERY).matches) {
         const teamKey = 'teamKey' in route ? route.teamKey : route.kind === 'issue' ? data.issues.find(issue => issue.identifier === route.identifier)?.team.key : undefined;
         const team = data.teams.find(team => team.key === teamKey) ?? data.teams.find(team => !team.archivedAt && !team.retiredAt);
         const workspace = data.workspace.urlKey;
@@ -1148,13 +1149,13 @@ function App() {
         shortcutSequence.current = { key: pressed, at: now };
         return;
       }
-      if (pressed === "]" && (['my-issues', 'project', 'initiative'].includes(route.kind) || window.matchMedia('(min-width: 1024px)').matches)) {
+      if (pressed === "]" && (['my-issues', 'project', 'initiative'].includes(route.kind) || window.matchMedia(DESKTOP_LAYOUT_QUERY).matches)) {
         e.preventDefault();
         window.dispatchEvent(new Event('flow:toggle-right-sidebar'));
         return;
       }
       shortcutSequence.current = { key: "", at: 0 };
-      if (pressed === "v" && window.matchMedia("(min-width: 1024px)").matches) {
+      if (pressed === "v" && window.matchMedia(DESKTOP_LAYOUT_QUERY).matches) {
         e.preventDefault();
         openCreateIssue(undefined, { expanded: true });
         return;

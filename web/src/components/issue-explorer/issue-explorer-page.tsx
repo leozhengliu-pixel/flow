@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useInsertionEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { IssueRowActionsProvider } from '@/components/my-issues/issue-row-actions'
+import { DESKTOP_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 import { useActionGroupsForSelection } from '@/hooks/use-action-groups-for-selection'
 import { clearSelectedModels, setSelectedModels } from '@/lib/selected-models-store'
 import { boundedIssueSequence } from '@/lib/navigation-context'
@@ -851,9 +852,9 @@ function filterInsightTeams(issues: Issue[], teamIds?: string[]) { return teamId
 function readFilters(key: string): MyIssuesAppliedFilter[] { try { return normalizeStoredFilters(JSON.parse(localStorage.getItem(key) ?? '[]')) } catch { return [] } }
 function readDisplay(key: string, view: TeamIssuesRouteView, board = false, teamDefault?: Record<string, unknown>, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { const fallback = withTeamDefault({ ...defaultDisplay(view, overrides), ...(board ? { layout: 'board' as const, showEmptyGroups: true } : {}) }, teamDefault); try { const value = JSON.parse(localStorage.getItem(key) ?? 'null'); return value ? { ...fallback, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties : [...fallback.properties]) } : fallback } catch { return fallback } }
 function readBoolean(key: string, fallback: boolean) { try { const value = localStorage.getItem(key); return value == null ? fallback : value === 'true' } catch { return fallback } }
-function isDesktop() { return window.matchMedia('(min-width: 1024px)').matches }
+function isDesktop() { return window.matchMedia(DESKTOP_LAYOUT_QUERY).matches }
 function subscribeDesktop(notify: () => void) {
-  const media = window.matchMedia('(min-width: 1024px)')
+  const media = window.matchMedia(DESKTOP_LAYOUT_QUERY)
   media.addEventListener('change', notify)
   return () => media.removeEventListener('change', notify)
 }

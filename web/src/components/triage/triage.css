@@ -158,7 +158,7 @@
 
 .flow-triage-list__empty-filter { padding: 24px 8px; color: var(--triage-row-meta-fg); font-size: 13px; text-align: center; }
 
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .flow-triage-list__team { width: 16px; height: 16px; margin-left: 10px; display: grid; place-items: center; }
   .flow-triage-list__team svg { width: 16px; height: 16px; }
   .flow-triage-list__title h2 { padding-left: 4px; color: var(--text); line-height: normal; }
@@ -355,7 +355,7 @@
 .flow-triage-not-selected__cta svg { width: 14px; height: 14px; }
 .flow-triage-not-selected__cta:hover { background: var(--triage-cta-hover-bg); }
 .flow-triage-not-selected__cta:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .flow-triage-not-selected__body h2 { color: var(--text); }
   .flow-triage-not-selected__cta { gap: 0; padding: 0 8px 0 6px; border: .5px solid transparent; background: var(--ui-pill-bg); color: var(--text); }
   .flow-triage-not-selected__cta svg { margin-right: 6px; }
@@ -499,7 +499,7 @@ html:root body .triage-snooze-dialog [cmdk-item]:not(#_) { font-size: 15px; }
 .issue-view--triage .issue-mobile-properties .label-project-trigger { height: 24px; margin: 0; padding: 0 8px; border: 0.5px solid var(--triage-card-border); border-radius: 9999px; background: var(--triage-card-bg); font-size: 12px; }
 .issue-view--triage .issue-mobile-properties .issue-label-chips { display: none; }
 .issue-view--triage .description-editor { width: auto; }
-@media (min-width: 1024px) {
+@media (--desktop-layout) {
   .issue-view--triage .issue-layout { display: flow-root; }
   .issue-view--triage .issue-document { display: flow-root; max-width: none; margin: 21.75px 14px 0 0; padding: 0 0 0 14px; }
   .issue-view--triage .issue-title-field { margin-top: 32px; }

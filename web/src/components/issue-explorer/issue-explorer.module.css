@@ -9,7 +9,7 @@
 .mobileSidebarButton{display:none;width:32px;height:32px;padding:8px;border:0;border-radius:6px;background:transparent}.mobileSidebarButton span{display:block;width:14px;height:1px;margin:3px 0;background:var(--issue-muted)}
 .toolbar{height:43px;flex:0 0 43px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;border-bottom:0}.tabs,.actions{display:flex;align-items:center}.tabs{min-width:0;flex:1;gap:4px;overflow:hidden}.actions{flex:none;gap:6px}.savedTabs{height:32px;min-width:0;flex:1;overflow:hidden}.savedTabs .savedTab{margin-right:8px}
 .viewCount{padding-left:10px;color:var(--muted);font-size:12px;font-weight:450}
-@media(min-width:1024px){.viewCount{font-size:13px;font-weight:500;line-height:normal}}
+@media(--desktop-layout){.viewCount{font-size:13px;font-weight:500;line-height:normal}}
 :global(:root[data-theme="light"]) .header{border-bottom-color:var(--border);border-bottom-width:.5px}
 :global(:root[data-theme="light"]) .header h2,:global(:root[data-theme="light"]) .scope{color:var(--theme-text-primary)}
 :global(:root[data-theme="light"]) .tab,:global(:root[data-theme="light"]) .savedTab{background:var(--ui-pill-bg);color:var(--ui-pill-fg)}
@@ -58,7 +58,7 @@
 
 /* Phone parity for the team issues list: the reference header breadcrumb and
    toolbar metrics, plus the estimate-only group header. */
-@media(min-width:1024px){
+@media(--desktop-layout){
   [data-issue-explorer]:has(section[data-mode="create"]) [data-content-view-breadcrumb] [data-current],.draftPlaceholder{color:var(--text)}
   [data-issue-explorer] [data-content-view-breadcrumb] [data-current]{color:var(--text)}
   [data-issue-explorer] [data-content-view-breadcrumb] a>span:last-child{color:var(--text)}
@@ -104,7 +104,7 @@
   .tab,.savedTab{line-height:normal}
   .insightsButton{order:-1}
 }
-@media(min-width:1024px){
+@media(--desktop-layout){
   [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) .headerNewIssue{padding-right:10px}
   .filterBar [data-filter-chip]{padding:.5px;border:0;box-shadow:inset 0 0 0 .5px var(--theme-border-strong);font-weight:400;background:var(--project-toolbar-bg);color:var(--text)}
   .filterBar [data-filter-chip]>span,.filterBar [data-filter-chip]>button{border:0;box-shadow:inset -.5px 0 0 var(--theme-border-strong)}

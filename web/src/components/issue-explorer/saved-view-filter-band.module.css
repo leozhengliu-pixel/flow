@@ -24,7 +24,7 @@
 .noMatchesArt{width:64px;height:48px;color:var(--theme-text-tertiary)}
 .noMatchesBlock{display:flex;flex-direction:column;align-items:center;gap:12px}
 .desktopArt,.desktopHeading,.emptyFilterCard{display:none}
-@media(min-width:1024px){
+@media(--desktop-layout){
   .noMatches{box-sizing:border-box;padding:120px 60px 148px}
   .noMatchesBlock{width:350px;max-width:100%;flex:none;gap:20px}
   .noMatchesArt,.phoneHeading{display:none}

@@ -11,7 +11,7 @@
 .sidebar-shell-link-label { width: min(148px, 70%); height: 10px; border-radius: 4px; }
 .sidebar-shell-section { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
 .sidebar-shell-section-label { width: 72px; height: 9px; margin: 0 8px 4px; border-radius: 4px; }
-@media (max-width: 1024px) {
+@media (--compact-layout) {
   .sidebar-shell-layout { display: none; }
 }
 :root[data-theme="light"] .sidebar-shell .skeleton {

@@ -12,7 +12,7 @@
 .issue-project-row:hover .issue-project-open-hit,.issue-project-open:focus-visible .issue-project-open-hit{opacity:1;background:color-mix(in srgb,var(--issue-project-row-hover) 50%,transparent)}
 .issue-project-open:hover .issue-project-open-hit,.issue-project-open:focus-visible .issue-project-open-hit{background:var(--issue-project-row-hover);color:var(--issue-fg)}
 .issue-milestone-trigger.is-empty>span,:root[data-theme="light"] .issue-milestone-trigger.is-empty>span{color:var(--issue-muted)}
-@media(min-width:1024px){
+@media(--desktop-layout){
   .property-command-project.issue-project-menu--compact{width:186px;max-height:min(490px,calc(100vh - 20px))}
   .property-command-project.issue-project-menu--compact{text-rendering:geometricPrecision}
   .property-command-project.issue-project-menu--compact button{text-rendering:inherit}

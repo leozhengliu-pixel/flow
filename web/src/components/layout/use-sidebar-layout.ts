@@ -3,8 +3,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Pointer
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { ClientStorage } from '@/lib/client-storage'
 import { motionPresets } from '@/lib/motion-presets'
+import { COMPACT_LAYOUT_QUERY } from '@/lib/layout-breakpoints'
 
-const compactQuery = '(max-width: 1024px)'
+const compactQuery = COMPACT_LAYOUT_QUERY
 const widthKey = 'flow.sidebar.width'
 const collapsedKey = 'flow.sidebar.collapsed'
 const triggerSelector = '[data-sidebar-trigger]'
