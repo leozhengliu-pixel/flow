@@ -795,7 +795,7 @@
 .lp-project-priority.is-none { color: #6b6b70; }
 .lp-project-avatar { align-items: center; border-radius: 50%; color: white; display: inline-flex; flex: none; font-size: 9px; height: 16px; justify-content: center; object-fit: cover; width: 16px; }
 .lp-project-avatar.is-empty { color: var(--theme-text-secondary); }
-.lp-project-row__date { color: var(--theme-text-secondary) !important; font-size: 12px; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 92px; }
+.lp-project-row__date { color: var(--theme-text-secondary); font-size: 12px; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 92px; }
 .lp-project-row__date-placeholder { opacity: 0; }
 .lp-project-row:hover .lp-project-row__date-placeholder,
 .lp-project-row__date:focus-visible .lp-project-row__date-placeholder { opacity: .6; }

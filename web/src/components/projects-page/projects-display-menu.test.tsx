@@ -90,7 +90,7 @@ describe('projects display model', () => {
     expect(projectsDisplayEqual(DEFAULT_PROJECTS_DISPLAY, { ...DEFAULT_PROJECTS_DISPLAY, timelineZoom: 'year' })).toBe(true)
     expect(projectsDisplayEqual(DEFAULT_PROJECTS_DISPLAY, { ...DEFAULT_PROJECTS_DISPLAY, onlyLeadTeamProjects: undefined })).toBe(true)
     expect(projectsDisplayEqual(DEFAULT_PROJECTS_DISPLAY, { ...DEFAULT_PROJECTS_DISPLAY, properties: [...DEFAULT_PROJECTS_DISPLAY.properties, 'ID'] })).toBe(false)
-    expect(projectsDisplayEqual(DEFAULT_PROJECTS_DISPLAY, { ...DEFAULT_PROJECTS_DISPLAY, ordering: 'Manual' })).toBe(false)
+    expect(projectsDisplayEqual(DEFAULT_PROJECTS_DISPLAY, { ...DEFAULT_PROJECTS_DISPLAY, ordering: 'Name' })).toBe(false)
   })
 
   it('keeps only lead-team projects when the team-page toggle is on', () => {

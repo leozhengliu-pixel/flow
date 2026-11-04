@@ -701,7 +701,7 @@ button.document-icon.is-empty:hover,
   .document-subscribers__row:is(:hover, :focus-visible):not(:disabled) .document-subscribers__name { color: var(--bright); }
   .document-subscribers__filter { font-weight: 400; }
   .document-subscribers__filter { padding: 10px 0 9px; }
-  .document-subscribers__group { height: auto; padding: 8px 14px; color: var(--pk-muted); }
+  .document-subscribers__group { height: 30px; align-items: flex-start; padding: 8px 14px 0; color: var(--pk-muted); }
   .document-subscribers__badge {
     box-sizing: border-box;
     display: inline-flex;

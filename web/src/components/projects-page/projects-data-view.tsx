@@ -246,7 +246,7 @@ export function ProjectsDataView({
   }
 
   const changeSort = (column: ProjectSortColumn) => {
-    const direction = sort.column === column && sort.direction === 'asc' ? 'desc' : 'asc'
+    const direction = !manualOrdering && sort.column === column && sort.direction === 'asc' ? 'desc' : 'asc'
     setSort({ column, direction })
     onSort?.(column, direction)
   }
@@ -335,7 +335,7 @@ export function ProjectsDataView({
 
   if (listEntries.length > PROJECT_VIRTUALIZATION_THRESHOLD) return <div className="lp-project-table is-virtual" role="grid" style={{ '--lp-project-grid': projectGrid(visible, labelGroupProperties) } as CSSProperties}>
     <VirtualColumnList
-      header={<ProjectTableHeader customerSettings={customerSettings} labelGroupProperties={labelGroupProperties} sort={sort} onSort={changeSort} visible={visible}/>}
+      header={<ProjectTableHeader customerSettings={customerSettings} labelGroupProperties={labelGroupProperties} manualOrdering={manualOrdering} sort={sort} onSort={changeSort} visible={visible}/>}
       className="lp-project-table__virtual"
       data={listEntries}
       computeItemKey={(_index, entry) => entry.key}
@@ -358,7 +358,7 @@ export function ProjectsDataView({
   </div>
 
   return <div className="lp-project-table" role="grid" style={{ '--lp-project-grid': projectGrid(visible, labelGroupProperties) } as CSSProperties}>
-    <ProjectTableHeader customerSettings={customerSettings} labelGroupProperties={labelGroupProperties} sort={sort} onSort={changeSort} visible={visible} />
+    <ProjectTableHeader customerSettings={customerSettings} labelGroupProperties={labelGroupProperties} manualOrdering={manualOrdering} sort={sort} onSort={changeSort} visible={visible} />
     {groups.map(group => {
       const isCollapsed = showGroupHeaders && collapsed.includes(group.id)
     return <section aria-label={group.name} className="lp-project-group" key={group.id} role="rowgroup">
@@ -447,10 +447,11 @@ function ProjectSubgroup({ group, manualOrdering, onOpen, onOpenIssues, onOpenUp
   </div>
 }
 
-function ProjectTableHeader({ customerSettings, labelGroupProperties, sort, onSort, visible }: { customerSettings?: Partial<FeatureSettings>; labelGroupProperties: Array<{ id: string; name: string }>; sort: { column: ProjectSortColumn, direction: 'asc' | 'desc' }, onSort: (column: ProjectSortColumn) => void, visible: Set<string> }) {
+function ProjectTableHeader({ customerSettings, labelGroupProperties, manualOrdering = false, sort, onSort, visible }: { manualOrdering?: boolean; customerSettings?: Partial<FeatureSettings>; labelGroupProperties: Array<{ id: string; name: string }>; sort: { column: ProjectSortColumn, direction: 'asc' | 'desc' }, onSort: (column: ProjectSortColumn) => void, visible: Set<string> }) {
+  const sorted = (column: ProjectSortColumn) => !manualOrdering && sort.column === column
   const header = (column: ProjectSortColumn, label: string) => <button
-    aria-label={`${sort.column === column ? sort.direction === 'asc' ? 'A–Z' : 'Z–A' : 'Order by'} ${label}`}
-    className={sort.column === column ? 'is-sorted' : ''}
+    aria-label={`${sorted(column) ? sort.direction === 'asc' ? 'A–Z' : 'Z–A' : 'Order by'} ${label}`}
+    className={sorted(column) ? 'is-sorted' : ''}
     onClick={() => onSort(column)}
     type="button"
   ><span>{label}</span><span aria-hidden="true" className="lp-project-table__sort-icon"><ProjectSortIcon/></span></button>
@@ -542,7 +543,7 @@ function ProjectListRow({ project, selected, manualOrdering, onOpen, onOpenIssue
       <div aria-hidden={!visible.has('Priority') || undefined} data-column-hidden={!visible.has('Priority') || undefined} role="gridcell"><ProjectPropertyPicker label={`${priorityText(project.priority)} Priority`} onChange={value => onPropertyChange?.(project, 'priority', value)} options={propertyOptions?.priority ?? PROPERTY_OPTIONS.priority} property="priority" value={project.priority}><DataViewPriorityIcon value={project.priority} /></ProjectPropertyPicker></div>
       <div aria-hidden={!visible.has('Lead') || undefined} className={`lp-project-row__lead ${project.lead ? '' : 'is-empty'}`} data-column-hidden={!visible.has('Lead') || undefined} role="gridcell"><LeadPropertyButton lead={project.lead} onChange={value => onPropertyChange?.(project, 'lead', value)} options={propertyOptions?.lead} /></div>
       {visible.has('Initiatives') && <div className="lp-project-row__initiatives" role="gridcell"><span data-i18n-ignore>{project.initiativeNames?.join(', ')}</span></div>}
-      <div aria-hidden={!visible.has('Target date') || undefined} data-column-hidden={!visible.has('Target date') || undefined} role="gridcell"><ProjectTargetDatePicker buttonClassName={`lp-project-row__date${project.targetDate ? '' : ' is-unset'}`} displayValue={project.targetDate} onChange={value => onPropertyChange?.(project, 'targetDate', value)} value={project.rawTargetDate}>{project.targetDate || <><CalendarIcon className="lp-project-row__date-icon" variant="target"/><span className="lp-project-row__date-placeholder">{t('Set date')}</span></>}</ProjectTargetDatePicker></div>
+      <div aria-hidden={!visible.has('Target date') || undefined} data-column-hidden={!visible.has('Target date') || undefined} role="gridcell"><ProjectTargetDatePicker buttonClassName={`lp-project-row__date${project.targetDate ? '' : ' is-unset'}`} displayValue={project.targetDate} onChange={value => onPropertyChange?.(project, 'targetDate', value)} value={project.rawTargetDate}>{project.targetDate || <><CalendarIcon className="lp-project-row__date-icon" variant="add"/><span className="lp-project-row__date-placeholder">{t('Set date')}</span></>}</ProjectTargetDatePicker></div>
       <div aria-hidden={!visible.has('Issues') || undefined} data-column-hidden={!visible.has('Issues') || undefined} role="gridcell"><button aria-label={`Open ${project.name} issues`} className="lp-project-row__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{project.issueCount}</button></div>
       <div aria-hidden={!visible.has('Status') || undefined} className="lp-project-row__status" data-column-hidden={!visible.has('Status') || undefined} role="gridcell"><ProjectPropertyPicker buttonClassName="lp-project-row__progress" label={`${project.progress}%`} onChange={value => onPropertyChange?.(project, 'status', value)} options={propertyOptions?.status ?? PROPERTY_OPTIONS.status} property="status" value={project.status}><ProjectStatusGlyph color={statusOption?.color} name={project.status} progress={project.progress / 100} type={statusOption?.statusType}/><span>{project.progress}%</span></ProjectPropertyPicker><ProjectProgressSparkline createdAt={project.createdAt} progress={project.progress} startDate={project.rawStartDate} targetDate={project.rawTargetDate}/></div>
       <div aria-hidden={!visible.has('Customers') || undefined} className="lp-project-row__customers" data-column-hidden={!visible.has('Customers') || undefined} role="gridcell">{visible.has('Customers') && project.customerCount ? <CustomersRowChip variant="plain" customers={project.customers ?? []} customerCount={project.customerCount} importantCustomerIds={project.importantCustomerIds ?? []} settings={project.customerSettings}/> : null}</div>

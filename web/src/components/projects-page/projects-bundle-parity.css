@@ -55,4 +55,6 @@
   .lp-project-row__date-icon { display: block; width: 16px; height: 16px; visibility: hidden; }
   .lp-project-row__date:is(:hover, :focus-visible, [data-state="open"]) .lp-project-row__date-icon { visibility: visible; }
   .lp-project-row__status .lp-project-progress-sparkline { display: none; }
+  .lp-project-row .lp-project-property-trigger:hover,
+  .lp-project-row .lp-project-row__issues:hover { background: var(--project-row-control-hover-bg); color: var(--project-row-control-hover-fg); }
 }

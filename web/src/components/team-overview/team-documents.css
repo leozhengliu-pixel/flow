@@ -60,7 +60,7 @@
   padding: 0 10px 0 14px;
   column-gap: 8px;
   border-radius: 8px;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--team-docs-group-color) 9%, var(--document-group-bg)) 0, var(--document-group-bg) 60%), var(--document-group-bg);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--team-docs-group-color) 4%, var(--document-group-bg)) 0, var(--document-group-bg) 100%), var(--document-group-bg);
   color: var(--theme-text-primary);
   font-size: 13px;
 }

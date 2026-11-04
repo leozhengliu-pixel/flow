@@ -101,8 +101,8 @@ export function MembersIcon(props: FlowIconProps) {
   return <AssetIcon asset="Members" {...props}/>
 }
 
-export function CalendarIcon({ variant = 'target', ...props }: FlowIconProps & { variant?: 'start'|'target' }) {
-  return <AssetIcon asset={variant === 'start' ? 'StartDate' : 'TargetDate'} {...props}/>
+export function CalendarIcon({ variant = 'target', ...props }: FlowIconProps & { variant?: 'start'|'target'|'add' }) {
+  return <AssetIcon asset={variant === 'start' ? 'StartDate' : variant === 'add' ? 'TargetDateAdd' : 'TargetDate'} {...props}/>
 }
 
 export function SlackIcon({ monochrome = false, size = 16, ...props }: FlowIconProps & { monochrome?: boolean }) {

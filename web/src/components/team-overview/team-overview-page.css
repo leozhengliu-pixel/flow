@@ -104,7 +104,6 @@
   align-items: center;
   gap: 8px;
   padding: 0 8px;
-  border-bottom: .5px solid var(--border-subtle);
   background: var(--bg-panel);
 }
 .team-home-tabs a {

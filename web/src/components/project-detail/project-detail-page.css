@@ -855,7 +855,7 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
 }
 
 .project-details-sidebar__section > header > .project-details-sidebar__see-all { width: auto!important; padding: 0 5px!important; color: var(--pd-label); font-size: 12px; line-height: normal; white-space: nowrap; }
-.project-details-sidebar__section > header > button.project-details-sidebar__add-dependency[aria-disabled=true], .project-details-sidebar__section > header > button.project-details-sidebar__add-dependency[aria-disabled=true]:hover { background: transparent; color: var(--theme-text-tertiary); cursor: default; }
+.project-details-sidebar__section > header > button.project-details-sidebar__add-dependency[aria-disabled=true], .project-details-sidebar__section > header > button.project-details-sidebar__add-dependency[aria-disabled=true]:hover { background: transparent; color: var(--pd-label); cursor: default; opacity: .6; }
 .project-details-sidebar__activity { display: grid; gap: 11px; padding: 0 11px 13px; }
 .project-details-sidebar__activity > div { display: grid; grid-template-columns: 16px minmax(0,1fr); align-items: start; gap: 4px; }
 .project-details-sidebar__activity > div > .avatar { width: 16px; height: 16px; font-size: 7px; }

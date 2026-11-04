@@ -18,13 +18,13 @@ export type ProjectsDisplaySettings = {
 }
 
 export const DEFAULT_PROJECTS_DISPLAY: ProjectsDisplaySettings = {
-  grouping: 'Status',
+  grouping: 'No grouping',
   groupOrder: 'asc',
   layout: 'list',
   onlyLeadTeamProjects: false,
-  ordering: 'Name',
+  ordering: 'Manual',
   orderingDirection: 'asc',
-  properties: ['Milestones', 'Summary', 'Priority', 'Status', 'Health', 'Lead', 'Target date', 'Issues'],
+  properties: ['Milestones', 'Priority', 'Status', 'Health', 'Lead', 'Target date', 'Issues'],
   showClosed: 'All',
   showEmptyGroups: false,
   subGrouping: 'No grouping',
