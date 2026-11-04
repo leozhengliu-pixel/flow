@@ -23,6 +23,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Protect unsaved skill edits when leaving through navigation, browser history, or a reload.
 - Open the same Edit, Use in chat, and Delete actions from a skill row's right-click and button menus.
 
+- Give shared desktop toolbar icon pills their measured resting, hover and open fills separately from text tabs.
 - Size the desktop issue document and property rail with the shared container grid, so their gutters and columns adapt together as the pane changes width.
 - Reset phone drawer navigation when focus returns to its pinned header, including on reopen, while preserving the hardware-keyboard skip link.
 - Wait for the label picker's opening animation before hovering its rows in the shared menu browser checks, preserving exact phone geometry assertions.

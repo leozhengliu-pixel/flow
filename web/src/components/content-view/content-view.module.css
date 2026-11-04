@@ -233,6 +233,15 @@
   min-width:0;
   outline:none;
 }
+@media (--desktop-layout){
+  .toolbarNav > :global(.ui-pill){
+    --ui-pill-bg:var(--toolbar-icon-pill-bg);
+    --ui-pill-hover-bg:var(--toolbar-icon-pill-hover-bg);
+    --ui-pill-active-bg:var(--toolbar-icon-pill-open-bg);
+    --ui-pill-active-hover-bg:var(--toolbar-icon-pill-open-bg);
+  }
+  .toolbarNav > :global(.ui-pill):hover > :global(svg){color:var(--bright)}
+}
 
 .body{
   min-height:0;
