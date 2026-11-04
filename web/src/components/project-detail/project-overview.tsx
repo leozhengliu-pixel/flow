@@ -96,7 +96,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
     {outline.length > 1 && <ProjectOutlineRail items={outline}/>}
     <section className="project-overview__intro">
       <ViewIconPicker surface="page" color={project.color} icon={normalizeProjectIcon(project.icon)} onChange={visual => void save(visual)} triggerClassName="project-overview__icon"/>
-      <ProjectEditableText ariaLabel="Project name" className="project-overview__name" placeholder="Project name" value={project.name} onCommit={name => save({ name })}/>
+      <ProjectEditableText ariaLabel="Project name" className="project-overview__name" placeholder="Project name" value={project.name} wrap onCommit={name => save({ name })}/>
       <ProjectEditableText ariaLabel="Project summary" className="project-overview__summary" placeholder="Add a short summary…" value={project.summary} onCommit={summary => save({ summary })}/>
       <div className="project-overview__property-section">
         <h3>Properties</h3>
@@ -241,12 +241,13 @@ function DateProperty({ label, max, min, onChange, onOpenChange, open, placehold
   return <ProjectDatePicker buttonClassName="project-overview__date" label={label} max={max} min={min} onChange={onChange} onOpenChange={onOpenChange} open={open} resolution={resolution} tooltip={tooltip} tooltipShortcut={tooltipShortcut} value={value}><CalendarIcon size={16} variant={label === 'Start date' ? 'start' : 'target'}/><span>{display}</span></ProjectDatePicker>
 }
 
-function ProjectEditableText({ ariaLabel, autoFocus, className, multiline, onCommit, onDone, placeholder, value }: { ariaLabel: string; autoFocus?: boolean; className: string; multiline?: boolean; onCommit: (value: string) => Promise<void>; onDone?: () => void; placeholder: string; value: string }) {
+function ProjectEditableText({ ariaLabel, autoFocus, className, multiline, onCommit, onDone, placeholder, value, wrap }: { ariaLabel: string; autoFocus?: boolean; className: string; multiline?: boolean; onCommit: (value: string) => Promise<void>; onDone?: () => void; placeholder: string; value: string; wrap?: boolean }) {
   const [draft, setDraft] = useState(value)
   const cancelled = useRef(false)
   useResetOnChange([value], () => setDraft(value))
   const commit = () => { const next = draft.trim(); const skip = cancelled.current || (onDone && !next); cancelled.current = false; if (!skip && next !== value) void onCommit(next); onDone?.() }
   if (multiline) return <MentionTextField ariaLabel={ariaLabel} autoFocus={autoFocus} className={className} onBlur={commit} onChange={setDraft} placeholder={placeholder} value={draft}/>
+  if (wrap) return <textarea aria-label={ariaLabel} autoFocus={autoFocus} className={className} onBlur={commit} onChange={event => setDraft(event.target.value.replace(/\n/g, ' '))} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.blur() } }} placeholder={placeholder} rows={1} value={draft}/>
   return <input aria-label={ariaLabel} autoFocus={autoFocus} className={className} onBlur={commit} onChange={event => setDraft(event.target.value)} onKeyDown={onDone ? event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') { cancelled.current = true; setDraft(value); event.currentTarget.blur() } } : undefined} placeholder={placeholder} value={draft}/>
 }
 
