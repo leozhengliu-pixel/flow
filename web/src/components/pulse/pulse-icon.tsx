@@ -1,3 +1,5 @@
+import { useId } from 'react'
+
 /** The reference app's Pulse glyph (sidebar item, inbox summary avatar, empty states). */
 export function PulseIcon({ size }: { size?: number } = {}) {
   return (
@@ -9,4 +11,27 @@ export function PulseIcon({ size }: { size?: number } = {}) {
       />
     </svg>
   );
+}
+
+const SPARK_PATH = 'M28.6708 8.51611C29.4118 8.8866 29.7121 9.78761 29.3416 10.5286L24.427 20.3577H34C34 20.3604 34.455 20.3576 34.5 20.3576C35.3284 20.3576 36 21.0292 36 21.8576C36 22.686 35.3284 23.3576 34.5 23.3576C26.8929 23.3576 20.6578 27.8962 17.3417 34.5284C16.9712 35.2694 16.0701 35.5697 15.3292 35.1992C14.5882 34.8287 14.2879 33.9277 14.6584 33.1868L19.5729 23.3577C16.2153 23.3566 12.8576 23.3578 9.5 23.3578C8.67157 23.3578 8 22.6862 8 21.8578C8 21.0293 8.67157 20.3578 9.5 20.3578C17.1072 20.3578 23.3423 15.8189 26.6584 9.18677C27.0289 8.44591 27.9299 8.14565 28.6708 8.51611Z'
+
+/** The 44px Pulse mark of the welcome banner: a top-to-bottom gradient spark over two blurred glows. */
+export function PulseSparkLogo() {
+  const id = useId().replace(/:/g, '')
+  const fill = `url(#${id}-fill)`
+  return (
+    <svg aria-hidden="true" fill="none" focusable="false" height="44" viewBox="0 0 44 44" width="44">
+      <g filter={`url(#${id}-glow-near)`} opacity=".3"><path d={SPARK_PATH} fill={fill}/></g>
+      <g filter={`url(#${id}-glow-far)`} opacity=".15"><path d={SPARK_PATH} fill={fill}/></g>
+      <path d={SPARK_PATH} fill={fill}/>
+      <defs>
+        <filter colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse" height="35.001" id={`${id}-glow-near`} width="36" x="4" y="4.35742"><feGaussianBlur stdDeviation="2"/></filter>
+        <filter colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse" height="43.001" id={`${id}-glow-far`} width="44" x="0" y="0.357422"><feGaussianBlur stdDeviation="4"/></filter>
+        <linearGradient gradientUnits="userSpaceOnUse" id={`${id}-fill`} x1="22" x2="22" y1="8.35742" y2="35.3579">
+          <stop style={{ stopColor: 'var(--text-strong)' }}/>
+          <stop offset="1" style={{ stopColor: 'var(--set-group-desc)' }}/>
+        </linearGradient>
+      </defs>
+    </svg>
+  )
 }

@@ -5,7 +5,7 @@ import { toast } from '@/lib/toast'
 import { useI18n } from '@/i18n/i18n'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
-import { PulseIcon } from './pulse-icon'
+import { PulseSparkLogo } from './pulse-icon'
 import { pulseWelcomeBannerCopy } from './use-show-pulse-welcome-banner'
 import { PULSE_SCHEDULES, pulseScheduleLabels, type PulseSchedule } from './pulse-schedule'
 
@@ -55,7 +55,7 @@ export function PulseWelcomeBanner({ containerRef, cadence, onConfirm }: PulseWe
 
   return (
     <div className="pulse-welcome-banner" data-pulse-welcome-banner="" style={{ opacity }}>
-      <div className="pulse-welcome-banner__glyph" aria-hidden><PulseIcon size={44}/></div>
+      <div className="pulse-welcome-banner__glyph" aria-hidden><PulseSparkLogo/></div>
       <h2>{t(copy.title)}</h2>
       <p>{t(copy.body)}</p>
       <div className="pulse-welcome-banner__schedule">
