@@ -3,6 +3,7 @@ import { Check } from "lucide-react";
 import { Command } from 'cmdk';
 import { PhoneMenu, PhoneMenuCommand } from '@/components/ui/phone-menu';
 import { SubmenuChevron } from '@/components/ui/submenu-chevron';
+import { useExitPresence } from '@/components/ui/motion';
 import { usePhoneLayout } from '@/hooks/use-phone-layout';
 import { useOptionalTranslate } from '@/i18n/i18n';
 import { useOnlineStatus } from '@/hooks/use-online-status';
@@ -38,6 +39,8 @@ export function WorkspaceMenu({
 }) {
   const [open, setOpen] = useState(false);
   const phone = usePhoneLayout();
+  // Bound the exit if native Presence misses the animation completion event.
+  const present = useExitPresence(!phone && open);
   const t = useOptionalTranslate();
   const online = useOnlineStatus();
   const [switching, setSwitching] = useState(false);
@@ -141,7 +144,7 @@ export function WorkspaceMenu({
           {online && <strong data-i18n-ignore>{workspace.name}</strong>}
           <WorkspaceChevronIcon />
         </DropdownMenuTrigger>
-        <DropdownMenuContent
+        {present && <DropdownMenuContent
           align="start"
           sideOffset={4}
           className="workspace-primary-menu"
@@ -203,7 +206,7 @@ export function WorkspaceMenu({
               {t('Log out')}<WorkspaceMenuShortcut>⌥ ⇧ Q</WorkspaceMenuShortcut>
             </DropdownMenuItem>
           </div>
-        </DropdownMenuContent>
+        </DropdownMenuContent>}
       </DropdownMenu>
       {!online && <OfflineIndicator />}
     </>

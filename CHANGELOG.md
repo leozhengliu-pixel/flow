@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Finish closing the desktop workspace menu and return focus even when an exit animation completion event is lost, preserving its divider and row spacing.
 - Reset phone drawer navigation when focus returns to its pinned header, including on reopen, while preserving the hardware-keyboard skip link.
 - Wait for the label picker's opening animation before hovering its rows in the shared menu browser checks, preserving exact phone geometry assertions.
 - Match the phone issue property sheets to the shared sheet: 13px rows, a heading chip that names the issue ("Assigned users" for assignees), cycle rows with their dates and state, "Workspace labels", the static status glyphs and a due date list that opens as a sheet with the cycle ends. Also draw the not-found page with the phone header and drawer button in the interface language, send `/settings/account` to the profile, show the Documents crumb on phone team documents, fill the project details toggle while the panel is open, translate the "search" tool row and read chat history times in Chinese like every other relative time.

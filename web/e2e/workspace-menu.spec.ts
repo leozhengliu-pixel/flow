@@ -96,6 +96,32 @@ for (const width of [1440, 390]) {
   }
 }
 
+test('unmounts the workspace menu and returns focus if exit animation events are lost', async ({ page, workspaceKey }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', 'desktop interaction coverage')
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto(`/${workspaceKey}/my-issues/assigned`)
+  const trigger = page.locator('.workspace-menu-trigger')
+  const menu = page.locator('.workspace-primary-menu')
+  await trigger.click()
+  await expect(menu).toHaveCSS('opacity', '1')
+  // A completed CSS animation must not retain a closed menu and its focus scope forever.
+  await page.evaluate(() => {
+    for (const type of ['animationend', 'animationcancel']) document.addEventListener(type, event => {
+      if (event.target instanceof Element && event.target.matches('.workspace-primary-menu') && (event as AnimationEvent).animationName === 'flow-floating-exit') event.stopImmediatePropagation()
+    }, true)
+  })
+  await menu.getByRole('menuitem', { name: /^Settings/ }).hover()
+  await page.keyboard.press('Escape')
+  await expect(menu).toBeHidden()
+  await expect(menu).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(menu.getByRole('menuitem', { name: /^Settings/ })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+})
+
 test('closes the workspace cascade when the pointer returns to a sibling command', async ({ page, workspaceKey }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'desktop interaction coverage')
   await page.setViewportSize({ width: 1440, height: 900 })
