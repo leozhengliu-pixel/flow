@@ -154,7 +154,7 @@
   html:root body .issue-options-due-date .due-date-command { width: 100%; min-width: 0; max-width: none; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
   html:root body .issue-options-due-date .due-date-head { height: 40px; padding: 6px 18px 0; border: 0; }
   html:root body .issue-options-due-date .due-date-options { padding: 6px; }
-  html:root body .issue-options-due-date .due-date-options button { height: 46px; padding: 0 12px; font-size: 15px; }
+  .issue-options-due-date .due-date-options button { height: 46px; padding: 0 12px; }
   .issue-options-due-date .due-date-shortcut { display: none; }
   .issue-options-submenu[data-menu="Remove"] { max-width: none; }
   .issue-options-mobile-overlay { background: transparent; pointer-events: auto; }

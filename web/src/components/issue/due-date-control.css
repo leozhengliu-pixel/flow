@@ -51,7 +51,7 @@ html:root .due-date-search::placeholder { color: var(--theme-text-secondary); op
   font: 400 11px / 12px var(--font);
 }
 html:root .due-date-options { padding: 6px 0; }
-html:root .due-date-options button {
+.due-date-options button {
   position: relative;
   box-sizing: border-box;
   width: 100%;
