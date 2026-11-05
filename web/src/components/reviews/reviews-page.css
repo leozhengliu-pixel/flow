@@ -725,7 +725,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-detail-tab-actions{display:flex;flex:none;align-items:center;gap:6px;margin-left:0}
   html:root body .app .review-detail-tab-actions>.review-pill-button{height:32px;padding:0 10px;border:.5px solid transparent}
   html:root body .app .review-ready-label--desktop{display:none}
-  html:root body .app .review-ready-label--phone{display:inline;margin-right:-1px}
+  html:root body .app .review-ready-label--phone{display:inline}
   html:root body .app .review-phone-agent{display:grid;place-items:center;box-sizing:border-box;width:32px;height:32px;flex:0 0 32px;padding:0 2px;border:.5px solid transparent;border-radius:50%;background:var(--review-phone-agent-bg);color:var(--issue-muted);font:500 12px/normal var(--font)}
   html:root body .app .review-phone-agent svg{width:14px;height:14px}
   html:root body .app .review-detail-tab-actions>.review-agent-toggle{box-sizing:border-box;width:32px;height:32px;flex-basis:32px}
