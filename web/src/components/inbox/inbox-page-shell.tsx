@@ -386,7 +386,7 @@ function InboxPhoneActionsMenu({
   ].filter(action => `${action.label} ${t(action.label)}`.toLowerCase().includes(searching))
   const showSettings = `Go to settings ${t('Go to settings')}`.toLowerCase().includes(searching)
   const settingsTop = 6 + actions.length * 46 + (actions.length ? 12 : 0)
-  const listHeight = 6 + actions.length * 46 + (actions.length && showSettings ? 12 : 0) + (showSettings ? 46 : 0) + 6 - 2
+  const listHeight = 6 + actions.length * 46 + (actions.length && showSettings ? 12 : 0) + (showSettings ? 46 : 0) + 6
   return (
     <PhoneMenu
       open={open}
@@ -394,48 +394,50 @@ function InboxPhoneActionsMenu({
       label="Notification actions"
       className="inbox-actions-phone-menu"
     >
-      <div className="phone-menu-search">
-        <input
-          type="text"
-          aria-label="Command menu"
-          autoFocus
-          placeholder="Filter…"
-          value={query}
-          onChange={event => setQuery(event.target.value)}
-        />
-      </div>
-      <div className="inbox-actions-phone-menu__list" style={{ height: listHeight }}>
-        {actions.map((action, index) => (
-          <button
-            key={action.id}
-            type="button"
-            role="menuitem"
-            data-testid={`inbox-actions-${action.id}`}
-            className="inbox-actions-phone-menu__row"
-            style={{ top: 6 + index * 46 }}
-            disabled={pending}
-            onClick={() => { action.onSelect(); onOpenChange(false) }}
-          >
-            <span className="inbox-actions-phone-menu__icon"><PhoneDeleteInboxIcon /></span>
-            <span className="inbox-actions-phone-menu__label">{action.label}</span>
-          </button>
-        ))}
-        {showSettings ? (
-          <>
-            {actions.length ? <div className="inbox-actions-phone-menu__separator" role="separator" data-testid="inbox-actions-divider" style={{ top: 6 + actions.length * 46 }} /> : null}
+      <div className="inbox-phone-menu-content">
+        <div className="phone-menu-search">
+          <input
+            type="text"
+            aria-label="Command menu"
+            autoFocus
+            placeholder="Filter…"
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+          />
+        </div>
+        <div className="inbox-actions-phone-menu__list" style={{ height: listHeight }}>
+          {actions.map((action, index) => (
             <button
-              className="inbox-actions-phone-menu__row"
-              data-testid="inbox-actions-settings"
+              key={action.id}
               type="button"
               role="menuitem"
-              style={{ top: settingsTop }}
-              onClick={() => { onOpenSettings?.(); onOpenChange(false) }}
+              data-testid={`inbox-actions-${action.id}`}
+              className="inbox-actions-phone-menu__row"
+              style={{ top: 6 + index * 46 }}
+              disabled={pending}
+              onClick={() => { action.onSelect(); onOpenChange(false) }}
             >
-              <span className="inbox-actions-phone-menu__icon"><PhoneSettingsInboxIcon /></span>
-              <span className="inbox-actions-phone-menu__label">Go to settings</span>
+              <span className="inbox-actions-phone-menu__icon"><PhoneDeleteInboxIcon /></span>
+              <span className="inbox-actions-phone-menu__label">{action.label}</span>
             </button>
-          </>
-        ) : null}
+          ))}
+          {showSettings ? (
+            <>
+              {actions.length ? <div className="inbox-actions-phone-menu__separator" role="separator" data-testid="inbox-actions-divider" style={{ top: 6 + actions.length * 46 }} /> : null}
+              <button
+                className="inbox-actions-phone-menu__row"
+                data-testid="inbox-actions-settings"
+                type="button"
+                role="menuitem"
+                style={{ top: settingsTop }}
+                onClick={() => { onOpenSettings?.(); onOpenChange(false) }}
+              >
+                <span className="inbox-actions-phone-menu__icon"><PhoneSettingsInboxIcon /></span>
+                <span className="inbox-actions-phone-menu__label">Go to settings</span>
+              </button>
+            </>
+          ) : null}
+        </div>
       </div>
     </PhoneMenu>
   )

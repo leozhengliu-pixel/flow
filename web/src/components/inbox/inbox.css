@@ -999,6 +999,11 @@
 
 /* Phone notification actions sheet: the reference's search field, three delete rows, divider and settings link. */
 @media (max-width: 767px) {
+  /* Content tracks fill the border box, including the sheet's two hairlines. */
+  .inbox-phone-menu-content {
+    width: calc(100vw - 32px);
+    margin-bottom: -1px;
+  }
   .phone-menu-surface.inbox-actions-phone-menu .phone-menu-search {
     padding-right: 6px;
     padding-left: 6px;

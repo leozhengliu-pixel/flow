@@ -98,7 +98,7 @@
   position: relative;
   height: auto;
   margin: 0 6px;
-  padding: 6px 0 5px;
+  padding: 6px 0;
   overflow-y: auto;
   border-style: none;
   background: var(--inbox-filter-list-bg);
