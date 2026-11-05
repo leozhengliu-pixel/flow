@@ -2,6 +2,9 @@ import { expect, type APIRequestContext } from '@playwright/test'
 import { test } from './workspace-fixture'
 import type { FlowDocument } from '../src/types/flow'
 
+// Match the strict phone gate's native scale so half-pixel borders retain their width.
+const nativeScaleTest = test.extend({ launchOptions: { args: ['--force-device-scale-factor=2'] } })
+
 test.describe('mobile document options', () => {
   test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
 
@@ -222,11 +225,11 @@ test.describe('mobile document view', () => {
   }
 })
 
-test.describe('mobile document subscribers', () => {
-  test.use({ isMobile: true, hasTouch: true, colorScheme: 'dark' })
+nativeScaleTest.describe('mobile document subscribers', () => {
+  nativeScaleTest.use({ isMobile: true, hasTouch: true, colorScheme: 'dark', deviceScaleFactor: 3, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' })
 
   for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
-    test(`subscriber sheet fills the phone surface at ${viewport.width}px`, async ({ page, request, workspaceKey }) => {
+    nativeScaleTest(`subscriber sheet fills the phone surface at ${viewport.width}px`, async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Workspace-Key': workspaceKey }
       const response = await request.post('/api/documents', { headers, data: { title: '[mobile] Subscribers', content: '[mobile] Body', subscriberIds: ['usr_local'] } })
       expect(response.status()).toBe(201)
@@ -237,7 +240,8 @@ test.describe('mobile document subscribers', () => {
       await page.getByRole('button', { name: 'Change document subscribers', exact: true }).click()
       const popover = page.locator('.document-subscribers')
       await expect(popover).toBeVisible()
-      await page.waitForTimeout(400)
+      await popover.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
+      await expect(popover).toHaveCSS('border-left-width', '0.5px')
       const box = await popover.boundingBox()
       expect(box?.x).toBe(16)
       expect(box?.width).toBe(viewport.width - 32)
@@ -256,8 +260,10 @@ test.describe('mobile document subscribers', () => {
       const chip = page.getByTestId('document-subscriber-chip')
       await expect(chip).toHaveText(`Document ⋅ ${longTitle}`)
       await expect(chip).toHaveCSS('text-overflow', 'ellipsis')
+      await popover.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
       const chipBox = (await chip.boundingBox())!
-      expect(chipBox.x + chipBox.width).toBeLessThanOrEqual(viewport.width - 30)
+      expect(chipBox.x).toBe(30.5)
+      expect(chipBox.x + chipBox.width).toBe(viewport.width - 29.5)
     })
   }
 })
@@ -474,10 +480,10 @@ test.describe('mobile documents tab menu', () => {
   })
 })
 
-test.describe('mobile documents filter menu', () => {
-  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' })
+nativeScaleTest.describe('mobile documents filter menu', () => {
+  nativeScaleTest.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark', deviceScaleFactor: 3, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' })
 
-  test('the round filter button opens the full-width filter command menu', async ({ page, request, workspaceKey }, testInfo) => {
+  nativeScaleTest('the round filter button opens the full-width filter command menu', async ({ page, request, workspaceKey }, testInfo) => {
     const team = await seedTeamDocuments(request, workspaceKey, '[mobile] Docs filter')
 
     await page.goto(`/${workspaceKey}/team/${team.key}/documents?doc-filter=${advancedFilterParam()}`)
@@ -485,7 +491,8 @@ test.describe('mobile documents filter menu', () => {
 
     const menu = page.locator('[data-radix-popper-content-wrapper] > [data-layout="documents"]')
     await expect(menu).toBeVisible()
-    await page.waitForTimeout(300)
+    await menu.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
+    await expect(menu).toHaveCSS('border-left-width', '0.5px')
     const box = await menu.boundingBox()
     expect(box?.x).toBe(16)
     expect(box?.width).toBe(358)
