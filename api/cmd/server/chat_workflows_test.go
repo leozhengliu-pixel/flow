@@ -230,7 +230,7 @@ func TestChatWebhookAuthenticatesTenantReplayAndMessageDedup(t *testing.T) {
 		{"cross tenant", func(e *chatWebhookEnvelope) { e.Header.TenantKey = "tenant_other" }, time.Now(), true, 403},
 		{"wrong token", func(e *chatWebhookEnvelope) { e.Header.Token = "wrong" }, time.Now(), true, 401},
 		{"no signature", func(e *chatWebhookEnvelope) {}, time.Now(), false, 401},
-		{"old signature", func(e *chatWebhookEnvelope) {}, time.Now().Add(-10 * time.Minute), true, 401},
+		{"old signature", func(e *chatWebhookEnvelope) {}, time.Now().Add(-25 * time.Hour), true, 401},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := envelope

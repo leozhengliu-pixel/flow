@@ -38,9 +38,10 @@ func (d chatCallbackLog) attrs(extra ...any) []any {
 	return append(attrs, extra...)
 }
 
-// rejected records the check that refused a callback.
-func (d chatCallbackLog) rejected(ctx context.Context, reason string) {
-	slog.WarnContext(ctx, "chat callback rejected", d.attrs("reason", reason)...)
+// rejected records the check that refused a callback, with the shape of its
+// timestamp once it reached the signature check (chatTimestampCheck).
+func (d chatCallbackLog) rejected(ctx context.Context, reason string, extra ...any) {
+	slog.WarnContext(ctx, "chat callback rejected", d.attrs(append([]any{"reason", reason}, extra...)...)...)
 }
 
 // handled records what an accepted callback became.

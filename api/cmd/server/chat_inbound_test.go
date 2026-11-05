@@ -96,7 +96,12 @@ func (f *chatWorkflowFixture) post(t *testing.T, callback chatRawCallback) *http
 	if callback.nonce == "" {
 		callback.nonce = "nonce_" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	}
-	r.Header.Set(chatCallbackTimestampHeader, callback.stamp)
+	// "-" sends no timestamp header; the signature then covers an empty one.
+	if callback.stamp == "-" {
+		callback.stamp = ""
+	} else {
+		r.Header.Set(chatCallbackTimestampHeader, callback.stamp)
+	}
 	if callback.nonce != "-" {
 		r.Header.Set(chatCallbackNonceHeader, callback.nonce)
 	}
@@ -273,8 +278,15 @@ func TestChatInboundCardCallbacksInBothFormatsRunTheFourControls(t *testing.T) {
 	}
 }
 
-// Every check that refuses a callback answers its status and leaves one
-// record naming the check, with no token, key, signature or payload.
+// chatRefusedCardAnswer: a refused card click is answered 200 with the error
+// toast, which the platform shows the member instead of an error code.
+func chatRefusedCardAnswer(w *httptest.ResponseRecorder) bool {
+	return w.Code == http.StatusOK && strings.Contains(w.Body.String(), `"type":"error"`) && strings.Contains(w.Body.String(), "无法验证此操作")
+}
+
+// Every check that refuses a callback answers its status (a card click: 200
+// and an error toast) and leaves one record naming the check, with no token,
+// key, signature or payload.
 func TestChatInboundCallbackRejectionsNameTheFailedCheck(t *testing.T) {
 	f := newChatWorkflowFixture(t)
 	logs := captureChatLogs(t)
@@ -302,28 +314,29 @@ func TestChatInboundCallbackRejectionsNameTheFailedCheck(t *testing.T) {
 	}{
 		{"not json", chatRawCallback{body: []byte("encrypt=1"), signature: chatSignSHA256}, 401, chatRejectMalformed},
 		{"wrong encrypt key", chatRawCallback{body: garbled, signature: chatSignSHA256}, 401, chatRejectDecrypt},
-		{"stale timestamp", chatRawCallback{body: event(nil), stamp: strconv.FormatInt(time.Now().Add(-10*time.Minute).Unix(), 10), signature: chatSignSHA256}, 401, chatRejectTimestamp},
-		{"future timestamp in ms", chatRawCallback{body: event(nil), stamp: strconv.FormatInt(time.Now().Add(10*time.Minute).UnixMilli(), 10), signature: chatSignSHA256}, 401, chatRejectTimestamp},
-		{"no nonce", chatRawCallback{body: event(nil), nonce: "-", signature: chatSignSHA256}, 401, chatRejectNonce},
-		{"unsigned", chatRawCallback{body: event(nil)}, 401, chatRejectSignature},
-		{"wrong signature", chatRawCallback{body: event(nil), signature: chatSignSHA256, override: strings.Repeat("0", 64)}, 401, chatRejectSignature},
+		{"stale timestamp", chatRawCallback{body: event(nil), stamp: strconv.FormatInt(time.Now().Add(-48*time.Hour).Unix(), 10), signature: chatSignSHA256}, 200, chatRejectTimestampStale},
+		{"future timestamp in ms", chatRawCallback{body: event(nil), stamp: strconv.FormatInt(time.Now().Add(48*time.Hour).UnixMilli(), 10), signature: chatSignSHA256}, 200, chatRejectTimestampFuture},
+		{"no nonce", chatRawCallback{body: event(nil), nonce: "-", signature: chatSignSHA256}, 200, chatRejectNonce},
+		{"unsigned", chatRawCallback{body: event(nil)}, 200, chatRejectSignature},
+		{"wrong signature", chatRawCallback{body: event(nil), signature: chatSignSHA256, override: strings.Repeat("0", 64)}, 200, chatRejectSignature},
 		// A schema 2.0 event never authenticates with the legacy scheme.
-		{"event signed the legacy way", chatRawCallback{body: event(nil), signature: chatSignSHA1}, 401, chatRejectSignature},
-		{"wrong header token", chatRawCallback{body: event(header(func(h map[string]string) { h["token"] = "wrong" })), signature: chatSignSHA256}, 401, chatRejectToken},
+		{"event signed the legacy way", chatRawCallback{body: event(nil), signature: chatSignSHA1}, 200, chatRejectSignature},
+		{"wrong header token", chatRawCallback{body: event(header(func(h map[string]string) { h["token"] = "wrong" })), signature: chatSignSHA256}, 200, chatRejectToken},
 		{"top-level token only", chatRawCallback{body: event(func(value map[string]any) {
 			value["token"] = f.credentials.VerificationToken
 			delete(value["header"].(map[string]string), "token")
-		}), signature: chatSignSHA256}, 401, chatRejectToken},
-		{"other app", chatRawCallback{body: event(header(func(h map[string]string) { h["app_id"] = "cli_other" })), signature: chatSignSHA256}, 403, chatRejectAppMismatch},
-		{"other tenant", chatRawCallback{body: event(header(func(h map[string]string) { h["tenant_key"] = "tenant_other" })), signature: chatSignSHA256}, 403, chatRejectTenantMismatch},
-		{"legacy unsigned", chatRawCallback{body: legacy}, 401, chatRejectSignature},
-		{"legacy other tenant", chatRawCallback{body: chatPlainBody(t, otherTenant), signature: chatSignSHA1}, 403, chatRejectTenantMismatch},
+		}), signature: chatSignSHA256}, 200, chatRejectToken},
+		{"other app", chatRawCallback{body: event(header(func(h map[string]string) { h["app_id"] = "cli_other" })), signature: chatSignSHA256}, 200, chatRejectAppMismatch},
+		{"other tenant", chatRawCallback{body: event(header(func(h map[string]string) { h["tenant_key"] = "tenant_other" })), signature: chatSignSHA256}, 200, chatRejectTenantMismatch},
+		{"legacy unsigned", chatRawCallback{body: legacy}, 200, chatRejectSignature},
+		{"legacy other tenant", chatRawCallback{body: chatPlainBody(t, otherTenant), signature: chatSignSHA1}, 200, chatRejectTenantMismatch},
 		{"v1 event", chatRawCallback{body: v1, signature: chatSignSHA256}, 403, chatRejectUnsupportedFormat},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			before := len(logs.records(t, "chat callback rejected"))
-			if got := f.post(t, tc.callback); got.Code != tc.status {
+			got := f.post(t, tc.callback)
+			if got.Code != tc.status || tc.status == http.StatusOK && !chatRefusedCardAnswer(got) {
 				t.Fatalf("status %d want %d: %s", got.Code, tc.status, got.Body.String())
 			}
 			records := logs.records(t, "chat callback rejected")
@@ -345,8 +358,8 @@ func TestChatInboundCallbackRejectionsNameTheFailedCheck(t *testing.T) {
 	if got := f.post(t, chatRawCallback{body: chatPlainBody(t, challenge)}); got.Code != 401 {
 		t.Fatalf("challenge with another token: %d", got.Code)
 	}
-	if got := f.post(t, chatRawCallback{body: event(nil), signature: chatSignSHA256}); got.Code != 403 {
-		t.Fatalf("pending connection accepted a click: %d", got.Code)
+	if got := f.post(t, chatRawCallback{body: event(nil), signature: chatSignSHA256}); !chatRefusedCardAnswer(got) {
+		t.Fatalf("pending connection accepted a click: %d %s", got.Code, got.Body.String())
 	}
 	if records := logs.records(t, "chat callback rejected"); records[len(records)-1]["reason"] != chatRejectNotConnected {
 		t.Fatalf("not connected record: %v", records[len(records)-1])
@@ -354,6 +367,197 @@ func TestChatInboundCallbackRejectionsNameTheFailedCheck(t *testing.T) {
 	for _, secret := range []string{f.credentials.EncryptKey, f.credentials.VerificationToken, f.credentials.AppSecret, "c-update-token", "Asia/Shanghai"} {
 		if strings.Contains(logs.String(), secret) {
 			t.Fatalf("diagnostics leaked %q", secret)
+		}
+	}
+}
+
+// The timestamp header is read in whichever Unix unit its magnitude names,
+// ignoring surrounding whitespace; anything else is not a timestamp.
+func TestChatCallbackTimestampReadsEveryUnit(t *testing.T) {
+	now := time.Now()
+	for _, tc := range []struct {
+		value, unit string
+	}{
+		{strconv.FormatInt(now.Unix(), 10), "s"},
+		{strconv.FormatInt(now.UnixMilli(), 10), "ms"},
+		{strconv.FormatInt(now.UnixMicro(), 10), "us"},
+		{strconv.FormatInt(now.UnixNano(), 10), "ns"},
+		{" \t" + strconv.FormatInt(now.Unix(), 10) + " ", "s"},
+		{strconv.FormatInt(now.Unix(), 10) + ".25", "s"},
+		{strconv.FormatInt(now.UnixMilli(), 10) + ".5", "ms"},
+	} {
+		at, unit, ok := chatCallbackTimestamp(tc.value)
+		if !ok || unit != tc.unit || at.Sub(now).Abs() > time.Second {
+			t.Fatalf("%q: %v %q %v", tc.value, at, unit, ok)
+		}
+	}
+	for _, value := range []string{"", " ", "0", "-1", "+1767225600", "1e9", "0x6956", "1767225600.", ".5", "1767 225600", "1767225600ms", "Thu, 05 Nov 2026 10:00:00 GMT", "2026-11-05T10:00:00Z", "99999999999999999999", strings.Repeat("1", 33)} {
+		if _, _, ok := chatCallbackTimestamp(value); ok {
+			t.Fatalf("%q read as a timestamp", value)
+		}
+	}
+}
+
+// chatInboundJobs claims the queued inbound jobs, so each call counts the
+// jobs queued since the last.
+func (f *chatWorkflowFixture) chatInboundJobs(t *testing.T) int {
+	t.Helper()
+	jobs, err := f.s.store.ClaimChatJobs(t.Context(), f.record.WorkspaceKey, "inbound", 100, time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(jobs)
+}
+
+// A signed card click is accepted with its timestamp in seconds, milliseconds,
+// microseconds or nanoseconds, with a fraction, and hours away from the
+// server's clock: the documented request shape fixes no unit and no window.
+func TestChatInboundSignedCardClicksAcceptEveryTimestampForm(t *testing.T) {
+	f := newChatWorkflowFixture(t)
+	logs := captureChatLogs(t)
+	_, messageID, ids := f.groupIssueCard(t)
+	f.chatInboundJobs(t)
+	now := time.Now()
+	for i, stamp := range []string{
+		strconv.FormatInt(now.Unix(), 10),
+		strconv.FormatInt(now.UnixMilli(), 10),
+		strconv.FormatInt(now.UnixMicro(), 10),
+		strconv.FormatInt(now.UnixNano(), 10),
+		strconv.FormatInt(now.Unix(), 10) + ".375",
+		strconv.FormatInt(now.Add(-2*time.Hour).Unix(), 10),
+		strconv.FormatInt(now.Add(2*time.Hour).UnixMilli(), 10),
+	} {
+		body := chatEncryptedTestBody(t, f.cardTriggerEvent(f.identity.OpenID, f.binding.ChatID, messageID, ids[chatQuickAssign], "", "evt_stamp_"+strconv.Itoa(i), nil), f.credentials.EncryptKey)
+		got := f.post(t, chatRawCallback{body: body, stamp: stamp, signature: chatSignSHA256})
+		if got.Code != http.StatusOK || !strings.Contains(got.Body.String(), "正在更新") {
+			t.Fatalf("timestamp form %d: %d %s", i, got.Code, got.Body.String())
+		}
+	}
+	// A legacy card request, signed with the verification token, in ms.
+	legacy := chatPlainBody(t, f.legacyCardRequest(f.identity.OpenID, messageID, ids[chatQuickAssign], ""))
+	if got := f.post(t, chatRawCallback{body: legacy, stamp: strconv.FormatInt(now.UnixMilli(), 10), signature: chatSignSHA1}); got.Code != http.StatusOK || !strings.Contains(got.Body.String(), "正在更新") {
+		t.Fatalf("legacy card in ms: %d %s", got.Code, got.Body.String())
+	}
+	if queued := f.chatInboundJobs(t); queued != 8 {
+		t.Fatalf("queued %d clicks, want 8", queued)
+	}
+	if rejected := logs.records(t, "chat callback rejected"); len(rejected) != 0 {
+		t.Fatalf("rejections: %v", rejected)
+	}
+}
+
+// A timestamp refusal is only ever of a correctly signed request, names what
+// was wrong with the timestamp, and describes its shape without the value,
+// the nonce, the signature or any secret. A forgery is refused as a forgery
+// whatever its timestamp. None of them queues anything.
+func TestChatInboundCardTimestampRefusalsAreDiagnosed(t *testing.T) {
+	f := newChatWorkflowFixture(t)
+	logs := captureChatLogs(t)
+	_, messageID, ids := f.groupIssueCard(t)
+	f.chatInboundJobs(t)
+	now := time.Now()
+	event := chatEncryptedTestBody(t, f.cardTriggerEvent(f.identity.OpenID, f.binding.ChatID, messageID, ids[chatQuickAssign], "", "evt_stamp_refused", nil), f.credentials.EncryptKey)
+	legacy := chatPlainBody(t, f.legacyCardRequest(f.identity.OpenID, messageID, ids[chatQuickAssign], ""))
+	forged := strings.Repeat("ab", 32)
+	stale := strconv.FormatInt(now.Add(-48*time.Hour).Unix(), 10)
+	future := strconv.FormatInt(now.Add(48*time.Hour).UnixNano(), 10)
+	httpDate := now.UTC().Format(http.TimeFormat)
+	cases := []struct {
+		name     string
+		callback chatRawCallback
+		reason   string
+		// want are the expected diagnostic attributes; skew is the sign
+		// of timestamp_skew_seconds, 0 when it must be absent.
+		want map[string]any
+		skew int
+	}{
+		{"missing", chatRawCallback{body: event, stamp: "-", signature: chatSignSHA256}, chatRejectTimestampMissing,
+			map[string]any{"timestamp_present": false, "timestamp_length": float64(0), "timestamp_digits_only": false, "timestamp_unit": "", "signature_valid": true}, 0},
+		{"unparsable", chatRawCallback{body: event, stamp: httpDate, signature: chatSignSHA256}, chatRejectTimestampUnparsable,
+			map[string]any{"timestamp_present": true, "timestamp_length": float64(len(httpDate)), "timestamp_digits_only": false, "timestamp_unit": "", "signature_valid": true}, 0},
+		{"stale seconds", chatRawCallback{body: event, stamp: stale, signature: chatSignSHA256}, chatRejectTimestampStale,
+			map[string]any{"timestamp_present": true, "timestamp_length": float64(len(stale)), "timestamp_digits_only": true, "timestamp_unit": "s", "signature_valid": true}, 1},
+		{"future nanoseconds", chatRawCallback{body: event, stamp: future, signature: chatSignSHA256}, chatRejectTimestampFuture,
+			map[string]any{"timestamp_present": true, "timestamp_length": float64(len(future)), "timestamp_digits_only": true, "timestamp_unit": "ns", "signature_valid": true}, -1},
+		{"genuine legacy signature, stale", chatRawCallback{body: legacy, stamp: stale, signature: chatSignSHA1}, chatRejectTimestampStale,
+			map[string]any{"timestamp_unit": "s", "signature_valid": true}, 1},
+		{"forged signature, fresh timestamp", chatRawCallback{body: event, signature: chatSignSHA256, override: forged}, chatRejectSignature,
+			map[string]any{"timestamp_present": true, "timestamp_digits_only": true, "timestamp_unit": "s", "signature_valid": false}, 0},
+		{"forged signature, stale timestamp", chatRawCallback{body: event, stamp: stale, signature: chatSignSHA256, override: forged}, chatRejectSignature,
+			map[string]any{"timestamp_unit": "s", "signature_valid": false}, 1},
+		{"forged signature, no timestamp", chatRawCallback{body: legacy, stamp: "-", signature: chatSignSHA1, override: forged}, chatRejectSignature,
+			map[string]any{"timestamp_present": false, "signature_valid": false}, 0},
+	}
+	secrets := []string{f.credentials.EncryptKey, f.credentials.VerificationToken, f.credentials.AppSecret, forged, httpDate, stale, future, "c-update-token", "Asia/Shanghai"}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.callback.nonce = "nonce_marker_" + strconv.Itoa(i)
+			stamp := tc.callback.stamp
+			if stamp == "-" {
+				stamp = ""
+			}
+			switch tc.callback.signature {
+			case chatSignSHA256:
+				secrets = append(secrets, larkevent.Signature(stamp, tc.callback.nonce, f.credentials.EncryptKey, string(tc.callback.body)))
+			case chatSignSHA1:
+				secrets = append(secrets, larkcard.Signature(stamp, tc.callback.nonce, f.credentials.VerificationToken, string(tc.callback.body)))
+			}
+			secrets = append(secrets, tc.callback.nonce)
+			before := len(logs.records(t, "chat callback rejected"))
+			if got := f.post(t, tc.callback); !chatRefusedCardAnswer(got) {
+				t.Fatalf("answer: %d %s", got.Code, got.Body.String())
+			}
+			records := logs.records(t, "chat callback rejected")
+			if len(records) != before+1 {
+				t.Fatalf("records: %v", records[before:])
+			}
+			record := records[len(records)-1]
+			if record["reason"] != tc.reason || record["answer"] != "error_toast" || record["event_type"] == "" {
+				t.Fatalf("record: %v", record)
+			}
+			for key, value := range tc.want {
+				if record[key] != value {
+					t.Fatalf("%s = %v want %v: %v", key, record[key], value, record)
+				}
+			}
+			skew, hasSkew := record["timestamp_skew_seconds"].(float64)
+			switch {
+			case tc.skew == 0 && record["timestamp_unit"] == "" && hasSkew,
+				tc.skew > 0 && (!hasSkew || skew < float64(47*3600)),
+				tc.skew < 0 && (!hasSkew || skew > -float64(47*3600)):
+				t.Fatalf("skew %v (%v): %v", skew, hasSkew, record)
+			}
+		})
+	}
+	if queued := f.chatInboundJobs(t); queued != 0 {
+		t.Fatalf("refused clicks queued %d jobs", queued)
+	}
+	for _, secret := range secrets {
+		if secret != "" && strings.Contains(logs.String(), secret) {
+			t.Fatalf("diagnostics leaked %q", secret)
+		}
+	}
+}
+
+// With a lenient timestamp window, the callback dedup is what stops a replay:
+// the same signed card click, delivered again inside the window, is answered
+// but changes Flow once, in both formats.
+func TestChatInboundSignedCardReplaysAreDeduplicated(t *testing.T) {
+	f := newChatWorkflowFixture(t)
+	_, messageID, ids := f.groupIssueCard(t)
+	f.chatInboundJobs(t)
+	stamp := strconv.FormatInt(time.Now().Add(-3*time.Hour).Unix(), 10)
+	for _, callback := range []chatRawCallback{
+		{body: chatEncryptedTestBody(t, f.cardTriggerEvent(f.identity.OpenID, f.binding.ChatID, messageID, ids[chatQuickAssign], "", "evt_replayed", nil), f.credentials.EncryptKey), stamp: stamp, nonce: "nonce_replayed_v2", signature: chatSignSHA256},
+		{body: chatPlainBody(t, f.legacyCardRequest(f.identity.OpenID, messageID, ids[chatQuickPriority], "1")), stamp: stamp, nonce: "nonce_replayed_legacy", signature: chatSignSHA1},
+	} {
+		for attempt := range 3 {
+			if got := f.post(t, callback); got.Code != http.StatusOK || !strings.Contains(got.Body.String(), "正在更新") {
+				t.Fatalf("attempt %d: %d %s", attempt, got.Code, got.Body.String())
+			}
+		}
+		if queued := f.chatInboundJobs(t); queued != 1 {
+			t.Fatalf("a replayed click queued %d jobs", queued)
 		}
 	}
 }

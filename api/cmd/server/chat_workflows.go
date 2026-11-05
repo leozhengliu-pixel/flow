@@ -219,7 +219,16 @@ func (s *server) handleChatWebhook(w http.ResponseWriter, r *http.Request) {
 		diagnostic.AppID = envelope.Header.AppID
 	}
 	if reason != "" {
-		diagnostic.rejected(ctx, reason)
+		// The platform shows a member any answer to a card click other than
+		// HTTP 200 with a valid body as a bare error code, so a refused card
+		// click gets 200 and an error toast instead. Nothing is queued: the
+		// answer only tells the clicker the click did nothing.
+		if callback.Format == chatCallbackFormatLegacyCard || callback.Format == chatCallbackFormatEvent && envelope.Header.EventType == "card.action.trigger" {
+			diagnostic.rejected(ctx, reason, append(callback.Timestamp.attrs(), "answer", "error_toast")...)
+			writeJSON(w, http.StatusOK, map[string]any{"toast": map[string]any{"type": "error", "content": "This action could not be verified. Try again, or open Flow.", "i18n": map[string]string{"en_us": "This action could not be verified. Try again, or open Flow.", "zh_cn": "无法验证此操作，请重试或在 Flow 中操作。"}}})
+			return
+		}
+		diagnostic.rejected(ctx, reason, callback.Timestamp.attrs()...)
 		writeError(w, chatRejectStatus(reason), "invalid chat callback")
 		return
 	}

@@ -674,11 +674,22 @@ them:
 - `chat callback rejected` (WARN): the check that refused the request, in
   `reason`: `unknown_connection`, `credentials_unavailable`, `too_large`,
   `malformed`, `decrypt` (the Encrypt Key does not open the body),
-  `challenge_token`, `not_connected`, `timestamp` (outside 5 minutes),
-  `nonce`, `signature` (neither the Encrypt Key nor, for a legacy card
-  request, the Verification Token signs the raw body), `token` (the schema
-  2.0 `header.token` is not the Verification Token), `app_mismatch`,
-  `tenant_mismatch` or `unsupported_format` (a v1 event).
+  `challenge_token`, `not_connected`, `nonce`, `signature` (neither the
+  Encrypt Key nor, for a legacy card request, the Verification Token signs
+  the raw body), then, for a correctly signed request,
+  `timestamp_missing`, `timestamp_unparsable`, `timestamp_stale` or
+  `timestamp_future` (more than 24 hours from the server's clock), `token`
+  (the schema 2.0 `header.token` is not the Verification Token),
+  `app_mismatch`, `tenant_mismatch` or `unsupported_format` (a v1 event).
+  Signature and timestamp rejections also carry `timestamp_present`,
+  `timestamp_length`, `timestamp_digits_only`, `timestamp_unit` (`s`, `ms`,
+  `us` or `ns`, read from the value's magnitude), `timestamp_skew_seconds`
+  (positive when the timestamp is in the past) and `signature_valid`, never
+  the timestamp, nonce or signature themselves. A refused card click is
+  answered with HTTP 200 and an error toast (`answer` `error_toast`), so the
+  member sees a message instead of a platform error code; nothing is queued.
+  Replays of signed requests are stopped by the event, message and card-click
+  dedup, not by the timestamp window.
 - `chat callback handled` (INFO): `outcome` `queued` (with the command kind
   in `reason` and the `job_id`), `ignored` (why the event asks nothing of
   Flow, such as `bot_not_mentioned`, `other_bot_mentioned`,
