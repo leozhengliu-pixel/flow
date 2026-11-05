@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Report a loop output-contract read whose model reply held only reasoning, nothing, or cut-off arguments by that class instead of a JSON error, retry it once with a class-specific hint, and keep the class in the fallback contract.
 - Keep phone browser assertions aligned with complete inbox content tracks, the issue header hairline and natural review control text widths.
 - Preserve the document directory's inner team-name weight on phones.
 - Require the phone project Milestones section's exact position after the properties margin correction.

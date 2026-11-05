@@ -107,6 +107,83 @@ func readLoopTurn(turn agentProviderTurn) loopTurnReading {
 	return reading
 }
 
+// structuredTurnReading is what a structured turn (requestAgentStructuredTurn) delivered: the target tool's
+// arguments, a JSON answer written as text, or nothing usable (outcome unusable).
+type structuredTurnReading struct {
+	// raw is the tool's arguments as sent (possibly malformed), or the answer text with any JSON object cut out.
+	raw      string
+	fromText bool
+	outcome  loopTurnOutcome
+	detail   string
+}
+
+func (reading structuredTurnReading) delivered() bool {
+	return !reading.outcome.unusable()
+}
+
+// readStructuredTurn classifies a structured turn by readLoopTurn's outcomes. The tool's arguments count as
+// delivered even when malformed, unless they were cut off; text counts when it holds a JSON object or is a plain
+// answer. Reasoning is never a result.
+func readStructuredTurn(turn agentProviderTurn, toolName string) structuredTurnReading {
+	loop := readLoopTurn(turn)
+	for index, call := range turn.ToolCalls {
+		if call.Name != toolName {
+			continue
+		}
+		if loop.cut[index] {
+			return structuredTurnReading{outcome: loop.outcome, detail: loop.detail}
+		}
+		return structuredTurnReading{raw: string(call.Arguments), outcome: loopTurnToolCalls}
+	}
+	text := strings.TrimSpace(turn.Text)
+	if text != "" && !turn.filtered() {
+		if candidate := loopJSONObjectText(text); strings.HasPrefix(candidate, "{") && json.Valid([]byte(candidate)) {
+			return structuredTurnReading{raw: candidate, fromText: true, outcome: loopTurnAnswer}
+		}
+	}
+	if len(turn.ToolCalls) > 0 {
+		if text != "" && !turn.truncated() && !turn.filtered() {
+			return structuredTurnReading{raw: text, fromText: true, outcome: loopTurnAnswer}
+		}
+		return structuredTurnReading{outcome: loopTurnUnreadable, detail: fmt.Sprintf("the model called %d other tool(s) but not %s", len(turn.ToolCalls), toolName)}
+	}
+	if loop.outcome.unusable() {
+		return structuredTurnReading{outcome: loop.outcome, detail: loop.detail}
+	}
+	return structuredTurnReading{raw: text, fromText: true, outcome: loopTurnAnswer}
+}
+
+// loopJSONObjectText is a JSON answer as models write it, without a Markdown fence or text around the object.
+func loopJSONObjectText(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(strings.TrimSuffix(raw, "```"), "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	if start, end := strings.Index(raw, "{"), strings.LastIndex(raw, "}"); start >= 0 && end > start {
+		raw = raw[start : end+1]
+	}
+	return strings.TrimSpace(raw)
+}
+
+// structuredMissingExplanation is a fixed-template explanation of an unusable structured turn; it holds no model
+// output.
+func structuredMissingExplanation(outcome loopTurnOutcome, detail string) string {
+	switch outcome {
+	case loopTurnReasoningOnly:
+		return "the response held only reasoning, with no answer and no tool call"
+	case loopTurnEmpty:
+		return "the response held no text, no tool call and no reasoning"
+	case loopTurnTruncated:
+		return "the response was cut off at the output limit before the result was complete"
+	case loopTurnFiltered:
+		return "the provider withheld the output"
+	case loopTurnToolCallText:
+		return "the model wrote the tool call as text instead of calling the tool"
+	case loopTurnUnreadable:
+		return firstNonEmpty(detail, "the response could not be read")
+	}
+	return "the response held no usable result"
+}
+
 func loopTextHasToolCallMarkup(text string) bool {
 	for _, marker := range loopToolCallMarkers {
 		if strings.Contains(text, marker) {

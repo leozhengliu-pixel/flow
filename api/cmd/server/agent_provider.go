@@ -222,10 +222,58 @@ func agentStructuredFrom(ctx context.Context) *agentStructuredRequest {
 	return request
 }
 
+// agentStructuredMissingError: a structured request succeeded (the provider answered and the stream ended) but
+// delivered neither the tool's arguments nor a JSON answer as text. It holds only the class and the response's
+// sizes and counts, never its text, reasoning or arguments.
+type agentStructuredMissingError struct {
+	tool           string
+	class          loopTurnOutcome
+	explanation    string
+	contentBytes   int
+	reasoningBytes int
+	events         int
+	toolCalls      int
+	finishReason   string
+	streamFinished bool
+	usage          *agentProviderUsage
+}
+
+func newAgentStructuredMissingError(tool string, reading structuredTurnReading, turn agentProviderTurn) *agentStructuredMissingError {
+	return &agentStructuredMissingError{
+		tool: tool, class: reading.outcome, explanation: structuredMissingExplanation(reading.outcome, reading.detail),
+		contentBytes: len(turn.Text), reasoningBytes: len(turn.Reasoning), events: turn.Stream.Events, toolCalls: len(turn.ToolCalls),
+		finishReason: agentStopReasonLabel(turn.StopReason), streamFinished: turn.Stream.Finished, usage: turn.Usage,
+	}
+}
+
+func (e *agentStructuredMissingError) Error() string {
+	usage := "usage=none"
+	if e.usage != nil {
+		usage = fmt.Sprintf("input_tokens=%d output_tokens=%d reasoning_tokens=%d", e.usage.InputTokens, e.usage.OutputTokens, e.usage.ReasoningTokens)
+	}
+	return fmt.Sprintf("the model returned no %s result: %s (%s; content_bytes=%d reasoning_bytes=%d events=%d tool_calls=%d finish_reason=%s stream_finished=%t %s)",
+		e.tool, e.class, e.explanation, e.contentBytes, e.reasoningBytes, e.events, e.toolCalls, e.finishReason, e.streamFinished, usage)
+}
+
 // requestAgentStructuredTurn asks for one call of tool, whose parameters are the answer's JSON schema: the tool is
 // the only one offered, tool_choice forces it and the temperature is 0. A provider that refuses the forced choice
-// or the temperature (400) is asked again without them; callers also read a JSON answer written as text.
-func (s *server) requestAgentStructuredTurn(ctx context.Context, messages []agentProviderMessage, tool agentProviderTool) (agentProviderTurn, error) {
+// or the temperature (400) is asked again without them. It answers with the tool's arguments, or a JSON answer
+// written as text (readStructuredTurn); a response with neither is an *agentStructuredMissingError.
+func (s *server) requestAgentStructuredTurn(ctx context.Context, messages []agentProviderMessage, tool agentProviderTool) (string, error) {
+	turn, err := s.requestStructuredProviderTurn(ctx, messages, tool)
+	if err != nil {
+		return "", err
+	}
+	reading := readStructuredTurn(turn, tool.Name)
+	if !reading.delivered() {
+		missing := newAgentStructuredMissingError(tool.Name, reading, turn)
+		slog.WarnContext(ctx, "agent provider answered a structured request without its result", "model", s.agent.Model, "error", missing.Error())
+		return "", missing
+	}
+	return reading.raw, nil
+}
+
+func (s *server) requestStructuredProviderTurn(ctx context.Context, messages []agentProviderMessage, tool agentProviderTool) (agentProviderTurn, error) {
 	request := func(ctx context.Context) (agentProviderTurn, error) {
 		emit := func(agentProviderEvent) error { return nil }
 		tools := []agentProviderTool{tool}

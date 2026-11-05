@@ -196,14 +196,12 @@ var errLoopContractNotJSON = errors.New("the arguments are not a JSON object")
 // errLoopContractNoModel: no model is configured to read the contract.
 var errLoopContractNoModel = errors.New("no model is configured to read the loop's outputs")
 
+// errLoopContractInvalid: the model delivered a contract that is not valid.
+var errLoopContractInvalid = errors.New("invalid contract")
+
 // parseLoopContractArguments reads and validates the model's contract.
 func parseLoopContractArguments(raw string) (*domain.LoopOutputContract, error) {
-	raw = strings.TrimSpace(raw)
-	raw = strings.TrimPrefix(strings.TrimSuffix(raw, "```"), "```json")
-	raw = strings.TrimPrefix(raw, "```")
-	if start, end := strings.Index(raw, "{"), strings.LastIndex(raw, "}"); start >= 0 && end > start {
-		raw = raw[start : end+1]
-	}
+	raw = loopJSONObjectText(raw)
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
 		return nil, fmt.Errorf("%w: %v", errLoopContractNotJSON, err)
@@ -262,21 +260,19 @@ func (s *server) requestLoopContract(ctx context.Context, loop domain.Loop, team
 	for attempt := 0; attempt < 2; attempt++ {
 		// A stalled attempt leaves time for the second one.
 		attemptCtx, cancel := context.WithTimeout(ctx, loopContractAttemptTimeout)
-		turn, err := s.requestAgentStructuredTurn(attemptCtx, messages, loopContractTool)
+		raw, err := s.requestAgentStructuredTurn(attemptCtx, messages, loopContractTool)
 		cancel()
 		if err != nil {
 			lastErr = err
 			if ctx.Err() != nil {
 				break
 			}
-			continue
-		}
-		raw := strings.TrimSpace(turn.Text)
-		for _, call := range turn.ToolCalls {
-			if call.Name == loopContractToolName {
-				raw = string(call.Arguments)
-				break
+			var missing *agentStructuredMissingError
+			if errors.As(err, &missing) {
+				// Nothing was delivered: ask afresh, saying what the reply lacked (never echoing it).
+				messages = append(messages[:2:2], agentProviderMessage{Role: "user", Content: loopContractMissingHint(missing.class)})
 			}
+			continue
 		}
 		contract, err := parseLoopContractArguments(raw)
 		if err == nil {
@@ -284,7 +280,7 @@ func (s *server) requestLoopContract(ctx context.Context, loop domain.Loop, team
 			contract.Source, contract.InstructionsHash, contract.Model, contract.ExtractedAt = loopContractModel, loopContractHashOf(loop), s.agent.Model, &now
 			return contract, nil
 		}
-		lastErr = fmt.Errorf("invalid contract: %w", err)
+		lastErr = fmt.Errorf("%w: %w", errLoopContractInvalid, err)
 		if errors.Is(err, errLoopContractNotJSON) {
 			// Unreadable arguments (tool-call markup leaked into them): ask afresh rather than echo them back.
 			messages = append(messages[:2:2], agentProviderMessage{Role: "user", Content: fmt.Sprintf("Answer only by calling %s once; its arguments are one JSON object that follows the schema, with no other text or markup.", loopContractToolName)})
@@ -293,6 +289,41 @@ func (s *server) requestLoopContract(ctx context.Context, loop domain.Loop, team
 		messages = append(messages, agentProviderMessage{Role: "user", Content: fmt.Sprintf("Your contract was not valid: %s.\nYour answer was:\n%s\nCall %s again with the complete, corrected contract: its arguments are one JSON object that follows the schema, with no other text or markup.", err.Error(), truncateSettingsText(raw, 6000), loopContractToolName)})
 	}
 	return nil, lastErr
+}
+
+// loopContractMissingHint is the second attempt's request after a reply that delivered no contract. It is a fixed
+// template per class and holds nothing of the reply.
+func loopContractMissingHint(class loopTurnOutcome) string {
+	format := " Its arguments are one JSON object that follows the schema, with no other text or markup."
+	switch class {
+	case loopTurnReasoningOnly:
+		return fmt.Sprintf("Your last reply contained only reasoning, with no tool call, so no contract was recorded. Keep your reasoning brief and call %s once now with the complete contract.", loopContractToolName) + format
+	case loopTurnTruncated:
+		return fmt.Sprintf("Your last reply was cut off at the output limit before the contract was complete. Think less and keep the contract short (brief analysis lines, short evidence quotes), then call %s once with the complete contract.", loopContractToolName) + format
+	case loopTurnToolCallText:
+		return fmt.Sprintf("Your last reply wrote the tool call as text, which Flow cannot read. Call %s once through the tool-calling interface.", loopContractToolName) + format
+	case loopTurnEmpty:
+		return fmt.Sprintf("Your last reply was empty: no tool call and no text. Call %s once now with the complete contract.", loopContractToolName) + format
+	}
+	return fmt.Sprintf("Your last reply could not be read. Call %s once with the complete contract.", loopContractToolName) + format
+}
+
+// loopContractFallbackReason is the stored fallback contract's error: the notice the editor shows, then the
+// failure's class and a fixed explanation (never the model's output or a provider message).
+func loopContractFallbackReason(err error) string {
+	var missing *agentStructuredMissingError
+	var runErr *loopRunError
+	switch {
+	case errors.Is(err, errLoopContractNoModel):
+		return loopContractFallbackNotice + " (no model is configured)"
+	case errors.As(err, &missing):
+		return fmt.Sprintf("%s (%s: %s)", loopContractFallbackNotice, missing.class, missing.explanation)
+	case errors.Is(err, errLoopContractInvalid):
+		return loopContractFallbackNotice + " (invalid_contract: the model's contract did not follow the schema)"
+	case errors.As(loopProviderFailure(err), &runErr):
+		return fmt.Sprintf("%s (%s: the model request failed)", loopContractFallbackNotice, runErr.reason)
+	}
+	return loopContractFallbackNotice
 }
 
 // loopContractAttemptTimeout bounds one model call of an extraction; two
@@ -367,11 +398,7 @@ func (s *server) readLoopContract(ctx context.Context, workspace string, loop do
 	contract, err := s.requestLoopContract(callCtx, loop, teams)
 	if err != nil {
 		log.Printf("Loop output contract workspace=%s loop=%s: %v", workspace, loop.ID, err)
-		reason := loopContractFallbackNotice
-		if errors.Is(err, errLoopContractNoModel) {
-			reason += " (no model is configured)"
-		}
-		contract = loopFallbackContract(hash, reason)
+		contract = loopFallbackContract(hash, loopContractFallbackReason(err))
 	}
 	s.storeLoopContract(workspace, loop.ID, hash, contract)
 	flight.contract = contract
@@ -574,7 +601,7 @@ func (s *server) analyzeLoopOutputs(w http.ResponseWriter, r *http.Request) {
 		contract, err := s.requestLoopContract(r.Context(), current, data.Teams)
 		if err != nil {
 			log.Printf("Loop output contract workspace=%s loop=%s: %v", data.Workspace.URLKey, current.ID, err)
-			contract = loopFallbackContract(hash, loopContractFallbackNotice)
+			contract = loopFallbackContract(hash, loopContractFallbackReason(err))
 		}
 		s.storeLoopContract(data.Workspace.URLKey, current.ID, hash, contract)
 	} else if strings.TrimSpace(current.Instructions) != "" {
