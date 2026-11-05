@@ -131,6 +131,8 @@ export const chatIntegrationsZhCN: Record<string, string> = {
   "This chat account is already linked to another Flow account.": "此聊天账号已关联到其他 Flow 账号。",
   "Application setup is incomplete. Disconnect and configure it again.": "应用配置未完成。请断开连接后重新配置。",
   "Messages could not be delivered. Check the bot's permissions, group access and application credentials.": "消息无法送达。请检查机器人权限、群访问权限和应用凭据。",
+  "A member's chat request failed inside Flow and was not retried. The server log has the details.": "成员的聊天请求在 Flow 内部处理失败，未再重试。详情见服务端日志。",
+  "The app has not been granted {scopes}. Without im:message.group_msg, replies in issue threads become comments only when they mention the bot; without im:message.p2p_msg:readonly, direct messages don't reach Flow. Grant the permissions and publish a new app version.": "应用尚未获得以下权限：{scopes}。没有 im:message.group_msg（获取群组中所有消息），事项话题中的回复只有 @ 机器人时才会成为评论；没有 im:message.p2p_msg:readonly（读取用户发给机器人的单聊消息），私聊消息不会到达 Flow。请开通权限并发布新版本应用。",
   "Your linked chat account has expired. Reconnect it in Settings > Connected accounts.": "你关联的聊天账号已过期，请在 设置 > 已连接账户 中重新连接。",
   "The connection reported an error. Test the connection for details.": "连接出现错误，请测试连接以查看详情。",
   // Permission domains: tenant authorization, workspace integration, team bindings.

@@ -228,6 +228,7 @@ export function ChatIntegrationSettings({ provider, data, onBack, onReload }: {
                 <span data-testid="chat-tenant-status">{tenantMessage}</span>
                 {tenantAuthorized && tenant?.tenantKey && tenant.tenantKeySource === "observed" && <span className="chat-muted">{t("The tenant key was first seen in an internal group or a linked account.")}</span>}
                 {tenantInfoHint && <span data-testid="chat-tenant-info-hint">{tenantInfoHint}</span>}
+                {tenantAuthorized && tenant?.missingScopes?.length ? <span data-testid="chat-missing-scopes">{t("The app has not been granted {scopes}. Without im:message.group_msg, replies in issue threads become comments only when they mention the bot; without im:message.p2p_msg:readonly, direct messages don't reach Flow. Grant the permissions and publish a new app version.").replace("{scopes}", asIs(tenant.missingScopes.join(", ")))}</span> : null}
                 {tenantAuthorized && authorization && <span>{(configuredBy
                   ? t("Detected automatically on {date}. Configured by {name}.").replace("{name}", () => configuredBy.displayName || configuredBy.name)
                   : t("Detected automatically on {date}.")).replace("{date}", () => formatDate(authorization.authorizedAt, { dateStyle: "medium" }))}</span>}

@@ -145,6 +145,7 @@ export const CHAT_ERROR_MESSAGES: Record<string, string> = {
   chat_identity_in_use: "This chat account is already linked to another Flow account.",
   chat_setup_incomplete: "Application setup is incomplete. Disconnect and configure it again.",
   chat_delivery_failed: "Messages could not be delivered. Check the bot's permissions, group access and application credentials.",
+  chat_processing_failed: "A member's chat request failed inside Flow and was not retried. The server log has the details.",
   chat_identity_expired: "Your linked chat account has expired. Reconnect it in Settings > Connected accounts.",
   chat_error: "The connection reported an error. Test the connection for details.",
   chat_initiative_binding_permission_required: "Only the initiative's owner and workspace administrators can connect it to groups.",

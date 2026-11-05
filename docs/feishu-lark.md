@@ -59,13 +59,18 @@ not supported by this connection flow.
    fields on subsequent saves preserve the existing encrypted values.
 6. Check **Permissions** on the same page: **Tenant** shows the tenant the
    app is connected to (its name and tenant key), or that the app is not
-   approved yet.
+   approved yet. Each check also reads the tenant's grants to the app
+   (`GET /open-apis/application/v6/scopes`) and names the message
+   permissions that are missing: `im:message.group_at_msg:readonly`,
+   `im:message.group_msg` and `im:message.p2p_msg:readonly`.
 7. Copy Flow's callback URL into the application's HTTP event and callback
    configuration. Enable encryption using the same Encrypt Key and
    Verification Token. Subscribe to `im.message.receive_v1` (it delivers
    group mentions and, with `im:message.p2p_msg:readonly`, direct messages)
-   and the current `card.action.trigger` callback; do not also subscribe to
-   the legacy card callback. For [link previews](#link-previews), also
+   and the current `card.action.trigger` callback. Flow also accepts card
+   clicks in the legacy card request format (a card request URL, or the
+   legacy `card.action.trigger_v1` callback), signed with the Verification
+   Token, plain or encrypted; subscribe to only one of the two. For [link previews](#link-previews), also
    subscribe to the `url.preview.get` callback; for requests by reaction,
    to `im.message.reaction.created_v1`. Publish configuration changes
    when required by the platform.
@@ -615,6 +620,47 @@ Keep the domain-event retention window longer than an expected service outage.
 If the chat consumer falls behind retained history, Flow reports a cursor
 gap instead of silently treating old events as delivered. Already accepted
 chat commands can still be processed independently.
+
+A chat job that fails inside Flow in a way a retry cannot fix (an internal
+response over its size limit or unreadable) fails on its first attempt; other
+internal failures fail after the attempt limit. Either way the member gets a
+short notice (`chat_processing_failed`) and the integration page shows the
+error until the next successful delivery.
+
+### Diagnostics
+
+Every callback leaves one structured log record without tokens, keys,
+signatures, member IDs or message text. Set `FLOW_LOG_FORMAT=json` to filter
+them:
+
+- `chat callback rejected` (WARN): the check that refused the request, in
+  `reason`: `unknown_connection`, `credentials_unavailable`, `too_large`,
+  `malformed`, `decrypt` (the Encrypt Key does not open the body),
+  `challenge_token`, `not_connected`, `timestamp` (outside 5 minutes),
+  `nonce`, `signature` (neither the Encrypt Key nor, for a legacy card
+  request, the Verification Token signs the raw body), `token` (the schema
+  2.0 `header.token` is not the Verification Token), `app_mismatch`,
+  `tenant_mismatch` or `unsupported_format` (a v1 event).
+- `chat callback handled` (INFO): `outcome` `queued` (with the command kind
+  in `reason` and the `job_id`), `ignored` (why the event asks nothing of
+  Flow, such as `bot_not_mentioned`, `other_bot_mentioned`,
+  `thread_not_issue`, `sender_other_tenant` or `message_type_unsupported`),
+  `refused` (a card click answered with an error toast, such as
+  `card_action_mismatch`), `challenge` or `link_preview`.
+
+Both carry `request_id`, `provider`, `connection_id`, `app_id`,
+`event_type` (`card.action.trigger_v1` for a legacy card request),
+`format` (`event_v2`, `legacy_card`, `url_verification`), `encrypted`,
+`signature_scheme` and, for messages, the platform `message_id`,
+`chat_type`, `message_type`, `in_thread` and the number of mentions.
+`chat direct message` records say how a direct message was answered:
+`dm_agent_queued` then `dm_agent_answered` (with the agent runtime and the
+Agent chat's `session_id`) when the Flow Agent answered, otherwise
+`dm_not_linked`, `dm_quick_*`, `dm_link_preview`, `dm_workspace_choice_pending`,
+`dm_workspace_access_refused`, `dm_agent_not_configured`,
+`dm_agent_disabled_for_member`, `dm_agent_rate_limited`, `dm_agent_error`
+and similar. No record at all for a message means the platform did not send
+it: check the event subscription and the message permissions.
 
 ## Verification
 

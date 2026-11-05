@@ -7,6 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Accept Feishu and Lark card clicks in the legacy card request format as well as `card.action.trigger` (plain or encrypted, either signature scheme), so Assign to me, status, priority and Comment no longer fail with HTTP 401 when the app sends legacy callbacks.
+- Recognize create commands in rich text messages and with full-width punctuation or no spaces, and log a secret-free reason code for every chat callback rejected or message ignored, and for every direct message answered without the Flow Agent.
+- Read workspace metadata for chat workflows in process, so direct messages, card actions and group commands keep working in workspaces whose bootstrap exceeds the internal response limit; an internal failure now fails the job at once, tells the member and shows on the integration page.
+- Show on the Feishu and Lark settings page which inbound message permissions the app has not been granted.
+
 - Keep browser checks aligned with the shared desktop toolbar palette, Auto-closed filter inventory and composer position, using an isolated workspace for shell commands.
 - Offer comment action tools in Agent chat, translate their Chinese step subjects, and synchronize the web tool fixture and exact MCP inventory contracts.
 - Finish closing the desktop workspace menu and return focus even when an exit animation completion event is lost, preserving its divider and row spacing.

@@ -188,6 +188,19 @@ it("asks for the tenant information permission and says where the key came from 
   expect(within(permissions).getByTestId("chat-tenant-info-hint")).toBeInTheDocument();
 });
 
+it("names the inbound message permissions the app lacks", async () => {
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ permissions: { ...tenantPending(), tenant: { status: "authorized", tenantKey: "tenant-1", missingScopes: ["im:message.group_msg"] } } }));
+  const { unmount } = show();
+  let permissions = await screen.findByRole("region", { name: "Permissions" });
+  expect(within(permissions).getByTestId("chat-missing-scopes")).toHaveTextContent("The app has not been granted im:message.group_msg. Without im:message.group_msg, replies in issue threads become comments only when they mention the bot");
+  unmount();
+
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ permissions: { ...tenantPending(), tenant: { status: "authorized", tenantKey: "tenant-1" } } }));
+  show();
+  permissions = await screen.findByRole("region", { name: "Permissions" });
+  expect(within(permissions).queryByTestId("chat-missing-scopes")).not.toBeInTheDocument();
+});
+
 it("says when the tenant key is not known yet", async () => {
   vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings({ permissions: { ...tenantPending(), tenant: { status: "authorized", authorization: { authorizedAt: "2026-10-20T00:00:00Z" } } } }));
   show();

@@ -50,6 +50,10 @@ export interface ChatPermissions {
     tenantKeySource?: "platform" | "observed";
     /** Why the tenant information was not readable, such as chat_tenant_info_permission_missing. */
     tenantInfoErrorCode?: string;
+    /** Inbound message permissions the tenant has not granted the app, from the platform's grant list. */
+    missingScopes?: string[];
+    /** The grant list could not be read on the last check. */
+    scopesUnchecked?: boolean;
     /** On mismatch, the tenant key the platform reported. */
     reportedTenantKey?: string;
     authorization?: ChatTenantAuthorization;
