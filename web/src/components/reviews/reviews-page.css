@@ -121,6 +121,7 @@
 .review-overview-main{min-width:0;max-width:820px}
 .review-overview-title{margin:0;color:var(--review-title-fg);font:600 24px/32px var(--font);overflow-wrap:anywhere}
 .review-byline{min-width:0;height:16px;display:flex;align-items:center;gap:4px;margin-top:6px;color:var(--review-fg-muted);font:450 12px/normal var(--font);white-space:nowrap}
+.review-byline-person,.review-byline-avatar-slot{display:contents}
 .review-byline-avatar{width:16px;height:16px;flex:0 0 16px;margin-right:2px;border-radius:50%;font-size:7px}
 .review-byline-author{color:var(--review-fg-strong)}
 .review-byline-dot,.review-byline-arrow{color:var(--review-fg-faint)}
@@ -737,11 +738,14 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-overview{display:block;box-sizing:border-box;padding:10px 16px 64px;overflow-y:auto}
   html:root body .app .review-overview-main{max-width:none}
   html:root body .app .review-overview-title{margin:0;color:var(--bright);font:600 24px/32px var(--font);letter-spacing:-.16px}
-  html:root body .app .review-byline{height:auto;min-height:0;margin-top:6px;padding-top:7px;flex-wrap:wrap;align-items:center;row-gap:3px;column-gap:4px;white-space:nowrap}
-  html:root body .app .review-byline-avatar{width:18px;height:18px;flex:0 0 18px;margin:0 2px 0 0;border-radius:50%;background:var(--review-phone-avatar-bg);box-shadow:none;color:var(--review-phone-avatar-fg);font:400 9px/0 var(--font)}
+  .review-byline{height:auto;min-height:0;margin-top:6px;padding-top:8px;flex-wrap:wrap;align-items:flex-start;row-gap:2px;column-gap:4px;white-space:nowrap}
+  .review-byline-person{display:flex;align-items:flex-start;gap:6px;height:16px;min-width:0;max-width:100%}
+  .review-byline-person .review-byline-author{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .review-byline-avatar-slot{display:flex;align-items:center;flex:0 0 18px;height:16px}
+  .review-byline-avatar{width:18px;height:18px;flex:0 0 18px;margin:0;border-radius:50%;background:var(--review-phone-avatar-bg);box-shadow:none;color:var(--review-phone-avatar-fg);font:400 9px/0 var(--font)}
   html:root body .app .review-byline-author{color:var(--bright);font:450 12px/normal var(--font)}
   html:root body .app .review-byline-dot{color:var(--review-fg-muted);font:450 12px/normal var(--font)}
-  html:root body .app .review-byline-branches{display:flex;flex:1 0 100%;align-items:center;gap:0;min-width:0}
+  .review-byline-branches{display:flex;flex:1 0 100%;align-items:center;gap:0;min-width:0;margin-top:2px}
   html:root body .app .review-byline-branch{flex:none;max-width:40%;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--issue-muted);font:450 12px/14.5px var(--font-monospace)}
   html:root body .app .review-byline-head{display:flex;flex:1 1 0;min-width:0;align-items:center}
   html:root body .app .review-byline-branches>.review-byline-branch:first-child{flex:none;padding-right:2px}

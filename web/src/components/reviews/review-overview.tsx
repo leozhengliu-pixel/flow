@@ -99,12 +99,16 @@ export function ReviewOverview({
           <ReviewTitle title={review.title} />
         </h1>
         <div className="review-byline">
-          <UserAvatar className="avatar review-byline-avatar" name={author} avatarUrl={review.author.avatarUrl} userId={review.author.id} />
-          <PersonHover person={review.author}>
-            <span className="review-byline-author" data-i18n-ignore>
-              {author}
+          <span className="review-byline-person">
+            <span className="review-byline-avatar-slot">
+              <UserAvatar className="avatar review-byline-avatar" name={author} avatarUrl={review.author.avatarUrl} userId={review.author.id} />
             </span>
-          </PersonHover>
+            <PersonHover person={review.author} side={phone ? "bottom" : "right"}>
+              <span className="review-byline-author" data-i18n-ignore>
+                {author}
+              </span>
+            </PersonHover>
+          </span>
           <span className="review-byline-dot" aria-hidden="true">
             ⋅
           </span>
