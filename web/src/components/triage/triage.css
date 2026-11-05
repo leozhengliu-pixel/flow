@@ -197,7 +197,7 @@
   .flow-triage-row__line.is-meta { margin-top: 4.75px; height: 18px; }
   .flow-triage-row__title { color: var(--bright); line-height: normal; }
   .flow-triage-row__id { color: var(--issue-muted); }
-  .flow-triage-row__id > span { letter-spacing: -.26px; }
+  .flow-triage-row__id > span { letter-spacing: -.26px; font-feature-settings: "calt", "cpsp", "tnum"; }
   .flow-triage-row__creator,
   .flow-triage-row__date { color: var(--issue-muted); line-height: normal; }
   .flow-triage-row__avatar-slot { display: block; width: 18px; height: 18px; flex: none; color: var(--bright); font: 400 16px / 0 var(--font); }
