@@ -1,10 +1,9 @@
 import { Filter, MoreHorizontal, Search, ShieldCheck, X } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/toast";
 import type { AuditLogEntry, BootstrapData } from "@/types/flow";
 import { listAuditLog } from "@/lib/api";
-import { avatarColor } from "@/lib/avatar-color";
-import { avatarInitials } from "@/lib/avatar-initials";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
 import { AuditLogStreaming } from "./audit-log-streaming";
 import { Toggle } from "@/components/ui/toggle";
@@ -158,9 +157,7 @@ export function AuditLogSettings({ data }: { data: BootstrapData }) {
           </div>
           {rows.map((item) => (
             <div className="settings-audit-row" key={item.id}>
-              <span className="settings-audit-avatar" style={{ '--avatar': avatarColor(item.actor.id) } as CSSProperties}>
-                {avatarInitials(item.actor.displayName, "U")}
-              </span>
+              <UserAvatar className="settings-audit-avatar" name={item.actor.displayName} avatarUrl={item.actor.avatarUrl} userId={item.actor.id} />
               <div>
                 <strong>{item.actor.displayName}</strong>
                 <small>{item.actor.email}</small>

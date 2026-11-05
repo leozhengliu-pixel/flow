@@ -369,3 +369,4 @@ html:root .settings-app .settings-main .personal-connection-links .settings-row-
 .personal-connection-link-chevron{width:16px;height:16px;color:var(--theme-text-secondary)}
 .personal-mcp-anchor{scroll-margin-top:10px;border-radius:10px;outline:1px solid transparent;outline-offset:0;transition:outline-color .6s ease-out}
 .personal-mcp-anchor.is-targeted{outline-color:var(--accent-primary);transition:none}
+.settings-row .personal-avatar .user-avatar-initials{color:inherit;font:inherit}

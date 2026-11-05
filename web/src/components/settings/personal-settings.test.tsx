@@ -229,7 +229,14 @@ describe('personal settings workflows', () => {
     const input = props('profile')
     input.data.viewer = { ...input.data.viewer, displayName: '[mobile] Skyler Anderson' }
     render(<I18nProvider><PersonalSettings {...input}/></I18nProvider>)
-    expect(screen.getByText('MS')).toHaveClass('personal-avatar')
+    expect(screen.getByText('MS').closest('.personal-avatar')).not.toBeNull()
+  })
+
+  it('shows the viewer\'s profile picture when one is set', () => {
+    const input = props('profile')
+    input.data.viewer = { ...input.data.viewer, avatarUrl: '/uploads/me.png' }
+    const { container } = render(<I18nProvider><PersonalSettings {...input}/></I18nProvider>)
+    expect(container.querySelector('.personal-avatar img')).toHaveAttribute('src', '/uploads/me.png')
   })
 
   it('validates and persists profile edits and workspace departure', async () => {

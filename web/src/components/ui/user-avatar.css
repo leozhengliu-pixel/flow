@@ -25,9 +25,27 @@
   white-space: nowrap;
 }
 
+/* Surfaces whose initials always sat on the line height they inherit keep it. */
+.settings-team-members-page .settings-member-avatar,
+.settings-members-table .settings-member-avatar,
+.settings-audit-avatar,
+.dashboard-owner > .user-avatar,
+.document-presence__avatar,
+.lp-project-updates-preview__avatar,
+.settings-team-members-page .settings-member-avatar .user-avatar-initials,
+.settings-members-table .settings-member-avatar .user-avatar-initials,
+.settings-audit-avatar .user-avatar-initials,
+.dashboard-owner > .user-avatar .user-avatar-initials,
+.document-presence__avatar .user-avatar-initials,
+.lp-project-updates-preview__avatar .user-avatar-initials {
+  line-height: inherit;
+}
+
 :where([data-user-avatar]) > img {
   width: 100%;
   height: 100%;
+  /* The grid row is as tall as the content, so a percentage height can't fill it: a wide picture would show as a strip. */
+  aspect-ratio: 1;
   border-radius: inherit;
   object-fit: cover;
 }

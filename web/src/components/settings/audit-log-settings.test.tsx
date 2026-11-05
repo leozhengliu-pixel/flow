@@ -49,6 +49,20 @@ it("names the member or group of SCIM provisioning entries with their source", (
   expect(screen.getByText("scim group")).toBeInTheDocument();
 });
 
+it("draws the actor's picture, or initials on the actor's colour when there is none", () => {
+  const photo = { ...viewer, id: "user-photo", displayName: "Photo Actor", avatarUrl: "/uploads/actor.png" };
+  const plain = { ...viewer, id: "user-plain", displayName: "张伟" };
+  const { container } = renderLog([
+    { ...removal, id: "audit_a", actor: photo },
+    { ...removal, id: "audit_b", actor: plain },
+  ]);
+  const [first, second] = Array.from(container.querySelectorAll(".settings-audit-avatar"));
+  expect(first.querySelector("img")).toHaveAttribute("src", "/uploads/actor.png");
+  expect(second.querySelector("img")).toBeNull();
+  expect(second).toHaveTextContent(/^张$/);
+  expect(second).toHaveAttribute("data-script", "cjk");
+});
+
 it("translates the change source in zh-CN", async () => {
   localStorage.setItem("flow:locale", "zh-CN");
   renderLog([{ ...removal, metadata: { ...removal.metadata, source: "scim" } }]);

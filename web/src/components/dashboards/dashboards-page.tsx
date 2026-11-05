@@ -25,7 +25,8 @@ import {
   UsersRound,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
-import { avatarInitials, leadingCharacters } from "@/lib/avatar-initials";
+import { leadingCharacters } from "@/lib/avatar-initials";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { confirmAction } from "@/components/ui/action-dialog-service";
@@ -939,7 +940,7 @@ function WorkspaceMark({ label }: { label: string }) {
 function Owner({ owner }: { owner?: User }) {
   return (
     <span className="dashboard-owner">
-      <span>{avatarInitials(owner?.displayName ?? "?")}</span>
+      <UserAvatar name={owner?.displayName ?? "?"} avatarUrl={owner?.avatarUrl} />
       <b data-i18n-ignore>{owner?.displayName ?? "Unknown"}</b>
     </span>
   );

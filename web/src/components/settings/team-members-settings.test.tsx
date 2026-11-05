@@ -9,6 +9,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 
 import { I18nProvider } from "@/i18n/i18n";
 import { zhCN } from "@/i18n/translations";
+import { avatarColor } from "@/lib/avatar-color";
 import { makeBootstrap, teammate, viewer } from "@/test/fixtures";
 import type { TeamMember, User, WorkspaceMember } from "@/types/flow";
 import { TeamMembersSettings } from "./team-members-settings";
@@ -131,5 +132,58 @@ describe("team member origins", () => {
     ]) {
       expect(zhCN[key], key).toBeTruthy();
     }
+  });
+});
+
+describe("team member avatars", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+
+  function avatarOf(name: string) {
+    const avatar = row(name).querySelector<HTMLElement>(".settings-member-avatar");
+    if (!avatar) throw new Error(`avatar for ${name} missing`);
+    return avatar;
+  }
+
+  function renderWith(users: User[]) {
+    const data = makeBootstrap({
+      viewerRole: "admin",
+      users,
+      members: users.map(member),
+      teamMembers: users.map((user) => membership(user.id)),
+    });
+    return render(
+      <I18nProvider>
+        <TeamMembersSettings data={data} team={data.teams[0]} onReload={vi.fn().mockResolvedValue(undefined)} />
+      </I18nProvider>,
+    );
+  }
+
+  it("draws a member's uploaded picture instead of initials", () => {
+    renderWith([{ ...person("user-photo", "Photo person"), avatarUrl: "/uploads/photo.png" }]);
+    const avatar = avatarOf("Photo person");
+    expect(avatar.querySelector("img")).toHaveAttribute("src", "/uploads/photo.png");
+    expect(avatar).not.toHaveTextContent("PP");
+  });
+
+  it("draws an OAuth app agent's application icon", () => {
+    renderWith([{ ...person("app_1", "Review bot"), app: true, avatarUrl: "/uploads/app-icon.svg" }]);
+    expect(avatarOf("Review bot").querySelector("img")).toHaveAttribute("src", "/uploads/app-icon.svg");
+  });
+
+  it("shows initials on the person's colour when there is no picture", () => {
+    renderWith([person("user-plain", "Plain person")]);
+    const avatar = avatarOf("Plain person");
+    expect(avatar.querySelector("img")).toBeNull();
+    expect(avatar).toHaveTextContent("PP");
+    expect(avatar.style.getPropertyValue("--avatar")).toBe(avatarColor("user-plain"));
+  });
+
+  it("shows one character of a Chinese name", () => {
+    renderWith([person("user-cjk", "张伟")]);
+    const avatar = avatarOf("张伟");
+    expect(avatar).toHaveTextContent(/^张$/);
+    expect(avatar).toHaveAttribute("data-script", "cjk");
+    expect(avatar.style.getPropertyValue("--avatar")).toBe(avatarColor("user-cjk"));
   });
 });

@@ -4,8 +4,8 @@ import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import { usePhoneLayout } from '@/hooks/use-phone-layout';
 import { NotificationChevron, NotificationSlackGlyph } from './notification-glyphs';
 import './mobile-notifications.css';
-import { avatarInitials } from '@/lib/avatar-initials';
 import { ViewGlyph } from '@/components/views/view-icon-picker';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import {
   useCallback,
   useEffect,
@@ -1098,9 +1098,7 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
       <PersonalPageTitle>{p("Profile")}</PersonalPageTitle>
       <PersonalSection>
         <PersonalRow title={p("Profile picture")}>
-          <span className="personal-avatar" data-i18n-ignore>
-            {avatarInitials(displayName)}
-          </span>
+          <UserAvatar className="personal-avatar" name={displayName} avatarUrl={data.viewer.avatarUrl} userId={data.viewer.id} />
         </PersonalRow>
         <PersonalRow title={p("Email")}>
           <span className="personal-static" data-i18n-ignore>

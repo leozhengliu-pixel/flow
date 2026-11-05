@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
-import { avatarInitials } from '@/lib/avatar-initials'
+import { UserAvatar } from '@/components/ui/user-avatar'
 import { toast } from '@/lib/toast'
 
 import { DocumentGlyph, DocumentIconPicker } from '@/components/documents/document-icon'
@@ -308,7 +308,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
       </div></div>
       <div className="document-header-actions">
         {saveState === 'error' && <span className="document-save-state error">{t('Could not save')}</span>}
-        {collaborators.slice(0, 4).map(user => { const name = user.displayName || user.name || '?'; return <span className="document-presence__avatar" key={user.id} title={t('{name} is editing').replace('{name}', () => name)}>{avatarInitials(name)}</span> })}
+        {collaborators.slice(0, 4).map(user => { const name = user.displayName || user.name || '?'; return <UserAvatar className="document-presence__avatar" key={user.id} name={name} avatarUrl={user.avatarUrl} title={t('{name} is editing').replace('{name}', () => name)}/> })}
         <DocumentEditedPopover ctx={ctx} document={document} lastEditor={lastEditor} lastEditorBot={lastEditorBot} lastEditedAt={lastEditedAt} showAuthorNames={authorNamesOpen} onShowAuthorNames={setAuthorNames} onShowHistory={openHistory} open={editedOpen} onOpenChange={next => { setEditedOpen(next); if (!next) setOwnerOpen(false) }} ownerOpen={ownerOpen} onOwnerOpenChange={setOwnerOpen} readOnly={deleted}/>
         {!deleted && <DocumentResolvedCommentsButton count={resolvedThreads.length} open={resolvedOpen} onToggle={() => setResolvedOpen(open => !open)}/>}
         <ScopedFlowTooltip label={documentUrlLabel} shortcut={DOCUMENT_PAGE_SHORTCUTS.copyUrl}>

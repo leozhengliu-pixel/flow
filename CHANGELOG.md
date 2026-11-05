@@ -8,6 +8,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 - Wait for the filter submenu's opening animation before checking exact avatar glyph containment in browser tests.
+- Show uploaded pictures and application icons, not just initials, for team members, audit log actors, dashboard owners, document collaborators, project update authors and your own profile picture.
 - Report a loop output-contract read whose model reply held only reasoning, nothing, or cut-off arguments by that class instead of a JSON error, retry it once with a class-specific hint, and keep the class in the fallback contract.
 - Accept signed Feishu and Lark card clicks whatever unit their request timestamp uses, check the signature before the timestamp, name each timestamp refusal with safe diagnostics, and answer a refused card click with an error toast instead of an HTTP error.
 - Preserve parent-trail line boxes and shared date insets in phone issue cards.
