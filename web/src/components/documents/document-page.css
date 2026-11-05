@@ -362,6 +362,8 @@
 .document-subscribers__row:focus-visible { outline: 0; }
 .document-subscribers__row .document-meta-avatar { width: 18px; height: 18px; flex-basis: 18px; font-size: 9px; font-weight: 450; line-height: 18px; }
 .document-subscribers__name { margin-left: 0; }
+.document-subscribers__identity { display: contents; }
+.document-subscribers__badge-line, .document-subscribers__badge-wrap { display: contents; }
 .document-subscribers__badge {
   flex: none;
   margin-left: 2px;
@@ -688,6 +690,9 @@ button.document-icon.is-empty:hover,
     font: 500 11px/16px var(--font);
   }
   .document-subscribers__name { min-width: 0; color: var(--action-menu-text); }
+  .document-subscribers__identity { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .document-subscribers__badge-line { display: block; line-height: normal; }
+  .document-subscribers__badge-wrap { display: inline-flex; align-items: center; }
 }
 
 @media (min-width: 768px) {
