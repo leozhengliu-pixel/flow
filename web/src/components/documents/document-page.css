@@ -594,7 +594,7 @@ button.document-icon.is-empty:hover,
   .document-subscribers > .document-subscribers__document,
   .document-subscribers > .document-subscribers__search,
   .document-subscribers > .document-subscribers__list {
-    width: 100%;
+    width: calc(100vw - 32px);
     margin-left: 0;
   }
   .document-subscribers__document > span {

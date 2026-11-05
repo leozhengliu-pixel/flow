@@ -86,24 +86,25 @@
   :global([data-radix-popper-content-wrapper]:has(>[data-field])),
   :global([data-radix-popper-content-wrapper]:has(>[data-level])){width:calc(100vw - 32px)!important;min-width:0!important;transform:translate(16px,13vh)!important}
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root],.valueMenu){width:100%;max-width:100%;max-height:min(450px,calc(100dvh - 13vh - 16px));box-shadow:var(--pk-card-shadow)}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootCommand,.valueMenu .valueSearch{width:calc(100vw - 32px)}
   /* A phone value picker replaces the root in the same panel instead of stacking beside it. */
   .rootMenu[data-layout=issues][data-submenu-open],
   .rootMenu[data-layout=documents][data-submenu-open]{visibility:hidden;pointer-events:none}
-  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSearch,.valueMenu .valueSearch{height:46px;flex-basis:46px;padding:6px 4.5px 0 5.5px;border-bottom:0}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSearch,.valueMenu .valueSearch{height:46px;flex-basis:46px;padding:6px 6px 0;border-bottom:0}
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSearch input,.valueMenu .valueSearch input{height:40px;padding:11px 12px;border-radius:12px}
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSearch input::placeholder{color:var(--pk-faint)}
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSearch kbd{display:none}
-  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootList{margin:0;padding:6px 0 4px}
-  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootGroup{margin:0 4.5px 0 5.5px}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootList{margin:0;padding:6px 0 5px}
+  :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootGroup{margin:0 6px}
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootItem,.valueMenu .valueItem{height:46px;padding:0 12px;font-size:13px;font-weight:450;line-height:15.6px}
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootChevron{display:none}
   :is(.rootMenu[data-layout=documents],.rootMenu[data-layout=issues][data-variant=root]) .rootSeparator{margin:0}
   .rootMenu[data-surface=my-issues][data-variant=root] .rootCommand{font-size:15px;font-weight:400;line-height:22.5px}
   .rootMenu[data-surface=my-issues][data-variant=root] .rootList{margin:0}
   .rootMenu[data-surface=my-issues][data-variant=root] .rootGroup{margin:0}
-  .rootMenu[data-surface=my-issues] .rootGroup [cmdk-group-items]>.rootItem{width:calc(100% - 10px);margin:0 4.5px 0 5.5px}
+  .rootMenu[data-surface=my-issues] .rootGroup [cmdk-group-items]>.rootItem{width:calc(100% - 12px);margin:0 6px}
   :global([data-radix-popper-content-wrapper]:has(>[data-surface=my-issues][data-variant=root])){transform:translate(16px,round(nearest,13vh,1px))!important}
-  .phoneRowSlot{position:relative;height:46px;margin:0 4.5px 0 5.5px}
+  .phoneRowSlot{position:relative;height:46px;margin:0 6px}
   .phoneRowSlot:not(:has([cmdk-item])){display:none}
   .rootMenu[data-surface=my-issues] .phoneRowSlot .rootItem{position:absolute;inset:0;font-size:15px;font-weight:400;line-height:22.5px}
   .rootMenu[data-surface=my-issues] .rootItem>span:nth-child(2){font-size:13px;font-weight:450;line-height:15.6px}
@@ -111,7 +112,7 @@
   .rootMenu[data-surface=my-issues] .rootIcon svg{fill:var(--pk-muted)}
   .phoneSeparatorSlot{position:relative;height:12px}
   .phoneSeparatorSlot:not(:has([cmdk-separator]:not([hidden]))){display:none}
-  .rootMenu[data-surface=my-issues] .phoneSeparatorSlot .rootSeparator{position:absolute;inset:0;margin:0;padding:6px 0;width:calc(100% + 1px)}
+  .rootMenu[data-surface=my-issues] .phoneSeparatorSlot .rootSeparator{position:absolute;inset:0;margin:0;padding:6px 0;width:100%}
   .rootMenu[data-surface=my-issues] .phoneSeparatorSlot .rootSeparator:after{height:1px;background:transparent;border-bottom:1px solid var(--pk-divider);transform:scaleY(.5);transform-origin:top}
 }
 
@@ -142,7 +143,7 @@
   .valueRowSlot .checkbox{margin-left:1px;}
   .valueRowSlot .optionSlot{width:14px;flex-basis:14px;margin-left:6px;margin-right:1px;}
   .valueRowSlot .valueLabel{font-size:13px;font-weight:450;line-height:15.6px;}
-  .valueMenu .valueList{margin:0 4.5px 0 5.5px;padding:6px 0 5px;}
+  .valueMenu .valueList{width:calc(100vw - 44px);margin:0 6px;padding:6px 0 5px;}
   .valueMenu .checkbox{padding:2px;border-color:var(--label-picker-checkbox-border);}
   .valueMenu .optionSlot>svg{color:var(--pk-text);}
   .valueMenu .valueMetaLine{display:block;flex:none;margin-left:auto;font-size:13px;line-height:normal;}
