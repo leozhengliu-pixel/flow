@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Use shared sidebar section spacing above phone team rows.
 - Remove fitted phone activity offsets and restore subscription-button padding.
 - Center phone sub-issue progress within the header's explicit grid track.
 - Match phone issue-title paragraph tracking.
