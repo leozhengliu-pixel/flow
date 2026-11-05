@@ -311,30 +311,49 @@ func (s *server) chatUpdateCard(ctx context.Context, record domain.ChatIntegrati
 	return s.chatWorkflowRequest(ctx, record, http.MethodPatch, "/open-apis/im/v1/messages/"+url.PathEscape(messageID), map[string]string{"content": string(content)}, nil)
 }
 
-// chatThreadReplyCommand recognizes a member's reply in an issue thread. A
-// create command addressed to the bot keeps its own meaning.
-func (s *server) chatThreadReplyCommand(ctx context.Context, record domain.ChatIntegrationRecord, envelope chatWebhookEnvelope) (chatInboundCommand, string, bool) {
+// Reasons chatThreadReplyCommandReason gives for a group message that is not
+// a reply to keep as a comment.
+const (
+	chatThreadNotThread     = "not_in_thread"       // no root_id: not a reply
+	chatThreadEmpty         = "thread_reply_empty"  // nothing but mentions, or not text
+	chatThreadCommand       = "thread_command"      // a create or request command to the bot
+	chatThreadNotIssue      = "thread_not_issue"    // the root is no issue card of this group
+	chatThreadLookupFailure = "thread_lookup_error" // the thread could not be read
+)
+
+// chatThreadReplyCommandReason recognizes a member's reply in an issue
+// thread, or says why the message is not one. A reply is a message with a
+// root_id (normal groups, reply in thread; topic groups, every reply in a
+// topic) whose root is an issue card Flow posted in this group; it needs no
+// mention, but the platform delivers group messages that do not mention the
+// bot only with the im:message.group_msg permission. A create or request
+// command addressed to the bot keeps its own meaning. The caller checked the
+// sender and chat type.
+func (s *server) chatThreadReplyCommandReason(ctx context.Context, record domain.ChatIntegrationRecord, envelope chatWebhookEnvelope) (chatInboundCommand, string, string) {
 	event := envelope.Event
 	message := event.Message
-	if event.Sender.SenderType != "user" || event.Sender.TenantKey != record.TenantKey || event.Sender.SenderID.OpenID == "" || event.Sender.SenderID.OpenID == record.BotOpenID || message.MessageID == "" || message.ChatID == "" || message.ChatType != "group" || message.RootID == "" || message.RootID == message.MessageID {
-		return chatInboundCommand{}, "", false
+	if message.RootID == "" || message.RootID == message.MessageID {
+		return chatInboundCommand{}, "", chatThreadNotThread
 	}
 	text, mentionedBot, ok := chatThreadReplyText(record, envelope)
 	if !ok || strings.TrimSpace(text) == "" {
-		return chatInboundCommand{}, "", false
+		return chatInboundCommand{}, "", chatThreadEmpty
 	}
 	if _, create := chatCreateTitle(text); create && mentionedBot {
-		return chatInboundCommand{}, "", false
+		return chatInboundCommand{}, "", chatThreadCommand
 	}
 	// So does a request ("@Flow 提需求 …", chat_requests.go).
 	if _, request := chatRequestText(text); request && mentionedBot {
-		return chatInboundCommand{}, "", false
+		return chatInboundCommand{}, "", chatThreadCommand
 	}
 	thread, err := s.store.ChatThreadForRoot(ctx, record.WorkspaceKey, record.ConnectionID, message.RootID)
-	if err != nil || thread.ChatID != message.ChatID || thread.ResourceType != domain.ChatThreadResourceIssue {
-		return chatInboundCommand{}, "", false
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return chatInboundCommand{}, "", chatThreadLookupFailure
 	}
-	return chatInboundCommand{Kind: chatThreadReplyKind, OpenID: event.Sender.SenderID.OpenID, ChatID: message.ChatID, MessageID: message.MessageID, RootMessageID: message.RootID, Text: text}, chatKey(record.ConnectionID, "message", message.MessageID), true
+	if err != nil || thread.ChatID != message.ChatID || thread.ResourceType != domain.ChatThreadResourceIssue {
+		return chatInboundCommand{}, "", chatThreadNotIssue
+	}
+	return chatInboundCommand{Kind: chatThreadReplyKind, OpenID: event.Sender.SenderID.OpenID, ChatID: message.ChatID, MessageID: message.MessageID, RootMessageID: message.RootID, Text: text}, chatKey(record.ConnectionID, "message", message.MessageID), ""
 }
 
 // chatThreadReplyText reads a text or rich text reply, with mentions written
@@ -352,7 +371,7 @@ func chatThreadReplyText(record domain.ChatIntegrationRecord, envelope chatWebho
 		}
 		text = content.Text
 	case "post":
-		var content struct {
+		type post struct {
 			Title   string `json:"title"`
 			Content [][]struct {
 				Tag      string `json:"tag"`
@@ -362,8 +381,19 @@ func chatThreadReplyText(record domain.ChatIntegrationRecord, envelope chatWebho
 				UserName string `json:"user_name"`
 			} `json:"content"`
 		}
-		if json.Unmarshal([]byte(message.Content), &content) != nil {
-			return "", false, false
+		var content post
+		plainErr := json.Unmarshal([]byte(message.Content), &content)
+		if plainErr != nil || content.Content == nil {
+			// Some events wrap the post in its locale (as chatDMContent).
+			var localized map[string]post
+			if json.Unmarshal([]byte(message.Content), &localized) == nil {
+				for _, item := range localized {
+					content = item
+					break
+				}
+			} else if plainErr != nil {
+				return "", false, false
+			}
 		}
 		lines := []string{}
 		if content.Title != "" {
@@ -376,7 +406,16 @@ func chatThreadReplyText(record domain.ChatIntegrationRecord, envelope chatWebho
 				case "text", "a":
 					line.WriteString(element.Text)
 				case "at":
-					line.WriteString(firstNonEmpty(element.UserName, element.UserID))
+					// A received post names a mention by its placeholder
+					// (user_id "@_user_1"), resolved with the mentions
+					// below like plain text, so the bot's own is removed.
+					switch {
+					case strings.HasPrefix(element.UserID, "@_"):
+						line.WriteString(element.UserID)
+					case record.BotOpenID != "" && element.UserID == record.BotOpenID:
+					default:
+						line.WriteString(firstNonEmpty(element.UserName, element.UserID))
+					}
 				}
 			}
 			lines = append(lines, line.String())

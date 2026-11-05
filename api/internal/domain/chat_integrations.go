@@ -65,6 +65,14 @@ type ChatTenantCheck struct {
 	// ReportedTenantKey is, on chat_tenant_mismatch, the tenant key the
 	// platform reported instead of the recorded one.
 	ReportedTenantKey string `json:"reportedTenantKey,omitempty"`
+	// MissingScopes are the message permissions the tenant has not granted
+	// the app, as the platform's grant list reports them on a successful
+	// check: im:message.group_at_msg:readonly (group mentions),
+	// im:message.group_msg (thread replies without a mention) and
+	// im:message.p2p_msg:readonly (direct messages). ScopesUnchecked is set
+	// when that list could not be read.
+	MissingScopes   []string `json:"missingScopes,omitempty"`
+	ScopesUnchecked bool     `json:"scopesUnchecked,omitempty"`
 }
 
 const (

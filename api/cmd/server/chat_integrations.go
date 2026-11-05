@@ -487,6 +487,27 @@ func (s *server) syncChatConnection(ctx context.Context, record domain.ChatInteg
 	})
 }
 
+// chatProcessingErrorPrefix starts the lastError of a chat job that failed
+// inside Flow (not on the platform); the next successful delivery clears it.
+const chatProcessingErrorPrefix = "Chat processing: "
+
+// chatProcessingErrorMessage is the lastError of a job that failed inside
+// Flow: an internal operation that cannot succeed (chatOperationError), or
+// any other error once the job ran out of attempts; empty for a platform
+// failure or an expected refusal.
+func chatProcessingErrorMessage(err error) string {
+	var platform *chatPlatformError
+	var permanent chatPermanentError
+	var operation *chatOperationError
+	switch {
+	case errors.As(err, &operation):
+		return chatProcessingErrorPrefix + "an internal operation failed (" + operation.Path + ": " + operation.Reason + "). Members' chat requests stop at this step; see the server log entries \"chat operation\"."
+	case err == nil || errors.As(err, &platform) || errors.As(err, &permanent):
+		return ""
+	}
+	return chatProcessingErrorPrefix + "a chat request kept failing inside Flow and was given up. See the server log for \"chat direct message\" or \"chat callback\" entries."
+}
+
 func (s *server) recordChatDeliveryResult(ctx context.Context, record domain.ChatIntegrationRecord, deliveryErr error) error {
 	err := s.recordChatDeliveryResultLocked(ctx, record, deliveryErr)
 	// A refused tenant token: find out whether the app is still approved.
@@ -515,9 +536,14 @@ func (s *server) recordChatDeliveryResultLocked(ctx context.Context, record doma
 				now := time.Now().UTC()
 				if deliveryErr == nil {
 					item.LastDeliveryAt = &now
-					if strings.HasPrefix(item.LastError, "Chat delivery: ") {
+					if strings.HasPrefix(item.LastError, "Chat delivery: ") || strings.HasPrefix(item.LastError, chatProcessingErrorPrefix) {
 						item.LastError = ""
 					}
+				} else if processing := chatProcessingErrorMessage(deliveryErr); processing != "" {
+					if item.LastError == processing {
+						return store.ErrNoMutation
+					}
+					item.LastError = processing
 				} else {
 					message := "Chat delivery: request failed. Check bot permissions, group access and application credentials."
 					var platformErr *chatPlatformError

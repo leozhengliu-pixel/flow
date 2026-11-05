@@ -94,6 +94,9 @@ func chatErrorCode(message string) string {
 	if strings.HasPrefix(message, "Chat delivery: ") {
 		return "chat_delivery_failed"
 	}
+	if strings.HasPrefix(message, chatProcessingErrorPrefix) {
+		return "chat_processing_failed"
+	}
 	return "chat_error"
 }
 

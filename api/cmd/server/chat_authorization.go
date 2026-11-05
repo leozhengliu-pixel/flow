@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -64,10 +65,28 @@ type chatMutationError struct {
 
 func (e *chatMutationError) Error() string { return e.Message }
 
+// chatOperationError is an internal chat operation that cannot succeed by
+// retrying it: its response exceeded the limit, or could not be decoded. The
+// job fails at once and the integration records it (chatJobFinal).
+type chatOperationError struct {
+	Path   string
+	Reason string // response_too_large or response_invalid
+}
+
+func (e *chatOperationError) Error() string {
+	return "chat operation " + e.Path + ": " + e.Reason
+}
+
+// chatOperationResponseLimit caps an internal chat operation's response.
+var chatOperationResponseLimit = 4 << 20
+
 type chatMutationResponse struct {
 	header http.Header
 	status int
 	body   bytes.Buffer
+	// overflow is the size the response reached when it exceeded the limit;
+	// the body is then incomplete and the operation fails.
+	overflow int
 }
 
 func (w *chatMutationResponse) Header() http.Header { return w.header }
@@ -78,7 +97,8 @@ func (w *chatMutationResponse) WriteHeader(status int) {
 }
 func (w *chatMutationResponse) Write(data []byte) (int, error) {
 	w.WriteHeader(http.StatusOK)
-	if w.body.Len()+len(data) > 4<<20 {
+	if w.overflow > 0 || w.body.Len()+len(data) > chatOperationResponseLimit {
+		w.overflow = max(w.overflow, w.body.Len()) + len(data)
 		return 0, errors.New("chat operation response exceeds limit")
 	}
 	return w.body.Write(data)
@@ -117,9 +137,27 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 	}
 	var handler http.HandlerFunc
 	parts := strings.Split(strings.Trim(path, "/"), "/")
+	inProcess := false
 	switch {
 	case path == "/api/issue-records/bootstrap" && method == http.MethodGet:
-		handler = s.issueRecordsBootstrap
+		// The workspace metadata, read in process: the same data and
+		// authorization as the route, without encoding many MiB of JSON for
+		// a check or a form.
+		metadata, ok := result.(*domain.Bootstrap)
+		if result != nil && !ok {
+			return errors.New("unsupported chat operation")
+		}
+		if metadata == nil {
+			// Only the authorization is wanted.
+			metadata = &domain.Bootstrap{}
+		}
+		inProcess = true
+		handler = func(w http.ResponseWriter, r *http.Request) {
+			if data, ok := s.issueRecordsBootstrapData(w, r); ok {
+				*metadata = data
+				w.WriteHeader(http.StatusOK)
+			}
+		}
 	case path == "/api/issue-records" && method == http.MethodPost:
 		handler = s.createIssueRecord
 	case len(parts) == 3 && parts[0] == "api" && parts[1] == "issue-records" && parts[2] != "":
@@ -158,6 +196,11 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 	if w.status == 0 {
 		return &chatMutationError{Status: http.StatusForbidden, Message: "This action is not allowed by your workspace"}
 	}
+	if w.overflow > 0 {
+		// Never decoded: the body is cut off at the limit.
+		slog.WarnContext(ctx, "chat operation response exceeds limit", "method", method, "endpoint", chatOperationEndpoint(path), "status", w.status, "size_bytes_at_least", w.overflow, "limit_bytes", chatOperationResponseLimit)
+		return &chatOperationError{Path: chatOperationEndpoint(path), Reason: "response_too_large"}
+	}
 	if w.status < http.StatusOK || w.status >= http.StatusMultipleChoices {
 		var payload struct {
 			Error string `json:"error"`
@@ -168,8 +211,21 @@ func (s *server) chatAuthorizedMutation(ctx context.Context, workspace, userID, 
 		}
 		return &chatMutationError{Status: w.status, Message: payload.Error}
 	}
-	if result != nil {
-		return json.Unmarshal(w.body.Bytes(), result)
+	if result != nil && !inProcess {
+		if err := json.Unmarshal(w.body.Bytes(), result); err != nil {
+			slog.WarnContext(ctx, "chat operation response invalid", "method", method, "endpoint", chatOperationEndpoint(path), "status", w.status, "size_bytes", w.body.Len())
+			return &chatOperationError{Path: chatOperationEndpoint(path), Reason: "response_invalid"}
+		}
 	}
 	return nil
+}
+
+// chatOperationEndpoint names an internal chat operation's route for the
+// logs, without the resource IDs.
+func chatOperationEndpoint(path string) string {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) >= 3 && parts[0] == "api" && parts[1] == "issue-records" && parts[2] != "bootstrap" {
+		parts[2] = "{id}"
+	}
+	return "/" + strings.Join(parts, "/")
 }

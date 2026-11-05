@@ -183,6 +183,19 @@ func (s *server) listIssueRecords(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
+	data, ok := s.issueRecordsBootstrapData(w, r)
+	if !ok {
+		return
+	}
+	w.Header().Set("Server-Timing", fmt.Sprintf("bootstrap;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
+	writeJSON(w, 200, data)
+}
+
+// issueRecordsBootstrapData is the viewer's workspace metadata the bootstrap
+// returns; on failure it has written the error (ok false). Chat workflows read
+// it in process (chat_authorization.go): a large workspace's bootstrap is many
+// MiB of JSON.
+func (s *server) issueRecordsBootstrapData(w http.ResponseWriter, r *http.Request) (domain.Bootstrap, bool) {
 	key := workspaceKey(r)
 	s.setChangeCursor(w, r, key)
 	var data domain.Bootstrap
@@ -191,19 +204,19 @@ func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 		data, ok = s.store.WorkspaceMetadata(key)
 		if !ok {
 			writeError(w, 404, "workspace not found")
-			return
+			return data, false
 		}
 		data.ViewerRole = "admin"
 		if err := s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID); err != nil {
 			issueRecordsError(w, err)
-			return
+			return data, false
 		}
 	} else {
 		var err error
 		data, err = s.store.PagedWorkspaceMetadata(r.Context(), key, authUser(r).ID)
 		if err != nil {
 			issueRecordsError(w, err)
-			return
+			return data, false
 		}
 		filterBootstrapForAPIKey(&data, r)
 	}
@@ -211,7 +224,7 @@ func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 	data.CommentActions = nil
 	if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
 		issueRecordsError(w, err)
-		return
+		return data, false
 	}
 	if projectListBootstrapRequested(r) {
 		store.ProjectListBootstrapProjection(&data)
@@ -219,11 +232,11 @@ func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 		store.IssueDetailBootstrapProjection(&data)
 	} else if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
 		issueRecordsError(w, err)
-		return
+		return data, false
 	}
 	if err := s.decorateCycleCapacity(r.Context(), &data); err != nil {
 		issueRecordsError(w, err)
-		return
+		return data, false
 	}
 	sanitizeBootstrap(&data)
 	s.applyCalendarAway(r.Context(), &data)
@@ -233,8 +246,7 @@ func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 	// per-initiative update endpoints instead of the bootstrap.
 	data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
 	data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
-	w.Header().Set("Server-Timing", fmt.Sprintf("bootstrap;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
-	writeJSON(w, 200, data)
+	return data, true
 }
 
 func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {

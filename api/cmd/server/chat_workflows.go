@@ -3,15 +3,16 @@ package main
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -47,20 +48,14 @@ type chatWebhookEnvelope struct {
 			MessageID string `json:"message_id"`
 			// RootID and ThreadID are set on a reply in a thread
 			// (chat_issue_threads.go); ParentID on a reply (chat_dm_agent.go).
-			RootID      string `json:"root_id"`
-			ThreadID    string `json:"thread_id"`
-			ParentID    string `json:"parent_id"`
-			ChatID      string `json:"chat_id"`
-			ChatType    string `json:"chat_type"`
-			MessageType string `json:"message_type"`
-			Content     string `json:"content"`
-			Mentions    []struct {
-				Key  string `json:"key"`
-				Name string `json:"name"`
-				ID   struct {
-					OpenID string `json:"open_id"`
-				} `json:"id"`
-			} `json:"mentions"`
+			RootID      string        `json:"root_id"`
+			ThreadID    string        `json:"thread_id"`
+			ParentID    string        `json:"parent_id"`
+			ChatID      string        `json:"chat_id"`
+			ChatType    string        `json:"chat_type"`
+			MessageType string        `json:"message_type"`
+			Content     string        `json:"content"`
+			Mentions    []chatMention `json:"mentions"`
 		} `json:"message"`
 		Operator struct {
 			TenantKey string `json:"tenant_key"`
@@ -86,6 +81,20 @@ type chatWebhookEnvelope struct {
 			OpenID string `json:"open_id"`
 		} `json:"user_id"`
 	} `json:"event"`
+	// legacyCard marks a click delivered as a legacy card request
+	// (chat_callback.go), mapped to card.action.trigger.
+	legacyCard bool
+}
+
+// chatMention is a mention in a received message: Key is its placeholder in
+// the content (@_user_1), ID the mentioned member or bot as this app sees it.
+type chatMention struct {
+	Key           string `json:"key"`
+	Name          string `json:"name"`
+	MentionedType string `json:"mentioned_type"`
+	ID            struct {
+		OpenID string `json:"open_id"`
+	} `json:"id"`
 }
 
 type chatInboundCommand struct {
@@ -179,66 +188,70 @@ func chatKey(parts ...string) string {
 func (s *server) handleChatWebhook(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2500*time.Millisecond)
 	defer cancel()
+	diagnostic := chatCallbackLog{RequestID: requestIDFrom(r.Context()), Provider: r.PathValue("provider"), ConnectionID: r.PathValue("id"), Format: chatCallbackFormatUnknown}
 	record, err := s.store.ChatIntegrationByID(ctx, r.PathValue("provider"), r.PathValue("id"))
 	if err != nil {
+		diagnostic.rejected(ctx, "unknown_connection")
 		writeError(w, http.StatusNotFound, "chat integration not found")
 		return
 	}
+	diagnostic.AppID = record.AppID
 	credentials, err := s.chatCredentials(ctx, record)
 	if err != nil || credentials.EncryptKey == "" || credentials.VerificationToken == "" {
+		diagnostic.rejected(ctx, "credentials_unavailable")
 		writeError(w, http.StatusServiceUnavailable, "chat callback credentials unavailable")
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 128<<10))
 	if err != nil {
+		diagnostic.rejected(ctx, "too_large")
 		writeError(w, http.StatusRequestEntityTooLarge, "chat callback too large")
 		return
 	}
-	plaintext, err := chatCallbackPlaintext(body, credentials.EncryptKey)
-	var envelope chatWebhookEnvelope
-	if err != nil || json.Unmarshal(plaintext, &envelope) != nil {
-		writeError(w, http.StatusUnauthorized, "invalid chat callback")
+	callback, reason := chatVerifyCallback(r.Header, body, credentials, record, time.Now())
+	envelope := callback.Envelope
+	diagnostic.Format, diagnostic.Encrypted, diagnostic.Scheme = callback.Format, callback.Encrypted, callback.Scheme
+	diagnostic.EventType = firstNonEmpty(envelope.Header.EventType, callback.Format)
+	if callback.Format == chatCallbackFormatLegacyCard && envelope.Header.EventType == "card.action.trigger" {
+		diagnostic.EventType = chatLegacyCardEventType
+	}
+	if envelope.Header.AppID != "" && reason != chatRejectAppMismatch {
+		diagnostic.AppID = envelope.Header.AppID
+	}
+	if reason != "" {
+		diagnostic.rejected(ctx, reason)
+		writeError(w, chatRejectStatus(reason), "invalid chat callback")
 		return
 	}
-	if envelope.Type == "url_verification" {
-		if envelope.Challenge == "" || len(envelope.Challenge) > 512 || subtle.ConstantTimeCompare([]byte(envelope.Token), []byte(credentials.VerificationToken)) != 1 {
-			writeError(w, http.StatusUnauthorized, "invalid chat verification")
-			return
-		}
+	if callback.Format == chatCallbackFormatChallenge {
+		diagnostic.handled(ctx, "challenge", "")
 		writeJSON(w, http.StatusOK, map[string]string{"challenge": envelope.Challenge})
 		return
 	}
-	if !record.Connected {
-		writeError(w, http.StatusForbidden, "chat integration is not connected")
-		return
-	}
-	timestamp, err := strconv.ParseInt(r.Header.Get(chatCallbackTimestampHeader), 10, 64)
-	if err != nil || time.Since(time.Unix(timestamp, 0)) > 5*time.Minute || time.Until(time.Unix(timestamp, 0)) > 5*time.Minute || r.Header.Get(chatCallbackNonceHeader) == "" || !chatCallbackSignatureValid(r.Header, body, credentials.EncryptKey) || subtle.ConstantTimeCompare([]byte(envelope.Header.Token), []byte(credentials.VerificationToken)) != 1 {
-		writeError(w, http.StatusUnauthorized, "invalid chat signature")
-		return
-	}
-	if envelope.Schema != "2.0" || envelope.Header.AppID != record.AppID || envelope.Header.TenantKey != record.TenantKey {
-		writeError(w, http.StatusForbidden, "chat callback tenant mismatch")
-		return
-	}
 	if envelope.Header.EventType == "url.preview.get" {
-		s.writeChatLinkPreview(ctx, w, record, plaintext)
+		diagnostic.handled(ctx, "link_preview", "")
+		s.writeChatLinkPreview(ctx, w, record, callback.Plaintext)
 		return
 	}
-	command, dedup, accepted, err := s.chatCommandForEnvelope(ctx, record, envelope)
+	command, dedup, ignored, err := s.chatCommandForEnvelopeReason(ctx, record, envelope)
 	if err != nil {
 		// Invalid/expired actions do not enter the queue; this response is visible
 		// only to the clicker and never changes a shared group card.
-		writeJSON(w, http.StatusOK, map[string]any{"toast": map[string]string{"type": "error", "content": "This action has expired or is unavailable. Open Flow and try again."}})
+		diagnostic.handled(ctx, "refused", ignored, chatEnvelopeLogAttrs(envelope)...)
+		writeJSON(w, http.StatusOK, map[string]any{"toast": map[string]any{"type": "error", "content": "This action has expired or is unavailable. Open Flow and try again.", "i18n": map[string]string{"en_us": "This action has expired or is unavailable. Open Flow and try again.", "zh_cn": "此操作已过期或不可用，请打开 Flow 后重试。"}}})
 		return
 	}
-	if accepted {
+	if ignored == "" {
 		payload, _ := json.Marshal(command)
 		_, err = s.store.EnqueueChatJob(ctx, domain.ChatJob{ID: "chat_job_" + dedup, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Kind: "inbound", DedupKey: dedup, Payload: payload, RunAt: time.Now().UTC()})
 		if err != nil {
+			diagnostic.rejected(ctx, "queue_unavailable")
 			writeError(w, http.StatusServiceUnavailable, "chat callback could not be saved")
 			return
 		}
+		diagnostic.handled(ctx, "queued", command.Kind, append(chatEnvelopeLogAttrs(envelope), "job_id", "chat_job_"+dedup)...)
+	} else {
+		diagnostic.handled(ctx, "ignored", ignored, chatEnvelopeLogAttrs(envelope)...)
 	}
 	if envelope.Header.EventType == "card.action.trigger" {
 		writeJSON(w, http.StatusOK, s.chatCallbackToast(ctx, record, command))
@@ -247,72 +260,123 @@ func (s *server) handleChatWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// chatCommandForEnvelope maps an authenticated event to its queued command;
+// accepted is false when the event asks nothing of Flow.
 func (s *server) chatCommandForEnvelope(ctx context.Context, record domain.ChatIntegrationRecord, envelope chatWebhookEnvelope) (chatInboundCommand, string, bool, error) {
+	command, dedup, ignored, err := s.chatCommandForEnvelopeReason(ctx, record, envelope)
+	return command, dedup, ignored == "" && err == nil, err
+}
+
+// chatSenderIgnoreReason is why a message's sender or IDs make it nothing
+// for Flow: the bot itself, another app, another tenant, a malformed event.
+func chatSenderIgnoreReason(record domain.ChatIntegrationRecord, envelope chatWebhookEnvelope) string {
+	event := envelope.Event
+	switch {
+	case event.Sender.SenderType != "user":
+		return "sender_not_user"
+	case event.Sender.SenderID.OpenID == "":
+		return "sender_missing"
+	case event.Sender.SenderID.OpenID == record.BotOpenID:
+		return "sender_is_bot"
+	case event.Sender.TenantKey != record.TenantKey:
+		return "sender_other_tenant"
+	case !chatValidPlatformID(event.Message.MessageID, "om_"):
+		return "message_id_invalid"
+	case event.Message.ChatID == "":
+		return "chat_id_missing"
+	}
+	return ""
+}
+
+// chatCommandForEnvelopeReason is chatCommandForEnvelope with the reason
+// code of an event that yields no command (ignored) or of a refused card
+// click (with err).
+func (s *server) chatCommandForEnvelopeReason(ctx context.Context, record domain.ChatIntegrationRecord, envelope chatWebhookEnvelope) (chatInboundCommand, string, string, error) {
 	event := envelope.Event
 	switch envelope.Header.EventType {
 	case "im.message.receive_v1":
 		if event.Message.ChatType == "p2p" {
-			return chatDirectMessageCommand(record, envelope) // chat_dm_agent.go
+			command, dedup, ok, err := chatDirectMessageCommand(record, envelope) // chat_dm_agent.go
+			if !ok && err == nil {
+				return command, dedup, firstNonEmpty(chatSenderIgnoreReason(record, envelope), "dm_content_too_large"), nil
+			}
+			return command, dedup, "", err
 		}
-		if command, dedup, ok := s.chatThreadReplyCommand(ctx, record, envelope); ok {
-			return command, dedup, true, nil
+		if reason := chatSenderIgnoreReason(record, envelope); reason != "" {
+			return chatInboundCommand{}, "", reason, nil
 		}
-		if event.Sender.SenderType != "user" || event.Sender.TenantKey != record.TenantKey || event.Sender.SenderID.OpenID == "" || event.Sender.SenderID.OpenID == record.BotOpenID || !chatValidPlatformID(event.Message.MessageID, "om_") || event.Message.ChatID == "" || event.Message.ChatType != "group" {
-			return chatInboundCommand{}, "", false, nil
+		if event.Message.ChatType != "group" {
+			return chatInboundCommand{}, "", "chat_type_unsupported", nil
 		}
-		if event.Message.MessageType == "text" {
-			var content struct {
-				Text string `json:"text"`
-			}
-			if json.Unmarshal([]byte(event.Message.Content), &content) != nil {
-				return chatInboundCommand{}, "", false, nil
-			}
-			mentioned := false
-			for _, mention := range event.Message.Mentions {
-				if mention.ID.OpenID == record.BotOpenID && record.BotOpenID != "" {
-					mentioned = true
-					content.Text = strings.ReplaceAll(content.Text, mention.Key, "")
-				}
-			}
-			if !mentioned {
-				return chatInboundCommand{}, "", false, nil
-			}
-			if title, matched := chatCreateTitle(content.Text); matched {
-				return chatInboundCommand{Kind: "create_form", OpenID: event.Sender.SenderID.OpenID, ChatID: event.Message.ChatID, MessageID: event.Message.MessageID, Title: title}, chatKey(record.ConnectionID, "message", event.Message.MessageID), true, nil
-			}
+		command, dedup, threadReason := s.chatThreadReplyCommandReason(ctx, record, envelope)
+		if threadReason == "" {
+			return command, dedup, "", nil
+		}
+		text, mentioned, ok := chatThreadReplyText(record, envelope)
+		switch {
+		case !ok && event.Message.MessageType != "text" && event.Message.MessageType != "post":
+			return chatInboundCommand{}, "", "message_type_unsupported", nil
+		case !ok:
+			return chatInboundCommand{}, "", "content_unreadable", nil
+		case !mentioned && threadReason != chatThreadNotThread:
+			// A reply in a thread that is not an issue's, or empty.
+			return chatInboundCommand{}, "", threadReason, nil
+		case !mentioned && slices.ContainsFunc(event.Message.Mentions, func(mention chatMention) bool { return mention.MentionedType == "bot" }):
+			// Another bot, or this bot under an open_id other than the one
+			// recorded for the app.
+			return chatInboundCommand{}, "", "other_bot_mentioned", nil
+		case !mentioned:
+			return chatInboundCommand{}, "", "bot_not_mentioned", nil
+		}
+		// Text and rich text alike, with the bot's mention removed.
+		if title, matched := chatCreateTitle(text); matched {
+			return chatInboundCommand{Kind: "create_form", OpenID: event.Sender.SenderID.OpenID, ChatID: event.Message.ChatID, MessageID: event.Message.MessageID, Title: title}, chatKey(record.ConnectionID, "message", event.Message.MessageID), "", nil
 		}
 		// Any other mention of the bot may be a request (chat_requests.go).
-		text, mentioned, ok := chatThreadReplyText(record, envelope)
-		if !ok || !mentioned {
-			return chatInboundCommand{}, "", false, nil
+		if command, dedup, ok := s.chatRequestMentionCommand(ctx, record, envelope, text); ok {
+			return command, dedup, "", nil
 		}
-		command, dedup, ok := s.chatRequestMentionCommand(ctx, record, envelope, text)
-		if ok {
-			return command, dedup, true, nil
-		}
-		return chatInboundCommand{Kind: "group_help", OpenID: event.Sender.SenderID.OpenID, ChatID: event.Message.ChatID, MessageID: event.Message.MessageID}, chatKey(record.ConnectionID, "message", event.Message.MessageID), true, nil
+		return chatInboundCommand{Kind: "group_help", OpenID: event.Sender.SenderID.OpenID, ChatID: event.Message.ChatID, MessageID: event.Message.MessageID}, chatKey(record.ConnectionID, "message", event.Message.MessageID), "", nil
 	case "im.message.reaction.created_v1":
 		command, dedup, ok := s.chatRequestReactionCommand(ctx, record, envelope)
-		return command, dedup, ok, nil
+		if !ok {
+			return command, dedup, "reaction_not_request", nil
+		}
+		return command, dedup, "", nil
 	case "card.action.trigger":
-		if event.Operator.TenantKey != record.TenantKey || event.Operator.OpenID == "" || event.Context.MessageID == "" || event.Context.ChatID == "" {
-			return chatInboundCommand{}, "", false, chatInvalid("invalid card operator")
+		// A legacy card request may not name the chat: the stored action
+		// does, and the message ID alone identifies the card.
+		if event.Operator.TenantKey != record.TenantKey || event.Operator.OpenID == "" || event.Context.MessageID == "" || event.Context.ChatID == "" && !envelope.legacyCard {
+			return chatInboundCommand{}, "", "card_operator_invalid", chatInvalid("invalid card operator")
 		}
 		var actionID string
 		if json.Unmarshal(event.Action.Value["actionId"], &actionID) != nil || actionID == "" || len(actionID) > 191 {
-			return chatInboundCommand{}, "", false, chatInvalid("invalid card action")
+			return chatInboundCommand{}, "", "card_action_invalid", chatInvalid("invalid card action")
 		}
 		stored, err := s.store.GetChatAction(ctx, record.WorkspaceKey, record.ConnectionID, actionID)
 		var action chatCardAction
-		if err != nil || stored.ExpiresAt.Before(time.Now()) || json.Unmarshal(stored.Payload, &action) != nil || !chatActionMatches(stored, action, event.Operator.OpenID, event.Context.ChatID, event.Context.MessageID) {
-			return chatInboundCommand{}, "", false, chatInvalid("card action expired")
+		if err != nil || json.Unmarshal(stored.Payload, &action) != nil {
+			return chatInboundCommand{}, "", "card_action_unknown", chatInvalid("card action expired")
+		}
+		if stored.ExpiresAt.Before(time.Now()) {
+			return chatInboundCommand{}, "", "card_action_expired", chatInvalid("card action expired")
+		}
+		chatID := event.Context.ChatID
+		if chatID == "" {
+			chatID = action.ChatID
+			if stored.UserID != "" {
+				chatID = action.PersonalChatID
+			}
+		}
+		if !chatActionMatches(stored, action, event.Operator.OpenID, chatID, event.Context.MessageID) {
+			return chatInboundCommand{}, "", "card_action_mismatch", chatInvalid("card action expired")
 		}
 		// Personal forms are single use even when a double click has another
 		// callback ID. Shared buttons may open a fresh private form later.
 		dedup := chatKey(record.ConnectionID, "action", actionID, event.Operator.OpenID)
 		if stored.UserID == "" || chatQuickActionKind(action.Kind) {
 			if envelope.Header.EventID == "" {
-				return chatInboundCommand{}, "", false, chatInvalid("missing card callback identity")
+				return chatInboundCommand{}, "", "card_event_id_missing", chatInvalid("missing card callback identity")
 			}
 			dedup = chatKey(dedup, envelope.Header.EventID)
 		}
@@ -320,9 +384,9 @@ func (s *server) chatCommandForEnvelope(ctx context.Context, record domain.ChatI
 		if event.Action.Option != "" && len(event.Action.Option) <= 191 {
 			values = map[string]json.RawMessage{"option": json.RawMessage(strconv.Quote(event.Action.Option))}
 		}
-		return chatInboundCommand{Kind: "card_action", OpenID: event.Operator.OpenID, ChatID: event.Context.ChatID, MessageID: event.Context.MessageID, ActionID: actionID, Values: values}, dedup, true, nil
+		return chatInboundCommand{Kind: "card_action", OpenID: event.Operator.OpenID, ChatID: chatID, MessageID: event.Context.MessageID, ActionID: actionID, Values: values}, dedup, "", nil
 	}
-	return chatInboundCommand{}, "", false, nil
+	return chatInboundCommand{}, "", "event_type_unsupported", nil
 }
 
 func chatActionMatches(stored domain.ChatAction, action chatCardAction, openID, chatID, messageID string) bool {
@@ -332,15 +396,19 @@ func chatActionMatches(stored domain.ChatAction, action chatCardAction, openID, 
 	return action.ChatID == chatID && action.MessageID == messageID && action.Kind != "create" && action.Kind != "state" && action.Kind != "assignee" && action.Kind != "comment"
 }
 
+// chatCreateCommand is a create command after the bot's mention: 创建事项 /
+// 新建事项 (spaces optional, the title may follow directly) or create issue /
+// new issue (any case, any spacing, not "create issues"), optionally behind a
+// slash, then an optional separator (half- or full-width colon or comma).
+var chatCreateCommand = regexp.MustCompile(`(?is)^/?\s*(?:(?:创建|新建)\s*事项|(?:create|new)\s+issue\b)[\s:：,，、]*(.*)$`)
+
 func chatCreateTitle(text string) (string, bool) {
-	text = strings.TrimSpace(text)
-	for _, prefix := range []string{"创建事项", "create issue"} {
-		if strings.HasPrefix(strings.ToLower(text), prefix) {
-			title := strings.TrimSpace(text[len(prefix):])
-			return title, len(title) <= 2048
-		}
+	match := chatCreateCommand.FindStringSubmatch(strings.TrimSpace(text))
+	if match == nil {
+		return "", false
 	}
-	return "", false
+	title := strings.TrimSpace(match[1])
+	return title, len(title) <= 2048
 }
 
 func (s *server) processChatJobs(ctx context.Context, workspace string) error {
@@ -383,6 +451,16 @@ func (s *server) processChatJobs(ctx context.Context, workspace string) error {
 				if healthErr := s.chatDeliveryHealth(ctx, job, platformFailure, false); healthErr != nil && !errors.Is(healthErr, store.ErrNoMutation) {
 					return healthErr
 				}
+			} else if processing := chatProcessingErrorMessage(err); status == "failed" && processing != "" {
+				// Failed inside Flow: the integration page shows it, the job
+				// keeps the reason, the log names the job and the step.
+				message = processing
+				slog.WarnContext(ctx, "chat job failed", "job_id", job.ID, "kind", job.Kind, "connection_id", job.ConnectionID, "attempts", job.Attempts, "error_kind", chatFailureKind(err))
+				if record, recordErr := s.chatJobIntegration(ctx, job); recordErr == nil {
+					if healthErr := s.recordChatDeliveryResultLocked(ctx, record, err); healthErr != nil && !errors.Is(healthErr, store.ErrNoMutation) {
+						return healthErr
+					}
+				}
 			} else if err == nil && progress.sent {
 				if healthErr := s.chatDeliveryHealth(ctx, job, nil, true); healthErr != nil && !errors.Is(healthErr, store.ErrNoMutation) {
 					return healthErr
@@ -415,6 +493,19 @@ func (s *server) processChatJob(ctx context.Context, job domain.ChatJob) error {
 	if json.Unmarshal(job.Payload, &command) != nil {
 		return chatInvalid("invalid stored chat command")
 	}
+	err = s.processChatInbound(ctx, record, job, command)
+	// A command that fails inside Flow for good answers its member (a
+	// direct message answers in its own conversation, chatDMFailure).
+	if err != nil && command.OpenID != "" && command.Kind != "dm_message" && chatProcessingErrorMessage(err) != "" && chatJobFinal(err, job) {
+		if noticeErr := s.chatSendPersonalText(ctx, record, command.OpenID, chatActionErrorText("chat_processing_failed", chatLanguage(domain.Bootstrap{}, "", record.Provider)), job.DedupKey+":processing"); noticeErr != nil {
+			slog.WarnContext(ctx, "chat failure notice not delivered", "job_id", job.ID, "connection_id", job.ConnectionID, "error_kind", chatFailureKind(noticeErr))
+		}
+	}
+	return err
+}
+
+// processChatInbound runs a queued inbound command.
+func (s *server) processChatInbound(ctx context.Context, record domain.ChatIntegrationRecord, job domain.ChatJob, command chatInboundCommand) error {
 	if command.Kind == chatThreadReplyKind {
 		return s.processChatThreadReply(ctx, record, job, command)
 	}

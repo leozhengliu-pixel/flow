@@ -71,6 +71,52 @@ type chatProbeResult struct {
 	// it was not readable (TenantInfoErr says why).
 	TenantKey, TenantName string
 	TenantInfoErr         error
+	// MissingScopes are the inbound message permissions not granted
+	// (chatInboundScopes); ScopesErr is set when the grant list was not
+	// readable.
+	MissingScopes []string
+	ScopesErr     error
+}
+
+// chatInboundScopes are the message permissions inbound workflows need, each
+// with the names the platform may list it under: group messages that mention
+// the bot, every group message (thread replies without a mention), and
+// direct messages.
+var chatInboundScopes = [][]string{
+	{"im:message.group_at_msg:readonly", "im:message.group_at_msg"},
+	{"im:message.group_msg", "im:message.group_msg:readonly"},
+	{"im:message.p2p_msg:readonly", "im:message.p2p_msg"},
+}
+
+// readChatMissingScopes reads the tenant's grants to the app
+// (GET /open-apis/application/v6/scopes, which needs no permission of its
+// own; grant_status 1 is granted) and returns the inbound permissions that
+// are not granted.
+func readChatMissingScopes(ctx context.Context, provider, token string) ([]string, error) {
+	var response struct {
+		Data struct {
+			Scopes []struct {
+				ScopeName   string `json:"scope_name"`
+				GrantStatus int    `json:"grant_status"`
+			} `json:"scopes"`
+		} `json:"data"`
+	}
+	if err := chatRequest(ctx, chatBaseURL(provider)+"/open-apis/application/v6/scopes", http.MethodGet, token, nil, &response); err != nil {
+		return nil, err
+	}
+	granted := map[string]bool{}
+	for _, scope := range response.Data.Scopes {
+		if scope.GrantStatus == 1 {
+			granted[scope.ScopeName] = true
+		}
+	}
+	missing := []string{}
+	for _, names := range chatInboundScopes {
+		if !slices.ContainsFunc(names, func(name string) bool { return granted[name] }) {
+			missing = append(missing, names[0])
+		}
+	}
+	return missing, nil
 }
 
 // chatTenantInfoPermissionCodes are the platform's answers when the app may
@@ -137,6 +183,7 @@ func chatProbe(ctx context.Context, record domain.ChatIntegrationRecord, credent
 	}
 	result.BotOpenID, result.BotName = response.Bot.OpenID, response.Bot.Name
 	result.TenantKey, result.TenantName, result.TenantInfoErr = readChatTenantInfo(ctx, record.Provider, token.Token)
+	result.MissingScopes, result.ScopesErr = readChatMissingScopes(ctx, record.Provider, token.Token)
 	if result.TenantKey != "" && record.TenantKey != "" && result.TenantKey != record.TenantKey {
 		// Never silently replaced: groups, accounts and callbacks were
 		// checked against the recorded key.
@@ -192,6 +239,11 @@ func applyChatTenantCheck(record *domain.ChatIntegrationRecord, probe chatProbeR
 			}
 		case probe.TenantInfoErr != nil:
 			check.TenantInfoErrorCode = chatErrorCode(chatCheckMessage(probe.TenantInfoErr))
+		}
+		if probe.ScopesErr != nil {
+			check.ScopesUnchecked = true
+		} else if len(probe.MissingScopes) > 0 {
+			check.MissingScopes = probe.MissingScopes
 		}
 		authorization := domain.ChatTenantAuthorization{TenantKey: record.TenantKey, AuthorizedAt: now, ConfiguredBy: configuredBy}
 		if record.Connected && record.TenantAuthorization != nil && !record.TenantAuthorization.AuthorizedAt.IsZero() {
@@ -534,6 +586,12 @@ func chatTenantPermission(record domain.ChatIntegrationRecord, exists bool, conn
 		}
 		if record.TenantCheck.TenantInfoErrorCode != "" {
 			tenant["tenantInfoErrorCode"] = record.TenantCheck.TenantInfoErrorCode
+		}
+		if len(record.TenantCheck.MissingScopes) > 0 {
+			tenant["missingScopes"] = record.TenantCheck.MissingScopes
+		}
+		if record.TenantCheck.ScopesUnchecked {
+			tenant["scopesUnchecked"] = true
 		}
 	}
 	if chatTenantAuthorized(record) {

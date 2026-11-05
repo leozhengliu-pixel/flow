@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -212,6 +213,10 @@ func chatDMNewIssueTitle(text string) (string, bool) {
 				continue
 			}
 			rest = strings.TrimSpace(strings.TrimLeft(rest, ":："))
+			// "新建事项怎么填模板？" asks the agent; it is no title.
+			if strings.HasSuffix(rest, "?") || strings.HasSuffix(rest, "？") {
+				return "", false
+			}
 			if utf8.RuneCountInString(rest) > 1000 {
 				rest = string([]rune(rest)[:1000])
 			}
@@ -228,15 +233,19 @@ func (s *server) chatDMMessage(ctx context.Context, record domain.ChatIntegratio
 	if err != nil {
 		return err
 	}
+	outcome := func(reason string) { chatLogDirectMessage(ctx, record, job, reason) }
 	if !linked {
+		outcome("dm_not_linked")
 		_, _, err = s.chatDMSend(ctx, record, command.OpenID, command.MessageID, job.DedupKey+":link", s.chatDMLinkCard(record.WorkspaceKey, zh))
 		return err
 	}
 	dm := chatDMRequest{record: record, identity: identity, command: command, job: job, zh: zh}
 	if !readable {
+		outcome("dm_message_type_unsupported")
 		return s.chatDMNotice(ctx, dm, chatDMText(zh, "Flow can read text, rich text, images and files here.", "这里支持文字、富文本、图片和文件。"))
 	}
 	if chatDMCommandIs(text, "switch workspace", "切换工作区") {
+		outcome("dm_quick_switch_workspace")
 		targets, err := s.chatDMTargets(ctx, record, identity)
 		if err != nil {
 			return err
@@ -265,24 +274,30 @@ func (s *server) chatDMMessage(ctx context.Context, record domain.ChatIntegratio
 		return err
 	}
 	if thread != nil && thread.Kind == "notification" {
+		outcome("dm_notification_comment")
 		return s.chatDMComment(ctx, dm, *thread, text)
 	}
 	if title, ok := chatDMNewIssueTitle(text); ok && len(resources) == 0 {
+		outcome("dm_quick_new_issue")
 		return s.chatDMNewIssueForm(ctx, dm, title)
 	}
 	switch {
 	case len(resources) == 0 && chatDMCommandIs(text, "my issues", "我的事项"):
+		outcome("dm_quick_my_issues")
 		return s.chatDMMyIssues(ctx, dm)
 	case len(resources) == 0 && chatDMCommandIs(text, "inbox", "收件箱"):
+		outcome("dm_quick_inbox")
 		return s.chatDMInbox(ctx, dm)
 	}
 	if link, ok := s.chatDMFlowLink(text); ok && len(resources) == 0 {
+		outcome("dm_link_preview")
 		return s.chatDMLinkPreview(ctx, dm, link)
 	}
 	sessionID := ""
 	if thread != nil {
 		sessionID = thread.SessionID
 	}
+	outcome("dm_agent_queued")
 	return s.chatDMStartReply(ctx, dm, sessionID)
 }
 
@@ -291,9 +306,11 @@ func (s *server) chatDMMessage(ctx context.Context, record domain.ChatIntegratio
 // chat applications; it answers the member when not (handled).
 func (s *server) chatDMAuthorize(ctx context.Context, dm *chatDMRequest) (bool, error) {
 	if err := s.chatAuthorizedMutation(dm.authContext(ctx), dm.target.Workspace, dm.identity.UserID, http.MethodGet, "/api/issue-records/bootstrap", nil, &dm.metadata); err != nil {
+		chatLogDirectMessage(ctx, dm.record, dm.job, "dm_workspace_access_refused")
 		return true, s.chatDMFailure(ctx, *dm, err)
 	}
 	if settings, ok := s.store.WorkspaceSettingsMetadata(dm.target.Workspace); !ok || settings.WorkspaceSettings.HIPAACompliance {
+		chatLogDirectMessage(ctx, dm.record, dm.job, "dm_workspace_keeps_content_out_of_chat")
 		return true, s.chatDMNotice(ctx, *dm, chatDMText(dm.zh, "This workspace keeps its content out of chat apps. Open Flow to continue: ", "这个工作区不允许把内容发送到聊天应用。请在 Flow 中继续：")+s.chatDMWorkspaceURL(dm.target.Workspace, ""))
 	}
 	return false, nil
@@ -302,6 +319,20 @@ func (s *server) chatDMAuthorize(ctx context.Context, dm *chatDMRequest) (bool, 
 func (s *server) chatDMFailure(ctx context.Context, dm chatDMRequest, err error) error {
 	var failure *chatMutationError
 	if !errors.As(err, &failure) || failure.Status < 400 || failure.Status >= 500 {
+		// Flow's own failure. A transient one is retried quietly; the last
+		// attempt, or one that cannot succeed (chatJobFinal), tells the
+		// member and fails the job, which the integration records.
+		if !chatJobFinal(err, dm.job) {
+			return err
+		}
+		chatLogDirectMessage(ctx, dm.record, dm.job, "dm_internal_failure", "error_kind", chatFailureKind(err))
+		language := "en"
+		if dm.zh {
+			language = "zh"
+		}
+		if noticeErr := s.chatDMNotice(ctx, dm, chatActionErrorText("chat_processing_failed", language)); noticeErr != nil {
+			return noticeErr
+		}
 		return err
 	}
 	if failure.Message == chatReconnectMessage || failure.Status == http.StatusUnauthorized {
@@ -426,6 +457,7 @@ func (s *server) chatDMChooseTarget(ctx context.Context, dm chatDMRequest, threa
 		if target, ok := chatDMFindTarget(targets, thread.WorkspaceKey); ok {
 			return target, true, nil
 		}
+		chatLogDirectMessage(ctx, dm.record, dm.job, "dm_conversation_workspace_unlinked")
 		return chatDMTarget{}, false, s.chatDMNotice(ctx, dm, chatDMText(dm.zh, "This conversation belongs to a workspace you're no longer linked in here.", "这段对话属于一个你已不再关联的工作区。"))
 	}
 	if workspace, ok := s.chatDMPreference(ctx, dm.record, dm.identity); ok {
@@ -436,6 +468,8 @@ func (s *server) chatDMChooseTarget(ctx context.Context, dm chatDMRequest, threa
 	if len(targets) == 1 {
 		return targets[0], true, nil
 	}
+	// The message waits on the card and runs once a workspace is chosen.
+	chatLogDirectMessage(ctx, dm.record, dm.job, "dm_workspace_choice_pending", "workspaces", len(targets))
 	pending := dm.command
 	return chatDMTarget{}, false, s.chatDMWorkspaceChoice(ctx, dm, targets, &pending)
 }
@@ -727,6 +761,22 @@ func (w *chatDMStream) errorMessage() string {
 	return payload.Error
 }
 
+// chatDMRefusalCode is the diagnostic reason of a refused agent call, as
+// chatDMRefusal words it for the member.
+func chatDMRefusalCode(status int, message string) string {
+	switch {
+	case status == http.StatusServiceUnavailable && message == "Flow Agent is not configured":
+		return "dm_agent_not_configured"
+	case status == http.StatusForbidden && strings.Contains(message, "Agent access is disabled"):
+		return "dm_agent_disabled_for_member"
+	case status == http.StatusTooManyRequests:
+		return "dm_agent_rate_limited"
+	case status == http.StatusUnauthorized || message == chatReconnectMessage:
+		return "dm_agent_reconnect_required"
+	}
+	return "dm_agent_refused"
+}
+
 // chatDMRefusal says why the agent did not run for the member.
 func chatDMRefusal(status int, message string, zh bool) string {
 	switch {
@@ -832,24 +882,37 @@ func (r *chatDMReply) run(ctx context.Context, method, path string, body any) {
 	done := make(chan struct{})
 	go r.follow(ctx, done)
 	w := newChatDMStream(r.observe)
+	runtime := "in_process"
+	if r.s.agentRuntimeWorker() && r.s.agentRuntimeEnabled() {
+		runtime = "worker"
+	}
 	err := r.s.chatDMAgentCall(ctx, r.dm, method, path, body, w)
 	r.mu.Lock()
+	outcome, status := "dm_agent_answered", 0
 	switch {
 	case err != nil:
 		var failure *chatMutationError
 		if errors.As(err, &failure) {
+			outcome, status = chatDMRefusalCode(failure.Status, failure.Message), failure.Status
 			r.failure = chatDMRefusal(failure.Status, failure.Message, r.dm.zh)
 		} else {
-			log.Printf("Chat direct message workspace=%s: %v", r.dm.target.Workspace, err)
+			outcome = "dm_agent_error"
+			slog.ErrorContext(ctx, "chat direct message agent call failed", "connection_id", r.dm.record.ConnectionID, "job_id", r.dm.job.ID, "workspace", r.dm.target.Workspace, "error", err)
 			r.failure = chatDMText(r.dm.zh, "Flow could not answer. Try again in a moment.", "Flow 暂时无法回复，请稍后再试。")
 		}
 	case w.status != 0 && !w.stream:
+		outcome, status = chatDMRefusalCode(w.status, w.errorMessage()), w.status
 		r.failure = chatDMRefusal(w.status, w.errorMessage(), r.dm.zh)
 	case w.status == 0:
+		outcome = "dm_agent_no_response"
 		r.failure = chatDMText(r.dm.zh, "Flow could not answer. Try again in a moment.", "Flow 暂时无法回复，请稍后再试。")
+	case r.failure != "":
+		outcome = "dm_agent_stream_error"
 	}
+	sessionID := r.sessionID
 	r.finished = true
 	r.mu.Unlock()
+	chatLogDirectMessage(ctx, r.dm.record, r.dm.job, outcome, "agent_runtime", runtime, "status", status, "session_id", sessionID)
 	r.poke()
 	<-done
 }

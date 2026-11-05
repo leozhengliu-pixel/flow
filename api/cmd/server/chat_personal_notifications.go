@@ -133,7 +133,11 @@ func (s *server) finishChatPersonalDelivery(ctx context.Context, key, id, status
 func chatJobFinal(err error, job domain.ChatJob) bool {
 	var permanent chatPermanentError
 	var platform *chatPlatformError
-	return errors.As(err, &permanent) || errors.Is(err, store.ErrAuthForbidden) || errors.As(err, &platform) && !platform.Retryable || job.Attempts >= 8
+	// An internal operation over its response limit or with an unreadable
+	// answer, and a Flow refusal (4xx), fail the same way every time.
+	var operation *chatOperationError
+	var refusal *chatMutationError
+	return errors.As(err, &permanent) || errors.Is(err, store.ErrAuthForbidden) || errors.As(err, &platform) && !platform.Retryable || errors.As(err, &operation) || errors.As(err, &refusal) && refusal.Status >= 400 && refusal.Status < 500 || job.Attempts >= 8
 }
 
 // chatUnavailableToUser: the platform refuses to message this account because

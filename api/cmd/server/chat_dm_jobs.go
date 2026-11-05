@@ -168,8 +168,14 @@ func (s *server) processChatDMReplyJob(l *chatDMReplyLease) error {
 	p, job := l.payload, l.job
 	l.mu.Unlock()
 	record, err := s.chatJobIntegration(l.ctx, job)
-	if err != nil || !record.Connected {
+	if err != nil {
 		return err
+	}
+	if !record.Connected {
+		// The tenant authorization lapsed after the message was queued: the
+		// app may not send, so nothing can answer.
+		chatLogDirectMessage(l.ctx, record, job, "dm_reply_integration_disconnected")
+		return nil
 	}
 	identity, linked, err := s.chatDMLinked(l.ctx, record, p.Command.OpenID)
 	if err != nil {
@@ -183,6 +189,7 @@ func (s *server) processChatDMReplyJob(l *chatDMReplyLease) error {
 	target, found := chatDMFindTarget(targets, p.Workspace)
 	dm.target = target
 	if !linked || identity.UserID != p.UserID || !found {
+		chatLogDirectMessage(l.ctx, record, job, "dm_reply_unlinked")
 		view := chatDMReplyView{Status: "stopped", Failure: chatDMText(p.Chinese, "Stopped: this chat account is no longer linked to Flow.", "已停止：这个聊天账号已不再关联 Flow。")}
 		return s.chatDMDeliverReplyFinal(l, dm, view)
 	}
@@ -235,6 +242,7 @@ func (s *server) processChatDMReplyJob(l *chatDMReplyLease) error {
 		if !errors.Is(err, errChatDMThreadBusy) {
 			return err
 		}
+		chatLogDirectMessage(l.ctx, record, job, "dm_reply_conversation_busy")
 		view := chatDMReplyView{Status: "stopped", Failure: chatDMText(dm.zh, "Flow is still answering your previous message in this conversation. Reply again when it has finished.", "Flow 还在回复这段对话中的上一条消息，请等它完成后再回复。")}
 		return s.chatDMDeliverReplyFinal(l, dm, view)
 	}
@@ -244,6 +252,7 @@ func (s *server) processChatDMReplyJob(l *chatDMReplyLease) error {
 		return err
 	}
 	if problem != "" {
+		chatLogDirectMessage(l.ctx, record, job, "dm_reply_attachment_refused")
 		return s.chatDMDeliverReplyFinal(l, dm, chatDMReplyView{Status: "failed", Failure: problem})
 	}
 	if strings.TrimSpace(text) == "" {

@@ -90,6 +90,7 @@ var chatActionErrors = map[string][2]string{
 	"chat_requests_disabled":        {"This group does not take requests. A team owner can turn them on in the group's Flow binding.", "此群未开启需求收集。团队管理员可以在此群的 Flow 绑定中开启。"},
 	"chat_request_forbidden":        {"Your Flow account can't submit requests to this team.", "你的 Flow 账号无权向此团队提交需求。"},
 	"chat_request_empty":            {"Write the request after the mention, or reply to the message you want to submit.", "请在 @ 机器人后写下需求，或回复要提交的消息。"},
+	"chat_processing_failed":        {"Flow couldn't process this because of a problem on the Flow server. A workspace admin can see it on the integration's settings page.", "Flow 服务端出现问题，无法处理此操作。工作区管理员可在集成设置页查看。"},
 }
 
 // chatLanguage is the member's Flow interface language for chat replies:
