@@ -1118,7 +1118,20 @@ func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data doma
 		}
 	}
 	var result domain.Comment
-	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "comment."+operation, targetID, map[string]string{"body": body}, func(next *domain.Bootstrap) error {
+	// The write is recorded like the resource's REST route records it
+	// (comment_events.go): consumers such as the chat group sync key on
+	// these events and read the comment through the resource.
+	eventType, aggregateID, updateID := mcpCommentEvent(data, targetID, operation)
+	payload := &commentEventPayload{Body: body, UpdateID: updateID}
+	if operation != "create" {
+		payload.CommentID = targetID
+	}
+	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, eventType, aggregateID, payload, func(next *domain.Bootstrap) error {
+		defer func() {
+			if operation == "create" || operation == "reply" {
+				payload.CommentID, payload.ParentID = result.ID, result.ParentID
+			}
+		}()
 		findIn := func(items *[]domain.Comment) (bool, error) {
 			index := slices.IndexFunc(*items, func(item domain.Comment) bool { return item.ID == targetID })
 			if index < 0 {
