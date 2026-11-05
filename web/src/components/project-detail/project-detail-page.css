@@ -1286,7 +1286,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
     box-sizing: border-box;
     border: 0 none;
     height: 24px;
-    gap: 5.29px;
+    gap: 6px;
     margin-left: 12px;
     overflow: hidden;
     color: var(--text);
@@ -1488,6 +1488,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
     background: lch(47.918 59.303 288.421 / 0.175) !important;
     color: rgb(255, 255, 255);
     font-weight: 400;
+    font-size: 13.3333px;
     line-height: normal;
   }
   .project-overview__icon svg { color: var(--view-color) !important; }
@@ -1503,6 +1504,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-overview__properties .project-overview__date,
   .project-overview__properties .project-overview__team,
   .project-overview__properties .project-overview__more { color: var(--text); }
+  .project-overview__properties .project-lead-trigger > svg { width: 16px; height: 16px; }
   .project-overview__properties .project-overview__team { gap: 8px; padding: 3px 6px; font-size: 13px; font-weight: 500; line-height: normal; }
   .project-overview__properties .project-overview__team svg { color: var(--text); }
   .project-overview__properties .mini-property-trigger[aria-label^="Change Lead"] svg,

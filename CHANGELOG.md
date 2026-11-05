@@ -19,6 +19,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Show the update itself on Feishu and Lark project update cards (health, author, posting time in the team's time zone and the body as card markdown with a link to the update), redraw the card when the update is edited and retire it when the update is deleted.
 - Write Feishu and Lark group cards, summaries and comment sync messages in one language, the group binding's (`language`, en-US or zh-CN) or the platform's default, and name people by display name.
 - Preserve shared phone sheet geometry while matching labels at the strict gate's native hairline scale; cover panel and notification content positions.
+- Use complete icon slots and consistent spacing in phone project controls.
 - Match the phone team heading weight to the surrounding header labels.
 - Preserve phone document filter-chip borders and full menu content insets.
 - Keep the phone document history title and restore action on their natural flex rows.
