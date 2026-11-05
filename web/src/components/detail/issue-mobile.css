@@ -1,5 +1,5 @@
 @media (max-width: 767px) {
-  .issue-view .issue-header { height: 43.5px; flex-basis: 43.5px; padding: 0 12px 0 8px; gap: 0; }
+  .issue-view .issue-header { height: 44px; flex-basis: 44px; margin-bottom: -.5px; padding: 0 12px 0 8px; gap: 0; }
   html:root body .app .issue-view .issue-header > [data-sidebar-trigger] { margin-right: 2px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--issue-header-fg); font-size: 12px; font-weight: 500; line-height: normal; }
   html:root body .app .issue-view .issue-header > [data-sidebar-trigger]::before,
   html:root body .app .issue-view .issue-header > [data-sidebar-trigger]::after { background: var(--phone-icon-fg); }
