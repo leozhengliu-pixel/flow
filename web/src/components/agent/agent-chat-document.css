@@ -1,3 +1,5 @@
+@import './phone-code-font.css';
+
 /*
  * (Selectors are deliberately heavy: the shared rich-text body rules in editor/rich-text-body.css also list the
  * agent message documents and are themselves :root + :is(…) chains.)
@@ -15,7 +17,7 @@
   background: var(--agent-inline-code-bg);
   box-shadow: inset 0 0 0 .5px var(--agent-inline-code-ring);
   color: inherit;
-  font-family: "Berkeley Mono", "SFMono Regular", Consolas, monospace;
+  font-family: var(--agent-inline-code-font, "Berkeley Mono", "SFMono Regular", Consolas, monospace);
   font-size: .9375em;
   font-weight: 450;
   line-height: 1.3;

@@ -1,0 +1,18 @@
+/* Keep the local monospace fallback's inline boxes consistent with the primary face. */
+@font-face {
+  font-family: "Flow Metric Mono";
+  src: local("Courier New"), local("Liberation Mono"), local("Courier");
+  font-weight: 100 900;
+  ascent-override: 95.6%;
+  descent-override: 24.5%;
+  line-gap-override: 0%;
+}
+
+@media (max-width: 767px) {
+  .agent-chat-document {
+    --agent-inline-code-font: "Berkeley Mono", "Flow Metric Mono", "SFMono Regular", Consolas, monospace;
+  }
+  .coding-agent-panel {
+    --cs-terminal-font: "Berkeley Mono", "Flow Metric Mono", "SFMono Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  }
+}
