@@ -544,10 +544,14 @@ test.describe('mobile documents display options', () => {
 
     const popover = page.locator('[data-list-display]')
     await expect(popover).toBeVisible()
-    await page.waitForTimeout(250)
+    await popover.evaluate(async element => {
+      await document.fonts.ready
+      await Promise.all(element.getAnimations().map(animation => animation.finished))
+      await new Promise(requestAnimationFrame)
+    })
     const box = await popover.boundingBox()
     await expect(popover).toHaveCSS('width', '301px')
-    expect(Math.abs((box?.height ?? 0) - 244)).toBeLessThanOrEqual(1)
+    expect(box?.height).toBeCloseTo(246, 2)
     expect(Math.abs((box?.x ?? 0) - 81)).toBeLessThanOrEqual(1)
     expect(Math.abs((box?.y ?? 0) - 85.67)).toBeLessThanOrEqual(1)
     await expect(popover).toHaveCSS('border-radius', '8px')
