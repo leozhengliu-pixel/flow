@@ -369,7 +369,7 @@ test.describe('mobile project properties panel', () => {
     expect((await page.locator('.project-details-sidebar__properties').boundingBox())?.height).toBe(352)
     expect((await page.locator('.project-details-sidebar__property .lp-project-property-trigger > span').first().boundingBox())?.x).toBe(177)
     expect((await page.locator('.project-details-sidebar__property-add').boundingBox())?.width).toBe(28)
-    expect((await page.locator('.project-details-sidebar__section.is-milestones').boundingBox())?.y).toBeCloseTo(501, 0)
+    expect((await page.locator('.project-details-sidebar__section.is-milestones').boundingBox())?.y).toBe(501.5)
     expect((await page.locator('.project-details-sidebar__milestone').first().boundingBox())?.height).toBe(36)
     const milestonesBox = (await page.locator('.project-details-sidebar__section.is-milestones').boundingBox())!
     expect((await page.locator('.project-details-sidebar__section').last().boundingBox())?.y).toBe(milestonesBox.y + milestonesBox.height + 8)
