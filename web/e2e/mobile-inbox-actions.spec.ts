@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './workspace-fixture'
-import { bootstrap } from './review-findings-fixture'
+import { bootstrap, preferences } from './review-findings-fixture'
 
 // Match the strict phone gate's native scale so half-pixel borders retain their width.
 test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark', deviceScaleFactor: 3, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1', launchOptions: { args: ['--force-device-scale-factor=2'] } })
@@ -67,3 +67,36 @@ test('opens the phone notification actions sheet', async ({ page, request, works
 
   if (process.env.FLOW_MOBILE_SHOTS) await page.screenshot({ path: `${process.env.FLOW_MOBILE_SHOTS}/inbox-actions-${testInfo.project.name}.png`, scale: 'css', animations: 'disabled' })
 })
+
+for (const width of [375, 390]) for (const theme of ['Dark', 'Light'] as const) for (const locale of ['en-US', 'zh-CN']) {
+  test(`keeps phone inbox glyphs in their content inset ${width} ${theme} ${locale}`, async ({ page, request, workspaceKey }) => {
+    await page.setViewportSize({ width, height: width === 375 ? 667 : 844 })
+    await preferences(request, workspaceKey, theme, locale)
+    await page.goto(`/${workspaceKey}/inbox`)
+    const header = page.locator('.flow-inbox__header')
+    for (const [trigger, surfaceSelector, iconSelector] of [
+      ['[data-inbox-filter-trigger]', '.inbox-filter-phone-properties', '[cmdk-item] > svg'],
+      [`button[aria-label="${locale === 'zh-CN' ? '通知操作' : 'Notification actions'}"]`, '.inbox-actions-phone-menu', '[data-testid="inbox-actions-delete-all"] .inbox-actions-phone-menu__icon > svg'],
+    ]) {
+      await header.locator(trigger).click()
+      const surface = page.locator(surfaceSelector)
+      await expect(surface).toBeVisible()
+      await surface.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
+      const icon = surface.locator(iconSelector).first()
+      await expect.poll(async () => {
+        const box = (await icon.boundingBox())!
+        return { x: box.x, width: box.width, height: box.height }
+      }).toEqual({ x: 34.5, width: 16, height: 16 })
+      const centerOffset = await icon.evaluate(element => {
+        const row = element.closest('[cmdk-item], [data-testid="inbox-actions-delete-all"]')!
+        const glyph = element.getBoundingClientRect(), bounds = row.getBoundingClientRect()
+        return glyph.y + glyph.height / 2 - bounds.y - bounds.height / 2
+      })
+      expect(centerOffset).toBe(0)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
+      if (process.env.FLOW_REVIEW_SHOTS) await surface.screenshot({ path: `${process.env.FLOW_REVIEW_SHOTS}/inbox-${surfaceSelector.slice(1)}-${width}-${theme}-${locale}.png`, animations: 'disabled' })
+      await page.keyboard.press('Escape')
+      await expect(surface).toBeHidden()
+    }
+  })
+}

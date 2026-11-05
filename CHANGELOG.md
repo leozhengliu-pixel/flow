@@ -15,6 +15,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Preserve parent-trail line boxes and shared date insets in phone issue cards.
 - Align phone review author names with the shared identity row's text track.
 - Preserve the empty description line when centering phone OAuth application counts.
+- Guard phone inbox filter and action glyph insets across both themes, languages and phone widths.
 - Verify phone due-date submenu typography and exact issue-options search insets.
 - Keep phone browser assertions aligned with complete inbox content tracks, the issue header hairline and natural review control text widths.
 - Preserve the document directory's inner team-name weight on phones.
