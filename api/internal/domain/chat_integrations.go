@@ -111,8 +111,12 @@ type ChatBinding struct {
 	AllowUpdate bool     `json:"allowUpdate"`
 	// Requests lets the group's members turn messages into requests in the
 	// team's triage; absent or disabled turns request intake off.
-	Requests  *ChatBindingRequests `json:"requests,omitempty"`
-	CreatedAt time.Time            `json:"createdAt"`
+	Requests *ChatBindingRequests `json:"requests,omitempty"`
+	// Language is the language of the cards and messages Flow posts in the
+	// group; empty uses the platform's default (Feishu Chinese, Lark
+	// English).
+	Language  string    `json:"language,omitempty" enum:"en-US,zh-CN"`
+	CreatedAt time.Time `json:"createdAt"`
 	// Authorization is recorded by the server whenever the binding is
 	// created or its scope changes.
 	Authorization *ChatBindingAuthorization `json:"authorization,omitempty"`

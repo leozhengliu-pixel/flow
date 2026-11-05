@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -95,8 +96,8 @@ func chatStateOptions(data domain.Bootstrap, teamID string) ([]map[string]any, [
 	return options, ids, defaultID
 }
 
-func chatAssigneeOptions(data domain.Bootstrap, preferred string) ([]map[string]any, []string) {
-	options := []map[string]any{chatOption("__unassigned", "Unassigned")}
+func chatAssigneeOptions(language string, data domain.Bootstrap, preferred string) ([]map[string]any, []string) {
+	options := []map[string]any{chatOption("__unassigned", chatT(language, "unassigned"))}
 	ids := []string{}
 	users := slices.Clone(data.Users)
 	slices.SortStableFunc(users, func(a, b domain.User) int {
@@ -106,13 +107,7 @@ func chatAssigneeOptions(data domain.Bootstrap, preferred string) ([]map[string]
 		if b.ID == preferred && a.ID != preferred {
 			return 1
 		}
-		if a.Name < b.Name {
-			return -1
-		}
-		if a.Name > b.Name {
-			return 1
-		}
-		return 0
+		return strings.Compare(chatPersonLabel(&a, nil), chatPersonLabel(&b, nil))
 	})
 	for _, user := range users {
 		if len(options) == 100 {
@@ -121,7 +116,7 @@ func chatAssigneeOptions(data domain.Bootstrap, preferred string) ([]map[string]
 		if user.App || !user.Active {
 			continue
 		}
-		options = append(options, chatOption(user.ID, user.Name))
+		options = append(options, chatOption(user.ID, chatPersonLabel(&user, nil)))
 		ids = append(ids, user.ID)
 	}
 	return options, ids
@@ -136,7 +131,7 @@ func chatCreateDefaults(metadata domain.Bootstrap, binding domain.ChatBinding, t
 		return action, chatInvalid("target team unavailable")
 	}
 	_, action.StateIDs, _ = chatStateOptions(metadata, binding.TeamID)
-	_, action.AssigneeIDs = chatAssigneeOptions(metadata, "")
+	_, action.AssigneeIDs = chatAssigneeOptions(chatLanguageEnglish, metadata, "")
 	if len(action.StateIDs) == 0 {
 		return action, chatInvalid("team workflow unavailable")
 	}
@@ -153,7 +148,7 @@ func chatCreateDefaults(metadata domain.Bootstrap, binding domain.ChatBinding, t
 			return action, chatInvalid("template unavailable")
 		}
 		template := metadata.IssueTemplates[index]
-		_, action.AssigneeIDs = chatAssigneeOptions(metadata, template.AssigneeID)
+		_, action.AssigneeIDs = chatAssigneeOptions(chatLanguageEnglish, metadata, template.AssigneeID)
 		if template.TeamID != "" && template.TeamID != binding.TeamID || template.StateID != "" && !slices.Contains(action.StateIDs, template.StateID) || template.AssigneeID != "" && !slices.Contains(action.AssigneeIDs, template.AssigneeID) || template.ProjectID != "" && chatBindingProjectScoped(binding) && !chatBindingLimitedToProject(binding, template.ProjectID) {
 			return action, chatInvalid("template does not match the target team workflow")
 		}
@@ -168,9 +163,10 @@ func chatCreateDefaults(metadata domain.Bootstrap, binding domain.ChatBinding, t
 }
 
 func (s *server) chatSendCreateForm(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, identity domain.ChatIdentity, metadata domain.Bootstrap, job domain.ChatJob, command chatInboundCommand) error {
+	language := chatLanguage(metadata, identity.UserID, record.Provider)
 	action, err := chatCreateDefaults(metadata, binding, command.Title)
 	if err != nil {
-		return s.chatSendCommandError(ctx, record, job, command.OpenID, "This group's team, project, or template is no longer available for creating an issue. Ask a Flow administrator to check the group binding.")
+		return s.chatSendCommandError(ctx, record, job, command.OpenID, chatT(language, "form_unavailable"))
 	}
 	action.OpenID, action.SourceMessageID = command.OpenID, command.MessageID
 	options, _, stateID := chatStateOptions(metadata, binding.TeamID)
@@ -187,19 +183,18 @@ func (s *server) chatSendCreateForm(ctx context.Context, record domain.ChatInteg
 			}
 		}
 	}
-	assignees, assigneeIDs := chatAssigneeOptions(metadata, assigneeID)
+	assignees, assigneeIDs := chatAssigneeOptions(language, metadata, assigneeID)
 	action.AssigneeIDs = assigneeIDs
 	actionID := "chat_action_" + chatKey(record.ConnectionID, job.DedupKey, "create")
-	priorities := []map[string]any{chatOption("0", "No priority"), chatOption("1", "Urgent"), chatOption("2", "High"), chatOption("3", "Medium"), chatOption("4", "Low")}
-	fields := []map[string]any{chatInput("title", "Issue title", action.Title, 1000)}
+	fields := []map[string]any{chatInput("title", chatT(language, "issue_title"), action.Title, 1000)}
 	// A binding with several projects asks which one the issue belongs to.
-	if projectSelect, offered := chatCreateProjectSelect(metadata, binding, templateProject); projectSelect != nil {
+	if projectSelect, offered := chatCreateProjectSelect(language, metadata, binding, templateProject); projectSelect != nil {
 		action.ProjectIDs = offered
 		fields = append(fields, projectSelect)
 	}
-	fields = append(fields, chatSelect("stateId", "State", stateID, options), chatSelect("priority", "Priority", strconv.Itoa(priority), priorities), chatSelect("assigneeId", "Assignee", assigneeID, assignees), chatSubmit(actionID, "Create issue"))
-	card := chatCard("Create Flow issue", chatCardText("Team: "+chatTeamName(metadata, binding.TeamID)+chatProjectsLabel(metadata, binding)), chatForm(fields...))
-	return s.chatSendPersonalForm(ctx, record, identity, job, actionID, action, card)
+	fields = append(fields, chatSelect("stateId", chatT(language, "state"), stateID, options), chatSelect("priority", chatT(language, "priority"), strconv.Itoa(priority), chatPriorityOptions(language)), chatSelect("assigneeId", chatT(language, "assignee"), assigneeID, assignees), chatSubmit(actionID, chatT(language, "create_issue")))
+	card := chatCard(chatT(language, "create_flow_issue"), chatCardText(chatT(language, "team_line", chatTeamName(metadata, binding.TeamID)+chatProjectsLabel(language, metadata, binding))), chatForm(fields...))
+	return s.chatSendPersonalForm(ctx, record, identity, job, language, actionID, action, card)
 }
 
 func chatTeamName(metadata domain.Bootstrap, teamID string) string {
@@ -212,15 +207,16 @@ func chatTeamName(metadata domain.Bootstrap, teamID string) string {
 }
 
 func (s *server) chatSendUpdateForm(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, identity domain.ChatIdentity, metadata domain.Bootstrap, job domain.ChatJob, command chatInboundCommand, original chatCardAction) error {
+	language := chatLanguage(metadata, identity.UserID, record.Provider)
 	var issue domain.Issue
 	if err := s.chatAuthorizedMutation(ctx, record.WorkspaceKey, identity.UserID, http.MethodGet, "/api/issue-records/"+url.PathEscape(original.IssueID), nil, &issue); err != nil {
-		return s.chatMutationFailure(ctx, record, job, command.OpenID, err, "This issue is no longer available in this group scope.")
+		return s.chatMutationFailure(ctx, record, job, command.OpenID, err, chatT(language, "issue_outside_scope"))
 	}
 	if !chatIssueMatchesBinding(issue, binding) {
-		return s.chatSendCommandError(ctx, record, job, command.OpenID, "This issue is no longer available in this group scope.")
+		return s.chatSendCommandError(ctx, record, job, command.OpenID, chatT(language, "issue_outside_scope"))
 	}
 	if issuePermissionRank(issueRole(s, metadata, issue)) < issuePermissionRank("commenter") || original.Kind != "open_comment" && issuePermissionRank(issueRole(s, metadata, issue)) < issuePermissionRank("editor") {
-		return s.chatSendCommandError(ctx, record, job, command.OpenID, "Your Flow account does not have permission to perform this action.")
+		return s.chatSendCommandError(ctx, record, job, command.OpenID, chatT(language, "action_forbidden"))
 	}
 	action := chatCardAction{Kind: original.Kind[len("open_"):], BindingID: binding.ID, BindingScope: chatBindingFingerprint(binding), ChatID: binding.ChatID, MessageID: original.MessageID, IssueID: issue.ID, ExpectedVersion: issue.Version, OpenID: identity.OpenID, SourceMessageID: original.SourceMessageID}
 	actionID := "chat_action_" + chatKey(record.ConnectionID, job.DedupKey, action.Kind)
@@ -236,28 +232,28 @@ func (s *server) chatSendUpdateForm(ctx context.Context, record domain.ChatInteg
 		if len(ids) == 0 {
 			return chatInvalid("team workflow unavailable")
 		}
-		control = chatSelect("stateId", "State", selected, options)
+		control = chatSelect("stateId", chatT(language, "state"), selected, options)
 	case "assignee":
 		selected := "__unassigned"
 		if issue.Assignee != nil {
 			selected = issue.Assignee.ID
 		}
-		options, ids := chatAssigneeOptions(metadata, selected)
+		options, ids := chatAssigneeOptions(language, metadata, selected)
 		action.AssigneeIDs = ids
 		if selected != "__unassigned" && !slices.Contains(ids, selected) {
 			selected = "__unassigned"
 		}
-		control = chatSelect("assigneeId", "Assignee", selected, options)
+		control = chatSelect("assigneeId", chatT(language, "assignee"), selected, options)
 	case "comment":
-		control = chatInput("comment", "Comment", "", 1000)
+		control = chatInput("comment", chatT(language, "comment"), "", 1000)
 	default:
 		return chatInvalid("unsupported issue form")
 	}
-	card := chatCard("Update "+issue.Identifier, chatCardText(issue.Title), chatForm(control, chatSubmit(actionID, "Confirm")))
-	return s.chatSendPersonalForm(ctx, record, identity, job, actionID, action, card)
+	card := chatCard(chatT(language, "update_issue", issue.Identifier), chatCardText(issue.Title), chatForm(control, chatSubmit(actionID, chatT(language, "confirm"))))
+	return s.chatSendPersonalForm(ctx, record, identity, job, language, actionID, action, card)
 }
 
-func (s *server) chatSendPersonalForm(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, job domain.ChatJob, actionID string, action chatCardAction, card map[string]any) error {
+func (s *server) chatSendPersonalForm(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, job domain.ChatJob, language, actionID string, action chatCardAction, card map[string]any) error {
 	payload, _ := json.Marshal(action)
 	stored := domain.ChatAction{ID: actionID, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, UserID: identity.UserID, Payload: payload, ExpiresAt: time.Now().UTC().Add(15 * time.Minute)}
 	if err := s.store.PutChatAction(ctx, stored); err != nil {
@@ -267,7 +263,7 @@ func (s *server) chatSendPersonalForm(ctx context.Context, record domain.ChatInt
 	// after sending attaches the same message instead of issuing a new command.
 	content, _ := json.Marshal(card)
 	if len(content) > 28<<10 {
-		return s.chatSendCommandError(ctx, record, job, identity.OpenID, "This form exceeds the platform's card limit. Open Flow to finish the operation: "+s.chatAppOrigin()+"/"+url.PathEscape(record.WorkspaceKey))
+		return s.chatSendCommandError(ctx, record, job, identity.OpenID, chatT(language, "form_too_large", s.chatAppOrigin()+"/"+url.PathEscape(record.WorkspaceKey)))
 	}
 	var result chatMessageResult
 	if err := s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages?receive_id_type=open_id", map[string]any{"receive_id": identity.OpenID, "msg_type": "interactive", "content": string(content), "uuid": chatKey(job.DedupKey, "form")[:32]}, &result); err != nil {
@@ -288,16 +284,18 @@ func chatSharedActionID(record domain.ChatIntegrationRecord, binding domain.Chat
 }
 
 func (s *server) chatIssueCard(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, issue domain.Issue, key, messageID, sourceMessage string) (map[string]any, []domain.ChatAction, error) {
+	language := chatGroupLanguage(record, binding)
 	link := fmt.Sprintf("%s/%s/issue/%s", s.chatAppOrigin(), url.PathEscape(record.WorkspaceKey), url.PathEscape(issue.Identifier))
-	assignee := "Unassigned"
-	if issue.Assignee != nil {
-		assignee = issue.Assignee.Name
+	users, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "users")
+	assignee := chatT(language, "unassigned")
+	if label := chatPersonLabel(issue.Assignee, users.Users); label != "" {
+		assignee = label
 	}
-	elements := []map[string]any{chatCardText(issue.Title), chatCardText(fmt.Sprintf("%s\n%s\n%s", issue.Team.Name, issue.State.Name, assignee))}
-	buttons := []map[string]any{{"tag": "button", "text": chatPlain("Open in Flow"), "url": link, "type": "default"}}
+	elements := []map[string]any{chatCardText(issue.Title), chatCardText(strings.Join([]string{issue.Team.Name, issue.State.Name, assignee}, "\n"))}
+	buttons := []map[string]any{{"tag": "button", "text": chatPlain(chatT(language, "open_in_flow")), "url": link, "type": "default"}}
 	actions := []domain.ChatAction{}
 	if binding.AllowUpdate {
-		for _, option := range []struct{ kind, label string }{{"open_comment", "Comment"}} {
+		for _, option := range []struct{ kind, label string }{{"open_comment", chatT(language, "comment")}} {
 			id := chatSharedActionID(record, binding, issue, key, option.kind)
 			payload, _ := json.Marshal(chatCardAction{Kind: option.kind, BindingID: binding.ID, BindingScope: chatBindingFingerprint(binding), ChatID: binding.ChatID, MessageID: messageID, IssueID: issue.ID, ExpectedVersion: issue.Version, SourceMessageID: sourceMessage})
 			action := domain.ChatAction{ID: id, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Payload: payload, ExpiresAt: time.Now().UTC().Add(14 * 24 * time.Hour)}

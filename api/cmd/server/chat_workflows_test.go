@@ -560,7 +560,7 @@ func TestChatSharedCardNeverGrantsViewerEditPermission(t *testing.T) {
 	if _, err := f.s.store.GetChatAction(t.Context(), f.record.WorkspaceKey, f.record.ConnectionID, personalID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("viewer received an edit form: %v", err)
 	}
-	if len(f.sent) != 1 || f.sent[0]["msg_type"] != "text" || !strings.Contains(f.sent[0]["content"].(string), "permission") {
+	if len(f.sent) != 1 || f.sent[0]["msg_type"] != "text" || !strings.Contains(f.sent[0]["content"].(string), chatT(chatLanguageChinese, "action_forbidden")) {
 		t.Fatalf("viewer denial not private: %#v", f.sent)
 	}
 }

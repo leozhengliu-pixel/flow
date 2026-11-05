@@ -329,14 +329,24 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 		// Authorize is the caller's explicit consent to share the team's
 		// selected updates and actions with everyone in the group.
 		Authorize bool `json:"authorize"`
+		// Language is read apart so that a save without it keeps the
+		// binding's language.
+		Language *string `json:"language"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
 	}
 	binding := input.ChatBinding
+	if input.Language != nil {
+		binding.Language = *input.Language
+	}
 	binding.NormalizeProjects()
 	if binding.ChatID == "" || len(binding.ChatID) > 191 || len(binding.ChatName) > 200 || len(binding.Events) > len(chatBindingEvents) || binding.TeamID == "" || len(binding.ProjectIDs) > chatBindingMaxProjects {
 		writeChatError(w, 400, "Invalid group binding")
+		return
+	}
+	if !slices.Contains(chatBindingLanguages, binding.Language) {
+		writeChatError(w, 400, "Unsupported group language")
 		return
 	}
 	for _, event := range binding.Events {
@@ -384,6 +394,9 @@ func (s *server) saveChatBinding(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		binding.CreatedAt = existing.CreatedAt
+		if input.Language == nil {
+			binding.Language = existing.Language
+		}
 		previous = &existing
 	}
 	if !input.Authorize {

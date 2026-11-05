@@ -73,7 +73,7 @@ func (s *server) chatDMNewIssueForm(ctx context.Context, dm chatDMRequest, title
 	if len(teamIDs) == 0 {
 		return s.chatDMNotice(ctx, dm, chatDMText(dm.zh, "You have no team in this workspace to create issues in.", "你在这个工作区没有可以创建事项的团队。"))
 	}
-	assignees, assigneeIDs := chatAssigneeOptions(dm.metadata, dm.identity.UserID)
+	assignees, assigneeIDs := chatAssigneeOptions(chatDMLanguage(dm.zh), dm.metadata, dm.identity.UserID)
 	if len(assignees) > 0 {
 		assignees[0] = chatOption("__unassigned", chatDMText(dm.zh, "Unassigned", "未分配"))
 	}

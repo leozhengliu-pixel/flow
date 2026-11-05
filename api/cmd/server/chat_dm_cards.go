@@ -580,8 +580,8 @@ func chatDMIssueLine(s *server, workspace string, issue domain.Issue) string {
 // chatDMIssueCard previews an issue the member can open.
 func (s *server) chatDMIssueCard(workspace string, issue domain.Issue, zh bool) map[string]any {
 	assignee := chatDMText(zh, "Unassigned", "未分配")
-	if issue.Assignee != nil {
-		assignee = issue.Assignee.Name
+	if label := chatPersonLabel(issue.Assignee, nil); label != "" {
+		assignee = label
 	}
 	lines := []string{
 		chatDMText(zh, "Status: ", "状态：") + issue.State.Name,

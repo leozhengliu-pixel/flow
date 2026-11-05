@@ -149,15 +149,16 @@ func chatMergeBody(base, extra map[string]any) map[string]any {
 
 // chatCommentCard is a Flow comment as a thread message: its author and text.
 // Only the comment itself is shown; the card is updated in place on edits
-// and deletions.
-func chatCommentCard(comment domain.Comment, note string) map[string]any {
-	author := firstNonEmpty(comment.User.DisplayName, comment.User.Name, "Flow")
+// and deletions. Texts are in the group's language; the author is named by
+// chatPersonLabel, read from directory when it has them.
+func chatCommentCard(language string, comment domain.Comment, note string, directory []domain.User) map[string]any {
+	author := firstNonEmpty(chatPersonLabel(&comment.User, directory), chatT(language, "comment_heading_unknown"))
 	if comment.BotActor != nil && comment.BotActor.Name != "" {
 		author = comment.BotActor.Name
 	}
-	heading := author + " commented"
+	heading := chatT(language, "commented", author)
 	if comment.ParentID != nil {
-		heading = author + " replied"
+		heading = chatT(language, "replied", author)
 	}
 	elements := []map[string]any{chatCardText(heading), chatCardText(chatTruncateText(strings.TrimSpace(comment.Body), 2000))}
 	if note != "" {
@@ -213,6 +214,8 @@ func (s *server) chatSyncIssueComments(ctx context.Context, record domain.ChatIn
 		}
 	}
 	slices.SortStableFunc(comments, func(a, b domain.Comment) int { return a.CreatedAt.Compare(b.CreatedAt) })
+	language := chatGroupLanguage(record, binding)
+	users, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "users")
 	sent, present := 0, map[string]bool{}
 	for _, comment := range comments {
 		present[comment.ID] = true
@@ -225,7 +228,7 @@ func (s *server) chatSyncIssueComments(ctx context.Context, record domain.ChatIn
 		}
 		switch {
 		case !known:
-			messageID, err := s.chatReplyToThread(ctx, record, &thread, binding, issue, chatInteractive(chatCommentCard(comment, "")), chatKey(thread.ID, "comment", comment.ID))
+			messageID, err := s.chatReplyToThread(ctx, record, &thread, binding, issue, chatInteractive(chatCommentCard(language, comment, "", users.Users)), chatKey(thread.ID, "comment", comment.ID))
 			if err != nil {
 				return err
 			}
@@ -234,7 +237,7 @@ func (s *server) chatSyncIssueComments(ctx context.Context, record domain.ChatIn
 				return err
 			}
 		case !item.Deleted && item.Version != comment.Version:
-			card := chatCommentCard(comment, "Edited in Flow")
+			card := chatCommentCard(language, comment, chatT(language, "edited_in_flow"), users.Users)
 			if item.Origin == domain.ChatThreadOriginFlow && s.chatUpdateCard(ctx, record, item.MessageID, card) == nil {
 				item.Version = comment.Version
 			} else {
@@ -264,9 +267,9 @@ func (s *server) chatSyncIssueComments(ctx context.Context, record domain.ChatIn
 			}
 			continue
 		}
-		note := "This comment was deleted in Flow."
+		note := chatT(language, "comment_deleted")
 		if item.Origin != domain.ChatThreadOriginFlow || s.chatUpdateCard(ctx, record, item.MessageID, chatNoticeCard(note)) != nil {
-			if _, err := s.chatReplyToThread(ctx, record, &thread, binding, issue, chatInteractive(chatNoticeCard("A comment in this thread was deleted in Flow.")), chatKey(thread.ID, "deleted", item.ItemID)); err != nil {
+			if _, err := s.chatReplyToThread(ctx, record, &thread, binding, issue, chatInteractive(chatNoticeCard(chatT(language, "thread_comment_deleted"))), chatKey(thread.ID, "deleted", item.ItemID)); err != nil {
 				return err
 			}
 			sent++

@@ -130,7 +130,7 @@ func TestChatInitiativeBindingsConnectInitiativesWithoutALeadTeam(t *testing.T) 
 		t.Fatalf("initiative update not delivered: %#v", *sent)
 	}
 	content := (*sent)[0]["content"].(string)
-	if !strings.Contains(content, "Company launch") || !strings.Contains(content, "/initiative/company-launch-1/overview") || !strings.Contains(content, "At risk") || !strings.Contains(content, "Launch checklist complete.") || !strings.Contains(content, "Next: customer rollout.") || strings.Contains(content, "A later update") || strings.Contains(content, "Vault") {
+	if !strings.Contains(content, "Company launch") || !strings.Contains(content, "/initiative/company-launch-1/overview") || !strings.Contains(content, chatT(chatProviderLanguage(provider), "health.atRisk")) || !strings.Contains(content, "Launch checklist complete.") || !strings.Contains(content, "Next: customer rollout.") || strings.Contains(content, "A later update") || strings.Contains(content, "Vault") {
 		t.Fatalf("initiative card: %s", content)
 	}
 	// Once a private team leads it, nothing more is posted.
@@ -231,7 +231,7 @@ func TestChatInitiativeTeamGroupCardsIncludeTheUpdateAndRespectProtection(t *tes
 		t.Fatalf("initiative group delivery: %+v", platform.calls)
 	}
 	content := platform.calls[0].body["content"].(string)
-	if !strings.Contains(content, "Shipping the launch plan.") || !strings.Contains(content, "On track") || strings.Contains(content, "Newer update") || strings.Contains(content, "not-in-preview") {
+	if !strings.Contains(content, "Shipping the launch plan.") || !strings.Contains(content, chatT(chatLanguageChinese, "health.onTrack")) || strings.Contains(content, "Newer update") || strings.Contains(content, "not-in-preview") {
 		t.Fatalf("wrong update or unbounded preview: %s", content)
 	}
 	if err := f.s.store.MutateWorkspace(t.Context(), f.record.WorkspaceKey, "test.protection", "", nil, func(data *domain.Bootstrap) error {

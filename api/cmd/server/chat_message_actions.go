@@ -544,7 +544,7 @@ func (s *server) chatSendMessageActionForm(ctx context.Context, record domain.Ch
 	forms := []chatStoredForm{}
 	fields := []map[string]any{}
 	if create {
-		assignees, assigneeIDs := chatAssigneeOptions(metadata, identity.UserID)
+		assignees, assigneeIDs := chatAssigneeOptions(language, metadata, identity.UserID)
 		action.AssigneeIDs = assigneeIDs
 		priority := teamSettings(&metadata, defaultTeam).DefaultPriority
 		submit := chatSubmit(actionID, "Create issue")
@@ -552,12 +552,12 @@ func (s *server) chatSendMessageActionForm(ctx context.Context, record domain.Ch
 		fields = append(fields, chatSelect("teamId", "Team", defaultTeam, teamOptions), chatInput("title", "Issue title", action.Title, 1000), descriptionInput)
 		// A bound group with several projects asks which one the issue belongs to.
 		if bound {
-			if projectSelect, offered := chatCreateProjectSelect(metadata, binding, ""); projectSelect != nil {
+			if projectSelect, offered := chatCreateProjectSelect(language, metadata, binding, ""); projectSelect != nil {
 				action.ProjectIDs = offered
 				fields = append(fields, projectSelect)
 			}
 		}
-		fields = append(fields, chatSelect("assigneeId", "Assignee", "__unassigned", assignees), chatSelect("priority", "Priority", strconv.Itoa(min(max(priority, 0), 4)), chatPriorityOptions()), submit)
+		fields = append(fields, chatSelect("assigneeId", "Assignee", "__unassigned", assignees), chatSelect("priority", "Priority", strconv.Itoa(min(max(priority, 0), 4)), chatPriorityOptions(language)), submit)
 		forms = append(forms, chatStoredForm{ID: actionID, Action: action})
 	} else {
 		fields = append(fields, chatInput("title", "Request title", action.Title, 1000), descriptionInput)
@@ -776,7 +776,7 @@ func (s *server) processChatMessageResult(ctx context.Context, record domain.Cha
 	if data.WorkspaceSettings.HIPAACompliance {
 		return s.chatSendPersonalText(ctx, record, identity.OpenID, saved, chatKey(job.DedupKey, "success"))
 	}
-	card := chatCard(issue.Identifier, chatCardText(issue.Title), chatCardText(chatIssueSummaryLine(issue)), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatI18nPlain("Open in Flow", "在 Flow 中打开"), "url": link}}})
+	card := chatCard(issue.Identifier, chatCardText(issue.Title), chatCardText(chatIssueSummaryLine(chatLanguage(data, identity.UserID, record.Provider), issue, nil)), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatI18nPlain("Open in Flow", "在 Flow 中打开"), "url": link}}})
 	content, _ := json.Marshal(card)
 	if payload.SourceMessageID != "" && chatPublicTeam(data, issue.Team.ID) && len(issue.Permissions) == 0 && issue.ArchivedAt == nil {
 		err := s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages/"+url.PathEscape(payload.SourceMessageID)+"/reply", map[string]any{"msg_type": "interactive", "content": string(content), "reply_in_thread": true, "uuid": chatKey(job.DedupKey, "reply")[:32]}, nil)

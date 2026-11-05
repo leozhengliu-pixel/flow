@@ -116,12 +116,12 @@ func TestChatBindingProjectSetsLimitScopeAndDeliveries(t *testing.T) {
 		}
 	}
 	data, _ := f.s.store.WorkspaceMetadataFields("test-workspace", "projects")
-	control, offered := chatCreateProjectSelect(data, stored, "project_set_b")
+	control, offered := chatCreateProjectSelect(chatLanguageEnglish, data, stored, "project_set_b")
 	if control == nil || control["name"] != "projectId" || control["initial_option"] != "project_set_b" || !slices.Equal(offered, []string{"project_set_a", "project_set_b"}) {
 		t.Fatalf("create form project choice: %v %v", control, offered)
 	}
 	singleBinding, _ := f.s.chatBindingByID(t.Context(), record, single["id"].(string))
-	if control, _ := chatCreateProjectSelect(data, singleBinding, ""); control != nil {
+	if control, _ := chatCreateProjectSelect(chatLanguageEnglish, data, singleBinding, ""); control != nil {
 		t.Fatal("one-project binding asks for a project")
 	}
 	if input, err := chatCreateInput(singleBinding, chatCardAction{}, map[string]json.RawMessage{"title": json.RawMessage(`"Single"`)}); err != nil || input.ProjectID == nil || *input.ProjectID != "project_set_c" {

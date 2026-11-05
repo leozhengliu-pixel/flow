@@ -92,7 +92,7 @@ func chatCreateProject(binding domain.ChatBinding, action chatCardAction, values
 // chatCreateProjectSelect is the create form's project choice for a binding
 // with several projects (nil otherwise). The template's project comes first
 // when it is one of them.
-func chatCreateProjectSelect(metadata domain.Bootstrap, binding domain.ChatBinding, preferred string) (map[string]any, []string) {
+func chatCreateProjectSelect(language string, metadata domain.Bootstrap, binding domain.ChatBinding, preferred string) (map[string]any, []string) {
 	ids := chatBindingProjects(binding)
 	if len(ids) < 2 {
 		return nil, nil
@@ -108,11 +108,11 @@ func chatCreateProjectSelect(metadata domain.Bootstrap, binding domain.ChatBindi
 	if slices.Contains(offered, preferred) {
 		initial = preferred
 	}
-	return chatSelect("projectId", "Project", initial, options), offered
+	return chatSelect("projectId", chatT(language, "project"), initial, options), offered
 }
 
 // chatProjectsLabel names the binding's projects for a card.
-func chatProjectsLabel(metadata domain.Bootstrap, binding domain.ChatBinding) string {
+func chatProjectsLabel(language string, metadata domain.Bootstrap, binding domain.ChatBinding) string {
 	names := []string{}
 	for _, id := range chatBindingProjects(binding) {
 		for _, project := range metadata.Projects {
@@ -125,7 +125,7 @@ func chatProjectsLabel(metadata domain.Bootstrap, binding domain.ChatBinding) st
 		return ""
 	}
 	if len(names) == 1 {
-		return "\nProject: " + names[0]
+		return "\n" + chatT(language, "project_line", names[0])
 	}
-	return "\nProjects: " + strings.Join(names, ", ")
+	return "\n" + chatT(language, "projects_line", strings.Join(names, chatT(language, "list_separator")))
 }

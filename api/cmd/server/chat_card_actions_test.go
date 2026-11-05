@@ -89,7 +89,7 @@ func TestChatGroupCardControlsRunAsClickerAndRedrawTheCard(t *testing.T) {
 	if ids["open_state"] != "" || ids["open_assignee"] != "" || len(ids) != 4 {
 		t.Fatalf("duplicated legacy controls: %v", ids)
 	}
-	if !strings.Contains(content, "Open in Flow") || !strings.Contains(content, `"zh_cn":"分配给我"`) {
+	if !strings.Contains(content, chatT(chatLanguageChinese, "open_in_flow")) || !strings.Contains(content, chatT(chatLanguageChinese, "assign_to_me")) {
 		t.Fatalf("card controls not labelled: %s", content)
 	}
 	messages, err := f.s.store.ChatMessagesForIssue(t.Context(), f.record.WorkspaceKey, f.record.ConnectionID, issue.ID)
@@ -105,7 +105,7 @@ func TestChatGroupCardControlsRunAsClickerAndRedrawTheCard(t *testing.T) {
 	if after.Assignee == nil || after.Assignee.ID != f.identity.UserID {
 		t.Fatalf("assign to me: %+v", after.Assignee)
 	}
-	if len(f.patched) != 1 || !strings.Contains(f.patched[0]["content"].(string), "Assign to me") {
+	if len(f.patched) != 1 || !strings.Contains(f.patched[0]["content"].(string), chatT(chatLanguageChinese, "assign_to_me")) {
 		t.Fatalf("card not redrawn in place: %#v", f.patched)
 	}
 	// Each control of the card keeps working, with every click its own change.

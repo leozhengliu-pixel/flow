@@ -190,10 +190,7 @@ func chatPreviewResponse(title, link string, fields []map[string]any, summary st
 }
 
 func chatUserName(user *domain.User, empty string) string {
-	if user == nil {
-		return empty
-	}
-	return firstNonEmpty(user.DisplayName, user.Name)
+	return firstNonEmpty(chatPersonLabel(user, nil), empty)
 }
 
 func chatTeamNames(data domain.Bootstrap, ids []string) string {

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -150,31 +149,36 @@ func chatI18nPlain(en, zh string) map[string]any {
 	return map[string]any{"tag": "plain_text", "content": en, "i18n": map[string]string{"en_us": en, "zh_cn": zh}}
 }
 
-func chatPriorityOptions() []map[string]any {
-	return []map[string]any{chatOption("0", "No priority"), chatOption("1", "Urgent"), chatOption("2", "High"), chatOption("3", "Medium"), chatOption("4", "Low")}
+func chatPriorityOptions(language string) []map[string]any {
+	options := make([]map[string]any, 0, 5)
+	for priority := range 5 {
+		options = append(options, chatOption(strconv.Itoa(priority), chatPriorityText(language, priority)))
+	}
+	return options
 }
 
-// chatQuickElements draws the controls with the given action IDs.
-func chatQuickElements(metadata domain.Bootstrap, issue domain.Issue, ids map[string]string) []map[string]any {
-	controls := []map[string]any{{"tag": "button", "text": chatI18nPlain("Assign to me", "分配给我"), "type": "primary", "value": map[string]string{"actionId": ids[chatQuickAssign]}}}
+// chatQuickElements draws the controls with the given action IDs, in the
+// card's language.
+func chatQuickElements(language string, metadata domain.Bootstrap, issue domain.Issue, ids map[string]string) []map[string]any {
+	controls := []map[string]any{{"tag": "button", "text": chatPlain(chatT(language, "assign_to_me")), "type": "primary", "value": map[string]string{"actionId": ids[chatQuickAssign]}}}
 	options, stateIDs, _ := chatStateOptions(metadata, issue.Team.ID)
 	if len(options) > 0 {
-		state := map[string]any{"tag": "select_static", "placeholder": chatI18nPlain("Status", "状态"), "options": options, "value": map[string]string{"actionId": ids[chatQuickState]}}
+		state := map[string]any{"tag": "select_static", "placeholder": chatPlain(chatT(language, "status")), "options": options, "value": map[string]string{"actionId": ids[chatQuickState]}}
 		if slices.Contains(stateIDs, issue.State.ID) {
 			state["initial_option"] = issue.State.ID
 		}
 		controls = append(controls, state)
 	}
-	controls = append(controls, map[string]any{"tag": "select_static", "placeholder": chatI18nPlain("Priority", "优先级"), "options": chatPriorityOptions(), "initial_option": strconv.Itoa(min(max(issue.Priority, 0), 4)), "value": map[string]string{"actionId": ids[chatQuickPriority]}})
+	controls = append(controls, map[string]any{"tag": "select_static", "placeholder": chatPlain(chatT(language, "priority")), "options": chatPriorityOptions(language), "initial_option": strconv.Itoa(min(max(issue.Priority, 0), 4)), "value": map[string]string{"actionId": ids[chatQuickPriority]}})
 	return []map[string]any{{"tag": "action", "actions": controls}}
 }
 
-func chatIssueSummaryLine(issue domain.Issue) string {
-	assignee := "Unassigned"
-	if issue.Assignee != nil {
-		assignee = issue.Assignee.Name
+func chatIssueSummaryLine(language string, issue domain.Issue, directory []domain.User) string {
+	assignee := chatT(language, "unassigned")
+	if label := chatPersonLabel(issue.Assignee, directory); label != "" {
+		assignee = label
 	}
-	return fmt.Sprintf("%s · %s · %s · %s", issue.Team.Name, issue.State.Name, priorityLabel(issue.Priority), assignee)
+	return strings.Join([]string{issue.Team.Name, issue.State.Name, chatPriorityText(language, issue.Priority), assignee}, " · ")
 }
 
 // chatGroupQuickControls stores the shared controls of a group issue card.
@@ -194,7 +198,7 @@ func (s *server) chatGroupQuickControls(ctx context.Context, record domain.ChatI
 		ids[kind] = id
 		actions = append(actions, action)
 	}
-	return chatQuickElements(metadata, issue, ids), actions, nil
+	return chatQuickElements(chatGroupLanguage(record, binding), metadata, issue, ids), actions, nil
 }
 
 func chatPersonalActionID(record domain.ChatIntegrationRecord, cardKey, kind string) string {
@@ -205,7 +209,8 @@ func chatPersonalActionID(record domain.ChatIntegrationRecord, cardKey, kind str
 // controls belong to the recipient only and stay usable for the card's
 // lifetime: each click reads the issue's current state.
 func (s *server) chatPersonalIssueCard(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, issue domain.Issue, action chatExtendedAction) (map[string]any, []domain.ChatAction, error) {
-	metadata, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "states", "teamSettings")
+	metadata, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "states", "teamSettings", "userSettings", "users")
+	language := chatLanguage(metadata, identity.UserID, record.Provider)
 	ids := map[string]string{}
 	actions := []domain.ChatAction{}
 	for _, kind := range []string{chatQuickAssign, chatQuickState, chatQuickPriority} {
@@ -219,8 +224,8 @@ func (s *server) chatPersonalIssueCard(ctx context.Context, record domain.ChatIn
 		ids[kind] = item.ID
 		actions = append(actions, item)
 	}
-	elements := []map[string]any{chatCardText(action.CardLine), chatCardText(issue.Identifier + " " + issue.Title + "\n" + chatIssueSummaryLine(issue)), {"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatI18nPlain("Open in Flow", "在 Flow 中打开"), "url": action.CardURL}}}}
-	elements = append(elements, chatQuickElements(metadata, issue, ids)...)
+	elements := []map[string]any{chatCardText(action.CardLine), chatCardText(issue.Identifier + " " + issue.Title + "\n" + chatIssueSummaryLine(language, issue, metadata.Users)), {"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatPlain(chatT(language, "open_in_flow")), "url": action.CardURL}}}}
+	elements = append(elements, chatQuickElements(language, metadata, issue, ids)...)
 	return chatCard(action.CardTitle, elements...), actions, nil
 }
 
@@ -228,7 +233,8 @@ func (s *server) chatPersonalIssueCard(ctx context.Context, record domain.ChatIn
 // controls when it is about an issue the recipient can open, otherwise the
 // notification with Open in Flow.
 func (s *server) chatPersonalNotificationCard(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, payload chatPersonalJob, item notificationEmailItem, job domain.ChatJob) (map[string]any, []domain.ChatAction, error) {
-	plain := chatCard(item.Title, chatCardText(item.Line), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatPlain("Open in Flow"), "url": item.URL}}})
+	settings, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "userSettings")
+	plain := chatCard(item.Title, chatCardText(item.Line), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatPlain(chatT(chatLanguage(settings, identity.UserID, record.Provider), "open_in_flow")), "url": item.URL}}})
 	notification, err := s.store.NotificationRecord(ctx, record.WorkspaceKey, payload.UserID, payload.NotificationID)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && (notification.IssueID == "" || notification.ReviewID != "") {
 		return plain, nil, nil

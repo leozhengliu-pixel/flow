@@ -12,6 +12,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Read workspace metadata for chat workflows in process, so direct messages, card actions and group commands keep working in workspaces whose bootstrap exceeds the internal response limit; an internal failure now fails the job at once, tells the member and shows on the integration page.
 - Show on the Feishu and Lark settings page which inbound message permissions the app has not been granted.
 
+- Mirror comments written through MCP and agent tools (new comments, replies, edits and deletions) into Feishu and Lark issue threads once each: MCP comment writes now record the same events as the REST routes of their resource, on that resource and naming the comment.
+- Show the update itself on Feishu and Lark project update cards (health, author, posting time in the team's time zone and the body as card markdown with a link to the update), redraw the card when the update is edited and retire it when the update is deleted.
+- Write Feishu and Lark group cards, summaries and comment sync messages in one language, the group binding's (`language`, en-US or zh-CN) or the platform's default, and name people by display name.
 - Keep browser checks aligned with the shared desktop toolbar palette, Auto-closed filter inventory and composer position, using an isolated workspace for shell commands.
 - Offer comment action tools in Agent chat, translate their Chinese step subjects, and synchronize the web tool fixture and exact MCP inventory contracts.
 - Finish closing the desktop workspace menu and return focus even when an exit animation completion event is lost, preserving its divider and row spacing.

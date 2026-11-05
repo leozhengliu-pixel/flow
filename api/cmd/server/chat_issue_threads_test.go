@@ -286,7 +286,7 @@ func TestChatIssueThreadSyncsCommentsBothWaysWithoutEchoes(t *testing.T) {
 	f.editComment(t, issue.ID, written.ID, "Fix merged, deployed to production")
 	patches := len(f.patched)
 	f.deliver(t, domain.DomainEvent{ID: "evt_edited", Type: "comment.updated", AggregateID: issue.ID})
-	if len(f.patched) != patches+1 || !strings.Contains(f.patched[patches]["content"].(string), "deployed to production") || !strings.Contains(f.patched[patches]["content"].(string), "Edited in Flow") {
+	if len(f.patched) != patches+1 || !strings.Contains(f.patched[patches]["content"].(string), "deployed to production") || !strings.Contains(f.patched[patches]["content"].(string), chatT(chatLanguageChinese, "edited_in_flow")) {
 		t.Fatalf("edit not reflected: %#v", f.patched[patches:])
 	}
 	// Editing the imported reply in Flow posts the edit: the member's own
@@ -300,7 +300,7 @@ func TestChatIssueThreadSyncsCommentsBothWaysWithoutEchoes(t *testing.T) {
 	f.deleteComment(t, issue.ID, written.ID)
 	patches = len(f.patched)
 	f.deliver(t, domain.DomainEvent{ID: "evt_deleted", Type: "comment.deleted", AggregateID: issue.ID})
-	if len(f.patched) != patches+1 || !strings.Contains(f.patched[patches]["content"].(string), "deleted in Flow") || strings.Contains(f.patched[patches]["content"].(string), "deployed to production") {
+	if len(f.patched) != patches+1 || !strings.Contains(f.patched[patches]["content"].(string), chatT(chatLanguageChinese, "comment_deleted")) || strings.Contains(f.patched[patches]["content"].(string), "deployed to production") {
 		t.Fatalf("deletion not reflected: %#v", f.patched[patches:])
 	}
 	f.deliver(t, domain.DomainEvent{ID: "evt_deleted_again", Type: "comment.deleted", AggregateID: issue.ID})
