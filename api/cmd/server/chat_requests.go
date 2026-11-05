@@ -280,17 +280,9 @@ func chatRequestContent(record domain.ChatIntegrationRecord, binding domain.Chat
 	}
 	title = strings.TrimSpace(title)
 	if title == "" {
-		title = "Request from " + binding.ChatName
-		if language == "zh" {
-			title = "来自「" + binding.ChatName + "」的需求"
-		}
-		title = strings.TrimSpace(chatTruncateText(title, 200))
+		title = strings.TrimSpace(chatTruncateText(chatT(language, "request_from", binding.ChatName), 200))
 	}
-	source := "Source message: "
-	if language == "zh" {
-		source = "来源消息："
-	}
-	link := source + chatChatLink(record.Provider, draft.ChatID)
+	link := chatT(language, "source_message", chatChatLink(record.Provider, draft.ChatID))
 	description := []rune(text)
 	if len(description) > 9000 {
 		description = append(description[:8999], '…')
@@ -441,7 +433,7 @@ func (s *server) chatCreateRequest(ctx context.Context, record domain.ChatIntegr
 	if err := s.store.UpdateChatIntakeRequest(ctx, record.WorkspaceKey, request); err != nil {
 		return err
 	}
-	return s.chatUpdateMessageFormResult(ctx, record, draft.FormMessageID, issue, false)
+	return s.chatUpdateMessageFormResult(ctx, record, language, draft.FormMessageID, issue, false)
 }
 
 // chatRequestExists answers a member asking again for a message that is
@@ -513,10 +505,7 @@ func (s *server) chatSendRequestResult(ctx context.Context, record domain.ChatIn
 		return nil
 	}
 	data, _ := s.store.WorkspaceMetadataFields(record.WorkspaceKey, "userSettings")
-	text := "Request saved in Flow: " + issue.Identifier + " " + chatRequestIssueURL(s, record, issue)
-	if chatLanguage(data, identity.UserID, record.Provider) == "zh" {
-		text = "需求已保存到 Flow：" + issue.Identifier + " " + chatRequestIssueURL(s, record, issue)
-	}
+	text := chatT(chatLanguage(data, identity.UserID, record.Provider), "request_saved_link", issue.Identifier, chatRequestIssueURL(s, record, issue))
 	return s.chatSendPersonalText(ctx, record, identity.OpenID, text, chatKey(job.DedupKey, "success"))
 }
 
@@ -562,27 +551,27 @@ func (s *server) chatSendRequestStatus(ctx context.Context, record domain.ChatIn
 	if closed && request.Outcome == outcome {
 		return nil
 	}
+	language := chatGroupLanguage(record, binding)
 	label := issue.Identifier + " " + issue.Title
-	var en, zh string
+	var text string
 	switch {
 	case outcome == "rejected":
-		en, zh = "Request rejected: "+label, "需求已拒绝："+label
+		text = chatT(language, "request_rejected", label)
 		if reason != "" {
-			reason = chatTruncateText(reason, 2000)
-			en, zh = en+"\nReason: "+reason, zh+"\n原因："+reason
+			text += "\n" + chatT(language, "request_reason", chatTruncateText(reason, 2000))
 		}
 	case outcome == "completed":
-		en, zh = "Request completed: "+label, "需求已完成："+label
+		text = chatT(language, "request_completed", label)
 	case outcome == "canceled":
-		en, zh = "Request closed ("+issue.State.Name+"): "+label, "需求已关闭（"+issue.State.Name+"）："+label
+		text = chatT(language, "request_closed", issue.State.Name, label)
 	case request.Outcome != "":
-		en, zh = "Request reopened: "+issue.State.Name, "需求已重新打开："+issue.State.Name
+		text = chatT(language, "request_reopened", issue.State.Name)
 	default:
-		en, zh = "Status changed to "+issue.State.Name, "状态已更新为："+issue.State.Name
+		text = chatT(language, "status_changed_to", issue.State.Name)
 	}
-	elements := []map[string]any{chatCardI18nText(en, zh)}
+	elements := []map[string]any{chatCardText(chatTruncateText(text, 2048))}
 	if closed {
-		elements = append(elements, map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatI18nPlain("Open in Flow", "在 Flow 中打开"), "url": chatRequestIssueURL(s, record, issue), "type": "default"}}})
+		elements = append(elements, map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatPlain(chatT(language, "open_in_flow")), "url": chatRequestIssueURL(s, record, issue), "type": "default"}}})
 	}
 	card := map[string]any{"config": map[string]bool{"wide_screen_mode": true, "update_multi": true}, "elements": elements}
 	if _, err := s.store.ChatThread(ctx, record.WorkspaceKey, record.ConnectionID, binding.ChatID, domain.ChatThreadResourceIssue, issue.ID); errors.Is(err, sql.ErrNoRows) {

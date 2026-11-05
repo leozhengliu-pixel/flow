@@ -488,7 +488,7 @@ func TestChatPersonLabel(t *testing.T) {
 
 // Every IM text has both languages, and the Chinese one is translated.
 func TestChatIMTextsAreTranslated(t *testing.T) {
-	same := map[string]bool{"list_separator": true, "time_utc": true, "comment_heading_unknown": true, "time_layout": true, "time_zone": true}
+	same := map[string]bool{"percent": true, "date_range": true, "more_count": true, "label_separator": true, "notify.with_excerpt": true, "list_separator": true, "time_utc": true, "comment_heading_unknown": true, "time_layout": true, "time_zone": true}
 	for key, texts := range chatIMTexts {
 		if texts[0] == "" || texts[1] == "" {
 			t.Errorf("%s lacks a language", key)
@@ -512,6 +512,12 @@ var chatIMBuilders = map[string][]string{
 	"chat_update_cards.go":        nil, // every function
 	"chat_initiative_bindings.go": {"chatSendInitiativeBindingUpdate"},
 	"chat_binding_projects.go":    {"chatCreateProjectSelect", "chatProjectsLabel"},
+	"chat_personal_cards.go":      nil,
+	"chat_message_intake.go":      nil,
+	"chat_group_help.go":          nil,
+	"chat_unfurl.go":              {"chatPreviewHint", "chatPreviewNeutral", "chatPreviewAnswer", "chatLinkPreviewFor", "chatIssuePreview", "chatProjectPreview", "chatProjectUpdatePreview", "chatDocumentPreview", "chatCyclePreview", "chatPreviewLabels", "chatPreviewDate"},
+	"chat_message_actions.go":     {"chatSendMessageActionForm", "chatSendExtendedForm", "chatSendLinkAccountCard", "processChatMessageResult"},
+	"chat_requests.go":            {"chatRequestContent", "chatSendRequestStatus", "chatSendRequestResult"},
 }
 
 var chatEnglishText = regexp.MustCompile(`[A-Za-z]{2,} [A-Za-z]{2,}|^[A-Z][a-z]+`)
@@ -520,7 +526,7 @@ var chatEnglishText = regexp.MustCompile(`[A-Za-z]{2,} [A-Za-z]{2,}|^[A-Z][a-z]+
 // chatIMTexts and write it with chatT.
 func TestChatIMBuildersHaveNoUntranslatedText(t *testing.T) {
 	// Calls whose string arguments are keys, IDs or internal errors.
-	exempt := map[string]bool{"chatT": true, "chatKey": true, "chatInvalid": true, "Errorf": true, "New": true, "Printf": true, "WorkspaceMetadataFields": true, "chatHealthText": true}
+	exempt := map[string]bool{"chatT": true, "chatKey": true, "chatInvalid": true, "Errorf": true, "New": true, "Printf": true, "WorkspaceMetadataFields": true, "chatHealthText": true, "chatCreateDefaults": true}
 	for file, functions := range chatIMBuilders {
 		parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
 		if err != nil {

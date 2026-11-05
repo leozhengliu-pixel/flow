@@ -37,6 +37,9 @@ type chatNotificationJob struct {
 	// (chat_requests.go), whose thread hears comments whatever the
 	// binding's notifications.
 	Request bool `json:"request,omitempty"`
+	// PreviewResource names the item whose link previews a refresh job asks
+	// the platform to request again (chat_unfurl_refresh.go).
+	PreviewResource string `json:"previewResource,omitempty"`
 }
 
 func chatEventKinds(event domain.DomainEvent) []string {
@@ -204,6 +207,9 @@ func (s *server) processChatNotification(ctx context.Context, record domain.Chat
 	}
 	if payload.InitiativeBindingID != "" {
 		return s.chatSendInitiativeBindingUpdate(ctx, record, job, payload)
+	}
+	if payload.Kind == chatPreviewRefreshKind {
+		return s.chatRefreshLinkPreviews(ctx, record, payload.PreviewResource)
 	}
 	if payload.Kind == chatMessageResultKind {
 		return s.processChatMessageResult(ctx, record, job, payload)

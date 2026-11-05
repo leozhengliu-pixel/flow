@@ -5,7 +5,7 @@ import type { FormEvent, ReactNode } from "react";
 import { PropertyMenu } from "@/components/property/property-menu";
 import { GridLoader } from "@/components/ui/grid-loader";
 import { useI18n } from "@/i18n/i18n";
-import type { ChatBinding, ChatBindingInput, ChatBindingRequests, ChatIntegrationEvent, ChatIntegrationProvider } from "@/types/chat-integrations";
+import type { ChatBinding, ChatBindingInput, ChatBindingLanguage, ChatBindingRequests, ChatIntegrationEvent, ChatIntegrationProvider } from "@/types/chat-integrations";
 import type { BootstrapData, Project } from "@/types/flow";
 
 import { bindingProjectIds, CHAT_BINDING_EVENTS, useBotChats } from "./chat-binding-support";
@@ -34,6 +34,9 @@ const REQUEST_EMOJIS: { value: string; label: string }[] = [
 ];
 const NO_EMOJI = "__no_emoji";
 const DEFAULT_PRIORITY = "__default_priority";
+const PLATFORM_LANGUAGE = "__platform_language";
+/** Card languages, each named in its own language. */
+const CHAT_BINDING_LANGUAGES: { value: ChatBindingLanguage; label: string; entityName: true }[] = [{ value: "en-US", label: "English", entityName: true }, { value: "zh-CN", label: "简体中文", entityName: true }];
 const REQUEST_PRIORITIES = [{ value: "0", label: "No priority" }, { value: "1", label: "Urgent" }, { value: "2", label: "High" }, { value: "3", label: "Medium" }, { value: "4", label: "Low" }];
 
 /** The binding's projects: all of the team's, or a chosen set, in the shared multi-select picker. */
@@ -133,6 +136,7 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
   const [requestEmoji, setRequestEmoji] = useState(binding?.requests?.emoji ?? "");
   const [requestTemplateId, setRequestTemplateId] = useState(binding?.requests?.templateId ?? "");
   const [requestPriority, setRequestPriority] = useState(binding?.requests?.priority === undefined ? "" : String(binding.requests.priority));
+  const [language, setLanguage] = useState<ChatBindingLanguage | "">(binding?.language ?? "");
   const [approved, setApproved] = useState(false);
   // The server decides which teams may be shared; see chatBindingScopePermitted.
   const bindable = new Set(bindableTeamIds);
@@ -162,7 +166,7 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
       ...(binding ? { id: binding.id } : {}),
       chatId, chatName: selectedChat?.name ?? binding?.chatName ?? "", teamId,
       ...(projectIds.length ? { projectIds } : {}), ...(templateId ? { templateId } : {}),
-      events, enabled, allowCreate, allowUpdate, ...(requests ? { requests } : {}), authorize: true,
+      events, enabled, allowCreate, allowUpdate, ...(requests ? { requests } : {}), language, authorize: true,
     });
   };
   const title = t(binding ? "Edit group binding" : "Add group binding");
@@ -187,6 +191,7 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
           ? <FieldRow label={t("Project")}><span className="chat-fixed-value" data-i18n-ignore>{fixedProject?.name}</span></FieldRow>
           : <FieldRow label={t("Projects")} description={t("Updates and group actions cover the issues of these projects only.")}><ChatProjectsPicker projects={projects} selectedIds={projectIds} onChange={(ids) => { setProjectIds(ids); setTemplateId(""); setRequestTemplateId(""); setApproved(false); }} /></FieldRow>}
         <FieldRow label={t("Default template")}><SettingsSelect label={t("Default template")} options={[{ value: NO_SELECTION, label: t("No template") }, ...templates.map((template) => ({ value: template.id, label: template.name, entityName: true }))]} value={templateId || NO_SELECTION} disabled={!teamId || !allowCreate} onChange={(value) => setTemplateId(value === NO_SELECTION ? "" : value)} /></FieldRow>
+        <FieldRow label={t("Card language")} description={t("The language of the cards and messages Flow posts in this group.")}><SettingsSelect label={t("Card language")} options={[{ value: PLATFORM_LANGUAGE, label: t(provider === "lark" ? "Platform default (English)" : "Platform default (Chinese)") }, ...CHAT_BINDING_LANGUAGES]} value={language || PLATFORM_LANGUAGE} onChange={(value) => setLanguage(value === PLATFORM_LANGUAGE ? "" : value as ChatBindingLanguage)} /></FieldRow>
       </div>
       <h3 className="chat-subheading">{t("Notifications")}</h3>
       <div className="feature-card">

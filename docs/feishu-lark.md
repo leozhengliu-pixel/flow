@@ -208,6 +208,20 @@ single project read as a one-project set (`projectIds`; `projectId` still
 names the project when there is exactly one), and their cards and queued
 notifications stay valid.
 
+### Card language
+
+Everything Flow posts in a group (issue and update cards, thread messages,
+comment sync, request notes, the group help) is written in one language: the
+binding's **Card language**, or without one the platform's default (Feishu
+Chinese, Lark English). In the API it is `language` on the binding
+(`POST /api/integrations/{provider}/chat/bindings`): `"en-US"`, `"zh-CN"`, or
+`""` for the platform default; any other value is refused with
+`400 Unsupported group language`, and a save that leaves `language` out keeps
+the binding's current language. State names are the team's own; people are
+named by their display name. Private messages (personal notifications,
+forms, results) use the member's Flow interface language instead, with the
+platform's default for a member who has not chosen one or is not linked yet.
+
 ### Initiative groups
 
 An initiative, with or without a lead team, can be connected directly to an
@@ -533,16 +547,35 @@ event names only the message) needs `im:message:readonly` and
 
 ### Link previews
 
-Flow links to issues, projects, documents and initiatives posted in a chat
-expand into a preview card: status, assignee, priority and team for issues;
-status, lead, priority and teams for projects; status, owner and teams for
-initiatives; title and the beginning of the text for documents. To turn them
-on:
+Flow links posted in a chat show a link line (the item's name) and expand
+into a compact card in the viewer's Flow language, with a header coloured by
+the item's state or health, short field columns, a footnote and **Open in
+Flow**:
+
+- issues (and links to one of their comments): identifier and title; status
+  (the team's state name, header colour by state type), priority, assignee,
+  up to three labels, project, due date, team, last update time; a comment
+  link adds the comment's author and first words;
+- projects: status, health, lead, progress, target date, teams and the
+  latest update's first words; a link to one update
+  (`…/overview#update-<id>`) shows that update (health, author, time, body);
+- initiatives: health, owner, target date, teams and summary;
+- documents: teams, project, the beginning of the text, last editor and time;
+- cycles (`…/team/<KEY>/cycle/<n>`), teams, saved views and the workspace
+  itself: name with their dates, status, team or description;
+- any other workspace page, and anything the viewer or the group may not
+  see: the neutral link line **Flow link** (Flow 链接) with no content.
+
+Card controls (Assign to me and the selects) stay on Flow's own cards: a
+preview belongs to the viewer's client, not to a message Flow sent, so it
+carries only links. To turn previews on:
 
 1. In the developer console, add the **Link preview** (链接预览) capability
    and register Flow's URL rules, for example `flow.example.com/*/issue/**`,
-   `flow.example.com/*/project/**`, `flow.example.com/*/document/**` and
-   `flow.example.com/*/initiative/**` (no scheme; at most 10 rules).
+   `flow.example.com/*/project/**`, `flow.example.com/*/document/**`,
+   `flow.example.com/*/initiative/**`, `flow.example.com/*/team/**` and
+   `flow.example.com/*/view/**` (no scheme; at most 10 rules). Grant
+   **Update link previews** (更新链接预览) so edited items refresh.
 2. Subscribe to the `url.preview.get` callback at Flow's callback URL (same
    encryption and verification token). The callback needs no extra
    permission; Flow does not ask for `user_id`.
@@ -552,17 +585,22 @@ on:
 The platform asks for a preview once per viewer and shows it to that viewer
 only, so each preview is filtered by the viewer's linked Flow account:
 
-- content the viewer cannot open in Flow is not expanded, and viewers who
-  have not linked an account only see a hint to link it;
+- content the viewer cannot open in Flow shows only the neutral link line,
+  and viewers who have not linked an account only see a hint to link it;
 - in a group (and whenever Flow cannot confirm that a chat is a direct
   conversation), content of private or restricted teams, issues with their
   own access lists and documents shared with specific people are expanded
   only when the group is bound to that team with its owner's authorization;
 - with sensitive data protection on, nothing is expanded.
 
-Flow answers within the platform's three-second limit and does not push
-preview updates; a preview shows the state when the viewer's client fetched
-it.
+Flow answers within the platform's three-second limit, keeps link lines
+under 80 characters and texts under 240, and stays far below the card size
+limit. It remembers the preview tokens of the issues, projects, initiatives
+and documents it described (a week, the latest 50 per item) and, when one of
+them changes, asks the platform to fetch those previews again
+(`im/v2/url_previews/batch_update`); each viewer's new preview is built with
+their current access. Without the update permission previews show the state
+of their last fetch.
 
 Creation uses the target team's effective workflow and default state,
 including inherited workflows. A template must be compatible with that

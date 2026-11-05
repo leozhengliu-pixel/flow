@@ -9,6 +9,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Check desktop tooltip keycaps on both Mac and Linux, preserving exact spacing while waiting for the tooltip's opening animation.
 - Run the phone inbox action geometry check at the strict phone gate's native scale and require exact content widths after the shared sheet sizing correction.
+- Write Feishu and Lark personal notifications from the notification itself in the member's Flow language, with display names, the team's state names and times in the member's time zone; message-shortcut forms, request notes and group help no longer mix languages.
+- Choose a group binding's **Card language** (English, Chinese or the platform default) in the group binding editor.
+- Redesign Feishu and Lark link previews: compact cards per link type (issues and comments, projects and updates, initiatives, documents, cycles, teams, views, the workspace) in the viewer's language, a neutral "Flow link" line for anything the viewer or group may not see, and refreshed previews when the item changes.
 
 - Accept Feishu and Lark card clicks in the legacy card request format as well as `card.action.trigger` (plain or encrypted, either signature scheme), so Assign to me, status, priority and Comment no longer fail with HTTP 401 when the app sends legacy callbacks.
 - Recognize create commands in rich text messages and with full-width punctuation or no spaces, and log a secret-free reason code for every chat callback rejected or message ignored, and for every direct message answered without the Flow Agent.

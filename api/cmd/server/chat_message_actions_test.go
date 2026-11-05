@@ -247,7 +247,7 @@ func TestChatMessageShortcutRespectsBindingFlagLinkingAndUnreadableMessages(t *t
 		t.Fatalf("unlinked: %d %#v", status, result)
 	}
 	f.runChatJobs(t)
-	if len(f.sent) != 1 || f.sent[0]["receive_id"] != "ou_stranger" || f.sent[0]["msg_type"] != "interactive" || !strings.Contains(f.sent[0]["content"].(string), "Connect account") {
+	if len(f.sent) != 1 || f.sent[0]["receive_id"] != "ou_stranger" || f.sent[0]["msg_type"] != "interactive" || !strings.Contains(f.sent[0]["content"].(string), chatT(chatProviderLanguage(f.record.Provider), "connect_account")) {
 		t.Fatalf("link-account card: %#v", f.sent)
 	}
 

@@ -262,7 +262,8 @@ func (s *server) chatPersonalNotificationItem(ctx context.Context, record domain
 		}
 		data.Issues = append(data.Issues, issue)
 	}
-	item, err := notificationSummary(&data, s.chatAppOrigin()+"/"+url.PathEscape(record.WorkspaceKey), notification)
+	language := chatLanguage(data, payload.UserID, record.Provider)
+	item, err := chatPersonalSummary(language, data.UserSettings[payload.UserID].Timezone, &data, s.chatAppOrigin()+"/"+url.PathEscape(record.WorkspaceKey), notification)
 	if err != nil {
 		return item, chatPersonalNoAccess, nil
 	}

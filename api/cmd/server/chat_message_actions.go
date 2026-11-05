@@ -356,19 +356,12 @@ func (s *server) chatConnectionsURL(record domain.ChatIntegrationRecord) string 
 	return fmt.Sprintf("%s/%s/settings/account/connections", s.chatAppOrigin(), url.PathEscape(record.WorkspaceKey))
 }
 
-func chatCardI18n(en, zh string, elements ...map[string]any) map[string]any {
-	card := chatCard(en, elements...)
-	card["header"] = map[string]any{"title": chatI18nPlain(chatTruncateText(en, 100), chatTruncateText(zh, 100)), "template": "blue"}
-	return card
-}
-
-func chatCardI18nText(en, zh string) map[string]any {
-	return map[string]any{"tag": "div", "text": chatI18nPlain(chatTruncateText(en, 2048), chatTruncateText(zh, 2048))}
-}
-
 // chatSendLinkAccountCard asks an unlinked member to link their account.
 func (s *server) chatSendLinkAccountCard(ctx context.Context, record domain.ChatIntegrationRecord, job domain.ChatJob, openID string) error {
-	card := chatCardI18n("Connect your Flow account", "关联你的 Flow 账号", chatCardI18nText("Link your account to create and update Flow issues from chat. Linking never grants Flow access by itself.", "关联账号后即可在聊天中创建和更新 Flow 事项。关联本身不会授予 Flow 访问权限。"), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "type": "primary", "text": chatI18nPlain("Connect account", "关联账号"), "url": s.chatConnectionsURL(record)}}})
+	// The member is not linked yet, so their Flow language is unknown: the
+	// platform's default.
+	language := chatProviderLanguage(record.Provider)
+	card := chatCard(chatT(language, "connect_title"), chatCardText(chatT(language, "connect_text")), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "type": "primary", "text": chatPlain(chatT(language, "connect_account")), "url": s.chatConnectionsURL(record)}}})
 	content, _ := json.Marshal(card)
 	return s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages?receive_id_type=open_id", map[string]any{"receive_id": openID, "msg_type": "interactive", "content": string(content), "uuid": chatKey(job.DedupKey, "link_card")[:32]}, nil)
 }
@@ -527,19 +520,15 @@ func (s *server) chatSendMessageActionForm(ctx context.Context, record domain.Ch
 		title = string(runes[:200])
 	}
 	action.Title = strings.TrimSpace(title)
-	source := "Source message: "
-	if language == "zh" {
-		source = "来源消息："
-	}
 	link := ""
 	if chatID != "" {
-		link = "\n\n" + source + chatChatLink(record.Provider, chatID)
+		link = "\n\n" + chatT(language, "source_message", chatChatLink(record.Provider, chatID))
 	}
 	description := []rune(text)
 	if room := 1000 - utf8.RuneCountInString(link); len(description) > room {
 		description = append(description[:max(room-1, 0)], '…')
 	}
-	descriptionInput := map[string]any{"tag": "input", "name": "description", "input_type": "multiline_text", "rows": 4, "placeholder": chatI18nPlain("Description", "描述"), "default_value": strings.TrimSpace(string(description) + link), "required": false, "max_length": 1000}
+	descriptionInput := map[string]any{"tag": "input", "name": "description", "input_type": "multiline_text", "rows": 4, "placeholder": chatPlain(chatT(language, "description")), "default_value": strings.TrimSpace(string(description) + link), "required": false, "max_length": 1000}
 	actionID := "chat_action_" + chatKey(record.ConnectionID, job.DedupKey, chatMessageCreateKind)
 	forms := []chatStoredForm{}
 	fields := []map[string]any{}
@@ -547,9 +536,8 @@ func (s *server) chatSendMessageActionForm(ctx context.Context, record domain.Ch
 		assignees, assigneeIDs := chatAssigneeOptions(language, metadata, identity.UserID)
 		action.AssigneeIDs = assigneeIDs
 		priority := teamSettings(&metadata, defaultTeam).DefaultPriority
-		submit := chatSubmit(actionID, "Create issue")
-		submit["text"] = chatI18nPlain("Create issue", "创建事项")
-		fields = append(fields, chatSelect("teamId", "Team", defaultTeam, teamOptions), chatInput("title", "Issue title", action.Title, 1000), descriptionInput)
+		submit := chatSubmit(actionID, chatT(language, "create_issue"))
+		fields = append(fields, chatSelect("teamId", chatT(language, "team"), defaultTeam, teamOptions), chatInput("title", chatT(language, "issue_title"), action.Title, 1000), descriptionInput)
 		// A bound group with several projects asks which one the issue belongs to.
 		if bound {
 			if projectSelect, offered := chatCreateProjectSelect(language, metadata, binding, ""); projectSelect != nil {
@@ -557,31 +545,31 @@ func (s *server) chatSendMessageActionForm(ctx context.Context, record domain.Ch
 				fields = append(fields, projectSelect)
 			}
 		}
-		fields = append(fields, chatSelect("assigneeId", "Assignee", "__unassigned", assignees), chatSelect("priority", "Priority", strconv.Itoa(min(max(priority, 0), 4)), chatPriorityOptions(language)), submit)
+		fields = append(fields, chatSelect("assigneeId", chatT(language, "assignee"), "__unassigned", assignees), chatSelect("priority", chatT(language, "priority"), strconv.Itoa(min(max(priority, 0), 4)), chatPriorityOptions(language)), submit)
 		forms = append(forms, chatStoredForm{ID: actionID, Action: action})
 	} else {
-		fields = append(fields, chatInput("title", "Request title", action.Title, 1000), descriptionInput)
+		fields = append(fields, chatInput("title", chatT(language, "request_title"), action.Title, 1000), descriptionInput)
 	}
-	intro := chatCardI18nText("From a chat message. The issue is created with your Flow account.", "来自聊天消息，将以你的 Flow 账号创建事项。")
-	heading, headingZh := "Create Flow issue", "创建 Flow 事项"
+	intro := chatCardText(chatT(language, "message_intro_create"))
+	heading := chatT(language, "create_flow_issue")
 	if request {
 		requestID := "chat_action_" + chatKey(record.ConnectionID, job.DedupKey, chatMessageRequestKind)
 		requestAction := action
 		requestAction.Kind, requestAction.AssigneeIDs, requestAction.ProjectIDs, requestAction.TeamIDs = chatMessageRequestKind, nil, nil, []string{binding.TeamID}
-		submit := chatSubmit(requestID, "Submit as request")
-		submit["name"], submit["text"] = "submit_request", chatI18nPlain("Submit as request", "提交为需求")
+		submit := chatSubmit(requestID, chatT(language, "submit_request"))
+		submit["name"] = "submit_request"
 		if create {
 			submit["type"] = "default"
 		}
 		fields = append(fields, submit)
 		forms = append(forms, chatStoredForm{ID: requestID, Action: requestAction})
-		intro = chatCardI18nText("From a chat message, with your Flow account. Submit as request sends it to the team's triage with this group's request settings and follows it in the message's thread.", "来自聊天消息，将以你的 Flow 账号提交。「提交为需求」会按此群的需求设置进入团队的分诊，并在消息的话题中跟进。")
+		intro = chatCardText(chatT(language, "message_intro_request"))
 		if !create {
-			heading, headingZh = "Submit a Flow request", "提交 Flow 需求"
+			heading = chatT(language, "submit_flow_request")
 		}
 	}
-	card := chatCardI18n(heading, headingZh, intro, chatForm(fields...))
-	return s.chatSendExtendedForm(ctx, record, identity, job, card, forms...)
+	card := chatCard(heading, intro, chatForm(fields...))
+	return s.chatSendExtendedForm(ctx, record, identity, job, language, card, forms...)
 }
 
 // chatStoredForm is one submit button's stored action of a private form.
@@ -592,7 +580,7 @@ type chatStoredForm struct {
 
 // chatSendExtendedForm sends a private form card whose stored actions (one
 // per submit button) keep the extended fields (see chatSendPersonalForm).
-func (s *server) chatSendExtendedForm(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, job domain.ChatJob, card map[string]any, forms ...chatStoredForm) error {
+func (s *server) chatSendExtendedForm(ctx context.Context, record domain.ChatIntegrationRecord, identity domain.ChatIdentity, job domain.ChatJob, language string, card map[string]any, forms ...chatStoredForm) error {
 	stored := make([]domain.ChatAction, 0, len(forms))
 	for _, form := range forms {
 		payload, _ := json.Marshal(form.Action)
@@ -604,7 +592,7 @@ func (s *server) chatSendExtendedForm(ctx context.Context, record domain.ChatInt
 	}
 	content, _ := json.Marshal(card)
 	if len(content) > 28<<10 {
-		return s.chatSendCommandError(ctx, record, job, identity.OpenID, "This form exceeds the platform's card limit. Open Flow to finish the operation: "+s.chatAppOrigin()+"/"+url.PathEscape(record.WorkspaceKey))
+		return s.chatSendCommandError(ctx, record, job, identity.OpenID, chatT(language, "form_too_large", s.chatAppOrigin()+"/"+url.PathEscape(record.WorkspaceKey)))
 	}
 	var result chatMessageResult
 	if err := s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages?receive_id_type=open_id", map[string]any{"receive_id": identity.OpenID, "msg_type": "interactive", "content": string(content), "uuid": chatKey(job.DedupKey, "form")[:32]}, &result); err != nil {
@@ -748,7 +736,7 @@ func (s *server) chatCreateFromMessage(ctx context.Context, record domain.ChatIn
 	if err := s.store.UpdateChatIntakeRequest(ctx, record.WorkspaceKey, intake); err != nil {
 		return err
 	}
-	return s.chatUpdateMessageFormResult(ctx, record, action.PersonalMessage, issue, true)
+	return s.chatUpdateMessageFormResult(ctx, record, chatLanguage(metadata, identity.UserID, record.Provider), action.PersonalMessage, issue, true)
 }
 
 // processChatMessageResult reports an issue created from a message outside a
@@ -769,14 +757,12 @@ func (s *server) processChatMessageResult(ctx context.Context, record domain.Cha
 		return chatInvalid("workspace unavailable")
 	}
 	link := fmt.Sprintf("%s/%s/issue/%s", s.chatAppOrigin(), url.PathEscape(record.WorkspaceKey), url.PathEscape(issue.Identifier))
-	saved := "Saved in Flow: " + issue.Identifier + " " + link
-	if chatLanguage(data, identity.UserID, record.Provider) == "zh" {
-		saved = "已保存到 Flow：" + issue.Identifier + " " + link
-	}
+	language := chatLanguage(data, identity.UserID, record.Provider)
+	saved := chatT(language, "saved_link", issue.Identifier, link)
 	if data.WorkspaceSettings.HIPAACompliance {
 		return s.chatSendPersonalText(ctx, record, identity.OpenID, saved, chatKey(job.DedupKey, "success"))
 	}
-	card := chatCard(issue.Identifier, chatCardText(issue.Title), chatCardText(chatIssueSummaryLine(chatLanguage(data, identity.UserID, record.Provider), issue, nil)), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatI18nPlain("Open in Flow", "在 Flow 中打开"), "url": link}}})
+	card := chatCard(issue.Identifier, chatCardText(issue.Title), chatCardText(chatIssueSummaryLine(language, issue, nil)), map[string]any{"tag": "action", "actions": []map[string]any{{"tag": "button", "text": chatPlain(chatT(language, "open_in_flow")), "url": link}}})
 	content, _ := json.Marshal(card)
 	if payload.SourceMessageID != "" && chatPublicTeam(data, issue.Team.ID) && len(issue.Permissions) == 0 && issue.ArchivedAt == nil {
 		err := s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages/"+url.PathEscape(payload.SourceMessageID)+"/reply", map[string]any{"msg_type": "interactive", "content": string(content), "reply_in_thread": true, "uuid": chatKey(job.DedupKey, "reply")[:32]}, nil)

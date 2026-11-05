@@ -2,6 +2,9 @@ import type { IntegrationConnection } from "./flow";
 
 export type ChatIntegrationProvider = "feishu" | "lark";
 
+/** A group binding's card language. */
+export type ChatBindingLanguage = "en-US" | "zh-CN";
+
 export type ChatIntegrationEvent =
   | "issue.created"
   | "issue.status_changed"
@@ -107,6 +110,8 @@ export interface ChatBinding {
   allowUpdate: boolean;
   /** Request intake: members turn the group's messages into requests in the team's triage. */
   requests?: ChatBindingRequests;
+  /** Language of the cards and messages Flow posts in the group; absent uses the platform's default (Feishu Chinese, Lark English). An empty string on save clears it. */
+  language?: ChatBindingLanguage | "";
   createdAt?: string;
   authorization?: ChatBindingAuthorization;
   revokedAt?: string;

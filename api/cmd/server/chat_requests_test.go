@@ -242,7 +242,7 @@ func TestChatRequestFromAReactionUsesTheConfiguredEmoji(t *testing.T) {
 		t.Fatal("reaction not accepted")
 	}
 	f.runJobs(t, "inbound")
-	if links := chatCallsMention(platform.calls, "Connect account"); len(links) != 1 || links[0].body["receive_id"] != "ou_request_unlinked" {
+	if links := chatCallsMention(platform.calls, chatT(chatLanguageChinese, "connect_account")); len(links) != 1 || links[0].body["receive_id"] != "ou_request_unlinked" {
 		t.Fatalf("link card: %#v", platform.calls)
 	}
 	if _, err := f.s.store.IssueRecord(t.Context(), f.record.WorkspaceKey, chatRequestIssueID(f, "om_reacted")); err == nil {
@@ -333,7 +333,7 @@ func TestChatRequestRefusalsFlagOffAndPermission(t *testing.T) {
 	calls := len(platform.calls)
 	f.accept(t, f.mentionEnvelope("ou_mention_unlinked", "om_unlinked_request", "提需求 Help", ""))
 	f.runJobs(t, "inbound")
-	if links := chatCallsMention(platform.since(calls), "Connect account"); len(links) != 1 || links[0].body["receive_id"] != "ou_mention_unlinked" {
+	if links := chatCallsMention(platform.since(calls), chatT(chatLanguageChinese, "connect_account")); len(links) != 1 || links[0].body["receive_id"] != "ou_mention_unlinked" {
 		t.Fatalf("unlinked mention: %#v", platform.since(calls))
 	}
 	// Sensitive data protection keeps the group out: an explicit request is
@@ -456,7 +456,7 @@ func TestChatRequestFromTheMessageShortcut(t *testing.T) {
 	f.runChatJobs(t)
 	_, _, content := f.formAction(t)
 	requestID := chatFormRequestAction(t, f, content)
-	if !strings.Contains(content, "提交为需求") || !strings.Contains(content, `"name":"teamId"`) {
+	if !strings.Contains(content, chatT(chatLanguageEnglish, "submit_request")) || !strings.Contains(content, `"name":"submit_request"`) || !strings.Contains(content, `"name":"teamId"`) {
 		t.Fatalf("form lacks the request choice: %s", content)
 	}
 	f.submitForm(t, requestID, map[string]string{"teamId": f.binding.TeamID, "title": "Invoices show the wrong currency", "description": "Seen on EU invoices", "priority": "0", "assigneeId": "__unassigned"})
@@ -501,7 +501,7 @@ func TestChatRequestFromTheMessageShortcut(t *testing.T) {
 	f.shortcut(t, map[string]string{"code": "code_only", "messageId": "om_request_only", "chatId": f.binding.ChatID})
 	f.runChatJobs(t)
 	_, action, content := f.formAction(t)
-	if action.Kind != chatMessageRequestKind || strings.Contains(content, `"name":"teamId"`) || strings.Contains(content, "创建事项") || !strings.Contains(content, "提交 Flow 需求") {
+	if action.Kind != chatMessageRequestKind || strings.Contains(content, `"name":"teamId"`) || strings.Contains(content, chatT(chatLanguageEnglish, "create_issue")) || !strings.Contains(content, chatT(chatLanguageEnglish, "submit_flow_request")) {
 		t.Fatalf("request-only form: %+v %s", action, content)
 	}
 }
