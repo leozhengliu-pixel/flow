@@ -1053,6 +1053,7 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
   }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-group {
     height: 32px;
+    border-bottom: 1px solid var(--settings-members-group-bg);
     margin-top: 2px;
     padding: 0 10px 0 22px !important;
     margin-left: 8px;
