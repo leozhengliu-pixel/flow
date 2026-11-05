@@ -44,7 +44,6 @@
   .flow-cycle-issues [data-row-title] + button[aria-label*="sub-issues"] > span{color:var(--cycle-muted);font-size:12px !important;font-weight:450 !important;line-height:normal !important}
   .flow-cycle-issues [data-row-title]:is(:first-child){margin-right:0}
   .flow-cycle-issues [data-row-title] + button[aria-label*="sub-issues"]{margin-left:4px}
-  .flow-cycle-issues [data-my-issues-group-header] .estimate-chip__value{transform:translateX(-1px)}
   .flow-cycle-count{padding-left:10px}
   .flow-cycle-issues [aria-label*="sub-issues"] > span{margin:0 3px 0 1px}
 }

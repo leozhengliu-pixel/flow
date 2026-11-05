@@ -149,6 +149,7 @@
   .collapseButton svg{color:var(--phone-icon-subtle)}
   .groupName{line-height:normal;border-style:none}
   .groupCount{font-size:13px;font-weight:450;line-height:normal;border-style:none}
+  .groupEstimate:global(.estimate-chip){gap:3px}
   .createButton{width:28px;height:28px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;font-size:12px;font-weight:500;line-height:normal}
   .createButton svg{color:var(--phone-icon-secondary)}
   .sessionPillTrigger{min-width:0;min-height:0;width:auto;height:auto;padding:0;border:0;border-radius:0;background:transparent}

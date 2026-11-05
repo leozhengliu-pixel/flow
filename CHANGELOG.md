@@ -10,6 +10,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Keep phone browser assertions aligned with complete inbox content tracks, the issue header hairline and natural review control text widths.
 - Require the phone project Milestones section's exact position after the properties margin correction.
 - Show each person's uploaded avatar or own initials colour, and each team's configured icon and colour, throughout filter menus, filter chips and people action menus on desktop and phone.
+- Use the compact phone gap between group estimate icons and totals, replacing the cycle-only value offset.
 - Include the member group divider in phone label centering.
 - Align phone display tabs and document property gaps with their shared control insets.
 - Use shared sidebar section spacing above phone team rows.
