@@ -1027,10 +1027,9 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
     grid-template-columns: subgrid;
     column-gap: 0;
   }
-  html:root .settings-app .settings-main .settings-workspace-members .settings-members-directory { width: 100vw; margin-left: -22px; display: grid; grid-template-columns: 44px minmax(0, calc(100% - 244px)) 140px 28px; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-directory { width: 100vw; margin-left: -22px; display: grid; grid-template-columns: 44px minmax(132px, calc(100% - 244px)) 140px 28px; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-directory > * { grid-column: 1 / -1; width: calc(100% + 32px); justify-self: start; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-directory > .settings-members-group { width: calc(100% + 16px); }
-  html:root .settings-app .settings-main .settings-workspace-members .settings-members-directory > .settings-member-directory-row { width: 100vw !important; min-width: 100vw !important; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns {
     height: 28px;
     padding: 0;

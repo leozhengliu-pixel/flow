@@ -391,7 +391,7 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
   html:root .settings-app .settings-main .label-settings-icon-button > svg { color: var(--set-desc); }
   html:root .settings-app .settings-main .domain-labels-grid {
     width: 100%;
-    grid-template-columns: [indent] 76px [title] minmax(0, 1fr) [menu] 28px [end-padding] 32px !important;
+    grid-template-columns: [indent] 76px [title] minmax(240px, 1fr) [menu] 28px [end-padding] 32px !important;
     min-height: 480px;
   }
   html:root .settings-app .settings-main .domain-labels-table-header {
