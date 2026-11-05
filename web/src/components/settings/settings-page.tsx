@@ -2535,7 +2535,7 @@ function ApiPage({
             </div>
           </Row>
         ))}
-        <Row title={data.webhooks.length ? "" : "No webhooks"} className="settings-row--action">
+        <Row title={data.webhooks.length ? "" : "No webhooks"} description={phone ? "" : undefined} className="settings-row--action">
           <ActionButton onClick={() => navigate(webhookSettingsPath(data.workspace.urlKey, "new"))}>
             {phone ? <FlowGlyph name="plus" size={16} /> : <Plus size={14} />}
             {phone ? t('New') : t('New webhook')}

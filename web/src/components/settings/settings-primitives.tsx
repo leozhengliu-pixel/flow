@@ -139,7 +139,7 @@ export function SettingsRow({
       {icon && <span className="settings-row-icon">{icon}</span>}
       <div className="settings-row-copy">
         <strong>{title}</strong>
-        {description && <span>{description}</span>}
+        {(description || description === "") && <span>{description}</span>}
       </div>
       {children &&
         (control ? (
