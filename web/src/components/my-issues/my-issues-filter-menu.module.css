@@ -43,6 +43,7 @@
    `plain` rows (date presets, text conditions) start their text at 14.5px. */
 .valueList{max-height:393px;overflow:auto;padding:6px 0;scrollbar-width:none}
 .valueItem{font-family:inherit}
+.valueMetaLine{display:contents}
 .valueLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .valueItem .count{flex:none;margin-left:auto;padding-left:4px;color:var(--pk-faint);font-size:12px;font-weight:450;white-space:nowrap}
 .valueItem>[data-agent-badge]{margin-left:0}
@@ -144,6 +145,7 @@
   .valueMenu .valueList{margin:0 4.5px 0 5.5px;padding:6px 0 5px;}
   .valueMenu .checkbox{padding:2px;border-color:var(--label-picker-checkbox-border);}
   .valueMenu .optionSlot>svg{color:var(--pk-text);}
+  .valueMenu .valueMetaLine{display:block;flex:none;margin-left:auto;font-size:13px;line-height:normal;}
   .valueMenu .count{padding-left:0;line-height:normal;}
   /* Pointer movement owns the active row on touch-sized pickers; do not leave
      the keyboard row painted underneath a different hovered row. */
