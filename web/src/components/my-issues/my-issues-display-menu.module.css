@@ -135,7 +135,7 @@
   .popover[data-list-display] .switchRow > span { display: flex; align-items: center; line-height: normal; }
   .popover[data-list-display] .switchRow input { align-self: center; background: var(--pk-toggle-off-phone); }
   .popover[data-list-display] .sectionLabel { height: auto; margin: 8px 0 4px; padding: 0; line-height: normal; }
-  .popover[data-list-display] .propertyGrid { margin-top: 7px; gap: 1px; padding-bottom: 0; }
+  .popover[data-list-display] .propertyGrid { margin-top: 8px; gap: 1px; padding-bottom: 0; }
   .popover[data-list-display] .propertyGrid button {
     height: 28px;
     margin: 0 4px 4px 0;
@@ -171,7 +171,7 @@
   .popover[data-my-issues-display-menu="true"] section[aria-label="Visible issues"] > .switchRow:first-of-type { margin-top: 4px; }
   .popover[data-issue-display-menu="true"] .layoutTabs {
     height: 32px;
-    margin: 14px 7.5px 6px;
+    margin: 14px 8px 6px;
     padding: 0;
     gap: 2px;
     background: var(--pk-surface);
