@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Wait for the phone context menu's empty state to clear before checking that its unfiltered rows return.
+- Measure subscription and issue property sheets after their entry animations finish, preserving exact browser geometry assertions.
 - Check desktop tooltip keycaps on both Mac and Linux, preserving exact spacing while waiting for the tooltip's opening animation.
 - Run the phone inbox action geometry check at the strict phone gate's native scale and require exact content widths after the shared sheet sizing correction.
 - Write Feishu and Lark personal notifications from the notification itself in the member's Flow language, with display names, the team's state names and times in the member's time zone; message-shortcut forms, request notes and group help no longer mix languages.

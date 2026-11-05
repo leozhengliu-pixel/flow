@@ -81,6 +81,10 @@ for (const width of [1440, 375, 390]) for (const theme of ['dark', 'light'] as c
     if (phone) await subscribe.click(); else await subscribe.hover()
     const subscriptions = page.locator('.sidebar-team-subscribe-menu')
     await expect(subscriptions).toBeVisible()
+    await subscriptions.evaluate(async element => {
+      await Promise.all(element.getAnimations().map(animation => animation.finished))
+      await new Promise(requestAnimationFrame)
+    })
     const heading = subscriptions.locator('[data-menu-heading]').first()
     await expect(heading).toHaveCSS('color', theme === 'dark' ? 'lch(64.714 1.425 272)' : 'lch(40 1 282)')
     const checkbox = subscriptions.getByRole('menuitemcheckbox').first()
@@ -176,6 +180,7 @@ for (const width of [1440, 375, 390]) for (const theme of ['dark', 'light'] as c
       await expect(context.getByRole('status')).toBeVisible()
       await capture(context, `context-empty-${key}`)
       await filter.clear()
+      await expect(context.getByRole('status')).toBeHidden()
       expect(await context.getByRole('menuitem').count()).toBeGreaterThan(1)
     }
   })

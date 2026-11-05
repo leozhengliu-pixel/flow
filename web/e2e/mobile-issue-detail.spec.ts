@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 import { test } from './workspace-fixture'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
@@ -47,6 +47,14 @@ async function openIssue(page: Page, identifier = parent.identifier) {
 async function noOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   expect(await page.locator('.issue-scroll').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+}
+
+async function waitForMenuAnimation(menu: Locator) {
+  await expect(menu).toBeVisible()
+  await menu.evaluate(async element => {
+    await Promise.all(element.getAnimations().map(animation => animation.finished))
+    await new Promise(requestAnimationFrame)
+  })
 }
 
 test('phone work actions stay available in issue options without widening the copy strip', async ({ page }) => {
@@ -232,8 +240,7 @@ test('issue actions are touch-sized and nested actions can return', async ({ pag
   await openIssue(page)
   await page.getByRole('button', { name: 'Issue options', exact: true }).click()
   const menu = page.locator('.issue-options-popover')
-  await expect(menu).toBeVisible()
-  await menu.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
+  await waitForMenuAnimation(menu)
   await expect.poll(async () => (await menu.boundingBox())?.y).toBeCloseTo(110, 0)
   await expect.poll(async () => (await menu.boundingBox())?.width).toBeCloseTo(358, 0)
   const box = await menu.boundingBox()
@@ -282,7 +289,7 @@ test('issue actions are touch-sized and nested actions can return', async ({ pag
   // The chip opens the shared phone sheet under the header (not a popover anchored to the chip), like the property pickers.
   await dueTrigger.click()
   const dueSheet = page.locator('.phone-menu-surface')
-  await expect(dueSheet).toBeVisible()
+  await waitForMenuAnimation(dueSheet)
   const viewportWidth = page.viewportSize()!.width
   await expect.poll(async () => (await dueSheet.boundingBox())!.x, { message: 'the sheet settles 16px from the left edge' }).toBeCloseTo(16, 0)
   expect((await dueSheet.boundingBox())!.width).toBeCloseTo(viewportWidth - 32, 0)
@@ -295,6 +302,7 @@ test('issue actions are touch-sized and nested actions can return', async ({ pag
   // A property sheet names the issue in its heading chip and lists 13px/450 rows.
   await page.locator('.issue-mobile-properties button[aria-label^="Change status"]').click()
   const sheet = page.locator('.phone-menu-surface')
+  await waitForMenuAnimation(sheet)
   await expect(sheet.locator('.phone-menu-context')).toContainText(parent.identifier)
   const sheetRow = sheet.getByRole('option').first()
   await expect(sheetRow).toHaveCSS('font-size', '13px')
