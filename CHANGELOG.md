@@ -19,6 +19,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Preserve the minimum name-column widths in phone member and label tables.
 - Keep phone browser checks aligned with searchable Team moves and exact document subscriber-chip insets after entry animations.
 - Wait for the agent composer's initial focus before testing the global command shortcut, so lazy page loading cannot steal the intended test focus.
+- Center the phone composer's create-more controls on their text line.
 - Align the phone composer team icon slot while preserving the chip's text spacing.
 - Fill phone priority picker icon slots without shifting their centers.
 - Keep phone command, help and property sheet content inside the hairline inset with consistent search widths and list padding.
