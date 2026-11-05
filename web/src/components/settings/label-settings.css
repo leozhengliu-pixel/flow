@@ -412,8 +412,9 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
   }
   html:root .settings-app .settings-main .domain-labels-table-header button:first-child {
     height: 28px;
-    margin-left: -7px;
+    margin-left: -6.5px;
     padding: 0 6px;
+    border-width: .5px;
     font-size: 12px;
     font-weight: 500;
     line-height: normal;
@@ -473,9 +474,9 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
     display: flex;
     align-items: center;
     height: 28.5px;
-    margin-left: -5px;
-    padding: 0 8px 0 5.5px;
-    border: 1px solid transparent;
+    margin-left: -5.5px;
+    padding: 0 8px 0 6px;
+    border: .5px solid transparent;
     border-radius: 8px;
     background: transparent;
     outline: 0;
@@ -491,7 +492,7 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
     line-height: normal;
     white-space: nowrap;
     position: relative;
-    top: .5px;
+    top: 0;
   }
   html:root .settings-app .settings-main .domain-label-name-input > input {
     position: absolute;
@@ -510,7 +511,7 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
   html:root .settings-app .settings-main .domain-label-name-input > input:disabled { cursor: default; }
   html:root .settings-app .settings-main .domain-label-name-input > span { position: relative; z-index: 2; pointer-events: none; }
   html:root .settings-app .settings-main .domain-labels-row:not(.is-nested):not(.is-group) > .domain-label-name > .domain-label-color[data-kind="label"] {
-    margin-left: -6px;
+    margin-left: -5.5px;
   }
   html:root .settings-app .settings-main .domain-label-color { width: 25px; height: 25px; }
 }
