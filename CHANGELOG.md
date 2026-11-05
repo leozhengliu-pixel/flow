@@ -53,6 +53,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Preserve the inline text baseline of counts in phone filter rows.
 
 - Align phone review metadata rows with the byline gap and shared icon insets.
+- Align phone review narration code chips to the surrounding text top while preserving the panel's hairline insets.
 - Let the phone review readiness action size itself from its full label.
 - Preserve phone heading and row text tracks when font metrics round to half pixels.
 - Keep phone review counts aligned with tabular digit metrics.

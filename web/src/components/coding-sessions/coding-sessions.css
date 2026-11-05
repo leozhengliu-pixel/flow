@@ -245,7 +245,7 @@
   html:root body .reviews-workspace .review-agent-panel .cs-group-header{gap:3px}
   html:root body .reviews-workspace .review-agent-panel .cs-group-label{line-height:normal}
   html:root body .reviews-workspace .review-agent-panel .cs-reasoning p{letter-spacing:-.08px}
-  html:root body .reviews-workspace .review-agent-panel .cs-reasoning code{font:450 11.25px/14.625px var(--cs-terminal-font)}
+  html:root body .reviews-workspace .review-agent-panel .cs-reasoning code{font:450 11.25px/14.625px var(--cs-terminal-font);vertical-align:text-top}
   html:root body .reviews-workspace .review-agent-panel .cs-action{gap:16px}
   html:root body .reviews-workspace .review-agent-panel .cs-action-header{gap:6px}
   html:root body .reviews-workspace .review-agent-panel .cs-action-label{line-height:normal}
