@@ -109,7 +109,7 @@
   top: var(--phone-menu-top);
   left: 16px;
   z-index: 1201;
-  width: var(--phone-menu-width, calc(100vw - 32px));
+  width: calc(100vw - 32px);
   max-height: min(450px, calc(100dvh - var(--phone-menu-top) - 16px));
   overflow: hidden;
   border: .5px solid var(--pk-border);
@@ -118,12 +118,6 @@
   box-shadow: var(--pk-card-shadow);
   color: var(--pk-text);
   outline: none;
-}
-.phone-menu-surface[data-phone-popover]:not(.property-command-surface) {
-  /* Direct menu content shares the command root's width, independent of rounded hairlines. */
-  display: grid;
-  grid-template-columns: calc(100vw - 32px);
-  justify-content: center;
 }
 .phone-menu-surface > [cmdk-root] { width: calc(100vw - 32px); }
 .phone-menu-search { padding: 6px 6px 0; }
@@ -164,18 +158,17 @@
 }
 
 @media (max-width: 767px) {
-  html:root body .phone-menu-surface.property-command-surface:not(#_) { padding: 0; width: var(--phone-menu-width, calc(100vw - 32px)); border-radius: 12px; }
+  html:root body .phone-menu-surface.property-command-surface:not(#_) { padding: 0; width: calc(100vw - 32px); border-radius: 12px; }
   html:root body .phone-menu-surface:not(#_) .property-command-search { height: 46px; padding: 6px 6px 0; border: 0; }
   html:root body .phone-menu-surface:not(#_) .property-command-search input { height: 40px; padding: 11px 12px; font-size: 13px; }
   html:root body .phone-menu-surface:not(#_) .property-command-search kbd,
   html:root body .phone-menu-surface:not(#_) .property-command-options kbd,
   html:root body .phone-menu-surface:not(#_) .property-command-shortcut,
   html:root body .phone-menu-surface:not(#_) .property-command-search-shortcut { display: none; }
-  html:root body .phone-menu-surface:not(#_) .property-command-options:not(.virtual-property-options) { max-height: min(403px, calc(100dvh - var(--phone-menu-top) - 63px)); padding: 6px; overscroll-behavior: contain; }
+  html:root body .phone-menu-surface:not(#_) .property-command-options:not(.virtual-property-options) { max-height: min(403px, calc(100dvh - var(--phone-menu-top) - 63px)); padding: 6px 6px var(--phone-property-options-padding-bottom, 6px); overscroll-behavior: contain; }
   html:root body .phone-menu-surface:not(#_) .property-command-options { width: calc(100vw - 32px); }
   html:root body .phone-menu-surface:not(#_) .property-command-options [role="option"] { height: 46px; padding-inline: 12px; font-size: var(--phone-property-option-font-size, 15px); font-weight: var(--phone-property-option-font-weight, 400); line-height: var(--phone-property-option-line-height, 22.5px); }
-  /* Center the labels content inside its two hairlines, even when a browser rounds the borders. */
-  .phone-menu-surface.property-command-labels { --phone-menu-width: calc(100vw - 31px); display: grid; grid-template-columns: calc(100vw - 32px); justify-content: center; }
+  .phone-menu-surface.property-command-labels { --phone-property-options-padding-bottom: 5px; }
   .phone-menu-surface.property-command-labels .property-command-options [role="option"] { grid-template-columns: 20px 16px minmax(0,1fr); gap: 8px; }
   .phone-menu-surface.property-command-labels .property-command-checkbox { justify-self: start; margin-left: 1px; }
   .phone-menu-surface.property-command-labels .option-dot { width: 9px; height: 9px; flex-basis: 9px; }

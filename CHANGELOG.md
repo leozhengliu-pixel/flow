@@ -15,6 +15,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Mirror comments written through MCP and agent tools (new comments, replies, edits and deletions) into Feishu and Lark issue threads once each: MCP comment writes now record the same events as the REST routes of their resource, on that resource and naming the comment.
 - Show the update itself on Feishu and Lark project update cards (health, author, posting time in the team's time zone and the body as card markdown with a link to the update), redraw the card when the update is edited and retire it when the update is deleted.
 - Write Feishu and Lark group cards, summaries and comment sync messages in one language, the group binding's (`language`, en-US or zh-CN) or the platform's default, and name people by display name.
+- Preserve shared phone sheet geometry while matching labels at the strict gate's native hairline scale; cover panel and notification content positions.
 - Keep browser checks aligned with the shared desktop toolbar palette, Auto-closed filter inventory and composer position, using an isolated workspace for shell commands.
 - Offer comment action tools in Agent chat, translate their Chinese step subjects, and synchronize the web tool fixture and exact MCP inventory contracts.
 - Keep phone menu content widths independent of hairline border rounding, including notification action rows and dividers.
