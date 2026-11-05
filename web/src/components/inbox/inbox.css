@@ -1154,7 +1154,7 @@
   html:root body .app .flow-inbox-detail__icon-button[data-detail-action="subscription"] { margin-left: 12px; background: transparent; }
   html:root body .app .flow-inbox-detail__command-strip {
     display: flex;
-    top: 43.5px;
+    top: 44px;
     right: 0;
   }
   html:root body .app .flow-inbox-detail__command-strip .issue-command-buttons { height: 32px; gap: 6px; }

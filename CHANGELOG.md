@@ -52,6 +52,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Keep phone filter and subscriber search content at the viewport inset width inside hairline borders.
 - Preserve the inline text baseline of counts in phone filter rows.
 
+- Anchor the phone notification copy strip below its full header height.
 - Use symmetric phone inbox filter insets and account for hairline borders in notification action content sizing.
 - Keep the phone review agent header and transcript inside the panel's hairline border.
 - Keep browser checks aligned with the shared desktop toolbar palette, Auto-closed filter inventory and composer position, using an isolated workspace for shell commands.
