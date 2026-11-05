@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Center phone sub-issue progress within the header's explicit grid track.
 - Match phone issue-title paragraph tracking.
 - Include the phone issue header's hairline in its box while retaining the content origin.
 - Reserve the same border space in every phone cycle metric row.
