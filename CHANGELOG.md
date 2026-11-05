@@ -8,6 +8,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 - Check the phone Documents display popover's exact height after the shared property-chip spacing correction.
+- Preserve fractional content insets in phone issue action sheets when the browser rounds hairline borders.
 - Wait for the filter submenu's opening animation before checking exact avatar glyph containment in browser tests.
 - Show uploaded pictures and application icons, not just initials, for team members, audit log actors, dashboard owners, document collaborators, project update authors and your own profile picture.
 - Report a loop output-contract read whose model reply held only reasoning, nothing, or cut-off arguments by that class instead of a JSON error, retry it once with a class-specific hint, and keep the class in the fallback contract.
