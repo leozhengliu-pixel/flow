@@ -660,6 +660,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
     border-radius: 4px;
     color: var(--review-fg-muted);
     font: 450 11px/normal var(--font);
+    font-variant-numeric: tabular-nums;
   }
   html:root body .app .reviews-selection-empty {
     gap: 24px;
