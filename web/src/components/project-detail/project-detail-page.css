@@ -1553,7 +1553,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-overview__milestone { min-height: 106px; padding: 4px 0 2px; }
   .project-overview__milestone[data-expanded=true] { min-height: 106px; }
   .project-overview__milestone { margin-top: 4px; }
-  .project-overview__milestone > header { height: 31px; padding-right: 2px; }
+  .project-overview__milestone > header { height: 32px; padding-right: 2px; }
   .project-overview__milestone-mark { height: 16px; }
   .project-overview__milestone-mark { font-size: 16px; font-weight: 400; line-height: 0; padding-right: 1px; }
   .project-overview__milestone-title { height: 23px; margin-left: 4px; padding: 0; line-height: 23px; }
@@ -1564,12 +1564,12 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-overview__milestone > header .project-overview__milestone-menu-trigger { opacity: 1 !important; }
   .project-overview__milestone-date-icon { display: block; width: 16px; height: 16px; color: var(--phone-icon-fg); }
   .project-overview__milestone-date-placeholder { display: none; }
-  .project-overview__milestone-issues { box-sizing: border-box; height: 32px; justify-content: center; line-height: normal; white-space: nowrap; opacity: .845; transform: translateY(.5px); }
+  .project-overview__milestone-issues { box-sizing: border-box; height: 32px; justify-content: center; line-height: normal; white-space: nowrap; opacity: .845; }
   .project-overview__milestone-menu-trigger { width: 32px; height: 32px; padding: 0 4px; color: var(--text); font-size: 12px; font-weight: 500; line-height: normal; }
   .project-overview__milestone-menu-trigger svg { opacity: .36; }
-  .project-overview__milestone-description { min-height: 50px; margin-top: 5px; padding: 10px 14px 16px 26px; border-radius: 0; color: var(--text); font-size: 15px; line-height: 24px; }
+  .project-overview__milestone-description { min-height: 50px; margin-top: 4px; padding: 10px 14px 16px 26px; border-radius: 0; color: var(--text); font-size: 15px; line-height: 24px; }
   .project-overview__milestone-description.mention-text-field .issue-description-root .description-editor { min-height: 1lh; font-size: 15px; line-height: 24px; }
-  .project-overview__milestone-link { margin-top: 12px; border: 0; }
+  .project-overview__milestone-link { margin-top: 12px; padding-left: 2.5px; border: 0; }
   .project-overview__milestone-link > span { font-size: 13px; font-weight: 500; line-height: normal; }
   .project-customers-row .project-overview__row-content { margin-top: 0; }
   .project-customers-row__add { color: rgb(255,255,255); font: 400 13.3333px/normal var(--font); }
@@ -1622,7 +1622,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-details-sidebar__property .project-label-add { color: var(--phone-project-panel-label); font-size: 12px; font-weight: 450; line-height: normal; }
   .project-details-sidebar__milestone { height: 36px; flex-basis: 36px; }
   .project-details-sidebar__milestones { gap: 0; }
-  .project-details-sidebar__properties { margin-bottom: 11.5px; }
+  .project-details-sidebar__properties { margin-bottom: 12px; }
   .project-details-sidebar__milestone strong { color: var(--phone-project-panel-text); }
   .project-details-sidebar__milestone.is-unassigned strong { color: var(--phone-project-panel-label); }
   .project-details-sidebar__section > header > button.project-details-sidebar__see-all:last-child:not(:first-child) { display: block; width: auto; padding: 2px 0 !important; color: var(--phone-project-panel-label); font-size: 16px; line-height: 24px; }
@@ -1650,7 +1650,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-activity__composer > header > div button { box-sizing: border-box; height: 28px; border: 0; color: var(--my-issues-details-muted); }
   .project-activity__composer > header > div button[aria-selected=true] { background: var(--my-issues-details-tab-active-bg); box-shadow: var(--phone-project-tab-shadow); color: var(--agent-thread-text); }
   .project-activity__composer > .project-activity__editor { margin-top: 12px; }
-  .project-activity__composer > footer { box-sizing: border-box; height: 56.5px; padding: 12px 14px 12.5px 12px; }
+  .project-activity__composer > footer { box-sizing: border-box; height: 56.5px; padding: 12.5px 14px 12px 12px; }
   .project-activity__composer > footer > div { gap: 12px; }
   .project-activity__composer > footer > div button.project-activity__attach {
     width: 32px;
