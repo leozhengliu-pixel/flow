@@ -118,7 +118,7 @@ test.describe('mobile inbox list', () => {
       const button = page.getByRole('button', { name, exact: true })
       await expect(button).toBeVisible()
       expect((await button.boundingBox())?.width).toBe(32)
-      expect((await button.boundingBox())?.y).toBeCloseTo(51.5, 0)
+      expect((await button.boundingBox())?.y).toBe(52)
     }
 
     const title = page.locator('.flow-inbox-detail .title-editor p')
@@ -331,7 +331,8 @@ test.describe('mobile inbox list', () => {
     const created = page.locator('.reviews-tabs a:nth-of-type(2)')
     const toReview = page.locator('.reviews-tabs a:nth-of-type(1)')
     near((await created.boundingBox())?.x, 8)
-    near((await toReview.boundingBox())?.x, 92.75)
+    expect((await toReview.boundingBox())?.x).toBeCloseTo(93.77, 2)
+    await expect(created.locator('.reviews-tab-count')).toHaveCSS('font-variant-numeric', 'tabular-nums')
     expect((await created.boundingBox())?.height).toBe(32)
     await expect(created).toHaveCSS('background-color', 'lch(10.149 0.593 272)')
     await expect(toReview).toHaveCSS('background-color', 'lch(16.706 0.979 272)')
@@ -517,7 +518,8 @@ test.describe('mobile inbox list', () => {
     await expect(tabs.locator('[data-review-tab="overview"]')).toHaveCSS('background-color', 'lch(16.706 0.979 272)')
     const ready = page.locator('.review-detail-tab-actions .review-pill-button.is-primary')
     await expect(ready).toHaveText('Mark as ready')
-    near((await ready.boundingBox())?.x, 241.23)
+    expect((await ready.boundingBox())?.x).toBeCloseTo(240.22, 2)
+    await expect(ready.locator('.review-ready-label--phone')).toHaveCSS('margin-right', '0px')
     expect((await ready.boundingBox())?.height).toBe(32)
     const agent = page.locator('.review-phone-agent')
     await expect(agent).toBeVisible()

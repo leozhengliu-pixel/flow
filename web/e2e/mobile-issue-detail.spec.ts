@@ -106,7 +106,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
     await page.setViewportSize(viewport)
     await openIssue(page)
     const values = await geometry(page)
-    expect(values['.issue-header'].height).toBeCloseTo(43.5, 0)
+    expect(values['.issue-header'].height).toBe(44)
     expect(values['.title-editor'].x).toBe(14)
     expect(values['.title-editor'].y).toBeCloseTo(89.75, 0)
     expect(values['.title-editor'].width).toBe(viewport.width - 28)

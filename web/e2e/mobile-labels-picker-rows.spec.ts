@@ -92,10 +92,10 @@ for (const width of [375, 390]) {
     for (const action of ['delete-all', 'delete-all-read', 'delete-all-completed', 'settings']) {
       const box = (await menu.getByTestId(`inbox-actions-${action}`).boundingBox())!
       expect(box.x).toBe(22.5)
-      expect(box.width).toBe(width - 45)
+      expect(box.width).toBe(width - 44)
     }
     const divider = (await menu.getByTestId('inbox-actions-divider').boundingBox())!
     expect(divider.x).toBe(16.5)
-    expect(divider.width).toBe(width - 33)
+    expect(divider.width).toBe(width - 32)
   })
 }

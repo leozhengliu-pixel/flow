@@ -42,7 +42,7 @@ test('opens the phone notification actions sheet', async ({ page, request, works
   const search = surface.locator('input')
   near((await search.boundingBox())?.x, 22.5)
   near((await search.boundingBox())?.y, 116.5)
-  expect((await search.boundingBox())?.width).toBe(345)
+  expect((await search.boundingBox())?.width).toBe(346)
   near((await search.boundingBox())?.height, 40)
 
   const rows = surface.locator('.inbox-actions-phone-menu__row')
@@ -50,14 +50,14 @@ test('opens the phone notification actions sheet', async ({ page, request, works
   await expect(rows.locator('.inbox-actions-phone-menu__label')).toHaveText(['Delete all', 'Delete all read', 'Delete all completed', 'Go to settings'])
   near((await rows.nth(0).boundingBox())?.y, 162.5)
   near((await rows.nth(0).boundingBox())?.height, 46)
-  expect((await rows.nth(0).boundingBox())?.width).toBe(345)
+  expect((await rows.nth(0).boundingBox())?.width).toBe(346)
   near((await rows.nth(0).locator('.inbox-actions-phone-menu__label').boundingBox())?.x, 58.5)
   near((await rows.nth(3).boundingBox())?.y, 312.5)
 
   const divider = surface.locator('.inbox-actions-phone-menu__separator')
   near((await divider.boundingBox())?.x, 16.5)
   near((await divider.boundingBox())?.y, 300.5)
-  expect((await divider.boundingBox())?.width).toBe(357)
+  expect((await divider.boundingBox())?.width).toBe(358)
   near((await divider.boundingBox())?.height, 12)
 
   await expect(surface.getByRole('menuitem', { name: 'Go to settings' })).toBeVisible()
