@@ -20,11 +20,10 @@
 }
 
 .oauth-complete-brand {
-  position: relative;
   width: 20px;
   height: 20px;
-  border-radius: 50%;
-  background: var(--theme-text-primary);
+  flex: none;
+  color: var(--theme-text-primary);
 }
 
 .oauth-complete-body {

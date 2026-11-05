@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 
 import './complete-oauth-views.css'
 import { GridLoader } from '@/components/ui/grid-loader'
+import { FlowLogo } from '@/components/ui/flow-logo'
 
 const PROVIDER_LABELS: Record<string, string> = {
   github: 'GitHub',
@@ -86,7 +87,7 @@ export function OAuthCompleteShell({ children }: { children: ReactNode }) {
   return (
     <div className="oauth-complete-page">
       <header>
-        <span className="oauth-complete-brand" aria-hidden />
+        <FlowLogo className="oauth-complete-brand"/>
         <span>Flow</span>
       </header>
       <div className="oauth-complete-body">{children}</div>
