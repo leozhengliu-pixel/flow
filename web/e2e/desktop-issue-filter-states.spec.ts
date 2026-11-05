@@ -170,6 +170,11 @@ for (const viewport of sizes) for (const colorScheme of ['dark', 'light'] as con
       await expect(person).toBeVisible()
       const avatar = person.locator('[class*="optionAvatar"]')
       await expect(avatar).toHaveText('林舟')
+      // Wait for the popover scale to settle before measuring fitted glyphs.
+      await page.locator('[data-level="1"]').evaluate(async element => {
+        await Promise.all(element.getAnimations().map(animation => animation.finished))
+        await new Promise(requestAnimationFrame)
+      })
       const avatarFits = await avatar.evaluate(element => {
         const range = document.createRange(); range.selectNodeContents(element)
         const glyphs = range.getBoundingClientRect(), box = element.getBoundingClientRect()

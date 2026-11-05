@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Wait for the filter submenu's opening animation before checking exact avatar glyph containment in browser tests.
 - Report a loop output-contract read whose model reply held only reasoning, nothing, or cut-off arguments by that class instead of a JSON error, retry it once with a class-specific hint, and keep the class in the fallback contract.
 - Accept signed Feishu and Lark card clicks whatever unit their request timestamp uses, check the signature before the timestamp, name each timestamp refusal with safe diagnostics, and answer a refused card click with an error toast instead of an HTTP error.
 - Keep phone browser assertions aligned with complete inbox content tracks, the issue header hairline and natural review control text widths.
