@@ -4,12 +4,11 @@ import * as Popover from '@radix-ui/react-popover'
 import { Command, defaultFilter } from 'cmdk'
 import { Diamond, Link2, Rocket } from 'lucide-react'
 import { EstimateIcon } from '@/components/issue/estimate-icon'
-import { CalendarIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surface'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { matchesSearch, translatedKeywords } from '@/lib/search-match'
-import { avatarInitials } from '@/lib/avatar-initials'
 import { partialMenuHeight } from '@/lib/menu-height'
 import { useI18n } from '@/i18n/i18n'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
@@ -25,8 +24,7 @@ import { CustomerGlyph, CustomerOwnerGlyph, CustomerRevenueGlyph, CustomerSizeGl
 import { CustomerStatusIcon, CustomerTierIcon } from '@/components/customer/customer-status-icon'
 import { CustomerLogoPile } from '@/components/customer/customer-logo-pile'
 import { CUSTOMER_NUMBER_COMPARISONS, parseCustomerNumberInput } from '@/components/issue-explorer/customer-filter'
-import { AgentAvatarMark } from '@/components/ui/agent-glyph'
-import { isBuiltinAgentAvatarUrl } from '@/components/ui/agent-avatar-url'
+import { UserAvatar } from '@/components/ui/user-avatar'
 import { ReleasePipelineIcon } from '@/components/releases/release-icons'
 import { durationFilterOptions } from '@/components/issue-explorer/issue-date-filter'
 import { MyIssuesPhoneFilterIcon } from './my-issues-phone-filter-icons'
@@ -433,7 +431,8 @@ export function OptionMark({ field, option }: { field: MyIssuesFilterKey; option
   if(kind==='status'&&option.stateType)return <StatusIcon state={{id:option.id,name:option.label,type:option.stateType,color:option.color??'var(--theme-text-secondary)'}} size={14}/>
   if(kind==='priority'){const priority=(option.priority??Number(option.id))||0;return <PriorityIcon priority={priority} size={14} style={{color:priorityColor(priority)}}/>}
   if(kind==='currentUser')return <ProjectPropertyCategoryIcon kind="lead"/>
-  if(kind==='assignee'||kind==='creator'||kind==='owner')return option.id?<OptionAvatar option={option}/>:<FlowGlyph name="owner"/>
+  if(kind==='assignee'||kind==='creator'||kind==='owner'||kind==='subscribers')return option.id?<OptionAvatar option={option}/>:kind==='subscribers'?<SubscriptionIcon/>:<FlowGlyph name="owner"/>
+  if(kind==='team')return <TeamIcon team={{icon:option.teamIcon,color:option.color??'currentColor'}} size={14}/>
   if(kind==='project')return option.id?<ProjectIcon size={14} style={{color:option.color}}/>:<NoProjectIcon size={14}/>
   if(kind==='labels')return option.color?<i className={styles.optionMark} style={{backgroundColor:option.color}}/>:<LabelIcon size={14}/>
   if(kind==='dueDate')return <CalendarIcon size={14}/>
@@ -471,9 +470,9 @@ function ProjectPropertyCategoryIcon({ kind }: { kind: 'status'|'statusType'|'pr
 }
 
 /** A person option's avatar: the image, or initials; the built-in agent gets the agent avatar tile. */
-function OptionAvatar({ option }: { option: { avatarUrl?: string; label: string } }) {
-  if (isBuiltinAgentAvatarUrl(option.avatarUrl)) return <span className={styles.optionAvatar} data-agent-avatar-slot=""><AgentAvatarMark/></span>
-  return <span className={styles.optionAvatar} style={option.avatarUrl?{backgroundImage:`url(${option.avatarUrl})`}:undefined}>{option.avatarUrl?'':initials(option.label)}</span>
+function OptionAvatar({ option }: { option: MyIssuesFilterOption }) {
+  const userId = option.id.replace(/^(?:project-lead|customer-owner|assignee):/, '')
+  return <UserAvatar avatarUrl={option.avatarUrl} className={styles.optionAvatar} name={option.label} userId={userId}/>
 }
 
 const FIELD_GLYPHS: Partial<Record<MyIssuesFilterKey, FlowGlyphName>> = {
@@ -527,14 +526,12 @@ function categoryGlyph(field: MyIssuesFilterKey, option: MyIssuesFilterOption) {
   if (field === 'triageIntelligence') {
     if (option.id === 'triage-project') return <ViewGlyph icon="Project" color="currentColor" style={{ width: 16, height: 16 }}/>
     if (option.id.endsWith(':*')) return <FlowGlyph name="triage"/>
-    if (option.id.startsWith('team:')) return <FlowGlyph name="moveTo"/>
     const name = TRIAGE_GLYPHS[option.id]
     return name ? <FlowGlyph name={name}/> : undefined
   }
   return undefined
 }
 function priorityColor(priority:number|undefined){return ['var(--theme-text-tertiary)','var(--priority-urgent)','var(--priority-high)','var(--priority-medium)','var(--priority-low)'][priority??0]}
-function initials(value:string){return avatarInitials(value,'')}
 
 function optionCount(option: MyIssuesFilterOption) {
   return 'count' in option && typeof option.count === 'number' ? option.count : undefined

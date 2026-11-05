@@ -6,6 +6,7 @@ import { useI18n } from '@/i18n/i18n'
 import type { ProjectFilter, ProjectFilterField, ProjectFilterOption } from './projects-filter-model'
 import type { MyIssuesFilterOption } from '@/components/my-issues/my-issues-surface'
 import { chipValueOptions } from '@/components/my-issues/my-issues-filter-chips'
+import { OptionMark } from '@/components/my-issues/my-issues-filter-menu'
 
 export function ProjectsFilterBar({ band = false, commands, customerOptions = [], filters, options, onAdd, onChange, onClear, onRemove, onSave }: {
   /** The reference app's Customers blocks: chips read their values (or number comparisons) from these. */
@@ -23,6 +24,9 @@ export function ProjectsFilterBar({ band = false, commands, customerOptions = []
 }) {
   const { t } = useI18n()
   // The reference app's operator labels: several values read "is any of".
-  const items = filters.map(filter => ({ ...filter, operatorChoices: filterOperatorChoices(filter.field === 'customers' ? 'customers' : 'status', filter.values.map(value => value.id)).filter((choice): choice is { operator: ProjectFilter['operator']; label: string } => ['is', 'isNot', 'gte', 'lte', 'eq', 'neq'].includes(choice.operator)) }))
-  return <AppliedFilterBar ariaLabel="Applied project filters" className={band ? bandStyles.band : undefined} commands={commands} compact={band} wrap={band} countLabel={count => count === 1 ? 'project' : 'projects'} filters={items} onAdd={onAdd} onClear={onClear} onOperatorChange={(filter, operator) => onChange({ ...filters.find(item => item.id === filter.id)!, operator })} onRemove={filter => onRemove(filter.id)} onSave={onSave} onValuesChange={(filter, values) => values.length ? onChange({ ...filters.find(item => item.id === filter.id)!, values }) : onRemove(filter.id)} optionsFor={filter => filter.field === 'customers' ? chipValueOptions(filter.fieldLabel, customerOptions) : options[filter.field] ?? []} translate={t}/>
+  const visual = (field: ProjectFilterField, option: ProjectFilterOption): ProjectFilterOption & { icon?: ReactNode; visualType?: 'person' | 'team' } => ['lead', 'members', 'teams'].includes(field)
+    ? { ...option, icon: <OptionMark field={field === 'teams' ? 'team' : 'assignee'} option={option}/>, visualType: field === 'teams' ? 'team' : option.id ? 'person' : undefined }
+    : option
+  const items = filters.map(filter => ({ ...filter, values: filter.values.map(value => visual(filter.field, { ...value, ...options[filter.field]?.find(option => option.id === value.id) })), operatorChoices: filterOperatorChoices(filter.field === 'customers' ? 'customers' : 'status', filter.values.map(value => value.id)).filter((choice): choice is { operator: ProjectFilter['operator']; label: string } => ['is', 'isNot', 'gte', 'lte', 'eq', 'neq'].includes(choice.operator)) }))
+  return <AppliedFilterBar<(typeof items)[number], ProjectFilterOption & { icon?: ReactNode }> ariaLabel="Applied project filters" className={band ? bandStyles.band : undefined} commands={commands} compact={band} wrap={band} countLabel={count => count === 1 ? 'project' : 'projects'} filters={items} onAdd={onAdd} onClear={onClear} onOperatorChange={(filter, operator) => onChange({ ...filters.find(item => item.id === filter.id)!, operator })} onRemove={filter => onRemove(filter.id)} onSave={onSave} onValuesChange={(filter, values) => values.length ? onChange({ ...filters.find(item => item.id === filter.id)!, values: values.map(({ id, label, color, avatarUrl, teamIcon, count }) => ({ id, label, color, avatarUrl, teamIcon, count })) }) : onRemove(filter.id)} optionsFor={filter => filter.field === 'customers' ? chipValueOptions(filter.fieldLabel, customerOptions) : (options[filter.field] ?? []).map(option => visual(filter.field, option))} translate={t}/>
 }

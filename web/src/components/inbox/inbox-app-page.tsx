@@ -8,7 +8,7 @@ import { ProjectGlyph } from '@/components/views/project-glyph'
 
 import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Initiative, InitiativeUpdate, Issue, IssueRelationType, IssueUpdateInput, Notification, Presence, Project, ProjectUpdate, User } from '@/types/flow'
 import { DetailPane } from '@/components/detail/detail-pane'
-import { NoProjectIcon, PriorityIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
+import { NoProjectIcon, PriorityIcon, TeamIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
 import { useI18n } from '@/i18n/i18n'
 import { batchNotifications, updateInboxNotification, updateUserSettings } from '@/lib/api'
@@ -973,7 +973,7 @@ function buildInboxFilterOptions(notifications: InboxProjection[], display: Inbo
   return {
     notificationType: INBOX_NOTIFICATION_TYPE_OPTIONS.map(option => ({ ...option, count: count('notificationType', option.id) })),
     from: inboxActorOptions(candidates, data.users),
-    team: data.teams.map(team => ({ id: team.id, label: team.name, color: team.color, icon: <TeamGlyph />, count: count('team', team.id), i18nIgnore: true })),
+    team: data.teams.map(team => ({ id: team.id, label: team.name, color: team.color, icon: <TeamIcon team={team} size={14}/>, count: count('team', team.id), i18nIgnore: true })),
     project: [
       { id: '__none__', label: 'No project', keywords: 'none empty', icon: <NoProjectIcon size={15} />, count: count('project', '__none__') },
       ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, icon: <ProjectGlyph project={project} size={15} />, count: count('project', project.id), i18nIgnore: true })),
@@ -996,10 +996,6 @@ function buildInboxFilterOptions(notifications: InboxProjection[], display: Inbo
 
 function InitiativeGlyph({ color = 'currentColor' }: { color?: string }) {
   return <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ color }}><path d="M3 2.25v11.5M4 3h7.25l-1.5 2.25 1.5 2.25H4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
-}
-
-function TeamGlyph({ color = 'currentColor' }: { color?: string }) {
-  return <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ color }}><path d="M12.5 13.5V15H3.5V13.5H12.5ZM13.5 12.5V3.5C13.5 2.94771 13.0523 2.5 12.5 2.5H3.5C2.94771 2.5 2.5 2.94772 2.5 3.5V12.5C2.5 13.0523 2.94772 13.5 3.5 13.5V15L3.24414 14.9873C2.06772 14.8677 1.13227 13.9323 1.0127 12.7559L1 12.5V3.5C1 2.20566 1.98361 1.14082 3.24414 1.0127L3.5 1H12.5L12.7559 1.0127C14.0164 1.14082 15 2.20566 15 3.5V12.5L14.9873 12.7559C14.8677 13.9323 13.9323 14.8677 12.7559 14.9873L12.5 15V13.5C13.0523 13.5 13.5 13.0523 13.5 12.5Z" /><path d="M10 6C10 7.10457 9.10457 8 8 8C6.89543 8 6 7.10457 6 6C6 4.89543 6.89543 4 8 4C9.10457 4 10 4.89543 10 6Z" /><path d="M11.405 12H4.59566C4.18761 12 3.88127 11.6641 4.0449 11.307C4.40693 10.5169 5.38905 9.33333 8.02449 9.33333C10.673 9.33333 11.6222 10.5286 11.9603 11.3187C12.1123 11.6738 11.8066 12 11.405 12Z" /></svg>
 }
 
 function resolveSnoozedUntil(preset: InboxSnoozePreset): string {

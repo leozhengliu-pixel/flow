@@ -2,7 +2,6 @@ import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { CustomerRevenueRowChip, CustomersRowChip } from '@/components/customer/customer-row-properties'
 import { revenueSuffix } from '@/components/issue-explorer/customer-filter'
 import { currencySymbol } from '@/lib/customer-settings'
-import { avatarInitials } from '@/lib/avatar-initials'
 import type { FeatureSettings } from '@/types/flow'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronDown, MoreHorizontal } from 'lucide-react'
@@ -24,7 +23,7 @@ import './projects-bundle-parity.css'
 import { ProjectsPageEmptyIcon } from './projects-page-empty-icon'
 import { ProjectTimeline } from './project-timeline'
 import type { TimelineZoom } from './project-timeline-model'
-import { AvatarImage } from '@/components/ui/user-avatar'
+import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
 import { asIs } from '@/lib/as-is'
 
@@ -708,8 +707,7 @@ function DataViewPriorityIcon({ value }: { value: ProjectPageItem['priority'] })
 
 function ProjectAvatar({ lead }: { lead?: ProjectPageItem['lead'] }) {
   if (!lead) return <NoAssigneeIcon aria-label="No lead" className="lp-project-avatar is-empty" size={16} />
-  if (lead.avatarUrl) return <AvatarImage alt={lead.name} className="lp-project-avatar" src={lead.avatarUrl} />
-  return <span aria-label={lead.name} className="lp-project-avatar" style={{ backgroundColor: lead.color ?? '#c65b5b' }}>{lead.initials ?? initials(lead.name)}</span>
+  return <UserAvatar avatarUrl={lead.avatarUrl} className="lp-project-avatar" color={lead.color} name={lead.name} userId={lead.id}/>
 }
 
 function ProjectSortIcon() {
@@ -815,9 +813,6 @@ function stopPropagation(event: MouseEvent<HTMLElement> | ChangeEvent<HTMLInputE
   event.stopPropagation()
 }
 
-function initials(name: string) {
-  return avatarInitials(name, '')
-}
 
 function compactAge(value?: string) {
   if (!value) return 'now'

@@ -63,7 +63,7 @@
 .valueItem[data-property=notificationType]{grid-template-columns:16px minmax(0,1fr) auto;gap:8px}
 .valueList:has(>.empty:only-child){padding:0}
 .valueList>.empty:only-child{height:42px}
-.avatar{display:grid;place-items:center;background:var(--avatar-fallback);color:var(--on-accent);font-size:8px}
+.avatar{display:grid;place-items:center;background:var(--avatar,var(--avatar-fallback));color:var(--avatar-initials-fg);font-size:9px;font-weight:450}
 
 /* Applied inbox filters mirror the shared the reference app chip geometry. */
 .appliedBar{min-height:52px;padding:10px 12px}
@@ -93,7 +93,7 @@
 .phoneShortcutProperty { color: var(--pk-muted); flex: none; }
 .phoneShortcutChevron { display: flex; flex: none; color: var(--pk-muted); }
 .phoneShortcutChevron svg { width: 12px; height: 12px; }
-.phoneMenu .avatar { display: inline-grid; place-items: center; flex: none; font-size: 7px; line-height: 1; }
+.phoneMenu .avatar { display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; font-size: 9px; font-weight: 400; line-height: 1; }
 .phoneMenu:global(.inbox-filter-phone-properties) :global([cmdk-list]:not(#_)) {
   position: relative;
   height: auto;

@@ -10,7 +10,7 @@ import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { isPeopleProperty } from '@/lib/people'
 
 export type AppliedFilterOperator = 'is' | 'isNot'
-export type AppliedFilterOption = { id: string; label: string; color?: string; count?: number; icon?: ReactNode; end?: string; keywords?: string }
+export type AppliedFilterOption = { id: string; label: string; color?: string; count?: number; icon?: ReactNode; visualType?: 'person' | 'team'; end?: string; keywords?: string }
 export type AppliedFilterOperatorChoice<TOperator extends string = string> = { operator: TOperator; label: string }
 export type AppliedFilterItem<TOption extends AppliedFilterOption = AppliedFilterOption, TOperator extends string = AppliedFilterOperator> = {
   id: string
@@ -125,5 +125,6 @@ function ValueMenu<TOption extends AppliedFilterOption>({ countLabel, filter, on
 
 function ValueSummary({ summary, translate, values, visual }: { summary?: string; translate: Translate; values: AppliedFilterOption[]; visual?: ReactNode }) {
   if(values.length===1)return <>{visual ?? values[0].icon ?? <i style={{background:values[0].color??'var(--theme-text-secondary)'}}/>}<span data-i18n-ignore>{values[0].label}</span></>
+  if(values.every(value=>value.visualType))return <><span className={styles.identityStack}>{values.slice(0,3).map(value=><span key={value.id}>{value.icon}</span>)}</span><span data-i18n-ignore={summary?undefined:true}>{summary?translate(summary):values.map(value=>value.label).join(', ')}</span></>
   return <><span className={styles.stack}>{values.slice(0,3).map((value,index)=><i key={value.id} style={{background:value.color??'var(--theme-text-secondary)',zIndex:3-index}}/>)}</span><span data-i18n-ignore={summary ? undefined : true}>{summary ? translate(summary) : values.map(value=>value.label).join(', ')}</span></>
 }

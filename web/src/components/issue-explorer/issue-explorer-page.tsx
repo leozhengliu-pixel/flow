@@ -394,7 +394,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     const current = list === 'extra' ? extraFilters : filters
     return {
       filters: current,
-      filterOptions: (filter: MyIssuesAppliedFilter) => filter.field === 'team' ? data.teams.map(team => ({ id: team.id, label: team.name, color: team.color })) : explorerFilterOptions(filter.field, rowOptions),
+      filterOptions: (filter: MyIssuesAppliedFilter) => explorerFilterOptions(filter.field, rowOptions),
       renderFilter: renderAdvanced(list),
       onAdd: () => setFilterOpenSignal(value => value + 1),
       onClear: () => setListFilters(list, []),

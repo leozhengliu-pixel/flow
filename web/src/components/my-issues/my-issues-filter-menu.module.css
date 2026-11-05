@@ -34,6 +34,7 @@
 .rootItem.rootItem[aria-disabled=true] .rootIcon{color:var(--pk-muted)}
 .rootItem>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rootIcon,.optionSlot{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center;overflow:visible!important;color:var(--pk-muted)}
+.optionSlot{grid-template:minmax(0,1fr)/minmax(0,1fr)}
 .rootIcon svg,.optionSlot>svg{max-width:16px;max-height:16px;color:currentColor}
 /* The reference app's ▶ submenu marker: 6px glyph centred in a 16px box at the row end. */
 .rootChevron,.submenuMarker{width:16px;flex:0 0 16px;margin-left:auto;color:var(--pk-faint);font-size:6px;line-height:7.5px;text-align:center}
@@ -52,7 +53,7 @@
 .valueItem:hover .checkbox,.valueItem[aria-selected=true] .checkbox,.valueItem[aria-checked=true] .checkbox{opacity:1}
 .valueItem[aria-checked=true] .checkbox{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
 .optionMark{width:10px;height:10px;display:block;border-radius:50%;background:var(--pk-faint)}
-.optionAvatar{width:16px;height:16px;display:grid;place-items:center;overflow:hidden;border-radius:50%;background-color:var(--avatar-option-fallback);background-position:center;background-size:cover;color:var(--on-accent);font-size:7px}
+.optionAvatar{width:16px;height:16px;overflow:hidden;color:var(--avatar-initials-fg);font-size:9px;font-weight:450}
 .optionIcon{width:16px;height:16px;display:grid;place-items:center;color:var(--pk-muted)}
 .optionIcon svg{max-width:16px;max-height:16px;color:currentColor}
 .categoryIcon{width:16px!important;height:16px!important;color:var(--pk-muted)}
@@ -142,11 +143,13 @@
   .valueRowSlot> :global([role=option]){position:absolute;inset:0;width:100%;height:46px;padding-left:12px;gap:8px;font-size:15px;font-weight:400;line-height:22.5px;}
   .valueRowSlot .checkbox{margin-left:1px;}
   .valueRowSlot .optionSlot{width:14px;flex-basis:14px;margin-left:6px;margin-right:1px;}
+  .valueRowSlot .optionSlot:has([data-user-avatar]){width:16px;flex-basis:16px;margin-right:-1px;}
   .valueRowSlot .valueLabel{font-size:13px;font-weight:450;line-height:15.6px;}
   .valueMenu .valueList{width:calc(100vw - 44px);margin:0 6px;padding:6px 0 5px;}
   .valueMenu .checkbox{padding:2px;border-color:var(--label-picker-checkbox-border);}
   .valueMenu .optionSlot>svg{color:var(--pk-text);}
   .valueMenu .valueMetaLine{display:block;flex:none;margin-left:auto;font-size:13px;line-height:normal;}
+  .valueMenu .optionAvatar{width:18px;height:18px;font-weight:400;}
   .valueMenu .count{padding-left:0;line-height:normal;}
   /* Pointer movement owns the active row on touch-sized pickers; do not leave
      the keyboard row painted underneath a different hovered row. */

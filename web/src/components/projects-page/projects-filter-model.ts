@@ -3,7 +3,7 @@ import type { FilterModelNode } from '@/components/filter/filter-block-types'
 export type ProjectFilterField = 'status' | 'priority' | 'lead' | 'members' | 'health' | 'dates' | 'milestones' | 'labels' | 'teams' | 'project' | 'customers'
 /** `gte` / `lte` / `eq` / `neq` are the Customers number blocks (Customer count ≥ 3). */
 export type ProjectFilterOperator = 'is' | 'isNot' | 'gte' | 'lte' | 'eq' | 'neq'
-export type ProjectFilterOption = { id: string; label: string; color?: string; count?: number }
+export type ProjectFilterOption = { id: string; label: string; color?: string; avatarUrl?: string; teamIcon?: string; count?: number }
 export type ProjectFilter = {
   id: string
   field: ProjectFilterField

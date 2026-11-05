@@ -543,7 +543,7 @@ export function ProjectsPage({
   const bulkActionOptions = (action: ProjectBulkAction) => {
     if (action === 'status') return statusOptions.map(option => ({ id: option.value, label: option.label, color: option.color }))
     if (action === 'priority') return [{ id: 'none', label: 'No priority' }, { id: 'urgent', label: 'Urgent', color: '#e56a68' }, { id: 'high', label: 'High' }, { id: 'medium', label: 'Medium' }, { id: 'low', label: 'Low' }]
-    if (action === 'lead') return propertyOptions.lead?.map(option => ({ id: option.value, label: option.label }))
+    if (action === 'lead') return propertyOptions.lead?.map(option => ({ id: option.value, label: option.label, avatarUrl: option.avatarUrl }))
     if (action === 'targetDate') return propertyOptions.targetDate?.map(option => ({ id: option.value, label: option.label }))
     return undefined
   }
@@ -945,13 +945,13 @@ function projectFilterOptions(items: ProjectPageItem[], users: User[], projectSt
     priority: values('priority', [
       { id: 'urgent', label: 'Urgent', color: '#e56a68' }, { id: 'high', label: 'High', color: '#c8c8cb' }, { id: 'medium', label: 'Medium', color: '#a7a7ac' }, { id: 'low', label: 'Low', color: '#77777c' }, { id: 'none', label: 'No priority', color: '#68686d' },
     ]),
-    lead: values('lead', [{ id: '', label: 'No lead', color: '#68686d' }, ...users.map(user => ({ id: user.id, label: user.displayName }))]),
-    members: values('members', users.map(user => ({ id: user.id, label: user.displayName }))),
+    lead: values('lead', [{ id: '', label: 'No lead', color: '#68686d' }, ...users.map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl }))]),
+    members: values('members', users.map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl }))),
     health: values('health', [{ id: 'on-track', label: 'On track', color: '#4d9b5d' }, { id: 'at-risk', label: 'At risk', color: '#d3a036' }, { id: 'off-track', label: 'Off track', color: '#d8605f' }, { id: 'no-update', label: 'No update', color: '#57575c' }]),
     dates: values('dates', [{ id: 'has-target', label: 'Has target date' }, { id: 'no-target', label: 'No target date' }, { id: 'overdue', label: 'Target date is overdue', color: '#d8605f' }]),
     milestones: values('milestones', uniqueFilterOptions(items.filter(item => item.milestone).map(item => ({ id: item.milestone!, label: item.milestone! })))),
     labels: values('labels', [{ id: '', label: 'No labels' }, ...labels.map(label => ({ id: label.id, label: label.name, color: label.color }))]),
-    teams: values('teams', teams.map(team => ({ id: team.id, label: team.name, color: team.color }))),
+    teams: values('teams', teams.map(team => ({ id: team.id, label: team.name, color: team.color, teamIcon: team.icon }))),
     project: items.map(item => ({ id: item.id, label: item.name, color: item.color, count: 1 })),
   }
 }

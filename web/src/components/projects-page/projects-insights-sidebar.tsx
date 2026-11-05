@@ -1,5 +1,6 @@
 import type { ProjectPageItem } from './projects-data-view'
-import { avatarInitials } from '@/lib/avatar-initials'
+import { UserAvatar } from '@/components/ui/user-avatar'
+import { NoAssigneeIcon } from '@/components/issue/issue-icons'
 import './projects-page.css'
 
 export type ProjectInsightFilter = { kind: 'health' | 'lead', value: string } | null
@@ -8,7 +9,7 @@ export type ProjectInsightMode = 'health' | 'initiatives' | 'leads'
 type ProjectInsightRow = {
   className?: string
   count: number
-  initials?: string
+  lead?: ProjectPageItem['lead']
   label: string
   value: string
 }
@@ -32,7 +33,7 @@ export function ProjectsInsightsSidebar({ activeFilter, mode, onChangeFilter, on
       {rows.map(row => {
         const active = activeFilter?.kind === filterKind && activeFilter.value === row.value
         return <button aria-pressed={active} key={row.value} onClick={() => onChangeFilter(active ? null : { kind: filterKind, value: row.value })} type="button">
-          <span className={`lp-project-insights__marker ${row.className ?? ''}`}>{row.initials ?? ''}</span>
+          {filterKind === 'lead' ? row.lead ? <UserAvatar avatarUrl={row.lead.avatarUrl} className="lp-project-avatar" name={row.lead.name} userId={row.lead.id}/> : <NoAssigneeIcon size={16}/> : <span className={`lp-project-insights__marker ${row.className ?? ''}`}/>}
           <span>{row.label}</span>
           <span aria-label="Project count">{row.count}</span>
         </button>
@@ -52,17 +53,12 @@ function healthRows(projects: ProjectPageItem[]) {
 }
 
 function leadRows(projects: ProjectPageItem[]) {
-  const leads = new Map<string, { label: string, initials: string, count: number }>()
+  const leads = new Map<string, { label: string, lead?: ProjectPageItem['lead'], count: number }>()
   for (const project of projects) {
     const value = project.lead?.id ?? ''
-    const current = leads.get(value) ?? { label: project.lead?.name ?? 'No lead', initials: project.lead?.initials ?? initials(project.lead?.name), count: 0 }
+    const current = leads.get(value) ?? { label: project.lead?.name ?? 'No lead', lead: project.lead, count: 0 }
     current.count += 1
     leads.set(value, current)
   }
   return [...leads.entries()].map(([value, item]) => ({ value, ...item }))
-}
-
-function initials(name?: string) {
-  if (!name) return '—'
-  return avatarInitials(name, '')
 }

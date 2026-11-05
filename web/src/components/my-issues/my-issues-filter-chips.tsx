@@ -7,7 +7,7 @@ import type { MyIssuesFilterOption } from './my-issues-surface'
 import { OptionMark } from './my-issues-filter-menu'
 import { agentSessionFilterValue } from '@/lib/agent-members'
 
-export type ChipOption = MyIssuesFilterOption & { icon?: ReactNode }
+export type ChipOption = MyIssuesFilterOption & { icon?: ReactNode; visualType?: 'person' | 'team' }
 export type NormalizedFilter = AppliedFilterItem<ChipOption, MyIssuesFilterOperator> & { field: MyIssuesAppliedFilter['field'] }
 
 /** Flatten nested option menus (Dates › Due date › …) so stored values find their option. */
@@ -29,7 +29,9 @@ export function filterChipItem(filter: Pick<MyIssuesAppliedFilter, 'id' | 'field
     const legacy = filter.field === 'agentSession' && !known.has(value.value) ? known.get(agentSessionFilterValue(value.value) ?? '') : undefined
     const option = known.get(value.value) ?? (legacy && { ...legacy, id: value.value })
     const base: MyIssuesFilterOption = option ?? { id: value.value, label: filter.field === 'dates' || filter.field === 'releases' ? dateFilterValueLabel(value.value) ?? value.valueLabel : value.valueLabel, color: value.color }
-    return { ...base, label: base.label || value.valueLabel, icon: <OptionMark field={filter.field} option={base}/> }
+    const kind = base.kind ?? filter.field
+    const visualType = kind === 'team' ? 'team' : base.id && ['assignee', 'creator', 'owner', 'subscribers', 'agent', 'projectLead', 'customerOwner'].includes(kind) ? 'person' : undefined
+    return { ...base, label: base.label || value.valueLabel, icon: <OptionMark field={filter.field} option={base}/>, visualType } as ChipOption
   })
   const ids = values.map(value => value.id)
   return { id: filter.id, field: filter.field, fieldLabel: filter.fieldLabel, operator: filter.operator, operatorLabel: filter.operatorLabel, negativeOperatorLabel: filter.negativeOperatorLabel, values, operatorChoices: filterOperatorChoices(filter.field, ids, filter), valueSummary: values.length > 1 ? valueSummaryLabel(filter.field, values) : undefined }

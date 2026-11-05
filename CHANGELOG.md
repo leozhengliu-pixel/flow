@@ -8,6 +8,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 - Require the phone project Milestones section's exact position after the properties margin correction.
+- Show each person's uploaded avatar or own initials colour, and each team's configured icon and colour, throughout filter menus, filter chips and people action menus on desktop and phone.
 - Use shared sidebar section spacing above phone team rows.
 - Remove fitted phone activity offsets and restore subscription-button padding.
 - Center phone sub-issue progress within the header's explicit grid track.

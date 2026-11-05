@@ -81,7 +81,7 @@ export function triageIntelligenceFilterOptions(data: Pick<BootstrapData, 'users
     ] },
     { id: 'triage-team', label: TRIAGE_FILTER_LABELS.team, children: [
       value('team', '*', 'Any team'),
-      ...data.teams.map(team => value('team', team.id, team.name)),
+      ...data.teams.map(team => value('team', team.id, team.name, { kind: 'team', teamIcon: team.icon, color: team.color })),
     ] },
     { id: 'related', label: 'Suggested relations', filterLabel: 'Triage Intelligence', operatorLabel: 'has', negativeOperatorLabel: 'does not have', count: counts.any.related },
     { id: 'duplicate', label: 'Suggested duplicates', filterLabel: 'Triage Intelligence', operatorLabel: 'has', negativeOperatorLabel: 'does not have', count: counts.any.duplicate },

@@ -33,6 +33,9 @@
 .options small{color:var(--theme-text-secondary);font-size:11px}
 .empty{display:block;padding:16px;color:var(--theme-text-secondary);text-align:center;font-size:12px}
 .stack{display:flex}
+.identityStack{display:flex;align-items:center;flex:none}
+.identityStack>span{display:grid;place-items:center;width:16px;height:16px;margin-left:-4px}
+.identityStack>span:first-child{margin-left:0}
 .stack i{width:9px;height:9px;margin-left:-3px;border:1px solid var(--theme-surface-0);border-radius:50%}
 .stack i:first-child{margin-left:0}
 @media(max-width:800px){.bar{overflow:auto;padding-inline:8px}.commands{position:sticky;right:0;background:var(--theme-surface-0)}}
@@ -49,4 +52,5 @@
 
 @media (max-width: 767px) {
   .compact .commands button[aria-label="Clear all filters"] { opacity: .6; }
+  .options [data-user-avatar] { width:18px;height:18px;font-weight:400; }
 }
