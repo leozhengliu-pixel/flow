@@ -1,0 +1,68 @@
+{
+  "card": {
+    "data": {
+      "config": {
+        "wide_screen_mode": true
+      },
+      "elements": [
+        {
+          "content": "背景 回调失败时需要重试并记录。 第二段内容。",
+          "tag": "markdown"
+        },
+        {
+          "fields": [
+            {
+              "is_short": true,
+              "text": {
+                "content": "**团队**\nTest team",
+                "tag": "lark_md"
+              }
+            },
+            {
+              "is_short": true,
+              "text": {
+                "content": "**项目**\n支付改版",
+                "tag": "lark_md"
+              }
+            }
+          ],
+          "tag": "div"
+        },
+        {
+          "elements": [
+            {
+              "content": "王小明 最近编辑于 <volatile>",
+              "tag": "plain_text"
+            }
+          ],
+          "tag": "note"
+        },
+        {
+          "actions": [
+            {
+              "tag": "button",
+              "text": {
+                "content": "在 Flow 中打开",
+                "tag": "plain_text"
+              },
+              "type": "primary",
+              "url": "https://flow.example.test/test-workspace/document/spec-0123456789ab"
+            }
+          ],
+          "tag": "action"
+        }
+      ],
+      "header": {
+        "template": "wathet",
+        "title": {
+          "content": "支付回调设计",
+          "tag": "plain_text"
+        }
+      }
+    },
+    "type": "raw"
+  },
+  "inline": {
+    "title": "支付回调设计"
+  }
+}

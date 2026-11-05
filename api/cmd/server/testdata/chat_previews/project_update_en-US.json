@@ -1,0 +1,66 @@
+{
+  "card": {
+    "data": {
+      "config": {
+        "wide_screen_mode": true
+      },
+      "elements": [
+        {
+          "content": "本周完成 **支付** 接入\n\n- 回调重试\n- 对账报表",
+          "tag": "markdown"
+        },
+        {
+          "fields": [
+            {
+              "is_short": true,
+              "text": {
+                "content": "**Health**\nAt risk",
+                "tag": "lark_md"
+              }
+            },
+            {
+              "is_short": true,
+              "text": {
+                "content": "**Author**\n王小明",
+                "tag": "lark_md"
+              }
+            },
+            {
+              "is_short": true,
+              "text": {
+                "content": "**Posted**\n<volatile>",
+                "tag": "lark_md"
+              }
+            }
+          ],
+          "tag": "div"
+        },
+        {
+          "actions": [
+            {
+              "tag": "button",
+              "text": {
+                "content": "Open in Flow",
+                "tag": "plain_text"
+              },
+              "type": "primary",
+              "url": "https://flow.example.test/test-workspace/project/payments-0123456789ab/overview#update-project_update_preview"
+            }
+          ],
+          "tag": "action"
+        }
+      ],
+      "header": {
+        "template": "orange",
+        "title": {
+          "content": "支付改版 · Project update",
+          "tag": "plain_text"
+        }
+      }
+    },
+    "type": "raw"
+  },
+  "inline": {
+    "title": "支付改版 · Project update"
+  }
+}

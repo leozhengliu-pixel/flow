@@ -1,0 +1,99 @@
+{
+  "card": {
+    "data": {
+      "config": {
+        "wide_screen_mode": true
+      },
+      "elements": [
+        {
+          "fields": [
+            {
+              "is_short": true,
+              "text": {
+                "content": "**Status**\nTodo",
+                "tag": "lark_md"
+              }
+            },
+            {
+              "is_short": true,
+              "text": {
+                "content": "**Priority**\nUrgent",
+                "tag": "lark_md"
+              }
+            },
+            {
+              "is_short": true,
+              "text": {
+                "content": "**Assignee**\n王小明",
+                "tag": "lark_md"
+              }
+            },
+            {
+              "is_short": true,
+              "text": {
+                "content": "**Labels**\nBug, 支付, P0, +1",
+                "tag": "lark_md"
+              }
+            },
+            {
+              "is_short": true,
+              "text": {
+                "content": "**Project**\n支付改版",
+                "tag": "lark_md"
+              }
+            },
+            {
+              "is_short": true,
+              "text": {
+                "content": "**Due date**\nNov 20, 2026",
+                "tag": "lark_md"
+              }
+            },
+            {
+              "is_short": true,
+              "text": {
+                "content": "**Team**\nTest team",
+                "tag": "lark_md"
+              }
+            }
+          ],
+          "tag": "div"
+        },
+        {
+          "elements": [
+            {
+              "content": "Updated <volatile>",
+              "tag": "plain_text"
+            }
+          ],
+          "tag": "note"
+        },
+        {
+          "actions": [
+            {
+              "tag": "button",
+              "text": {
+                "content": "Open in Flow",
+                "tag": "plain_text"
+              },
+              "type": "primary",
+              "url": "https://flow.example.test/test-workspace/issue/TST-1"
+            }
+          ],
+          "tag": "action"
+        }
+      ],
+      "header": {
+        "template": "grey",
+        "title": {
+          "content": "TST-1 支付回调偶发失败，需要重试机制与告警",
+          "tag": "plain_text"
+        }
+      }
+    },
+    "type": "raw"
+  },
+  "inline": {
+    "title": "TST-1 支付回调偶发失败，需要重试机制与告警"
+  }
+}

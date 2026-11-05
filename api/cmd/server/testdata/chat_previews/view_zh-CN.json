@@ -1,0 +1,52 @@
+{
+  "card": {
+    "data": {
+      "config": {
+        "wide_screen_mode": true
+      },
+      "elements": [
+        {
+          "content": "Open payment bugs",
+          "tag": "markdown"
+        },
+        {
+          "fields": [
+            {
+              "is_short": true,
+              "text": {
+                "content": "**团队**\nTest team",
+                "tag": "lark_md"
+              }
+            }
+          ],
+          "tag": "div"
+        },
+        {
+          "actions": [
+            {
+              "tag": "button",
+              "text": {
+                "content": "在 Flow 中打开",
+                "tag": "plain_text"
+              },
+              "type": "primary",
+              "url": "https://flow.example.test/test-workspace/view/payments-bugs-0123456789ab"
+            }
+          ],
+          "tag": "action"
+        }
+      ],
+      "header": {
+        "template": "indigo",
+        "title": {
+          "content": "支付缺陷",
+          "tag": "plain_text"
+        }
+      }
+    },
+    "type": "raw"
+  },
+  "inline": {
+    "title": "支付缺陷"
+  }
+}

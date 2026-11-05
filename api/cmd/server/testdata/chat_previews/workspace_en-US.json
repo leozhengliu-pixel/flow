@@ -1,0 +1,36 @@
+{
+  "card": {
+    "data": {
+      "config": {
+        "wide_screen_mode": true
+      },
+      "elements": [
+        {
+          "actions": [
+            {
+              "tag": "button",
+              "text": {
+                "content": "Open in Flow",
+                "tag": "plain_text"
+              },
+              "type": "primary",
+              "url": "https://flow.example.test/test-workspace"
+            }
+          ],
+          "tag": "action"
+        }
+      ],
+      "header": {
+        "template": "blue",
+        "title": {
+          "content": "Test workspace",
+          "tag": "plain_text"
+        }
+      }
+    },
+    "type": "raw"
+  },
+  "inline": {
+    "title": "Test workspace"
+  }
+}

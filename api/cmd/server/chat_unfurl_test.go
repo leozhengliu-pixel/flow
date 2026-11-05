@@ -32,6 +32,17 @@ func (f *chatWorkflowFixture) preview(t *testing.T, openID, link, chatID string)
 	return result
 }
 
+// chatPreviewHidden: the answer describes nothing (no answer, or the neutral
+// link line without a card).
+func chatPreviewHidden(result map[string]any) bool {
+	if len(result) == 0 {
+		return true
+	}
+	inline, _ := result["inline"].(map[string]any)
+	title, _ := inline["title"].(string)
+	return result["card"] == nil && (title == chatT(chatLanguageChinese, "preview_neutral") || title == chatT(chatLanguageEnglish, "preview_neutral"))
+}
+
 func chatPreviewText(result map[string]any) string {
 	raw, _ := json.Marshal(result)
 	return string(raw)
@@ -56,7 +67,7 @@ func TestChatLinkPreviewFollowsViewerPermissionsAndGroupScope(t *testing.T) {
 
 	// A linked member's own context: every kind expands.
 	result := f.preview(t, f.identity.OpenID, issueLink, "")
-	if text := chatPreviewText(result); !strings.Contains(text, issue.Identifier) || !strings.Contains(text, `"type":"raw"`) || !strings.Contains(text, "Status: "+issue.State.Name) || !strings.Contains(text, "Priority: ") || !strings.Contains(text, "Team: "+issue.Team.Name) || !strings.Contains(text, "Assignee: ") {
+	if text := chatPreviewText(result); !strings.Contains(text, issue.Identifier) || !strings.Contains(text, `"type":"raw"`) || !strings.Contains(text, `**Status**\n`+issue.State.Name) || !strings.Contains(text, "**Priority**") || !strings.Contains(text, `**Team**\n`+issue.Team.Name) || !strings.Contains(text, "**Assignee**") {
 		t.Fatalf("issue preview: %s", text)
 	}
 	for _, tc := range []struct{ link, want string }{
@@ -64,16 +75,16 @@ func TestChatLinkPreviewFollowsViewerPermissionsAndGroupScope(t *testing.T) {
 		{base + "/document/spec-0123456789ab", "Ship the export fix"},
 		{base + "/initiative/growth-0123456789ab/overview", "Grow the base"},
 	} {
-		if text := chatPreviewText(f.preview(t, f.identity.OpenID, tc.link, "")); !strings.Contains(text, tc.want) || !strings.Contains(text, "Open in Flow") {
+		if text := chatPreviewText(f.preview(t, f.identity.OpenID, tc.link, "")); !strings.Contains(text, tc.want) || !strings.Contains(text, chatT(chatLanguageEnglish, "open_in_flow")) {
 			t.Fatalf("preview of %s: %s", tc.link, text)
 		}
 	}
 	// Unlinked viewers get a hint only; other tenants, other workspaces and
 	// other hosts get nothing.
-	if text := chatPreviewText(f.preview(t, "ou_unlinked", issueLink, "")); strings.Contains(text, issue.Identifier) || !strings.Contains(text, "Connect your Flow account") {
+	if text := chatPreviewText(f.preview(t, "ou_unlinked", issueLink, "")); strings.Contains(text, issue.Identifier) || !strings.Contains(text, chatT(chatLanguageChinese, "preview_connect")) {
 		t.Fatalf("unlinked preview: %s", text)
 	}
-	if len(f.preview(t, f.identity.OpenID, "https://flow.example.test/other-workspace/issue/"+issue.Identifier, "")) != 0 || len(f.preview(t, f.identity.OpenID, "https://elsewhere.example/"+f.record.WorkspaceKey+"/issue/"+issue.Identifier, "")) != 0 || len(f.preview(t, f.identity.OpenID, base+"/issue/MISSING-1", "")) != 0 {
+	if len(f.preview(t, f.identity.OpenID, "https://flow.example.test/other-workspace/issue/"+issue.Identifier, "")) != 0 || len(f.preview(t, f.identity.OpenID, "https://elsewhere.example/"+f.record.WorkspaceKey+"/issue/"+issue.Identifier, "")) != 0 || !chatPreviewHidden(f.preview(t, f.identity.OpenID, base+"/issue/MISSING-1", "")) {
 		t.Fatal("a link outside the workspace or to a missing issue expanded")
 	}
 	if len(f.s.chatLinkPreview(t.Context(), f.record, "tenant_other", f.identity.OpenID, issueLink, "")) != 0 {
@@ -104,11 +115,11 @@ func TestChatLinkPreviewFollowsViewerPermissionsAndGroupScope(t *testing.T) {
 		t.Fatalf("private issue in the member's own context: %s", text)
 	}
 	for _, link := range []string{issueLink, base + "/project/" + project.SlugID, base + "/document/spec-0123456789ab", base + "/initiative/growth-0123456789ab"} {
-		if result := f.preview(t, f.identity.OpenID, link, "oc_unbound_group"); len(result) != 0 {
+		if result := f.preview(t, f.identity.OpenID, link, "oc_unbound_group"); !chatPreviewHidden(result) {
 			t.Fatalf("private team content expanded in an unbound group (%s): %s", link, chatPreviewText(result))
 		}
 		// The public binding of the fixture does not authorize the private team.
-		if result := f.preview(t, f.identity.OpenID, link, f.binding.ChatID); len(result) != 0 {
+		if result := f.preview(t, f.identity.OpenID, link, f.binding.ChatID); !chatPreviewHidden(result) {
 			t.Fatalf("private team content expanded under a public binding (%s): %s", link, chatPreviewText(result))
 		}
 	}
@@ -119,7 +130,7 @@ func TestChatLinkPreviewFollowsViewerPermissionsAndGroupScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, link := range []string{issueLink, base + "/document/spec-0123456789ab"} {
-		if text := chatPreviewText(f.preview(t, f.identity.OpenID, link, private.ChatID)); !strings.Contains(text, "Open in Flow") {
+		if text := chatPreviewText(f.preview(t, f.identity.OpenID, link, private.ChatID)); !strings.Contains(text, chatT(chatLanguageEnglish, "open_in_flow")) {
 			t.Fatalf("private team content in its bound group (%s): %s", link, text)
 		}
 	}
@@ -143,7 +154,7 @@ func TestChatLinkPreviewFollowsViewerPermissionsAndGroupScope(t *testing.T) {
 	}
 	for _, chatID := range []string{"", private.ChatID} {
 		for _, link := range []string{issueLink, base + "/document/spec-0123456789ab", base + "/project/" + project.SlugID} {
-			if result := f.preview(t, "ou_preview_member", link, chatID); len(result) != 0 {
+			if result := f.preview(t, "ou_preview_member", link, chatID); !chatPreviewHidden(result) {
 				t.Fatalf("content the member cannot open expanded (%s in %q): %s", link, chatID, chatPreviewText(result))
 			}
 		}

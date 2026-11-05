@@ -1,0 +1,66 @@
+{
+  "card": {
+    "data": {
+      "config": {
+        "wide_screen_mode": true
+      },
+      "elements": [
+        {
+          "content": "Grow the base",
+          "tag": "markdown"
+        },
+        {
+          "fields": [
+            {
+              "is_short": true,
+              "text": {
+                "content": "**健康度**\n进展正常",
+                "tag": "lark_md"
+              }
+            },
+            {
+              "is_short": true,
+              "text": {
+                "content": "**负责人**\n王小明",
+                "tag": "lark_md"
+              }
+            },
+            {
+              "is_short": true,
+              "text": {
+                "content": "**团队**\nTest team",
+                "tag": "lark_md"
+              }
+            }
+          ],
+          "tag": "div"
+        },
+        {
+          "actions": [
+            {
+              "tag": "button",
+              "text": {
+                "content": "在 Flow 中打开",
+                "tag": "plain_text"
+              },
+              "type": "primary",
+              "url": "https://flow.example.test/test-workspace/initiative/growth-0123456789ab/overview"
+            }
+          ],
+          "tag": "action"
+        }
+      ],
+      "header": {
+        "template": "green",
+        "title": {
+          "content": "增长计划",
+          "tag": "plain_text"
+        }
+      }
+    },
+    "type": "raw"
+  },
+  "inline": {
+    "title": "增长计划"
+  }
+}

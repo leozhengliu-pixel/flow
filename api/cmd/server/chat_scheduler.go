@@ -39,6 +39,9 @@ func (s *server) queueCommittedChatEvents(ctx context.Context, workspace string)
 		return err
 	}
 	for _, record := range records {
+		if err := s.queueChatPreviewRefresh(ctx, workspace, record.Event); err != nil {
+			return err
+		}
 		switch record.Event.Type {
 		case "issue.created", "issue.updated", "comment.created", "comment.updated", "comment.deleted", "project.update_created", "project.update_updated", "project.update_deleted", "initiative.update_created", "ask.decided":
 			if err := s.queueChatDomainEvent(ctx, workspace, record.Event); err != nil {
