@@ -7,9 +7,10 @@
     .settings-section { margin-bottom: 24px; }
     .settings-section > h3 { margin: 0 16px 2px; font: 500 15px/23px var(--font); }
     .settings-section > .settings-section-description { margin: 0 16px 16px; color: var(--set-group-desc); font: 450 13px/18px var(--font); overflow-wrap: normal; }
-    .oauth-app-list-header { height: 60px; padding: 16px 10.6667px; border-bottom: .5px solid var(--set-sep); }
+    .oauth-app-list-header { position: relative; flex-direction: column; align-items: stretch; justify-content: center; gap: 2px; height: 60px; padding: 16px 10.6667px; border-bottom: .5px solid var(--set-sep); }
+    .oauth-app-list-header::after { content: ""; }
     .oauth-app-list-header > span { color: var(--set-text); font: 500 13px/normal var(--font); }
-    .oauth-app-list-header > button { margin-right: -6px; }
+    .oauth-app-list-header > button { position: absolute; right: 10.6667px; top: 50%; transform: translateY(-50%); margin-right: -6px; }
     .oauth-app-icon-button { color: var(--set-control-text); font: 500 13px/normal var(--font); }
     .oauth-app-icon-button.is-medium svg { width: 16px; height: 16px; }
     .oauth-app-list li { position: relative; height: 68px; }
