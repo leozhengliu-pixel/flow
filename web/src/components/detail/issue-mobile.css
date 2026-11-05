@@ -21,6 +21,7 @@
   .issue-view .issue-work-control { width: auto; height: 32px; }
   .issue-view .issue-document { padding: 22.25px 14px 60px; }
   .issue-view .issue-title-field { margin: 18px 0 18px; }
+  .issue-view .issue-title-field .title-editor p { letter-spacing: -.16px; }
   .issue-view .issue-properties-rail { display: none; }
   .issue-view .issue-mobile-properties {
     display: flex;

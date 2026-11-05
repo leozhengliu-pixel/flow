@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match phone issue-title paragraph tracking.
 - Include the phone issue header's hairline in its box while retaining the content origin.
 - Reserve the same border space in every phone cycle metric row.
 - Preserve inline text baselines in phone issue summaries and document subscriber badges.
