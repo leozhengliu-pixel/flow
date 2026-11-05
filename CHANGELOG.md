@@ -11,7 +11,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Preserve the document directory's inner team-name weight on phones.
 - Require the phone project Milestones section's exact position after the properties margin correction.
 - Show each person's uploaded avatar or own initials colour, and each team's configured icon and colour, throughout filter menus, filter chips and people action menus on desktop and phone.
-- Reconcile persisted phone issue/document fixture names and stabilize activity fixture ages without reseeding the shared database.
 - Preserve the empty description slot in phone webhook rows.
 - Match phone code-chip line boxes with a local monospace fallback that preserves the primary font's ascent and descent.
 - Use the compact phone gap between group estimate icons and totals, replacing the cycle-only value offset.
