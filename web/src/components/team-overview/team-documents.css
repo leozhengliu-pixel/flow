@@ -433,10 +433,10 @@
   .team-documents-filter-bar [data-advanced-chip],
   .team-documents-filter-bar [data-advanced-chip][data-empty] {
     height: 28px;
-    border: 0;
+    border: .5px solid var(--theme-border-strong);
     border-radius: 8px;
     background: var(--phone-control-bg);
-    box-shadow: 0 0 0 .5px var(--theme-border-strong);
+    box-shadow: none;
   }
   .team-documents-filter-bar [data-advanced-chip] > button:first-of-type {
     height: 27px;
