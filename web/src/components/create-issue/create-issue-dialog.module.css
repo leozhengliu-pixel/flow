@@ -168,6 +168,7 @@
   .priorityMenu :global(.property-command-section) { position: relative; height: calc(var(--property-option-count) * 46px); }
   html:root body .priorityMenu:not(#_) :global(.property-command-options [role="option"]) { position: absolute; top: calc(var(--property-option-index) * 46px); grid-template-columns: 16px minmax(0, 1fr) 16px; padding: 0 12px; font: 450 13px/15.6px var(--font); letter-spacing: normal; }
   .priorityMenu :global(.property-command-label) { font: 450 13px/15.6px var(--font); letter-spacing: normal; }
+  .priorityMenu :global(.property-command-icon > svg) { width: 100%; height: 100%; }
   html:root body .priorityMenu:not(#_) :global(.property-command-option-background) { inset: 2px 0; }
   html:root body .priorityMenu:not(#_) :global(.property-command-icon) { font: 400 15px/22.5px var(--font); color: var(--pk-text); }
   html:root body .priorityMenu:not(#_) :global([role="option"][aria-selected="true"] .property-command-icon) { color: var(--pk-text-strong); }
