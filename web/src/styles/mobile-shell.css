@@ -119,7 +119,14 @@
   color: var(--pk-text);
   outline: none;
 }
-.phone-menu-surface > [cmdk-root] { width: calc(100vw - 32px); }
+/* Phone sheet content retains the full surface width inside its hairline border. */
+.phone-menu-surface > [cmdk-root] { width: var(--phone-menu-content-width); }
+@media (max-width: 767px) {
+  .command-dialog > [cmdk-root] { width: var(--phone-menu-content-width); }
+}
+.phone-menu-surface.property-command-standard {
+  --phone-property-options-padding-bottom: 5px;
+}
 .phone-menu-search { padding: 6px 6px 0; }
 .phone-menu-surface.phone-menu-custom { max-height: calc(100dvh - var(--phone-menu-top) - 16px); overflow: visible; border: 0; background: transparent; box-shadow: none; }
 .phone-menu-search input {

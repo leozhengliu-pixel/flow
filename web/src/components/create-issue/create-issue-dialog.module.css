@@ -118,11 +118,10 @@
 @media (max-width: 767px) {
   html:root body .assigneeMenu:not(#_) { --property-option-count: 0; --property-option-index: 0; box-shadow: var(--pk-card-shadow); }
   .assigneeMenu :global(.phone-menu-context) { padding-block: 2px; font-weight: 400; line-height: 18px; letter-spacing: normal; }
-  html:root body .assigneeMenu:not(#_) :global(.property-command-search) { width: calc(100% - 10px); height: 40px; margin: 6px 6px 0; padding: 0; border-radius: 12px; font: 400 13px/19.5px var(--font); letter-spacing: normal; grid-template-columns: minmax(0, 1fr); }
+  html:root body .assigneeMenu:not(#_) :global(.property-command-search) { width: var(--phone-property-search-width); height: 40px; margin: 6px 6px 0; padding: 0; border-radius: 12px; font: 400 13px/19.5px var(--font); letter-spacing: normal; grid-template-columns: minmax(0, 1fr); }
   html:root body .assigneeMenu:not(#_) :global(.property-command-search input) { border-radius: 12px; letter-spacing: normal; }
   html:root body .assigneeMenu:not(#_) :global(.property-command-search input::placeholder) { color: var(--pk-faint); }
   html:root body .assigneeMenu:not(#_) :global(.property-command-icon:not(:has(.core-person-picker-avatar))) { color: var(--phone-menu-icon-fg); }
-  html:root body .assigneeMenu:not(#_) :global(.property-command-options:not(.virtual-property-options)) { width: calc(100% + 2px); padding-bottom: 4px; transform: translate(-.5px, -.5px); }
   .assigneeMenu :global(.property-command-section) { position: relative; height: calc(var(--property-option-count) * 46px); }
   .assigneeMenu :global(.property-command-section:has(.property-command-group)) { height: calc(30px + var(--property-option-count) * 46px); padding-top: 30px; }
   html:root body .assigneeMenu:not(#_) :global(.property-command-group) { position: absolute; inset: 0 0 auto; padding: 8px 12px; font: 500 12px/normal var(--font); letter-spacing: normal; }
@@ -155,19 +154,17 @@
   html:root body .statusMenu:not(#_) { --property-option-count: 0; --property-option-index: 0; box-shadow: var(--pk-card-shadow); }
   html:root body .priorityMenu:not(#_) { --property-option-count: 0; --property-option-index: 0; box-shadow: var(--pk-card-shadow); }
   .statusMenu :global(.phone-menu-context) { padding-block: 2px; font-weight: 400; line-height: 18px; letter-spacing: normal; }
-  html:root body .statusMenu:not(#_) :global(.property-command-search) { box-sizing: border-box; width: calc(100% - 10px); height: 40px; margin: 6px 6px 0; padding: 0; border-radius: 12px; font: 400 13px/19.5px var(--font); letter-spacing: normal; grid-template-columns: minmax(0, 1fr); }
+  html:root body .statusMenu:not(#_) :global(.property-command-search) { box-sizing: border-box; width: var(--phone-property-search-width); height: 40px; margin: 6px 6px 0; padding: 0; border-radius: 12px; font: 400 13px/19.5px var(--font); letter-spacing: normal; grid-template-columns: minmax(0, 1fr); }
   html:root body .statusMenu:not(#_) :global(.property-command-search input) { border-radius: 12px; letter-spacing: normal; }
   html:root body .statusMenu:not(#_) :global(.property-command-search input::placeholder) { color: var(--pk-faint); }
-  html:root body .statusMenu:not(#_) :global(.property-command-options:not(.virtual-property-options)) { width: calc(100% + 2px); padding-bottom: 4px; transform: translate(-.5px, -.5px); }
   .statusMenu :global(.property-command-section) { position: relative; height: calc(var(--property-option-count) * 46px); }
   html:root body .statusMenu:not(#_) :global(.property-command-options [role="option"]) { position: absolute; top: calc(var(--property-option-index) * 46px); grid-template-columns: 16px minmax(0, 1fr) 16px; padding: 0 12px; font: 450 13px/15.6px var(--font); letter-spacing: normal; }
   .statusMenu :global(.property-command-label) { font: 450 13px/15.6px var(--font); letter-spacing: normal; }
   html:root body .statusMenu:not(#_) :global(.property-command-option-background) { inset: 2px 0; }
   .priorityMenu :global(.phone-menu-context) { padding-block: 2px; font-weight: 400; line-height: 18px; letter-spacing: normal; }
-  html:root body .priorityMenu:not(#_) :global(.property-command-search) { box-sizing: border-box; width: calc(100% - 10px); height: 40px; margin: 6px 6px 0; padding: 0; border-radius: 12px; font: 400 13px/19.5px var(--font); letter-spacing: normal; grid-template-columns: minmax(0, 1fr); }
+  html:root body .priorityMenu:not(#_) :global(.property-command-search) { box-sizing: border-box; width: var(--phone-property-search-width); height: 40px; margin: 6px 6px 0; padding: 0; border-radius: 12px; font: 400 13px/19.5px var(--font); letter-spacing: normal; grid-template-columns: minmax(0, 1fr); }
   html:root body .priorityMenu:not(#_) :global(.property-command-search input) { border-radius: 12px; letter-spacing: normal; }
   html:root body .priorityMenu:not(#_) :global(.property-command-search input::placeholder) { color: var(--pk-faint); }
-  html:root body .priorityMenu:not(#_) :global(.property-command-options:not(.virtual-property-options)) { width: calc(100% + 2px); padding-bottom: 4px; transform: translate(-.5px, -.5px); }
   .priorityMenu :global(.property-command-section) { position: relative; height: calc(var(--property-option-count) * 46px); }
   html:root body .priorityMenu:not(#_) :global(.property-command-options [role="option"]) { position: absolute; top: calc(var(--property-option-index) * 46px); grid-template-columns: 16px minmax(0, 1fr) 16px; padding: 0 12px; font: 450 13px/15.6px var(--font); letter-spacing: normal; }
   .priorityMenu :global(.property-command-label) { font: 450 13px/15.6px var(--font); letter-spacing: normal; }

@@ -1,5 +1,5 @@
 /* ⌘K context: the issue(s)/project the menu acts on, then the nested page trail. */
-html:root body .command-dialog .command-context {
+.command-dialog .command-context {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -207,10 +207,10 @@ html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
   html:root body .command-overlay {
     background: transparent;
   }
-  html:root body .command-dialog:has(.command-context-chip) .command-context {
-    height: 33.5px;
+  .command-dialog:has(.command-context-chip) .command-context {
+    height: 34px;
     box-sizing: border-box;
-    padding: 11.5px 13.5px 0;
+    padding: 12px 14px 0;
   }
   html:root body .command-dialog:has(.command-context-chip) .command-context-chip {
     box-sizing: border-box;
@@ -225,8 +225,8 @@ html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
     display: flex;
     max-width: calc(100% - 28px);
   }
-  html:root body .command-dialog:has(.command-context-chip) .command-input {
-    padding: 6px 4.5px 0 5.5px;
+  .command-dialog:has(.command-context-chip) .command-input {
+    padding: 6px 6px 0;
   }
   html:root body .command-dialog:has(.command-context-chip) .command-input-field {
     box-sizing: border-box;
@@ -244,8 +244,8 @@ html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
     border-radius: 12px !important;
     line-height: 19.5px !important;
   }
-  html:root body .command-dialog:has(.command-context-chip) [cmdk-list] {
-    padding: 6px 4.5px 6px 5.5px;
+  .command-dialog:has(.command-context-chip) [cmdk-list] {
+    padding: 6px;
   }
   html:root body .command-dialog:has(.command-context-chip) .command-context-actions [cmdk-group-heading] {
     display: none;

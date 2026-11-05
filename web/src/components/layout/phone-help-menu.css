@@ -6,7 +6,7 @@
 html:root body .help-phone-menu [cmdk-item]:not(#_) { position: absolute; width: 100%; border-radius: 0; background: transparent; color: var(--pk-text); }
 .help-phone-menu [cmdk-item] { --help-icon-color: var(--pk-muted); }
 .help-phone-menu [cmdk-item][data-selected=true] { --help-icon-color: var(--pk-text-strong); }
-.help-phone-menu > [cmdk-root] { position: relative; left: -.5px; top: -.5px; width: calc(100vw - 32px); border: 0; }
+.help-phone-menu > [cmdk-root] { position: relative; border: 0; }
 .help-phone-menu [cmdk-item]::before { content: ''; position: absolute; inset: 2px -1px; border-radius: 8px; pointer-events: none; }
 .help-phone-menu [cmdk-item][data-selected=true]::before { background: var(--pk-hover); }
 .help-phone-menu [cmdk-item] > :is(span, svg) { position: relative; }
