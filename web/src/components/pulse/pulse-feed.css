@@ -359,10 +359,13 @@
   html:root body .app .pulse-page .pulse-post-heading {
     min-width: 0;
     flex: 0 1 auto;
+    display: grid;
+    grid-template-rows: minmax(22.5px, max-content) auto;
+    align-items: start;
     gap: 6px;
   }
   html:root body .app .pulse-page .pulse-post-title {
-    min-height: 22.5px;
+    min-height: 22px;
     line-height: normal;
     border-style: none;
   }

@@ -648,7 +648,8 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-row .review-row-icon--phone[data-review-state=open] path { fill: var(--review-row-state-open); }
   html:root body .app .review-row .review-row-icon--phone[data-review-state=draft] path { fill: var(--review-state-draft); }
   html:root body .app .review-row .review-row-icon--phone[data-review-state=draft] { color: var(--review-state-draft); }
-  html:root body .app .review-row .review-list-row__title { border-style: none; }
+  html:root body .app .review-row .review-list-row__title { display: flex; min-height: 16px; border-style: none; }
+  .review-list-row__title > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   html:root body .app .review-row time { min-width: 30px; border-style: none; text-align: right; }
   .reviews-tab-label--phone { display: inline; }
   .reviews-tab-label { border-style: none; border-radius: 0; }
