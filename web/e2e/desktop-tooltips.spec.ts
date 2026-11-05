@@ -17,18 +17,20 @@ async function hover(page: Page, target: Locator) {
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 6 })
 }
 
-test('shortcut tooltips draw their key caps 8px after the label and 5px from the edge', async ({ page, request, workspaceKey }) => {
+for (const platform of ['MacIntel', 'Linux x86_64']) test(`shortcut tooltips draw their key caps 8px after the label and 5px from the edge (${platform})`, async ({ page, request, workspaceKey }) => {
+  await page.addInitScript(platform => Object.defineProperty(navigator, 'platform', { get: () => platform }), platform)
   const headers = { 'X-Workspace-Key': workspaceKey }
   const data = await (await request.get('/api/bootstrap', { headers })).json() as { teams: Array<{ key: string }> }
   await page.goto(`/${workspaceKey}/team/${data.teams[0].key}/all`)
   await page.evaluate(() => document.fonts.ready)
-  for (const [name, label, keys] of [['Search', 'Search', ['/']], ['Create new issue', 'Create new issue', ['C']], ['Open details', 'Open details', ['⌘', 'I']], ['Add filter', 'Add Filter', ['F']]] as const) {
+  const detailsKeys = platform === 'MacIntel' ? ['⌘', 'I'] : ['Ctrl', 'I']
+  for (const [name, label, keys] of [['Search', 'Search', ['/']], ['Create new issue', 'Create new issue', ['C']], ['Open details', 'Open details', detailsKeys], ['Add filter', 'Add Filter', ['F']]] as const) {
     await hover(page, page.getByRole('button', { name, exact: true }).first())
     const tooltip = page.locator('.flow-tooltip-content').filter({ hasText: label })
     await expect(tooltip).toBeVisible()
     // The open animation scales the surface slightly; measure once it has settled.
     await expect.poll(async () => (await tooltip.boundingBox())!.height, { message: `${name} tooltip height` }).toBeCloseTo(28.1, 1)
-    await page.waitForTimeout(250)
+    await tooltip.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)))
     const box = (await tooltip.boundingBox())!
     const copy = (await tooltip.locator('.flow-tooltip-copy').boundingBox())!
     const caps = tooltip.locator('kbd.flow-tooltip-key')
