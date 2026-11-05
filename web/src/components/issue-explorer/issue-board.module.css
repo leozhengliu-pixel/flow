@@ -409,10 +409,10 @@
   .desktopIcon{display:none}
   .columnHeader strong{line-height:normal}
   .countValue{line-height:normal}
-  .cardBody{padding-bottom:12.25px}
   .cardTop{letter-spacing:-.24px;line-height:normal;color:var(--board-card-muted)}
   .title{color:var(--theme-text-primary)}
-  .created{margin:11.25px 1px 0;line-height:normal;color:var(--board-card-muted)}
+  .status{margin:-2px -3px}
+  .created{line-height:normal;color:var(--board-card-muted)}
   .noAssignee{color:var(--theme-text-primary);font-size:16px;font-weight:400;line-height:24px;opacity:.34}
   .column:hover .addIssue{opacity:0}
   .addIssue{opacity:0;width:calc(100% - 4px);height:28px;margin:0 2px;padding:6px 8px;line-height:normal;border:.5px solid var(--board-add-issue-border);border-radius:9999px;background:var(--board-add-issue-bg);color:var(--board-add-issue-fg);font-size:12px;font-weight:500}
