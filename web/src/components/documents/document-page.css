@@ -556,13 +556,16 @@ button.document-icon.is-empty:hover,
   .document-metadata-people {
     display: grid;
     grid-template-columns: max-content minmax(0, 1fr) max-content;
+    border-top: .5px solid var(--pk-divider);
   }
   .document-metadata-people > .document-owner-row,
   .document-metadata-people > .document-last-edit-row {
     display: grid;
     grid-column: 1 / -1;
     grid-template-columns: subgrid;
+    border-top: 0;
   }
+  .document-metadata-divider { display: block; grid-column: 1 / -1; height: .5px; border-bottom: .5px solid var(--pk-divider); }
   [data-radix-popper-content-wrapper]:has(> .document-subscribers) {
     position: fixed !important;
     inset: 13vh 16px auto !important;
