@@ -138,7 +138,7 @@
   [data-issue-explorer] [data-content-view-breadcrumb] a>span:first-child{border-radius:8px}
   [data-issue-explorer] [data-content-view-breadcrumb] a>span:first-child>*{width:16px;height:16px}
   [data-issue-explorer] [data-content-view-breadcrumb] a>span:last-child{line-height:normal;color:var(--text);border-style:none}
-  [data-issue-explorer] [data-content-view-breadcrumb]>span:nth-child(2)>span:first-child{display:inline-flex;align-items:center;height:15.5px;margin:0 0 0 3px;color:var(--issue-muted);font-size:13px;font-weight:500;line-height:normal;border-style:none}
+  [data-issue-explorer] [data-content-view-breadcrumb]>span:nth-child(2)>span:first-child{display:inline-flex;align-items:center;height:15.5px;margin:0 0 0 3px;color:var(--issue-muted);font-size:13px;font-weight:500;line-height:normal;border-style:none;transform:translateY(-1px)}
   [data-issue-explorer] [data-content-view-breadcrumb]>span:last-child>[data-current]{color:var(--text);font-size:13px;font-weight:500;line-height:normal}
   [data-issue-explorer] [data-content-view-breadcrumb]>span:last-child>[data-current] span{border-style:none}
   [data-issue-explorer] [data-content-view-subheader]{gap:6px;border-style:none}
@@ -165,7 +165,7 @@
   [data-issue-explorer] a[data-issue-row-id] [class*="priorityTrigger"] svg rect{fill:var(--issue-muted)}
   [data-issue-explorer] a[data-issue-row-id] :global(.estimate-chip) svg path{fill:var(--issue-muted)}
   [data-issue-explorer] a[data-issue-row-id] [class*="noAssignee"] svg{fill:var(--issue-dim);opacity:1}
-  [data-issue-explorer] [class*="groupState"]{display:grid;width:14px;height:14px;margin-left:0;place-items:center}
+  [data-issue-explorer] [class*="groupState"]{display:grid;width:16px;height:16px;margin-left:-2px;place-items:center}
   [data-issue-explorer] [class*="groupState"] svg{color:var(--bright);border-style:none}
   [data-issue-explorer] [class*="groupHeader"]:has([class*="groupEstimate"]) [class*="groupCount"]{display:none}
   [data-issue-explorer] [class*="groupEstimate"] :global(.estimate-chip__value){border-style:none}
