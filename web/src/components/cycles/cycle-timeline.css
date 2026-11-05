@@ -157,4 +157,6 @@
   .flow-cycles-page .flow-cycle-cooldown .cycle-cooldown-icon { position: absolute; left: 64px; }
   .flow-cycles-page .cycle-timeline-chart { position: absolute; left: 80px; top: 57.25px; width: calc(100% - 112px); }
   .flow-cycles-page .cycle-timeline-metrics { position: absolute; top: 267.25px; left: 80px; right: 32px; }
+  .flow-cycles-page .cycle-timeline-metric { border-bottom-width: 1px; }
+  .flow-cycles-page .cycle-timeline-metric:last-child { border-bottom: 1px solid transparent; }
 }
