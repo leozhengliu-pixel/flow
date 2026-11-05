@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Wait for the agent composer's initial focus before testing the global command shortcut, so lazy page loading cannot steal the intended test focus.
 - Wait for the phone context menu's empty state to clear before checking that its unfiltered rows return.
 - Measure subscription and issue property sheets after their entry animations finish, preserving exact browser geometry assertions.
 - Check desktop tooltip keycaps on both Mac and Linux, preserving exact spacing while waiting for the tooltip's opening animation.

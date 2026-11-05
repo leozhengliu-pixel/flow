@@ -18,6 +18,7 @@ test('desktop shell commands keep commands first, list real shortcuts and open t
 
   await page.goto(`/${workspaceKey}/agent`)
   await expect(page.locator('.sidebar')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Send a message to Flow AI', exact: true })).toBeFocused()
   await page.mouse.click(800, 20)
 
   // The sidebar search tooltip advertises the shortcut that really opens search.
