@@ -35,8 +35,8 @@ for (const theme of ['light', 'dark'] as const) {
         const geometry = await loader.evaluate(element => {
           const rail = element.querySelector('.flow-startup__rail')!.getBoundingClientRect()
           const card = element.querySelector('.flow-startup__card')!.getBoundingClientRect()
-          const disc = element.querySelector('.flow-startup__disc')!.getBoundingClientRect()
-          return { rail: rail.width, card: [card.x, card.y, card.width, card.height], disc: [disc.width, disc.height], dx: disc.x + disc.width / 2 - (card.x + card.width / 2), dy: disc.y + disc.height / 2 - (card.y + card.height / 2), overflow: document.documentElement.scrollWidth > innerWidth }
+          const mark = element.querySelector('.flow-startup__mark')!.getBoundingClientRect()
+          return { rail: rail.width, card: [card.x, card.y, card.width, card.height], mark: [mark.width, mark.height], dx: mark.x + mark.width / 2 - (card.x + card.width / 2), dy: mark.y + mark.height / 2 - (card.y + card.height / 2), overflow: document.documentElement.scrollWidth > innerWidth }
         })
         const phone = page.viewportSize()!.width <= 1024
         // Narrow screens hide the sidebar and let the loading card fill the viewport.
@@ -44,7 +44,7 @@ for (const theme of ['light', 'dark'] as const) {
         expect(geometry.card[0]).toBe(phone ? 0 : 244)
         expect(geometry.card[1]).toBe(phone ? 0 : 8)
         if (phone) expect(geometry.card.slice(2)).toEqual([page.viewportSize()!.width, page.viewportSize()!.height])
-        expect(geometry.disc).toEqual([32, 32])
+        expect(geometry.mark).toEqual([32, 32])
         // Centred between the sidebar column and the window edge, so 4px right of the card's own centre.
         expect(geometry.dx).toBeCloseTo(phone ? 0 : 4, 0)
         expect(geometry.dy).toBeCloseTo(0, 0)
@@ -68,5 +68,5 @@ test('draws the startup shell before JavaScript starts', async ({ page }) => {
   await page.route(url => url.pathname === '/src/main.tsx', route => route.abort())
   await page.goto('/join')
   await expect(page.locator('.flow-startup')).toBeVisible()
-  await expect(page.locator('.flow-startup__disc')).toBeVisible()
+  await expect(page.locator('.flow-startup__mark')).toBeVisible()
 })

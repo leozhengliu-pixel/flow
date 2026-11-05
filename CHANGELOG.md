@@ -134,7 +134,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Show cycle dates in the interface language, use tabular numerals for cycle percentages, align the cycle page breadcrumb and item list with the directory, keep the phone cycle insights panel inside the viewport, translate the Loops template cards, and stop partial translations of sentences that end in "issue views".
 
 - Align browser regressions with label checkbox opacity states and searchable phone subscription submenu navigation.
-- Show an Offline pill in the sidebar header in place of the workspace name while the browser is offline, draw the first-load surface as the app shell (blank sidebar column, main card and a loading mark) instead of a full-window splash, and add a "Skip to content" link as the first Tab stop on desktop.
+- Show an Offline pill in the sidebar header in place of the workspace name while the browser is offline, draw the first-load surface as the app shell (blank sidebar column, main card and the Flow mark) instead of a full-window splash, and add a "Skip to content" link as the first Tab stop on desktop.
 
 - Give primary buttons a hover fill (Create issue), stop disabled comment buttons from painting hover, and draw sidebar, header and bottom-bar focus rings as a 1px accent ring (none on section toggles and team rows).
 - Show whole-character initials for emoji-led names, colour every person avatar by user id, truncate long assignee names in the issue property column, and mention people written next to CJK text or with one-character names.
