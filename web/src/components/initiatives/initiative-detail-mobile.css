@@ -1,6 +1,7 @@
 .li-detail-top { display: contents; }
 .li-detail-phone-icon, .li-latest-update { display: none; }
 .li-overview-properties { display: contents; }
+.li-latest-update__frame { display: contents; }
 
 @media (max-width: 767px) {
   .li-detail { height: 100%; margin: 0; border-radius: 0; text-rendering: geometricPrecision; }
@@ -75,7 +76,8 @@
   .li-latest-update button { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; color: var(--text); background: transparent; font: 500 12px var(--font); line-height: normal; letter-spacing: normal; }
   .li-latest-update > header > button { margin-left: auto; margin-right: -8px; color: var(--issue-muted); font-size: 13px; }
   .li-latest-update > header > button svg { width: 14px; height: 14px; }
-  .li-latest-update__content { padding: 16.5px 8px 12px; }
+  .li-latest-update__content { padding: 12px 8px; }
+  .li-latest-update__frame { display: block; padding-top: 4px; border: .5px solid transparent; }
   .li-latest-update__meta { display: flex; align-items: center; gap: 12px; height: 36px; white-space: nowrap; color: var(--issue-muted); font: 450 13px var(--font); line-height: normal; }
   .li-latest-update__health, .li-latest-update__author { display: flex; align-items: center; gap: 8px; }
   .li-latest-update__health.is-onTrack { color: var(--project-health-on-track); }
