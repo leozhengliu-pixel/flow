@@ -62,7 +62,7 @@
   .issue-view .activity-event-group[aria-expanded=true] > svg { transform: rotate(90deg); }
   .issue-view .issue-parent-context { font-size: 13px; font-weight: 450; }
   .issue-view .issue-parent-context > span { line-height: normal; }
-  .issue-view .issue-parent-context > a { height: 26px; padding: 5px 4px; gap: 4px; border-radius: 8px; font-weight: 450; line-height: normal; }
+  .issue-view .issue-parent-context > a { height: 26px; padding: 5px 4px; gap: 4px; border: .5px solid transparent; border-radius: 8px; font-weight: 450; line-height: normal; }
   .issue-view .issue-parent-context > a > strong { color: var(--issue-muted); font-weight: inherit; }
   .issue-view .issue-parent-context > a > span { color: var(--bright); font-weight: 500; }
   .issue-view .issue-empty-sub-issue-action { gap: 3px; font-size: 12px; line-height: normal; }
