@@ -258,6 +258,23 @@ describe('sidebar feature flags', () => {
     }
   })
 
+  it('lists the hidden entries then Customize sidebar, all drawn with filled glyphs', async () => {
+    localStorage.setItem('flow.sidebar.preferences', JSON.stringify({ ...defaultVisibility, members: 'never', customers: 'never', teams: 'never', releases: 'never' }))
+    renderSidebar({ 'customer-requests': true, asks: true, releases: true })
+    const menu = await openMore()
+    const rows = [...menu.querySelectorAll('[role="menuitem"]')]
+    expect(rows.map(row => row.textContent)).toEqual(['Members', 'Customers', 'Releases', 'Teams', 'Asks', 'Customize sidebar'])
+    // One glyph family: no stroked icon libraries, every glyph is a 16px viewBox that fills with the row colour.
+    for (const row of rows) {
+      const glyph = row.querySelector(':scope > svg')!
+      expect(glyph, row.textContent ?? '').not.toHaveClass('lucide')
+      expect(glyph.getAttribute('viewBox')).toBe('0 0 16 16')
+      expect(glyph.querySelector('[stroke]')).toBeNull()
+    }
+    expect(menu.querySelectorAll('[role="separator"]')).toHaveLength(1)
+    expect(rows.at(-1)!.querySelector('svg')).toHaveClass('sidebar-more-customize-icon')
+  })
+
   it('does not keep Loops in primary nav or More when the flag is off', async () => {
     localStorage.setItem('flow.sidebar.preferences', JSON.stringify(defaultVisibility))
     renderSidebar({ loops: false, 'customer-requests': true, asks: true })

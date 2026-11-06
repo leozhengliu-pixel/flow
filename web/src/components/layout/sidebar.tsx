@@ -4,6 +4,7 @@ import { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog';
 import { SidebarTeamMenu } from './sidebar-team-menu';
 import { SidebarIssuesTooltip } from './sidebar-issues-tooltip';
 import { PhoneInboxIcon, PhoneViewsIcon, PhoneTriageIcon, PhoneTeamBranchIcon } from './sidebar-phone-glyphs';
+import { SettingsNavGlyph } from '@/components/settings/settings-nav-glyphs';
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import { roleAllowed } from '@/lib/settings-access';
@@ -19,7 +20,6 @@ import {
   FolderOpen,
   Keyboard,
   MessageCircle,
-  MessageCircleQuestion,
   MoreHorizontal,
   Pause,
   Play,
@@ -1817,7 +1817,7 @@ function MoreMenu({
           className="sidebar-popover sidebar-more-menu"
           side="bottom"
           align="start"
-          sideOffset={6.5}
+          sideOffset={5.5}
         >
           {visibleEntries.map((entry) => {
             const item = items[entry];
@@ -1841,7 +1841,7 @@ function MoreMenu({
           {asks && (
             <DropdownMenu.Item asChild>
               <NavLink to={asksPath(workspaceSlug)}>
-                <MessageCircleQuestion />
+                <SettingsNavGlyph name="asks" size={14} />
                 <span>{t("Asks")}</span>
               </NavLink>
             </DropdownMenu.Item>
@@ -2833,15 +2833,9 @@ export function LoopsIcon() {
 }
 function CustomizeIcon() {
   return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path
-        d="M10.5 2.5h3v3M13.2 2.8 8.7 7.3M7 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V9"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.35"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+    <svg className="sidebar-more-customize-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M15.7591 3.22525C15.9544 3.42051 15.9544 3.73709 15.7591 3.93236L10.5769 9.11464C9.81194 9.87961 8.79374 10.3386 7.71398 10.4051C7.59306 10.4126 7.49293 10.3124 7.50039 10.1915C7.56704 9.11183 8.026 8.09372 8.79089 7.32882L13.9732 2.14645C14.1684 1.95118 14.485 1.95118 14.6803 2.14645L15.7591 3.22525Z" />
+      <path d="M13.5 8.39521V10.7499C13.5 11.7164 12.7165 12.4999 11.75 12.4999H6V3.5H10.4688L11.9619 2.0068C11.8919 2.00229 11.8212 2 11.75 2H4.25C2.45508 2 1 3.45508 1 5.25V10.7499C1 12.5449 2.45508 13.9999 4.25 13.9999H11.75C13.5449 13.9999 15 12.5449 15 10.7499V6.89521L13.5 8.39521Z" />
     </svg>
   );
 }

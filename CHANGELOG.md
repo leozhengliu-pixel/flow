@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Align the desktop settings sidebar's "Back to app" link: it sits 0.25px higher and the chevron keeps its own 6px gap, so the link is 1px wider and the search field below stays put.
 - Draw the saved view details panel cards with one real border and the shared card shadow (no double outline in the light theme), match the reference tab strip and row geometry, and show deactivated, SCIM-provisioned or unknown assignees by name or "Unknown user" instead of their raw IDs.
+- Match the sidebar More menu's rows, glyph slots, muted icon colour, hover, separator and light-theme border and shadow to the current design, use one filled glyph family for Asks and Customize sidebar, and keep Customize sidebar on one line.
 - Refuse SAML responses whose assertion lacks a Subject, a NameID in a user format, a bearer confirmation or Conditions, comes from another issuer, uses the artifact binding or carries SAML elements in a foreign XML namespace, so a malformed signed assertion can no longer crash the sign-in handler or name a different user (GO-2026-6909).
 - Organize team settings into Issues, Projects, Workflows, and AI sections with live counts and direct hierarchy and estimate settings links on desktop and phone.
 - Check the phone Documents display popover's exact height after the shared property-chip spacing correction.
