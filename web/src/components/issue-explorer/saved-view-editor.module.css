@@ -7,7 +7,7 @@
 .name,.description{min-width:0;width:100%;padding:0 6px;border:0;border-radius:6px;outline:0;background:transparent;font-family:inherit;letter-spacing:0}
 .name{height:24px;margin:2px 0;color:var(--theme-text-primary);font-size:15px;font-weight:500;line-height:24px}
 .description{height:32px;color:var(--theme-text-secondary);font-size:13px;font-weight:400;line-height:32px}
-.name::placeholder,.description::placeholder{color:var(--theme-text-tertiary);opacity:1}
+.name::placeholder,.description::placeholder{color:var(--view-editor-placeholder,var(--theme-text-tertiary));opacity:1}
 .commands{height:28px;display:flex;align-items:center;gap:6px}
 .saveActions{display:flex;align-items:center;gap:6px}
 .saveTo{height:24px;display:flex;align-items:center;gap:8px;margin-right:6px;color:var(--theme-text-secondary);font-size:13px;font-weight:450;white-space:nowrap}
