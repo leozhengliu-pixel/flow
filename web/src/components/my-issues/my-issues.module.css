@@ -1,6 +1,11 @@
 .surface{position:relative;height:calc(100% - 44px);min-width:0;margin:8px 8px 8px 0;overflow:hidden;display:flex;flex-direction:column;background:var(--bg-panel);border:.5px solid var(--border);border-radius:12px;box-shadow:var(--shadow);color:var(--text);font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif}
 .header{height:44px;flex:0 0 44px;display:flex;align-items:center;padding:0 8px;border-bottom:.5px solid var(--border)}
+.headerNewIssue{display:none}
 @media(--desktop-layout){
+  .headerNewIssue{height:28px;display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 10px 0 8px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--muted);font-family:inherit;font-size:12px;font-weight:500;line-height:normal;cursor:pointer}
+  .headerNewIssue:hover{background:var(--theme-surface-hover);color:var(--text)}
+  .headerNewIssue:focus-visible{outline:var(--control-focus-width) solid var(--focus-ring);outline-offset:var(--control-focus-offset)}
+  .headerNewIssue svg{width:14px;height:14px}
   [data-my-issues-surface] [data-content-view-title]{padding-inline:10px}
   [data-my-issues-surface] [data-content-view-title] > h2{color:var(--text)}
   [data-my-issues-surface] [data-content-view-subheader]{gap:6px}

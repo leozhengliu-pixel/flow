@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useLayoutEffect, useRef, useState, type ButtonHT
 import * as Popover from '@radix-ui/react-popover'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { DetailsIcon, FilterIcon, TabsOverflowIcon } from './my-issues-icons'
-import { InsightsIcon } from '@/components/ui/view-action-icons'
+import { InsightsIcon, PlusIcon } from '@/components/ui/view-action-icons'
 import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { useIssueSurfaceControls } from './use-issue-surface-controls'
 import { DisplayMenuActionRow, MyIssuesDisplayMenu, type MyIssuesDisplayMenuProps } from './my-issues-display-menu'
@@ -177,6 +177,7 @@ export function MyIssuesSurface({
   return <ContentViewContainer framed inset="tall" data-my-issues-surface="true">
     <ContentViewHeader compact onOpenSidebar={onOpenSidebar} onCreateIssue={onCreateIssue}>
       <ContentViewHeaderTitle title="My issues" />
+      {onCreateIssue ? <FlowTooltip label="Create new issue" shortcut="C" align="end"><button className={styles.headerNewIssue} type="button" onClick={onCreateIssue}><PlusIcon width={14} height={14} /><span>{t('New issue')}</span></button></FlowTooltip> : null}
     </ContentViewHeader>
     <ContentViewSubheader
       borderless
