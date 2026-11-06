@@ -46,9 +46,10 @@ type File struct {
 	Env map[string]string
 	// Defaults are the creation defaults (domain.SetCreationDefaults).
 	Defaults domain.CreationDefaults
-	// DefaultLanguage is defaults.user.language: the language of the sign-in
-	// pages for a browser that has not chosen one, and of new members'
-	// personal settings. Empty keeps the browser's language.
+	// DefaultLanguage is defaults.user.language (or FLOW_DEFAULT_LANGUAGE,
+	// which wins): the language of the sign-in pages for a browser that has
+	// not chosen one, and of new members' personal settings. Empty keeps the
+	// browser's language.
 	DefaultLanguage string
 	// Applied and Overridden list the variables LoadFileFromArgs set from the
 	// file and the ones it left because the environment sets them.
@@ -66,15 +67,41 @@ func LoadFileFromArgs(args []string) (*File, error) {
 	if path == "" {
 		path = strings.TrimSpace(os.Getenv(ConfigFileEnv))
 	}
-	if path == "" {
-		return &File{Env: map[string]string{}}, nil
+	file := &File{Env: map[string]string{}}
+	if path != "" {
+		if file, err = ReadFile(path); err != nil {
+			return nil, err
+		}
+		file.Applied, file.Overridden = file.ApplyEnvironment(os.LookupEnv, os.Setenv)
 	}
-	file, err := ReadFile(path)
-	if err != nil {
+	if err := file.ApplyDefaultLanguage(os.LookupEnv); err != nil {
 		return nil, err
 	}
-	file.Applied, file.Overridden = file.ApplyEnvironment(os.LookupEnv, os.Setenv)
 	return file, nil
+}
+
+// DefaultLanguageEnv is the environment form of defaults.user.language, for
+// deployments without a config file; like any variable it wins over the file.
+const DefaultLanguageEnv = "FLOW_DEFAULT_LANGUAGE"
+
+// ApplyDefaultLanguage takes the default language from FLOW_DEFAULT_LANGUAGE
+// when it is set (after ApplyEnvironment it carries the file's value unless
+// the environment sets another). Only a supported language is accepted.
+func (f *File) ApplyDefaultLanguage(lookup func(string) (string, bool)) error {
+	value, _ := lookup(DefaultLanguageEnv)
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if !slices.Contains(SupportedLanguages, value) {
+		return fmt.Errorf("%s: must be one of %s (got %q)", DefaultLanguageEnv, strings.Join(SupportedLanguages, ", "), value)
+	}
+	f.setDefaultLanguage(value)
+	return nil
+}
+
+func (f *File) setDefaultLanguage(language string) {
+	f.Defaults.User.Language, f.DefaultLanguage = &language, language
 }
 
 func configPathFromArgs(args []string) (string, error) {
@@ -553,9 +580,8 @@ var fileSchema = map[string]*field{
 			}),
 		}),
 		"user": section(map[string]*field{
-			"language": {kind: kindString, enum: SupportedLanguages, apply: func(f *File, value any) {
-				language := value.(string)
-				f.Defaults.User.Language, f.DefaultLanguage = &language, language
+			"language": {kind: kindString, env: DefaultLanguageEnv, enum: SupportedLanguages, apply: func(f *File, value any) {
+				f.setDefaultLanguage(value.(string))
 			}},
 			"theme": defaultMapped(map[string]string{"system": "System preference", "light": "Light", "dark": "Dark"}, func(d *domain.CreationDefaults, v string) {
 				d.User.InterfaceTheme = &v

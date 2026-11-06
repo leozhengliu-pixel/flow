@@ -72,6 +72,11 @@ things:
   follow the browser's language, as before. A language chosen on the device
   always wins, and after sign-in the member's own language applies.
 
+Without a configuration file, set `FLOW_DEFAULT_LANGUAGE=zh-CN` (or `en-US`)
+for the same effect. It accepts exactly the languages the file accepts (an
+unsupported value stops startup) and, like every variable, wins over
+`defaults.user.language` when both are set. An empty value is unset.
+
 The "Getting started" issues of a new workspace are written in its creator's
 language.
 
@@ -315,7 +320,7 @@ defaults:
 | `defaults.team.cycles.autoCreate` | `true` | boolean |
 | `defaults.team.cycles.autoAddStarted` / `autoAddCompleted` | `false` | boolean |
 | `defaults.team.cycles.moveUnfinished` | `true` | move unfinished issues to the next cycle |
-| `defaults.user.language` | `en-US` (sign-in pages: the browser's) | `en-US`, `zh-CN` |
+| `defaults.user.language` | `en-US` (sign-in pages: the browser's); `FLOW_DEFAULT_LANGUAGE` wins | `en-US`, `zh-CN` |
 | `defaults.user.theme` | `system` | `system`, `light`, `dark` |
 | `defaults.user.firstDayOfWeek` | `locale` (Sunday for English, Monday for Chinese) | `locale`, `monday` … `sunday` |
 | `defaults.user.homeView` | `agent` | `agent`, `inbox`, `myIssues` |

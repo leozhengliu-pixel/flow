@@ -66,6 +66,7 @@ defaults:
 		"FLOW_AUTH_ALLOWED_DOMAINS": "example.com,@example.org", "FLOW_AUTH_OIDC_ENABLED": "true", "FLOW_OIDC_SCOPES": "openid email",
 		"FLOW_OIDC_ROLE_MAPPING": "flow-admins=admin,staff=member", "FLOW_WORKSPACE_REGION_SELECTOR_ENABLED": "false",
 		"FLOW_CODING_MAX_SESSIONS": "20", "FLOW_WORKSPACE_DEFAULT_REGION": "eu", "FLOW_WORKSPACE_TUTORIAL": "off",
+		"FLOW_DEFAULT_LANGUAGE": "zh-CN",
 	}
 	for name, want := range wantEnv {
 		if got := file.Env[name]; got != want {
@@ -223,6 +224,46 @@ func TestConfigFileEnvironmentPrecedence(t *testing.T) {
 	})
 	if !slices.Equal(applied, []string{"FLOW_APP_URL", "FLOW_DATABASE_PATH", "FLOW_LOG_LEVEL"}) || len(overridden) != 0 {
 		t.Fatalf("applied %v overridden %v", applied, overridden)
+	}
+}
+
+// FLOW_DEFAULT_LANGUAGE is defaults.user.language for deployments without a
+// file, and wins over the file like any variable.
+func TestDefaultLanguageEnvironment(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("defaults:\n  user:\n    language: zh-CN\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(ConfigFileEnv, "")
+
+	// No file: the variable alone sets new members' language and the sign-in pages'.
+	t.Setenv(DefaultLanguageEnv, "zh-CN")
+	file, err := LoadFileFromArgs(nil)
+	if err != nil || file.DefaultLanguage != "zh-CN" || file.Defaults.User.Language == nil || *file.Defaults.User.Language != "zh-CN" {
+		t.Fatalf("variable only: %+v, %v", file, err)
+	}
+	// The file alone.
+	t.Setenv(DefaultLanguageEnv, "")
+	if file, err = LoadFileFromArgs([]string{"--config", path}); err != nil || file.DefaultLanguage != "zh-CN" || os.Getenv(DefaultLanguageEnv) != "zh-CN" {
+		t.Fatalf("file only: %+v, %v", file, err)
+	}
+	// The variable wins over the file.
+	t.Setenv(DefaultLanguageEnv, "en-US")
+	if file, err = LoadFileFromArgs([]string{"--config", path}); err != nil || file.DefaultLanguage != "en-US" || *file.Defaults.User.Language != "en-US" || !slices.Contains(file.Overridden, DefaultLanguageEnv) {
+		t.Fatalf("variable over file: %+v, %v", file, err)
+	}
+	// Neither: the browser's language, as before.
+	t.Setenv(DefaultLanguageEnv, " ")
+	if file, err = LoadFileFromArgs(nil); err != nil || file.DefaultLanguage != "" || file.Defaults.User.Language != nil {
+		t.Fatalf("neither: %+v, %v", file, err)
+	}
+	// Only the web app's languages, exactly as the file accepts them.
+	for _, value := range []string{"fr-FR", "zh-cn", "zh"} {
+		t.Setenv(DefaultLanguageEnv, value)
+		if _, err := LoadFileFromArgs(nil); err == nil || err.Error() != fmt.Sprintf("FLOW_DEFAULT_LANGUAGE: must be one of en-US, zh-CN (got %q)", value) {
+			t.Fatalf("%q: error %v", value, err)
+		}
 	}
 }
 
