@@ -1,0 +1,14 @@
+{{- /* The YAML configuration file (docs/configuration.md, "Configuration file"), mounted at /etc/flow. */ -}}
+{{- if .Values.config.file }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "flow.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flow.labels" . | nindent 4 }}
+    {{- include "flow.selectorLabels" . | nindent 4 }}
+data:
+  config.yaml: |
+    {{- toYaml .Values.config.file | nindent 4 }}
+{{- end }}

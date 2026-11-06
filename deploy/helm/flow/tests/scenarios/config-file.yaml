@@ -1,0 +1,32 @@
+# The YAML configuration file: application defaults for new workspaces,
+# teams and members, plus a server setting the chart does not set itself.
+config:
+  file:
+    version: 1
+    server:
+      agent:
+        model: gpt-5-mini
+      workspaces:
+        regionSelector: false
+    defaults:
+      workspace:
+        region: eu
+        invitePermission: members
+        features:
+          initiatives: true
+          customer-requests: false
+      team:
+        timezone: Europe/Berlin
+        estimates:
+          type: fibonacci
+          countUnestimated: true
+        triage:
+          enabled: true
+        cycles:
+          enabled: true
+          durationWeeks: 2
+          startDay: monday
+      user:
+        language: zh-CN
+        theme: system
+        firstDayOfWeek: monday

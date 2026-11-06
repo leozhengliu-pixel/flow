@@ -1,0 +1,8 @@
+# The file comes from values or from an existing ConfigMap, not both.
+config:
+  file:
+    defaults:
+      user:
+        language: zh-CN
+  fileConfigMap:
+    name: flow-settings

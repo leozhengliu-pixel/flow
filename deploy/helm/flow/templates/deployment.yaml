@@ -43,6 +43,9 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- if $v.config.file }}
+        checksum/config-file: {{ include (print $.Template.BasePath "/configmap-file.yaml") . | sha256sum }}
+        {{- end }}
         {{- with $v.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -188,6 +191,11 @@ spec:
               mountPath: /app/data
             - name: tmp
               mountPath: /tmp
+            {{- if or $v.config.file $v.config.fileConfigMap.name }}
+            - name: config-file
+              mountPath: /etc/flow
+              readOnly: true
+            {{- end }}
             {{- if $v.assets.shared.enabled }}
             - name: assets-shared
               mountPath: /app/assets-shared
@@ -224,6 +232,14 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 1Gi
+        {{- if or $v.config.file $v.config.fileConfigMap.name }}
+        - name: config-file
+          configMap:
+            name: {{ default (printf "%s-config" (include "flow.fullname" .)) $v.config.fileConfigMap.name }}
+            items:
+              - key: {{ if $v.config.file }}config.yaml{{ else }}{{ $v.config.fileConfigMap.key }}{{ end }}
+                path: config.yaml
+        {{- end }}
         {{- if $v.assets.shared.enabled }}
         - name: assets-shared
           persistentVolumeClaim:

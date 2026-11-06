@@ -271,6 +271,28 @@ seccompProfile:
 {{- fail "outbound.trustedCA: set secretName or configMapName, not both" -}}
 {{- end -}}
 {{- end -}}
+{{- with $v.config -}}
+{{- if and .file .fileConfigMap.name -}}
+{{- fail "set config.file or config.fileConfigMap.name, not both" -}}
+{{- end -}}
+{{- if .file -}}
+{{- /* Secrets never go into the config file's ConfigMap (Flow also refuses them at startup). */ -}}
+{{- range $line := regexFindAll "(?m)^\\s*(- )?[A-Za-z0-9_.-]+\\s*:" (toYaml .file) -1 -}}
+{{- $key := lower (trimSuffix ":" (trim (trimPrefix "- " (trim $line)))) -}}
+{{- $flat := replace "_" "" (replace "-" "" $key) -}}
+{{- if and (regexMatch "password|passwd|secret|apikey|privatekey|accesskey|credential|signingkey|token$|key$|keyid$" $flat) (not (hasSuffix "file" $flat)) (not (hasSuffix "secrets" $flat)) -}}
+{{- fail (printf "config.file: %s looks like a secret; pass secrets with secrets.env, secrets.existingSecret or extraEnv from a Secret, never in the config file" (trimSuffix ":" (trim $line))) -}}
+{{- end -}}
+{{- if has $key (list "flow_database_url" "flow_redis_url" "flow_redis_username" "flow_mcp_credentials" "flow_saml_metadata_xml") -}}
+{{- fail (printf "config.file: %s carries credentials; set it from a Secret, never in the config file" (upper $key)) -}}
+{{- end -}}
+{{- end -}}
+{{- $server := default dict .file.server -}}
+{{- if or (hasKey (default dict $server.database) "url") (hasKey (default dict $server.redis) "url") (hasKey (default dict $server.redis) "username") -}}
+{{- fail "config.file: server.database.url and server.redis.url/username carry credentials; use database.url / database.existingSecret, redis.existingSecret or secrets.env" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- if and $v.postgresql.enabled $v.mysql.enabled -}}
 {{- fail "enable at most one of postgresql.enabled and mysql.enabled" -}}
 {{- end -}}

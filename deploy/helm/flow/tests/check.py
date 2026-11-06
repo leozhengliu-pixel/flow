@@ -366,6 +366,32 @@ volumes = {v["name"]: v for v in pod["volumes"]}
 if mounts.get("assets-shared", {}).get("mountPath") != "/app/assets-shared" or volumes.get("assets-shared", {}).get("persistentVolumeClaim", {}).get("claimName") != "flow-web-assets":
     fail("production-ha", "shared assets claim mounted at /app/assets-shared")
 
+# The YAML configuration file: its own ConfigMap, mounted read-only at
+# /etc/flow, named by FLOW_CONFIG_FILE, rolled by a checksum; absent unless set.
+scenario_values = yaml.safe_load((repo / "deploy/helm/flow/tests/scenarios/config-file.yaml").read_text())
+docs = load("config-file")
+env = flow_env(docs)
+file_maps = find(docs, "ConfigMap", "flow-config")
+if not file_maps or yaml.safe_load(file_maps[0]["data"]["config.yaml"]) != scenario_values["config"]["file"]:
+    fail("config-file", "flow-config ConfigMap must hold config.file as config.yaml")
+if env.get("FLOW_CONFIG_FILE") != "/etc/flow/config.yaml":
+    fail("config-file", f"FLOW_CONFIG_FILE={env.get('FLOW_CONFIG_FILE')!r}")
+deployment = find(docs, "Deployment", "flow")[0]
+pod = deployment["spec"]["template"]["spec"]
+mounts = {m["name"]: m for m in pod["containers"][0]["volumeMounts"]}
+volumes = {v["name"]: v for v in pod["volumes"]}
+if mounts.get("config-file") != {"name": "config-file", "mountPath": "/etc/flow", "readOnly": True}:
+    fail("config-file", f"config file mount {mounts.get('config-file')!r}")
+if volumes.get("config-file", {}).get("configMap") != {"name": "flow-config", "items": [{"key": "config.yaml", "path": "config.yaml"}]}:
+    fail("config-file", f"config file volume {volumes.get('config-file')!r}")
+if not deployment["spec"]["template"]["metadata"]["annotations"].get("checksum/config-file"):
+    fail("config-file", "pods must roll when the config file changes (checksum/config-file)")
+for name in ("default", "production-ha"):
+    docs = load(name)
+    pod = find(docs, "Deployment", "flow")[0]["spec"]["template"]
+    if find(docs, "ConfigMap", "flow-config") or "FLOW_CONFIG_FILE" in flow_env(docs) or "checksum/config-file" in pod["metadata"]["annotations"] or any(v["name"] == "config-file" for v in pod["spec"]["volumes"]):
+        fail(name, "no config file unless config.file or config.fileConfigMap is set")
+
 if failures:
     for failure in failures:
         print("FAIL", failure)

@@ -139,6 +139,35 @@
               "boolean"
             ]
           }
+        },
+        "file": {
+          "description": "The YAML configuration file (docs/configuration.md). Flow validates it at startup.",
+          "type": "object",
+          "properties": {
+            "version": {
+              "const": 1
+            },
+            "server": {
+              "type": "object"
+            },
+            "defaults": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false
+        },
+        "fileConfigMap": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
         }
       }
     },

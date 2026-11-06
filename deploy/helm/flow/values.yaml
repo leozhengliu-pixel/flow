@@ -260,6 +260,27 @@ config:
   logLevel: info
   logFormat: json
   env: {}
+  # The YAML configuration file (docs/configuration.md, "Configuration file";
+  # a full example is examples/config.yaml in this chart). It is rendered as
+  # config.yaml in the <release>-config ConfigMap, mounted read-only at
+  # /etc/flow and named by FLOW_CONFIG_FILE; pods roll when it changes.
+  # Use its defaults: section for new workspaces, teams and members (language,
+  # estimates, cycles, ...). The variables this chart sets (appUrl, log,
+  # database, storage, ...) win over its server: settings. Never put secrets
+  # here: the chart and Flow refuse them.
+  #   file:
+  #     defaults:
+  #       user:
+  #         language: zh-CN
+  #       team:
+  #         estimates:
+  #           type: fibonacci
+  file: {}
+  # Or mount a ConfigMap you manage instead of file (pods do not roll when
+  # it changes).
+  fileConfigMap:
+    name: ""
+    key: config.yaml
 
 # Extra container env entries (valueFrom allowed) and envFrom sources.
 extraEnv: []

@@ -114,6 +114,12 @@ services:
       FLOW_GITHUB_APP_SLUG: ${FLOW_GITHUB_APP_SLUG:-}
       FLOW_GITHUB_APP_PRIVATE_KEY: ${FLOW_GITHUB_APP_PRIVATE_KEY:-}
       FLOW_GITHUB_APP_WEBHOOK_SECRET: ${FLOW_GITHUB_APP_WEBHOOK_SECRET:-}
+      # Optional YAML configuration file (docs/configuration.md, "Configuration
+      # file"; example: deploy/helm/flow/examples/config.yaml). The variables
+      # above win over its server: keys, so use it mainly for defaults:
+      # (language, team estimates, cycles, ...). Uncomment this line and the
+      # matching volume below.
+      # FLOW_CONFIG_FILE: /etc/flow/config.yaml
     networks:
       - default
       - flow-sandbox
@@ -135,6 +141,7 @@ services:
       retries: 3
     volumes:
       - flow-api-data:/app/data
+      # - ./flow-config.yaml:/etc/flow/config.yaml:ro
     restart: unless-stopped
 
   postgres:
