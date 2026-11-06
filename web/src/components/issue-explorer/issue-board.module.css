@@ -134,7 +134,8 @@
   padding:1px 12px 8px;
   border-radius:8px;
 }
-@media(min-width:1024px){.cards{padding-bottom:0}}
+/* The reference leaves an 8px gap under the sticky column header before the first card. */
+@media(min-width:1024px){.cards{padding-top:9px;padding-bottom:0}}
 .cards[data-over-end=true]:after{
   content:"";
   display:block;
