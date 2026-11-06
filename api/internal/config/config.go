@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -644,12 +645,15 @@ func switchedOff(name string) bool {
 	return false
 }
 
+// integer reads a whole-number variable. A number too large for an int (on
+// 32-bit builds anything from 2^31) becomes the largest int rather than the
+// fallback, so a large byte limit stays large and the bounds checks still see it.
 func integer(name string, fallback int) int {
-	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name)))
-	if err != nil {
+	value, err := strconv.ParseInt(strings.TrimSpace(os.Getenv(name)), 10, strconv.IntSize)
+	if err != nil && !errors.Is(err, strconv.ErrRange) {
 		return fallback
 	}
-	return value
+	return int(value)
 }
 
 // integer64 is integer for values that may exceed 32 bits (byte sizes on

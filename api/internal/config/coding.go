@@ -330,7 +330,7 @@ func loadCoding(appURL string) CodingConfig {
 		BrowserEnabled:    !switchedOff("FLOW_CODING_BROWSER"),
 		MCPServers:        csvRaw(value("FLOW_CODING_MCP_SERVERS", "")),
 		DebugTerminal:     !switchedOff("FLOW_CODING_DEBUG_TERMINAL"),
-		ArtifactMaxBytes:  int64(integer("FLOW_CODING_ARTIFACT_MAX_BYTES", 10<<20)),
+		ArtifactMaxBytes:  integer64("FLOW_CODING_ARTIFACT_MAX_BYTES", 10<<20),
 		MaxSessions:       integer("FLOW_CODING_MAX_SESSIONS", 20),
 		WorkspaceSessions: integer("FLOW_CODING_WORKSPACE_SESSIONS", 5),
 		ReconcileInterval: duration("FLOW_CODING_RECONCILE_INTERVAL", 5*time.Second),

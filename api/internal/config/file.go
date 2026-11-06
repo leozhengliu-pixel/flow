@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"os"
 	"slices"
@@ -138,15 +139,22 @@ func ParseFile(path string, content []byte) (*File, error) {
 }
 
 // ApplyEnvironment sets each environment value of the file that lookup does
-// not already find (with a non-blank value). It returns the variables it set
-// and the ones the environment overrides, both sorted.
+// not already find (with a non-blank value). It returns the variables that
+// carry the file's value (set here, or already set to it) and the ones the
+// environment overrides with another value, both sorted.
 func (f *File) ApplyEnvironment(lookup func(string) (string, bool), setenv func(string, string) error) (applied, overridden []string) {
 	if f == nil {
 		return nil, nil
 	}
 	for name, value := range f.Env {
 		if current, ok := lookup(name); ok && strings.TrimSpace(current) != "" {
-			overridden = append(overridden, name)
+			// The Helm chart renders a file value into its own variable;
+			// the environment then carries the file's value, not another.
+			if current == value {
+				applied = append(applied, name)
+			} else {
+				overridden = append(overridden, name)
+			}
 			continue
 		}
 		if err := setenv(name, value); err == nil {
@@ -170,6 +178,8 @@ const (
 	kindStringMap
 	kindBoolMap
 	kindEnvMap
+	// kindCustom values are read by the field's parse function.
+	kindCustom
 )
 
 // field describes one key of the file.
@@ -193,6 +203,8 @@ type field struct {
 	keys []string
 	// apply stores the decoded value into the creation defaults.
 	apply func(*File, any)
+	// parse reads a kindCustom value (workflow statuses and labels).
+	parse func(p fileParser, node *yaml.Node, path string) error
 }
 
 func section(children map[string]*field) *field {
@@ -218,8 +230,18 @@ func defaultBool(apply func(*domain.CreationDefaults, bool)) *field {
 	return &field{kind: kindBool, apply: func(f *File, value any) { apply(&f.Defaults, value.(bool)) }}
 }
 func defaultInt(min, max int64, apply func(*domain.CreationDefaults, int)) *field {
-	return &field{kind: kindInt, min: min, max: max, limited: true, apply: func(f *File, value any) { apply(&f.Defaults, value.(int)) }}
+	// Defaults take small ranges, so their int is exact on every platform.
+	return &field{kind: kindInt, min: min, max: max, limited: true, apply: func(f *File, value any) { apply(&f.Defaults, int(value.(int64))) }}
 }
+
+// maxPlatformInt is the largest value Flow's integer settings hold: their
+// variables are read into an int, which has 32 bits on the 32-bit ARM build
+// of the image.
+const maxPlatformInt = int64(math.MaxInt)
+
+// byteLimit bounds byte-size settings: 1 TiB, or what an int holds on 32-bit
+// builds.
+const byteLimit = min(1<<40, maxPlatformInt)
 
 func pointer[T any](value T) *T { return &value }
 
@@ -332,9 +354,9 @@ var fileSchema = map[string]*field{
 			"maxIdleConns":                envInt("FLOW_DATABASE_MAX_IDLE_CONNS", 0, 100000),
 			"connMaxLifetime":             envDuration("FLOW_DATABASE_CONN_MAX_LIFETIME"),
 			"migrationLockTimeout":        envDuration("FLOW_DATABASE_MIGRATION_LOCK_TIMEOUT"),
-			"maxTransactionBytes":         envInt("FLOW_DATABASE_MAX_TRANSACTION_BYTES", 1<<20, 1<<40),
-			"workspaceStateMaxBytes":      envInt("FLOW_WORKSPACE_STATE_MAX_BYTES", 1<<20, 1<<40),
-			"contentCacheBytes":           envInt("FLOW_CONTENT_CACHE_BYTES", 0, 1<<40),
+			"maxTransactionBytes":         envInt("FLOW_DATABASE_MAX_TRANSACTION_BYTES", 1<<20, byteLimit),
+			"workspaceStateMaxBytes":      envInt("FLOW_WORKSPACE_STATE_MAX_BYTES", 1<<20, byteLimit),
+			"contentCacheBytes":           envInt("FLOW_CONTENT_CACHE_BYTES", 0, byteLimit),
 			"searchIndexMaxChars":         envInt("FLOW_SEARCH_INDEX_MAX_CHARS", 0, 1<<30),
 			"agentTranscriptOffloadBytes": envInt("FLOW_AGENT_TRANSCRIPT_OFFLOAD_BYTES", 1024, 1<<30),
 		}),
@@ -684,8 +706,7 @@ func (p fileParser) value(node *yaml.Node, path string, spec *field) error {
 		if spec.limited && (value < spec.min || value > spec.max) {
 			return p.errorf(node, path, "must be between %d and %d (got %d)", spec.min, spec.max, value)
 		}
-		// Defaults take small ranges, so their int is exact on every platform.
-		decoded, env = int(value), strconv.FormatInt(value, 10)
+		decoded, env = value, strconv.FormatInt(value, 10)
 	case kindDuration:
 		if node.Kind != yaml.ScalarNode || node.Tag != "!!str" {
 			return p.errorf(node, path, "must be a duration such as 30s, 5m or 2h (got %s)", describe(node))
@@ -766,6 +787,11 @@ func (p fileParser) value(node *yaml.Node, path string, spec *field) error {
 		return p.envMap(node, path)
 	}
 	if spec.env != "" {
+		// Every variable has one key, so a value already there came from
+		// server.env (listed earlier in the file).
+		if _, dup := p.file.Env[spec.env]; dup {
+			return p.errorf(node, path, "sets %s, which server.env already sets", spec.env)
+		}
 		p.file.Env[spec.env] = env
 	}
 	if spec.apply != nil {

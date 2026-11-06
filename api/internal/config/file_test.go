@@ -1,10 +1,12 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -123,6 +125,7 @@ func TestConfigFileErrors(t *testing.T) {
 		{"env lower case", "server:\n  env:\n    flow_x: 1\n", "server.env.flow_x: must be a FLOW_* or OTEL_* variable name in capitals"},
 		{"env other prefix", "server:\n  env:\n    HOME: /root\n", "server.env.HOME: must be a FLOW_* or OTEL_* variable name"},
 		{"env duplicates a key", "server:\n  appUrl: https://a.example\n  env:\n    FLOW_APP_URL: https://b.example\n", "server.env.FLOW_APP_URL: is already set by another key of the file"},
+		{"key duplicates env", "server:\n  env:\n    FLOW_LOG_LEVEL: warn\n  log:\n    level: debug\n", "config file /etc/flow/config.yaml:5: server.log.level: sets FLOW_LOG_LEVEL, which server.env already sets"},
 		{"two documents", "version: 1\n---\nversion: 1\n", "only one YAML document is allowed"},
 		{"bad version", "version: 2\n", "version: must be 1 (got 2)"},
 		{"not yaml", "server: [\n", "config file /etc/flow/config.yaml: yaml:"},
@@ -207,6 +210,52 @@ func TestConfigFileEnvironmentPrecedence(t *testing.T) {
 	}
 	if !slices.Equal(applied, []string{"FLOW_DATABASE_PATH", "FLOW_LOG_LEVEL"}) || !slices.Equal(overridden, []string{"FLOW_APP_URL"}) {
 		t.Fatalf("applied %v overridden %v", applied, overridden)
+	}
+	// A variable that already carries the file's value (the Helm chart
+	// renders it) is not reported as an override.
+	environment = map[string]string{"FLOW_APP_URL": "https://file.example"}
+	applied, overridden = file.ApplyEnvironment(func(name string) (string, bool) {
+		value, ok := environment[name]
+		return value, ok
+	}, func(name, value string) error {
+		environment[name] = value
+		return nil
+	})
+	if !slices.Equal(applied, []string{"FLOW_APP_URL", "FLOW_DATABASE_PATH", "FLOW_LOG_LEVEL"}) || len(overridden) != 0 {
+		t.Fatalf("applied %v overridden %v", applied, overridden)
+	}
+}
+
+// Integer settings are read into an int, so the file never accepts a value
+// the platform cannot hold (32-bit ARM builds of the image).
+func TestConfigFileIntegerBoundsFitThePlatform(t *testing.T) {
+	names := map[string]string{}
+	var walk func(prefix string, children map[string]*field)
+	walk = func(prefix string, children map[string]*field) {
+		for key, spec := range children {
+			path := join(prefix, key)
+			if spec.kind == kindSection {
+				walk(path, spec.children)
+				continue
+			}
+			if spec.kind == kindInt && (!spec.limited || spec.max > maxPlatformInt || spec.min < -maxPlatformInt) {
+				t.Errorf("%s: bounds %d..%d (limited %v) exceed an int", path, spec.min, spec.max, spec.limited)
+			}
+			if spec.env != "" {
+				if other, dup := names[spec.env]; dup {
+					t.Errorf("%s and %s both set %s", path, other, spec.env)
+				}
+				names[spec.env] = path
+			}
+		}
+	}
+	walk("", fileSchema)
+	file := mustParse(t, fmt.Sprintf("server:\n  database:\n    contentCacheBytes: %d\n", byteLimit))
+	if file.Env["FLOW_CONTENT_CACHE_BYTES"] != strconv.FormatInt(byteLimit, 10) {
+		t.Fatalf("env = %v", file.Env)
+	}
+	if _, err := parse(t, fmt.Sprintf("server:\n  database:\n    contentCacheBytes: %d\n", byteLimit+1)); err == nil || !strings.Contains(err.Error(), "must be between 0 and") {
+		t.Fatalf("over the limit: %v", err)
 	}
 }
 

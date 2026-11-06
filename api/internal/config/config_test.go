@@ -1,6 +1,7 @@
 package config
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -404,5 +405,29 @@ func TestAgentToolBudgetSettings(t *testing.T) {
 		if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_AGENT_MAX_TOOL_") {
 			t.Fatalf("%s turns, %s calls must be rejected: %v", budget[0], budget[1], err)
 		}
+	}
+}
+
+// A number too large for an int keeps its size (the largest int) instead of
+// silently falling back to the default; on 32-bit builds that is any value
+// from 2^31, such as a 4 GiB cache.
+func TestIntegerTooLargeForAnInt(t *testing.T) {
+	t.Setenv("FLOW_TEST_INTEGER", "99999999999999999999")
+	if got := integer("FLOW_TEST_INTEGER", 7); got != math.MaxInt {
+		t.Fatalf("overflow = %d, want %d", got, math.MaxInt)
+	}
+	t.Setenv("FLOW_TEST_INTEGER", "-99999999999999999999")
+	if got := integer("FLOW_TEST_INTEGER", 7); got != math.MinInt {
+		t.Fatalf("underflow = %d, want %d", got, math.MinInt)
+	}
+	for _, value := range []string{"", "many", "1.5"} {
+		t.Setenv("FLOW_TEST_INTEGER", value)
+		if got := integer("FLOW_TEST_INTEGER", 7); got != 7 {
+			t.Fatalf("%q = %d, want the fallback", value, got)
+		}
+	}
+	t.Setenv("FLOW_TEST_INTEGER", " 42 ")
+	if got := integer("FLOW_TEST_INTEGER", 7); got != 42 {
+		t.Fatalf("42 = %d", got)
 	}
 }
