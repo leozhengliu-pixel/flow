@@ -81,6 +81,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Offer comment action tools in Agent chat, translate their Chinese step subjects, and synchronize the web tool fixture and exact MCP inventory contracts.
 - Keep phone menu content widths independent of hairline border rounding, including notification action rows and dividers.
 - Finish closing the desktop workspace menu and return focus even when an exit animation completion event is lost, preserving its divider and row spacing.
+- Keep ordinary tooltips from blocking nearby controls or page shortcuts, retain the selected view-details fill with custom tooltips, and verify tooltip keycaps on both Mac and Linux.
 - Restore shared phone picker content widths and consistent search/list insets while preserving Team filter row sizing.
 - Cover the MCP count filter tree with a matching team predicate in the schema fast-path check.
 - Give a favorited initiative star the removal label and tooltip, and cover the sidebar shortcuts, assignee profile links and filled star in isolated browser workspaces.

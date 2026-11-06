@@ -6,9 +6,10 @@ import { test } from './workspace-fixture'
 const longLabel = 'A long fixture label for checking truncation and selected filter containment '.repeat(3).slice(0, 200)
 const sizes = [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 375, height: 667 }]
 const statesDirectory = process.env.FLOW_FILTER_STATE_SHOTS
+const statesMatch = process.env.FLOW_FILTER_STATE_SHOTS_MATCH ? new RegExp(process.env.FLOW_FILTER_STATE_SHOTS_MATCH) : undefined
 
 async function capture(page: Page, name: string, target: Locator) {
-  if (!statesDirectory) return
+  if (!statesDirectory || (statesMatch && !statesMatch.test(name))) return
   await fs.mkdir(statesDirectory, { recursive: true })
   await page.evaluate(() => document.fonts.ready)
   const state = await target.evaluate(element => {
@@ -22,7 +23,7 @@ async function capture(page: Page, name: string, target: Locator) {
 }
 
 async function capturePanels(page: Page, name: string) {
-  if (!statesDirectory) return
+  if (!statesDirectory || (statesMatch && !statesMatch.test(name))) return
   const boxes = await page.locator('[data-variant=root]:visible, [data-level]:visible').evaluateAll(elements => elements.map(element => {
     const box = element.getBoundingClientRect()
     return { x: box.x, y: box.y, right: box.right, bottom: box.bottom }

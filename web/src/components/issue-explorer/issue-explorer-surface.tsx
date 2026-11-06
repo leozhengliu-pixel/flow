@@ -103,7 +103,7 @@ export function IssueExplorerSurface({
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented || event.repeat) return
       const target = event.target as HTMLElement | null
-      if (target?.closest('input,textarea,select,[contenteditable="true"],[role="textbox"]') || document.querySelector('[role="dialog"],[role="alertdialog"],[data-radix-popper-content-wrapper]')) return
+      if (target?.closest('input,textarea,select,[contenteditable="true"],[role="textbox"]') || document.querySelector('[role="dialog"],[role="alertdialog"],[data-radix-popper-content-wrapper]:not(:has(> [role="tooltip"]))')) return
       const key = event.key.toLowerCase()
       if (key === 'f' && !event.shiftKey) { event.preventDefault(); changeFilterOpen(true) }
       else if (key === 'v' && event.shiftKey) { event.preventDefault(); changeDisplayOpen(true) }
@@ -233,6 +233,7 @@ export function IssueExplorerSurface({
           </ToolbarButton>}
           {mode === 'view' && (
             <ToolbarButton
+              data-details-trigger=""
               label={savedView ? (detailsOpen ? 'Close view details' : 'Open view details') : (detailsOpen ? 'Close details' : 'Open details')}
               tooltip={savedView ? (detailsOpen ? 'Close view details' : 'Open view details') : (detailsOpen ? 'Close details' : 'Open details')}
               shortcut={isMacPlatform() ? '⌘ I' : 'Ctrl I'}

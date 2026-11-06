@@ -1,5 +1,58 @@
 # CI guard delivery
 
+## Review delivery: run 41839544845
+
+Run [41839544845](https://github.com/leozhengliu-pixel/flow/actions/runs/41839544845) failed at `e6e6d358`, after the previous green main run `41814667117` at `25505250`. The downloaded failed logs contain browser failures exposing three product regressions and two test assumptions. This delivery includes product/UI changes and therefore follows the owner's review-branch requirement: push only `review/ci-guard`, for the lead to review and merge. It is not a direct-main CI-guard push.
+
+| Failure | Cause and correction |
+| --- | --- |
+| All eight phone filter state cases timed out hovering or removing chips. | The new Add Filter tooltip overlapped the chip below and intercepted input. The ordinary tooltip surface and its positioning wrapper now ignore pointer events; rich customer-summary tooltip cards explicitly retain pointer interaction. Both layers matter: a diagnostic run with only the surface fixed still failed because the wrapper intercepted the pointer. |
+| `]` no longer toggled My issues details after closing help; a new focused unit test also reproduced F being blocked with a tooltip visible. | The shortcut-scope checks treated any visible positioning wrapper as a blocking popover. Exclude wrappers whose immediate child is a tooltip, while preserving dialog/menu/popover blocking. Existing keyboard assertions remain unchanged. |
+| The selected saved-view details button used the generic fill instead of the measured fill. | `e6e6d358` replaced its native title, but its CSS selected `[title]`. Use an explicit details-trigger attribute, and key menu-open styling to `aria-expanded` so opening a tooltip does not masquerade as opening a menu. Keep the existing exact fill assertion. |
+| The new tooltip spec expected Mac modifier caps on Linux. | Exercise both explicit Mac and Linux platform values and require the exact corresponding keycaps. Retain every gap, height and edge assertion; replace the old fixed delay with an actual animation wait. |
+| Phone issue-menu geometry intermittently measured about 357.35px instead of 358px. | Five normal local repetitions passed; CPU throttling then reproduced the same partial-scale width on the due-date sheet (357.36px). Wait for actual animations and a paint frame on the menu, due-date sheet and status sheet before exact geometry checks. Three throttled confirmation cases passed. Temporary throttling instrumentation is removed; no dimensions, tolerances, retries or timeouts were relaxed. |
+
+The baseline bundled-browser reproduction exited 1 with three failures (filter pointer interception, saved-view fill and shell shortcut) and two passes. The new F-shortcut unit regression failed before the scope correction, then passed with it. All fixtures create their own workspaces; the browser uses an auth-disabled scratch API, scripted provider and Vite. Unique ports 24773/24780/24790 and `reuseExistingServer:false` avoid other agents' servers. The current API was built under `/tmp/codex-ci-guard/flow-server-41839544845` through the heavy lock (exit 0); no Go source or REST contract changes are included.
+
+Required local checks use Node 24.7.0 and `~/.flow-local/heavy.sh`, from `web/` unless stated:
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| `npm ci` | 0 | Worktree-local installation; no dependency changes |
+| `npm run typecheck` | 0 | Final explicit check |
+| `npm run lint` | 0 | Complete lint including every architecture, design-token, picker, foundation, functional-control and motion gate |
+| `npx vitest run --maxWorkers=2 src/components/issue-explorer/issue-explorer-surface.test.tsx src/components/ui/tooltip.test.tsx src/components/ui/title-tooltip-bridge.test.tsx src/components/my-issues/my-issues-summary-filter.test.tsx` | 0 | Four files, 27 tests |
+| Focused bundled Chromium reproduction after both tooltip-layer fixes | 0 | Five cases: phone filter, saved-view fill, shell shortcuts, Mac caps and Linux caps |
+| Phone issue-menu confirmation with 4x CPU throttling, three repeats, zero retries | 0 | Three passes with exact geometry; the pre-fix throttled run exited 1 at the due-date sheet width |
+| `npx playwright test --config=playwright.ci-guard.tmp.config.ts --retries=0 --reporter=list` with the five affected specs and temporary review probe | 0 | 61 tests: 37 browser regression cases plus 24 review-state checks; 6.4 minutes, zero retries |
+| Repository root: `git diff --check` | 0 | No whitespace errors |
+
+Logs use `/tmp/codex-ci-guard/*-41839544845*.log`. The browser commands set `CI=1`, `FLOW_E2E_API_BIN`, a task-specific scratch database and API log, `--config=playwright.ci-guard.tmp.config.ts --retries=0 --reporter=list`, and output under `/tmp/codex-ci-guard/results-41839544845-*`. The temporary config imports the repository configuration, changes only ports/provider binding and server reuse, and selects bundled Chromium. It and the one-off review probe are removed before delivery. No real-model request or user's Chrome was used.
+
+Review evidence is under `/tmp/codex-ci-guard/shots/tooltip-review/`. The details probe checks resting/unselected, hover/tooltip, keyboard focus-visible, selected/open, deselected, enabled and overflow states in English/Chinese and light/dark at 1440x900, 375x667 and 390x844. The existing filter matrix additionally checks pending-save disabled state, selected short/two-CJK/long labels, a two-CJK avatar, full accessible descriptions and text containment. The details action has no disabled product state; disabled coverage belongs to the filter's held AI request. No new avatar or chip styling is introduced.
+
+The full browser command runs `e2e/desktop-issue-filter-states.spec.ts e2e/desktop-saved-view-details.spec.ts e2e/keyboard-shortcuts.spec.ts e2e/desktop-tooltips.spec.ts e2e/mobile-issue-detail.spec.ts e2e/ci-guard-review.tmp.spec.ts`. Screenshot hooks use `FLOW_FILTER_STATE_SHOTS` and an optional `FLOW_FILTER_STATE_SHOTS_MATCH` to capture selected states without hundreds of duplicate images. All 51 initial crops were opened and inspected; after rebasing those originals are archived under `shots/tooltip-review-9415df60/`.
+
+| Screenshot group | What it shows |
+| --- | --- |
+| `details-*` (24 crops, mouse and touch contexts) | Selected/focused details action, its custom tooltip and modifier caps, and the long English/Chinese saved-view name at all three widths and both themes. |
+| `{1440-dark-en-US,375-dark-zh-CN,390-light-zh-CN}-{resting,hover,focus-visible}` | Nine filter-button crops: resting border/fill, hovered fill and visible keyboard ring. |
+| The same prefixes with `{open-root,disabled,selected-long-option}` | Nine menu crops: open root, muted disabled pending AI action, and checked long label alongside A and two-CJK labels. |
+| The same prefixes with `{long-label-tooltip,value-hover,value-focus}` | Nine text/value crops: complete long label in a wrapped tooltip, complete large-number tooltip, and focused numeric chip. A narrow chip ellipsizes its painted value while retaining the complete accessible description and tooltip. |
+
+Seven diagnostic screenshots were also opened: three baseline failures (blocked phone chip, wrong saved-view fill, help tooltip while the shortcut fails), three from the interrupted surface-only fix (the wrapper still blocks two phone cases; the last light phone case was interrupted), and the throttled due-date sheet before its animation finished. They remain under the corresponding `results-41839544845-{baseline,fixed,mobile-slow2}` directories and are failure evidence only, not verification. Earlier harness-only failures generated no screenshots. No assertion, retry, timeout or gate was relaxed.
+
+After rebasing onto `a4202413`, the explicit typecheck, complete lint, four related Vitest files (27 tests), and all five affected browser specs plus the temporary review probe (61 tests, 6.8 minutes, zero retries) were rerun and exited 0. The only rebase conflict was the changelog; both entries were retained. Refreshed logs use `-41839544845-rebased.log`. All 51 refreshed crops were opened: 24 `details-{mouse,touch}-*` crops and 27 filter-state crops, with the same states and contents described above. No error, broken step or overflowing text is claimed as verification. Changed files are `web/src/App.tsx`, `web/src/components/ui/tooltip.css`, the issue-explorer surface/CSS/unit test, `web/e2e/{desktop-issue-filter-states,desktop-tooltips,mobile-issue-detail}.spec.ts`, `CHANGELOG.md`, and this report. No Go package or REST shape changed, so Go tests/vet and API/SDK generation are not applicable.
+
+Because menu-open styling also applies to Display, final targeted checks additionally ran `npx vitest run --maxWorkers=2 src/components/my-issues/my-issues-display-menu.test.tsx` (exit 0, 13 tests) and `npx playwright test --config=playwright.ci-guard.tmp.config.ts --retries=0 --reporter=list e2e/desktop-issue-list-menus.spec.ts --grep 'shows every display property'` (exit 0, one browser case). Both used the heavy lock; their logs end in `-41839544845-display.log`. No new screenshots were generated by those checks. The harness stopped normally, and task-owned ports had no listeners afterward. Temporary source/config files and installed dependencies are removed before handoff. Full suites were not run; no main CI success after this UI correction is claimed until the lead reviews and merges the branch.
+
+Reviewer steps:
+
+1. At `/:workspace/team/:teamKey/all` at 375/390px, add a Labels filter with a long name or a Customer count filter with a large number. Let the Add Filter tooltip appear, then hover the selected value and remove the chip. These actions must work without dismissing a tooltip first. Keyboard F must also open filtering while its tooltip is visible.
+2. At `/:workspace/my-issues/assigned`, open help with ?, close with Escape, then press ] twice. Details must open and close even if the help tooltip remains visible. Open a real menu and confirm page shortcuts remain scoped to that menu.
+3. At `/:workspace/view/:id`, toggle the details button, then hover/focus it. The selected desktop fill must retain the measured dark/light token while the tooltip is open. Repeat in Chinese and on a phone; the tooltip and long view name stay within the viewport.
+4. On a team issues page, hover Search, Create new issue, details and Add Filter. Check keycaps and spacing on both Mac and Linux. On `/:workspace/issue/:identifier` on a phone, open Issue options, return from Create related, set Tomorrow, reopen the due-date chip, then open Status; the settled sheet geometry remains exact.
+
 ## Continuation: run 41805518838
 
 Run [41805518838](https://github.com/leozhengliu-pixel/flow/actions/runs/41805518838) failed at `983b0b92` in the shared menu state matrix: phone label text intermittently started at x=86 or 85.5 instead of the asserted 86.5. The previous green run, `41796501428`, passed at `c50eba6b`. Commit `e5ed54d5` deliberately made the phone property list viewport-wide inside its bordered sheet to match the measured rows. The newer main commit `bf194bf9` corrects unrelated timeline locators and does not address this failure.

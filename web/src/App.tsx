@@ -7673,7 +7673,7 @@ function hasOpenShortcutScope() {
     return style.display !== 'none' && style.visibility !== 'hidden' && element.getBoundingClientRect().width > 0;
   };
   if ([...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="menu"][data-state="open"]')].some(visible)) return true;
-  return [...document.querySelectorAll<HTMLElement>('[data-radix-popper-content-wrapper]')].some(visible);
+  return [...document.querySelectorAll<HTMLElement>('[data-radix-popper-content-wrapper]:not(:has(> [role="tooltip"]))')].some(visible);
 }
 function applyOptimisticIssue(
   issue: Issue,

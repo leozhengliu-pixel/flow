@@ -24,7 +24,9 @@
   letter-spacing: normal;
   white-space: nowrap;
   user-select: none;
+  pointer-events: none;
 }
+[data-radix-popper-content-wrapper]:has(> .flow-tooltip-content) { pointer-events: none; }
 .flow-tooltip-content--raised {
   --tooltip-bg: var(--tooltip-raised-bg);
   --tooltip-border: var(--tooltip-raised-border);
@@ -45,7 +47,7 @@
 .flow-tooltip-content--title { white-space: pre-line; }
 .flow-tooltip-content--title .flow-tooltip-copy { white-space: pre-line; }
 /* Rich hover cards (customer lists, stats): size to their content. */
-.flow-tooltip-content--card { min-height: 0; }
+.flow-tooltip-content--card { min-height: 0; pointer-events: auto; }
 
 /* The 17.1px key caps set the line height (28.1px surface); the -3px end margin leaves 5px between the last key and the surface edge. */
 .flow-tooltip-shortcut { display: inline-flex; flex: none; align-items: center; gap: 3px; margin-right: -3px; color: var(--tooltip-muted); font: 400 11px/12.1px var(--font); }

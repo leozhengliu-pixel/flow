@@ -11,6 +11,15 @@ Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value:
 
 const display = { layout: 'list', grouping: 'status', subGrouping: 'none', properties: new Set(), hiddenGroupIds: [] } as never
 beforeEach(() => localStorage.setItem('flow:locale', 'en-US'))
+it('opens the filter shortcut while its tooltip is visible', async () => {
+  const user = userEvent.setup()
+  render(<I18nProvider><TooltipProvider delayDuration={0}><IssueExplorerSurface scopeName="Workspace" activeView="all" viewHref={() => '#'} filters={[]} displayOptions={display} detailsOpen={false} onFilterToggle={vi.fn()} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()} filterOptions={() => []}>Content</IssueExplorerSurface></TooltipProvider></I18nProvider>)
+  await user.hover(screen.getByRole('button', { name: 'Add filter' }))
+  expect(await screen.findByRole('tooltip')).toBeVisible()
+  await user.keyboard('f')
+  expect(await screen.findByRole('combobox', { name: 'Add Filter…' })).toBeVisible()
+})
+
 it('keeps the create-view filter menu clickable outside the fixed editor panel', async () => {
   const user = userEvent.setup()
   render(<I18nProvider><IssueExplorerSurface creatingView scopeName="Workspace" activeView="all" viewHref={() => '#'} filters={[]} displayOptions={display} detailsOpen={false} onFilterToggle={vi.fn()} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()} filterOptions={() => [{ id: 'open', label: 'Open' }] as never} viewEditor={controls => <div aria-label="New issue view">Editor{controls.filterButton}</div>} onNewViewResourceChange={vi.fn()} onOpenSidebar={vi.fn()}>Content</IssueExplorerSurface></I18nProvider>)
