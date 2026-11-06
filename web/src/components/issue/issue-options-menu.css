@@ -87,14 +87,18 @@
     box-shadow: var(--pk-card-shadow);
     overflow: hidden;
   }
-  /* Center the content track independently of native-scale hairline rounding. */
+  /* A .5px border is a half-pixel hairline on a 2x screen but snaps to a whole CSS pixel when the
+     browser only emulates the device scale (browser tests, remote debugging). Centering a track
+     as wide as the frame cancels the border, so the content sits one hairline in from the frame
+     edge, in both cases. */
   .issue-options-popover {
+    --issue-options-hairline: .5px;
     display: grid;
     grid-template-columns: calc(100vw - 32px);
-    grid-template-rows: calc(min(450px,80dvh) - 1px);
+    grid-template-rows: calc(min(450px,80dvh) - 2 * var(--issue-options-hairline));
     place-content: center;
   }
-  .issue-options-popover > [cmdk-root] { position: relative; z-index: 1; width: calc(100vw - 32px); margin-left: .5px; }
+  .issue-options-popover > [cmdk-root] { position: relative; z-index: 1; width: calc(100vw - 32px); margin-left: var(--issue-options-hairline); }
   .issue-options-popover[data-nested=true] { visibility: hidden; }
   .issue-options-popover > [cmdk-root],.issue-options-submenu > [cmdk-root] { height: 100%; max-height: 100%; }
   .issue-options-search {
