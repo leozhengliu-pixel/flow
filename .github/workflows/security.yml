@@ -40,9 +40,38 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
+      # govulncheck has no ignore option, so this step fails exactly as its
+      # text mode does (any vulnerable function the code reaches) except for
+      # REVIEWED: advisories with no fixed release that Flow mitigates in code,
+      # each until its review date, the same entries as api/osv-scanner.toml.
+      # GO-2026-6909 (github.com/crewjam/saml): mitigated in
+      # api/cmd/server/saml_assertion_guard.go.
       - name: Go vulnerability scan
         working-directory: api
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        env:
+          REVIEWED: GO-2026-6909:2027-02-05
+        run: |
+          report="$RUNNER_TEMP/govulncheck.json"
+          go run golang.org/x/vuln/cmd/govulncheck@latest -format json ./... > "$report"
+          reachable=$(jq -r 'select(.finding != null and (.finding.trace[0].function // "") != "") | .finding.osv' "$report" | sort -u)
+          today=$(date -u +%F)
+          unreviewed=""
+          for id in $reachable; do
+            until=""
+            for entry in $REVIEWED; do
+              if [ "${entry%%:*}" = "$id" ]; then until="${entry#*:}"; fi
+            done
+            if [ -n "$until" ] && [[ ! "$today" > "$until" ]]; then
+              echo "::warning::$id is reachable; reviewed and mitigated until $until (see api/osv-scanner.toml)"
+            else
+              unreviewed="$unreviewed $id"
+            fi
+          done
+          if [ -n "$unreviewed" ]; then
+            echo "::error::Reachable vulnerabilities without a current review:$unreviewed"
+            go run golang.org/x/vuln/cmd/govulncheck@latest ./... || true
+            exit 1
+          fi
 
       - name: Web dependency audit
         working-directory: web

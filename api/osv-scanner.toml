@@ -1,0 +1,9 @@
+# Reviewed advisories for api/go.mod. Each entry needs a reason that points at
+# the mitigation and an expiry, after which the scan fails again and the entry
+# must be reviewed. The Go vulnerability scan in .github/workflows/security.yml
+# keeps the same list in its REVIEWED variable.
+
+[[IgnoredVulns]]
+id = "GO-2026-6909"
+ignoreUntil = 2027-02-05
+reason = "github.com/crewjam/saml v0.5.1 has no fixed release. Flow checks every SAML response before the library parses it and the parsed assertion again (api/cmd/server/saml_assertion_guard.go, tests in saml_assertion_guard_test.go): assertions without Subject, NameID or Conditions, foreign-namespace NameID/attribute elements, non-user NameID formats, another Issuer and the artifact binding are refused, and a library panic becomes a 403. Upgrade and drop this entry when upstream fixes it."

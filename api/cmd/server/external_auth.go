@@ -119,10 +119,16 @@ func configureSAML(ctx context.Context, provider config.SAMLProvider, appURL str
 			return nil, err
 		}
 	}
+	if options.IDPMetadata == nil || strings.TrimSpace(options.IDPMetadata.EntityID) == "" {
+		return nil, fmt.Errorf("SAML IdP metadata has no entityID")
+	}
 	idpMetadataResult, err = samlsp.New(options)
 	if err != nil {
 		return nil, err
 	}
+	// Assertions must come from this IdP and carry a user NameID; see
+	// saml_assertion_guard.go (GO-2026-6909).
+	idpMetadataResult.AssertionHandler = samlAssertionPolicy{idpEntityID: options.IDPMetadata.EntityID}
 	if parsedACS, parseErr := url.Parse(provider.ACSURL); parseErr == nil && parsedACS.Host != "" {
 		idpMetadataResult.ServiceProvider.AcsURL = *parsedACS
 	}

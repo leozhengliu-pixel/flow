@@ -749,7 +749,12 @@ and signed ID-token verification. OIDC identities are stored separately from
 login key, while email is optional profile data. `LoginExternal` remains the
 email-based compatibility API for email/password and existing integrations.
 SAML assertions are validated against IdP metadata and mapped from standard
-email/name attributes.
+email/name attributes. The IdP metadata must name its `entityID`, responses
+arrive by HTTP-POST (the artifact binding is refused), and each assertion must
+come from that entity ID and carry a Subject with one SAML `NameID` in a user
+format (unspecified, email, persistent, transient, X.509, Windows or Kerberos),
+a bearer `SubjectConfirmation` and `Conditions`; SAML elements in another XML
+namespace are refused.
 
 For an enterprise IdP that exposes an immutable employee number instead of an
 email address, configure for example:

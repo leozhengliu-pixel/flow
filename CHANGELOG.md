@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Refuse SAML responses whose assertion lacks a Subject, a NameID in a user format, a bearer confirmation or Conditions, comes from another issuer, uses the artifact binding or carries SAML elements in a foreign XML namespace, so a malformed signed assertion can no longer crash the sign-in handler or name a different user (GO-2026-6909).
 - Check the phone Documents display popover's exact height after the shared property-chip spacing correction.
 - Preserve fractional content insets in phone issue action sheets when the browser rounds hairline borders.
 - Wait for the filter submenu's opening animation before checking exact avatar glyph containment in browser tests.

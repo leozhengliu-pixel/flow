@@ -364,7 +364,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/auth/saml/start", s.startSAML)
 	if s.externalAuth != nil && s.externalAuth.saml != nil {
 		mux.Handle("GET /api/auth/saml/metadata", s.externalAuth.saml)
-		mux.Handle("POST /api/auth/saml/acs", s.externalAuth.saml)
+		mux.Handle("POST /api/auth/saml/acs", guardSAMLACS(s.externalAuth.saml))
 		mux.Handle("GET /api/auth/saml/complete", s.externalAuth.saml.RequireAccount(http.HandlerFunc(s.finishSAML)))
 	}
 	mux.HandleFunc("POST /api/invitations/accept", s.acceptInvitation)
