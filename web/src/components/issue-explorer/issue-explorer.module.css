@@ -69,14 +69,13 @@
   [data-issue-explorer] [data-content-view-header]:has(.headerViewActions) [data-content-view-favorite],.headerViewActions button{padding-inline:2px}
   .headerViewIcon{margin-right:0}
   .iconButton[data-details-trigger]{--ui-pill-active-bg:var(--issue-toolbar-open-bg);--ui-pill-active-hover-bg:var(--issue-toolbar-open-bg)}
-  [data-issue-explorer] [data-content-view-subheader] [data-toolbar-buttons-navigation] button[aria-expanded=true]{--ui-pill-active-bg:var(--ui-pill-bg);--ui-pill-active-hover-bg:var(--ui-pill-bg)}
-  :global(body:has([data-layout=issues][data-variant=root][data-submenu-open])) [data-issue-explorer] .iconButton[aria-expanded=true]{--ui-pill-active-bg:var(--issue-toolbar-open-bg);--ui-pill-active-hover-bg:var(--issue-toolbar-open-bg)}
+  [data-issue-explorer] [data-content-view-subheader] [data-toolbar-buttons-navigation] button[aria-expanded=true]{--ui-pill-active-bg:var(--issue-toolbar-open-bg);--ui-pill-active-hover-bg:var(--issue-toolbar-open-bg)}
   .filterBar{border:.5px solid var(--issue-filter-band-border);box-shadow:none}
   .filterBar>div:first-child>button{padding-inline:2px}
   [data-issue-explorer]:has(section[data-mode="create"]) [data-header-row]{padding-left:8px}
   [data-issue-explorer]:has(section[data-mode="create"]) [data-content-view-breadcrumb]{padding-left:10px}
   [data-issue-explorer] [data-content-view-subheader]{gap:6px}
-  .resourceTab{--ui-pill-bg:var(--my-issues-details-tab-bg);--ui-pill-active-bg:var(--my-issues-details-tab-active-bg);--ui-pill-fg:var(--issue-muted);--ui-pill-active-fg:var(--text);padding-inline:16px;font-family:inherit;font-size:12px;font-weight:500;line-height:normal}
+  .resourceTab{--ui-pill-bg:var(--my-issues-details-tab-bg);--ui-pill-active-bg:var(--my-issues-details-tab-active-bg);--ui-pill-fg:var(--issue-muted);--ui-pill-active-fg:var(--text);padding-inline:10px;font-family:inherit;font-size:12px;font-weight:500;line-height:normal}
   .resourceTab::after{box-shadow:none!important}
   .cardDisplay{--ui-pill-bg:var(--my-issues-details-tab-bg)}
 }
