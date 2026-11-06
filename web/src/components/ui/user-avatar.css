@@ -5,7 +5,7 @@
   height: 20px;
   border-radius: 50%;
   background: var(--avatar, var(--avatar-fallback));
-  color: var(--on-accent);
+  color: var(--avatar-initials-fg);
   font-size: 9px;
   line-height: 1;
 }
