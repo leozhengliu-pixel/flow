@@ -7,6 +7,7 @@
 .pt-list-header p{margin:4px 0 0;color:var(--pt-text-muted);font-size:13px;font-weight:450;line-height:22px}
 .pt-list-header a{padding:1px 4px;border-radius:8px;color:var(--pt-text);text-decoration:none}
 .pt-list-header a::after{content:"↗";margin-left:4px}
+@media(min-width:761px){.pt-list-header a{margin-left:-3px}}
 .pt-list-header a:hover{background:var(--pt-back-hover-bg)}
 .pt-list-card{overflow:hidden;border-radius:10px;background:var(--pt-surface);box-shadow:var(--pt-list-ring)}
 .pt-list-card>header{box-sizing:border-box;height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px}

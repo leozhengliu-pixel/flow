@@ -271,7 +271,8 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
 .label-settings-usage-card > a > em { color: var(--theme-text-secondary); font-style: normal; }
 .label-settings-usage-card > a:hover > span { text-decoration: underline; }
 /* The reference app: 9px dot 2.5px into the title column, 13px/500 name. */
-.domain-labels-row:not(.is-nested):not(.is-group) > .domain-label-name > .domain-label-color[data-kind="label"] { margin-left: -6px; }
+.domain-labels-row:not(.is-nested):not(.is-group) > .domain-label-name > .domain-label-color[data-kind="label"] { margin-left: -5.5px; }
+.settings-page-header.domain-labels-header > .settings-header-actions { gap: 8px; margin-top: 0; }
 .domain-labels-row:not(.is-group) .domain-label-name-input:not(.is-editing) { font-size: 13px; font-weight: 500; }
 .domain-labels-row.is-archived .domain-label-name,
 .domain-labels-row.is-archived .domain-label-description { opacity: .6; }

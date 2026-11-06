@@ -158,7 +158,7 @@ function ProjectTemplateList({
         <p>
           {t(
             "These templates are available when creating projects for any team in the workspace. To create templates that only apply to specific teams, add them as team templates.",
-          )}
+          )}{" "}
           <a href="https://flow.app/docs/project-templates" target="_blank" rel="noreferrer">
             {t("Docs")}
           </a>
