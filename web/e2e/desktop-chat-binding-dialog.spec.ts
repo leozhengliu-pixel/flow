@@ -2,7 +2,9 @@ import { expect, type Page } from '@playwright/test'
 import { test } from './workspace-fixture'
 import type { Project } from '../src/types/flow'
 
-test.use({ timezoneId: 'UTC', viewport: { width: 1440, height: 900 } })
+// The panel's width is its widest label plus fixed gaps, so it needs the real device scale and the subpixel text positioning of a real Mac
+// browser (the flags desktop-settings-panel-offset.spec.ts uses); an emulated scale factor also lays a 0.5px border out as 1px.
+test.use({ timezoneId: 'UTC', viewport: { width: 1440, height: 900 }, launchOptions: { args: ['--force-device-scale-factor=2', '--font-hinting=none', '--font-render-hinting=none', '--enable-font-subpixel-positioning'] } })
 
 // The shots land in FLOW_CHAT_DIALOG_SHOTS when set (reviewing only; the assertions run either way).
 const shots = process.env.FLOW_CHAT_DIALOG_SHOTS
