@@ -18,7 +18,9 @@
   html:root .settings-app .settings-main:has(.settings-workspace-members) { scrollbar-gutter: auto; }
   html:root .settings-app .settings-main > .settings-content:has(.settings-teams-page) { padding-top: 64px; }
   html:root .settings-app .settings-sidebar { padding: 0; }
-  html:root .settings-app .settings-back { gap: 5px; margin: 16.5px 0 12px 16px; text-decoration: none; }
+  /* The reference centres the 28px link in a 44.5px header row that starts 8px down: 8 + (44.5 - 28) / 2 = 16.25 above the link and
+     8.25 below it, plus the 4px above the search field = 12.25. The chevron keeps the base 6px gap. */
+  html:root .settings-app .settings-back { margin: 16.25px 0 12.25px 16px; text-decoration: none; }
   html:root .settings-app .settings-search { margin: 0 12px; }
   .settings-search > svg { color: var(--sidebar-nav-fg); }
   .settings-members-group + .settings-member-directory-row { margin-top: 2px; }
