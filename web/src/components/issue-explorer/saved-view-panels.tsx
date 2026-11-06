@@ -8,6 +8,7 @@ import styles from './saved-view-panels.module.css'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { avatarColor } from '@/components/issue/avatar-color'
 import { useI18n } from '@/i18n/i18n'
+import { personDisplayName } from '@/lib/people'
 import { listIssueRecordGroups, type IssueQueryInput } from '@/lib/api'
 import { EstimateIcon } from '@/components/issue/estimate-icon'
 import { useTeamEstimateSettings } from '@/components/my-issues/use-issue-row-actions'
@@ -57,11 +58,11 @@ export function SavedViewDetailsPanel({ belowFilterBar = false, favorite, inline
   }, [queryKey, retry, summaryRevision])
   const loading = Boolean(queryKey && (remote.key !== queryKey || (!remote.groups && !remote.error)))
   const failed = Boolean(queryKey && remote.key === queryKey && remote.error)
-  const items = queryKey ? (remote.key === queryKey ? remote.groups ?? [] : []).map(group => {
+  const items = (queryKey ? (remote.key === queryKey ? remote.groups ?? [] : []).map(group => {
     const teamOption = tab === 'team' ? teams?.find(item => item.id === group.value) : undefined
     const option = tab === 'team' ? undefined : summaryOptions?.[tab].find(option => option.id === group.value)
     return { id: group.value, label: teamOption?.name ?? option?.label ?? group.value, color: teamOption?.color ?? option?.color, avatarUrl: option?.avatarUrl, count: group.count }
-  }) : localItems
+  }) : localItems).map(item => tab === 'assignee' && item.id ? { ...item, ...assigneeIdentity(item, users, rows, t('Unknown user')) } : item)
   const enabledTeams = (teams ?? []).filter(item => teamUsesEstimates(estimateSettingsFor(item.id)))
   const estimatesKey = queryKey && enabledTeams.length && remote.key === queryKey && remote.groups
     ? JSON.stringify({ query: JSON.parse(queryKey), revision: summaryRevision, groups: remote.groups, teams: enabledTeams.map(item => ({ id: item.id, settings: estimateSettingsFor(item.id) })) }) : undefined
@@ -112,12 +113,27 @@ export function SavedViewDetailsPanel({ belowFilterBar = false, favorite, inline
         {loading ? <div className={styles.empty}>{t('Loading...')}</div> : failed ? <div className={styles.empty}><span>{t('Could not load view summary')}</span><button type="button" onClick={() => { setRemote({}); setRetry(value => value + 1) }}>{t('Retry')}</button></div> : items.length ? items.map(item => {
           const label = item.id ? item.label : t(tab === 'assignee' ? 'No assignee' : tab === 'project' ? 'No project' : tab === 'team' ? 'No team' : 'No labels')
           const points = queryKey ? remotePoints.key === estimatesKey ? remotePoints.values?.[item.id] : undefined : sumEstimatePoints(rowsForDimension(rows, tab, item.id), estimateSettingsFor)
-          return <button aria-label={`${label} ${item.count}`} className={styles.summaryItem} key={item.id} onClick={() => onSummaryItemSelect(tab, item.id, label, item.color)} type="button">
+          return <button aria-label={`${label} ${item.count}`} className={styles.summaryItem} data-unassigned={tab === 'assignee' && !item.id ? '' : undefined} key={item.id} onClick={() => onSummaryItemSelect(tab, item.id, label, item.color)} type="button">
           <SummaryMark color={item.color} userId={item.id} kind={tab} name={label} avatarUrl={item.avatarUrl} unassigned={!item.id} inline={inline}/><span data-i18n-ignore>{label}</span><small>{t('See issues')}</small><b>{points !== undefined && <EstimateIcon size={14}/>}<span>{points !== undefined ? formatEstimatePoints(points) : item.count}</span></b>
         </button>}) : <div className={styles.empty}>{t('No matching data')}</div>}
       </div>
     </section>
   </aside>
+}
+
+/**
+ * A person row of the Assignees tab. The server's summary only returns the assignee's ID and the assignee options list active
+ * members, so a deactivated, suspended or SCIM-provisioned member (or one the picker leaves out) has no option: read the
+ * member itself, then the loaded issues, and finish with "Unknown user" like every other person surface, never the ID.
+ */
+function assigneeIdentity(item: SummaryItem, users: User[], rows: MyIssuesRowData[], unknownLabel: string): Pick<SummaryItem, 'label' | 'avatarUrl'> {
+  const user = users.find(candidate => candidate.id === item.id)
+  const assignee = rows.find(row => row.assignee?.id === item.id)?.assignee
+  const named = (value?: string) => value && value !== item.id ? value : undefined
+  return {
+    label: (user ? named(personDisplayName(user)) : undefined) ?? named(item.label) ?? named(assignee?.name) ?? unknownLabel,
+    avatarUrl: user?.avatarUrl ?? item.avatarUrl ?? assignee?.avatarUrl,
+  }
 }
 
 function handleSummaryTabKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
@@ -149,6 +165,6 @@ function summaryItems(rows: MyIssuesRowData[], dimension: SummaryDimension, incl
 
 function SummaryMark({ color, userId, kind, name, avatarUrl, unassigned, inline }: { color?: string; userId?: string; kind: string; name: string; avatarUrl?: string; unassigned: boolean; inline: boolean }) {
   if (kind === 'team') return <ViewGlyph color={color} icon="Team"/>
-  return kind === 'assignee' ? !inline ? <span className={styles.avatarMark} style={{ backgroundColor: color }}>•</span> : unassigned ? <NoAssigneeIcon size={18}/> : <UserAvatar className={styles.avatarMark} name={name} avatarUrl={avatarUrl} color={color} userId={userId || undefined}/> : kind === 'project' ? <span className={styles.projectMark}>◇</span> : <i className={styles.dot} style={{ backgroundColor: color }}/>
+  return kind === 'assignee' ? !inline ? <span className={styles.avatarMark} style={{ backgroundColor: color }}>•</span> : unassigned ? <NoAssigneeIcon className={styles.noAssignee} size={20}/> : <UserAvatar className={styles.avatarMark} name={name} avatarUrl={avatarUrl} color={color} userId={userId || undefined}/> : kind === 'project' ? <span className={styles.projectMark}>◇</span> : <i className={styles.dot} style={{ backgroundColor: color }}/>
 }
 function InsightOwnerAvatar({ user }: { user?: User }) { const { t } = useI18n(); return <UserAvatar avatarUrl={user?.avatarUrl} className={styles.avatar} color={user ? avatarColor(user.id) : undefined} name={user?.displayName ?? t('Unknown user')}/> }

@@ -69,3 +69,17 @@ it('keeps a plain count when the summary bucket contains no estimate-enabled tea
   expect(item.querySelector('b')).toHaveTextContent('7')
   expect(item.querySelector('b .estimate-icon')).toBeNull()
 })
+
+it('names deactivated, SCIM-provisioned and unknown assignees instead of showing their IDs', async () => {
+  const suspended = { ...data.users[1], id: 'usr_1789976810279757001', displayName: 'Dana Former', name: 'Dana Former', active: false, avatarUrl: 'https://img.example.test/dana.png' }
+  const scim = { ...data.users[1], id: 'usr_1789976810279757002', displayName: '', name: '', email: 'sam@example.test', username: undefined }
+  const users = [...data.users, suspended, scim]
+  vi.mocked(listIssueRecordGroups).mockResolvedValue({ groups: [{ value: suspended.id, count: 5 }, { value: scim.id, count: 4 }, { value: 'usr_1789976810279757008', count: 3 }] })
+  render(<I18nProvider><SavedViewDetailsPanel inline favorite={false} menu={null} onClose={vi.fn()} onSummaryItemSelect={vi.fn()} onToggleFavorite={vi.fn()} rows={[]} summaryOptions={{ assignee: [] } as never} users={users} view={view} workspace={data.workspace} summaryQuery={{ filter: { and: [] } }}/></I18nProvider>)
+  const panel = screen.getByRole('complementary', { name: 'View sidebar' })
+  const dana = await within(panel).findByRole('button', { name: 'Dana Former 5' })
+  expect(dana.querySelector('img')).toHaveAttribute('src', 'https://img.example.test/dana.png')
+  expect(within(panel).getByRole('button', { name: 'sam@example.test 4' })).toBeVisible()
+  expect(within(panel).getByRole('button', { name: 'Unknown user 3' })).toBeVisible()
+  expect(panel.textContent).not.toContain('usr_')
+})
