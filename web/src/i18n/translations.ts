@@ -1034,6 +1034,7 @@ export const zhCN: Record<string, string> = {
   "Label description": "标签描述",
   "Add label description…": "添加标签描述…",
   "Select group": "选择分组",
+  "Select chat group": "选择群",
   "Select label": "选择标签",
   "Edit description": "编辑描述",
   "Edit label name": "编辑标签名称",

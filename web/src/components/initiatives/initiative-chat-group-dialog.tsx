@@ -131,7 +131,7 @@ function InitiativeChatBindingEditor({ provider, initiative, busy, onCancel, onS
       {error && <div className="feature-card chat-integration-alert" role="alert"><div className="feature-row"><div><span>{error}</span></div><aside><button type="button" className="feature-button" disabled={loading} onClick={() => void loadChats(cursor)}><RefreshCw size={14} aria-hidden="true"/>{t('Retry')}</button></aside></div></div>}
       <div className="feature-card">
         <FieldRow label={t('Group')}>
-          <SettingsSelect label={t('Group')} options={options} value={chatId || NO_SELECTION} placeholder={t('Select group')} disabled={loading || !options.length} onChange={value => { setChatId(value); setApproved(false) }}/>
+          <SettingsSelect label={t('Group')} options={options} value={chatId || NO_SELECTION} placeholder={t('Select chat group')} disabled={loading || !options.length} onChange={value => { setChatId(value); setApproved(false) }}/>
           <button type="button" className="feature-button chat-icon-button" aria-label={t('Refresh groups')} title={t('Refresh groups')} disabled={loading} onClick={() => void loadChats()}>{loading ? <GridLoader size={14}/> : <RefreshCw size={14} aria-hidden="true"/>}</button>
         </FieldRow>
         {hasMore && <FieldRow label={<span className="chat-muted">{t('More groups are available.')}</span>}><button type="button" className="feature-button" disabled={loading || !cursor} onClick={() => void loadChats(cursor)}>{t('Load more groups')}</button></FieldRow>}
