@@ -90,8 +90,8 @@
   .footerButton:not(.footerPrimary) { color: var(--theme-text-primary); }
   .footerPrimary { color: var(--issue-display-default-link); }
   /* Section captions sit 8px under the divider on a 14.5px line; the chips start 12px under their caption. */
-  .popover[data-issue-display-menu="true"] .sectionLabel { padding: 8px 0 2px; line-height: normal; }
-  .popover[data-issue-display-menu="true"] .sectionLabel + .propertyGrid { margin-top: 10px; }
+  .popover[data-issue-display-menu="true"] .sectionLabel { margin: 8px 0 2px; padding: 0; line-height: normal; }
+  .popover[data-issue-display-menu="true"] .sectionLabel + .propertyGrid { margin-top: 12px; }
   .footer { box-sizing: border-box; height: 36px; align-items: center; gap: 4px; padding: 0 8px; border-top-color: var(--pk-border); }
 }
 
