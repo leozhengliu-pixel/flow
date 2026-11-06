@@ -180,8 +180,8 @@ type field struct {
 	env string
 	// enum lists the allowed (case-sensitive) values of a string.
 	enum []string
-	// min and max bound an integer when limited.
-	min, max int
+	// min and max bound an integer when limited (int64 so byte limits fit 32-bit builds).
+	min, max int64
 	limited  bool
 	// separator joins a list for its environment variable (default ",").
 	separator string
@@ -202,7 +202,7 @@ func envString(env string, enum ...string) *field {
 	return &field{kind: kindString, env: env, enum: enum}
 }
 func envBool(env string) *field { return &field{kind: kindBool, env: env} }
-func envInt(env string, min, max int) *field {
+func envInt(env string, min, max int64) *field {
 	return &field{kind: kindInt, env: env, min: min, max: max, limited: true}
 }
 func envDuration(env string) *field { return &field{kind: kindDuration, env: env} }
@@ -217,7 +217,7 @@ func defaultMapped(mapping map[string]string, apply func(*domain.CreationDefault
 func defaultBool(apply func(*domain.CreationDefaults, bool)) *field {
 	return &field{kind: kindBool, apply: func(f *File, value any) { apply(&f.Defaults, value.(bool)) }}
 }
-func defaultInt(min, max int, apply func(*domain.CreationDefaults, int)) *field {
+func defaultInt(min, max int64, apply func(*domain.CreationDefaults, int)) *field {
 	return &field{kind: kindInt, min: min, max: max, limited: true, apply: func(f *File, value any) { apply(&f.Defaults, value.(int)) }}
 }
 
@@ -674,7 +674,7 @@ func (p fileParser) value(node *yaml.Node, path string, spec *field) error {
 		if node.Kind != yaml.ScalarNode || node.Tag != "!!int" {
 			return p.errorf(node, path, "must be a whole number (got %s)", describe(node))
 		}
-		value, err := strconv.Atoi(node.Value)
+		value, err := strconv.ParseInt(node.Value, 10, 64)
 		if err != nil {
 			return p.errorf(node, path, "must be a whole number (got %s)", describe(node))
 		}
@@ -684,7 +684,8 @@ func (p fileParser) value(node *yaml.Node, path string, spec *field) error {
 		if spec.limited && (value < spec.min || value > spec.max) {
 			return p.errorf(node, path, "must be between %d and %d (got %d)", spec.min, spec.max, value)
 		}
-		decoded, env = value, strconv.Itoa(value)
+		// Defaults take small ranges, so their int is exact on every platform.
+		decoded, env = int(value), strconv.FormatInt(value, 10)
 	case kindDuration:
 		if node.Kind != yaml.ScalarNode || node.Tag != "!!str" {
 			return p.errorf(node, path, "must be a duration such as 30s, 5m or 2h (got %s)", describe(node))
