@@ -74,7 +74,8 @@
   .rootItem[data-selected=true] .rootChevron,.rootItem[aria-selected=true] .rootChevron{color:var(--pk-muted)}
   .rootItem:hover .rootChevron{color:var(--pk-muted)}
   .rootChevron{text-align:right}
-  .valueItem .count{padding-left:0}
+  .valueItem .count{padding-left:0;line-height:normal}
+  .valueItem .valueMetaLine{display:block;flex:none;margin-left:auto;font-size:13px;line-height:16px}
 }
 @media(max-width:600px){.rootMenu{width:min(var(--filter-root-width),calc(100vw - 22px))}.valueMenu{max-width:calc(100vw - 22px)}}
 
