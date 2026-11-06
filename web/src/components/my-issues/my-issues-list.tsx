@@ -1,4 +1,4 @@
-import { FlowTooltip } from '@/components/ui/tooltip'
+import { FlowTooltip, TooltipShortcut } from '@/components/ui/tooltip'
 import { memo, useContext, useEffect, useInsertionEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { useI18n } from '@/i18n/i18n'
 import { Virtuoso, type Components } from 'react-virtuoso'
@@ -311,14 +311,35 @@ function MyIssuesParentGroupHeader({ label, count }: { label: string; count: num
 export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, estimateSum, onCreateIssue, onGroupCollapsedChange, ...menuActions }: IssueGroupMenuActions & { collapsed: boolean; createIssueLabel: string; group: MyIssuesGroupData; estimateSum?: number; onCreateIssue?: (group: MyIssuesGroupData) => void; onGroupCollapsedChange?: (groupId: string, collapsed: boolean) => void }) {
   const translate = useOptionalTranslate()
   const desktop = useDesktopLayout()
+  const [hovered, setHovered] = useState(false)
+  const toggle = onGroupCollapsedChange ? () => onGroupCollapsedChange(group.id, !collapsed) : undefined
+  // The reference app's T: collapse or expand the group whose header the pointer is over.
+  const latestToggle = useRef(toggle)
+  useInsertionEffect(() => { latestToggle.current = toggle })
+  const canToggle = Boolean(toggle)
+  useEffect(() => {
+    if (!hovered || !canToggle) return
+    const keydown = (event: globalThis.KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 't' || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.defaultPrevented) return
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]')) return
+      event.preventDefault()
+      latestToggle.current?.()
+    }
+    document.addEventListener('keydown', keydown)
+    return () => document.removeEventListener('keydown', keydown)
+  }, [hovered, canToggle])
   // Status groups translate like the status picker does: the default workflow names have a Chinese entry, a renamed one stays as typed.
   const translatable = Boolean(group.translatableLabel || group.state)
   const label = translatable ? translate(group.label) : group.label
-  return <IssueGroupContextMenu collapsed={collapsed} onCollapse={onGroupCollapsedChange ? () => onGroupCollapsedChange(group.id, !collapsed) : undefined} {...menuActions}><header className={styles.groupHeader} data-subgroup={group.parentGroupId ? true : undefined} data-my-issues-group-header>
-    <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={() => onGroupCollapsedChange?.(group.id, !collapsed)}><ChevronDown className={styles.groupChevron} size={12}/><svg className={styles.groupCaret} width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z" fill="currentColor"/></svg></button>
+  const collapseButton = <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={event => { if (event.altKey && menuActions.onCollapseAll) menuActions.onCollapseAll(); else toggle?.() }}><ChevronDown className={styles.groupChevron} size={12}/><svg className={styles.groupCaret} width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.75194 10.6239C6.41861 10.8183 6 10.5779 6 10.192V5.80802C6 5.42212 6.41861 5.18169 6.75194 5.37613L10.5096 7.56811C10.8404 7.76105 10.8404 8.23895 10.5096 8.43189L6.75194 10.6239Z" fill="currentColor"/></svg></button>
+  return <IssueGroupContextMenu collapsed={collapsed} onCollapse={toggle} {...menuActions}><header className={styles.groupHeader} data-subgroup={group.parentGroupId ? true : undefined} data-my-issues-group-header onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
+    {toggle ? <FlowTooltip raised label={<span className="flow-tooltip-rows">
+      <span className="flow-tooltip-row"><TooltipShortcut value="T"/>{translate(collapsed ? 'to expand group' : 'to collapse group')}</span>
+      {menuActions.onCollapseAll && <span className="flow-tooltip-row"><TooltipShortcut value="⌥ Click"/>{translate('to collapse all')}</span>}
+    </span>}><span className={styles.collapseTip}>{collapseButton}</span></FlowTooltip> : collapseButton}
     <GroupStateIcon state={group.state ?? (desktop ? undefined : group.issues[0]?.state)} type={desktop && !group.state ? undefined : group.stateType}/><span data-i18n-ignore={translatable ? undefined : true} id={`my-issues-group-${group.id}`} className={styles.groupName} data-my-issues-group-title><span className={styles.groupText}>{label}</span></span><span className={styles.groupCount}>{group.totalCount ?? group.issues.length}</span>
     {estimateSum !== undefined && <span className={`estimate-chip ${styles.groupEstimate}`} aria-label={`${estimateSum} estimate points`}><EstimateIcon size={14}/><span className="estimate-chip__value">{formatEstimatePoints(estimateSum)}</span></span>}
-    {onCreateIssue && (group.createContext || group.stateType) && <button className={styles.createButton} aria-label={createIssueLabel} data-my-issues-group-add onClick={() => onCreateIssue(group)}><PlusIcon width={14} height={14}/></button>}
+    {onCreateIssue && (group.createContext || group.stateType) && <FlowTooltip raised align="end" label={translate('Add issue…')}><button className={styles.createButton} aria-label={createIssueLabel} data-my-issues-group-add onClick={() => onCreateIssue(group)}><PlusIcon width={14} height={14}/></button></FlowTooltip>}
   </header></IssueGroupContextMenu>
 }
 

@@ -244,7 +244,7 @@ describe('LoopRunPage', () => {
     const user = userEvent.setup()
     const reply = { id: 'reply-1', userId: viewer.id, body: 'Check this', status: 'running' as const, attachments: [{ name: 'notes.md', contentType: 'text/markdown', size: 12 }], createdAt: now.toISOString() }
     api.replyToLoopRun.mockResolvedValue({ ...completed, replies: [reply] })
-    const { onNavigate } = renderPage('run-1')
+    renderPage('run-1')
     const box = await screen.findByRole('textbox', { name: 'Ask about this run…' })
     const footer = box.closest('form')!.querySelector('.loops-run-composer-actions')!
     // The reference app's layout: Skills on the left, attach then send on the right.
@@ -252,8 +252,8 @@ describe('LoopRunPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Skills' }))
     await user.click(await screen.findByRole('option', { name: /Terse answers/ }))
-    await user.click(screen.getByRole('option', { name: /Create skill/ }))
-    expect(onNavigate).toHaveBeenLastCalledWith('/workspace/settings/skill/new')
+    // The skill list holds the skills only, as in the reference app; "Create skill" shows while there are none.
+    expect(screen.queryByRole('option', { name: /Create skill/ })).not.toBeInTheDocument()
     await user.keyboard('{Escape}')
 
     const input = box.closest('form')!.querySelector<HTMLInputElement>('input[type="file"]')!

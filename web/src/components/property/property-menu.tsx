@@ -236,7 +236,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
         {content}
       </Popover.Content>
     </Popover.Portal>
-  </Popover.Root>{tooltipContent&&<Tooltip.Portal><Tooltip.Content ref={hoverSurface} data-flow-motion="tooltip" className={plainTooltip ? 'flow-tooltip-content' : hoverClassName ?? 'property-hover-tooltip'} side={hoverPlacement === 'above' ? 'top' : plainTooltip || hoverPlacement === 'below' ? 'bottom' : 'left'} align="center" sideOffset={plainTooltip || personCard || hoverPlacement === 'above' ? 8 : hoverPlacement === 'below' ? 14 : 6} collisionPadding={8} onClick={event => event.stopPropagation()}>{tooltipContent}</Tooltip.Content></Tooltip.Portal>}</Tooltip.Root></Tooltip.Provider>
+  </Popover.Root>{tooltipContent&&<Tooltip.Portal><Tooltip.Content ref={hoverSurface} data-flow-motion="tooltip" className={plainTooltip ? 'flow-tooltip-content' : hoverClassName ?? 'property-hover-tooltip'} side={hoverPlacement === 'above' ? 'top' : plainTooltip || hoverPlacement === 'below' ? 'bottom' : 'left'} align="center" sideOffset={plainTooltip || personCard || hoverPlacement === 'above' || hoverPlacement === 'below' ? 8 : 6} collisionPadding={8} onClick={event => event.stopPropagation()}>{tooltipContent}</Tooltip.Content></Tooltip.Portal>}</Tooltip.Root></Tooltip.Provider>
 }
 
 function VirtualStandardOptions({ options, activeId, selected, label, multiple, listboxId, onChoose, onActive }: {

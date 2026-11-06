@@ -1078,11 +1078,13 @@
 @media (min-width: 801px) {
   /* Desktop keeps the skill picker as the compact single-action menu. The
      searchable command surface remains available on phone layouts. */
-  .skillsMenu { box-sizing: content-box; min-width: 174px; width: max-content; max-width: calc(100vw - 32px); padding: 0; border: 0.5px solid var(--release-popover-border); border-radius: 12px; background: var(--release-popover-bg); box-shadow: var(--release-popover-shadow); }
+  .skillsMenu { box-sizing: content-box; min-width: 174px; width: max-content; max-width: calc(100vw - 32px); padding: 0; border: 0.5px solid var(--release-popover-border); border-radius: 12px; background: var(--release-popover-bg); box-shadow: var(--compact-submenu-shadow); }
   .skillsMenuHeader { display: none; }
   .skillsMenu > .menuSearch { position: fixed; left: -99999px; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
   .skillsMenu [role="listbox"] { padding: 6px 0; }
-  .skillsMenu [role="option"] { height: 32px; padding: 0 18px 0 14px; }
+  /* Rows are plain text 14px in from the edge, as in the reference app's skill list (a one-skill menu is 175x45). */
+  .skillsMenu [role="option"] { height: 32px; padding: 0 18px 0 14px; grid-template-columns: minmax(0, 1fr) 16px; }
+  .skillsMenu [role="option"] > svg:first-child:not(:last-child) { display: none; }
   .editorScroll > div > .editor { min-height: 44px; }
   .emptyComposerSlot > .composer .skillsButton { padding-right: 6px; line-height: normal; }
 }

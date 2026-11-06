@@ -5,6 +5,7 @@ import { CodingToolsSettingsPage } from "./coding-tools-settings-page";
 import {
   Suspense,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -90,10 +91,11 @@ import {
   identityProviderSettingsPath,
   integrationSettingsPath,
   settingsPath,
+  teamsPath,
   webhookSettingsPath,
 } from "@/lib/app-routes";
 import { AgentSkillEditor } from "./agent-skill-page";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, UNSAFE_NavigationContext, useNavigate } from "react-router-dom";
 import type {
   APIKey,
   BootstrapData,
@@ -524,6 +526,12 @@ export function SettingsPage(props: SettingsPageProps) {
   const [settings, setSettings] = useUserStoredSettings(props.data);
   // The reference app: "Team creation" (Settings → Security) defaults to all members.
   const canCreateTeam = roleAllowed(props.data.viewerRole, props.data.workspaceSettings?.teamCreatePermission);
+  // The reference app's link under "Your teams" reads "Join or create a team" while there are teams to join (it opens the teams page).
+  const canJoinTeam = props.data.viewerRole !== "guest" && (props.data.teams ?? []).some(team => !team.retiredAt && !team.private
+    && !(props.data.teamMembers ?? []).some(member => member.teamId === team.id && member.userId === props.data.viewer.id)
+    && props.data.teamSettings?.[team.id]?.access !== "private"
+    && (!props.data.teamSettings?.[team.id]?.membershipRestriction || props.data.teamSettings?.[team.id]?.membershipRestriction === "open"));
+  const joinOrCreateNavigator = useContext(UNSAFE_NavigationContext)?.navigator;
   const allSidebarTeams = useMemo(() => settingsSidebarTeams(props.data, ""), [props.data]);
   const sidebarTeams = allSidebarTeams;
   const visible = useMemo(
@@ -790,9 +798,9 @@ export function SettingsPage(props: SettingsPageProps) {
                     </button>
                   ))}
                 {canCreateTeam && !query.trim() && (
-                  <button onPointerEnter={() => { void TeamCreatePage.preload().catch(() => undefined); }} onFocus={() => { void TeamCreatePage.preload().catch(() => undefined); }} onClick={props.onCreateTeam}>
+                  <button onPointerEnter={() => { void TeamCreatePage.preload().catch(() => undefined); }} onFocus={() => { void TeamCreatePage.preload().catch(() => undefined); }} onClick={canJoinTeam ? () => { joinOrCreateNavigator?.push(teamsPath(props.data.workspace.urlKey)); setMobileNav(false); } : props.onCreateTeam}>
                     <FlowGlyph name="plus" size={14} className="settings-nav-create-glyph" />
-                      <span>{t("Create a team")}</span>
+                      <span>{t(canJoinTeam ? "Join or create a team" : "Create a team")}</span>
                   </button>
                 )}
               </section>

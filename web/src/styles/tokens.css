@@ -685,16 +685,16 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :root[data-theme="light"]{--project-timeline-bar-bg:lch(92% 6 272);--project-timeline-bar-hover:lch(88% 8 272);--project-timeline-bar-border:lch(76% 14 272);--project-timeline-bar-text:lch(18% 6 272);--project-timeline-bar-progress:lch(84% 12 272);--project-timeline-dependency:lch(58% 4 282);--project-timeline-dependency-active:lch(30% 6 282);--project-timeline-milestone:lch(30% 2 282);--project-timeline-grid:lch(94% .5 282);--project-timeline-grid-strong:lch(88% .5 282);--project-timeline-drag-shadow:0 4px 12px lch(0% 0 0 / .14);--project-timeline-desktop-grid:var(--project-timeline-grid);--project-timeline-desktop-bar-bg:var(--theme-control);--project-timeline-desktop-bar-border:var(--theme-border);--project-timeline-desktop-bar-shadow:none}
 
 /* The reference app "Time in status" card (measured: 177px wide, 24px row pitch, 12px/450 rows, current status bright). */
-.property-rich-hover:has(>.status-hover-preview){width:auto;min-width:177px}
-.status-hover-preview{box-sizing:border-box;display:grid;gap:8px;padding:10px 8px 9px 9px}
-.status-hover-preview>strong{margin-bottom:1.5px;color:var(--bright);font-size:12px;font-weight:450;line-height:14.5px}
-.status-hover-preview>div{height:16px;display:grid;grid-template-columns:14px minmax(90px,1fr) minmax(40px,auto);align-items:center;column-gap:8px;color:var(--theme-text-secondary);font-size:12px;font-weight:450}
+.property-rich-hover:has(>.status-hover-preview){width:auto;min-width:177px;border-color:var(--tooltip-border);background:var(--tooltip-bg);box-shadow:var(--tooltip-shadow);color:var(--tooltip-text)}
+.status-hover-preview{box-sizing:border-box;display:grid;gap:8px;padding:9px 8px}
+.status-hover-preview>strong{margin-bottom:2px;color:var(--tooltip-title);font-size:12px;font-weight:450;line-height:normal}
+.status-hover-preview>div{height:16px;display:grid;grid-template-columns:14px minmax(90px,1fr) minmax(40px,auto);align-items:center;column-gap:8px;color:var(--tooltip-muted);font-size:12px;font-weight:450;line-height:normal}
 .status-hover-preview>div>svg{justify-self:center}
 .status-hover-preview>div>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.status-hover-preview>div[data-current]{color:var(--theme-text-primary)}
+.status-hover-preview>div[data-current]{color:var(--tooltip-text)}
 .status-hover-preview time{text-align:right;font:inherit;font-variant-numeric:tabular-nums}
-.status-hover-preview footer{display:flex;align-items:center;justify-content:space-between;margin-top:2px;padding-top:8px;border-top:.5px solid var(--theme-border);color:var(--bright);font-size:11px;font-weight:450}
-.status-hover-preview footer kbd{box-sizing:border-box;min-width:18px;height:17px;display:grid;place-items:center;padding:2px;border:.5px solid var(--theme-border);border-radius:4px;color:var(--theme-text-secondary);font:400 11px/1 var(--font)}
+.status-hover-preview footer{display:flex;align-items:center;justify-content:space-between;margin-top:2px;padding-top:8px;border-top:.5px solid var(--tooltip-key-border);color:var(--tooltip-title);font-size:11px;font-weight:450;line-height:normal}
+.status-hover-preview footer kbd{box-sizing:border-box;min-width:18px;height:17.1px;display:grid;place-items:center;padding:2px;border:.5px solid var(--tooltip-key-border);border-radius:4px;color:var(--tooltip-muted);font:400 11px/12.1px var(--font)}
 
 /* The reference app status glyph motion: the ring, pie and colour transition to the new status (~.35s ease) and the
    check/cross pops in once the pie has filled. Only on a change, never on first paint. */
@@ -1135,3 +1135,8 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 
 /* Sidebar row hover and open fill in light theme (More trigger, nav rows). */
 :root{--sidebar-row-hover-light-bg:lch(91.64% .5 282)}
+
+/* The reference app's compact menus (agent skill menus): shadows of the menu and its submenu, the muted marker colour (submenu triangle, team keys) and the secondary line of a settings row. */
+:root{--tooltip-title:lch(100% 0 272);--compact-menu-shadow:0 3px 8px lch(0 0 0/.125),0 2px 5px lch(0 0 0/.125),0 1px 1px lch(0 0 0/.125);--compact-submenu-shadow:0 4px 40px lch(0 0 0/.1),0 3px 20px lch(0 0 0/.125),0 3px 12px lch(0 0 0/.125),0 2px 8px lch(0 0 0/.125),0 1px 1px lch(0 0 0/.125);--compact-menu-marker:lch(41.778% 1.425 272);--settings-row-meta:lch(63.304% 1.425 272)}
+:root[data-theme="light"]{--tooltip-title:lch(10% 0 282);--compact-menu-shadow:0 6px 18px lch(0 0 0/.02),0 3px 9px lch(0 0 0/.04),0 1px 1px lch(0 0 0/.04);--compact-submenu-shadow:0 9px 48px lch(0 0 0/.08),0 6px 24px lch(0 0 0/.1),0 1px 1px lch(0 0 0/.04);--compact-menu-marker:lch(66% 1 282);--settings-row-meta:lch(40% 1 282)}
+:root[data-theme="light"] .property-rich-hover:has(>.status-hover-preview){box-shadow:var(--tooltip-shadow)}

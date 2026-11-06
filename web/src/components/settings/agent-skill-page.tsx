@@ -15,7 +15,7 @@ import type { BootstrapData } from "@/types/flow";
 import { AgentSkillActionsMenu } from "./agent-skill-actions";
 import { useAgentSkillActions } from "./use-agent-skill-actions";
 import { SettingsCrumb } from "./settings-primitives";
-import { confirmTemplateAction } from "./template-confirm";
+import { confirmAction } from "@/components/ui/action-dialog-service";
 import "./agent-skills.css";
 
 export function AgentSkillEditor({
@@ -43,7 +43,7 @@ export function AgentSkillEditor({
     if (mode === "edit" && !existing) onCancel();
   }, [existing, mode, onCancel]);
   const dirty = existing ? name !== existing.name || instructions.trim() !== existing.instructions.trim() : Boolean(name.trim() || instructions.trim());
-  const confirmDiscard = () => confirmTemplateAction({ title: t("Discard changes?"), description: t("Confirm that you want to discard your changes."), confirmLabel: t("Discard"), cancelLabel: t("Cancel") });
+  const confirmDiscard = () => confirmAction(t("Discard changes?"), { confirmLabel: t("Confirm"), danger: true });
   const allowNavigation = useUnsavedNavigation(dirty, confirmDiscard);
   const back = agentSkillsSettingsBackLink(data.workspace.urlKey);
   const save = async () => {

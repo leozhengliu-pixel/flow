@@ -237,7 +237,7 @@ it('shows members the workspace feature pages and hides administration', () => {
   input.data = { ...input.data, viewerRole: 'member', workspaceSettings: { ...input.data.workspaceSettings, labelPermission: 'members', templatePermission: 'members', teamCreatePermission: 'members' } };
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
   const labels = navLabels();
-  for (const visible of ['Preferences', 'Labels', 'Templates', 'SLAs', 'Statuses', 'Updates', 'AI & agents', 'Loops', 'Initiatives', 'Documents', 'Customer requests', 'Releases', 'Pulse', 'Asks', 'Emojis', 'Integrations', 'Create a team'])
+  for (const visible of ['Preferences', 'Labels', 'Templates', 'SLAs', 'Statuses', 'Updates', 'AI & agents', 'Loops', 'Initiatives', 'Documents', 'Customer requests', 'Releases', 'Pulse', 'Asks', 'Emojis', 'Integrations', 'Join or create a team'])
     expect(labels).toContain(visible);
   for (const hidden of ['Workspace', 'Members', 'Security', 'API', 'Applications', 'Billing', 'Usage & limits', 'Import & export'])
     expect(labels).not.toContain(hidden);

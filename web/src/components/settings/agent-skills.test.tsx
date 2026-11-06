@@ -3,8 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const api = vi.hoisted(() => ({ createAgentSkill: vi.fn(), updateAgentSkill: vi.fn(), deleteAgentSkill: vi.fn() }))
+const api = vi.hoisted(() => ({ createAgentSkill: vi.fn(), updateAgentSkill: vi.fn(), deleteAgentSkill: vi.fn(), updateStructuredTeamSettings: vi.fn() }))
 vi.mock('@/lib/api', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
+const dialogs = vi.hoisted(() => ({ confirmAction: vi.fn() }))
+vi.mock('@/components/ui/action-dialog-service', async importOriginal => ({ ...(await importOriginal<typeof import('@/components/ui/action-dialog-service')>()), ...dialogs }))
 const toast = vi.hoisted(() => ({ warning: vi.fn(), error: vi.fn(), success: vi.fn() }))
 vi.mock('@/lib/toast', () => ({ toast }))
 
@@ -93,6 +95,19 @@ describe('skills list', () => {
     expect(onReload).toHaveBeenCalled()
   })
 
+  it('moves a skill to a team from the row menu: a team skill with the same text, then the personal copy goes', async () => {
+    api.deleteAgentSkill.mockResolvedValue(undefined)
+    api.updateStructuredTeamSettings.mockResolvedValue({})
+    const { onReload } = renderList(skills.slice(0, 1))
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Move to team' }))
+    const team = data([]).teams[0]
+    await userEvent.click(await screen.findByRole('menuitem', { name: new RegExp(team.name) }))
+    await waitFor(() => expect(api.deleteAgentSkill).toHaveBeenCalledWith('skill-1'))
+    expect(api.updateStructuredTeamSettings).toHaveBeenCalledWith(team.id, { agentSkills: [expect.objectContaining({ name: 'Release notes', instructions: markdown, enabled: true })] })
+    expect(onReload).toHaveBeenCalled()
+  })
+
   it('keeps the skill when the delete confirmation is cancelled', async () => {
     renderList(skills.slice(0, 1))
     await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
@@ -161,13 +176,13 @@ describe('skill page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(onCancel).toHaveBeenCalledTimes(1)
     fireEvent.change(screen.getByRole('textbox', { name: 'Skill name' }), { target: { value: 'Changed' } })
+    // The reference app's "Discard changes?" dialog: a title with Cancel and a red Confirm, no description.
+    dialogs.confirmAction.mockResolvedValueOnce(false)
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('Discard changes?')).toBeInTheDocument()
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(dialogs.confirmAction).toHaveBeenCalledWith('Discard changes?', { confirmLabel: 'Confirm', danger: true })
     expect(onCancel).toHaveBeenCalledTimes(1)
+    dialogs.confirmAction.mockResolvedValueOnce(true)
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Discard' }))
     await waitFor(() => expect(onCancel).toHaveBeenCalledTimes(2))
   })
 

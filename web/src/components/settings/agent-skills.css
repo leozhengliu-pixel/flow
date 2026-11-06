@@ -12,7 +12,8 @@
 .agent-skills-create:focus-visible { background: var(--theme-surface-hover); color: var(--theme-text-primary); outline: 0; }
 :root[data-theme="light"] .agent-skills-create { color: var(--theme-text-primary); }
 .agent-skills-list { margin: 0; padding: 0; box-shadow: inset 0 .5px var(--set-sep); list-style: none; }
-.agent-skills-row { position: relative; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: center; gap: 12px; padding: 16px; }
+.agent-skills-row { position: relative; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) 24px; align-items: center; gap: 12px; padding: 16px; }
+.agent-skills-row > .agent-skill-menu-trigger { width: 24px; height: 24px; }
 /* Separators are drawn over the row's bottom edge, inset by the row padding, so they add no height; they hide beside a hovered row. */
 .agent-skills-row:not(:last-child)::after { content: ""; position: absolute; right: 16px; bottom: 0; left: 16px; border-bottom: .5px solid var(--set-sep); }
 .agent-skills-row:not(:last-child):hover::after,
@@ -27,7 +28,7 @@
 .agent-skill-link strong,
 .agent-skill-link small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-skill-link strong { font-size: 13px; font-weight: 500; line-height: 15.5px; }
-.agent-skill-link small { margin-top: 1px; padding: 1px; color: var(--set-group-desc); font-size: 12px; font-weight: 450; line-height: 14.5px; }
+.agent-skill-link small { margin-top: 4px; padding: 1px; color: var(--settings-row-meta); font-size: 12px; font-weight: 450; line-height: 14.5px; }
 .agent-skill-menu-trigger { position: relative; z-index: 1; width: 28px; height: 28px; color: var(--security-api-key-action-fg); }
 .agent-skill-menu-trigger:hover,
 .agent-skill-menu-trigger[data-state="open"] { background: var(--security-api-key-action-active); color: var(--bright); }
@@ -67,3 +68,33 @@
   .agent-skills-row { padding: 10.66px; }
   .agent-skills-row:not(:last-child)::after { right: 10.66px; left: 10.66px; }
 }
+
+/*
+ * The skill menus (right-click, the row's "…" button and the skill page's title menu), measured against the reference
+ * app in both themes: a 175px surface in the tooltip palette with a .5px border and 12px corners, 6px above and below
+ * the 32px rows, whose highlight is inset 6px on both sides with 8px corners; separators are 12px tall with a full-width
+ * hairline; the team submenu is a 241px surface with an 18px icon slot, the team's path and its key.
+ */
+.menu-content.agent-skill-menu {
+  box-sizing: border-box; z-index: 600; width: 175px; min-width: 175px; padding: 6px 0; overflow: visible;
+  border: .5px solid var(--tooltip-border); border-radius: 12px; background: var(--tooltip-bg);
+  box-shadow: var(--compact-menu-shadow); color: var(--tooltip-text); font-size: 13px; font-weight: 450;
+}
+.menu-content.agent-skill-submenu { width: max-content; min-width: 175px; box-shadow: var(--compact-submenu-shadow); }
+/* Rows are 6px in from the surface edges and carry their own highlight (the light theme's shared menu rules use the same box). */
+.agent-skill-menu .menu-item { position: relative; box-sizing: border-box; height: 32px; margin: 0 6px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 8px; border-radius: 8px; background: transparent; color: inherit; font-size: 13px; font-weight: 450; }
+.agent-skill-menu .menu-item > svg { flex: none; width: 16px; height: 16px; }
+.agent-skill-menu .menu-item > span:not(.flow-submenu-chevron, .agent-skill-team-icon) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-skill-menu .menu-item[data-highlighted],
+.agent-skill-menu .menu-item[data-state="open"] { background: var(--theme-surface-active); }
+.agent-skill-menu .menu-item .flow-submenu-chevron,
+.agent-skill-sub-trigger::after { color: var(--compact-menu-marker); }
+.agent-skill-sub-trigger > .menu-chevron { display: none; }
+.agent-skill-sub-trigger::after { content: "▶"; display: block; flex: none; width: 16px; text-align: right; font: 450 6px/normal var(--font); }
+.agent-skill-menu .menu-separator { box-sizing: border-box; height: 12px; margin: 0; padding: 0; background: transparent; }
+.agent-skill-menu .menu-separator::after { border-bottom-color: var(--tooltip-key-border); }
+.agent-skill-team-icon { display: grid; flex: none; place-items: center; width: 18px; height: 18px; }
+.agent-skill-submenu .menu-item { color: var(--bright); }
+.agent-skill-submenu .issue-team-path { width: 100%; }
+.agent-skill-submenu .issue-team-parent { color: var(--tooltip-muted); }
+.agent-skill-submenu .issue-team-key { color: var(--compact-menu-marker); }

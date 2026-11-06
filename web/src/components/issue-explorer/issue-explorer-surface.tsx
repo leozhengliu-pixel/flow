@@ -228,7 +228,7 @@ export function IssueExplorerSurface({
         <ToolbarButtonsNavigation className={styles.actions}>
           {filterMenu(<ToolbarButton label={t(filterActive ? 'Add another filter' : 'Add filter')} tooltip={t('Add Filter')} shortcut="F" pressed={filterActive || undefined} data-filter-active={filterActive || undefined}><FilterIcon /></ToolbarButton>)}
           {displayMenu}
-          {!phone && <ToolbarButton className={styles.insightsButton} label={`${insightsOpen ? 'Close' : 'Open'} ${insightsLabel}`} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}>
+          {!phone && <ToolbarButton className={styles.insightsButton} label={`${insightsOpen ? 'Close' : 'Open'} ${insightsLabel}`} tooltip={`${insightsOpen ? 'Close' : 'Open'} ${insightsLabel}`} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}>
             <InsightsIcon />
           </ToolbarButton>}
           {mode === 'view' && (

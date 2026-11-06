@@ -53,3 +53,9 @@
 .flow-tooltip-shortcut { display: inline-flex; flex: none; align-items: center; gap: 3px; margin-right: -3px; color: var(--tooltip-muted); font: 400 11px/12.1px var(--font); }
 .flow-tooltip-key { box-sizing: border-box; min-width: 18px; height: 17.1px; display: grid; place-items: center; padding: 2px; border: .5px solid var(--tooltip-key-border); border-radius: 4px; background: transparent; color: var(--tooltip-muted); font: 400 11px/12.1px var(--font); }
 .flow-tooltip-then { color: var(--tooltip-muted); font: 450 10px/16.5px var(--font); }
+
+/* A tooltip of hint rows ("T to collapse group" / "⌥ Click to collapse all"): the keys lead each row, 4px before the text. */
+.flow-tooltip-rows { display: flex; flex-direction: column; gap: 6px; }
+.flow-tooltip-row { display: block; }
+.flow-tooltip-row .flow-tooltip-shortcut { margin: 0 4px 0 -3px; vertical-align: top; }
+.flow-tooltip-row .flow-tooltip-key { font-weight: 450; }

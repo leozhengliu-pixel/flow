@@ -29,7 +29,11 @@ export function AgentSkillsPicker({
   const phone = usePhoneLayout();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const options = useMemo(
-    () => [...(data.agentSkills ?? []).map((item) => ({ id: item.id, label: item.name })), { id: "__create__", label: t("Create skill") }],
+    // The reference app's skill list holds the skills only; "Create skill" is offered while there are none to pick.
+    () => {
+      const skills = (data.agentSkills ?? []).map((item) => ({ id: item.id, label: item.name }));
+      return skills.length ? skills : [{ id: "__create__", label: t("Create skill") }];
+    },
     [data.agentSkills, t],
   );
   const { activeId, choose, filteredOptions, inputRef, isSelected, onKeyDown, onQueryChange, query, setActiveId } = usePropertyCommand({
