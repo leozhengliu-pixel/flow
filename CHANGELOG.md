@@ -11,6 +11,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Give SLA automation rules an action and an order: a rule can now add an SLA or remove it, rules are evaluated top to bottom and the first enabled rule an issue matches decides its SLA (the way the reference set works: Urgent and High get a deadline, Medium, Low and No priority have it removed), an issue that matches again after its SLA was removed starts a new clock, new rules go last, and `POST /api/sla-rules/reorder` saves a new order. Rules saved before this keep working as rules that add an SLA, but an issue that matched several of them now follows only the first.
 
+- Set desktop description text at the face's automatic optical size instead of a forced 14, which made links 0.3px wider than the reference.
 - Give the issue's parent link the reference's transparent half-pixel border so its identifier and title sit 0.5px further right.
 - Size the property pickers' search shortcut keycaps with a 1.1 line height (17.1px tall) like the reference.
 - Match the issue sidebar's empty label and project triggers to the reference: the button keeps the primary ink with only its placeholder muted, 6px between icon and text, the hover and open background of the other triggers, the same left edge (so the labels popup opens 1px further right), and the accessible name "Add labels".

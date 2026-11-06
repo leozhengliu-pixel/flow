@@ -11,6 +11,8 @@
   .issue-view .issue-properties .label-project-trigger:is(:hover, [aria-expanded=true]) { background: var(--ui-pill-hover-bg); }
   /* The empty label picker starts on the same edge as the other property triggers, so its popup anchors there too. */
   .issue-view .issue-properties .labels-picker--inline { margin-left: 1px; }
+  /* Desktop description text sets at the face's automatic optical size, as the reference does. */
+  .issue-view .description-editor { font-variation-settings: normal; }
   .issue-view .issue-command-buttons { height: 28px; }
   .issue-view .issue-work-control { width: 56.5px; height: 28px; border: 0; }
   .issue-view .issue-work-control .issue-work-prompt { margin-right: .5px; }
