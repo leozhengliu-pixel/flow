@@ -82,10 +82,10 @@ test('Latin initials take the reference font size for their avatar size and inhe
     fixture.mount(inventory)
     await document.fonts.ready
   }, inventory)
-  await expect(page.locator('[data-consumer]')).toHaveCount(inventory.length * 2)
-  // Measured on the reference at 1440 and on phones: 14px -> 8px, 16px and 18px -> 9px, 24px -> 11px, 32px -> 14px (20px reads 9px between them).
+  await expect(page.locator('[data-consumer]')).toHaveCount(inventory.length * 3)
+  // Two-letter initials. Measured on the reference at 1440 and on phones: 14px -> 8px, 16px and 18px -> 9px, 24px -> 11px, 32px -> 14px (20px reads 9px between them).
   const reference: Record<number, string> = { 14: '8px', 16: '9px', 18: '9px', 20: '9px', 24: '11px', 32: '14px' }
-  await expect.poll(() => page.locator('[data-consumer] [data-user-avatar][data-script="latin"]').evaluateAll((avatars, reference) => avatars.flatMap(avatar => {
+  await expect.poll(() => page.locator('[data-consumer] [data-user-avatar][data-script="latin"][data-initials="2"]').evaluateAll((avatars, reference) => avatars.flatMap(avatar => {
     const width = avatar.getBoundingClientRect().width, size = reference[width]
     if (!size) return []
     const initials = getComputedStyle(avatar.querySelector('.user-avatar-initials')!), parent = getComputedStyle(avatar.parentElement!)
