@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { FileText, Lightbulb, Plus } from 'lucide-react'
+import { FileText, Lightbulb } from 'lucide-react'
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { AgentDraftCard } from './agent-draft-card'
 import { splitAgentDraft } from './agent-draft'
@@ -9,9 +9,9 @@ import { toast } from '@/lib/toast'
 import { streamAgentSessionMessage, streamAgentSessionMessageEdit, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
 import { createAgentStreamEventCoalescer } from '@/lib/agent-stream-coalescer'
 import { markStoppedAgentReply } from './agent-stopped-reply'
-import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from '@/types/flow'
-import { PropertyMenu } from '@/components/property/property-menu'
-import { AgentAttachIcon, AgentChevronDownIcon, AgentPageContextIcon, AgentSkillsIcon } from './agent-icons'
+import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData, PersonalAgentSkill } from '@/types/flow'
+import { AgentAddMenu } from './agent-add-menu'
+import { AgentPageContextIcon } from './agent-icons'
 import { agentFileAttachment, attachAgentFiles } from './agent-attachments'
 import { quoteAgentMessage } from './agent-floating-request'
 import { claimAgentQuoteHighlight, clearAgentQuoteHighlight } from './agent-quote-highlight'
@@ -20,7 +20,7 @@ import threadStyles from './entity-agent-thread.module.css'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { mentionIcon } from './agent-mention-icon'
-import type { AgentMention } from './agent-mention-input'
+import type { AgentMention, AgentSkillMention } from './agent-mention-input'
 import { ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import { useI18n } from '@/i18n/i18n'
@@ -63,7 +63,7 @@ export function AgentChatPanel({
   onDraft,
   draftCard,
 }: {
-  /** Workspace data enables @-mentions and the Skills picker. */
+  /** Workspace data enables @-mentions and the skills in the "+" and "/" menus. */
   data?: BootstrapData
   onCreateSkill?: () => void
   initialPrompt?: string
@@ -144,7 +144,9 @@ export function AgentChatPanel({
     onSessionChange?.(next)
   })
   const [mentions, setMentions] = useState<AgentMention[]>([])
-  const [skillIds, setSkillIds] = useState<string[]>([])
+  // The skill chips in the composer: the message runs with these skills.
+  const [skills, setSkills] = useState<AgentSkillMention[]>([])
+  const insertSkillRef = useRef<((skill: PersonalAgentSkill) => void) | null>(null)
   const [removedContext, setRemovedContext] = useState<string[]>([])
   const contextIssues = useMemo(() => issues.filter(issue => !removedContext.includes(issue.id)), [issues, removedContext])
   const [attachedContext, setAttachedContext] = useState<AgentContextEntity[]>([])
@@ -273,7 +275,7 @@ export function AgentChatPanel({
     setMinimized(false)
     setFullscreen(false)
     setMentions([])
-    setSkillIds([])
+    setSkills([])
     setRemovedContext([])
     setAttachedContext([])
     clearEntityThreadDraft(draftKey)
@@ -317,7 +319,7 @@ export function AgentChatPanel({
         : item),
       { id: `pending-${Date.now()}`, role: 'user', content: message, mentions: sentMentions, answerTo: answer?.partId, attachments: sentFiles.length ? sentFiles.map(({ name, type, size }) => ({ name, contentType: type, size })) : undefined, createdAt: new Date().toISOString() },
     ])
-    const mentioned = { issueIds: sentIdsOf('issue'), projectIds: sentIdsOf('project'), documentIds: sentIdsOf('document'), initiativeIds: sentIdsOf('initiative'), userIds: sentIdsOf('user'), mentions: sentMentions, ...(answer ? { answer } : {}) }
+    const mentioned = { issueIds: sentIdsOf('issue'), projectIds: sentIdsOf('project'), documentIds: sentIdsOf('document'), initiativeIds: sentIdsOf('initiative'), userIds: sentIdsOf('user'), mentions: sentMentions, ...(followUp === undefined && skills.length ? { skillIds: skills.map(item => item.id) } : {}), ...(answer ? { answer } : {}) }
     const pageIdsOf = (type: AgentPageContext['type']) => activePageContexts.filter(context => context.type === type).map(context => context.id)
     if (!session) {
       setAttachedContext([
@@ -330,6 +332,7 @@ export function AgentChatPanel({
       setQuote(undefined)
       setAttachments([])
       setMentions([])
+      setSkills([])
     }
     setError(undefined)
     setLoading(true)
@@ -413,7 +416,7 @@ export function AgentChatPanel({
               initiativeIds: [...new Set([...pageIdsOf('initiative'), ...mentioned.initiativeIds])],
               userIds: mentioned.userIds,
               mentions: sentMentions,
-              skillIds,
+              skillIds: skills.map(item => item.id),
               location: 'toolbar',
             },
             onEvent,
@@ -501,8 +504,9 @@ export function AgentChatPanel({
         contextIssues={contextIssues}
         mentionData={data}
         onMentionsChange={setMentions}
+        onSkillsChange={setSkills}
+        insertSkillRef={insertSkillRef}
         onRemoveContext={id => setRemovedContext(current => [...current, id])}
-        footerStart={data ? <SkillsPicker data={data} disabled={Boolean(session)} selectedIds={skillIds} onChange={setSkillIds} onCreate={onCreateSkill}/> : undefined}
         conversationDraftKey={draftKey}
         // The reference app's floating chat is blank until you write: no greeting, no suggestions.
         blankEmpty
@@ -534,11 +538,13 @@ export function AgentChatPanel({
               </button>
             </ScopedFlowTooltip>
           )}
-          <ScopedFlowTooltip label={t('Attach images, files, or videos')} sideOffset={8}>
-            <button aria-label={t('Attach images, files, or videos')} className={threadStyles.composerTool} onClick={() => fileInputRef.current?.click()} type="button">
-              <AgentAttachIcon size={14}/>
-            </button>
-          </ScopedFlowTooltip>
+          <AgentAddMenu
+            className={threadStyles.composerTool}
+            skills={data?.agentSkills}
+            onFile={() => fileInputRef.current?.click()}
+            onSkill={skill => insertSkillRef.current?.(skill)}
+            onCreateSkill={() => onCreateSkill?.()}
+          />
           <input
             ref={fileInputRef}
             aria-hidden="true"
@@ -594,34 +600,6 @@ export function AgentChatPanel({
     />}
     </>
   )
-}
-
-/** Skills picker in the composer footer; skills apply when a conversation starts. */
-function SkillsPicker({ data, disabled, selectedIds, onChange, onCreate }: { data: BootstrapData; disabled: boolean; selectedIds: string[]; onChange: (ids: string[]) => void; onCreate?: () => void }) {
-  const { t } = useI18n()
-  const skills = data.agentSkills ?? []
-  return <PropertyMenu
-    label={t('Skills')}
-    ariaLabel={t('Skills')}
-    value={t('Skills')}
-    multiple
-    hideSearch
-    side="top"
-    align="start"
-    selectedIds={selectedIds}
-    searchPlaceholder={t('Search skills…')}
-    triggerRole="button"
-    triggerClassName="agent-skills-trigger"
-    trigger={<><AgentSkillsIcon/><span>{selectedIds.length ? `${t('Skills')} · ${selectedIds.length}` : t('Skills')}</span><AgentChevronDownIcon/></>}
-    options={[
-      ...skills.map(skill => ({ id: skill.id, label: skill.name, icon: <AgentSkillsIcon/>, i18nIgnore: true, disabled })),
-      ...(onCreate ? [{ id: '__create__', label: t('Create skill'), icon: <Plus size={16}/> }] : []),
-    ]}
-    onChange={id => {
-      if (id === '__create__') { onCreate?.(); return }
-      onChange(selectedIds.includes(id) ? selectedIds.filter(item => item !== id) : [...selectedIds, id])
-    }}
-  />
 }
 
 /** The conversation as Markdown ("Copy as markdown" in the chat menu). */

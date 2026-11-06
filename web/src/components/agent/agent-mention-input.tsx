@@ -4,10 +4,12 @@ import { FileText, Link2, PanelBottom } from 'lucide-react'
 import { ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { useIssueCandidates } from '@/components/issue/use-issue-candidates'
 import { avatarColor } from '@/components/issue/avatar-color'
+import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
+import { matchesSearch } from '@/lib/search-match'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
-import { AGENT_UPLOAD_MAX_ITEMS, agentFileKind, agentUploadLimit, pastedAgentFiles, shrinkAgentImage } from './agent-attachments'
+import { AGENT_ATTACHMENT_ACCEPT, AGENT_UPLOAD_MAX_ITEMS, agentFileKind, agentUploadLimit, pastedAgentFiles, shrinkAgentImage } from './agent-attachments'
 import { agentBlockMarkdown, splitAgentBlocks } from './agent-content-model'
 import { emptyLine, fillAgentComposer, inlineBlock, isBlock, isEmptyLine, type BlockKind, type InlineBlock } from './agent-composer-dom'
 import { AgentInlineEmbed } from './agent-inline-embed'
@@ -18,14 +20,21 @@ import { toast } from '@/lib/toast'
 import embedStyles from '@/components/editor/embeds/embed.module.css'
 import type { EmbedSource } from '@/components/editor/embeds/embed-providers'
 import { formattingMarkdown, planPaste } from './agent-paste'
-import type { BootstrapData, WorkflowState } from '@/types/flow'
+import type { BootstrapData, PersonalAgentSkill, WorkflowState } from '@/types/flow'
 import { mentionTriggerBeforeCaret } from '@/lib/mention-trigger'
+import { agentSkillPath } from '@/lib/app-routes'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import styles from './agent-mention-input.module.css'
-import { AgentSelectedTextIcon } from './agent-icons'
+import { AgentSelectedTextIcon, AgentSkillsIcon } from './agent-icons'
+import { AgentSlashMenu, type SlashAnchor, type SlashEntry } from './agent-slash-menu'
+import { SLASH_SKILL_LIMIT, orderedAgentSkills, skillMatches, splitSkillTokens } from './agent-skill-menu'
 
 export type AgentMention = { type: 'issue' | 'project' | 'document' | 'initiative' | 'user'; id: string; label: string }
 
-type MentionOption = AgentMention & { key: string; detail?: string; icon: ReactNode; group: string }
+/** A skill chip in the composer: the message runs with that skill (the reference app's "/" menu and "+ › Skill"). */
+export type AgentSkillMention = { id: string; label: string }
+
+type MentionOption = Omit<AgentMention, 'type'> & { type: AgentMention['type'] | 'skill'; key: string; detail?: string; icon: ReactNode; group: string }
 
 type Chip = { el: HTMLElement; option: MentionOption }
 
@@ -60,12 +69,14 @@ export function AgentMentionInput({
   onUploadFile,
   insertFilesRef,
   onBusyChange,
+  insertSkillRef,
 }: {
   data: BootstrapData
   /** Issues from the current page, offered first under "This page". */
   pageIssues?: MentionIssue[]
   value: string
-  onChange: (value: string, mentions: AgentMention[]) => void
+  /** `skills` are the skill chips in the message (they also read "/Name" in `value`); `mentions` leaves them out. */
+  onChange: (value: string, mentions: AgentMention[], skills: AgentSkillMention[]) => void
   onSubmit: () => void
   placeholder: string
   disabled?: boolean
@@ -92,6 +103,8 @@ export function AgentMentionInput({
   insertFilesRef?: MutableRefObject<((files: File[]) => void) | null>
   /** Whether files are still uploading; the host holds the message until they are done. */
   onBusyChange?: (busy: boolean) => void
+  /** Set to a function that puts a skill chip in the message at the caret (the "+" menu's Skill submenu). */
+  insertSkillRef?: MutableRefObject<((skill: PersonalAgentSkill) => void) | null>
 }) {
   const { t } = useI18n()
   const editorRef = useRef<HTMLDivElement | null>(null)
@@ -109,10 +122,15 @@ export function AgentMentionInput({
   // A pasted link's popup ("Keep as link (Esc)", plus "Embed ... (Tab)" for a video or preview) while it is the latest edit.
   const [hint, setHint] = useState<{ link: HTMLAnchorElement; embed?: EmbedSource; active: 0 | 1 } | null>(null)
   const pasteAsText = useRef(false)
+  // The "/" menu: the token being typed (a text node, where it starts, what follows the slash) and where the menu opens.
+  const [slash, setSlash] = useState<{ query: string; node: Text; start: number; anchor: SlashAnchor } | null>(null)
+  const [slashIndex, setSlashIndex] = useState(0)
+  const dismissedSlash = useRef<{ node: Text; start: number } | null>(null)
   const retries = useRef(new Map<HTMLElement, () => void>())
   // The page only holds the issues it loaded, so fetch workspace issues while the menu is open.
   const candidates = useIssueCandidates(data, query !== null)
 
+  const skillList = useMemo(() => orderedAgentSkills(data.agentSkills), [data.agentSkills])
   const options = useMemo(() => {
     if (query === null) return []
     const needle = query.toLocaleLowerCase()
@@ -135,16 +153,27 @@ export function AgentMentionInput({
     setActiveQuery(query)
     setActiveIndex(0)
   }
+  const slashQuery = slash?.query ?? null
+  const [activeSlashQuery, setActiveSlashQuery] = useState(slashQuery)
+  if (activeSlashQuery !== slashQuery) {
+    setActiveSlashQuery(slashQuery)
+    setSlashIndex(0)
+  }
 
   const read = useCallback(() => {
     const editor = editorRef.current
-    if (!editor) return { text: '', mentions: [] as AgentMention[] }
+    if (!editor) return { text: '', mentions: [] as AgentMention[], skills: [] as AgentSkillMention[] }
     const mentions: AgentMention[] = []
+    const skills: AgentSkillMention[] = []
     const walk = (node: Node): string => {
       if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
       if (!(node instanceof HTMLElement)) return ''
       // The quote travels separately (the host puts it first, as a markdown quote).
       if (node.dataset.agentQuote !== undefined) return ''
+      if (node.dataset.mentionId && node.dataset.mentionType === 'skill') {
+        skills.push({ id: node.dataset.mentionId, label: node.dataset.mentionLabel ?? '' })
+        return `/${node.dataset.mentionLabel ?? ''}`
+      }
       if (node.dataset.mentionId) {
         mentions.push({ type: node.dataset.mentionType as AgentMention['type'], id: node.dataset.mentionId, label: node.dataset.mentionLabel ?? '' })
         return `@${node.dataset.mentionLabel ?? ''}`
@@ -158,15 +187,16 @@ export function AgentMentionInput({
     }
     const text = walk(editor).replace(/\u00a0/g, ' ').replace(/^ /, editor.querySelector('[data-agent-quote]') ? '' : ' ').replace(/\n{3,}/g, '\n\n')
     const unique = mentions.filter((item, index) => mentions.findIndex(other => other.type === item.type && other.id === item.id) === index)
-    return { text, mentions: unique }
+    const uniqueSkills = skills.filter((item, index) => skills.findIndex(other => other.id === item.id) === index)
+    return { text, mentions: unique, skills: uniqueSkills }
   }, [editorRef])
 
   const sync = useCallback(() => {
-    const { text, mentions } = read()
+    const { text, mentions, skills } = read()
     const editor = editorRef.current
     const quoted = Boolean(editor?.querySelector('[data-agent-quote]'))
     const found = [...(editor?.querySelectorAll<HTMLElement>('[data-agent-block]') ?? [])]
-    setEmpty(!text.trim() && !mentions.length && !quoted && !found.length)
+    setEmpty(!text.trim() && !mentions.length && !skills.length && !quoted && !found.length)
     setChips(current => current.filter(chip => chip.el.isConnected))
     // Blocks written in from outside (an edited message, a draft) join the ones pasted here.
     setBlocks(current => {
@@ -176,7 +206,7 @@ export function AgentMentionInput({
       return added.length || kept.length !== current.length ? [...kept, ...added] : current
     })
     if (quote && !quoted) { setQuoteEl(null); onQuoteRemove?.() }
-    onChange(text, mentions)
+    onChange(text, mentions, skills)
   }, [editorRef, onChange, onQuoteRemove, quote, read])
 
   // The quote chip sits first in the editor with the caret after it's chip from "Ask agent".
@@ -261,32 +291,71 @@ export function AgentMentionInput({
       setChips([]); setBlocks(current => { current.forEach(block => block.preview && URL.revokeObjectURL(block.preview)); return [] }); setEmpty(!quoteChip); setQuery(null)
     }
     else if (value && !typed && !hasBlocks && !editor.querySelector('[data-mention-id]')) {
+      const parts = splitSkillTokens(value, data.agentSkills)
       if (splitAgentBlocks(value).some(part => part.type !== 'text')) fillAgentComposer(editor, value)
+      else if (parts.some(part => typeof part !== 'string')) {
+        // A draft's "/Name" turns back into the skill's chip.
+        const added: Chip[] = []
+        for (const part of parts) {
+          if (typeof part === 'string') { editor.append(document.createTextNode(part)); continue }
+          const chip = skillChip(part)
+          editor.append(chip.el)
+          added.push(chip)
+        }
+        setChips(current => [...current, ...added])
+      }
       else editor.append(document.createTextNode(value))
       setEmpty(false)
     }
-  }, [editorRef, value])
+  }, [data.agentSkills, editorRef, value])
 
   const detectQuery = () => {
     const selection = window.getSelection()
     const node = selection?.anchorNode
-    if (!selection || !node || node.nodeType !== Node.TEXT_NODE || !editorRef.current?.contains(node)) { setQuery(null); return }
+    if (!selection || !node || node.nodeType !== Node.TEXT_NODE || !editorRef.current?.contains(node)) { setQuery(null); setSlash(null); return }
     const before = (node.textContent ?? '').slice(0, selection.anchorOffset)
     const match = before.match(mentionTriggerBeforeCaret(40))
     setQuery(match ? match[1] : null)
+    // "/" at the start of the text or after a space opens the skills and commands menu; Escape keeps that token closed.
+    const slashMatch = match ? null : before.match(/(?:^|\s)\/([^\s/]{0,40})$/)
+    if (!slashMatch) { dismissedSlash.current = null; setSlash(null); return }
+    const start = selection.anchorOffset - slashMatch[1].length - 1
+    const dismissed = dismissedSlash.current
+    if (dismissed && dismissed.node === node && dismissed.start === start) { setSlash(null); return }
+    const range = document.createRange()
+    range.setStart(node, start)
+    range.setEnd(node, start + 1)
+    const box = typeof range.getBoundingClientRect === 'function' ? range.getBoundingClientRect() : editorRef.current!.getBoundingClientRect()
+    const middle = box.top + box.height / 2
+    const anchor: SlashAnchor = { left: Math.max(8, Math.min(box.left - 4, window.innerWidth - 227 - 8)), top: middle + 16, lineTop: middle - 12 }
+    setSlash(current => current && current.node === node && current.start === start && current.query === slashMatch[1] && current.anchor.left === anchor.left && current.anchor.top === anchor.top ? current : { query: slashMatch[1], node: node as Text, start, anchor })
   }
 
-  const choose = (option: MentionOption) => {
+  const skillOption = (skill: Pick<PersonalAgentSkill, 'id' | 'name'>): MentionOption => ({ key: `skill:${skill.id}`, type: 'skill', id: skill.id, label: skill.name, icon: <AgentSkillsIcon size={14}/>, group: '' })
+
+  /** A skill's chip element, as the "/" menu, the "+" menu and a restored draft put it in the message. */
+  const skillChip = (skill: Pick<PersonalAgentSkill, 'id' | 'name'>): Chip => {
+    const option = skillOption(skill)
+    const el = document.createElement('span')
+    el.contentEditable = 'false'
+    el.className = `${styles.chip} ${styles.skillChip}`
+    el.dataset.mentionType = 'skill'
+    el.dataset.mentionId = skill.id
+    el.dataset.mentionLabel = skill.name
+    return { el, option }
+  }
+
+  const choose = (option: MentionOption, trigger = '@') => {
     const selection = window.getSelection()
     const node = selection?.anchorNode
     if (!selection || !node || node.nodeType !== Node.TEXT_NODE) return
     const text = node.textContent ?? ''
     const caret = selection.anchorOffset
-    const start = text.slice(0, caret).lastIndexOf('@')
+    const start = text.slice(0, caret).lastIndexOf(trigger)
     if (start < 0) return
     const chip = document.createElement('span')
     chip.contentEditable = 'false'
-    chip.className = styles.chip
+    chip.className = option.type === 'skill' ? `${styles.chip} ${styles.skillChip}` : styles.chip
     chip.dataset.mentionType = option.type
     chip.dataset.mentionId = option.id
     chip.dataset.mentionLabel = option.label
@@ -302,6 +371,7 @@ export function AgentMentionInput({
     selection.addRange(range)
     setChips(current => [...current, { el: chip, option }])
     setQuery(null)
+    setSlash(null)
     sync()
   }
 
@@ -449,7 +519,7 @@ export function AgentMentionInput({
     range.deleteContents()
     const chip = document.createElement('span')
     chip.contentEditable = 'false'
-    chip.className = styles.chip
+    chip.className = option.type === 'skill' ? `${styles.chip} ${styles.skillChip}` : styles.chip
     chip.dataset.mentionType = option.type
     chip.dataset.mentionId = option.id
     chip.dataset.mentionLabel = option.label
@@ -530,6 +600,64 @@ export function AgentMentionInput({
     sync()
   }
 
+  /** Files for the message from the system picker, like the attach shortcut (only with an upload path). */
+  const pickFiles = (accept?: string) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.multiple = true
+    if (accept) input.accept = accept
+    input.addEventListener('change', () => insertFiles([...(input.files ?? [])]))
+    input.click()
+  }
+
+  const attachKeys = isMacPlatform() ? '⌘ ⇧ U' : 'Ctrl Shift U'
+  const slashEntries = useMemo<SlashEntry[]>(() => {
+    if (!slash) return []
+    const needle = slash.query
+    const skills = (needle ? skillList.filter(skill => skillMatches(skill, needle)) : skillList.slice(0, SLASH_SKILL_LIMIT)).map((skill): SlashEntry => ({ kind: 'skill', key: `skill:${skill.id}`, skill }))
+    const commands: SlashEntry[] = onUploadFile ? [
+      { kind: 'command', key: 'media', label: 'Insert media…', icon: <FlowGlyph name="attach" size={16}/>, group: 1, run: () => pickFiles('image/*,video/*') },
+      { kind: 'command', key: 'files', label: 'Attach files…', icon: <FlowGlyph name="attach" size={16}/>, shortcut: attachKeys, group: 1, run: () => pickFiles(AGENT_ATTACHMENT_ACCEPT) },
+    ] : []
+    return [...skills, ...commands.filter(command => command.kind === 'command' && matchesSearch(needle, [command.label], t, { fuzzy: true }))]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pickFiles only reads insertFiles, which is stable per upload path
+  }, [attachKeys, onUploadFile, skillList, slash, t])
+
+  /** Takes the "/query" token out of the text, caret where it was. */
+  const dropSlashToken = () => {
+    if (!slash || !slash.node.isConnected) return
+    const text = slash.node.textContent ?? ''
+    slash.node.textContent = text.slice(0, slash.start) + text.slice(slash.start + 1 + slash.query.length)
+    placeCaret(slash.node, slash.start)
+    setSlash(null)
+    sync()
+  }
+
+  const chooseSlash = (entry: SlashEntry) => {
+    if (entry.kind === 'skill') { choose(skillOption(entry.skill), '/'); return }
+    dropSlashToken()
+    entry.run()
+  }
+
+  const dismissSlash = () => {
+    if (slash) dismissedSlash.current = { node: slash.node, start: slash.start }
+    setSlash(null)
+  }
+
+  // The "+" menu's Skill submenu puts a skill chip at the caret (the end of the message without one).
+  useEffect(() => {
+    if (!insertSkillRef) return
+    insertSkillRef.current = skill => {
+      const editor = editorRef.current
+      if (!editor) return
+      const present = [...editor.querySelectorAll<HTMLElement>('[data-mention-type="skill"]')].some(chip => chip.dataset.mentionId === skill.id)
+      if (present) { editor.focus({ preventScroll: true }); return }
+      insertChip(skillOption(skill))
+    }
+    return () => { insertSkillRef.current = null }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- insertChip and skillOption are rebuilt every render and read refs only
+  }, [insertSkillRef, editorRef])
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     pasteAsText.current = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v'
     if (hint && !['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) {
@@ -537,6 +665,15 @@ export function AgentMentionInput({
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setHint(null); return }
       if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && hint.embed) { event.preventDefault(); setHint({ ...hint, active: hint.active ? 0 : 1 }); return }
       setHint(null)
+    }
+    if (slash && !event.nativeEvent.isComposing) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        if (slashEntries.length) setSlashIndex(index => (index + (event.key === 'ArrowDown' ? 1 : -1) + slashEntries.length) % slashEntries.length)
+        return
+      }
+      if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); if (slashEntries[slashIndex]) chooseSlash(slashEntries[slashIndex]); else dismissSlash(); return }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); dismissSlash(); return }
     }
     if (query !== null && options.length) {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -581,6 +718,7 @@ export function AgentMentionInput({
       </div>,
       document.body,
     )}
+    {slash && <AgentSlashMenu activeIndex={slashIndex} anchor={slash.anchor} entries={slashEntries} onActive={setSlashIndex} onChoose={chooseSlash} onDismiss={dismissSlash} skillHref={skill => agentSkillPath(data.workspace.urlKey, skill.id)}/>}
     {hint && hint.link.isConnected && createPortal(<LinkHint hint={hint} onKeep={() => setHint(null)} onEmbed={acceptEmbed} onActive={active => setHint(current => current && { ...current, active })}/>, document.body)}
     <div
       ref={attachEditor}
@@ -595,7 +733,7 @@ export function AgentMentionInput({
       onInput={() => { setHint(null); sync(); detectQuery() }}
       onKeyUp={event => { if (!['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(event.key)) detectQuery() }}
       onClick={() => { setHint(null); detectQuery() }}
-      onBlur={() => { setQuery(null); setHint(null) }}
+      onBlur={() => { setQuery(null); setSlash(null); setHint(null) }}
       onKeyDown={onKeyDown}
       onPaste={event => {
         event.preventDefault()

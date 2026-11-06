@@ -136,9 +136,8 @@
 :global([data-variant='floating']) .composer:not(#_)>:first-child{max-height:160px;overflow-y:auto;padding:2px 6px;scrollbar-color:transparent transparent}
 :global([data-variant='floating']) .composer:not(#_):not(#_) footer{height:28px;gap:8px;padding:0 6px 4px 2px;margin-top:8px}
 :global([data-variant='floating']) .composer:not(#_) footer>span:empty{flex:1}
-:global([data-variant='floating']) .composer:not(#_):not(#_) footer :global(.agent-skills-trigger){height:24px;padding:0 6px 0 4px;color:var(--agent-float-skills-fg)}
 :global([data-variant='floating']) .composer:not(#_):not(#_) footer .composerTool{background:transparent;color:var(--agent-float-tool-fg)}
-:global([data-variant='floating']) .composer:not(#_):not(#_) footer .composerTool:hover{background:var(--agent-float-tool-hover-bg)}
+:global([data-variant='floating']) .composer:not(#_):not(#_) footer .composerTool:is(:hover,[aria-expanded=true]){background:var(--agent-float-tool-hover-bg);color:var(--agent-float-tool-on-fg)}
 :global([data-variant='floating']) .composer:not(#_):not(#_) footer .composerTool[aria-pressed=true]{background:var(--agent-float-tool-on-bg);color:var(--agent-float-tool-on-fg)}
 :global([data-variant='floating']) .composer:not(#_):not(#_) footer>button:last-child{width:24px;height:24px;border:.5px solid transparent;border-radius:12px;background:var(--agent-float-send-bg);color:var(--agent-float-send-fg)}
 :global([data-variant='floating']) .composer:not(#_):not(#_) footer>button[data-state=ready]:last-child{background:var(--agent-send-ready-bg);color:var(--agent-send-ready-fg)}

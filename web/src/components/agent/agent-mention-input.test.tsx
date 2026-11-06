@@ -21,7 +21,7 @@ const data = {
 
 describe('AgentMentionInput', () => {
   it('offers initiatives under @ and reports a chosen one as an initiative mention', async () => {
-    const onChange = vi.fn<(value: string, mentions: AgentMention[]) => void>()
+    const onChange = vi.fn<(value: string, mentions: AgentMention[], skills: unknown[]) => void>()
     const user = userEvent.setup()
     render(<I18nProvider><AgentMentionInput ariaLabel="Ask" data={data} onChange={onChange} onSubmit={vi.fn()} placeholder="Ask" value=""/></I18nProvider>)
     await user.click(screen.getByRole('textbox', { name: 'Ask' }))
@@ -29,7 +29,7 @@ describe('AgentMentionInput', () => {
     const menu = await screen.findByRole('listbox', { name: 'Mention' })
     expect(menu).toHaveTextContent('Initiatives')
     await user.click(screen.getByRole('option', { name: /Payments Q4/ }))
-    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(expect.any(String), [{ type: 'initiative', id: 'initiative-1', label: 'Payments Q4' }]))
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(expect.any(String), [{ type: 'initiative', id: 'initiative-1', label: 'Payments Q4' }], []))
     expect(screen.getByRole('textbox', { name: 'Ask' })).toHaveTextContent('Payments Q4')
   })
 
@@ -62,7 +62,7 @@ describe('AgentMentionInput', () => {
   })
 
   it('puts a pasted screenshot into the message as an uploaded image block', async () => {
-    const onChange = vi.fn<(value: string, mentions: AgentMention[]) => void>()
+    const onChange = vi.fn<(value: string, mentions: AgentMention[], skills: unknown[]) => void>()
     const onBusyChange = vi.fn<(busy: boolean) => void>()
     let finish: (value: AgentUpload) => void = () => undefined
     const onUploadFile = vi.fn(() => new Promise<AgentUpload>(resolve => { finish = resolve }))
@@ -79,17 +79,17 @@ describe('AgentMentionInput', () => {
     await waitFor(() => expect(onUploadFile).toHaveBeenCalledWith(screenshot))
     expect(onBusyChange).toHaveBeenLastCalledWith(true)
     finish(upload(screenshot))
-    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining('![image.png](/uploads/agent_upload_0123456789abcdef_1_image.png)'), []))
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining('![image.png](/uploads/agent_upload_0123456789abcdef_1_image.png)'), [], []))
     await waitFor(() => expect(onBusyChange).toHaveBeenLastCalledWith(false))
     expect(block.querySelector('img')).toHaveAttribute('src', '/uploads/agent_upload_0123456789abcdef_1_image.png')
     // The toolbar's delete takes the image (and its empty line) back out.
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     expect(box.querySelector('[data-agent-block]')).toBeNull()
-    expect(onChange).toHaveBeenLastCalledWith('', [])
+    expect(onChange).toHaveBeenLastCalledWith('', [], [])
   })
 
   it('turns a pasted PDF, video and SVG into blocks, ignores audio by MIME type and keeps an untyped .wav as a file', async () => {
-    const onChange = vi.fn<(value: string, mentions: AgentMention[]) => void>()
+    const onChange = vi.fn<(value: string, mentions: AgentMention[], skills: unknown[]) => void>()
     const onUploadFile = vi.fn(async (file: File) => upload(file))
     URL.createObjectURL = vi.fn(() => 'blob:preview')
     URL.revokeObjectURL = vi.fn()
@@ -106,6 +106,7 @@ describe('AgentMentionInput', () => {
     expect(onUploadFile.mock.calls.map(([file]) => file.name)).toEqual(['spec.pdf', 'demo.mp4', 'logo.svg', 'clip.wav'])
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(
       '\n::file[spec.pdf](/uploads/agent_upload_0123456789abcdef_1_spec.pdf){size="3" type="application/pdf"}\n\n::video[demo.mp4](/uploads/agent_upload_0123456789abcdef_1_demo.mp4)\n\n![logo.svg](/uploads/agent_upload_0123456789abcdef_1_logo.svg)\n\n::file[clip.wav](/uploads/agent_upload_0123456789abcdef_1_clip.wav){size="3" type=""}\n\n',
+      [],
       [],
     ))
     // The card shows the name and size; the video has the custom player.
@@ -147,7 +148,7 @@ describe('AgentMentionInput', () => {
   })
 
   it('writes a message with images, videos and files back as blocks (editing, drafts)', async () => {
-    const onChange = vi.fn<(value: string, mentions: AgentMention[]) => void>()
+    const onChange = vi.fn<(value: string, mentions: AgentMention[], skills: unknown[]) => void>()
     render(<I18nProvider><AgentMentionInput ariaLabel="Ask" data={data} onChange={onChange} onSubmit={vi.fn()} onUploadFile={vi.fn()} placeholder="Ask" value=""/></I18nProvider>)
     const box = screen.getByRole('textbox', { name: 'Ask' })
     const message = '\n![shot.png](/uploads/agent_upload_0123456789abcdef_2_shot.png)\n\n::video[demo.mp4](/uploads/agent_upload_0123456789abcdef_3_demo.mp4)\n\n::file[spec.pdf](/uploads/agent_upload_0123456789abcdef_4_spec.pdf){size="2048" type="application/pdf"}\n\nWhy is this red?'
@@ -155,7 +156,7 @@ describe('AgentMentionInput', () => {
     await waitFor(() => expect(box.querySelector('[data-kind="image"] img')).toHaveAttribute('src', '/uploads/agent_upload_0123456789abcdef_2_shot.png'))
     expect(box.querySelector('[data-kind="video"] video')).toHaveAttribute('src', '/uploads/agent_upload_0123456789abcdef_3_demo.mp4')
     expect(within(box).getByRole('group', { name: 'spec.pdf' })).toHaveTextContent('2 KB')
-    expect(onChange).toHaveBeenLastCalledWith(message, [])
+    expect(onChange).toHaveBeenLastCalledWith(message, [], [])
   })
 
   it('draws an initiative chip with its glyph', () => {

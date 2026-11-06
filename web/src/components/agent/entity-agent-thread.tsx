@@ -22,8 +22,8 @@ import { pastedAgentFiles } from './agent-attachments'
 import { AgentMessageAttachments } from './agent-message-attachments'
 import { AgentContentWithBlocks } from './agent-content-blocks'
 import { hasAgentBlocks } from './agent-content-model'
-import type { AgentMessage, AgentMessagePart, AgentSession, BootstrapData } from '@/types/flow'
-import { AgentMentionInput, type AgentMention, type AgentUpload } from './agent-mention-input'
+import type { AgentMessage, AgentMessagePart, AgentSession, BootstrapData, PersonalAgentSkill } from '@/types/flow'
+import { AgentMentionInput, type AgentMention, type AgentSkillMention, type AgentUpload } from './agent-mention-input'
 import { mentionIcon } from './agent-mention-icon'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import {
@@ -71,8 +71,10 @@ export type EntityAgentThreadProps = {
   /** Workspace data for @-mentions; when set the composer becomes a mention editor. */
   mentionData?: BootstrapData
   onMentionsChange?: (mentions: AgentMention[]) => void
-  /** Controls at the start of the composer footer (e.g. the Skills picker). */
-  footerStart?: ReactNode
+  /** The skill chips in the message change (they run with the message). */
+  onSkillsChange?: (skills: AgentSkillMention[]) => void
+  /** Set to a function that puts a skill chip in the message (the "+" menu's Skill submenu). */
+  insertSkillRef?: MutableRefObject<((skill: PersonalAgentSkill) => void) | null>
   onRemoveContext?: (issueId: string) => void
   /** Extra controls rendered under a message (e.g. "Insert into update"). */
   renderMessageActions?: (message: AgentMessage, index: number) => ReactNode
@@ -141,7 +143,8 @@ export function EntityAgentThread({
   welcome,
   mentionData,
   onMentionsChange,
-  footerStart,
+  onSkillsChange,
+  insertSkillRef,
   onRemoveContext,
   renderMessageActions,
   renderMessageAttachment,
@@ -461,7 +464,7 @@ export function EntityAgentThread({
             pageIssues={contextIssues}
             placeholder={composerPlaceholder}
             value={input}
-            onChange={(value, mentions) => { onInputChange(value); onMentionsChange?.(mentions) }}
+            onChange={(value, mentions, skills) => { onInputChange(value); onMentionsChange?.(mentions); onSkillsChange?.(skills) }}
             onSubmit={onSubmit}
             quote={quote}
             onQuoteRemove={onQuoteRemove}
@@ -470,6 +473,7 @@ export function EntityAgentThread({
             onPasteFiles={onPasteFiles}
             onUploadFile={onUploadFile}
             insertFilesRef={insertFilesRef}
+            insertSkillRef={insertSkillRef}
             onBusyChange={onFilesBusyChange}
           />
         ) : (
@@ -494,7 +498,6 @@ export function EntityAgentThread({
         />
         )}
         <footer>
-          {footerStart}
           <span />
           {composerTools}
           {loading ? (

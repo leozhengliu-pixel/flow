@@ -227,7 +227,7 @@ describe('agent page composer focus', () => {
     renderPage([])
     const editor = await screen.findByRole('textbox', editorName)
     editor.blur()
-    expect(fireEvent.mouseDown(screen.getByRole('button', { name: 'Attach images, files, or videos' }))).toBe(true)
+    expect(fireEvent.mouseDown(screen.getByRole('button', { name: 'Add files and more' }))).toBe(true)
     expect(editor).not.toHaveFocus()
   })
 })

@@ -13,6 +13,8 @@ const dedicated = new Set([
   'issue/editor/mention-menu.tsx',
   // The agent composer's @-mention menu is the same inline, caret-driven interaction.
   'agent/agent-mention-input.tsx',
+  // The composer's "/" menu (skills and commands) is the same inline, caret-driven interaction, with a hover card for the focused skill.
+  'agent/agent-slash-menu.tsx',
   // Loop instructions use the same inline, caret-driven @-mention interaction.
   'loops/loop-instructions-editor.tsx',
   // Account security's team scope combobox owns filtering and multi-select

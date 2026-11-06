@@ -43,14 +43,16 @@ type agentSessionInput struct {
 
 // agentMessageInput is a follow-up message plus anything @-mentioned in it.
 type agentMessageInput struct {
-	Message       string                `json:"message"`
-	IssueIDs      []string              `json:"issueIds"`
-	ProjectIDs    []string              `json:"projectIds"`
-	DocumentIDs   []string              `json:"documentIds"`
-	InitiativeIDs []string              `json:"initiativeIds"`
-	UserIDs       []string              `json:"userIds"`
-	LoopIDs       []string              `json:"loopIds"`
-	Mentions      []domain.AgentMention `json:"mentions"`
+	Message       string   `json:"message"`
+	IssueIDs      []string `json:"issueIds"`
+	ProjectIDs    []string `json:"projectIds"`
+	DocumentIDs   []string `json:"documentIds"`
+	InitiativeIDs []string `json:"initiativeIds"`
+	UserIDs       []string `json:"userIds"`
+	LoopIDs       []string `json:"loopIds"`
+	// SkillIDs are the skills the message runs with (its skill chips); they join the conversation's skills.
+	SkillIDs []string              `json:"skillIds"`
+	Mentions []domain.AgentMention `json:"mentions"`
 	// Answer picks an option of the reply's pending question (ask_user); the message carries its label.
 	Answer *agentQuestionAnswer `json:"answer,omitempty"`
 	// Attachments are files sent with the message (see agent_attachments.go).
@@ -491,8 +493,12 @@ func (s *server) appendAgentSessionMessage(r *http.Request, id string, input age
 		session.InitiativeIDs = mergeAgentIDs(session.InitiativeIDs, input.InitiativeIDs)
 		session.UserIDs = mergeAgentIDs(session.UserIDs, input.UserIDs)
 		session.LoopIDs = mergeAgentIDs(session.LoopIDs, input.LoopIDs)
+		session.SkillIDs = mergeAgentIDs(session.SkillIDs, input.SkillIDs)
 		if err := checkAgentLoops(data, session.LoopIDs); err != nil {
 			return err
+		}
+		if len(selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)) != len(session.SkillIDs) {
+			return fmt.Errorf("%w: one or more selected skills were not found", errInvalid)
 		}
 		if len(session.IssueIDs) > 25 || len(session.ProjectIDs) > 25 || len(session.DocumentIDs) > 25 || len(session.InitiativeIDs) > 25 || len(session.UserIDs) > 25 {
 			return fmt.Errorf("%w: a conversation can reference at most 25 issues, projects, documents and initiatives each", errInvalid)

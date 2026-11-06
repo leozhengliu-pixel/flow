@@ -13,14 +13,15 @@ import { DisplayIcon, FilterIcon } from "@/components/ui/view-action-icons";
 import { AgentWorkGroup } from "@/components/agent/agent-work-group";
 import { AgentAnswerText } from "@/components/agent/agent-answer";
 import { AGENT_ATTACHMENT_ACCEPT, agentFileAttachment, attachAgentFiles, pastedAgentFiles } from "@/components/agent/agent-attachments";
-import { AgentAttachIcon, AgentStopIcon } from "@/components/agent/agent-icons";
-import { AgentSkillsPicker } from "@/components/agent/agent-skills-picker";
+import { AgentStopIcon } from "@/components/agent/agent-icons";
+import { AgentAddMenu } from "@/components/agent/agent-add-menu";
+import { skillIdsInText, skillToken } from "@/components/agent/agent-skill-menu";
 import { AttachmentRemoveButton } from "@/components/ui/attachment-remove-button";
 import { toast } from "@/lib/toast";
 import { cancelLoopRun, getLoopRun, getLoopVersion, listLoopRuns, rateLoopRun, replyToLoopRun, runLoopNow } from "@/lib/api";
 import { LOOP_RUN_ACTIVITY_EVENT, type LoopRunActivity } from "@/lib/loop-run-activity";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { editLoopPath, loopPath, loopRunPath, loopsPath } from "@/lib/app-routes";
+import { editLoopPath, loopPath, loopRunPath, loopsPath, newAgentSkillPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, LoopRun, LoopRunReply, LoopRunStatus, LoopVersion } from "@/types/flow";
 import { copyText, loopUrl, runParts, useLoopRecord } from "./loop-data";
@@ -696,7 +697,7 @@ function RunReplyComposer({
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string>();
-  const [skillIds, setSkillIds] = useState<string[]>([]);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
   const canSend = Boolean(body.trim()) && !busy && !sending;
@@ -713,7 +714,7 @@ function RunReplyComposer({
     setSendError(undefined);
     try {
       const files = await Promise.all(previousAttachments.map(agentFileAttachment));
-      onReplied(await replyToLoopRun(loopId, run.id, message, { skillIds, attachments: files }));
+      onReplied(await replyToLoopRun(loopId, run.id, message, { skillIds: skillIdsInText(message, data.agentSkills), attachments: files }));
     } catch (reason) {
       setBody(previousBody);
       setAttachments(previousAttachments);
@@ -745,6 +746,7 @@ function RunReplyComposer({
         </div>
       )}
       <textarea
+        ref={bodyRef}
         aria-label={t("Ask about this run…")}
         placeholder={t(busy ? "The agent is working…" : "Ask about this run…")}
         value={body}
@@ -765,11 +767,23 @@ function RunReplyComposer({
         }}
       />
       <div className="loops-run-composer-actions">
-        <AgentSkillsPicker className="loops-run-skills" data={data} selectedIds={skillIds} onChange={setSkillIds} onNavigate={onNavigate} />
         <span />
-        <button type="button" className="loops-run-attach" aria-label={t("Attach images, files, or videos")} onClick={() => fileInput.current?.click()}>
-          <AgentAttachIcon />
-        </button>
+        <AgentAddMenu
+          className="loops-run-attach"
+          skills={data.agentSkills}
+          onFile={() => fileInput.current?.click()}
+          onSkill={(skill) => {
+            // The textarea has no chips: the skill goes in as "/Name" at the caret, and the reply runs with it.
+            const box = bodyRef.current;
+            const at = box?.selectionStart ?? body.length;
+            const end = box?.selectionEnd ?? at;
+            const before = body.slice(0, at);
+            const token = `${before && !/\s$/.test(before) ? " " : ""}${skillToken(skill)} `;
+            setBody(before + token + body.slice(end));
+            requestAnimationFrame(() => { box?.focus(); box?.setSelectionRange(at + token.length, at + token.length); });
+          }}
+          onCreateSkill={() => onNavigate(newAgentSkillPath(data.workspace.urlKey))}
+        />
         <input
           ref={fileInput}
           accept={AGENT_ATTACHMENT_ACCEPT}

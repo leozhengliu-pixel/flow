@@ -1,0 +1,10 @@
+/*
+ * The composer's "+" menu, measured against the reference app: a 175px surface (File and Skill rows, 32px each); its Skill
+ * submenu grows with the longest skill name up to 401px, ellipsizing past that. Everything else is the shared flow-menu.
+ */
+.flow-menu.agent-add-submenu { max-width: 401px; box-shadow: var(--compact-submenu-shadow); }
+/* The skill search field is 36.5px tall here, which puts the first skill 43px under the submenu's top edge. */
+.flow-menu.agent-add-submenu .flow-menu__search { height: 36.5px; }
+.flow-menu.agent-add-submenu .flow-menu__search input { height: 36px; }
+/* Radix places a menu on whole pixels; the reference app's skill search submenu sits half a pixel above that. */
+.flow-menu.agent-add-submenu.has-search { position: relative; top: -0.5px; }

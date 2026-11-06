@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type RefObject } from "react";
-import { Check, ChevronRight, Plus, Search, X } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { fetchAgentStatus } from "@/lib/api";
 import {
   streamAgentSessionMessage,
@@ -13,13 +13,9 @@ import type {
   PersonalAgentSkill,
 } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
-import {
-  AgentAttachIcon,
-  AgentChevronDownIcon,
-  AgentPointerIcon,
-  AgentSkillsIcon,
-  AgentSubmitIcon,
-} from "@/components/agent/agent-icons";
+import { AgentPointerIcon, AgentSubmitIcon } from "@/components/agent/agent-icons";
+import { AgentAddMenu } from "@/components/agent/agent-add-menu";
+import { skillIdsInText, skillToken } from "@/components/agent/agent-skill-menu";
 import { AgentAnswerText } from "@/components/agent/agent-answer";
 import { useAgentEntityData } from "@/components/agent/agent-entity-data";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
@@ -80,9 +76,6 @@ export function ProjectCreationAgent({
   const [session, setSession] = useState<AgentSession>();
   const [status, setStatus] = useState<AgentStatus>();
   const [busy, setBusy] = useState(false);
-  const [skillsOpen, setSkillsOpen] = useState(false);
-  const [skillQuery, setSkillQuery] = useState("");
-  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [error, setError] = useState<string>();
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -116,41 +109,21 @@ export function ProjectCreationAgent({
     viewport.scrollTop = viewport.scrollHeight;
   }, [messages, busy]);
 
-  useEffect(() => {
-    if (!skillsOpen) return;
-    const close = (event: PointerEvent) => {
-      if (!(event.target as HTMLElement | null)?.closest(".project-creation-agent__skill-wrap")) setSkillsOpen(false);
-    };
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, [skillsOpen]);
-
-  if (!skillsOpen && skillQuery) setSkillQuery("");
-
   const chooseSuggestion = (message: string) => {
     setInput(message);
     void send(message);
   };
 
-  const chooseSkill = (skillId: string) => {
-    setSelectedSkills((current) =>
-      current.includes(skillId)
-        ? current.filter((id) => id !== skillId)
-        : [...current, skillId],
-    );
+  // The textarea has no chips: a skill goes in as "/Name" at the caret, and the message runs with the skills it names.
+  const insertSkill = (skill: PersonalAgentSkill) => {
+    const box = inputRef.current;
+    const at = box?.selectionStart ?? input.length;
+    const end = box?.selectionEnd ?? at;
+    const before = input.slice(0, at);
+    const token = `${before && !/\s$/.test(before) ? " " : ""}${skillToken(skill)} `;
+    setInput(before + token + input.slice(end));
+    requestAnimationFrame(() => { box?.focus(); box?.setSelectionRange(at + token.length, at + token.length); });
   };
-
-  const createSkill = () => {
-    setSkillsOpen(false);
-    if (onCreateSkill) {
-      onCreateSkill();
-      return;
-    }
-  };
-
-  const visibleSkills = agentSkills.filter((skill) =>
-    skill.name.toLocaleLowerCase().includes(skillQuery.trim().toLocaleLowerCase()),
-  );
 
   const send = async (override?: string) => {
     const text = (override ?? input).trim();
@@ -253,7 +226,7 @@ export function ProjectCreationAgent({
         : await streamNewAgentSession(
             {
               message,
-              skillIds: selectedSkills,
+              skillIds: skillIdsInText(text, agentSkills),
               location: "page",
             },
             onEvent,
@@ -289,13 +262,6 @@ export function ProjectCreationAgent({
       className="project-creation-agent"
       data-hidden={hidden || undefined}
       ref={panelRef}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && skillsOpen) {
-          event.preventDefault();
-          event.stopPropagation();
-          setSkillsOpen(false);
-        }
-      }}
       role="complementary"
     >
       <header className="project-creation-agent__header">
@@ -430,74 +396,13 @@ export function ProjectCreationAgent({
           value={input}
         />
         <footer>
-          <div className="project-creation-agent__skill-wrap">
-            <button
-              aria-expanded={skillsOpen}
-              aria-haspopup="menu"
-              aria-label={t("Skills")}
-              className="project-creation-agent__skills"
-              onClick={() => setSkillsOpen((value) => !value)}
-              type="button"
-            >
-              <AgentSkillsIcon />
-              <span>{t("Skills")}</span>
-              <AgentChevronDownIcon />
-            </button>
-            {skillsOpen && (
-              <div className="project-creation-agent__skills-menu" role="menu">
-                <div className="project-creation-agent__skills-search">
-                  <Search size={14} />
-                  <input
-                    aria-label={t("Search skills…")}
-                    autoFocus
-                    onChange={(event) => setSkillQuery(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") {
-                        event.preventDefault();
-                        setSkillsOpen(false);
-                      }
-                    }}
-                    placeholder={t("Search skills…")}
-                    value={skillQuery}
-                  />
-                </div>
-                {visibleSkills.length ? (
-                  <>
-                  {visibleSkills.map((skill) => (
-                    <button
-                      aria-checked={selectedSkills.includes(skill.id)}
-                      key={skill.id}
-                      onClick={() => chooseSkill(skill.id)}
-                      role="menuitemcheckbox"
-                      type="button"
-                    >
-                      <AgentSkillsIcon />
-                      <span>{skill.name}</span>
-                      {selectedSkills.includes(skill.id) && <Check />}
-                    </button>
-                  ))}
-                  <AppLink href={`/${window.location.pathname.split('/').filter(Boolean)[0]}/settings/skill/new`} className="project-creation-agent__create-skill" onClick={event => { if (onCreateSkill) event.preventDefault(); createSkill(); }} role="menuitem">
-                    <Plus size={14} />
-                    <span>{t("Create skill")}</span>
-                  </AppLink>
-                  </>
-                ) : (
-                  <AppLink href={`/${window.location.pathname.split('/').filter(Boolean)[0]}/settings/skill/new`} className="project-creation-agent__create-skill" onClick={event => { if (onCreateSkill) event.preventDefault(); createSkill(); }} role="menuitem">
-                    <Plus size={14} />
-                    <span>{t("Create skill")}</span>
-                  </AppLink>
-                )}
-              </div>
-            )}
-          </div>
           <span />
-          <button
-            aria-label={t("Attach images, files, or videos")}
-            onClick={() => fileInputRef.current?.click()}
-            type="button"
-          >
-            <AgentAttachIcon size={14} />
-          </button>
+          <AgentAddMenu
+            skills={agentSkills}
+            onFile={() => fileInputRef.current?.click()}
+            onSkill={insertSkill}
+            onCreateSkill={() => onCreateSkill?.()}
+          />
           <input
             accept="image/*,video/*,text/*,application/json,application/pdf,.md,.markdown,.csv"
             className="project-creation-agent__file-input"
@@ -611,4 +516,3 @@ function formatConversationTime(value: string | undefined, todayLabel: string) {
   if (Number.isNaN(date.getTime())) return todayLabel;
   return `${todayLabel} ${new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: false }).format(date)}`;
 }
-import { AppLink } from '@/components/ui/app-link';

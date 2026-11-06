@@ -1,6 +1,7 @@
 /** Edit, Use in chat and Delete for a personal agent skill, shared by the skills list rows and the skill page. */
 import { useNavigate } from "react-router-dom";
 import { writeAgentDraft } from "@/components/agent/agent-drafts";
+import { skillToken } from "@/components/agent/agent-skill-menu";
 import { useI18n } from "@/i18n/i18n";
 import { deleteAgentSkill, updateStructuredTeamSettings } from "@/lib/api";
 import { issueMoveTeams } from "@/lib/issue-team-move";
@@ -37,9 +38,9 @@ export function useAgentSkillActions(data: BootstrapData, onReload: () => Promis
       }
     },
     edit: (skill: PersonalAgentSkill) => navigate(agentSkillPath(urlKey, skill.id)),
-    /** Opens a new agent chat with the skill selected in its composer. */
+    /** Opens a new agent chat with the skill's chip in its composer. */
     useInChat: (skill: PersonalAgentSkill) => {
-      writeAgentDraft(`flow:agent-draft:${data.workspace.id}`, { input: "", skillIds: [skill.id] });
+      writeAgentDraft(`flow:agent-draft:${data.workspace.id}`, { input: `${skillToken(skill)} `, skillIds: [skill.id] });
       navigate(agentPath(urlKey));
     },
     /** Confirms, deletes and reloads; `afterDelete` runs once it is gone (the skill page returns to the list). */

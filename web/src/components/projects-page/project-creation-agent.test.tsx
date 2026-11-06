@@ -156,8 +156,9 @@ describe('ProjectCreationAgent', () => {
     render(<I18nProvider><ProjectCreationAgent onCreateSkill={onCreateSkill} onClose={vi.fn()} onHide={vi.fn()}/></I18nProvider>)
 
     await waitFor(() => expect(api.fetchAgentStatus).toHaveBeenCalled())
-    await user.click(screen.getByRole('button', { name: 'Skills' }))
-    await user.click(screen.getByRole('menuitem', { name: 'Create skill' }))
+    await user.click(screen.getByRole('button', { name: 'Add files and more' }))
+    await user.click(await screen.findByRole('menuitem', { name: /^Skill/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Create skill' }))
     expect(onCreateSkill).toHaveBeenCalledTimes(1)
   })
 })

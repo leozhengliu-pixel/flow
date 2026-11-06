@@ -3,6 +3,11 @@
 .editor[data-empty]::before{content:attr(data-placeholder);position:absolute;pointer-events:none;color:var(--pk-faint)}
 .chip{display:inline-flex;align-items:center;gap:4px;margin:0 1px;padding:1.5px 3.9px 1.5px 2.6px;border:.5px solid var(--pk-border);border-radius:4px;background:var(--chip-bg);color:var(--pk-text);font:450 13px/16px var(--font);vertical-align:baseline;user-select:all}
 .chipIcon{display:inline-grid;place-items:center;width:14px;height:14px}
+/* A skill's chip, measured against the reference app: it follows the composer's own type (15px on the Agent page, 13px in the
+   floating panel) and sits inline in the line, 3px/4.5px in with the icon 4px before the name and no visible outline. */
+.skillChip{display:inline;margin:0;padding:1.5px 4.5px 1.5px 3px;border:.5px solid transparent;background:var(--agent-skill-chip-bg);color:var(--agent-skill-chip-text);font:450 1em/inherit var(--font)}
+.skillChip .chipIcon{display:inline-block;width:1em;height:1em;margin-right:4px;vertical-align:-2px}
+.skillChip .chipIcon svg{width:100%;height:100%}
 .chip .identifier{color:var(--chip-text)}
 .menu{position:fixed;z-index:1000;width:350px;max-height:320px;overflow-y:auto;padding:4px 0 6px;border:.5px solid var(--pk-border);border-radius:12px;background:var(--pk-surface);box-shadow:var(--pk-shadow)}
 .group{height:28px;display:flex;align-items:center;padding:0 14px;color:var(--pk-muted);font:500 12px/normal var(--font)}

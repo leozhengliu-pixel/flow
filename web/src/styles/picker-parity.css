@@ -1068,27 +1068,6 @@ html:root body .bottom-agent > button:not(#_):is(:hover, :focus-visible, [aria-e
   color: var(--agent-float-pill-active-fg);
 }
 
-/* ── Agent composer Skills button ──────────────────────────────────────── */
-html:root body .agent-skills-trigger:not(#_) {
-  width: auto;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 9999px;
-  background: transparent;
-  color: var(--chip-text);
-  font: 500 12px/normal var(--font);
-}
-html:root body .agent-skills-trigger:not(#_):hover,
-html:root body .agent-skills-trigger:not(#_)[data-state=open] {
-  background: var(--pk-hover);
-  color: var(--pk-text);
-}
-html:root body .agent-skills-trigger:not(#_) svg { width: 14px; height: 14px; }
-
 /* Pickers whose search stays hidden until you type. */
 @media (--desktop-layout) {
   .property-command-surface.issue-labels-menu .property-command-options [role=option] { grid-template-columns: 16px 18px minmax(0,1fr); gap: 6px; padding: 0 18px 0 14px; }
@@ -1121,7 +1100,6 @@ html:root body .property-command-surface .property-command-search.is-visually-hi
   overflow: hidden;
   border: 0;
 }
-html:root body .agent-skills-trigger:not(#_) svg:last-child { width: 10px; height: 7px; }
 
 /* ── Sub-issues header: display options and + (right-click for more) ──── */
 html:root body .flow-sub-issues > header:not(#_) { position: relative; grid-template-columns: auto auto minmax(0, 1fr) 28px 28px; }

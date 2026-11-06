@@ -2,7 +2,6 @@
 
 /* Native title tooltips are the fallback for collapsed navigation rows. */
 a.ip-status-usage,
-a.project-creation-agent__create-skill { text-decoration: none; }
 
 .sidebar .nav-item[title] { position: relative; }
 

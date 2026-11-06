@@ -5,4 +5,7 @@ export const agentMentionsZhCN: Record<string, string> = {
   "Last edited {date} by {name}": "{name} 最后编辑于 {date}",
   "Last edited {date}": "最后编辑于 {date}",
   "Last updated {date}": "最后更新于 {date}",
+  "Add files and more": "添加文件等",
+  File: "文件",
+  Skill: "技能",
 };

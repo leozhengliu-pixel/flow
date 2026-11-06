@@ -333,7 +333,7 @@
 
 .project-creation-agent__composer footer {
   display: grid;
-  grid-template-columns: auto 1fr 24px 24px;
+  grid-template-columns: 1fr 24px 24px;
   align-items: center;
   gap: 8px;
   box-sizing: border-box;
@@ -343,8 +343,7 @@
   padding: 0 6px 4px 2px;
 }
 
-.project-creation-agent__composer footer > button,
-.project-creation-agent__skills {
+.project-creation-agent__composer footer > button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -358,9 +357,7 @@
 
 .project-creation-agent__composer footer > button:hover:not(:disabled),
 .project-creation-agent__composer footer > button:focus-visible,
-.project-creation-agent__skills:hover,
-.project-creation-agent__skills:focus-visible,
-.project-creation-agent__skills[aria-expanded="true"] {
+.project-creation-agent__composer footer > button[aria-expanded="true"] {
   background: var(--theme-surface-hover);
   color: var(--theme-text-primary);
   outline: 0;
@@ -371,84 +368,6 @@
 .project-creation-agent__composer footer > button:last-child:disabled { opacity: .4; }
 .project-creation-agent__composer footer svg { width: 14px; height: 14px; }
 
-.project-creation-agent__skill-wrap { position: relative; }
-
-.project-creation-agent__skills {
-  gap: 6px;
-  padding: 0 6px 0 4px;
-  font: 500 12px/16px var(--font) !important;
-  white-space: nowrap;
-}
-
-.project-creation-agent__skills > svg:last-child { width: 8px; height: 9px; }
-
-.project-creation-agent__skills-menu {
-  position: absolute;
-  z-index: 5;
-  top: 28px;
-  bottom: auto;
-  left: .5px;
-  width: 175px;
-  overflow: hidden;
-  padding: 6px 0;
-  border: .5px solid var(--popover-border);
-  border-radius: 12px;
-  background: var(--theme-surface-2);
-  box-shadow: var(--shadow-dialog);
-}
-
-.project-creation-agent__skills-search {
-  position: absolute;
-  left: -99999px;
-  display: flex;
-  height: 36px;
-  width: 1px;
-  overflow: hidden;
-  align-items: center;
-  gap: 7px;
-  padding: 0 10px 0 14px;
-  border-bottom: .5px solid var(--theme-border);
-  color: var(--theme-text-secondary);
-}
-
-.project-creation-agent__skills-search input {
-  min-width: 0;
-  flex: 1;
-  height: 36px;
-  padding: 10px 0 9px;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--theme-text-primary);
-  font: 13px/17px var(--font);
-}
-
-.project-creation-agent__skills-search input::placeholder { color: var(--theme-text-secondary); }
-
-.project-creation-agent__skills-menu button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  height: 32px;
-  padding: 0 18px 0 14px;
-  border: 0;
-  background: transparent;
-  color: var(--theme-text-primary);
-  font: 500 12px/16px var(--font) !important;
-  text-align: left;
-  cursor: pointer;
-}
-
-.project-creation-agent__skills-menu .project-creation-agent__create-skill {
-  border-radius: 8px;
-  padding-left: 14px;
-}
-
-.project-creation-agent__skills-menu button:hover,
-.project-creation-agent__skills-menu button:focus-visible { background: var(--theme-surface-hover); outline: 0; }
-.project-creation-agent__skills-menu button > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.project-creation-agent__skills-menu button > svg:last-child { margin-left: auto; width: 14px; height: 14px; }
 .project-creation-agent__file-input { display: none; }
 .project-creation-agent__attachments { display: flex; gap: 4px; overflow: hidden; padding: 0 6px 4px; }
 .project-creation-agent__attachments span { max-width: 140px; overflow: hidden; padding: 2px 5px; border-radius: 4px; background: var(--theme-surface-hover); color: var(--theme-text-secondary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -472,16 +391,10 @@
 :root[data-theme="light"] .project-creation-agent__empty > strong,
 :root[data-theme="light"] .project-creation-agent__suggestions button,
 :root[data-theme="light"] .project-creation-agent__message,
-:root[data-theme="light"] .project-creation-agent__composer textarea,
-:root[data-theme="light"] .project-creation-agent__skills-menu button {
+:root[data-theme="light"] .project-creation-agent__composer textarea {
   color: var(--theme-text-primary);
 }
 :root[data-theme="light"] .project-creation-agent__empty > p { color: var(--theme-text-secondary); }
-:root[data-theme="light"] .project-creation-agent__skills-menu {
-  border-color: var(--popover-border);
-  background: var(--theme-surface-2);
-  box-shadow: var(--shadow-dialog);
-}
 
 @media (max-width: 900px) {
   .project-creation-agent { flex-basis: 360px; }

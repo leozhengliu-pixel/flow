@@ -247,14 +247,16 @@ describe('LoopRunPage', () => {
     renderPage('run-1')
     const box = await screen.findByRole('textbox', { name: 'Ask about this run…' })
     const footer = box.closest('form')!.querySelector('.loops-run-composer-actions')!
-    // The reference app's layout: Skills on the left, attach then send on the right.
-    expect([...footer.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Skills', 'Attach images, files, or videos', 'Send message'])
+    // The reference app's layout: the "+" menu then send on the right, and no Skills button.
+    expect([...footer.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Add files and more', 'Send message'])
 
-    await user.click(screen.getByRole('button', { name: 'Skills' }))
-    await user.click(await screen.findByRole('option', { name: /Terse answers/ }))
+    await user.click(screen.getByRole('button', { name: 'Add files and more' }))
+    await user.click(await screen.findByRole('menuitem', { name: /^Skill/ }))
     // The skill list holds the skills only, as in the reference app; "Create skill" shows while there are none.
-    expect(screen.queryByRole('option', { name: /Create skill/ })).not.toBeInTheDocument()
-    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('menuitem', { name: /Create skill/ })).not.toBeInTheDocument()
+    await user.click(await screen.findByRole('menuitem', { name: /Terse answers/ }))
+    // The textarea has no chips: the skill goes in as "/Name" at the caret.
+    expect(box).toHaveValue('/Terse answers ')
 
     const input = box.closest('form')!.querySelector<HTMLInputElement>('input[type="file"]')!
     expect(input).toHaveAttribute('accept', expect.stringContaining('image/*'))
@@ -268,7 +270,7 @@ describe('LoopRunPage', () => {
     expect(screen.queryByText('deck.pdf')).not.toBeInTheDocument()
 
     await user.type(box, 'Check this{Enter}')
-    await waitFor(() => expect(api.replyToLoopRun).toHaveBeenCalledWith('loop-1', 'run-1', 'Check this', {
+    await waitFor(() => expect(api.replyToLoopRun).toHaveBeenCalledWith('loop-1', 'run-1', '/Terse answers Check this', {
       skillIds: ['skill-1'],
       attachments: [{ name: 'notes.md', contentType: 'text/markdown', size: 13, content: '# Escalations' }],
     }))

@@ -41,6 +41,8 @@ export type AgentMessageMentions = {
   userIds?: string[]
   loopIds?: string[]
   mentions?: { type: 'issue' | 'project' | 'document' | 'initiative' | 'user'; id: string; label: string }[]
+  /** Skills the message runs with (its skill chips); the server adds them to the conversation. */
+  skillIds?: string[]
   /** Picks an option of the reply's pending question (ask_user). */
   answer?: { partId: string; value: string }
   /** Files sent with the message. */

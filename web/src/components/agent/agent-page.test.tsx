@@ -45,7 +45,9 @@ describe('agent page composer', () => {
     api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
     render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     expect(await screen.findByRole('textbox', { name: 'Send a message to Flow AI' })).toHaveAttribute('data-placeholder', 'Ask Flow…')
-    expect(screen.getByRole('button', { name: 'Skills' })).toBeVisible()
+    // The reference app's composer has no Skills button: skills are in the "+" menu and the "/" menu.
+    expect(screen.queryByRole('button', { name: 'Skills' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add files and more' })).toBeVisible()
     expect(screen.getByText('Get started with some examples')).toBeVisible()
     expect(screen.getByText('Create a new project')).toBeVisible()
     expect(screen.getByText('Research a topic')).toBeVisible()

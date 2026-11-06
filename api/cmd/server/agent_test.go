@@ -90,6 +90,13 @@ func TestAgentSessionAndSkillLifecycle(t *testing.T) {
 	if len(session.Messages) != 4 {
 		t.Fatalf("follow-up did not persist: %#v", session.Messages)
 	}
+	// A follow-up can add skills (its skill chips); they join the conversation, and an unknown one is refused.
+	second := requestJSON[domain.PersonalAgentSkill](t, handler, http.MethodPost, "/api/agent/skills", map[string]string{"name": "Triage", "instructions": "Sort new issues."}, http.StatusCreated)
+	session = requestJSON[domain.AgentSession](t, handler, http.MethodPost, "/api/agent/sessions/"+session.ID+"/messages", map[string]any{"message": "And triage", "skillIds": []string{second.ID}}, http.StatusOK)
+	if len(session.SkillIDs) != 2 || session.SkillIDs[1] != second.ID {
+		t.Fatalf("follow-up skill not added: %#v", session.SkillIDs)
+	}
+	requestJSON[any](t, handler, http.MethodPost, "/api/agent/sessions/"+session.ID+"/messages", map[string]any{"message": "Nope", "skillIds": []string{"missing"}}, http.StatusBadRequest)
 	session = requestJSON[domain.AgentSession](t, handler, http.MethodPatch, "/api/agent/sessions/"+session.ID, map[string]any{"favorite": true, "location": "toolbar"}, http.StatusOK)
 	if !session.Favorite || session.Location != "toolbar" {
 		t.Fatalf("session update failed: %#v", session)

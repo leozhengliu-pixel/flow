@@ -79,13 +79,13 @@ export function FlowMenuContent({ label, children, className = '', onCloseAutoFo
 }
 
 /** The same menu as a Radix DropdownMenu surface (a header "…" button). */
-export function FlowDropdownMenuContent({ label, children, className = '', onCloseAutoFocus, align = 'start', alignOffset, sideOffset = 4 }: ContentProps & { align?: 'start' | 'center' | 'end'; alignOffset?: number; sideOffset?: number }) {
+export function FlowDropdownMenuContent({ label, children, className = '', onCloseAutoFocus, align = 'start', alignOffset, side, sideOffset = 4, loop = false, collisionPadding = 12 }: ContentProps & { align?: 'start' | 'center' | 'end'; alignOffset?: number; side?: 'top' | 'bottom' | 'left' | 'right'; sideOffset?: number; /** Arrow keys wrap from the last row to the first and back. */ loop?: boolean; /** How close to the window's edge the menu may sit before it is shifted in. */ collisionPadding?: number }) {
   const registry = useMemo(() => new Set<ShortcutEntry>(), [])
   const onKeyDown = useShortcutKeys(registry)
   useQueuedShortcut(registry)
   return <KitContext.Provider value={DROPDOWN_KIT}>
     <RegistryContext.Provider value={registry}>
-      <DropdownMenu.Content data-flow-motion="floating" aria-label={label} align={align} alignOffset={alignOffset} sideOffset={sideOffset} className={`flow-menu ${className}`} collisionPadding={12} onCloseAutoFocus={onCloseAutoFocus} onKeyDown={onKeyDown}>
+      <DropdownMenu.Content data-flow-motion="floating" aria-label={label} align={align} alignOffset={alignOffset} loop={loop} side={side} sideOffset={sideOffset} className={`flow-menu ${className}`} collisionPadding={collisionPadding} onCloseAutoFocus={onCloseAutoFocus} onKeyDown={onKeyDown}>
         {children}
       </DropdownMenu.Content>
     </RegistryContext.Provider>
@@ -140,7 +140,7 @@ export function FlowMenuSeparator() {
 export type FlowSubmenuApi = { close: () => void; container: HTMLElement | null }
 
 /** A row that opens a nested menu; the nested menu's first row lines up with the trigger row. */
-export function FlowSubmenu({ icon, label, detail, shortcut, children, className = '', search = false, disabled = false, translate = true, onOpenChange }: { icon?: ReactNode; label: string; detail?: ReactNode; shortcut?: string; children: ReactNode | ((api: FlowSubmenuApi) => ReactNode); className?: string; search?: boolean; disabled?: boolean; translate?: boolean; onOpenChange?: (open: boolean) => void }) {
+export function FlowSubmenu({ icon, label, detail, shortcut, children, className = '', search = false, disabled = false, translate = true, loop = false, sideOffset = -2, alignOffset, onOpenChange }: { icon?: ReactNode; label: string; detail?: ReactNode; shortcut?: string; children: ReactNode | ((api: FlowSubmenuApi) => ReactNode); className?: string; search?: boolean; disabled?: boolean; translate?: boolean; loop?: boolean; /** How far the submenu overlaps its parent menu, and where its top edge sits against the trigger row (the defaults line the first row up). */ sideOffset?: number; alignOffset?: number; onOpenChange?: (open: boolean) => void }) {
   const Kit = useContext(KitContext)
   const [open, setOpenState] = useState(false)
   const setOpen = (next: boolean) => { setOpenState(next); onOpenChange?.(next) }
@@ -166,7 +166,7 @@ export function FlowSubmenu({ icon, label, detail, shortcut, children, className
   return <MenuSubmenu kit={Kit} label={text} open={open} onOpenChange={setOpen}
     triggerProps={{ ref: setTrigger, className: 'flow-menu__row', 'data-menu-item': label, disabled }}
     trigger={<FlowMenuRowContent icon={icon} label={text} detail={detail} shortcut={shortcut} submenu/>}
-    contentProps={{ ref: setContainer, 'data-flow-motion': 'floating', 'aria-label': text, className: `flow-menu flow-menu--sub${search ? ' has-search' : ''} ${className}`, 'data-menu': label, sideOffset: -2, alignOffset: search ? -42.3 : -6.5, collisionPadding: 12,
+    contentProps={{ ref: setContainer, 'data-flow-motion': 'floating', 'aria-label': text, className: `flow-menu flow-menu--sub${search ? ' has-search' : ''} ${className}`, 'data-menu': label, loop, sideOffset, alignOffset: alignOffset ?? (search ? -42.3 : -6.5), collisionPadding: 12,
       onFocusOutside: event => {
         // Radix briefly focuses the parent menu while the pointer crosses into the submenu.
         const target = event.target

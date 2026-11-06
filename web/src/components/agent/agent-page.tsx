@@ -10,12 +10,11 @@ import {
 } from "@/lib/api";
 import { streamAgentSessionMessage, streamAgentSessionMessageEdit, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
 import { createAgentStreamEventCoalescer } from "@/lib/agent-stream-coalescer";
-import { agentPath } from "@/lib/app-routes";
-import type { AgentMessage, AgentMessageAttachment, AgentMessagePart, AgentSession, AgentStatus, AgentToolCall, BootstrapData, Project } from "@/types/flow";
+import { agentPath, newAgentSkillPath } from "@/lib/app-routes";
+import type { AgentMessage, AgentMessageAttachment, AgentMessagePart, AgentSession, AgentStatus, AgentToolCall, BootstrapData, PersonalAgentSkill, Project } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import { usePropertyCommand } from "@/components/property/use-property-command";
 import {
-  AgentAttachIcon,
   AgentChevronDownIcon,
   AgentStopIcon,
   AgentSubmitIcon,
@@ -35,7 +34,7 @@ import { AgentQuestionPrompt } from "./agent-approval-question";
 import { formatAgentTime, shouldShowAgentTime } from "./agent-time";
 import { clearAgentDraft, readAgentDraft, writeAgentDraft } from "./agent-drafts";
 import styles from "./agent-page.module.css";
-import { AgentMentionInput, type AgentMention } from "./agent-mention-input";
+import { AgentMentionInput, type AgentMention, type AgentSkillMention } from "./agent-mention-input";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { agentFileAttachment } from './agent-attachments'
 import { AgentMessageAttachments } from './agent-message-attachments'
@@ -43,7 +42,7 @@ import { AgentContentWithBlocks } from './agent-content-blocks'
 import { splitAgentBlocks } from './agent-content-model'
 import { fillAgentComposer } from './agent-composer-dom'
 import { uploadAgentFile } from '@/lib/api'
-import { AgentSkillsPicker } from './agent-skills-picker'
+import { AgentAddMenu } from './agent-add-menu'
 import { applyAgentStreamEvent, markAgentSessionFailed, markAgentSessionStopped } from './agent-stream-state'
 import { isBlankStoppedReply, settleStoppedAgentReply } from './agent-stopped-reply'
 import { clearLiveAgentSession, liveAgentSession, setLiveAgentSession, useLiveAgentSessionsVersion } from './agent-live-sessions'
@@ -97,7 +96,8 @@ export function AgentPage({
       try { return window.localStorage.getItem("flow:agent-examples-dismissed") === "1"; } catch { return false; }
     }),
     [mentions, setMentions] = useState<AgentMention[]>([]),
-    [selectedSkills, setSelectedSkills] = useState<string[]>([]),
+    // The skill chips in the composer: the message runs with these skills.
+    [skills, setSkills] = useState<AgentSkillMention[]>([]),
     [renameOpen, setRenameOpen] = useState(false),
     [editingId, setEditingId] = useState<string>(),
     [activeStreamId, setActiveStreamId] = useState<string>(),
@@ -110,6 +110,7 @@ export function AgentPage({
   const scrollToLatestRef = useRef<(() => void) | undefined>(undefined);
   const editorRef = useRef<HTMLDivElement>(null);
   const insertFilesRef = useRef<((files: File[]) => void) | null>(null);
+  const insertSkillRef = useRef<((skill: PersonalAgentSkill) => void) | null>(null);
   // Pasted images upload at once; the message waits until they are in.
   const [filesUploading, setFilesUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -136,9 +137,9 @@ export function AgentPage({
     if (chatSlug || !restoredAgentDraft.current?.input) return;
     const restored = restoredAgentDraft.current;
     setInput(restored.input);
-    setSelectedSkills(restored.skillIds);
     requestAnimationFrame(() => {
-      writeInputToEditor(editorRef, restored.input);
+      // The composer already put the draft back (skills as chips) when it had the text.
+      if (!editorRef.current?.textContent) writeInputToEditor(editorRef, restored.input);
       if (document.activeElement === editorRef.current) placeCaretAtEnd(editorRef.current);
     });
   }, [chatSlug]);
@@ -204,7 +205,6 @@ export function AgentPage({
   });
   const awaitingReply = follow.following;
   const replyRunning = busy || Boolean(live) || awaitingReply;
-  const attachShortcut = isMacPlatform() ? "⌘⇧U" : "Ctrl Shift U";
   // Seeing a chat (once its reply has settled) clears its unread dot here and in the history list.
   useMarkAgentSessionRead(current, replyRunning, (read, lastReadAt) => {
     const listed = sessions.find((item) => item.id === read.id);
@@ -220,15 +220,9 @@ export function AgentPage({
       if (!chatSlug && !current && !input.trim()) clearAgentDraft(agentDraftKey);
       return;
     }
-    const timer = window.setTimeout(() => writeAgentDraft(agentDraftKey, { input, skillIds: selectedSkills }), 250);
+    const timer = window.setTimeout(() => writeAgentDraft(agentDraftKey, { input }), 250);
     return () => window.clearTimeout(timer);
-  }, [agentDraftKey, chatSlug, current, input, selectedSkills]);
-  // The skills picked follow the chat shown (and what it saved).
-  const [skillsFor, setSkillsFor] = useState<{ id?: string; skillIds?: string[] }>();
-  if (!skillsFor || skillsFor.id !== current?.id || skillsFor.skillIds !== current?.skillIds) {
-    setSkillsFor({ id: current?.id, skillIds: current?.skillIds });
-    setSelectedSkills(current?.skillIds ?? []);
-  }
+  }, [agentDraftKey, chatSlug, current, input]);
   const writeInput = (value: string) => {
     setInput(value);
     writeInputToEditor(editorRef, value);
@@ -242,7 +236,6 @@ export function AgentPage({
   };
   const commitSession = (next: AgentSession) => {
     saveSession(next);
-    setSelectedSkills(next.skillIds);
     onNavigate(agentPath(data.workspace.urlKey, next.slugId));
   };
   // The generated title can land after the reply: re-read just this chat (never the whole workspace) until it does.
@@ -312,6 +305,7 @@ export function AgentPage({
         documentIds: mentions.filter((item) => item.type === "document").map((item) => item.id),
         initiativeIds: mentions.filter((item) => item.type === "initiative").map((item) => item.id),
         userIds: mentions.filter((item) => item.type === "user").map((item) => item.id),
+        skillIds: skills.map((item) => item.id),
         mentions,
         ...(answer ? { answer } : {}),
         ...(sentAttachments.length ? { attachments: sentAttachments } : {}),
@@ -319,13 +313,14 @@ export function AgentPage({
       // The reference app clears the composer as soon as the message is sent; restore it below if sending fails.
       if (!retrying && !answer) {
         setMentions([]);
+        setSkills([]);
         writeInput("");
         setAttachments([]);
       }
       if (current && retryOf) await streamAgentSessionMessageEdit(current.id, retryOf.id, message, onEvent, controller.signal);
       else if (current && editingId) await streamAgentSessionMessageEdit(current.id, editingId, message, onEvent, controller.signal, sentAttachments);
       else if (current) await streamAgentSessionMessage(current.id, message, onEvent, controller.signal, mentioned);
-      else await streamNewAgentSession({ message, ...mentioned, skillIds: selectedSkills, location: "page" }, onEvent, controller.signal);
+      else await streamNewAgentSession({ message, ...mentioned, location: "page" }, onEvent, controller.signal);
       coalescer.flush();
       if (!retrying) {
         clearAgentDraft(agentDraftKey);
@@ -405,7 +400,7 @@ export function AgentPage({
         setHistoryOpen(false);
         setActiveStreamId(undefined);
         writeInput("");
-        setSelectedSkills([]);
+        setSkills([]);
         onNavigate(agentPath(data.workspace.urlKey));
         return;
       }
@@ -451,7 +446,7 @@ export function AgentPage({
     setActiveStreamId(undefined);
     writeInput("");
     clearAgentDraft(agentDraftKey);
-    setSelectedSkills([]);
+    setSkills([]);
     onNavigate(agentPath(data.workspace.urlKey));
   };
   // Deleting is immediate (no confirmation); the toast's Undo restores the chat and returns to it.
@@ -726,27 +721,24 @@ export function AgentPage({
               disabled={replyRunning}
               placeholder={shown ? t(offersChoices(shown, replyRunning) ? "Something else…" : "Reply…") : t("Ask Flow…")}
               value={input}
-              onChange={(value, next) => { setInput(value); setMentions(next); }}
+              onChange={(value, next, chips) => { setInput(value); setMentions(next); setSkills(chips); }}
               onSubmit={() => void send()}
               onUploadFile={file => uploadAgentFile(file)}
               insertFilesRef={insertFilesRef}
+              insertSkillRef={insertSkillRef}
               onBusyChange={setFilesUploading}
             />
           </div>
           <footer>
-            <AgentSkillsPicker data={data} selectedIds={selectedSkills} onChange={setSelectedSkills} onNavigate={onNavigate} />
             <span />
-            <FlowTooltip label={t("Attach images, files, or videos")} shortcut={attachShortcut} sideOffset={8}>
-              <button
-                aria-label={t("Attach images, files, or videos")}
-                className={styles.attachButton}
-                data-agent-attach=""
-                onClick={() => fileInputRef.current?.click()}
-                type="button"
-              >
-                <AgentAttachIcon />
-              </button>
-            </FlowTooltip>
+            <AgentAddMenu
+              className={styles.attachButton}
+              skills={data.agentSkills}
+              onFile={() => fileInputRef.current?.click()}
+              onSkill={(skill) => insertSkillRef.current?.(skill)}
+              onCreateSkill={() => onNavigate(newAgentSkillPath(data.workspace.urlKey))}
+              onClosed={() => editorRef.current?.focus({ preventScroll: true })}
+            />
             <input
               ref={fileInputRef}
               className={styles.fileInput}

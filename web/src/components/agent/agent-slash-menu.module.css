@@ -1,0 +1,219 @@
+/*
+ * The composer's "/" menu and its skill hover card, measured against the reference app: a 227px surface with a .5px border
+ * and 10px corners, 4px above and below the rows; a 28px "Skills" heading; 34px rows 14px in with a 6px-radius highlight
+ * inset 4px; icons in a 20px slot (skills have none) and 8px to the label; key hints 3px apart; 10.5px between groups.
+ */
+.menu {
+  position: fixed;
+  z-index: 1100;
+  box-sizing: border-box;
+  width: 227px;
+  max-height: min(465.75px, calc(100dvh - 16px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0.5px solid var(--agent-slash-border);
+  border-radius: 10px;
+  background: var(--agent-slash-bg);
+  box-shadow: var(--compact-menu-shadow);
+  color: var(--agent-slash-text);
+  font: 400 13px/19.5px var(--font);
+}
+
+.card {
+  position: fixed;
+  z-index: 1101;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 233px;
+  max-width: 320px;
+  padding: 6px;
+  border: 0.5px solid var(--agent-slash-border);
+  border-radius: 8px;
+  background: var(--agent-slash-bg);
+  box-shadow: var(--compact-submenu-shadow);
+  color: var(--agent-slash-card-text);
+  font: 400 13px/19.5px var(--font);
+  pointer-events: auto;
+}
+
+.list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.heading {
+  box-sizing: border-box;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px 2px;
+  color: var(--agent-slash-muted);
+  font: 500 12px/normal var(--font);
+}
+
+.row {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  width: 100%;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--agent-slash-text);
+  font: 450 13px/normal var(--font);
+  text-align: left;
+  cursor: default;
+}
+
+.row::before {
+  content: "";
+  position: absolute;
+  inset: 0 4px;
+  z-index: -1;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.row[data-focused]::before { background: var(--agent-slash-focus); }
+
+.rowBody {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.icon {
+  width: 20px;
+  height: 16px;
+  flex: 0 0 20px;
+  display: grid;
+  place-items: center;
+  color: var(--agent-slash-muted);
+}
+
+.icon > svg { width: 16px; height: 16px; }
+.label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.keys {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  color: var(--agent-slash-muted);
+  white-space: nowrap;
+}
+
+.keys kbd {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: 500 11px/12.1px var(--font);
+}
+
+.separator {
+  height: 0.5px;
+  margin: 5px 0;
+  background: var(--agent-slash-border);
+}
+
+.empty {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 14px;
+  font: 450 13px/normal var(--font);
+}
+
+.empty::before {
+  content: "";
+  position: absolute;
+  inset: 0 4px;
+  z-index: -1;
+  border-radius: 6px;
+  background: var(--agent-slash-focus);
+}
+
+.empty button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--agent-slash-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+}
+
+.cardTitle {
+  height: 16px;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  color: var(--agent-slash-text);
+}
+
+.cardIcon { width: 16px; height: 16px; flex: none; display: grid; place-items: center; color: var(--agent-slash-muted); }
+.cardIcon > svg { width: 16px; height: 16px; }
+
+.cardLink {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  color: var(--agent-slash-card-text);
+  font: 500 13px/normal var(--font);
+  text-decoration: none;
+}
+
+.cardLink > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cardLink > svg { flex: none; width: 12px; height: 12px; color: var(--agent-slash-muted); }
+
+.cardText {
+  display: block;
+  overflow: hidden;
+  color: var(--agent-slash-muted);
+  font: 450 12px/normal var(--font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardOwner {
+  height: 16px;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--agent-slash-text);
+}
+
+.cardOwner > svg { flex: none; width: 16px; height: 16px; color: var(--agent-slash-muted); }
+.cardOwner > span { color: var(--agent-slash-card-text); font: 450 12px/normal var(--font); }

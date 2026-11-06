@@ -100,7 +100,7 @@ describe('floating agent chat (the reference app toolbar chat)', () => {
     expect(screen.queryByText('Welcome to Flow')).not.toBeInTheDocument()
     expect(screen.queryByText('Ask anything or propose changes')).not.toBeInTheDocument()
     expect(screen.getByText('Spec')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Attach images, files, or videos' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Add files and more' })).toBeVisible()
   })
 
   it('routes every file from the attach button into the message as a block and ignores audio', async () => {

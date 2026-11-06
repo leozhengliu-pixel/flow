@@ -33,9 +33,9 @@ describe('tooltips over raised agent surfaces', () => {
   it('uses the elevated variant for the Agent page composer buttons', async () => {
     const user = userEvent.setup()
     render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
-    await user.hover(screen.getByRole('button', { name: 'Attach images, files, or videos' }))
-    expect(await tooltipSurface('Attach images, files, or videos')).toHaveClass('flow-tooltip-content--elevated')
-    await user.unhover(screen.getByRole('button', { name: 'Attach images, files, or videos' }))
+    await user.hover(screen.getByRole('button', { name: 'Add files and more' }))
+    expect(await tooltipSurface('Add files and more')).toHaveClass('flow-tooltip-content--elevated')
+    await user.unhover(screen.getByRole('button', { name: 'Add files and more' }))
     await user.type(screen.getByRole('textbox', { name: 'Send a message to Flow AI' }), 'Hello')
     await user.hover(screen.getByRole('button', { name: 'Submit comment' }))
     const send = await tooltipSurface('Send message')

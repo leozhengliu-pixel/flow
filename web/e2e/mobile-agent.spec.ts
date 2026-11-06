@@ -196,8 +196,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       expect((await composer.boundingBox())?.width).toBe(viewport.width - 48)
       expect((await composer.boundingBox())?.height).toBe(108)
       expect((await page.locator('main [data-agent-composer] [contenteditable="true"]').boundingBox())?.y).toBe(302)
-      expect((await page.locator('main [data-agent-composer] [data-agent-skills]').boundingBox())?.height).toBe(28)
-      const attach = page.locator('main [data-agent-composer] [data-agent-attach]')
+      // The reference app's phone composer has no Skills button: its footer is the "+" menu and send.
+      await expect(page.locator('main [data-agent-composer] [data-agent-skills]')).toHaveCount(0)
+      const attach = page.locator('main [data-agent-composer] [data-agent-add]')
       expect((await attach.boundingBox())?.x).toBe(viewport.width - 96)
       expect((await attach.boundingBox())?.width).toBe(28)
       const send = page.locator('main [data-agent-composer] [data-agent-send]')

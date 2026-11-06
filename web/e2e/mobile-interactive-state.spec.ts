@@ -19,24 +19,30 @@ test('keyboard navigation clears the previous pointer highlight in display selec
   expect(await focused.evaluate(e => getComputedStyle(e).outlineStyle)).toBe('none')
 })
 
-test('skill keyboard highlight fits long labels and restores its trigger', async ({ page, request, workspaceKey }) => {
+test('skill sheet rows fit long labels, and a chosen skill becomes a chip in the message', async ({ page, request, workspaceKey }) => {
   const headers = { 'X-Workspace-Key': workspaceKey }
   for (const name of ['中文', 'Review release readiness for international integrations']) {
     expect((await request.post('/api/agent/skills', { headers, data: { name, instructions: 'Check release readiness.' } })).ok()).toBeTruthy()
   }
   await page.goto(`/${workspaceKey}/agent`)
-  const trigger = page.getByRole('button', { name: 'Skills', exact: true })
-  await trigger.click()
-  const menu = page.getByRole('dialog', { name: 'Skills', exact: true })
+  await expect(page.getByRole('button', { name: 'Skills', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Add files and more', exact: true }).click()
+  const menu = page.getByRole('dialog', { name: 'Add files and more', exact: true })
   await expect(menu).toBeVisible()
   await menu.evaluate(async e => { await Promise.all(e.getAnimations().map(a => a.finished)) })
-  const input = menu.getByRole('textbox', { name: 'Search skills…' })
+  await menu.getByRole('option', { name: 'Skill', exact: true }).click()
+  // The sheet is replaced by the skills (its own dialog).
+  const sheet = page.locator('.phone-menu-surface').last()
+  const input = sheet.getByRole('combobox')
+  await expect(input).toHaveAttribute('placeholder', 'Search skills…')
+  await sheet.evaluate(async e => { await Promise.all(e.getAnimations({ subtree: true }).map(a => a.finished)) })
+  await expect.poll(() => sheet.getByRole('option').first().evaluate(e => e.getBoundingClientRect().height)).toBe(46)
   await input.press('ArrowDown')
   await expect(input).toBeFocused()
-  const active = menu.locator('[role=option][aria-selected=true]')
+  const active = sheet.locator('[cmdk-item][data-selected="true"]')
   await expect(active).toHaveCount(1)
   await expect.poll(() => active.evaluate(e => getComputedStyle(e, '::before').backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
-  for (const row of await menu.getByRole('option').all()) {
+  for (const row of await sheet.getByRole('option').all()) {
     const geometry = await row.evaluate(e => {
       const r = e.getBoundingClientRect(), label = e.querySelector('span')!.getBoundingClientRect()
       return { height: r.height, fits: label.top >= r.top && label.bottom <= r.bottom }
@@ -44,11 +50,9 @@ test('skill keyboard highlight fits long labels and restores its trigger', async
     expect(geometry.height).toBe(46)
     expect(geometry.fits).toBe(true)
   }
-  await menu.getByRole('option', { name: '中文', exact: true }).click()
-  await expect(menu.getByRole('option', { name: '中文', exact: true }).locator('.lucide-check')).toBeVisible()
-  await input.press('Escape')
-  await expect(menu).not.toBeVisible()
-  await expect(trigger).toBeFocused()
+  await sheet.getByRole('option', { name: '中文', exact: true }).click()
+  await expect(sheet).not.toBeVisible()
+  await expect(page.locator('[role=textbox] [data-mention-type="skill"]')).toHaveCount(1)
 })
 
 test('team phone menu and subscription level share row geometry and return to the parent filter', async ({ page, request, workspaceKey }) => {
