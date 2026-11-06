@@ -43,6 +43,8 @@
 .tpl-secondary-button:has(> svg:first-child) { padding: 0 12px 0 10px; }
 .tpl-ghost-button svg,
 .tpl-secondary-button svg { width: 16px; height: 16px; flex: none; }
+/* The list card's "New template" button reads with the settings control ink. */
+.tpl-list-card-header .tpl-ghost-button { color: var(--tpl-set-fg); }
 .tpl-ghost-button:hover,
 .tpl-ghost-button[data-state="open"] { background: var(--tpl-hover-bg); color: var(--tpl-text); }
 .tpl-secondary-button { position: relative; background: var(--tpl-secondary-bg); color: var(--tpl-secondary-fg); }

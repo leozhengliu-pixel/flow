@@ -167,9 +167,12 @@ html:root .settings-app .settings-main .feature-button:not(.danger) {
   border-radius: 9999px;
   background: var(--set-button);
   box-shadow: var(--set-button-shadow);
-  color: var(--set-button-text);
+  color: var(--set-control-text);
   font-weight: 500;
 }
+/* Buttons in cards, rows and page headers use the control ink; the label pages header and the member and team toolbars use the button ink. */
+html:root .settings-app .settings-main .domain-labels-header .settings-header-actions .settings-action:not(.danger):not(.primary),
+html:root .settings-app .settings-main .settings-members-toolbar > .settings-action:not(.danger):not(.primary) { color: var(--set-button-text); }
 html:root .settings-app .settings-main .settings-action:not(.danger):not(.primary):hover:not(:disabled),
 html:root .settings-app .settings-main .personal-action:not(.danger):not(.primary):hover:not(:disabled),
 html:root .settings-app .settings-main .feature-button:not(.danger):not(.primary):hover:not(:disabled) { background: var(--bg-hover); }
@@ -730,7 +733,7 @@ html:root .settings-app .settings-main .settings-workspace-members .settings-mem
 html:root .settings-app .settings-main .settings-workspace-members .settings-members-filter > svg { flex: none; color: var(--theme-text-secondary); }
 html:root .settings-app .settings-main .settings-workspace-members .settings-members-filter:hover,
 html:root .settings-app .settings-main .settings-workspace-members .settings-members-filter[data-state="open"] { background: var(--settings-members-row-hover); }
-html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-action.primary { margin-left: 9px; }
+html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-action.primary { margin-left: 8px; }
 
 /* Column header row and member rows share one grid. */
 html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns,

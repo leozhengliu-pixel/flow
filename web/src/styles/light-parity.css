@@ -168,7 +168,11 @@ html:root[data-theme="light"] body .feature-button:not(.danger):not(.primary) {
   border: .5px solid transparent;
   background: var(--lx-control);
   box-shadow: var(--lx-control-ring);
-  color: var(--lx-control-text);
+  color: var(--set-control-text);
+}
+html:root[data-theme="light"] .domain-labels-header .settings-header-actions .settings-action:not(.danger):not(.primary),
+html:root[data-theme="light"] .settings-members-toolbar > .settings-action:not(.danger):not(.primary) {
+  color: var(--set-button-text);
 }
 html:root[data-theme="light"] body .settings-action:not(.danger):not(.primary):hover:not(:disabled),
 html:root[data-theme="light"] body .personal-action:not(.danger):not(.primary):hover:not(:disabled),
@@ -190,11 +194,14 @@ html:root[data-theme="light"] body .feature-domain-row .feature-button[aria-labe
 }
 html:root[data-theme="light"] body .settings-select:not(.settings-select--bare),
 html:root[data-theme="light"] body .settings-members-toolbar > .settings-select {
-  height: 32px;
   border: .5px solid transparent;
   border-radius: 8px;
   background: var(--lx-control);
   box-shadow: var(--lx-control-ring);
+  color: var(--settings-dropdown-trigger-fg);
+}
+html:root[data-theme="light"] body .settings-members-toolbar > .settings-select {
+  height: 32px;
   color: var(--lx-control-text);
 }
 html:root[data-theme="light"] body .settings-members-toolbar > label,
