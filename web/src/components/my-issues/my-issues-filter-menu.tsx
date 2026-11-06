@@ -172,7 +172,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
     <Popover.Trigger asChild>{isValidElement(trigger) ? cloneElement(trigger, { 'aria-expanded': open } as object) : trigger}</Popover.Trigger>
     <Popover.Portal>
       <Popover.Content ref={setRootElement} aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-layout={layout} data-surface={surface} data-variant={variant} data-submenu-open={activeField ? true : undefined} style={{ zIndex: rootLayer, maxHeight: menuMaxHeight }} side="bottom" align={flushEnd ? 'end' : align} alignOffset={flushEnd ? -4000 : align === 'center' ? -15 : 0} sideOffset={desktop ? 3.5 : 3} collisionPadding={collisionPadding} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (keepFocus.current) { keepFocus.current = false; event.preventDefault() } }} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
-        <Command label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} className={styles.rootCommand} defaultValue={phone && variant === 'root' ? '__none__' : undefined} loop filter={(value, search, keywords) => value.startsWith('__ai__') ? 0.0001 : defaultFilter(value, search, keywords)}>
+        <Command label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} className={styles.rootCommand} defaultValue={variant === 'root' ? '__none__' : undefined} loop filter={(value, search, keywords) => value.startsWith('__ai__') ? 0.0001 : defaultFilter(value, search, keywords)}>
           <div className={styles.rootSearch}>
             <Command.Input aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} placeholder={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} autoFocus value={query} onValueChange={setQuery}/>
             {variant === 'root' && <kbd aria-hidden="true">F</kbd>}
@@ -271,7 +271,7 @@ function ValueMenu({ field, filters, label, layer, minSearchOptions, onClose, on
     const aliased = options.filter(option => option.aliases?.some(alias => stored.includes(alias))).map(option => option.id)
     return aliased.length ? [...new Set([...stored, ...aliased])] : stored
   }, [field, filters, options])
-  const { inputRef: commandInputRef, ...command } = usePropertyCommand({ personOptions: isPeopleProperty(field), closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: option => onToggle(field, option), open: true, options, selectedIds })
+  const { inputRef: commandInputRef, ...command } = usePropertyCommand({ personOptions: isPeopleProperty(field), closeOnSelect: false, highlightOnOpen: false, onOpenChange: open => { if (!open) onClose() }, onSelect: option => onToggle(field, option), open: true, options, selectedIds })
   const [aiPending, setAiPending] = useState(false)
   // Hosts build the next filter list from their current props, so apply AI results one render at a time.
   const toggleAnyRef = useRef(onToggleAny)

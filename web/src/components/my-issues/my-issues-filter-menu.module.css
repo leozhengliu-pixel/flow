@@ -16,7 +16,7 @@
 .rootSearch input,.valueSearch input{min-width:0;width:100%;height:36px;padding:10px 0 9px;border:0;outline:0;background:transparent;color:var(--pk-text);font-family:inherit;font-size:13px;font-weight:400;line-height:normal}
 .rootSearch input::placeholder{color:var(--pk-muted)}
 .valueSearch input::placeholder{color:var(--pk-faint)}
-.rootSearch kbd{box-sizing:border-box;justify-self:end;min-width:18px;height:17px;padding:2px 4px;border:.5px solid var(--pk-divider);border-radius:4px;background:transparent;color:var(--pk-muted);font-family:inherit;font-size:11px;font-weight:400;line-height:12px;text-align:center}
+.rootSearch kbd{box-sizing:border-box;justify-self:end;min-width:18px;height:17px;padding:2px 4px;border:.5px solid var(--pk-divider);border-radius:4px;background:transparent;color:var(--pk-muted);font-family:inherit;font-size:11px;font-weight:400;line-height:1.1;text-align:center}
 /* Category submenus (Dates, Relations, Project properties…) keep type-to-filter but show no search band. */
 .valueSearch[data-hidden]{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);border:0;white-space:nowrap}
 
@@ -72,7 +72,7 @@
   .rootSearch kbd{padding-inline:2px}
   .rootItem[data-selected=true],.rootItem[aria-selected=true],.valueItem[aria-selected=true],.valueItem:hover{color:var(--bright)}
   .rootItem[data-selected=true] .rootChevron,.rootItem[aria-selected=true] .rootChevron{color:var(--pk-muted)}
-  .rootItem:hover .rootChevron{color:var(--bright)}
+  .rootItem:hover .rootChevron{color:var(--pk-muted)}
   .rootChevron{text-align:right}
   .valueItem .count{padding-left:0}
 }
