@@ -207,10 +207,10 @@
 
 @media(--desktop-layout){
   .identifier{letter-spacing:-.26px;font-feature-settings:"calt","cpsp","tnum"}
-  .row[data-selected=true] .identifier{color:var(--issue-selected-identifier-fg)}
+  .row[data-selected=true] .identifier,.row[data-selected=true] .rowDate{color:var(--issue-selected-identifier-fg)}
   .groupHeader{gap:8px;padding-left:0}
   .groupState{width:14px;height:14px;margin:0}
-  .groupName,.groupText{color:var(--issue-group-title)}
+  .groupName,.groupText{color:var(--issue-strong-fg)}
   .title{color:var(--bright)}
 }
 @media(min-width:1024px){

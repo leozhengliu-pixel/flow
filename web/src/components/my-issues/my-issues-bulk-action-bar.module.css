@@ -13,7 +13,7 @@
 :global(:root[data-theme="light"]) .actionsButton:hover,:global(:root[data-theme="light"]) .iconButton:hover{background:var(--theme-control-hover);color:var(--theme-text-primary)}
 
 .desktopShortcut{display:none}
-@media(--desktop-layout){.actionsButton{background:var(--issue-bulk-command-bg);color:var(--text)}}
+@media(--desktop-layout){.actionsButton{min-width:0;gap:6px;background:var(--issue-bulk-command-bg);color:var(--issue-strong-fg)}}
 @media(--desktop-layout){.bar{left:calc(var(--sidebar) + 394px);bottom:37.5px;gap:8px;background:var(--my-issues-details-bg)}.desktopShortcut{display:flex;order:-1}.phoneChevron{display:none}}
 
 .optionAvatar{width:16px;height:16px;flex:0 0 16px;border-radius:50%;display:grid;place-items:center;overflow:hidden;color:var(--avatar-initials-fg);font-size:9px;font-weight:450}.optionAvatar[data-agent-avatar-slot]{background:transparent}.inviteIcon{flex:none;color:var(--theme-text-secondary)}.commandList [cmdk-group-heading]{padding:8px 12px;color:var(--theme-text-secondary);font-size:12px;font-weight:500}
