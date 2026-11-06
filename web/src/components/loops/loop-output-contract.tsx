@@ -14,6 +14,7 @@ import {
   CONTRACT_KIND_LABELS,
   CONTRACT_OPERATION_LABELS,
   blankOutput,
+  contractFallbackExplanation,
   contractReady,
   contractTargetText,
   createsOutput,
@@ -27,6 +28,13 @@ import {
   type ContractTargetChoice,
 } from "./loop-output-contract-model";
 import type { BootstrapData, Loop, LoopContractOutput, LoopOutputContract, LoopOutputKind, LoopOutputOperation } from "@/types/flow";
+
+/** What to do about a failed read of the outputs, from the class the server stored; nothing for a fallback saved before the class existed. */
+export function FallbackExplanation({ contract }: { contract: Pick<LoopOutputContract, "source" | "fallbackReason"> | undefined }) {
+  const { t } = useI18n();
+  const text = contractFallbackExplanation(contract, t);
+  return text ? <span className="loops-contract-fallback-detail">{text}</span> : null;
+}
 
 /** The contract's outputs, read-only: what each run makes, reads and must not touch, with the instruction text behind it. */
 export function LoopContractSummary({ contract, data, showEvidence = true }: { contract: LoopOutputContract; data: Pick<BootstrapData, "teams" | "documents"> & Partial<Pick<BootstrapData, "projects" | "initiatives">>; showEvidence?: boolean }) {
@@ -346,7 +354,10 @@ export function LoopOutputContractPanel({
         {fallback && !editing && (
           <p className="loops-contract-warning" role="alert">
             <AlertTriangle size={14} />
-            <span>{t(CONTRACT_FALLBACK_NOTICE)}</span>
+            <span>
+              {t(CONTRACT_FALLBACK_NOTICE)}
+              <FallbackExplanation contract={contract} />
+            </span>
           </p>
         )}
         {contract?.source === "person" && contract.stale && !editing && <div
@@ -363,7 +374,7 @@ export function LoopOutputContractPanel({
         >
           <strong>{t("Instructions changed — review suggested outputs")}</strong>
           {suggestion?.source === "model" && !reviewing && <button type="button" className="loops-ghost-button is-small" onClick={(event) => { event.stopPropagation(); setReviewing(true); }}>{t("Review suggested outputs")}</button>}
-          {suggestion?.source === "fallback" && <p className="loops-contract-hint">{t(CONTRACT_FALLBACK_NOTICE)}</p>}
+          {suggestion?.source === "fallback" && <p className="loops-contract-hint">{t(CONTRACT_FALLBACK_NOTICE)}<FallbackExplanation contract={suggestion} /></p>}
           {!reviewing && <button type="button" className="loops-ghost-button is-small" disabled={saving} onClick={(event) => { event.stopPropagation(); void save(contract); }}>{t("Keep my outputs")}</button>}
         </div>}
         {unsaved && contract?.source !== "person" && <p className="loops-contract-hint">{t("Save the loop to read its outputs from the new instructions.")}</p>}

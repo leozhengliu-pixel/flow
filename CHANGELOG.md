@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Say why a loop's outputs could not be read: the "Couldn't determine outputs automatically" notice in the loop editor and on a run now adds what happened (the model returned only reasoning, the reply hit the length limit, an empty or withheld or unreadable reply, a tool call written as text, outputs in the wrong format, no model configured, or a failed or timed-out request) and what to do, in English and Chinese. The loop API serves it as `outputContract.fallbackReason` (`class`, `explanation`); contracts saved before show the generic notice alone, and no model output or reasoning is ever shown.
+
 - Pick avatar initials like the reference: a single name shows its first two letters ("Hui" is HU), two words show one letter each, three or more show the first word and the last two ("Flow QA OAuth app" is FOA), and an email uses its local part.
 - Size three-letter and "WW" avatar initials like the reference's avatar tiers (three letters 4px at 14px, 5px at 16, 18 and 20px, 7px at 24px, 9px at 32px; "WW" 5, 6, 7, 9 and 12px) instead of squeezing them to fit the avatar.
 - Start team and workspace issue lists and new view drafts ordered by Priority (Manual stays the board default), show triage issues in a new view draft, and keep a draft's display from reading or overwriting the All issues display.

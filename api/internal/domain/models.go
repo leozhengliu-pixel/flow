@@ -1237,6 +1237,16 @@ type Loop struct {
 	SuggestedOutputContract *LoopOutputContract `json:"suggestedOutputContract,omitempty"`
 }
 
+// LoopContractFallbackReason says why reading a loop's outputs failed. Class
+// is one of no_model, empty, reasoning_only, truncated, unreadable, filtered,
+// tool_call_text, invalid_contract, or the model request's failure
+// (provider_error, provider_timeout, stream_error). Explanation is a fixed
+// English sentence that holds nothing of the model's output.
+type LoopContractFallbackReason struct {
+	Class       string `json:"class"`
+	Explanation string `json:"explanation,omitempty"`
+}
+
 // LoopOutputContract says, for each output kind, what a loop's runs make:
 // the operation, its target, how many, when, and the instruction text it
 // was read from. Runs are prompted from it, their write tools are checked
@@ -1264,6 +1274,10 @@ type LoopOutputContract struct {
 	Model       string     `json:"model,omitempty"`
 	ExtractedAt *time.Time `json:"extractedAt,omitempty"`
 	Error       string     `json:"error,omitempty"`
+	// FallbackReason is the structured class of a fallback contract's
+	// failure, so clients need not read Error. Absent on fallbacks saved
+	// before it existed and when no class is known.
+	FallbackReason *LoopContractFallbackReason `json:"fallbackReason,omitempty"`
 	// UpdatedBy is the person who set a person contract.
 	UpdatedBy string `json:"updatedBy,omitempty"`
 	// Stale is computed when a loop is served: the name or instructions

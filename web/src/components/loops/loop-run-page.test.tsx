@@ -360,6 +360,28 @@ describe('LoopRunPage', () => {
     expect(screen.getAllByText('无法创建要求的独立新文档。').length).toBeGreaterThan(0)
   })
 
+  it('explains why the outputs a run worked to could not be read, in English and in Chinese', async () => {
+    const fallback: LoopRun = {
+      ...completed, id: 'run-8',
+      outputContract: { source: 'fallback', readOnly: true, outputs: [], error: 'Couldn\'t determine outputs automatically — set them (truncated: server text)', fallbackReason: { class: 'truncated', explanation: 'server text' } },
+    }
+    api.listLoopRuns.mockResolvedValue([fallback])
+    api.getLoopRun.mockResolvedValue(fallback)
+    renderPage('run-8')
+    const notice = await screen.findByRole('note')
+    expect(notice).toHaveTextContent("Couldn't determine outputs automatically — set them")
+    expect(notice).toHaveTextContent("The model's reply hit the length limit before the outputs were complete. Try again or pick another model.")
+    expect(notice).not.toHaveTextContent('server text')
+    cleanup()
+    localStorage.setItem('flow:locale', 'zh-CN')
+    try {
+      renderPage('run-8')
+      expect(await screen.findByRole('note')).toHaveTextContent('模型的回复在输出完整之前就达到了长度上限。请重试或换一个模型。')
+    } finally {
+      localStorage.removeItem('flow:locale')
+    }
+  })
+
   it('shows interrupted runs and failure reasons', async () => {
     const interrupted: LoopRun = { ...failed, id: 'run-5', status: 'interrupted', failureReason: 'interrupted', error: 'Interrupted by server restart' }
     const timedOut: LoopRun = { ...failed, id: 'run-6', failureReason: 'provider_timeout', error: 'Flow Agent provider is unavailable' }

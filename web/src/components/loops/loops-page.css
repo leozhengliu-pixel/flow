@@ -1154,6 +1154,7 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-contract-readonly strong { display: block; color: var(--theme-text-primary); font-size: 13px; font-weight: 500; }
 .loops-contract-warning { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; color: var(--semantic-warning-text); font-size: 12px; line-height: 18px; }
 .loops-contract-hint { margin-bottom: 8px; }
+.loops-contract-fallback-detail { display: block; color: var(--theme-text-secondary); }
 .loops-contract-edit-row { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 0.5px solid var(--theme-border); }
 .loops-contract-edit-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .loops-contract-input { flex: 1 1 200px; min-width: 0; height: 28px; padding: 0 8px; border: 0.5px solid var(--theme-border); border-radius: 6px; background: transparent; color: var(--theme-text-primary); font-size: 13px; }

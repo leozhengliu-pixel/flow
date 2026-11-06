@@ -13,7 +13,7 @@ vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof 
 import { LoopContractSummary, LoopOutputContractPanel } from './loop-output-contract'
 import { LoopContractReview } from './loop-contract-review'
 import { LoopDocumentPicker } from './loop-document-picker'
-import { CONTRACT_FALLBACK_NOTICE, contractOutputSummary, contractTargetText, personContract } from './loop-output-contract-model'
+import { CONTRACT_FALLBACK_EXPLANATIONS, CONTRACT_FALLBACK_NOTICE, contractOutputSummary, contractTargetText, personContract } from './loop-output-contract-model'
 
 beforeEach(() => {
   // The document picker is a cmdk list.
@@ -81,6 +81,36 @@ describe('LoopOutputContractPanel', () => {
     renderPanel({ ...loop, outputContract: { source: 'fallback', readOnly: true, outputs: [], error: CONTRACT_FALLBACK_NOTICE, extractedAt: '2026-10-28T00:00:00Z' } })
     expect(screen.getByRole('alert')).toHaveTextContent(CONTRACT_FALLBACK_NOTICE)
     expect(api.analyzeLoopOutputs).not.toHaveBeenCalled()
+  })
+
+  it.each(Object.entries(CONTRACT_FALLBACK_EXPLANATIONS))('says what a %s failure means and what to do, in English and in Chinese', (failureClass, explanation) => {
+    const fallback: LoopOutputContract = { source: 'fallback', readOnly: true, outputs: [], error: `${CONTRACT_FALLBACK_NOTICE} (${failureClass}: server text)`, fallbackReason: { class: failureClass, explanation: 'server-side explanation' }, extractedAt: '2026-10-28T00:00:00Z' }
+    const { view } = renderPanel({ ...loop, outputContract: fallback })
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(CONTRACT_FALLBACK_NOTICE)
+    expect(alert).toHaveTextContent(explanation)
+    expect(alert).not.toHaveTextContent('server')
+    view.unmount()
+
+    expect(zhCN[explanation], explanation).toBeTruthy()
+    localStorage.setItem('flow:locale', 'zh-CN')
+    try {
+      renderPanel({ ...loop, outputContract: fallback })
+      const zh = screen.getByRole('alert')
+      expect(zh).toHaveTextContent(zhCN[CONTRACT_FALLBACK_NOTICE])
+      expect(zh).toHaveTextContent(zhCN[explanation])
+      expect(zh).not.toHaveTextContent('server')
+    } finally {
+      localStorage.removeItem('flow:locale')
+    }
+  })
+
+  it('shows only the generic notice for a fallback saved before the class existed or with an unknown class', () => {
+    const { view } = renderPanel({ ...loop, outputContract: { source: 'fallback', readOnly: true, outputs: [], error: `${CONTRACT_FALLBACK_NOTICE} (reasoning_only: the response held only reasoning)`, extractedAt: '2026-10-28T00:00:00Z' } })
+    expect(screen.getByRole('alert').textContent).toBe(CONTRACT_FALLBACK_NOTICE)
+    view.unmount()
+    renderPanel({ ...loop, outputContract: { source: 'fallback', readOnly: true, outputs: [], fallbackReason: { class: 'something_new', explanation: 'new' }, extractedAt: '2026-10-28T00:00:00Z' } })
+    expect(screen.getByRole('alert').textContent).toBe(CONTRACT_FALLBACK_NOTICE)
   })
 
   it('saves a person\'s edits as the authoritative contract and can go back to the automatic one', async () => {

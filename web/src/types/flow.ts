@@ -1128,6 +1128,8 @@ export interface LoopOutputContract {
   model?: string;
   extractedAt?: string;
   error?: string;
+  /** Why a fallback contract was used; absent on fallbacks saved before the class existed. */
+  fallbackReason?: { class: string; explanation?: string };
   updatedBy?: UUID;
   /** The name or instructions changed since it was read or set. */
   stale?: boolean;

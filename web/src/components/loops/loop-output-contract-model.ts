@@ -38,6 +38,31 @@ export const CARDINALITY_LABELS: Record<string, string> = {
 /** The fallback contract's error the server stores (loopContractFallbackNotice in loop_output_contract.go). */
 export const CONTRACT_FALLBACK_NOTICE = "Couldn't determine outputs automatically — set them";
 
+/**
+ * What a failed read of the outputs means and what to do, by the class the server stores in
+ * `fallbackReason.class` (loopContractFallbackCause in loop_output_contract_extraction.go). The copy is fixed text
+ * keyed by class; the server's explanation and the stored error are never shown.
+ */
+export const CONTRACT_FALLBACK_EXPLANATIONS: Record<string, string> = {
+  reasoning_only: "The model returned only reasoning and no outputs. Try again or pick another model.",
+  truncated: "The model's reply hit the length limit before the outputs were complete. Try again or pick another model.",
+  empty: "The model returned an empty reply. Try again or pick another model.",
+  filtered: "The model provider withheld the reply. Try again or pick another model.",
+  unreadable: "The model's reply could not be read. Try again or pick another model.",
+  tool_call_text: "The model wrote its answer as text instead of calling the tool Flow expects. Try again or pick another model.",
+  invalid_contract: "The model's outputs did not follow the expected format. Try again or set the outputs yourself.",
+  no_model: "No model is configured to read the outputs. Set them yourself or configure a model.",
+  provider_error: "The model request failed. Try again in a moment or pick another model.",
+  provider_timeout: "The model request timed out. Try again in a moment or pick another model.",
+  stream_error: "The model's reply could not be read. Try again or pick another model.",
+};
+
+/** The translated explanation of a fallback contract's failure class. Undefined for a fallback saved before the class existed or an unknown class, so only the generic notice shows. */
+export function contractFallbackExplanation(contract: Pick<LoopOutputContract, "source" | "fallbackReason"> | undefined, t: (key: string) => string): string | undefined {
+  const key = contract?.source === "fallback" ? CONTRACT_FALLBACK_EXPLANATIONS[contract.fallbackReason?.class ?? ""] : undefined;
+  return key ? t(key) : undefined;
+}
+
 /** Title placeholders the server fills (loopRuntimePlaceholders in loop_contract_targets.go). */
 const RUNTIME_PLACEHOLDERS = ["date", "week", "month", "year", "day", "team", "project"];
 

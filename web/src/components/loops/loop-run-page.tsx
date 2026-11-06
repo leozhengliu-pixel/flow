@@ -30,7 +30,7 @@ import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
 import { dayLabel, runDuration } from "./loop-model";
 import { describeRunFailure, runSkipNote, runTriggerText } from "./loop-run-labels";
-import { LoopContractSummary } from "./loop-output-contract";
+import { FallbackExplanation, LoopContractSummary } from "./loop-output-contract";
 import { CONTRACT_FALLBACK_NOTICE } from "./loop-output-contract-model";
 import { AgentErrorDetail, ErrorDetails } from "@/components/agent/agent-error-detail";
 import { GridLoader } from '@/components/ui/grid-loader'
@@ -567,7 +567,10 @@ export function LoopRunPage({
                   {selected.outputContract.source === "fallback" && (
                     <p className="loops-run-notice" role="note">
                       <Info size={14} />
-                      <span>{t(CONTRACT_FALLBACK_NOTICE)}</span>
+                      <span>
+                        {t(CONTRACT_FALLBACK_NOTICE)}
+                        <FallbackExplanation contract={selected.outputContract} />
+                      </span>
                     </p>
                   )}
                   <LoopContractSummary contract={selected.outputContract} data={data} showEvidence={false} />

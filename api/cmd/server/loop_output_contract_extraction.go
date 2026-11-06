@@ -311,19 +311,44 @@ func loopContractMissingHint(class loopTurnOutcome) string {
 // loopContractFallbackReason is the stored fallback contract's error: the notice the editor shows, then the
 // failure's class and a fixed explanation (never the model's output or a provider message).
 func loopContractFallbackReason(err error) string {
+	cause := loopContractFallbackCause(err)
+	switch {
+	case cause == nil:
+		return loopContractFallbackNotice
+	case cause.Class == loopContractNoModelClass:
+		return loopContractFallbackNotice + " (no model is configured)"
+	}
+	return fmt.Sprintf("%s (%s: %s)", loopContractFallbackNotice, cause.Class, cause.Explanation)
+}
+
+// loopContractNoModelClass is the fallback class of a workspace with no model to read the outputs.
+const loopContractNoModelClass = "no_model"
+
+// loopContractFallbackCause is the structured class of a failed extraction (nil when it has none): the class and
+// a fixed explanation, never the model's output or a provider message.
+func loopContractFallbackCause(err error) *domain.LoopContractFallbackReason {
 	var missing *agentStructuredMissingError
 	var runErr *loopRunError
 	switch {
+	case err == nil:
+		return nil
 	case errors.Is(err, errLoopContractNoModel):
-		return loopContractFallbackNotice + " (no model is configured)"
+		return &domain.LoopContractFallbackReason{Class: loopContractNoModelClass, Explanation: "no model is configured"}
 	case errors.As(err, &missing):
-		return fmt.Sprintf("%s (%s: %s)", loopContractFallbackNotice, missing.class, missing.explanation)
+		return &domain.LoopContractFallbackReason{Class: string(missing.class), Explanation: missing.explanation}
 	case errors.Is(err, errLoopContractInvalid):
-		return loopContractFallbackNotice + " (invalid_contract: the model's contract did not follow the schema)"
+		return &domain.LoopContractFallbackReason{Class: "invalid_contract", Explanation: "the model's contract did not follow the schema"}
 	case errors.As(loopProviderFailure(err), &runErr):
-		return fmt.Sprintf("%s (%s: the model request failed)", loopContractFallbackNotice, runErr.reason)
+		return &domain.LoopContractFallbackReason{Class: runErr.reason, Explanation: "the model request failed"}
 	}
-	return loopContractFallbackNotice
+	return nil
+}
+
+// loopFallbackContractFor is the fallback contract of a failed extraction, with its error text and class.
+func loopFallbackContractFor(hash string, err error) *domain.LoopOutputContract {
+	contract := loopFallbackContract(hash, loopContractFallbackReason(err))
+	contract.FallbackReason = loopContractFallbackCause(err)
+	return contract
 }
 
 // loopContractAttemptTimeout bounds one model call of an extraction; two
@@ -398,7 +423,7 @@ func (s *server) readLoopContract(ctx context.Context, workspace string, loop do
 	contract, err := s.requestLoopContract(callCtx, loop, teams)
 	if err != nil {
 		log.Printf("Loop output contract workspace=%s loop=%s: %v", workspace, loop.ID, err)
-		contract = loopFallbackContract(hash, loopContractFallbackReason(err))
+		contract = loopFallbackContractFor(hash, err)
 	}
 	s.storeLoopContract(workspace, loop.ID, hash, contract)
 	flight.contract = contract
@@ -601,7 +626,7 @@ func (s *server) analyzeLoopOutputs(w http.ResponseWriter, r *http.Request) {
 		contract, err := s.requestLoopContract(r.Context(), current, data.Teams)
 		if err != nil {
 			log.Printf("Loop output contract workspace=%s loop=%s: %v", data.Workspace.URLKey, current.ID, err)
-			contract = loopFallbackContract(hash, loopContractFallbackReason(err))
+			contract = loopFallbackContractFor(hash, err)
 		}
 		s.storeLoopContract(data.Workspace.URLKey, current.ID, hash, contract)
 	} else if strings.TrimSpace(current.Instructions) != "" {
