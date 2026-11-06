@@ -41,7 +41,7 @@ export function ContentViewHeader({
           <SidebarLeftIcon width={14} height={14} aria-hidden="true" />
         </button>
       ) : null}
-      {children}
+      {compact ? <div className={styles.headerRow} data-header-row="">{children}</div> : children}
       {onCreateIssue && <button className="phone-create-issue" type="button" aria-label={t('New issue')} title={t('New issue')} onClick={onCreateIssue}><PlusIcon width={14} height={14}/></button>}
     </header>
   )

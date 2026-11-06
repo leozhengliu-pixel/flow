@@ -62,7 +62,7 @@
   [data-issue-explorer]:has(section[data-mode="create"]) [data-content-view-breadcrumb] [data-current],.draftPlaceholder{color:var(--text)}
   [data-issue-explorer] [data-content-view-breadcrumb] [data-current]{color:var(--text)}
   [data-issue-explorer] [data-content-view-breadcrumb] a>span:last-child{color:var(--text)}
-  [data-issue-explorer] [data-content-view-header][data-compact]:has(.headerViewActions){padding-left:8px}
+  [data-issue-explorer] [data-header-row]:has(.headerViewActions){padding-left:8px}
   [data-issue-explorer] [data-content-view-header]:has(.headerViewActions) [data-content-view-title]{padding:0 4px 0 10px}
   [data-issue-explorer] [data-content-view-header]:has(.headerViewActions) [data-content-view-title]>span[aria-hidden]{margin-right:6px}
   [data-issue-explorer] [data-content-view-header]:has(.headerViewActions) [data-content-view-title]>h2{color:var(--text)}
@@ -73,7 +73,7 @@
   :global(body:has([data-layout=issues][data-variant=root][data-submenu-open])) [data-issue-explorer] .iconButton[aria-expanded=true]{--ui-pill-active-bg:var(--issue-toolbar-open-bg);--ui-pill-active-hover-bg:var(--issue-toolbar-open-bg)}
   .filterBar{border:.5px solid var(--issue-filter-band-border);box-shadow:none}
   .filterBar>div:first-child>button{padding-inline:2px}
-  [data-issue-explorer]:has(section[data-mode="create"]) [data-content-view-header][data-compact]{padding-left:8px}
+  [data-issue-explorer]:has(section[data-mode="create"]) [data-header-row]{padding-left:8px}
   [data-issue-explorer]:has(section[data-mode="create"]) [data-content-view-breadcrumb]{padding-left:10px}
   [data-issue-explorer] [data-content-view-subheader]{gap:6px}
   .resourceTab{--ui-pill-bg:var(--my-issues-details-tab-bg);--ui-pill-active-bg:var(--my-issues-details-tab-active-bg);--ui-pill-fg:var(--issue-muted);--ui-pill-active-fg:var(--text);padding-inline:16px;font-family:inherit;font-size:12px;font-weight:500;line-height:normal}
@@ -93,8 +93,8 @@
 .headerNewIssue svg{width:14px;height:14px}
 [data-toolbar-buttons-navigation].actions{gap:6px}
 @media(min-width:801px){
-  [data-issue-explorer] [data-content-view-header][data-compact]{padding-left:18px}
-  [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite){padding-left:8px;padding-right:8px}
+  [data-issue-explorer] [data-header-row]{padding-left:18px}
+  [data-issue-explorer] [data-header-row]:has(.phoneTeamFavorite){padding-left:8px;padding-right:8px}
   [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb]>span:first-child>a{height:24px;margin-left:6px;padding:0 5px 0 4px;border-radius:8px;line-height:normal}
   [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb]>span:first-child>a>span:first-child{width:16px;height:16px;flex:0 0 16px}
   [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [class*="headerNewIssue"]{padding-right:9px}

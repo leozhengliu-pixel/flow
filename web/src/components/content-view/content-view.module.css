@@ -35,6 +35,12 @@
   min-width:0;
 }
 .header[data-compact=true]{padding:0 8px}
+/* Compact desktop headers keep their insets on one inner row, like the reference's single header child. */
+.headerRow{display:contents}
+@media (--desktop-layout){
+  .header[data-compact=true]{padding:0;gap:12px}
+  .headerRow{display:flex;align-items:center;flex:1 1 auto;min-width:0;height:100%;padding:0 8px}
+}
 :global(:root[data-theme="light"]) .header{border-bottom-width:.5px}
 
 .mobileSidebarButton{
