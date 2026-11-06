@@ -106,6 +106,8 @@ describe('built-in agent avatar', () => {
     ['Hui', 'HU', '2'],
     ['Flow QA OAuth app', 'FOA', '3'],
     ['O\'Neil', 'O\'', '2'],
+    ['Wanda Williams', 'WW', 'ww'],
+    ['Will Wu Wang', 'WWW', '3'],
   ])('tells the stylesheet how many initials %s shows', (name, expected, count) => {
     const view = render(<UserAvatar name={name} />)
     expect(view.container.querySelector('span')).toHaveTextContent(expected)

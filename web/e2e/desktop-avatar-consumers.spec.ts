@@ -54,7 +54,7 @@ test('every avatar consumer has a size, and arbitrary initials fit its bounds', 
     fixture.mount(inventory)
     await document.fonts.ready
   }, inventory)
-  await expect(page.locator('[data-consumer]')).toHaveCount(inventory.length * 3)
+  await expect(page.locator('[data-consumer]')).toHaveCount(inventory.length * 4)
   await expect.poll(() => page.locator('#avatar-consumer-fixture [data-user-avatar]').evaluateAll(avatars => avatars.filter(avatar => {
     const bounds = avatar.getBoundingClientRect()
     return bounds.width <= 0 || bounds.height <= 0
@@ -82,19 +82,37 @@ test('Latin initials take the reference font size for their avatar size and inhe
     fixture.mount(inventory)
     await document.fonts.ready
   }, inventory)
-  await expect(page.locator('[data-consumer]')).toHaveCount(inventory.length * 3)
-  // Two-letter initials. Measured on the reference at 1440 and on phones: 14px -> 8px, 16px and 18px -> 9px, 24px -> 11px, 32px -> 14px (20px reads 9px between them).
-  const reference: Record<number, string> = { 14: '8px', 16: '9px', 18: '9px', 20: '9px', 24: '11px', 32: '14px' }
-  await expect.poll(() => page.locator('[data-consumer] [data-user-avatar][data-script="latin"][data-initials="2"]').evaluateAll((avatars, reference) => avatars.flatMap(avatar => {
-    const width = avatar.getBoundingClientRect().width, size = reference[width]
-    if (!size) return []
-    const initials = getComputedStyle(avatar.querySelector('.user-avatar-initials')!), parent = getComputedStyle(avatar.parentElement!)
-    const consumer = avatar.closest('[data-consumer]')?.getAttribute('data-consumer')
-    // The reference never sets a weight on the avatar: the initials sit at the weight of the row they are in. Document thread avatars
-    // set 400 on purpose (the reference's document comment avatars measure 400 inside a 450 card).
-    const inherits = initials.fontWeight === parent.fontWeight || avatar.classList.contains('document-thread-avatar') && initials.fontWeight === '400'
-    return initials.fontSize === size && inherits ? [] : [`${consumer}: ${width}px ${initials.fontSize}/${initials.fontWeight} (row ${parent.fontWeight})`]
-  }), reference)).toEqual([])
+  await expect(page.locator('[data-consumer]')).toHaveCount(inventory.length * 4)
+  // The reference's avatar tiers (read from its avatar component and measured live at 1440): 14px micro, 16px tiny, 18px small, 24px regular,
+  // 32px large. Each gives a font size for two letters ("SA"), for exactly "WW" and for three letters ("FOA"). A 20px avatar has no tier of
+  // its own and reads like 18px.
+  const reference: Record<number, Record<string, string>> = {
+    14: { two: '8px', ww: '5px', three: '4px' },
+    16: { two: '9px', ww: '6px', three: '5px' },
+    18: { two: '9px', ww: '7px', three: '5px' },
+    20: { two: '9px', ww: '7px', three: '5px' },
+    24: { two: '11px', ww: '9px', three: '7px' },
+    32: { two: '14px', ww: '12px', three: '9px' },
+  }
+  for (const [kind, count] of [['two', '2'], ['ww', 'ww'], ['three', '3']] as const) {
+    const selector = `[data-consumer] [data-user-avatar][data-script="latin"][data-initials="${count}"]`
+    await expect.poll(() => page.locator(selector).evaluateAll((avatars, { reference, kind }) => avatars.flatMap(avatar => {
+      const width = avatar.getBoundingClientRect().width, size = reference[width]?.[kind]
+      if (!size) return []
+      const text = avatar.querySelector('.user-avatar-initials') as HTMLElement, initials = getComputedStyle(text), parent = getComputedStyle(avatar.parentElement!)
+      const consumer = avatar.closest('[data-consumer]')?.getAttribute('data-consumer')
+      // The reference never sets a weight on the avatar: the initials sit at the weight of the row they are in. Document thread avatars
+      // set 400 on purpose (the reference's document comment avatars measure 400 inside a 450 card).
+      const inherits = initials.fontWeight === parent.fontWeight || avatar.classList.contains('document-thread-avatar') && initials.fontWeight === '400'
+      // The size is the table's, never a scaled-down fit, and the letters stay inside the avatar.
+      const bounds = text.getBoundingClientRect(), slot = avatar.getBoundingClientRect()
+      const inside = bounds.left >= slot.left - 0.02 && bounds.right <= slot.right + 0.02 && bounds.top >= slot.top - 0.02 && bounds.bottom <= slot.bottom + 0.02
+      return initials.fontSize === size && inherits && inside && !text.style.transform ? [] : [`${consumer}: ${width}px ${text.textContent} ${initials.fontSize}/${initials.fontWeight} (row ${parent.fontWeight}) inside ${inside} transform "${text.style.transform}"`]
+    }), { reference, kind })).toEqual([])
+    // Every size of the table is exercised by at least one consumer.
+    const widths = await page.locator(selector).evaluateAll(avatars => [...new Set(avatars.map(avatar => avatar.getBoundingClientRect().width))])
+    for (const size of Object.keys(reference)) expect(widths, `${kind} initials at ${size}px`).toContain(Number(size))
+  }
 })
 
 test('meeting attendee avatars keep their initials beside the name in every layout', async ({ page, request, workspaceKey }) => {

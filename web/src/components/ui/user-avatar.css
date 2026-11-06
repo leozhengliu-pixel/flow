@@ -19,24 +19,53 @@
 }
 
 /*
- * Latin initials follow the avatar's own size, the way the reference's one avatar component does, so a 16px avatar reads 9px
- * in an issue row, a picker, a filter menu and a panel alike. The weight is never set here or by a consumer: it is inherited, so
- * initials sit at the weight of the row they are in (400 in rows, 450 in menus, 500 beside a property value).
+ * Latin initials follow the avatar's own size, the way the reference's one avatar component does: its size tiers are 14 (micro), 16
+ * (tiny), 18 (small), 24 (regular), 32 (large), 44 (xlarge) and 54px (huge), and each tier has a font size for two letters, for
+ * exactly "WW" (data-initials="ww") and for three letters. A 20px avatar has no tier of its own and reads like 18px. The weight is
+ * never set here or by a consumer: it is inherited, so initials sit at the weight of the row they are in (400 in rows, 450 in
+ * menus, 500 beside a property value). Initials that are not Latin (CJK) and sizes outside the table keep the inherited size and
+ * are scaled to fit by FittedInitials.
  */
 @container user-avatar (13.5px <= width < 14.5px) {
   [data-script="latin"] > .user-avatar-initials { font-size: 8px; }
+  [data-script="latin"][data-initials="ww"] > .user-avatar-initials { font-size: 5px; }
+  [data-script="latin"][data-initials="3"] > .user-avatar-initials { font-size: 4px; }
 }
 
-@container user-avatar (15.5px <= width < 18.5px) or (19.5px <= width < 20.5px) {
+@container user-avatar (15.5px <= width < 16.5px) {
   [data-script="latin"] > .user-avatar-initials { font-size: 9px; }
+  [data-script="latin"][data-initials="ww"] > .user-avatar-initials { font-size: 6px; }
+  [data-script="latin"][data-initials="3"] > .user-avatar-initials { font-size: 5px; }
+}
+
+@container user-avatar (17.5px <= width < 18.5px) or (19.5px <= width < 20.5px) {
+  [data-script="latin"] > .user-avatar-initials { font-size: 9px; }
+  [data-script="latin"][data-initials="ww"] > .user-avatar-initials { font-size: 7px; }
+  [data-script="latin"][data-initials="3"] > .user-avatar-initials { font-size: 5px; }
 }
 
 @container user-avatar (23.5px <= width < 24.5px) {
   [data-script="latin"] > .user-avatar-initials { font-size: 11px; }
+  [data-script="latin"][data-initials="ww"] > .user-avatar-initials { font-size: 9px; }
+  [data-script="latin"][data-initials="3"] > .user-avatar-initials { font-size: 7px; }
 }
 
 @container user-avatar (31.5px <= width < 32.5px) {
   [data-script="latin"] > .user-avatar-initials { font-size: 14px; }
+  [data-script="latin"][data-initials="ww"] > .user-avatar-initials { font-size: 12px; }
+  [data-script="latin"][data-initials="3"] > .user-avatar-initials { font-size: 9px; }
+}
+
+@container user-avatar (43.5px <= width < 44.5px) {
+  [data-script="latin"] > .user-avatar-initials { font-size: 18px; }
+  [data-script="latin"][data-initials="ww"] > .user-avatar-initials { font-size: 15px; }
+  [data-script="latin"][data-initials="3"] > .user-avatar-initials { font-size: 12px; }
+}
+
+@container user-avatar (53.5px <= width < 54.5px) {
+  [data-script="latin"] > .user-avatar-initials { font-size: 22px; }
+  [data-script="latin"][data-initials="ww"] > .user-avatar-initials { font-size: 18px; }
+  [data-script="latin"][data-initials="3"] > .user-avatar-initials { font-size: 16px; }
 }
 
 .user-avatar-initials,

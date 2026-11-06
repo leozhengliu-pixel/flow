@@ -16,7 +16,7 @@ export function mount(consumers: Array<{ label: string; classes: Array<string | 
   Object.assign(host.style, { position: 'fixed', inset: '0', overflow: 'auto', zIndex: '9999', background: 'var(--bg-panel)' })
   document.body.append(host)
   createRoot(host).render(<>
-    {consumers.flatMap(consumer => ['W W', 'W W W W', '中 文'].map(name => <div key={`${consumer.label}-${name}`} data-consumer={consumer.label} style={{ display: 'inline-flex', width: 180, height: 60, alignItems: 'center', justifyContent: 'center' }}>
+    {consumers.flatMap(consumer => ['S A', 'W W', 'W W W W', '中 文'].map(name => <div key={`${consumer.label}-${name}`} data-consumer={consumer.label} style={{ display: 'inline-flex', width: 180, height: 60, alignItems: 'center', justifyContent: 'center' }}>
       <div className={consumer.parent}><UserAvatar name={name} className={consumer.classes.map(value => typeof value === 'string' ? value : modules[value.file]?.[value.key] ?? '').join(' ')}/></div>
     </div>))}
     {['WW', 'MM', '中文', '中W', 'i', 'ÅÉ'].flatMap(name => [1, .8].map(scale => <div key={`${name}-${scale}`} data-fit={name} style={{ display: 'inline-grid', width: 100, height: 60, placeItems: 'center', transform: `scale(${scale})` }}>
