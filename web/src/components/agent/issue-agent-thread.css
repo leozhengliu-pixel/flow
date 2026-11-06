@@ -122,7 +122,7 @@
 .issue-agent-threads.is-document-card .issue-agent-approval,.issue-agent-threads.is-document-card .issue-agent-thread-error{margin-left:0;margin-right:0;padding-left:0;padding-right:0}
 .issue-agent-threads.is-document-card .issue-agent-thread-footer{width:calc(100% + 24px);min-height:0;margin:12px -12px -12px;border-top:.5px solid var(--document-comment-card-border)}
 .issue-agent-threads.is-document-card .issue-agent-start-reply{min-height:48px;padding:12px 56px 12px 12px;color:var(--theme-text-tertiary)}
-.issue-agent-threads.is-document-card .issue-agent-start-reply .avatar,.issue-agent-threads.is-document-card .issue-agent-thread-footer .avatar{background:var(--theme-surface-active);color:var(--theme-text-secondary);font-weight:600}
+.issue-agent-threads.is-document-card .issue-agent-start-reply .avatar,.issue-agent-threads.is-document-card .issue-agent-thread-footer .avatar{background:var(--theme-surface-active);color:var(--theme-text-secondary)}
 .issue-agent-threads.is-document-card .issue-agent-idle-tools{right:12px;gap:4px}
 .issue-agent-threads.is-document-card .issue-agent-idle-tools button{width:24px;height:24px}
 .issue-agent-threads.is-document-card .issue-agent-thread-footer form{padding:12px}

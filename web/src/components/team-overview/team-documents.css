@@ -175,7 +175,6 @@
   color: var(--on-accent);
   font-size: 9px;
   font-style: normal;
-  font-weight: 500;
   line-height: 1;
 }
 .team-docs-avatar img { width: 100%; height: 100%; object-fit: cover; }

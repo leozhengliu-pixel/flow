@@ -15,6 +15,28 @@
   align-content: center;
   flex-shrink: 0;
   white-space: nowrap;
+  container: user-avatar / inline-size;
+}
+
+/*
+ * Latin initials follow the avatar's own size, the way the reference's one avatar component does, so a 16px avatar reads 9px
+ * in an issue row, a picker, a filter menu and a panel alike. The weight is never set here or by a consumer: it is inherited, so
+ * initials sit at the weight of the row they are in (400 in rows, 450 in menus, 500 beside a property value).
+ */
+@container user-avatar (13.5px <= width < 14.5px) {
+  [data-script="latin"] > .user-avatar-initials { font-size: 8px; }
+}
+
+@container user-avatar (15.5px <= width < 18.5px) or (19.5px <= width < 20.5px) {
+  [data-script="latin"] > .user-avatar-initials { font-size: 9px; }
+}
+
+@container user-avatar (23.5px <= width < 24.5px) {
+  [data-script="latin"] > .user-avatar-initials { font-size: 11px; }
+}
+
+@container user-avatar (31.5px <= width < 32.5px) {
+  [data-script="latin"] > .user-avatar-initials { font-size: 14px; }
 }
 
 .user-avatar-initials,

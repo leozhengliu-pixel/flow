@@ -188,7 +188,7 @@ body .cs-select-menu .cs-select-group { height: 29px; padding: 8px 25px 6px 12px
 .cs-owner-row > div { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .cs-owner-row strong { overflow: hidden; color: var(--theme-text-primary); font-size: 13px; font-weight: 500; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 .cs-owner-row span { color: var(--text-label); font-size: 12px; font-weight: 450; line-height: 15px; }
-.cs-owner-avatar { --avatar: var(--theme-accent); width: 18px; height: 18px; flex: none; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--avatar); color: var(--theme-on-primary); font-size: 8px; font-weight: 500; }
+.cs-owner-avatar { --avatar: var(--theme-accent); width: 18px; height: 18px; flex: none; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--avatar); color: var(--theme-on-primary); font-size: 8px; }
 .cs-owner-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .cs-owner-remove { opacity: 0; }
 .cs-owner-row:hover .cs-owner-remove, .cs-owner-remove:focus-visible { opacity: 1; }

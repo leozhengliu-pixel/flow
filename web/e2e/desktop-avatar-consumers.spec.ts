@@ -72,6 +72,31 @@ test('every avatar consumer has a size, and arbitrary initials fit its bounds', 
   }
 })
 
+test('Latin initials take the reference font size for their avatar size and inherit their weight', async ({ page, workspaceKey }) => {
+  await page.goto(`/${workspaceKey}/agent`)
+  await expect(page.locator('.app')).toBeVisible()
+  const inventory = consumers()
+  await page.evaluate(async inventory => {
+    const modulePath = '/e2e/avatar-consumers-fixture.tsx'
+    const fixture = await import(/* @vite-ignore */ modulePath)
+    fixture.mount(inventory)
+    await document.fonts.ready
+  }, inventory)
+  await expect(page.locator('[data-consumer]')).toHaveCount(inventory.length * 2)
+  // Measured on the reference at 1440 and on phones: 14px -> 8px, 16px and 18px -> 9px, 24px -> 11px, 32px -> 14px (20px reads 9px between them).
+  const reference: Record<number, string> = { 14: '8px', 16: '9px', 18: '9px', 20: '9px', 24: '11px', 32: '14px' }
+  await expect.poll(() => page.locator('[data-consumer] [data-user-avatar][data-script="latin"]').evaluateAll((avatars, reference) => avatars.flatMap(avatar => {
+    const width = avatar.getBoundingClientRect().width, size = reference[width]
+    if (!size) return []
+    const initials = getComputedStyle(avatar.querySelector('.user-avatar-initials')!), parent = getComputedStyle(avatar.parentElement!)
+    const consumer = avatar.closest('[data-consumer]')?.getAttribute('data-consumer')
+    // The reference never sets a weight on the avatar: the initials sit at the weight of the row they are in. Document thread avatars
+    // set 400 on purpose (the reference's document comment avatars measure 400 inside a 450 card).
+    const inherits = initials.fontWeight === parent.fontWeight || avatar.classList.contains('document-thread-avatar') && initials.fontWeight === '400'
+    return initials.fontSize === size && inherits ? [] : [`${consumer}: ${width}px ${initials.fontSize}/${initials.fontWeight} (row ${parent.fontWeight})`]
+  }), reference)).toEqual([])
+})
+
 test('meeting attendee avatars keep their initials beside the name in every layout', async ({ page, request, workspaceKey }) => {
   test.setTimeout(180_000)
   const headers = { 'X-Workspace-Key': workspaceKey }

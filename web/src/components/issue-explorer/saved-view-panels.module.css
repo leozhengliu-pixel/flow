@@ -120,7 +120,6 @@
   background: var(--avatar, var(--chart-cyan));
   color: var(--on-accent);
   font-size: 8px;
-  font-weight: 600;
 }
 .summaryCard {
   min-height: calc(100% - 183px);

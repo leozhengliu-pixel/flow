@@ -82,7 +82,7 @@
 .menuItem[data-state=checked] .checkbox{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
 /* Rows show focus with the highlight; outrank the global role-based focus ring. */
 .targetItem.targetItem:focus-visible,.menuItem.menuItem:focus-visible{outline:0;box-shadow:none}
-.avatar{width:16px;height:16px;flex:0 0 16px;overflow:hidden;font-size:7px;font-weight:600;line-height:1}
+.avatar{width:16px;height:16px;flex:0 0 16px;overflow:hidden;font-size:7px;line-height:1}
 .avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover}
 .menuCheck{flex:0 0 16px;margin-left:auto;color:var(--pk-text)}
 .menuItem>[data-agent-badge]{margin-left:0}
