@@ -11,6 +11,8 @@ import type { BootstrapData, Project } from "@/types/flow";
 import { bindingProjectIds, CHAT_BINDING_EVENTS, useBotChats } from "./chat-binding-support";
 import { SettingsSelect, SettingsToggle } from "./settings-primitives";
 import { asIs } from '@/lib/as-is'
+import "./feature-settings.css";
+import "./chat-integration-settings.css";
 
 // Radix Select shows its trigger text only for a non-empty value; this one matches no option.
 const NO_SELECTION = "__none__";

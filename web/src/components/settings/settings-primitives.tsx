@@ -17,6 +17,7 @@ import type { Team } from "@/types/flow";
 import { isPeopleProperty } from '@/lib/people'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
+import "./settings-select.css";
 
 export function SettingsPageTitle({
   action,
@@ -286,6 +287,8 @@ export function SettingsSelect({
           onChange={(event) => onChange(event.target.value)}
           value={value}
         >
+          {/* A value that matches no option shows the placeholder, not the first option. */}
+          {!selected && <option disabled hidden value={value}>{placeholder || value}</option>}
           {normalized.map((option) => (
             <option disabled={option.disabled} key={option.value} value={option.value}>{withSuffix(option)}</option>
           ))}
@@ -298,14 +301,14 @@ export function SettingsSelect({
 
 function SettingsChevron() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 9 5">
+    <svg aria-hidden="true" width="9" height="5" viewBox="0 0 9 5">
       <path d="M1.915.557a.667.667 0 0 0-.943.943l2.862 2.862a.942.942 0 0 0 1.333 0L8.028 1.5a.667.667 0 0 0-.943-.943L4.5 3.14 1.915.557Z" />
     </svg>
   );
 }
 function SettingsCheck() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 16 16">
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16">
       <path d="M4.3 7.24a.75.75 0 1 0-1.1 1.02l3.25 3.5a.75.75 0 0 0 1.13-.04l5.25-6.5a.75.75 0 0 0-1.16-.94l-4.71 5.83L4.3 7.24Z" />
     </svg>
   );

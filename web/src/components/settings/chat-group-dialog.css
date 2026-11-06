@@ -1,0 +1,25 @@
+/* The chat group dialog: the shared dialog with the settings dialog skin (.feature-dialog), a fixed header and a scrolling body. */
+.dialog-content.chat-group-dialog { box-sizing: border-box; width: min(560px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 48px); gap: 0; padding: 0; overflow: hidden; }
+.chat-group-dialog__header { flex: none; display: flex; flex-direction: column; gap: 4px; padding: 20px 56px 12px 24px; }
+.chat-group-dialog__header h2 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.chat-group-dialog__header h2 > img { flex: none; width: 16px; height: 16px; }
+.chat-group-dialog__header h2 > span { min-width: 0; overflow-wrap: anywhere; }
+.chat-group-dialog__header p { margin: 0; color: var(--theme-text-secondary); font-size: 13px; line-height: 19px; }
+.chat-group-dialog__body { box-sizing: border-box; min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 4px 24px 24px; }
+/* The settings page lays its sections out with a 40px gap and a titled card; here the form follows the header directly. */
+.chat-group-dialog .chat-integration-settings .feature-section { margin-top: 0; }
+/* The dialog title already names the form; keep its status line. */
+.chat-group-dialog .chat-binding-editor > header { margin: 0 0 12px; }
+.chat-group-dialog .chat-binding-editor > header h2 { display: none; }
+.chat-group-dialog .chat-binding-editor > header p { margin: 0; }
+.chat-group-dialog .chat-fieldset { display: block; gap: 0; padding: 0; border: 0; }
+.chat-group-dialog .chat-subheading { margin: 20px 4px 8px; }
+.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select { width: 220px; }
+.chat-group-dialog .chat-fixed-value { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-group-dialog .feature-card .feature-row > div > span { font-size: 12px; }
+.chat-group-dialog__connect { display: inline-flex; margin-top: 4px; }
+@media (max-width: 760px) {
+  .chat-group-dialog__header { padding: 16px 48px 12px 16px; }
+  .chat-group-dialog__body { padding: 4px 16px 16px; }
+  .chat-group-dialog .chat-integration-settings .feature-row aside .settings-select { width: auto; }
+}

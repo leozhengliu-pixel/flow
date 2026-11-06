@@ -1,10 +1,9 @@
-import * as Dialog from '@radix-ui/react-dialog'
 import { Ban, Check, RefreshCw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { useBotChats } from '@/components/settings/chat-binding-support'
 import { FieldRow } from '@/components/settings/chat-group-bindings'
-import { IntegrationBrandIcon } from '@/components/settings/integration-brand-icon'
+import { ChatGroupDialog } from '@/components/settings/chat-group-dialog'
 import { SettingsSelect, SettingsToggle } from '@/components/settings/settings-primitives'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { AppLink } from '@/components/ui/app-link'
@@ -17,8 +16,6 @@ import { chatProviderName } from '@/lib/integration-catalog'
 import { toast } from '@/lib/toast'
 import type { ChatInitiativeBinding, ChatInitiativeBindings, ChatIntegrationProvider } from '@/types/chat-integrations'
 import type { Initiative, User } from '@/types/flow'
-import '@/components/settings/feature-settings.css'
-import '@/components/settings/chat-integration-settings.css'
 import { asIs } from '@/lib/as-is'
 
 const NO_SELECTION = '__none__'
@@ -31,14 +28,9 @@ const NO_SELECTION = '__none__'
 export function InitiativeChatGroupDialog({ open, onOpenChange, provider, initiative, users = [] }: { open: boolean; onOpenChange: (open: boolean) => void; provider: ChatIntegrationProvider; initiative: Initiative; users?: User[] }) {
   const { t } = useI18n()
   const name = chatProviderName(provider, t)
-  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay"/>
-    <Dialog.Content data-flow-motion="dialog" className="project-detail-page__form-dialog project-slack-dialog project-chat-group-dialog initiative-chat-group-dialog">
-      <Dialog.Title><IntegrationBrandIcon provider={provider} size={16}/>{t('{name} notifications for').replace('{name}', () => name)} <span data-i18n-ignore>{initiative.name}</span></Dialog.Title>
-      <Dialog.Description>{t("Connect a {name} group to receive this initiative's updates.").replace('{name}', () => name)}</Dialog.Description>
-      {open && <InitiativeChatGroups provider={provider} initiative={initiative} users={users}/>}
-      <footer><Dialog.Close asChild><button type="button">{t('Close')}</button></Dialog.Close></footer>
-    </Dialog.Content>
-  </Dialog.Portal></Dialog.Root>
+  return <ChatGroupDialog open={open} onOpenChange={onOpenChange} provider={provider} subject={initiative.name} description={t("Connect a {name} group to receive this initiative's updates.").replace('{name}', () => name)} className="initiative-chat-group-dialog">
+    {open && <InitiativeChatGroups provider={provider} initiative={initiative} users={users}/>}
+  </ChatGroupDialog>
 }
 
 function InitiativeChatGroups({ provider, initiative, users }: { provider: ChatIntegrationProvider; initiative: Initiative; users: User[] }) {
@@ -87,7 +79,7 @@ function InitiativeChatGroups({ provider, initiative, users }: { provider: ChatI
   }
 
   if (loading && !state && !missing) return <p className="chat-muted" role="status">{t('Loading integration…')}</p>
-  if (missing || state && !state.tenantAuthorized) return <AppLink className="project-slack-dialog__connect" href={integrationSettingsPath(workspace, provider)}>{t('Connect {name}').replace('{name}', () => name)}</AppLink>
+  if (missing || state && !state.tenantAuthorized) return <AppLink className="feature-button primary chat-group-dialog__connect" href={integrationSettingsPath(workspace, provider)}>{t('Connect {name}').replace('{name}', () => name)}</AppLink>
   return <div className="chat-integration-settings project-chat-groups initiative-chat-groups">
     {error && <p className="chat-integration-alert" role="alert">{error}</p>}
     {state && state.bindings.length > 0 && <div className="feature-card">{state.bindings.map(binding => {
