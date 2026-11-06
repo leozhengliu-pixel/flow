@@ -76,16 +76,7 @@
   html:root .settings-app .settings-main .personal-row-link-meta { line-height: normal; }
   html:root .settings-app .settings-main .settings-crumb ~ .team-settings-header { position: relative; margin-bottom: 23px; }
   html:root .settings-app .team-overview-shortcut { position: absolute; right: -6px; top: 36px; height: 24px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border-radius: 9999px; color: var(--set-text); text-decoration: none; font: 500 12px var(--font); }
-  html:root .settings-app .team-overview-list > a { position: relative; box-sizing: border-box; min-height: 65px; height: 65px; gap: 12px; padding: 16px; border-bottom: 0; }
-  html:root .settings-app .team-overview-list > a:not(:last-child)::after { position: absolute; content: ''; left: 16px; right: 16px; bottom: 0; border-bottom: .5px solid var(--set-sep); }
-  html:root .settings-app .team-overview-list .team-overview-icon { box-sizing: border-box; flex: 0 0 32px; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; background: var(--theme-surface-2); color: var(--set-desc); }
-  html:root .settings-app .team-overview-list .team-overview-copy { gap: 3px; }
-  html:root .settings-app .team-overview-list strong { font: 500 13px/15.5px var(--font); }
-  html:root .settings-app .team-overview-list small { font: 450 12px/14.5px var(--font); }
-  html:root .settings-app .team-overview-list .team-overview-copy strong { color: var(--set-text); }
-  html:root .settings-app .team-overview-list .team-overview-copy small { color: var(--set-desc); }
   html:root .settings-app .settings-main .team-settings-header > div > p { color: var(--set-group-desc); }
-  html:root .settings-app .team-overview-list .team-overview-summary { flex: none; display: block; max-width: 160px; color: var(--set-desc); font: 450 12px/14.5px var(--font); }
   html:root .settings-app .settings-main .settings-teams-page > .settings-page-header { margin-bottom: 13px; }
   html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar { gap: 6px; margin-bottom: 21px; }
   html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar > .settings-select { height: 32px; }

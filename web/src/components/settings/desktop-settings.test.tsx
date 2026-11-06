@@ -58,9 +58,9 @@ it('shows team visibility, working section links, actual members and workflow st
   expect(screen.getByText('Accessible to all workspace members')).toBeVisible()
   expect(screen.getByRole('link', { name: 'Team overview' })).toHaveAttribute('href', '/workspace/team/TST/overview')
   expect(screen.getByText('1 member')).toBeVisible()
-  expect(screen.getByRole('link', { name: /Project labels/ })).toHaveAttribute('href', '/workspace/settings/teams/TST/project-labels')
-  expect(screen.getByRole('link', { name: /Issue statuses/ })).toHaveTextContent('3 statuses')
-  expect(screen.getByRole('link', { name: /Project statuses/ })).toBeVisible()
+  expect(screen.getByRole('link', { name: /Labels available to this team’s projects/ })).toHaveAttribute('href', '/workspace/settings/teams/TST/project-labels')
+  expect(screen.getByRole('link', { name: /Customize the statuses issues go through/ })).toHaveTextContent('3 statuses')
+  expect(screen.getByRole('link', { name: /Customize the statuses projects go through/ })).toBeVisible()
 })
 
 it('validates announcements, preserves unrelated settings, saves, and reopens persisted content', async () => {

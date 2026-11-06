@@ -100,7 +100,7 @@ test('teams sort by supported columns, expose member links, and show live overvi
   await expect(page.getByRole('link', { name: 'Team overview', exact: true })).toBeVisible()
   expect((await page.locator('.team-overview-icon').first().boundingBox())?.width).toBe(32)
   await expect(page.locator('.team-overview-summary').first()).toHaveText('1 member')
-  await page.getByRole('link', { name: /^Project labels/ }).click()
+  await page.locator('[data-team-overview-row=project-labels]').click()
   await expect(page).toHaveURL(new RegExp('/teams/ZUL/project-labels$'))
 })
 

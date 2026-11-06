@@ -69,6 +69,19 @@ import { chatIntegrationsZhCN } from './translations-chat-integrations';
 import { coverageGapsZhCN } from './translations-coverage-gaps';
 
 export const zhCN: Record<string, string> = {
+  "Name, identifier, description, and timezone": "名称、标识符、描述和时区",
+  "Customize the statuses projects go through": "自定义项目所经历的状态",
+  "Reflect your team structure and share workflows & settings": "体现团队结构并共享工作流和设置",
+  "Estimate issue complexity and plan team capacity": "估算事项复杂度并规划团队容量",
+  "Pre-filled templates for issues, projects, and documents": "用于事项、项目和文档的预填模板",
+  "Create issues by email and automate status updates, closing, and archiving": "通过邮件创建事项，自动更新状态、关闭和归档",
+  "Manage team notifications and automatically create project channels": "管理团队通知并自动创建项目频道",
+  "MCP connectors shared with this team": "与此团队共享的 MCP 连接器",
+  "Flow Agent skills shared with this team": "与此团队共享的 Flow Agent 技能",
+  "{count} skill": "{count} 项技能",
+  "{count} skills": "{count} 项技能",
+  "{count} connector": "{count} 个连接器",
+  "{count} connectors": "{count} 个连接器",
   "Enable suggested actions on comments": "启用评论建议操作",
   "Allow the Flow Agent to identify and suggest next steps on comment threads": "允许 Flow Agent 识别评论会话中的后续步骤并提出建议",
   "Suggested actions": "建议操作",
@@ -5925,7 +5938,7 @@ Object.assign(zhCN, {
   "Add MCP connectors that team members can use with Flow Agent": "添加团队成员可与 Flow Agent 配合使用的 MCP 连接器",
   "Labels available to this team’s projects": "此团队项目可用的标签",
   "Resources that appear in Favorites for every team member": "每位团队成员的收藏中都会显示的资源",
-  "Customize the statuses projects go through, or inherit from parent/workspace": "自定义项目经历的状态，或继承上级团队/工作区的状态",
+  "Customize the statuses projects go through, or inherit from parent/workspace": "自定义项目所经历的状态，或继承上级团队/工作区的状态",
   "Permanently delete this team and all its data, with a 30-day restoration window": "永久删除此团队及其所有数据，30 天内可恢复",
   "Team deleted": "团队已删除",
   "Keep this team's project statuses in sync with its parent team": "让此团队的项目状态与上级团队保持同步",

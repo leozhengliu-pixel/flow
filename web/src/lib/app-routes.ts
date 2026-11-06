@@ -105,6 +105,8 @@ export type UsageSettingsView = "analytics" | "spend-limits" | "user-limits" | "
 export type TeamSettingsSection =
   | "overview"
   | "general"
+  | "hierarchy"
+  | "estimates"
   | "security"
   | "members"
   | "notifications"
@@ -1979,6 +1981,8 @@ const SETTINGS_PAGES = new Set<SettingsPageId>([
 const TEAM_SETTINGS_SECTIONS = new Set<TeamSettingsSection>([
   "overview",
   "general",
+  "hierarchy",
+  "estimates",
   "security",
   "members",
   "notifications",

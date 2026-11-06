@@ -100,8 +100,8 @@ describe('chat platform entry points', () => {
 
   it('lists the team chat page under its Lark name in the team settings overview', async () => {
     teamNotifications(workspace('lark'), 'overview')
-    expect(await screen.findByText('Lark notifications')).toBeInTheDocument()
-    expect(screen.getByText('Broadcast notifications to Lark groups')).toBeInTheDocument()
+    expect(await screen.findByText('Lark')).toBeInTheDocument()
+    expect(screen.getByText('Manage team notifications and automatically create project channels')).toBeInTheDocument()
     expect(screen.queryByText('Slack notifications')).not.toBeInTheDocument()
   })
 

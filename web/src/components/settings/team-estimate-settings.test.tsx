@@ -21,7 +21,7 @@ function mount(settings: Partial<TeamSettings>) {
     emailIntakeAddresses: [],
     teamSettings: { [team.id]: { teamId: team.id, timezone: 'Etc/UTC', defaultStateId: 'state-started', estimateType: 'notUsed', ...settings } as TeamSettings },
   } as unknown as Partial<BootstrapData>)
-  render(<MemoryRouter><I18nProvider><TeamWorkflowSettings data={data} team={team} section="general" onNavigate={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider></MemoryRouter>)
+  render(<MemoryRouter><I18nProvider><TeamWorkflowSettings data={data} team={team} section="estimates" onNavigate={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider></MemoryRouter>)
   return team
 }
 
