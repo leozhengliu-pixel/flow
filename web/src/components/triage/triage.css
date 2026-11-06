@@ -21,7 +21,7 @@
   color: var(--text);
 }
 
-/* The list's right edge: the reference app's 0.5px divider (the split resizer draws it). */
+/* The list's right edge: the split resizer draws the reference app's 0.5px divider. */
 .flow-triage-page [data-split-view='triage'] [data-split-view-list] { border-right: 0; }
 .flow-triage-page [data-split-view='triage'] [role='separator']::after { background: var(--triage-border); }
 
@@ -162,7 +162,10 @@
   .flow-triage-list__team svg { width: 16px; height: 16px; }
   .flow-triage-list__title h2 { padding-left: 4px; color: var(--text); line-height: normal; }
   .flow-triage-list__actions { gap: 4px; }
-  .flow-triage-row { margin: 0; padding: 0; }
+  /* The desktop list keeps the reference's 0.5px divider column, so its content is 399.5px wide. */
+  .flow-triage-page [data-split-view='triage'] [data-split-view-list] { border-right: .5px solid transparent; }
+  .flow-triage-row { margin: 0; padding: 0; justify-content: flex-start; }
+  .flow-triage-row__line:not(.is-meta) { height: 16px; margin-top: 10px; }
   .flow-triage-row::before { inset-inline: 8px; }
   .flow-triage-row__line { margin-inline: 22px; }
   .flow-triage-row__title { color: var(--bright); line-height: normal; }
@@ -356,7 +359,7 @@
 .flow-triage-not-selected__cta:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 @media (--desktop-layout) {
   .flow-triage-not-selected__body h2 { color: var(--text); }
-  .flow-triage-not-selected__cta { gap: 0; padding: 0 8px 0 6px; border: .5px solid transparent; background: var(--ui-pill-bg); color: var(--text); }
+  .flow-triage-not-selected__cta { gap: 0; padding: 0 8px 0 6px; border: .5px solid transparent; background: var(--toolbar-icon-pill-bg); color: var(--text); }
   .flow-triage-not-selected__cta svg { margin-right: 6px; }
   .flow-triage-not-selected__cta:hover { background: var(--ui-pill-hover-bg); }
 }
