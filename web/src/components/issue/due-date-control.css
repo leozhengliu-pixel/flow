@@ -4,7 +4,8 @@ html:root .due-date-command {
   box-sizing: border-box;
   z-index: 650;
   width: max-content;
-  min-width: var(--due-date-min-width, 207px);
+  width: calc-size(max-content, round(size, 1px));
+  min-width: 207px;
   max-width: min(360px, calc(100vw - 20px));
   overflow: hidden;
   border: .5px solid var(--pk-border);

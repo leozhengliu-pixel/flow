@@ -134,7 +134,7 @@ test('opens every action submenu and applies desktop date and reminder presets',
   await trigger.click()
   await page.locator('.issue-options-popover [data-submenu="due"]').hover()
   const dates = page.locator('.issue-options-due-date')
-  await expect(dates.locator('.due-date-command')).toHaveCSS('min-width', '232px')
+  await expect(dates.locator('.due-date-command')).toHaveCSS('min-width', '207px')
   await expect(dates.locator('.due-date-shortcut')).toBeHidden()
   await expect(dates.getByRole('option', { name: /^End of this week/ })).toBeVisible()
   const update = page.waitForResponse(res => res.request().method() === 'PATCH' && res.url().endsWith(`/api/issues/${issue.id}`))
