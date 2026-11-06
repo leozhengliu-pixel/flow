@@ -30,7 +30,7 @@ test('enables a throwaway team queue, shows its count, and opens a real issue in
   const create = page.getByRole('button', { name: 'Create triage issue', exact: true })
   await expect(create).toHaveCSS('padding', '0px 8px 0px 6px')
   await expect(create.locator('svg')).toHaveCSS('margin-right', '6px')
-  await expect(create).toHaveCSS('background-color', 'lch(10.149 0.593 272)')
+  await expect(create).toHaveCSS('background-color', 'lch(10.149 0.689 272)')
   await expect(create).toHaveCSS('color', 'lch(90.451 1.2 272)')
   if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/triage-empty-selection.png`, animations: 'disabled' })
   const selectedTitle = '[audit] Triage check 2'
