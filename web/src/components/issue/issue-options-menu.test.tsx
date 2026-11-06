@@ -50,6 +50,8 @@ describe('issue action menu', () => {
 
   it('offers a desktop three-hour reminder and sends the chosen timestamp', async () => {
     const media = vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: query === DESKTOP_LAYOUT_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as MediaQueryList)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 7, 9, 0))
     try {
       const user = userEvent.setup()
       const { actions } = setup()
@@ -58,7 +60,7 @@ describe('issue action menu', () => {
       await user.click(within(await screen.findByRole('dialog', { name: 'Remind me' })).getByRole('option', { name: /In 3 hours/ }))
       const date = new Date(vi.mocked(actions.remind).mock.calls[0][0])
       expect(Math.abs(date.getTime() - Date.now() - 3 * 60 * 60 * 1000)).toBeLessThan(5000)
-    } finally { media.mockRestore() }
+    } finally { media.mockRestore(); vi.useRealTimers() }
   })
 
   it('offers desktop team moves, marks the current team, and omits retired targets', async () => {

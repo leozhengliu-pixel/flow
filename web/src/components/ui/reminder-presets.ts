@@ -28,8 +28,8 @@ export function reminderPresetDate(kind: ReminderPreset, from: Date) {
 
 export function presetApplies(kind: ReminderPreset, from: Date) {
   const hour = from.getHours()
-  if (kind === 'threeHours') return hour >= 8 && reminderPresetDate(kind, from).getHours() < 18 && reminderPresetDate(kind, from).getDate() === from.getDate()
-  if (kind === 'evening') return hour >= 8 && hour < 17
+  if (kind === 'threeHours') return reminderPresetDate(kind, from).getHours() < 18 && reminderPresetDate(kind, from).getDate() === from.getDate()
+  if (kind === 'evening') return hour < 17
   return true
 }
 

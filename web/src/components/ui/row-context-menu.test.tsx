@@ -97,8 +97,13 @@ describe('the reference app reminder presets', () => {
     expect(labels()).toEqual(['An hour from now', 'In 3 hours', 'This evening', 'Tomorrow', 'Next week', 'A month from now', 'Custom…'])
     expect(document.querySelectorAll('.flow-menu__row .flow-menu__icon svg').length).toBe(7)
   })
-  it('keeps the early-morning list to the reference app\'s four presets', () => {
-    render(<I18nProvider><Reminders now={new Date(2026, 9, 7, 7, 38)}/></I18nProvider>)
+  it('keeps the early-morning hours on the full list, as the reference app does at 00:22 and 05:43', () => {
+    render(<I18nProvider><Reminders now={new Date(2026, 9, 7, 5, 43)}/></I18nProvider>)
+    fireEvent.contextMenu(screen.getByRole('row', { name: 'Row' }))
+    expect(labels()).toEqual(['An hour from now', 'In 3 hours', 'This evening', 'Tomorrow', 'Next week', 'A month from now', 'Custom…'])
+  })
+  it('drops "This evening" from late afternoon and "In 3 hours" once it would pass 18:00', () => {
+    render(<I18nProvider><Reminders now={new Date(2026, 9, 7, 17, 30)}/></I18nProvider>)
     fireEvent.contextMenu(screen.getByRole('row', { name: 'Row' }))
     expect(labels()).toEqual(['An hour from now', 'Tomorrow', 'Next week', 'A month from now', 'Custom…'])
   })

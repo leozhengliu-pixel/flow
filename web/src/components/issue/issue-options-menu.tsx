@@ -54,6 +54,7 @@ import { issueMoveTeams } from '@/lib/issue-team-move'
 import { deleteRelation, refreshIssueSuggestions } from '@/lib/api'
 import { issueRemovableLinks, issueEverythingMarkdown, issueMarkdown, type IssueRemovableLink } from './issue-options-model'
 import { useIssuesById } from './use-issues-by-id'
+import { PRESETS, presetApplies, reminderPresetDate } from '@/components/ui/reminder-presets'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
 export type RelatedIssueCreationKind = 'issue' | 'sub-issue' | 'parent' | 'blocked' | 'blocking' | 'copy'
@@ -624,7 +625,7 @@ export function ReminderChoices({ data, teamId, onChoose, onCustom }: { data?: B
   const nextCycle = data?.cycles.filter(cycle => cycle.teamId === teamId && new Date(cycle.startsAt).getTime() > now.getTime()).sort((a,b) => a.startsAt.localeCompare(b.startsAt))[0]
   const options = [
     {label:'An hour from now',date:reminderDate('hour')},
-    ...(desktop ? [{label:'In 3 hours',date:new Date(now.getTime() + 3 * 60 * 60 * 1000)}] : []),
+    ...(desktop ? (['threeHours', 'evening'] as const).filter(kind => presetApplies(kind, now)).map(kind => ({ label: PRESETS.find(preset => preset.id === kind)!.label, date: reminderPresetDate(kind, now) })) : []),
     {label:'Tomorrow',date:reminderDate('tomorrow')},
     {label:'Next week',date:reminderDate('week')}, {label:'A month from now',date:reminderDate('month')},
     ...(nextCycle ? [{label:'Next cycle',date:new Date(nextCycle.startsAt)}] : []),

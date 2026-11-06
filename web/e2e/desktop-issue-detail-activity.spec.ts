@@ -109,11 +109,13 @@ test('opens every action submenu and applies desktop date and reminder presets',
   const target = await (await request.post('/api/issues', { headers, data: { title: '[audit] Remove target', teamId: data.teams[0].id } })).json() as Issue
   expect((await request.post(`/api/issues/${issue.id}/relations`, { headers, data: { type: 'related', relatedIssueId: target.id } })).status()).toBe(201)
   await page.goto(`/${key}/issue/${issue.identifier}`)
+  // "In 3 hours" stops at 18:00 and "This evening" at 17:00, so the list length follows the clock.
+  const hour = new Date().getHours(), threeHoursOffered = hour < 15, eveningOffered = hour < 17
   const trigger = page.getByRole('button', { name: 'Issue options', exact: true })
   await trigger.click()
   await expect(trigger).toHaveCSS('background-color', 'rgb(45, 45, 47)')
   await expect(page.locator('.issue-options-popover [data-submenu="release"]')).toHaveCount(0)
-  for (const [key, label, count] of [['create', 'Create related', 5], ['mark', 'Mark as', 6], ['remove', 'Remove', 1], ['copy', 'Copy', 8], ['convert', 'Convert to', 3], ['remind', 'Remind me', 6]] as const) {
+  for (const [key, label, count] of [['create', 'Create related', 5], ['mark', 'Mark as', 6], ['remove', 'Remove', 1], ['copy', 'Copy', 8], ['convert', 'Convert to', 3], ['remind', 'Remind me', 5 + Number(threeHoursOffered) + Number(eveningOffered)]] as const) {
     const parent = page.locator(`.issue-options-popover [data-submenu="${key}"]`)
     await parent.hover()
     const menu = page.getByRole('dialog', { name: label, exact: true })
@@ -128,9 +130,9 @@ test('opens every action submenu and applies desktop date and reminder presets',
   }
   const remind = page.getByRole('dialog', { name: 'Remind me', exact: true })
   const reminderRequest = page.waitForRequest(req => req.method() === 'POST' && req.url().includes('/reminders'))
-  await remind.getByRole('option', { name: /^In 3 hours/ }).click()
+  await remind.getByRole('option', { name: threeHoursOffered ? /^In 3 hours/ : /^Tomorrow/ }).click()
   const reminder = await reminderRequest
-  expect(Math.abs(Date.parse(reminder.postDataJSON().remindAt) - Date.now() - 3 * 60 * 60 * 1000)).toBeLessThan(10_000)
+  if (threeHoursOffered) expect(Math.abs(Date.parse(reminder.postDataJSON().remindAt) - Date.now() - 3 * 60 * 60 * 1000)).toBeLessThan(10_000)
   await trigger.click()
   await page.locator('.issue-options-popover [data-submenu="due"]').hover()
   const dates = page.locator('.issue-options-due-date')
