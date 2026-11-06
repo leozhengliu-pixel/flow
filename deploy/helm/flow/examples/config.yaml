@@ -1,0 +1,127 @@
+# Flow configuration file (docs/configuration.md, "Configuration file").
+# Mount it read-only and point FLOW_CONFIG_FILE (or --config) at it, e.g.
+# /etc/flow/config.yaml from a Kubernetes ConfigMap.
+#
+# Precedence: built-in default < this file < environment variable.
+# Every key is optional; leave a key out (or empty) to keep the default.
+# Unknown keys, wrong types and values outside the allowed set stop the
+# server at startup with the file, line and key. Secrets (passwords, API
+# keys, tokens, client secrets, database and Redis URLs) are refused here:
+# pass them as environment variables from a Kubernetes Secret.
+version: 1
+
+# Server settings. Each key sets the FLOW_* variable named in the comment,
+# unless the environment already sets it.
+server:
+  appUrl: https://flow.example.com          # FLOW_APP_URL
+  httpAddr: ":8080"                         # FLOW_HTTP_ADDR
+  log:
+    level: info                             # FLOW_LOG_LEVEL: debug | info | warn | error
+    format: json                            # FLOW_LOG_FORMAT: text | json
+  database:
+    driver: postgres                        # FLOW_DATABASE_DRIVER: sqlite | postgres | mysql
+    maxOpenConns: 20                        # FLOW_DATABASE_MAX_OPEN_CONNS
+    maxIdleConns: 10                        # FLOW_DATABASE_MAX_IDLE_CONNS
+    connMaxLifetime: 30m                    # FLOW_DATABASE_CONN_MAX_LIFETIME
+    # url: is a secret: set FLOW_DATABASE_URL from a Secret.
+  redis:
+    mode: disabled                          # FLOW_REDIS_MODE: disabled | standalone | cluster
+    prefix: flow                            # FLOW_REDIS_PREFIX
+  storage:
+    driver: s3                              # FLOW_STORAGE_DRIVER: local | s3
+    s3:
+      bucket: flow-uploads                  # FLOW_S3_BUCKET
+      region: us-east-1                     # FLOW_S3_REGION
+      pathStyle: false                      # FLOW_S3_PATH_STYLE
+  retention:
+    trashDays: 30                           # FLOW_TRASH_RETENTION_DAYS
+    domainEventDays: 90                     # FLOW_DOMAIN_EVENT_RETENTION_DAYS
+  auth:
+    email:
+      enabled: true                         # FLOW_AUTH_EMAIL_ENABLED
+    autoProvision: false                    # FLOW_AUTH_AUTO_PROVISION
+    allowedDomains: [example.com]           # FLOW_AUTH_ALLOWED_DOMAINS
+    oidc:
+      enabled: false                        # FLOW_AUTH_OIDC_ENABLED
+      issuerUrl: https://login.example.com  # FLOW_OIDC_ISSUER_URL
+      clientId: flow                        # FLOW_OIDC_CLIENT_ID (the secret stays in FLOW_OIDC_CLIENT_SECRET)
+      scopes: [openid, profile, email]      # FLOW_OIDC_SCOPES
+      roleClaim: groups                     # FLOW_OIDC_ROLE_CLAIM
+      roleMapping:                          # FLOW_OIDC_ROLE_MAPPING
+        flow-admins: admin
+      defaultRole: member                   # FLOW_OIDC_DEFAULT_ROLE
+  agent:
+    enabled: true                           # FLOW_AGENT_ENABLED (the key stays in FLOW_AGENT_API_KEY)
+    protocol: openai-responses              # FLOW_AGENT_PROTOCOL
+    baseUrl: https://api.openai.com/v1      # FLOW_AGENT_BASE_URL
+    model: gpt-5-mini                       # FLOW_AGENT_MODEL
+    timeout: 60s                            # FLOW_AGENT_TIMEOUT
+  smtp:
+    host: smtp.example.com                  # FLOW_SMTP_HOST
+    port: 587                               # FLOW_SMTP_PORT
+    from: flow@example.com                  # FLOW_SMTP_FROM
+  workspaces:
+    regionSelector: false                   # FLOW_WORKSPACE_REGION_SELECTOR_ENABLED
+  # Any other non-secret FLOW_* or OTEL_* variable by name.
+  env:
+    FLOW_CODING_MAX_SESSIONS: "20"
+
+# Defaults for objects Flow creates. They apply when the object is created
+# (a new workspace, a new team, a member's settings the first time they
+# appear in a workspace) and never change settings people already have.
+defaults:
+  workspace:
+    region: us                              # FLOW_WORKSPACE_DEFAULT_REGION
+    tutorial: true                          # FLOW_WORKSPACE_TUTORIAL ("Getting started" issues)
+    fiscalMonth: January                    # first month of the fiscal year
+    guestsAllowed: true
+    sessionDurationDays: 30                 # 1 to 365
+    invitePermission: admins                # members | owners_and_admins | owners | admins
+    teamCreatePermission: members           # members | owners_and_admins | owners | admins
+    inviteLinksEnabled: false
+    allowedDomains: []                      # email domains allowed to join the workspace
+    features:                               # Settings > Features switches of a new workspace
+      initiatives: true
+      customer-requests: true
+      releases: true
+      pulse: true
+      asks: true
+      loops: true
+      ai: true
+      triage-intelligence: false
+  team:
+    timezone: Etc/UTC                       # IANA time zone
+    defaultPriority: none                   # none | urgent | high | medium | low
+    estimates:
+      type: fibonacci                       # notUsed | exponential | fibonacci | flow | tShirt
+      allowZero: false
+      extended: false
+      countUnestimated: true                # count unestimated issues as 1 point
+    triage:
+      enabled: false
+      requirePriority: false
+    autoClose:
+      parentIssues: false
+      subIssues: false
+      staleIssues: false
+      staleMonths: 6                        # 1 to 24
+    autoArchiveMonths: 6                    # 1 to 24
+    cycles:
+      enabled: true
+      durationWeeks: 2                      # 1 to 8
+      cooldownWeeks: 0                      # 0 to 8
+      startDay: monday                      # sunday … saturday
+      upcomingCycles: 2                     # 1 to 15
+      autoCreate: true
+      moveUnfinished: true                  # move unfinished issues to the next cycle
+  user:
+    language: zh-CN                         # en-US | zh-CN; also the sign-in pages' language
+    theme: system                           # system | light | dark
+    firstDayOfWeek: monday                  # locale | monday … sunday
+    homeView: agent                         # agent | inbox | myIssues
+    displayNames: fullName                  # fullName | firstName | username
+    fontSize: default                       # small | default | large
+    notifications:
+      email: true
+      desktop: true
+      emailFormat: digest                   # digest | immediate

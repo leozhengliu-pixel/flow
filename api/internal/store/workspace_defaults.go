@@ -27,7 +27,25 @@ func EmptyWorkspace(name, urlKey, region string, viewer domain.User) domain.Boot
 	}
 	data.Labels = defaultWorkspaceLabels(now)
 	normalize(&data)
+	applyTeamCreationDefaults(&data, team.ID)
 	return data
+}
+
+// applyTeamCreationDefaults gives a new workspace's first team the operator's
+// team defaults (defaults.team in the config file): its settings and, when
+// they configure cycles, its cycle settings. The scheduler creates the cycles
+// of a team whose cycles are on.
+func applyTeamCreationDefaults(data *domain.Bootstrap, teamID string) {
+	defaults := domain.CurrentCreationDefaults().Team
+	settings := data.TeamSettings[teamID]
+	defaults.Apply(&settings)
+	data.TeamSettings[teamID] = settings
+	if defaults.Cycles != (domain.CycleCreationDefaults{}) {
+		if data.CycleSettings == nil {
+			data.CycleSettings = map[string]domain.CycleSettings{}
+		}
+		data.CycleSettings[teamID] = defaults.NewTeamCycleSettings()
+	}
 }
 
 // defaultWorkspaceLabels are the issue labels every new workspace starts with.

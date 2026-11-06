@@ -1,6 +1,8 @@
 # Deployment configuration
 
-Flow uses environment variables for infrastructure and authentication choices.
+Flow uses environment variables for infrastructure and authentication choices,
+and an optional YAML [configuration file](#configuration-file) for the same
+non-secret settings plus defaults for new workspaces, teams and members.
 Configuration is validated before migrations or the HTTP listener start. A
 selected backend with missing required values causes a clear startup error.
 Secrets may be supplied as `VARIABLE_FILE=/run/secrets/name`; the file value
@@ -8,6 +10,464 @@ takes precedence over `VARIABLE`.
 
 For application bot setup, permissions, account linking, and group bindings,
 see [Feishu and Lark integrations](feishu-lark.md).
+
+## Configuration file
+
+Besides environment variables, Flow reads an optional YAML file, typically
+mounted from a Kubernetes ConfigMap. It carries two kinds of settings:
+
+- `server:` the non-secret server settings that environment variables set
+  today (application URL, logging, database pool, Redis, storage, sign-in
+  methods, Flow Agent model, SMTP, ...), with the variable each key sets;
+- `defaults:` application defaults for objects Flow creates: new workspaces,
+  new teams and members' personal settings (language, estimates, cycles,
+  triage, feature switches, theme, notifications, ...). These have no
+  environment variable.
+
+Point Flow at the file with `FLOW_CONFIG_FILE=/etc/flow/config.yaml` or the
+`--config /etc/flow/config.yaml` flag (the flag wins). Without either, nothing
+changes: Flow runs exactly as before.
+
+### Precedence
+
+**Built-in default < config file < environment variable.** A `server:` key
+sets its variable only when the environment does not set it (an empty value
+counts as unset), so every existing deployment keeps working, and an
+environment variable can always override the file. At startup Flow logs how
+many settings came from the file and which variables the environment
+overrode.
+
+The container image presets `FLOW_DATABASE_DRIVER`, `FLOW_DATABASE_PATH`,
+`FLOW_STORAGE_DRIVER`, `FLOW_STORAGE_LOCAL_PATH`, `FLOW_STATIC_PATH`,
+`FLOW_ASSET_PREVIOUS_PATH` and `FLOW_APP_URL` with `ENV`, and the Helm chart
+sets the variables of its own values (`config.appUrl`, `config.logLevel`,
+`database.*`, `storage.*`, `redis.*`, ...). Those are environment variables
+too, so they win over the file's `server:` keys of the same name: keep
+setting them the way you do today and use the file for everything else.
+
+### Defaults apply to new objects only
+
+`defaults:` never rewrites settings people already have:
+
+| Section | Applied when |
+| --- | --- |
+| `defaults.workspace` | A workspace is created (from the app or `POST /api/workspaces`). |
+| `defaults.team` | A team is created, including a new workspace's first team. A team created with "copy settings from" or as a sub-team takes the other team's settings instead. With `cycles.enabled` and `autoCreate`, the team starts with its current cycle and the upcoming ones. |
+| `defaults.user` | A member's personal settings (and notification preferences) in a workspace are first created: when they create or join the workspace. Members who already have settings keep them. |
+
+Changing a default later affects only what is created afterwards. Existing
+workspaces, teams and members are changed in their settings pages, as before.
+
+### Language
+
+Flow keeps the interface language per member (Settings > Preferences >
+Language); there is no workspace-wide language. `defaults.user.language`
+(`en-US` or `zh-CN`, the languages of the web app) therefore does two
+things:
+
+- it is the language of new members' personal settings, so everyone who joins
+  sees Flow in that language until they choose another;
+- the sign-in pages use it for a browser that has not chosen a language
+  (`GET /api/auth/providers` returns it as `defaultLanguage`); without it they
+  follow the browser's language, as before. A language chosen on the device
+  always wins, and after sign-in the member's own language applies.
+
+The "Getting started" issues of a new workspace are written in its creator's
+language.
+
+### Validation
+
+The file is checked before anything else starts, and any problem stops the
+server with the file, line and key:
+
+- unknown keys (`config file /etc/flow/config.yaml:12: defaults.team.estimate:
+  unknown key (allowed here: autoArchiveMonths, autoClose, cycles, ...)`);
+- wrong types: booleans are `true`/`false`, numbers are whole numbers,
+  durations are Go durations such as `30s` or `2h`, lists are YAML lists;
+- values outside their allowed set or range (`defaults.user.language: must be
+  one of en-US, zh-CN (got "fr-FR")`, `defaults.team.cycles.durationWeeks: must
+  be between 1 and 8`), time zones that are not IANA names, URLs that are not
+  http(s) or carry credentials;
+- a key set twice, more than one YAML document, or `version` other than `1`.
+
+An empty value (`key:` or `key: ~`) keeps the default, which is convenient for
+templated files.
+
+### Secrets stay out of the file
+
+The file usually lives in a ConfigMap, which is not meant for secrets, so
+Flow refuses them: a key named like a secret anywhere in the file (`password`,
+`secret`, `apiKey`, `token`, `privateKey`, `accessKeyId`, `credentials`, ...),
+the credential-bearing settings `server.database.url`, `server.redis.url` and
+`server.redis.username`, and secret variables under `server.env`
+(`FLOW_*_KEY`, `*_SECRET`, `*_TOKEN`, `*_PASSWORD`, `FLOW_DATABASE_URL`,
+`FLOW_REDIS_URL`, `FLOW_MCP_CREDENTIALS`, ...) all stop startup with an error
+that names the variable to use instead, without repeating the value. Pass
+secrets as environment variables from a Kubernetes Secret (or as
+`VARIABLE_FILE` paths, which are allowed). The Helm chart refuses them in
+`config.file` before anything is applied.
+
+### Helm
+
+Put the file under `config.file` in your values. The chart renders it as
+`config.yaml` in the `<release>-config` ConfigMap, mounts it read-only at
+`/etc/flow`, sets `FLOW_CONFIG_FILE=/etc/flow/config.yaml`, and annotates the
+Pods with its checksum so they roll when it changes:
+
+```yaml
+config:
+  appUrl: https://flow.example.com
+  file:
+    defaults:
+      user:
+        language: zh-CN
+      team:
+        estimates:
+          type: fibonacci
+        cycles:
+          enabled: true
+```
+
+To manage the ConfigMap yourself, set `config.fileConfigMap.name` (and `key`,
+default `config.yaml`) instead; Pods then do not roll on their own when it
+changes. The environment-variable ConfigMap keeps working as before.
+
+### Docker Compose
+
+Mount the file and name it (commented example in `docker-compose.yml`). The
+compose file sets most `FLOW_*` variables with defaults, and those win over the
+file's `server:` keys; use the file there for `defaults:` and for server
+settings the compose file does not set.
+
+```yaml
+services:
+  app:
+    environment:
+      FLOW_CONFIG_FILE: /etc/flow/config.yaml
+    volumes:
+      - ./flow-config.yaml:/etc/flow/config.yaml:ro
+```
+
+### Full example
+
+Every key is optional. This is
+[`deploy/helm/flow/examples/config.yaml`](../deploy/helm/flow/examples/config.yaml):
+
+```yaml
+# Flow configuration file (docs/configuration.md, "Configuration file").
+# Mount it read-only and point FLOW_CONFIG_FILE (or --config) at it, e.g.
+# /etc/flow/config.yaml from a Kubernetes ConfigMap.
+#
+# Precedence: built-in default < this file < environment variable.
+# Every key is optional; leave a key out (or empty) to keep the default.
+# Unknown keys, wrong types and values outside the allowed set stop the
+# server at startup with the file, line and key. Secrets (passwords, API
+# keys, tokens, client secrets, database and Redis URLs) are refused here:
+# pass them as environment variables from a Kubernetes Secret.
+version: 1
+
+# Server settings. Each key sets the FLOW_* variable named in the comment,
+# unless the environment already sets it.
+server:
+  appUrl: https://flow.example.com          # FLOW_APP_URL
+  httpAddr: ":8080"                         # FLOW_HTTP_ADDR
+  log:
+    level: info                             # FLOW_LOG_LEVEL: debug | info | warn | error
+    format: json                            # FLOW_LOG_FORMAT: text | json
+  database:
+    driver: postgres                        # FLOW_DATABASE_DRIVER: sqlite | postgres | mysql
+    maxOpenConns: 20                        # FLOW_DATABASE_MAX_OPEN_CONNS
+    maxIdleConns: 10                        # FLOW_DATABASE_MAX_IDLE_CONNS
+    connMaxLifetime: 30m                    # FLOW_DATABASE_CONN_MAX_LIFETIME
+    # url: is a secret: set FLOW_DATABASE_URL from a Secret.
+  redis:
+    mode: disabled                          # FLOW_REDIS_MODE: disabled | standalone | cluster
+    prefix: flow                            # FLOW_REDIS_PREFIX
+  storage:
+    driver: s3                              # FLOW_STORAGE_DRIVER: local | s3
+    s3:
+      bucket: flow-uploads                  # FLOW_S3_BUCKET
+      region: us-east-1                     # FLOW_S3_REGION
+      pathStyle: false                      # FLOW_S3_PATH_STYLE
+  retention:
+    trashDays: 30                           # FLOW_TRASH_RETENTION_DAYS
+    domainEventDays: 90                     # FLOW_DOMAIN_EVENT_RETENTION_DAYS
+  auth:
+    email:
+      enabled: true                         # FLOW_AUTH_EMAIL_ENABLED
+    autoProvision: false                    # FLOW_AUTH_AUTO_PROVISION
+    allowedDomains: [example.com]           # FLOW_AUTH_ALLOWED_DOMAINS
+    oidc:
+      enabled: false                        # FLOW_AUTH_OIDC_ENABLED
+      issuerUrl: https://login.example.com  # FLOW_OIDC_ISSUER_URL
+      clientId: flow                        # FLOW_OIDC_CLIENT_ID (the secret stays in FLOW_OIDC_CLIENT_SECRET)
+      scopes: [openid, profile, email]      # FLOW_OIDC_SCOPES
+      roleClaim: groups                     # FLOW_OIDC_ROLE_CLAIM
+      roleMapping:                          # FLOW_OIDC_ROLE_MAPPING
+        flow-admins: admin
+      defaultRole: member                   # FLOW_OIDC_DEFAULT_ROLE
+  agent:
+    enabled: true                           # FLOW_AGENT_ENABLED (the key stays in FLOW_AGENT_API_KEY)
+    protocol: openai-responses              # FLOW_AGENT_PROTOCOL
+    baseUrl: https://api.openai.com/v1      # FLOW_AGENT_BASE_URL
+    model: gpt-5-mini                       # FLOW_AGENT_MODEL
+    timeout: 60s                            # FLOW_AGENT_TIMEOUT
+  smtp:
+    host: smtp.example.com                  # FLOW_SMTP_HOST
+    port: 587                               # FLOW_SMTP_PORT
+    from: flow@example.com                  # FLOW_SMTP_FROM
+  workspaces:
+    regionSelector: false                   # FLOW_WORKSPACE_REGION_SELECTOR_ENABLED
+  # Any other non-secret FLOW_* or OTEL_* variable by name.
+  env:
+    FLOW_CODING_MAX_SESSIONS: "20"
+
+# Defaults for objects Flow creates. They apply when the object is created
+# (a new workspace, a new team, a member's settings the first time they
+# appear in a workspace) and never change settings people already have.
+defaults:
+  workspace:
+    region: us                              # FLOW_WORKSPACE_DEFAULT_REGION
+    tutorial: true                          # FLOW_WORKSPACE_TUTORIAL ("Getting started" issues)
+    fiscalMonth: January                    # first month of the fiscal year
+    guestsAllowed: true
+    sessionDurationDays: 30                 # 1 to 365
+    invitePermission: admins                # members | owners_and_admins | owners | admins
+    teamCreatePermission: members           # members | owners_and_admins | owners | admins
+    inviteLinksEnabled: false
+    allowedDomains: []                      # email domains allowed to join the workspace
+    features:                               # Settings > Features switches of a new workspace
+      initiatives: true
+      customer-requests: true
+      releases: true
+      pulse: true
+      asks: true
+      loops: true
+      ai: true
+      triage-intelligence: false
+  team:
+    timezone: Etc/UTC                       # IANA time zone
+    defaultPriority: none                   # none | urgent | high | medium | low
+    estimates:
+      type: fibonacci                       # notUsed | exponential | fibonacci | flow | tShirt
+      allowZero: false
+      extended: false
+      countUnestimated: true                # count unestimated issues as 1 point
+    triage:
+      enabled: false
+      requirePriority: false
+    autoClose:
+      parentIssues: false
+      subIssues: false
+      staleIssues: false
+      staleMonths: 6                        # 1 to 24
+    autoArchiveMonths: 6                    # 1 to 24
+    cycles:
+      enabled: true
+      durationWeeks: 2                      # 1 to 8
+      cooldownWeeks: 0                      # 0 to 8
+      startDay: monday                      # sunday … saturday
+      upcomingCycles: 2                     # 1 to 15
+      autoCreate: true
+      moveUnfinished: true                  # move unfinished issues to the next cycle
+  user:
+    language: zh-CN                         # en-US | zh-CN; also the sign-in pages' language
+    theme: system                           # system | light | dark
+    firstDayOfWeek: monday                  # locale | monday … sunday
+    homeView: agent                         # agent | inbox | myIssues
+    displayNames: fullName                  # fullName | firstName | username
+    fontSize: default                       # small | default | large
+    notifications:
+      email: true
+      desktop: true
+      emailFormat: digest                   # digest | immediate
+```
+
+### Application defaults reference
+
+| Key | Built-in default | Values |
+| --- | --- | --- |
+| `defaults.workspace.region` | `us` (`FLOW_WORKSPACE_DEFAULT_REGION`) | `us`, `eu`, `uk`, `ca`, `cn`, `asia`, `jp`, `sg`, `in`, `au`, `br` |
+| `defaults.workspace.tutorial` | `true` (`FLOW_WORKSPACE_TUTORIAL`) | create the "Getting started" issues |
+| `defaults.workspace.fiscalMonth` | `January` | `January` … `December` |
+| `defaults.workspace.guestsAllowed` | `true` | boolean |
+| `defaults.workspace.sessionDurationDays` | `30` | 1 to 365 |
+| `defaults.workspace.invitePermission` | `admins` | `members`, `owners_and_admins`, `owners`, `admins` |
+| `defaults.workspace.teamCreatePermission` | `members` | same as above |
+| `defaults.workspace.inviteLinksEnabled` | `false` | boolean |
+| `defaults.workspace.allowedDomains` | `[]` | email domains allowed to join |
+| `defaults.workspace.features.<flag>` | on, except `triage-intelligence` | `ai`, `ai-agent`, `asks`, `audit-log`, `coding-sessions`, `customer-requests`, `dashboards`, `documents`, `emojis`, `initiatives`, `loops`, `pulse`, `recently-deleted`, `releases`, `triage-intelligence` |
+| `defaults.team.timezone` | `Etc/UTC` | IANA time zone |
+| `defaults.team.defaultPriority` | `none` | `none`, `urgent`, `high`, `medium`, `low` |
+| `defaults.team.detailedHistory` | `false` | boolean |
+| `defaults.team.estimates.type` | `notUsed` (estimates off) | `notUsed`, `exponential`, `fibonacci`, `flow`, `tShirt` |
+| `defaults.team.estimates.allowZero` / `extended` | `false` | boolean |
+| `defaults.team.estimates.countUnestimated` | unset (counted as 1 point) | boolean |
+| `defaults.team.triage.enabled` / `requirePriority` | `false` | boolean |
+| `defaults.team.autoClose.parentIssues` / `subIssues` / `staleIssues` | `false` | boolean |
+| `defaults.team.autoClose.staleMonths` | `6` | 1 to 24 |
+| `defaults.team.autoArchiveMonths` | `6` | 1 to 24 |
+| `defaults.team.cycles.enabled` | `false` | boolean |
+| `defaults.team.cycles.durationWeeks` | `2` | 1 to 8 |
+| `defaults.team.cycles.cooldownWeeks` | `0` | 0 to 8 |
+| `defaults.team.cycles.startDay` | `monday` | `sunday` … `saturday` |
+| `defaults.team.cycles.upcomingCycles` | `2` | 1 to 15 |
+| `defaults.team.cycles.autoCreate` | `true` | boolean |
+| `defaults.team.cycles.autoAddStarted` / `autoAddCompleted` | `false` | boolean |
+| `defaults.team.cycles.moveUnfinished` | `true` | move unfinished issues to the next cycle |
+| `defaults.user.language` | `en-US` (sign-in pages: the browser's) | `en-US`, `zh-CN` |
+| `defaults.user.theme` | `system` | `system`, `light`, `dark` |
+| `defaults.user.firstDayOfWeek` | `locale` (Sunday for English, Monday for Chinese) | `locale`, `monday` … `sunday` |
+| `defaults.user.homeView` | `agent` | `agent`, `inbox`, `myIssues` |
+| `defaults.user.displayNames` | `fullName` | `fullName`, `firstName`, `username` |
+| `defaults.user.fontSize` | `default` | `small`, `default`, `large` |
+| `defaults.user.notifications.email` / `desktop` | `true` | boolean |
+| `defaults.user.notifications.emailFormat` | `digest` | `digest`, `immediate` |
+
+### Server settings reference
+
+Each `server:` key sets the variable described elsewhere on this page. Any
+other non-secret `FLOW_*` or `OTEL_*` variable (coding sessions, security
+headers, ...) goes under `server.env` by name:
+
+```yaml
+server:
+  env:
+    FLOW_CODING_MAX_SESSIONS: "20"
+    FLOW_SECURITY_HSTS: "on"
+```
+
+<details>
+<summary>All <code>server:</code> keys</summary>
+
+| Key under `server:` | Variable | Type |
+| --- | --- | --- |
+| `agent.anthropicVersion` | `FLOW_AGENT_ANTHROPIC_VERSION` | text |
+| `agent.baseUrl` | `FLOW_AGENT_BASE_URL` | text |
+| `agent.enabled` | `FLOW_AGENT_ENABLED` | boolean |
+| `agent.maxOutputTokens` | `FLOW_AGENT_MAX_OUTPUT_TOKENS` | number |
+| `agent.maxToolCalls` | `FLOW_AGENT_MAX_TOOL_CALLS` | number |
+| `agent.maxToolTurns` | `FLOW_AGENT_MAX_TOOL_TURNS` | number |
+| `agent.media.baseUrl` | `FLOW_AGENT_MEDIA_BASE_URL` | text |
+| `agent.media.timeout` | `FLOW_AGENT_MEDIA_TIMEOUT` | duration |
+| `agent.media.transcribeModel` | `FLOW_AGENT_MEDIA_TRANSCRIBE_MODEL` | text |
+| `agent.media.videoModel` | `FLOW_AGENT_MEDIA_VIDEO_MODEL` | text |
+| `agent.model` | `FLOW_AGENT_MODEL` | text |
+| `agent.nativeWebSearch` | `FLOW_AGENT_NATIVE_WEB_SEARCH` | boolean |
+| `agent.protocol` | `FLOW_AGENT_PROTOCOL` | text: openai-responses, anthropic-messages, openai-chat-completions |
+| `agent.reasoningEffort` | `FLOW_AGENT_REASONING_EFFORT` | text: none, minimal, low, medium, high, xhigh |
+| `agent.runtime` | `FLOW_AGENT_RUNTIME` | text: inprocess, worker |
+| `agent.timeout` | `FLOW_AGENT_TIMEOUT` | duration |
+| `agent.toolsEnabled` | `FLOW_AGENT_TOOLS_ENABLED` | boolean |
+| `agent.workerClaimTimeout` | `FLOW_AGENT_WORKER_CLAIM_TIMEOUT` | duration |
+| `agent.workspaceConcurrency` | `FLOW_AGENT_WORKSPACE_CONCURRENCY` | number |
+| `agent.writeTools` | `FLOW_AGENT_WRITE_TOOLS` | boolean |
+| `appUrl` | `FLOW_APP_URL` | text |
+| `assets.fallbackUrls` | `FLOW_ASSET_FALLBACK_URL` | list |
+| `assets.peers` | `FLOW_ASSET_PEERS` | list |
+| `assets.previousPath` | `FLOW_ASSET_PREVIOUS_PATH` | text |
+| `assets.sharedKeepReleases` | `FLOW_ASSET_SHARED_KEEP_RELEASES` | number |
+| `assets.sharedPath` | `FLOW_ASSET_SHARED_PATH` | text |
+| `auth.allowedDomains` | `FLOW_AUTH_ALLOWED_DOMAINS` | list |
+| `auth.autoProvision` | `FLOW_AUTH_AUTO_PROVISION` | boolean |
+| `auth.disabled` | `FLOW_AUTH_DISABLED` | boolean |
+| `auth.email.enabled` | `FLOW_AUTH_EMAIL_ENABLED` | boolean |
+| `auth.google.clientId` | `FLOW_GOOGLE_CLIENT_ID` | text |
+| `auth.google.enabled` | `FLOW_AUTH_GOOGLE_ENABLED` | boolean |
+| `auth.google.redirectUrl` | `FLOW_GOOGLE_REDIRECT_URL` | text |
+| `auth.oidc.clientId` | `FLOW_OIDC_CLIENT_ID` | text |
+| `auth.oidc.defaultRole` | `FLOW_OIDC_DEFAULT_ROLE` | text: owner, admin, member, guest |
+| `auth.oidc.displayName` | `FLOW_OIDC_DISPLAY_NAME` | text |
+| `auth.oidc.enabled` | `FLOW_AUTH_OIDC_ENABLED` | boolean |
+| `auth.oidc.identityClaim` | `FLOW_OIDC_IDENTITY_CLAIM` | text |
+| `auth.oidc.issuerUrl` | `FLOW_OIDC_ISSUER_URL` | text |
+| `auth.oidc.redirectUrl` | `FLOW_OIDC_REDIRECT_URL` | text |
+| `auth.oidc.roleClaim` | `FLOW_OIDC_ROLE_CLAIM` | text |
+| `auth.oidc.roleMapping` | `FLOW_OIDC_ROLE_MAPPING` | map: owner, admin, member, guest |
+| `auth.oidc.scopes` | `FLOW_OIDC_SCOPES` | list |
+| `auth.saml.acsUrl` | `FLOW_SAML_ACS_URL` | text |
+| `auth.saml.displayName` | `FLOW_SAML_DISPLAY_NAME` | text |
+| `auth.saml.enabled` | `FLOW_AUTH_SAML_ENABLED` | boolean |
+| `auth.saml.entityId` | `FLOW_SAML_ENTITY_ID` | text |
+| `auth.saml.metadataUrl` | `FLOW_SAML_METADATA_URL` | text |
+| `database.agentTranscriptOffloadBytes` | `FLOW_AGENT_TRANSCRIPT_OFFLOAD_BYTES` | number |
+| `database.connMaxLifetime` | `FLOW_DATABASE_CONN_MAX_LIFETIME` | duration |
+| `database.contentCacheBytes` | `FLOW_CONTENT_CACHE_BYTES` | number |
+| `database.driver` | `FLOW_DATABASE_DRIVER` | text: sqlite, postgres, postgresql, mysql |
+| `database.maxIdleConns` | `FLOW_DATABASE_MAX_IDLE_CONNS` | number |
+| `database.maxOpenConns` | `FLOW_DATABASE_MAX_OPEN_CONNS` | number |
+| `database.maxTransactionBytes` | `FLOW_DATABASE_MAX_TRANSACTION_BYTES` | number |
+| `database.migrationLockTimeout` | `FLOW_DATABASE_MIGRATION_LOCK_TIMEOUT` | duration |
+| `database.path` | `FLOW_DATABASE_PATH` | text |
+| `database.searchIndexMaxChars` | `FLOW_SEARCH_INDEX_MAX_CHARS` | number |
+| `database.workspaceStateMaxBytes` | `FLOW_WORKSPACE_STATE_MAX_BYTES` | number |
+| `environment` | `FLOW_ENV` | text |
+| `httpAddr` | `FLOW_HTTP_ADDR` | text |
+| `log.format` | `FLOW_LOG_FORMAT` | text: text, json |
+| `log.level` | `FLOW_LOG_LEVEL` | text: debug, info, warn, error |
+| `outbound.trustedCaFile` | `FLOW_TRUSTED_CA_FILE` | text |
+| `outbound.trustedPrivateEndpoints` | `FLOW_TRUSTED_PRIVATE_ENDPOINTS` | list |
+| `outbound.trustedPrivateNetworks` | `FLOW_TRUSTED_PRIVATE_NETWORKS` | list |
+| `proxy.trustHeaders` | `FLOW_TRUST_PROXY_HEADERS` | boolean |
+| `proxy.trustedProxies` | `FLOW_TRUSTED_PROXIES` | list |
+| `redis.addrs` | `FLOW_REDIS_ADDRS` | list |
+| `redis.connectTimeout` | `FLOW_REDIS_CONNECT_TIMEOUT` | duration |
+| `redis.db` | `FLOW_REDIS_DB` | number |
+| `redis.dialTimeout` | `FLOW_REDIS_DIAL_TIMEOUT` | duration |
+| `redis.lockTtl` | `FLOW_REDIS_LOCK_TTL` | duration |
+| `redis.lockWait` | `FLOW_REDIS_LOCK_WAIT` | duration |
+| `redis.minIdleConns` | `FLOW_REDIS_MIN_IDLE_CONNS` | number |
+| `redis.mode` | `FLOW_REDIS_MODE` | text: disabled, standalone, cluster |
+| `redis.poolSize` | `FLOW_REDIS_POOL_SIZE` | number |
+| `redis.prefix` | `FLOW_REDIS_PREFIX` | text |
+| `redis.readTimeout` | `FLOW_REDIS_READ_TIMEOUT` | duration |
+| `redis.tls` | `FLOW_REDIS_TLS` | boolean |
+| `redis.writeTimeout` | `FLOW_REDIS_WRITE_TIMEOUT` | duration |
+| `retention.changeLogMinRows` | `FLOW_CHANGE_LOG_MIN_ROWS` | number |
+| `retention.domainEventDays` | `FLOW_DOMAIN_EVENT_RETENTION_DAYS` | number |
+| `retention.trashDays` | `FLOW_TRASH_RETENTION_DAYS` | number |
+| `smtp.from` | `FLOW_SMTP_FROM` | text |
+| `smtp.host` | `FLOW_SMTP_HOST` | text |
+| `smtp.port` | `FLOW_SMTP_PORT` | number |
+| `smtp.username` | `FLOW_SMTP_USERNAME` | text |
+| `staticPath` | `FLOW_STATIC_PATH` | text |
+| `storage.driver` | `FLOW_STORAGE_DRIVER` | text: local, s3 |
+| `storage.localPath` | `FLOW_STORAGE_LOCAL_PATH` | text |
+| `storage.s3.bucket` | `FLOW_S3_BUCKET` | text |
+| `storage.s3.contentPrefix` | `FLOW_S3_CONTENT_PREFIX` | text |
+| `storage.s3.endpoint` | `FLOW_S3_ENDPOINT` | text |
+| `storage.s3.pathStyle` | `FLOW_S3_PATH_STYLE` | boolean |
+| `storage.s3.prefix` | `FLOW_S3_PREFIX` | text |
+| `storage.s3.region` | `FLOW_S3_REGION` | text |
+| `storage.s3.validateOnStart` | `FLOW_S3_VALIDATE_ON_START` | boolean |
+| `telemetry.enabled` | `FLOW_TELEMETRY_ENABLED` | boolean |
+| `telemetry.endpoint` | `OTEL_EXPORTER_OTLP_ENDPOINT` | text |
+| `telemetry.environment` | `FLOW_ENVIRONMENT` | text |
+| `telemetry.metricsEndpoint` | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | text |
+| `telemetry.serviceName` | `OTEL_SERVICE_NAME` | text |
+| `telemetry.tracesEndpoint` | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | text |
+| `tts.baseUrl` | `FLOW_TTS_BASE_URL` | text |
+| `tts.enabled` | `FLOW_TTS_ENABLED` | boolean |
+| `tts.model` | `FLOW_TTS_MODEL` | text |
+| `tts.timeout` | `FLOW_TTS_TIMEOUT` | duration |
+| `tts.voice` | `FLOW_TTS_VOICE` | text |
+| `webSearch.provider` | `FLOW_WEB_SEARCH_PROVIDER` | text: tavily, brave, searxng |
+| `webSearch.url` | `FLOW_WEB_SEARCH_URL` | text |
+| `workspaces.regionSelector` | `FLOW_WORKSPACE_REGION_SELECTOR_ENABLED` | boolean |
+
+</details>
+
+### What stays out of the file
+
+| Setting | Where it stays | Why |
+| --- | --- | --- |
+| Database and Redis URLs, Redis user and password, S3 keys, OAuth/OIDC client secrets, SAML private key, Agent/TTS/web search API keys, SMTP password, connector and coding secret keys, GitHub App private key, MCP credentials | Environment from a Secret (or `*_FILE`) | Secrets; the file is refused if it holds them. |
+| SAML metadata XML | Environment (or `FLOW_SAML_METADATA_XML_FILE`) | It can embed signing material; the file refuses it. |
+| Development-only switches (`FLOW_DEV_*`) | Environment | Never part of a production file. |
+| Workspace security (2FA, admin bypass, SCIM, approved applications, MCP allow lists, HIPAA mode, spend limits) | Settings > Security / Usage | Per-workspace decisions made by its admins; a deployment-wide default would grant or remove access silently. |
+| Workflow statuses, labels, templates, project statuses | Settings, per workspace and team | Content rather than switches; new workspaces get Flow's standard set. |
+| Member roles of invited people, OIDC/SCIM role mapping | Invite dialog, `server.auth.oidc.*`, Settings > SCIM | Role mapping is already a server setting; the role of an invite is chosen by the inviter. |
+| Per-member time zone | The member's browser | Flow records it from the browser for Pulse delivery. |
 
 ## Chat platform
 
@@ -237,7 +697,11 @@ self-hosted deployments. Existing and imported workspaces never get it.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `FLOW_WORKSPACE_TUTORIAL` | `on` | `off` (or `false`, `0`) creates new workspaces without the tutorial issues. API clients can also pass `"tutorial": false` to `POST /api/workspaces`. |
+| `FLOW_WORKSPACE_TUTORIAL` | `on` | `off` (or `false`, `0`) creates new workspaces without the tutorial issues. API clients can also pass `"tutorial": false` to `POST /api/workspaces`. In the [configuration file](#configuration-file): `defaults.workspace.tutorial`. |
+
+Other settings of new workspaces, their first team and their members (feature
+switches, invite permission, estimates, cycles, language, ...) are set in the
+`defaults:` section of the [configuration file](#configuration-file).
 
 ## Redis coordination and cluster mode
 

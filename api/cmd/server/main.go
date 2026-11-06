@@ -97,7 +97,8 @@ type server struct {
 	allowedOrigin                  string
 	workspaceRegionSelectorEnabled bool
 	workspaceDefaultRegion         string
-	workspaceTutorial              bool // seed the "Getting started" issues into workspaces created from the app
+	workspaceTutorial              bool   // seed the "Getting started" issues into workspaces created from the app
+	defaultLanguage                string // defaults.user.language of the config file, for sign-in pages ("" follows the browser)
 	agentApprovalsMu               sync.Mutex
 	agentApprovals                 map[string]*agentApproval
 	agentElicitations              map[string]*agentElicitation
@@ -138,7 +139,23 @@ func main() {
 	if len(os.Args) >= 2 && os.Args[1] == "egress-acl" {
 		os.Exit(runEgressACLCommand(os.Args[2:]))
 	}
+	// The YAML configuration file (--config or FLOW_CONFIG_FILE) is read
+	// first: its server settings become environment values the environment
+	// does not set, so logging and every later reader see them.
+	configFile, err := appconfig.LoadFileFromArgs(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	initLogging()
+	if configFile.Path != "" {
+		message := fmt.Sprintf("config file %s: %d server settings applied", configFile.Path, len(configFile.Applied))
+		if len(configFile.Overridden) > 0 {
+			message += "; the environment overrides " + strings.Join(configFile.Overridden, ", ")
+		}
+		log.Print(message)
+	}
+	domain.SetCreationDefaults(configFile.Defaults)
 	applicationConfig, err := appconfig.Load()
 	if err != nil {
 		log.Fatal(err)
@@ -215,6 +232,7 @@ func main() {
 		workspaceRegionSelectorEnabled: applicationConfig.WorkspaceRegionSelectorEnabled,
 		workspaceDefaultRegion:         applicationConfig.WorkspaceDefaultRegion,
 		workspaceTutorial:              applicationConfig.WorkspaceTutorial,
+		defaultLanguage:                configFile.DefaultLanguage,
 	}
 
 	httpServer := &http.Server{Addr: applicationConfig.HTTPAddr, Handler: telemetryHandler(newHandler(s), applicationConfig.Telemetry.Enabled), ReadHeaderTimeout: 5 * time.Second}
@@ -1962,6 +1980,10 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 			data.TeamSettings = map[string]domain.TeamSettings{}
 		}
 		settings := domain.TeamSettings{TeamID: team.ID, Timezone: "Etc/UTC", EstimateType: "notUsed", DefaultStateID: "state_backlog", Access: "public", MembershipRestriction: "open", SettingsPermission: "allMembers", LabelPermission: "allMembers", TemplatePermission: "allMembers", AgentSkillPermission: "allMembers", LoopPermission: "allMembers", MemberPermission: "allMembers", SlackNotifications: map[string]bool{}, PRAutomations: map[string]string{}, StaleMonths: 6, AutoArchiveMonths: 6, ProgressOrder: "first", TriageAction: "none", ReleaseAutomations: []domain.TeamAutomationRule{}, TriageRules: []domain.TeamAutomationRule{}, AgentSkills: []domain.TeamAgentSkill{}, ResolvedSummaries: true, ShowInitiatives: true}
+		// The operator's team defaults (defaults.team in the config file); a
+		// team that copies another team's settings takes that team's instead.
+		teamDefaults := domain.CurrentCreationDefaults().Team
+		teamDefaults.Apply(&settings)
 		sourceTeamID := input.CopyFromTeamID
 		if input.ParentTeamID != "" {
 			sourceTeamID = input.ParentTeamID
@@ -1990,13 +2012,19 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		if data.CycleSettings == nil {
 			data.CycleSettings = map[string]domain.CycleSettings{}
 		}
-		cycleSettings := domain.CycleSettings{Enabled: false, DurationWeeks: 2, StartsOn: 1, UpcomingCount: 2, Capacity: 4, AutoCreate: true, AutoMigrate: true}
+		cycleSettings := teamDefaults.NewTeamCycleSettings()
+		copiedCycles := false
 		if sourceTeamID != "" {
 			if source, exists := data.CycleSettings[sourceTeamID]; exists {
-				cycleSettings = source
+				cycleSettings, copiedCycles = source, true
 			}
 		}
 		data.CycleSettings[team.ID] = cycleSettings
+		if !copiedCycles && cycleSettings.Enabled && cycleSettings.AutoCreate {
+			// Cycles on by default: the team starts with its current cycle and
+			// the upcoming ones, as when cycles are turned on in its settings.
+			startTeamCycles(data, team.ID, now)
+		}
 		if sourceTeamID != "" {
 			stateMap := map[string]string{}
 			for _, source := range statesForTeam(data, sourceTeamID) {
@@ -2999,6 +3027,17 @@ func startCycleOn(target *domain.Cycle, now time.Time) {
 	}
 	target.Status = "current"
 	target.UpdatedAt = now
+}
+
+// startTeamCycles gives a team without cycles its first (current) cycle and
+// the upcoming ones its cycle settings ask for.
+func startTeamCycles(data *domain.Bootstrap, teamID string, now time.Time) {
+	if latestCycle(data, teamID) != nil {
+		return
+	}
+	first := appendFutureCycle(data, teamID, nil)
+	startCycleOn(first, now)
+	ensureUpcomingCycles(data, teamID)
 }
 
 func ensureUpcomingCycles(data *domain.Bootstrap, teamID string) {

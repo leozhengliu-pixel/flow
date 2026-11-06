@@ -34,13 +34,16 @@ func defaultPreferences(userID string) domain.NotificationPreferences {
 		}
 		return result
 	}
-	return domain.NotificationPreferences{
+	preferences := domain.NotificationPreferences{
 		UserID:      userID,
 		Inbox:       domain.NotificationChannelPreferences{Enabled: true, Categories: categoryMap()},
 		Email:       domain.NotificationChannelPreferences{Enabled: true, Categories: categoryMap()},
 		Desktop:     domain.NotificationChannelPreferences{Enabled: true, Categories: categoryMap()},
 		EmailFormat: "digest", DelayLowPriority: true, ImmediateUrgent: true, SoundEnabled: true, UpdatedAt: time.Now().UTC(),
 	}
+	// The operator's defaults (defaults.user.notifications in the config file).
+	domain.CurrentCreationDefaults().User.ApplyNotifications(&preferences)
+	return preferences
 }
 
 func (s *server) getNotificationPreferences(w http.ResponseWriter, r *http.Request) {

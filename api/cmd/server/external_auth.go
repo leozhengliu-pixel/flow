@@ -151,7 +151,13 @@ func (s *server) authProviders(w http.ResponseWriter, _ *http.Request) {
 			providers = append(providers, map[string]any{"id": "saml", "name": s.externalAuth.config.SAML.DisplayName, "startUrl": "/api/auth/saml/start"})
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"email": email, "providers": providers})
+	response := map[string]any{"email": email, "providers": providers}
+	if s.defaultLanguage != "" {
+		// The operator's default language (defaults.user.language) for the
+		// sign-in pages of a browser that has not chosen one.
+		response["defaultLanguage"] = s.defaultLanguage
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (s *server) requireEmailAuth(next http.Handler) http.Handler {
