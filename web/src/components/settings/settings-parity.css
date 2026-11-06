@@ -172,7 +172,8 @@ html:root .settings-app .settings-main .feature-button:not(.danger) {
 }
 /* Buttons in cards, rows and page headers use the control ink; the label pages header and the member and team toolbars use the button ink. */
 html:root .settings-app .settings-main .domain-labels-header .settings-header-actions .settings-action:not(.danger):not(.primary),
-html:root .settings-app .settings-main .settings-members-toolbar > .settings-action:not(.danger):not(.primary) { color: var(--set-button-text); }
+html:root .settings-app .settings-main .settings-members-toolbar > .settings-action:not(.danger):not(.primary),
+html:root .settings-app .settings-main .settings-team-actions > .settings-action:not(.danger):not(.primary) { color: var(--set-button-text); }
 html:root .settings-app .settings-main .settings-action:not(.danger):not(.primary):hover:not(:disabled),
 html:root .settings-app .settings-main .personal-action:not(.danger):not(.primary):hover:not(:disabled),
 html:root .settings-app .settings-main .feature-button:not(.danger):not(.primary):hover:not(:disabled) { background: var(--bg-hover); }

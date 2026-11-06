@@ -46,7 +46,7 @@
   html:root .settings-app .settings-main .settings-row--empty strong,
   html:root .settings-app .settings-main .personal-security-empty-row strong { color: var(--set-desc); font-weight: 450; }
   html:root .settings-app .settings-main .personal-static { font: 450 13px/normal var(--font); }
-  html:root .settings-app .settings-main .personal-emoticon-emoji { display: inline-block; width: 14px; font: 450 13px/14px var(--font-emoji); vertical-align: bottom; }
+  html:root .settings-app .settings-main .personal-emoticon-emoji { display: inline-block; width: 14px; font: 450 13px/14px "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Twemoji Mozilla", "Noto Color Emoji", sans-serif; vertical-align: bottom; }
   html:root .settings-app .settings-main .personal-avatar { width: 32px; height: 32px; font: 400 14px/normal var(--font); font-size: 14px !important; }
   html:root .settings-app .settings-main .personal-input { background: var(--set-card); }
   html:root .settings-app .settings-main[data-settings-page=profile] .personal-input { border: .5px solid var(--set-input-border); color: var(--set-text); font: 400 13px/normal var(--font); }
@@ -80,6 +80,7 @@
   html:root .settings-app .settings-main .settings-crumb ~ .team-settings-header { position: relative; margin-bottom: 23px; }
   html:root .settings-app .team-overview-shortcut { position: absolute; right: -6px; top: 36px; height: 24px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border-radius: 9999px; color: var(--set-text); text-decoration: none; font: 500 12px var(--font); }
   html:root .settings-app .settings-main .team-settings-header > div > p { color: var(--set-group-desc); }
+  html:root .settings-app .settings-main .team-settings-header h1 > span { display: block; }
   html:root .settings-app .settings-main .settings-teams-page > .settings-page-header { margin-bottom: 13px; }
   html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar { gap: 6px; margin-bottom: 21px; }
   html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar > .settings-select { height: 32px; }
@@ -142,7 +143,7 @@
   .desktop-enabled-card { box-sizing: border-box; height: 68px; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 16px; border: 0; border-radius: 8px; background: var(--set-card); box-shadow: var(--set-card-shadow); color: var(--set-text); text-align: left; }
   .desktop-enabled-card:hover { background: var(--bg-hover); }
   .desktop-enabled-card > svg, .desktop-enabled-card > img { flex: none; }
-  .desktop-enabled-card > span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .desktop-enabled-card > span { min-width: 0; display: flex; flex-direction: column; gap: 0; }
   .desktop-enabled-card strong { overflow: hidden; text-overflow: ellipsis; font: 500 13px/15.5px var(--font); }
   .desktop-enabled-card small { color: var(--set-desc); font: 450 12px/14.5px var(--font); }
   .desktop-integration-discovery { margin-top: 48px; }
