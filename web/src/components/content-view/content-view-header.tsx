@@ -7,6 +7,8 @@ import { useOptionalTranslate } from '@/i18n/i18n'
 export interface ContentViewHeaderProps extends HTMLAttributes<HTMLElement> {
   children: ReactNode
   compact?: boolean
+  /** Carry the horizontal insets on one inner row (desktop) instead of on the header; direct-child selectors then target the row's children. */
+  insetRow?: boolean
   onOpenSidebar?: () => void
   sidebarLabel?: string
   onCreateIssue?: () => void
@@ -17,6 +19,7 @@ export function ContentViewHeader({
   children,
   className,
   compact = false,
+  insetRow = false,
   onOpenSidebar,
   sidebarLabel = 'Open sidebar',
   onCreateIssue,
@@ -28,6 +31,7 @@ export function ContentViewHeader({
       className={cn(styles.header, className)}
       data-content-view-header=""
       data-compact={compact || undefined}
+      data-inset-row={insetRow || undefined}
       {...rest}
     >
       {onOpenSidebar ? (
@@ -41,7 +45,7 @@ export function ContentViewHeader({
           <SidebarLeftIcon width={14} height={14} aria-hidden="true" />
         </button>
       ) : null}
-      {compact ? <div className={styles.headerRow} data-header-row="">{children}</div> : children}
+      {insetRow ? <div className={styles.headerRow} data-header-row="">{children}</div> : children}
       {onCreateIssue && <button className="phone-create-issue" type="button" aria-label={t('New issue')} title={t('New issue')} onClick={onCreateIssue}><PlusIcon width={14} height={14}/></button>}
     </header>
   )

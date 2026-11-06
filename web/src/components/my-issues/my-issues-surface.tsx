@@ -175,7 +175,7 @@ export function MyIssuesSurface({
   const overflowVisibleLabel = activeHidden ? views[activeIndex].label : overflowLabel
   useEffect(() => { if (!overflowOpen) itemRefs.current = [] }, [overflowOpen])
   return <ContentViewContainer framed inset="tall" data-my-issues-surface="true">
-    <ContentViewHeader compact onOpenSidebar={onOpenSidebar} onCreateIssue={onCreateIssue}>
+    <ContentViewHeader compact insetRow onOpenSidebar={onOpenSidebar} onCreateIssue={onCreateIssue}>
       <ContentViewHeaderTitle title="My issues" />
       {onCreateIssue ? <FlowTooltip label="Create new issue" shortcut="C" align="end"><button className={styles.headerNewIssue} type="button" onClick={onCreateIssue}><PlusIcon width={14} height={14} /><span>{t('New issue')}</span></button></FlowTooltip> : null}
     </ContentViewHeader>

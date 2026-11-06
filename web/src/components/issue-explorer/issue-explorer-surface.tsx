@@ -125,7 +125,7 @@ export function IssueExplorerSurface({
   const renderSavedView = (item: SavedView) => <a key={item.id} href={savedViewHref?.(item) ?? '#'} className={`${styles.savedTab} ui-pill`} onClick={event => { event.preventDefault(); onSavedViewSelect?.(item) }}><ViewGlyph color={item.color} icon={item.icon}/><span data-i18n-ignore>{item.name}</span></a>
 
   const header = (
-    <ContentViewHeader compact onOpenSidebar={onOpenSidebar} onCreateIssue={mode === 'view' ? onCreateIssue : undefined}>
+    <ContentViewHeader compact insetRow onOpenSidebar={onOpenSidebar} onCreateIssue={mode === 'view' ? onCreateIssue : undefined}>
       {mode === 'create' ? (
         <>
           <ContentViewHeaderBreadcrumb
