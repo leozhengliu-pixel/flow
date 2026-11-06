@@ -9,6 +9,7 @@
   html:root .settings-app .settings-main .settings-team-actions > .settings-action { border-width: .5px; }
   .settings-desktop-docs { display: inline-block; margin-left: -3px; padding: 1px 4px; border-radius: 8px; color: var(--set-text); font: inherit; font-weight: 450; line-height: normal; text-decoration: none; }
   .settings-desktop-docs:hover { background: var(--bg-hover); }
+  .settings-desktop-docs > span { margin-left: 4px; }
   .workspace-announcements-open { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--set-desc); font: 450 12px var(--font); }
   .workspace-announcements-dialog > label { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; font-size: 13px; }
   .workspace-announcements-dialog > label.workspace-announcements-toggle { flex-direction: row; justify-content: space-between; }
@@ -45,7 +46,7 @@
   html:root .settings-app .settings-main .settings-row--empty strong,
   html:root .settings-app .settings-main .personal-security-empty-row strong { color: var(--set-desc); font-weight: 450; }
   html:root .settings-app .settings-main .personal-static { font: 450 13px/normal var(--font); }
-  html:root .settings-app .settings-main .personal-emoticon-emoji { display: inline-block; font: 450 13px/14px var(--font); vertical-align: bottom; }
+  html:root .settings-app .settings-main .personal-emoticon-emoji { display: inline-block; width: 14px; font: 450 13px/14px var(--font-emoji); vertical-align: bottom; }
   html:root .settings-app .settings-main .personal-avatar { width: 32px; height: 32px; font: 400 14px/normal var(--font); font-size: 14px !important; }
   html:root .settings-app .settings-main .personal-input { background: var(--set-card); }
   html:root .settings-app .settings-main[data-settings-page=profile] .personal-input { border: .5px solid var(--set-input-border); color: var(--set-text); font: 400 13px/normal var(--font); }
@@ -65,7 +66,7 @@
   html:root .settings-app .settings-main .settings-row-icon { box-sizing: border-box; width: 32px; min-width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; background: var(--theme-surface-2); }
   html:root .settings-app .settings-main .personal-channel-icon svg { width: 16px; height: 16px; }
   html:root .settings-app .settings-main a.personal-channel { text-decoration: none; }
-  .personal-channel-status { display: inline-block; width: 6px; height: 6px; margin: 0 5px 1px 0; border-radius: 50%; background: var(--set-desc); }
+  .personal-channel-status { display: inline-block; width: 6px; height: 6px; margin: 0 4px 1px 0; border-radius: 50%; background: var(--set-desc); }
   .personal-channel-status.is-enabled { background: var(--semantic-success); }
   html:root .settings-app .settings-main .settings-card > .personal-security-device-row { grid-template-columns: 32px minmax(0, 1fr) auto; column-gap: 16px; min-height: 65px; }
   html:root .settings-app .settings-main .personal-security-section > header p { line-height: 22px; }
@@ -83,7 +84,7 @@
   html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar { gap: 6px; margin-bottom: 21px; }
   html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar > .settings-select { height: 32px; }
   html:root .settings-app .settings-main .settings-teams-page .settings-members-columns,
-  html:root .settings-app .settings-main .settings-teams-page .settings-member-directory-row { grid-template-columns: minmax(240px, 320fr) minmax(250px, 371fr) 108px 80px 70px 70px 32px; column-gap: 12px; padding: 0 20px 0 52px; }
+  html:root .settings-app .settings-main .settings-teams-page .settings-member-directory-row { grid-template-columns: minmax(240px, 320fr) minmax(250px, 371fr) 120px 92px 82px 82px 32px; column-gap: 0; padding: 0 20px 0 52px; }
   html:root .settings-app .settings-main .settings-teams-page .settings-members-columns button { display: inline-flex; align-items: center; gap: 2px; margin-left: -6.5px; border: .5px solid transparent; color: var(--set-button-text); font: 500 12px/normal var(--font); }
   html:root .settings-app .settings-main .settings-teams-page .settings-members-columns button > span { font-weight: 450; }
   html:root .settings-app .settings-main .settings-teams-row { height: 44px; }
@@ -110,7 +111,7 @@
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-column-label { font-weight: 450; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button > .settings-members-column-label { color: var(--set-group-desc); }
   html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=name] { margin-left: -6.5px; }
-  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=role] { margin-left: 0; }
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort=role] { margin-left: -.5px; }
   html:root .settings-app .settings-main .settings-workspace-members .settings-member-more { width: 32px; height: 32px; }
   html:root .settings-app .settings-main .settings-members-page > .settings-members-toolbar > label { position: relative; padding: 0; border: 0; background: transparent; }
   html:root .settings-app .settings-main .settings-members-page > .settings-members-toolbar > label > svg { position: absolute; left: 11px; pointer-events: none; }
@@ -127,7 +128,8 @@
   html:root .settings-app .settings-main .pst-actions { position: absolute; right: 16px; }
   html:root .settings-app .settings-main .pst-copy { padding-right: 44px; }
   html:root .settings-app .settings-main .domain-label-name > input.domain-label-name-input:not([type=color]) { height: 28.5px; border-radius: 7px; }
-  html:root .settings-app .desktop-integrations .feature-header { margin-bottom: 45px; }
+  html:root .settings-app .desktop-integrations .feature-header { margin-bottom: 44px; }
+  html:root .settings-app .desktop-integrations .feature-header p { margin-top: 4px; line-height: 22px; }
   .desktop-integration-search { position: relative; box-sizing: border-box; height: 44px; display: flex; align-items: center; border: 1px solid var(--set-integration-search-border); border-radius: 8px; color: var(--set-desc); }
   .desktop-integration-search > svg { position: absolute; left: 16px; pointer-events: none; }
   .desktop-integration-search input { box-sizing: border-box; width: 100%; height: 42px; padding: 12px 12px 12px 40px; border: 0; outline: none; background: transparent; color: var(--set-text); font: 400 15px var(--font); }
@@ -137,7 +139,7 @@
   .desktop-enabled h2 button { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-transform: inherit; }
   .desktop-enabled p { margin: 0 16px; color: var(--set-desc); font-size: 13px; }
   .desktop-enabled-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-  .desktop-enabled-card { box-sizing: border-box; height: 68px; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 16px; border: .5px solid var(--set-sep); border-radius: 8px; background: var(--set-card); color: var(--set-text); text-align: left; }
+  .desktop-enabled-card { box-sizing: border-box; height: 68px; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 16px; border: 0; border-radius: 8px; background: var(--set-card); box-shadow: var(--set-card-shadow); color: var(--set-text); text-align: left; }
   .desktop-enabled-card:hover { background: var(--bg-hover); }
   .desktop-enabled-card > svg, .desktop-enabled-card > img { flex: none; }
   .desktop-enabled-card > span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
