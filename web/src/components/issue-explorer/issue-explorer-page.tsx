@@ -118,7 +118,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const teamViewKey = boardRoute ? 'board' : view
   const [teamDefault, setTeamDefault] = useState<Record<string, unknown> | undefined>(() => scope.kind === 'team' ? data.teamSettings?.[scope.team.id]?.issueViewDefaults?.[teamViewKey] : undefined)
   const personalViewKey = savedView ? `${data.workspace.urlKey}:issue-explorer:view:${savedView.id}:display` : undefined
-  const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => personalViewKey ? readPersonalDisplay(personalViewKey, savedView!, view) : duplicateFrom ? displayFromSavedView(duplicateFrom, view) : readDisplay(`${preferencesKey}:display`, view, boardRoute, teamDefault, defaultDisplayOverrides))
+  const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => personalViewKey ? readPersonalDisplay(personalViewKey, savedView!, view) : duplicateFrom ? displayFromSavedView(duplicateFrom, view) : creatingView ? draftDisplay(view, boardRoute, teamDefault, defaultDisplayOverrides) : readDisplay(`${preferencesKey}:display`, view, boardRoute, teamDefault, defaultDisplayOverrides))
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false)
   const detailsKey = detailsStorageKey ?? `${data.workspace.urlKey}:issue-explorer:${savedView && desktop ? `view:${savedView.id}:desktop` : storageScope}:details`
   const defaultDetailsOpen = Boolean(savedView && desktop)
@@ -299,15 +299,16 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     else url.searchParams.delete('filter')
     if (url.href !== location.href) history.replaceState(history.state, '', url)
   }, [extraFilters, savedView, viewEditor])
+  const viewDefault = savedView ? displayFromSavedView(savedView, savedView.view) : creatingView ? draftDisplay(view, boardRoute, teamDefault, defaultDisplayOverrides) : withTeamDefault({ ...defaultDisplay(view, defaultDisplayOverrides), ...(boardRoute ? BOARD_ROUTE_DISPLAY : {}) }, teamDefault)
   const changeDisplay = (next: MyIssuesDisplayOptions) => {
     setDisplay(next)
     // Never write through to a shared saved view; "Save as default for view" does that explicitly.
-    writeValue(personalViewKey ?? `${preferencesKey}:display`, JSON.stringify({ ...next, properties: [...next.properties] }))
+    // A new view draft starts from the defaults every time; only a saved view or team page remembers its display.
+    if (!creatingView) writeValue(personalViewKey ?? `${preferencesKey}:display`, JSON.stringify({ ...next, properties: [...next.properties] }))
   }
   const resetDisplay = () => {
-    const next = savedView ? displayFromSavedView(savedView, savedView.view) : withTeamDefault({ ...defaultDisplay(view, defaultDisplayOverrides), ...(boardRoute ? { layout: 'board' as const, showEmptyGroups: true } : {}) }, teamDefault)
-    setDisplay(next)
-    removeValue(personalViewKey ?? `${preferencesKey}:display`)
+    setDisplay(viewDefault)
+    if (!creatingView) removeValue(personalViewKey ?? `${preferencesKey}:display`)
   }
   const saveDisplayAsViewDefault = savedView && onUpdateSavedView ? () => {
     void onUpdateSavedView(savedView.id, { display: displaySnapshot(display) })
@@ -321,7 +322,6 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   } : undefined
   const menuGroups = groupSummaries(groups)
   const listGroups = groups.filter(group => !display.hiddenGroupIds.includes(group.id) && !display.hiddenGroupIds.includes(group.parentGroupId ?? ''))
-  const viewDefault = savedView ? displayFromSavedView(savedView, savedView.view) : withTeamDefault({ ...defaultDisplay(view, defaultDisplayOverrides), ...(boardRoute ? { layout: 'board' as const, showEmptyGroups: true } : {}) }, teamDefault)
   const displayModified = !issueDisplayEqual(display, viewDefault)
   const displayMenuProps = {
     phoneIssueMenu: true,
@@ -827,8 +827,10 @@ function deriveSummary(groups: MyIssuesGroupData[]): MyIssuesDetailsSummary {
   }
 }
 function countItems(items: Omit<MyIssuesSummaryItem, 'count'>[]) { const values = new Map<string, MyIssuesSummaryItem>(); for (const item of items) values.set(item.id, { ...item, count: (values.get(item.id)?.count ?? 0) + 1 }); return [...values.values()].sort((a, b) => b.count - a.count) }
-/** The reference app defaults: team/workspace/custom views hide triage issues (they live in Triage). */
-function defaultDisplay(view: TeamIssuesRouteView, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { return { ...defaultMyIssuesDisplayOptions, ...(isDesktop() ? desktopDisplayDefaults() : {}), grouping: 'status', completedWindow: view === 'all' ? 'all' : 'none', showTriageIssues: false, ...(isDesktop() ? {} : { properties: new Set(defaultMyIssuesDisplayOptions.properties) }), ...overrides } }
+/** The board route keeps the reference board default: Manual ordering with empty columns shown. */
+const BOARD_ROUTE_DISPLAY = { layout: 'board', showEmptyGroups: true, ordering: 'importance' } as const satisfies Partial<MyIssuesDisplayOptions>
+/** The reference app defaults: a list groups by status and orders by priority; team/workspace/custom views hide triage issues (they live in Triage) while a new view draft shows them. */
+function defaultDisplay(view: TeamIssuesRouteView, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { return { ...defaultMyIssuesDisplayOptions, ...(isDesktop() ? desktopDisplayDefaults() : {}), grouping: 'status', ordering: 'priority', completedWindow: view === 'all' ? 'all' : 'none', showTriageIssues: false, ...(isDesktop() ? {} : { properties: new Set(defaultMyIssuesDisplayOptions.properties) }), ...overrides } }
 function initialPropertyFilters(data: BootstrapData, labelId?: string, statusId?: string): MyIssuesAppliedFilter[] | undefined {
   const filters: MyIssuesAppliedFilter[] = []
   const label = data.labels.find(item => item.id === labelId)
@@ -851,7 +853,8 @@ function insightPropertyFilters(data: BootstrapData, filters: NonNullable<IssueE
 }
 function filterInsightTeams(issues: Issue[], teamIds?: string[]) { return teamIds?.length ? issues.filter(issue=>teamIds.includes(issue.team.id)) : issues }
 function readFilters(key: string): MyIssuesAppliedFilter[] { try { return normalizeStoredFilters(JSON.parse(localStorage.getItem(key) ?? '[]')) } catch { return [] } }
-function readDisplay(key: string, view: TeamIssuesRouteView, board = false, teamDefault?: Record<string, unknown>, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { const fallback = withTeamDefault({ ...defaultDisplay(view, overrides), ...(board ? { layout: 'board' as const, showEmptyGroups: true } : {}) }, teamDefault); try { const value = JSON.parse(localStorage.getItem(key) ?? 'null'); return value ? { ...fallback, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties : [...fallback.properties]) } : fallback } catch { return fallback } }
+function draftDisplay(view: TeamIssuesRouteView, board: boolean, teamDefault?: Record<string, unknown>, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { return withTeamDefault({ ...defaultDisplay(view, { showTriageIssues: true, ...overrides }), ...(board ? BOARD_ROUTE_DISPLAY : {}) }, teamDefault) }
+function readDisplay(key: string, view: TeamIssuesRouteView, board = false, teamDefault?: Record<string, unknown>, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { const fallback = withTeamDefault({ ...defaultDisplay(view, overrides), ...(board ? BOARD_ROUTE_DISPLAY : {}) }, teamDefault); try { const value = JSON.parse(localStorage.getItem(key) ?? 'null'); return value ? { ...fallback, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties : [...fallback.properties]) } : fallback } catch { return fallback } }
 function readBoolean(key: string, fallback: boolean) { try { const value = localStorage.getItem(key); return value == null ? fallback : value === 'true' } catch { return fallback } }
 function isDesktop() { return window.matchMedia(DESKTOP_LAYOUT_QUERY).matches }
 function subscribeDesktop(notify: () => void) {
