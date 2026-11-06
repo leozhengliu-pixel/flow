@@ -20,6 +20,21 @@ function inlineIconSprites() {
   }
 }
 
+// Radix Popper imports useFloating from '@floating-ui/react-dom'; the app's copy (src/lib/floating-ui-react-dom.ts) puts desktop
+// popups on whole pixels. Only that module may reach the real package.
+const FLOATING_SNAP_SHIM = path.resolve(import.meta.dirname, 'src/lib/floating-ui-react-dom.ts')
+
+function snapFloatingPositions() {
+  return {
+    name: 'flow-snap-floating-positions',
+    enforce: 'pre' as const,
+    resolveId(source: string, importer?: string) {
+      if (source !== '@floating-ui/react-dom' || !importer || path.resolve(importer.split('?')[0]) === FLOATING_SNAP_SHIM) return null
+      return FLOATING_SNAP_SHIM
+    },
+  }
+}
+
 // elkjs (1.4 MB) and @mermaid-js/parser (660 kB) ship as one pre-bundled file each, so they cannot be split any further.
 // Both are fetched only when a mermaid diagram renders. `chunkSizeWarningLimit` below is raised to fit them, so this
 // plugin keeps Vite's usual 500 kB warning for every other chunk.
@@ -43,12 +58,14 @@ function chunkSizeBudget() {
 export default defineConfig(async ({ command }) => ({
   // tourMedia: docs/media/*.gif → /tour/ (dev server and build output) for the Getting started issues.
   // releaseManifest: dist/asset-manifest.json, which lets other releases' servers find this build's assets.
-  plugins: [layoutMedia(), react(), tailwindcss(), inlineIconSprites(),
+  plugins: [layoutMedia(), snapFloatingPositions(), react(), tailwindcss(), inlineIconSprites(),
     command === 'serve' && process.env.FLOW_E2E_AGENT_PANEL_SEED === '1'
       ? (await import('./e2e/agent-panel-seed-plugin.ts')).agentPanelSeedPlugin(apiProxyTarget)
       : undefined,
     chunkSizeBudget(), tourMedia(), releaseManifest()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
+  // Radix is pre-bundled in dev with its own copy of floating-ui; route that copy through the same module.
+  optimizeDeps: { rolldownOptions: { plugins: [snapFloatingPositions()] } },
   build: {
     // Small KaTeX fonts must stay same-origin files under font-src 'self', not data URLs.
     assetsInlineLimit: (file: string) => /\.(?:woff2?|ttf|otf|eot)$/i.test(file) ? false : undefined,
