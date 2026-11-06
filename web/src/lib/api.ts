@@ -167,6 +167,8 @@ export function fetchAuthSession(): Promise<AuthSession> {
 }
 export type AuthProviderConfig = {
   email: boolean;
+  /** The deployment's default language (defaults.user.language of the server's config file), when configured. */
+  defaultLanguage?: "en-US" | "zh-CN";
   providers: Array<{
     id: "google" | "oidc" | "saml";
     name: string;
