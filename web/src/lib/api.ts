@@ -2083,6 +2083,7 @@ export function createSLARule(
       SLARule,
       | "teamIds"
       | "filters"
+      | "action"
       | "targetMinutes"
       | "pauseStatuses"
       | "businessHours"
@@ -2100,6 +2101,7 @@ export function updateSLARule(
       | "name"
       | "teamIds"
       | "filters"
+      | "action"
       | "targetMinutes"
       | "pauseStatuses"
       | "businessHours"
@@ -2108,6 +2110,10 @@ export function updateSLARule(
   >,
 ): Promise<SLARule> {
   return request(`/api/sla-rules/${id}`, jsonRequest("PATCH", input));
+}
+/** Saves the rule order; rules are evaluated top to bottom. `ids` lists every rule. */
+export function reorderSLARules(ids: string[]): Promise<SLARule[]> {
+  return request("/api/sla-rules/reorder", jsonRequest("POST", { ids }));
 }
 export function deleteSLARule(id: string): Promise<void> {
   return request(`/api/sla-rules/${id}`, { method: "DELETE" });

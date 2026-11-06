@@ -1,8 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Popover from "@radix-ui/react-popover";
 import {
-  Circle,
-  ExternalLink,
   Plus,
   Trash2,
   X,
@@ -21,16 +19,12 @@ import { toast } from "@/lib/toast";
 import {
   createIssueTemplate,
   createProjectTemplate,
-  createSLARule,
   createWorkspaceIssueTemplate,
   deleteIssueTemplate,
   deleteProjectTemplate,
-  deleteSLARule,
   deleteWorkspaceIssueTemplate,
   updateIssueTemplate,
   updateProjectTemplate,
-  updateSLASettings,
-  updateSLARule,
   updateWorkspaceIssueTemplate,
 } from "@/lib/api";
 import { markdownPlainText } from "@/lib/markdown-plain-text";
@@ -54,7 +48,7 @@ import "./issue-template-settings.css";
 import { ProjectTemplateSettings } from "./project-template-settings";
 import { IssueTemplateSettings } from "./issue-template-settings";
 import { keepMentionMenuOpen } from "./mention-field-host";
-import { SettingsSelect, SettingsToggle } from "./settings-primitives";
+import { SettingsSelect } from "./settings-primitives";
 
 type TemplateKind = "issue" | "project";
 type TemplateValue = IssueTemplate | ProjectTemplate;
@@ -763,207 +757,6 @@ function MilestoneDialog({
   );
 }
 
-export function SLASettings({
-  data,
-  onReload,
-}: {
-  data: BootstrapData;
-  onReload: () => Promise<void>;
-}) {
-  const { t } = useI18n();
-  const settings = (data.settings?.sla ?? {}) as Record<string, unknown>;
-  const enabled = settings.enabled === true;
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState("");
-  const [targetMinutes, setTargetMinutes] = useState(1440);
-  const [priority, setPriority] = useState("");
-  const [saving, setSaving] = useState(false);
-  const run = async (action: () => Promise<unknown>) => {
-    setSaving(true);
-    try {
-      await action();
-      await onReload();
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setSaving(false);
-    }
-  };
-  return (
-    <div className="ip-settings-page" data-i18n-ignore>
-      <header className="settings-page-header ip-page-header">
-        <div>
-          <h1>{t("SLAs")}</h1>
-          <p>
-            {t(
-              "Service-level agreements (SLAs) automatically apply deadlines to issues when they match predefined parameters. While often used to define response times to customer issues, they can also be used to define internal standards for bug and time-sensitive issue resolution.",
-            )}{" "}
-            <a
-              href="https://flow.app/docs/sla"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t("Docs")}
-              <ExternalLink size={11} />
-            </a>
-          </p>
-        </div>
-      </header>
-      <section className="ip-settings-section">
-        <div className="ip-setting-row">
-          <span>
-            <strong>{t("Enable SLAs")}</strong>
-            <small>
-              {t("Workspace-wide access to issue SLA automations and notifications")}
-            </small>
-          </span>
-          <SettingsToggle
-            checked={enabled}
-            disabled={saving}
-            label={t("Enable SLAs")}
-            onChange={(value) =>
-              run(() => updateSLASettings({ enabled: value }))
-            }
-          />
-        </div>
-        {enabled && (
-          <div className="ip-setting-row">
-            <span>
-              <strong>{t("Work week")}</strong>
-              <small>{t("Used to determine business day SLAs")}</small>
-            </span>
-            <SettingsSelect
-              label={t("Work week")}
-              value={settings.workWeek === "sunThu" ? "sunThu" : "monFri"}
-              options={[
-                { value: "monFri", label: t("Mon-Fri") },
-                { value: "sunThu", label: t("Sun-Thu") },
-              ]}
-              onChange={(value) =>
-                run(() => updateSLASettings({ workWeek: value as "monFri" | "sunThu" }))
-              }
-            />
-          </div>
-        )}
-      </section>
-      <section className="ip-settings-section">
-        <header>
-          <h3>{t("Automation rules")}</h3>
-          <button
-            className="settings-action ip-add-rule"
-            disabled={!enabled || creating}
-            onClick={() => setCreating(true)}
-          >
-            {t("Add rule")}
-          </button>
-        </header>
-        {creating && (
-          <form
-            className="ip-rule-editor"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!name.trim()) return;
-              void run(() =>
-                createSLARule({
-                  name: name.trim(),
-                  targetMinutes,
-                  teamIds: data.teams.map((item) => item.id),
-                  filters: priority ? { priority: Number(priority) } : {},
-                  pauseStatuses: ["completed", "canceled"],
-                  enabled: true,
-                }),
-              ).then(() => {
-                setCreating(false);
-                setName("");
-              });
-            }}
-          >
-            <EditorField label={t("Rule name")}>
-              <input
-                autoFocus
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </EditorField>
-            <div className="ip-properties-grid">
-              <SelectField
-                label={t("Target")}
-                value={String(targetMinutes)}
-                onChange={(value) => setTargetMinutes(Number(value))}
-                options={[
-                  ["60", t("1 hour")],
-                  ["240", t("4 hours")],
-                  ["480", t("8 hours")],
-                  ["1440", t("24 hours")],
-                  ["4320", t("3 days")],
-                ]}
-              />
-              <SelectField
-                label={t("Priority")}
-                value={priority}
-                onChange={setPriority}
-                empty={t("Any priority")}
-                options={priorityOptions(t).slice(1)}
-              />
-            </div>
-            <footer>
-              <button type="button" onClick={() => setCreating(false)}>
-                {t("Cancel")}
-              </button>
-              <button className="primary" disabled={saving}>
-                {t("Create")}
-              </button>
-            </footer>
-          </form>
-        )}
-        {data.slaRules.length
-          ? data.slaRules.map((rule) => (
-              <div className="ip-setting-row" key={rule.id}>
-                <span>
-                  <strong data-i18n-ignore>{rule.name}</strong>
-                  <small>
-                    {formatDuration(rule.targetMinutes, t)} ·{" "}
-                    {t(rule.enabled ? "Active" : "Disabled")}
-                  </small>
-                </span>
-                <div className="ip-row-actions">
-                  <SettingsToggle
-                    checked={rule.enabled}
-                    disabled={!enabled || saving}
-                    label={rule.name}
-                    onChange={(value) =>
-                      run(() => updateSLARule(rule.id, { enabled: value }))
-                    }
-                  />
-                  <button
-                    aria-label={t("Delete rule")}
-                    onClick={() => void run(() => deleteSLARule(rule.id))}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))
-          : !creating && (
-              <div className="ip-empty-row">
-                <span className="ip-template-glyph">
-                  <Circle size={14} />
-                </span>
-                <span>
-                  <strong>{t("No automation rules")}</strong>
-                  <small>
-                    {enabled
-                      ? t("Add a rule to begin applying SLAs.")
-                      : t("Enable SLAs to add automation rules.")}
-                  </small>
-                </span>
-              </div>
-            )}
-      </section>
-    </div>
-  );
-}
-
 export { ProjectUpdateSettingsPage as ProjectUpdateSettings } from "./project-updates-settings";
 
 export function StatusDragHandle() {
@@ -1133,11 +926,6 @@ export function StatusColorPicker({
   );
 }
 
-function formatDuration(minutes: number, t: (value: string) => string) {
-  if (minutes % 1440 === 0) return t(`${minutes / 1440} days`);
-  if (minutes % 60 === 0) return t(`${minutes / 60} hours`);
-  return t(`${minutes} minutes`);
-}
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Could not save setting";
 }

@@ -2188,6 +2188,8 @@ export interface SLARule {
   name: string;
   teamIds: UUID[];
   filters: Record<string, unknown>;
+  /** What a match does: add an SLA or take it away. Rules saved before actions existed have none and add one. */
+  action?: "add" | "remove";
   targetMinutes: number;
   pauseStatuses: string[];
   businessHours: boolean;

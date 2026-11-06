@@ -183,7 +183,7 @@ const ProjectUpdateSettings = lazyPage(
   "ProjectUpdateSettings",
 );
 const SLASettings = lazyPage(
-  () => import("./issues-projects-settings"),
+  () => import("./sla-settings"),
   "SLASettings",
 );
 const TemplateSettings = lazyPage(

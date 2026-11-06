@@ -1,6 +1,7 @@
 import { workspaceFeatureEnabled } from '@/components/layout/sidebar-customization-state'
 import { teamUsesEstimates } from '@/lib/estimates'
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
+import { slaFeatureEnabled } from '@/components/settings/sla-model'
 import type { BootstrapData } from '@/types/flow'
 import type { MyIssuesProperty } from './my-issues-surface'
 
@@ -14,7 +15,7 @@ export function unavailableDisplayProperties(data: BootstrapData, teamIds?: read
   const hidden: MyIssuesProperty[] = []
   if (!scope.some(teamId => data.cycleSettings?.[teamId]?.enabled)) hidden.push('cycle')
   if (!scope.some(teamId => teamUsesEstimates(resolvedTeamSettings(data.teamSettings ?? {}, teamId)))) hidden.push('estimate')
-  if ((data.settings?.sla as { enabled?: boolean } | undefined)?.enabled !== true) hidden.push('sla')
+  if (!slaFeatureEnabled(data)) hidden.push('sla')
   if (!workspaceFeatureEnabled(data.workspaceSettings?.featureFlags, 'releases') || !data.releasePipelines?.length) hidden.push('release')
   if (!options.activity) hidden.push('myActivity')
   return hidden

@@ -68,9 +68,9 @@ function ShortcutMark() {
   );
 }
 
+export { SLASettings } from "./sla-settings";
 export {
   ProjectUpdateSettings,
-  SLASettings,
   TemplateEditor,
   TemplateSettings,
 } from "./issues-projects-settings";
