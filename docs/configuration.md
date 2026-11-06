@@ -39,11 +39,12 @@ overrode.
 
 The container image presets `FLOW_DATABASE_DRIVER`, `FLOW_DATABASE_PATH`,
 `FLOW_STORAGE_DRIVER`, `FLOW_STORAGE_LOCAL_PATH`, `FLOW_STATIC_PATH`,
-`FLOW_ASSET_PREVIOUS_PATH` and `FLOW_APP_URL` with `ENV`, and the Helm chart
-sets the variables of its own values (`config.appUrl`, `config.logLevel`,
-`database.*`, `storage.*`, `redis.*`, ...). Those are environment variables
-too, so they win over the file's `server:` keys of the same name: keep
-setting them the way you do today and use the file for everything else.
+`FLOW_ASSET_PREVIOUS_PATH` and `FLOW_APP_URL` with `ENV`. Those are
+environment variables too, so outside Helm they win over the file's
+`server:` keys of the same name: keep setting them the way you do today and
+use the file for everything else. The Helm chart instead writes a
+`config.file` value into its own variable, so there the file wins over the
+chart's values; see [Helm](#helm).
 
 ### Defaults apply to new objects only
 
@@ -195,6 +196,51 @@ To manage the ConfigMap yourself, set `config.fileConfigMap.name` (and `key`,
 default `config.yaml`) instead; Pods then do not roll on their own when it
 changes. The environment-variable ConfigMap keeps working as before.
 
+#### Precedence with Helm
+
+The chart sets many `FLOW_*` variables from its own values (`config.appUrl`,
+`config.logLevel`, `database.*`, `redis.*`, `storage.s3.*`, ...), and the
+image presets a few more. So that a `server:` key in `config.file` still
+takes effect, the chart writes the file's value into its own variable for
+the same setting (marked `# config.file` in the rendered ConfigMap). From
+highest to lowest:
+
+1. Variables you set yourself: `config.env`, `coding.extraEnv`, `extraEnv`,
+   `extraEnvFrom`, `secrets.env` and `secrets.existingSecret`. They win over
+   the file, as every environment variable does.
+2. `config.file`: a `server:` key, or a `server.env` entry.
+3. The chart's value for the setting (`config.appUrl`, `config.logLevel`,
+   `config.logFormat`, `database.maxOpenConns`, `redis.prefix`,
+   `storage.s3.bucket`, `integrations.chat.platform`, the coding session
+   values, ...), including its defaults.
+4. Flow's built-in default.
+
+For example, with `config.appUrl: https://chart.example.com` and
+`config.file.server.appUrl: https://flow.example.com`, Flow uses
+`https://flow.example.com`; add `FLOW_APP_URL` to `config.env` and that
+value wins over both. Set each setting in one place to keep this simple.
+
+A few settings follow from the Pod the chart builds, and `helm template`
+fails when `config.file` sets one of them (as a key or under `server.env`)
+while the chart manages it, naming the chart value to use instead:
+
+| Key under `server:` | Variable | Use instead |
+| --- | --- | --- |
+| `httpAddr` | `FLOW_HTTP_ADDR` | nothing: the chart serves on port 8080 |
+| `staticPath`, `assets.previousPath` | `FLOW_STATIC_PATH`, `FLOW_ASSET_PREVIOUS_PATH` | nothing: paths inside the image |
+| `assets.peers`, `assets.sharedPath` | `FLOW_ASSET_PEERS`, `FLOW_ASSET_SHARED_PATH` | `assets.peerFallback`, `assets.shared` |
+| `database.driver` | `FLOW_DATABASE_DRIVER` | `database.driver` |
+| `redis.mode` | `FLOW_REDIS_MODE` | `redis.mode` or `redisBundled.enabled` |
+| `storage.driver`, `storage.localPath` | `FLOW_STORAGE_DRIVER`, `FLOW_STORAGE_LOCAL_PATH` | `storage.driver`, `storage.persistence` |
+| `outbound.trustedCaFile` | `FLOW_TRUSTED_CA_FILE` | `outbound.trustedCA` |
+
+Server settings the chart does not set (most of them: agent, sign-in,
+retention, SMTP, ...) reach Flow from the file directly. With
+`config.fileConfigMap` the chart cannot read the file, so its own variables
+win over the file's `server:` keys for the same settings; set those through
+chart values there. Deployments without `config.file` render exactly as
+before.
+
 ### Docker Compose
 
 Mount the file and name it (commented example in `docker-compose.yml`). The
@@ -230,24 +276,26 @@ Every key is optional. This is
 version: 1
 
 # Server settings. Each key sets the FLOW_* variable named in the comment,
-# unless the environment already sets it.
+# unless the environment already sets it. With the Helm chart (config.file)
+# a key wins over the chart's value for the same variable; the keys marked
+# "not with Helm" follow from the chart's Pod and stay commented out there.
 server:
   appUrl: https://flow.example.com          # FLOW_APP_URL
-  httpAddr: ":8080"                         # FLOW_HTTP_ADDR
+  # httpAddr: ":8080"                       # FLOW_HTTP_ADDR (not with Helm: port 8080)
   log:
     level: info                             # FLOW_LOG_LEVEL: debug | info | warn | error
     format: json                            # FLOW_LOG_FORMAT: text | json
   database:
-    driver: postgres                        # FLOW_DATABASE_DRIVER: sqlite | postgres | mysql
+    # driver: postgres                      # FLOW_DATABASE_DRIVER: sqlite | postgres | mysql (not with Helm: database.driver)
     maxOpenConns: 20                        # FLOW_DATABASE_MAX_OPEN_CONNS
     maxIdleConns: 10                        # FLOW_DATABASE_MAX_IDLE_CONNS
     connMaxLifetime: 30m                    # FLOW_DATABASE_CONN_MAX_LIFETIME
     # url: is a secret: set FLOW_DATABASE_URL from a Secret.
   redis:
-    mode: disabled                          # FLOW_REDIS_MODE: disabled | standalone | cluster
+    # mode: standalone                      # FLOW_REDIS_MODE: disabled | standalone | cluster (not with Helm: redis.mode)
     prefix: flow                            # FLOW_REDIS_PREFIX
   storage:
-    driver: s3                              # FLOW_STORAGE_DRIVER: local | s3
+    # driver: s3                            # FLOW_STORAGE_DRIVER: local | s3 (not with Helm: storage.driver)
     s3:
       bucket: flow-uploads                  # FLOW_S3_BUCKET
       region: us-east-1                     # FLOW_S3_REGION
@@ -351,7 +399,7 @@ defaults:
       autoCreate: true
       moveUnfinished: true                  # move unfinished issues to the next cycle
   user:
-    language: zh-CN                         # en-US | zh-CN; also the sign-in pages' language
+    language: zh-CN                         # en-US | zh-CN; also the sign-in pages' language (FLOW_DEFAULT_LANGUAGE)
     theme: system                           # system | light | dark
     firstDayOfWeek: monday                  # locale | monday … sunday
     homeView: agent                         # agent | inbox | myIssues

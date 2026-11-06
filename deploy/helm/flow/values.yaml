@@ -265,9 +265,13 @@ config:
   # config.yaml in the <release>-config ConfigMap, mounted read-only at
   # /etc/flow and named by FLOW_CONFIG_FILE; pods roll when it changes.
   # Use its defaults: section for new workspaces, teams and members (language,
-  # estimates, cycles, ...). The variables this chart sets (appUrl, log,
-  # database, storage, ...) win over its server: settings. Never put secrets
-  # here: the chart and Flow refuse them.
+  # estimates, cycles, ...). A server: setting wins over this chart's value
+  # for the same variable (appUrl, log, database pool, redis, s3, ...); the
+  # chart writes the file's value into its variable. config.env, extraEnv and
+  # secrets still win over the file. Settings that follow from the Pod
+  # (httpAddr, database.driver, redis.mode, storage.driver, paths) are set
+  # here, not in the file. Never put secrets here: the chart and Flow refuse
+  # them.
   #   file:
   #     defaults:
   #       user:

@@ -36,6 +36,14 @@ for scenario in "$tests"/invalid/*.yaml; do
   fi
 done
 
+# The example configuration file works as config.file as it is.
+python3 -I -c 'import json, sys, yaml; json.dump({"config": {"file": yaml.safe_load(open(sys.argv[1]))}}, open(sys.argv[2], "w"))' "$chart/examples/config.yaml" "$work/example-values.json"
+if helm template flow "$chart" -f "$work/example-values.json" --namespace flow >"$work/example.yaml" 2>"$work/template.log"; then
+  echo "ok   examples/config.yaml as config.file"
+else
+  cat "$work/template.log"; echo "FAIL examples/config.yaml as config.file"; status=1
+fi
+
 python3 -I "$tests/check.py" "$work" "$repo" || status=1
 sh "$tests/egress-entrypoint-test.sh" "$repo" || status=1
 exit $status

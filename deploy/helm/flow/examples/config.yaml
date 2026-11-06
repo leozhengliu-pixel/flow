@@ -11,24 +11,26 @@
 version: 1
 
 # Server settings. Each key sets the FLOW_* variable named in the comment,
-# unless the environment already sets it.
+# unless the environment already sets it. With the Helm chart (config.file)
+# a key wins over the chart's value for the same variable; the keys marked
+# "not with Helm" follow from the chart's Pod and stay commented out there.
 server:
   appUrl: https://flow.example.com          # FLOW_APP_URL
-  httpAddr: ":8080"                         # FLOW_HTTP_ADDR
+  # httpAddr: ":8080"                       # FLOW_HTTP_ADDR (not with Helm: port 8080)
   log:
     level: info                             # FLOW_LOG_LEVEL: debug | info | warn | error
     format: json                            # FLOW_LOG_FORMAT: text | json
   database:
-    driver: postgres                        # FLOW_DATABASE_DRIVER: sqlite | postgres | mysql
+    # driver: postgres                      # FLOW_DATABASE_DRIVER: sqlite | postgres | mysql (not with Helm: database.driver)
     maxOpenConns: 20                        # FLOW_DATABASE_MAX_OPEN_CONNS
     maxIdleConns: 10                        # FLOW_DATABASE_MAX_IDLE_CONNS
     connMaxLifetime: 30m                    # FLOW_DATABASE_CONN_MAX_LIFETIME
     # url: is a secret: set FLOW_DATABASE_URL from a Secret.
   redis:
-    mode: disabled                          # FLOW_REDIS_MODE: disabled | standalone | cluster
+    # mode: standalone                      # FLOW_REDIS_MODE: disabled | standalone | cluster (not with Helm: redis.mode)
     prefix: flow                            # FLOW_REDIS_PREFIX
   storage:
-    driver: s3                              # FLOW_STORAGE_DRIVER: local | s3
+    # driver: s3                            # FLOW_STORAGE_DRIVER: local | s3 (not with Helm: storage.driver)
     s3:
       bucket: flow-uploads                  # FLOW_S3_BUCKET
       region: us-east-1                     # FLOW_S3_REGION
@@ -132,7 +134,7 @@ defaults:
       autoCreate: true
       moveUnfinished: true                  # move unfinished issues to the next cycle
   user:
-    language: zh-CN                         # en-US | zh-CN; also the sign-in pages' language
+    language: zh-CN                         # en-US | zh-CN; also the sign-in pages' language (FLOW_DEFAULT_LANGUAGE)
     theme: system                           # system | light | dark
     firstDayOfWeek: monday                  # locale | monday … sunday
     homeView: agent                         # agent | inbox | myIssues

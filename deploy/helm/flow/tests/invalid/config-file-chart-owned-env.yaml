@@ -1,0 +1,6 @@
+# Variables that follow from the Pod cannot be set through server.env either.
+config:
+  file:
+    server:
+      env:
+        FLOW_HTTP_ADDR: ":9090"

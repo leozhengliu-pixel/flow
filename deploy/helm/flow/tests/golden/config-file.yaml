@@ -91,7 +91,7 @@ data:
   FLOW_STATIC_PATH: /app/web
   FLOW_ASSET_PREVIOUS_PATH: /app/web-previous
   FLOW_ASSET_PEERS: "flow-peers.flow.svc:8080"
-  # The YAML configuration file; these variables win over its server settings.
+  # The YAML configuration file; variables marked "# config.file" carry its value.
   FLOW_CONFIG_FILE: /etc/flow/config.yaml
   FLOW_LOG_LEVEL: "info"
   FLOW_LOG_FORMAT: "json"

@@ -392,6 +392,37 @@ for name in ("default", "production-ha"):
     if find(docs, "ConfigMap", "flow-config") or "FLOW_CONFIG_FILE" in flow_env(docs) or "checksum/config-file" in pod["metadata"]["annotations"] or any(v["name"] == "config-file" for v in pod["spec"]["volumes"]):
         fail(name, "no config file unless config.file or config.fileConfigMap is set")
 
+# config.file server: settings win over the chart's own values for the same
+# variable; config.env still wins over the file; variables the chart does not
+# set are left to Flow, which reads them from the file.
+docs = load("config-file-server")
+config_data = find(docs, "ConfigMap", "flow")[0].get("data") or {}
+for key, want in {
+    "FLOW_APP_URL": "https://flow.example.com",
+    "FLOW_LOG_LEVEL": "debug",
+    "FLOW_LOG_FORMAT": "json",
+    "FLOW_REDIS_PREFIX": "flow-prod",
+    "FLOW_REDIS_TLS": "true",
+    "FLOW_CHAT_PLATFORM": "lark",
+    "FLOW_AGENT_MODEL": "gpt-5",
+    "FLOW_DATABASE_DRIVER": "sqlite",
+}.items():
+    if config_data.get(key) != want:
+        fail("config-file-server", f"ConfigMap {key}={config_data.get(key)!r}, want {want!r}")
+for key in ("FLOW_DATABASE_MAX_OPEN_CONNS", "FLOW_DATABASE_CONN_MAX_LIFETIME", "FLOW_ASSET_FALLBACK_URL", "FLOW_CODING_MAX_SESSIONS"):
+    if key in config_data:
+        fail("config-file-server", f"{key} is not a chart variable here and must come from the file")
+cm_text = (rendered / "config-file-server.yaml").read_text()
+if cm_text.count("FLOW_AGENT_MODEL:") != 1 or cm_text.count("FLOW_LOG_LEVEL:") != 1:
+    fail("config-file-server", "each variable appears once")
+file_values = yaml.safe_load(find(docs, "ConfigMap", "flow-config")[0]["data"]["config.yaml"])
+if file_values["server"]["log"]["level"] != "debug":
+    fail("config-file-server", "the file keeps its server settings")
+# The documented example works as config.file.
+example_env = flow_env(load("example"))
+if example_env.get("FLOW_APP_URL") != "https://flow.example.com" or example_env.get("FLOW_LOG_LEVEL") != "info" or example_env.get("FLOW_REDIS_PREFIX") != "flow":
+    fail("example", f"example config values {example_env.get('FLOW_APP_URL')!r}, {example_env.get('FLOW_REDIS_PREFIX')!r}")
+
 if failures:
     for failure in failures:
         print("FAIL", failure)

@@ -1,0 +1,36 @@
+# config.file server: settings for variables the chart sets itself win over
+# the chart's values (docs/configuration.md, "Helm"); variables set with
+# config.env still win over the file.
+config:
+  appUrl: https://chart.example.com
+  logLevel: info
+  env:
+    FLOW_AGENT_MODEL: gpt-5
+  file:
+    version: 1
+    server:
+      appUrl: https://flow.example.com
+      log:
+        level: debug
+        format: json
+      database:
+        maxOpenConns: 40
+        connMaxLifetime: 15m
+      redis:
+        prefix: flow-prod
+        tls: true
+      assets:
+        fallbackUrls:
+          - https://cdn.example.com/flow
+          - https://cdn2.example.com/flow
+      agent:
+        model: gpt-5-mini
+      env:
+        FLOW_CHAT_PLATFORM: lark
+        FLOW_CODING_MAX_SESSIONS: 40
+    defaults:
+      user:
+        language: zh-CN
+integrations:
+  chat:
+    platform: feishu

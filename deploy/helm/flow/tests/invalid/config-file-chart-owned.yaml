@@ -1,0 +1,6 @@
+# The database driver comes from the chart's database.driver, not config.file.
+config:
+  file:
+    server:
+      database:
+        driver: postgres
