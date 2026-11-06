@@ -2415,11 +2415,21 @@ type DeployPreviewInput struct {
 	Provider    string `json:"provider"`
 }
 
+// SLA rule actions. A rule written before actions existed has none and adds an SLA.
+const (
+	SLAActionAdd    = "add"
+	SLAActionRemove = "remove"
+)
+
+// SLARule is one automation rule. Rules are evaluated in list order and the
+// first enabled rule an issue matches decides what happens to its SLA: "add"
+// starts one that is due TargetMinutes later, "remove" leaves the issue with none.
 type SLARule struct {
 	ID            string         `json:"id"`
 	Name          string         `json:"name"`
 	TeamIDs       []string       `json:"teamIds"`
 	Filters       map[string]any `json:"filters"`
+	Action        string         `json:"action,omitempty" enum:"add,remove"`
 	TargetMinutes int            `json:"targetMinutes"`
 	PauseStatuses []string       `json:"pauseStatuses"`
 	BusinessHours bool           `json:"businessHours"`
@@ -2427,6 +2437,9 @@ type SLARule struct {
 	CreatedAt     time.Time      `json:"createdAt"`
 	UpdatedAt     time.Time      `json:"updatedAt"`
 }
+
+// Removes reports whether the rule takes SLAs away rather than adding one.
+func (rule SLARule) Removes() bool { return rule.Action == SLAActionRemove }
 
 type IssueSLA struct {
 	ID               string     `json:"id"`

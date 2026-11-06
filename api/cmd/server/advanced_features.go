@@ -270,6 +270,7 @@ type slaRuleInput struct {
 	Name          *string        `json:"name,omitempty"`
 	TeamIDs       *[]string      `json:"teamIds,omitempty"`
 	Filters       map[string]any `json:"filters,omitempty"`
+	Action        *string        `json:"action,omitempty"`
 	TargetMinutes *int           `json:"targetMinutes,omitempty"`
 	PauseStatuses *[]string      `json:"pauseStatuses,omitempty"`
 	BusinessHours *bool          `json:"businessHours,omitempty"`
@@ -2076,6 +2077,12 @@ func applySLARuleInput(data *domain.Bootstrap, rule *domain.SLARule, input slaRu
 	if input.Filters != nil {
 		rule.Filters = input.Filters
 	}
+	if input.Action != nil {
+		if *input.Action != domain.SLAActionAdd && *input.Action != domain.SLAActionRemove {
+			return errInvalid
+		}
+		rule.Action = *input.Action
+	}
 	if input.TargetMinutes != nil {
 		if *input.TargetMinutes < 1 {
 			return errInvalid
@@ -2103,11 +2110,13 @@ func (s *server) createSLARule(w http.ResponseWriter, r *http.Request) {
 	var created domain.SLARule
 	err := s.store.MutateWorkspaceWithAggregate(slaRuleScope(r.Context(), "", input), workspaceKey(r), "sla_rule.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.SLARule{ID: idgen.New("sla_rule_"), Name: strings.TrimSpace(*input.Name), TeamIDs: []string{}, Filters: map[string]any{}, TargetMinutes: 1440, PauseStatuses: []string{}, Enabled: true, CreatedAt: now, UpdatedAt: now}
+		created = domain.SLARule{ID: idgen.New("sla_rule_"), Name: strings.TrimSpace(*input.Name), TeamIDs: []string{}, Filters: map[string]any{}, Action: domain.SLAActionAdd, TargetMinutes: 1440, PauseStatuses: []string{}, Enabled: true, CreatedAt: now, UpdatedAt: now}
 		if err := applySLARuleInput(data, &created, input); err != nil {
 			return "", err
 		}
-		data.SLARules = append([]domain.SLARule{created}, data.SLARules...)
+		// A new rule goes last: rules are evaluated top to bottom, so it never takes
+		// an issue from a rule the workspace already relies on.
+		data.SLARules = append(data.SLARules, created)
 		for index := range data.Issues {
 			applySLARules(data, &data.Issues[index], now)
 		}
@@ -2146,6 +2155,49 @@ func (s *server) updateSLARule(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
+}
+
+// reorderSLARules saves the order of the rules. Rules are evaluated top to bottom, so
+// the order decides which rule an issue that matches several of them follows.
+func (s *server) reorderSLARules(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		IDs []string `json:"ids"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	scope := store.WithMutationScope(r.Context(), store.MutationScope{Resolve: func(data domain.Bootstrap) store.MutationScope {
+		if !slaEnabled(&data) {
+			return store.MutationScope{}
+		}
+		return slaIssueScope(data, data.SLARules)
+	}})
+	var ordered []domain.SLARule
+	err := s.store.MutateWorkspace(scope, workspaceKey(r), "sla_rule.reordered", "workspace", input, func(data *domain.Bootstrap) error {
+		if len(input.IDs) != len(data.SLARules) || !allUniqueStrings(input.IDs) {
+			return errInvalid
+		}
+		next := make([]domain.SLARule, 0, len(input.IDs))
+		for _, id := range input.IDs {
+			index := slices.IndexFunc(data.SLARules, func(rule domain.SLARule) bool { return rule.ID == id })
+			if index < 0 {
+				return errInvalid
+			}
+			next = append(next, data.SLARules[index])
+		}
+		if slices.EqualFunc(next, data.SLARules, func(a, b domain.SLARule) bool { return a.ID == b.ID }) {
+			ordered = data.SLARules
+			return store.ErrNoMutation
+		}
+		data.SLARules, ordered = next, next
+		now := time.Now().UTC()
+		for issueIndex := range data.Issues {
+			applySLARules(data, &data.Issues[issueIndex], now)
+		}
+		appendAudit(data, "reordered", "sla_rule", "workspace", nil)
+		return nil
+	})
+	respondMutation(w, err, http.StatusOK, ordered)
 }
 
 func (s *server) deleteSLARule(w http.ResponseWriter, r *http.Request) {
@@ -2191,24 +2243,52 @@ func slaMatches(rule domain.SLARule, issue domain.Issue) bool {
 	return true
 }
 
+// slaWinner is the rule that decides the issue's SLA: the first enabled rule, in list
+// order, that the issue matches. It is nil when no rule matches.
+func slaWinner(rules []domain.SLARule, issue domain.Issue) *domain.SLARule {
+	for index := range rules {
+		if slaMatches(rules[index], issue) {
+			return &rules[index]
+		}
+	}
+	return nil
+}
+
+func newIssueSLA(data *domain.Bootstrap, issue domain.Issue, rule domain.SLARule, now time.Time) domain.IssueSLA {
+	value := domain.IssueSLA{ID: idgen.New("issue_sla_"), IssueID: issue.ID, RuleID: rule.ID, StartedAt: now, DueAt: slaDeadline(data, issue, rule, now, rule.TargetMinutes), RemainingMinutes: rule.TargetMinutes, Status: "active"}
+	if slices.Contains(rule.PauseStatuses, issue.State.ID) || slices.Contains(rule.PauseStatuses, issue.State.Type) {
+		value.PausedAt, value.Status = &now, "paused"
+	}
+	return value
+}
+
 func applySLARules(data *domain.Bootstrap, issue *domain.Issue, now time.Time) {
 	if !slaEnabled(data) {
 		return
 	}
+	winner := slaWinner(data.SLARules, *issue)
 	for _, rule := range data.SLARules {
 		index := slices.IndexFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.IssueID == issue.ID && item.RuleID == rule.ID })
-		matches := slaMatches(rule, *issue)
+		// Only the winning rule keeps an SLA on the issue, and only when it adds one.
+		matches := winner != nil && winner.ID == rule.ID && !rule.Removes()
 		if !matches {
 			if index >= 0 && data.IssueSLAs[index].Status != "completed" {
 				data.IssueSLAs[index].Status = "removed"
 			}
 			continue
 		}
-		if index < 0 {
-			value := domain.IssueSLA{ID: idgen.New("issue_sla_"), IssueID: issue.ID, RuleID: rule.ID, StartedAt: now, DueAt: slaDeadline(data, *issue, rule, now, rule.TargetMinutes), RemainingMinutes: rule.TargetMinutes, Status: "active"}
-			if slices.Contains(rule.PauseStatuses, issue.State.ID) || slices.Contains(rule.PauseStatuses, issue.State.Type) {
-				value.PausedAt, value.Status = &now, "paused"
+		if index >= 0 && data.IssueSLAs[index].Status == "removed" {
+			// The issue matches again after its SLA was taken away (for example it was
+			// escalated back), so the clock starts over.
+			data.IssueSLAs[index] = newIssueSLA(data, *issue, rule, now)
+			recordSLAEvent(data, issue.ID, data.IssueSLAs[index].ID, "started", now)
+			if data.IssueSLAs[index].Status == "paused" {
+				recordSLAEvent(data, issue.ID, data.IssueSLAs[index].ID, "paused", now)
 			}
+			continue
+		}
+		if index < 0 {
+			value := newIssueSLA(data, *issue, rule, now)
 			data.IssueSLAs = append(data.IssueSLAs, value)
 			recordSLAEvent(data, issue.ID, value.ID, "started", now)
 			if value.Status == "paused" {

@@ -630,6 +630,7 @@ var InternalRoutes = []string{
 	"DELETE /api/sla-rules/{id}",
 	"PATCH /api/sla-rules/{id}",
 	"POST /api/sla-rules",
+	"POST /api/sla-rules/reorder",
 	// /api/sla-settings
 	"PUT /api/sla-settings",
 	// /api/subscriptions

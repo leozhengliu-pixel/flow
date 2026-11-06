@@ -710,6 +710,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/reviews/import", s.importReviewsFromCodeHosts)
 	mux.HandleFunc("PATCH /api/reviews/import", s.updateReviewImport)
 	mux.HandleFunc("POST /api/sla-rules", s.createSLARule)
+	mux.HandleFunc("POST /api/sla-rules/reorder", s.reorderSLARules)
 	mux.HandleFunc("PATCH /api/sla-rules/{id}", s.updateSLARule)
 	mux.HandleFunc("DELETE /api/sla-rules/{id}", s.deleteSLARule)
 	mux.HandleFunc("PUT /api/sla-settings", s.updateSLASettings)

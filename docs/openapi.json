@@ -27625,6 +27625,31 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/sla-rules/reorder": {
+      "post": {
+        "operationId": "post_sla_rules_reorder",
+        "tags": [
+          "sla-rules"
+        ],
+        "summary": "POST /api/sla-rules/reorder",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/sla-settings": {
       "put": {
         "operationId": "put_sla_settings",
