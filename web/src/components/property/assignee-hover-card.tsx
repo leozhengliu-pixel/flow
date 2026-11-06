@@ -1,4 +1,6 @@
+import * as Tooltip from '@radix-ui/react-tooltip'
 import { CalendarOff, Clock3, ContactRound } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Avatar } from '@/components/issue/issue-row'
 import { useCurrentTimeMs } from '@/hooks/use-current-time'
 import { useI18n } from '@/i18n/i18n'
@@ -40,4 +42,16 @@ export function AssigneeHoverPreview({ user: suppliedUser, member: suppliedMembe
       {teams.length > 0 && <div><ContactRound/><span data-i18n-ignore>{teams.map((team, index) => <span key={team.key}>{index > 0 && ', '}{directory.workspaceKey && !inactive ? <a href={teamHomePath(directory.workspaceKey, team.key)}>{team.name}</a> : team.name}</span>)}</span></div>}
     </div>}
   </div>
+}
+
+/**
+ * Opens the person card from any avatar-sized trigger: above it, 8px away and aligned with its left edge, the way the reference app's
+ * person card opens from an activity avatar. Without a user the children render as they are.
+ */
+export function PersonCardHover({ user, children }: { user?: User; children: ReactNode }) {
+  if (!user) return <>{children}</>
+  return <Tooltip.Provider delayDuration={350} skipDelayDuration={150}><Tooltip.Root>
+    <Tooltip.Trigger asChild><span className="person-card-trigger">{children}</span></Tooltip.Trigger>
+    <Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className="assignee-person-surface" side="top" align="start" sideOffset={8} collisionPadding={8}><AssigneeHoverPreview user={user}/></Tooltip.Content></Tooltip.Portal>
+  </Tooltip.Root></Tooltip.Provider>
 }

@@ -2,6 +2,7 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { Archive, Bell, BellOff, CheckCircle2, ChevronRight, Copy, Edit3, Ellipsis, Link2, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
 import type { ActivityEvent, Comment, ThreadSubscription, ThreadSubscriptionState, WorkflowState } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
+import { PersonCardHover } from '@/components/property/assignee-hover-card'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { AttributedAction, ViaApp } from '@/components/ui/via-app'
 import { activityActor, attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
@@ -473,7 +474,8 @@ function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?:
   if (event.type.includes('review')) return <Link2 size={14} />
   const actor = activityActor(event.actor, event.botActor, context?.users)
   const avatar = <Avatar id={event.actor?.id} name={actor.name} avatarUrl={actor.avatarUrl} />
-  return phone ? <span className="activity-actor-avatar">{avatar}</span> : avatar
+  const card = desktop && !event.botActor ? <PersonCardHover user={event.actor}>{avatar}</PersonCardHover> : avatar
+  return phone ? <span className="activity-actor-avatar">{avatar}</span> : card
 }
 
 export function CommentMenu({

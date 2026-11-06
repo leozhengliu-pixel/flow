@@ -37,11 +37,11 @@ async function openForm() {
   return screen.findByRole('form', { name: 'Add group binding' })
 }
 
-it('wears the shared dialog and settings dialog skin, not the project form dialog', async () => {
+it('wears the notification panel skin, not the project form dialog or the settings dialog', async () => {
   await openForm()
   const dialog = screen.getByRole('dialog')
-  expect(dialog).toHaveClass('dialog-content', 'feature-dialog', 'chat-group-dialog')
-  expect(dialog).not.toHaveClass('project-detail-page__form-dialog')
+  expect(dialog).toHaveClass('chat-group-dialog')
+  expect(dialog).not.toHaveClass('project-detail-page__form-dialog', 'feature-dialog', 'dialog-content')
   expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument()
 })
 
@@ -56,13 +56,17 @@ it('renders selects as the shared settings select with a sized chevron', async (
   }
 })
 
-it('renders every notification and action option as the shared switch', async () => {
+it('renders the notification options as the panel checkboxes and the Flow-only options as the shared switch', async () => {
   const form = await openForm()
-  const switches = [...form.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
-  expect(switches.length).toBeGreaterThanOrEqual(9)
-  for (const input of switches) expect(input).toHaveAttribute('data-control', 'toggle')
+  const options = within(form).getByRole('heading', { name: 'Notifications' }).parentElement!
+  const checkboxes = [...options.querySelectorAll('button[role="checkbox"]')]
+  expect(checkboxes.map(box => box.getAttribute('aria-label'))).toEqual(['Issue created', 'Status changed', 'Assignee changed', 'Comment added', 'Project update published', 'Initiative update published'])
   expect(within(form).getByRole('checkbox', { name: 'Issue created' })).toBeChecked()
   expect(within(form).getByRole('checkbox', { name: 'Comment added' })).not.toBeChecked()
+  const switches = [...form.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+  expect(switches.length).toBeGreaterThanOrEqual(5)
+  for (const input of switches) expect(input).toHaveAttribute('data-control', 'toggle')
+  expect(within(form).getByRole('checkbox', { name: 'Allow creating issues' })).toBeChecked()
 })
 
 it('gives every icon in the dialog an explicit size', async () => {

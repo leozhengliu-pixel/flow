@@ -50,11 +50,12 @@ for (const theme of ['light', 'dark']) {
       await expect(page.locator('html')).toHaveAttribute('data-locale', locale)
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
 
-      // Selects are the shared settings select; toggles are the shared switch, not bare checkboxes.
+      // Selects are the shared settings select; the notification options are the panel's checkboxes and the Flow-only options the shared switch.
       const selects = form.locator('button.settings-select')
       expect(await selects.count()).toBeGreaterThanOrEqual(3)
       const toggles = form.locator('input[data-control="toggle"]')
-      expect(await toggles.count()).toBeGreaterThanOrEqual(9)
+      expect(await toggles.count()).toBeGreaterThanOrEqual(5)
+      expect(await form.locator('.chat-group-dialog__options button[role="checkbox"]').count()).toBe(6)
 
       if (shots) {
         await dialog.scrollIntoViewIfNeeded()
@@ -69,10 +70,13 @@ for (const theme of ['light', 'dark']) {
         const chevrons = [...root.querySelectorAll('svg')].map(svg => svg.getBoundingClientRect()).filter(rect => rect.width > 24 || rect.height > 24)
         const select = root.querySelector('button.settings-select')!.getBoundingClientRect()
         const toggle = root.querySelector('input[data-control="toggle"]')!.getBoundingClientRect()
-        const row = root.querySelector('.feature-row')!
-        const aside = row.querySelector('aside')!.getBoundingClientRect()
-        const copy = row.querySelector('div')!.getBoundingClientRect()
-        return { outside, bigIcons: chevrons.length, selectHeight: select.height, selectWidth: select.width, toggleWidth: toggle.width, toggleHeight: toggle.height, asideLeft: aside.left, copyRight: copy.right, copyLeft: copy.left, dialogLeft: box.left, scrolls: root.scrollWidth > root.clientWidth + 1 }
+        const stacked = root.querySelector('.feature-row:not(.chat-inline)')!
+        const stackedCopy = stacked.querySelector('div')!.getBoundingClientRect()
+        const stackedControl = stacked.querySelector('aside')!.getBoundingClientRect()
+        const inline = root.querySelector('.feature-row.chat-inline')!
+        const inlineAside = inline.querySelector('aside')!.getBoundingClientRect()
+        const inlineCopy = inline.querySelector('div')!.getBoundingClientRect()
+        return { outside, bigIcons: chevrons.length, selectHeight: select.height, selectWidth: select.width, toggleWidth: toggle.width, toggleHeight: toggle.height, stackedGap: stackedControl.top - stackedCopy.bottom, stackedLeft: [stackedCopy.left, stackedControl.left], inlineGap: inlineAside.left - inlineCopy.right, inlineSameRow: Math.abs(inlineAside.top + inlineAside.height / 2 - (inlineCopy.top + inlineCopy.height / 2)) < 1.5, scrolls: root.scrollWidth > root.clientWidth + 1 }
       })
       expect(geometry.outside).toEqual([])
       expect(geometry.bigIcons).toBe(0)
@@ -80,9 +84,49 @@ for (const theme of ['light', 'dark']) {
       expect(geometry.selectHeight).toBeLessThanOrEqual(36)
       expect(geometry.selectWidth).toBeGreaterThan(80)
       expect([geometry.toggleWidth, geometry.toggleHeight]).toEqual([30, 20])
-      // Label and description sit left of the control column.
-      expect(geometry.copyLeft).toBeLessThan(geometry.asideLeft)
-      expect(geometry.copyRight).toBeLessThanOrEqual(geometry.asideLeft + 0.5)
+      // A stacked row (a select) puts the control 8px under its label; an inline row (a switch) keeps the label left of the control.
+      expect(geometry.stackedGap).toBe(8)
+      expect(geometry.stackedLeft[0]).toBe(geometry.stackedLeft[1])
+      expect(geometry.inlineSameRow).toBe(true)
+      expect(geometry.inlineGap).toBeGreaterThanOrEqual(24)
+
+      // The reference app's project notification panel: 334.21px wide, 8px radius, 16px sections, 12px titles at 500 and options at 450
+      // on 14.5px lines, 14px checkboxes 22.5px apart, 24px pill buttons.
+      const panel = await dialog.evaluate(root => {
+        const css = (el: Element, ...props: string[]) => Object.fromEntries(props.map(prop => [prop, getComputedStyle(el).getPropertyValue(prop)]))
+        const round = (value: number) => Math.round(value * 100) / 100
+        const rect = (el: Element) => { const r = el.getBoundingClientRect(); return { width: round(r.width), height: round(r.height) } }
+        const options = root.querySelector('.chat-group-dialog__options')!
+        const labels = [...options.querySelectorAll('label')]
+        const checkboxes = [...options.querySelectorAll('[role="checkbox"]')]
+        const buttons = [...root.querySelectorAll('.chat-actions button')]
+        return {
+          root: { width: root.getBoundingClientRect().width, ...css(root, 'border-top-left-radius', 'padding-top') },
+          header: css(root.querySelector('.chat-group-dialog__header')!, 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'row-gap'),
+          title: css(root.querySelector('.chat-group-dialog__header h2')!, 'font-size', 'font-weight', 'line-height'),
+          description: css(root.querySelector('.chat-group-dialog__header p')!, 'font-size', 'font-weight', 'line-height'),
+          options: css(options, 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'border-bottom-style'),
+          optionsTitle: css(options.querySelector('h2')!, 'font-size', 'font-weight', 'line-height', 'margin-bottom'),
+          label: css(labels[0], 'font-size', 'font-weight', 'line-height', 'column-gap'),
+          pitch: labels.slice(1).map((label, index) => round(label.getBoundingClientRect().top - labels[index].getBoundingClientRect().top)),
+          checkbox: { ...rect(checkboxes[0]), ...css(checkboxes[0], 'border-top-left-radius') },
+          checkboxRight: round(options.getBoundingClientRect().right - checkboxes[0].getBoundingClientRect().right),
+          buttons: buttons.map(button => ({ height: round(button.getBoundingClientRect().height), ...css(button, 'font-size', 'font-weight', 'border-top-left-radius', 'padding-left', 'padding-right') })),
+        }
+      })
+      expect(panel.root.width).toBeCloseTo(334.21, 1)
+      expect(panel.root).toMatchObject({ 'border-top-left-radius': '8px', 'padding-top': '0px' })
+      expect(panel.header).toEqual({ 'padding-top': '16px', 'padding-right': '48px', 'padding-bottom': '16px', 'padding-left': '16px', 'row-gap': '8px' })
+      expect(panel.title).toEqual({ 'font-size': '12px', 'font-weight': '500', 'line-height': '14.5px' })
+      expect(panel.description).toEqual({ 'font-size': '12px', 'font-weight': '450', 'line-height': '14.5px' })
+      expect(panel.options).toEqual({ 'padding-top': '16px', 'padding-right': '16px', 'padding-bottom': '16px', 'padding-left': '16px', 'border-bottom-style': 'solid' })
+      expect(panel.optionsTitle).toEqual({ 'font-size': '12px', 'font-weight': '500', 'line-height': '14.5px', 'margin-bottom': '8px' })
+      expect(panel.label).toEqual({ 'font-size': '12px', 'font-weight': '450', 'line-height': '14.5px', 'column-gap': '24px' })
+      expect(panel.pitch).toEqual([22.5, 22.5, 22.5, 22.5, 22.5])
+      expect(panel.checkbox).toMatchObject({ width: 14, height: 14, 'border-top-left-radius': '3px' })
+      expect(panel.checkboxRight).toBe(16)
+      expect(panel.buttons.length).toBe(2)
+      for (const button of panel.buttons) expect(button).toMatchObject({ height: 24, 'font-size': '12px', 'font-weight': '500', 'border-top-left-radius': '9999px', 'padding-left': '8px', 'padding-right': '8px' })
 
       // A toggle flips like a switch.
       const first = toggles.first()
@@ -114,3 +158,35 @@ for (const theme of ['light', 'dark']) {
     })
   }
 }
+
+test('the notification panel keeps the chat row and the schedule row on the reference measurements', async ({ page, request, workspaceKey }) => {
+  const headers = { 'X-Workspace-Key': workspaceKey }
+  const project = await (await request.post('/api/projects', { headers, data: { name: 'Panel project' } })).json() as Project
+  await mockChat(page, 'en-US', 'light')
+  await page.goto(`/${workspaceKey}/project/${project.slugId}/overview`)
+  await page.getByRole('button', { name: 'Setup project notifications' }).click()
+  const panel = page.locator('.project-notifications')
+  await expect(panel).toBeVisible()
+  await page.waitForTimeout(300)
+  const measured = await panel.evaluate(root => {
+    const css = (el: Element, ...props: string[]) => Object.fromEntries(props.map(prop => [prop, getComputedStyle(el).getPropertyValue(prop)]))
+    const height = (el: Element) => Math.round(el.getBoundingClientRect().height * 100) / 100
+    const schedule = root.querySelector('.project-notifications__schedule')!
+    const slack = root.querySelector('.project-notifications__slack')!
+    const icon = slack.querySelector('strong > img, strong > svg')!.getBoundingClientRect()
+    return {
+      width: root.getBoundingClientRect().width,
+      sections: [...root.querySelectorAll('.project-notifications__section, .project-notifications__schedule, .project-notifications__slack')].map(section => css(section, 'padding-top', 'padding-left')),
+      schedule: { gap: getComputedStyle(schedule.firstElementChild!).rowGap, title: css(schedule.querySelector('strong')!, 'font-size', 'font-weight', 'line-height'), button: { height: height(schedule.querySelector('button')!), ...css(schedule.querySelector('button')!, 'font-size', 'font-weight', 'border-top-left-radius', 'padding-left') } },
+      slack: { title: css(slack.querySelector('strong')!, 'font-size', 'font-weight', 'line-height', 'column-gap'), icon: [icon.width, icon.height], button: { height: height(slack.querySelector('button')!), ...css(slack.querySelector('button')!, 'font-size', 'font-weight', 'border-top-left-radius', 'padding-left') } },
+    }
+  })
+  expect(measured.width).toBeCloseTo(334.21, 1)
+  for (const section of measured.sections) expect(section).toEqual({ 'padding-top': '16px', 'padding-left': '16px' })
+  expect(measured.schedule.gap).toBe('8px')
+  expect(measured.schedule.title).toEqual({ 'font-size': '12px', 'font-weight': '500', 'line-height': '14.5px' })
+  expect(measured.schedule.button).toEqual({ height: 24, 'font-size': '12px', 'font-weight': '500', 'border-top-left-radius': '9999px', 'padding-left': '8px' })
+  expect(measured.slack.title).toEqual({ 'font-size': '12px', 'font-weight': '500', 'line-height': '14.5px', 'column-gap': '6px' })
+  expect(measured.slack.icon).toEqual([16, 16])
+  expect(measured.slack.button).toEqual({ height: 24, 'font-size': '12px', 'font-weight': '500', 'border-top-left-radius': '9999px', 'padding-left': '8px' })
+})

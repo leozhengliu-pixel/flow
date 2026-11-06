@@ -1,25 +1,97 @@
-/* The chat group dialog: the shared dialog with the settings dialog skin (.feature-dialog), a fixed header and a scrolling body. */
-.dialog-content.chat-group-dialog { box-sizing: border-box; width: min(560px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 48px); gap: 0; padding: 0; overflow: hidden; }
-.chat-group-dialog__header { flex: none; display: flex; flex-direction: column; gap: 4px; padding: 20px 56px 12px 24px; }
-.chat-group-dialog__header h2 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/*
+ * The chat group dialog. Its sizes follow the reference app's project notification panel, the one place that app connects a chat
+ * channel: a 334.21px panel with an 8px radius and a .5px border, 16px sections split by .5px dividers, 12px titles (500) and
+ * options (450), 14px checkboxes, 14.5px lines on an 8px rhythm, and 24px pill buttons (28px on touch screens). Flow's own rows
+ * (group, team, card language, requests) keep the settings controls but sit on the same spacing.
+ */
+.chat-group-dialog {
+  box-sizing: border-box;
+  position: fixed;
+  z-index: 701;
+  left: 50%;
+  top: 50%;
+  width: min(334.21px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  border: .5px solid var(--tooltip-border);
+  border-radius: 8px;
+  background: var(--tooltip-bg);
+  box-shadow: var(--shadow-control);
+  color: var(--action-menu-text);
+  transform: translate(-50%, -50%);
+}
+.chat-group-dialog .dialog-close { top: 12px; right: 12px; }
+.chat-group-dialog__header { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 16px 48px 16px 16px; border-bottom: .5px solid var(--popover-divider); }
+.chat-group-dialog__header h2 { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; color: var(--action-menu-active-text); font-size: 12px; font-weight: 500; line-height: 14.5px; }
 .chat-group-dialog__header h2 > img { flex: none; width: 16px; height: 16px; }
 .chat-group-dialog__header h2 > span { min-width: 0; overflow-wrap: anywhere; }
-.chat-group-dialog__header p { margin: 0; color: var(--theme-text-secondary); font-size: 13px; line-height: 19px; }
-.chat-group-dialog__body { box-sizing: border-box; min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 4px 24px 24px; }
-/* The settings page lays its sections out with a 40px gap and a titled card; here the form follows the header directly. */
+.chat-group-dialog__header h2 > span > span { color: var(--action-menu-text); }
+.chat-group-dialog__header p { margin: 0; color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
+.chat-group-dialog__body { box-sizing: border-box; min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
+
+/* Sections: the shared settings card becomes a 16px section split by a divider, and the heading above it joins it. */
 .chat-group-dialog .chat-integration-settings .feature-section { margin-top: 0; }
-/* The dialog title already names the form; keep its status line. */
-.chat-group-dialog .chat-binding-editor > header { margin: 0 0 12px; }
-.chat-group-dialog .chat-binding-editor > header h2 { display: none; }
-.chat-group-dialog .chat-binding-editor > header p { margin: 0; }
-.chat-group-dialog .chat-fieldset { display: block; gap: 0; padding: 0; border: 0; }
-.chat-group-dialog .chat-subheading { margin: 20px 4px 8px; }
-.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select { width: 220px; }
-.chat-group-dialog .chat-fixed-value { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-group-dialog .feature-card .feature-row > div > span { font-size: 12px; }
-.chat-group-dialog__connect { display: inline-flex; margin-top: 4px; }
-@media (max-width: 760px) {
-  .chat-group-dialog__header { padding: 16px 48px 12px 16px; }
-  .chat-group-dialog__body { padding: 4px 16px 16px; }
-  .chat-group-dialog .chat-integration-settings .feature-row aside .settings-select { width: auto; }
+.chat-group-dialog .chat-integration-settings .feature-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; overflow: visible; border: 0; border-bottom: .5px solid var(--popover-divider); border-radius: 0; background: none; box-shadow: none; }
+.chat-group-dialog .chat-integration-settings .chat-subheading { margin: 0; padding: 16px 16px 0; color: var(--action-menu-active-text); font-size: 12px; font-weight: 500; line-height: 14.5px; }
+.chat-group-dialog .chat-integration-settings .chat-subheading + .feature-card { padding-top: 8px; }
+.chat-group-dialog .chat-integration-settings .chat-binding-editor > header { margin: 0; padding: 16px; border-bottom: .5px solid var(--popover-divider); }
+.chat-group-dialog .chat-integration-settings .chat-binding-editor > header h2 { display: none; }
+.chat-group-dialog .chat-integration-settings .chat-binding-editor > header p { margin: 0; color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
+.chat-group-dialog .chat-integration-settings .chat-binding-editor .chat-integration-alert { margin: 0; padding: 16px; border-bottom: .5px solid var(--popover-divider); }
+.chat-group-dialog .chat-integration-settings .chat-fieldset { display: block; gap: 0; padding: 0; border: 0; }
+.chat-group-dialog .chat-integration-settings > :is(p, a, button) { margin: 16px; }
+.chat-group-dialog .chat-integration-settings > .chat-integration-alert { margin: 0; padding: 16px; border-bottom: .5px solid var(--popover-divider); }
+.chat-group-dialog .chat-integration-settings .chat-muted { color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
+.chat-group-dialog .feature-button.chat-group-dialog__connect { display: inline-flex; margin: 16px; }
+
+/* The notification options: the panel's own checkbox rows. */
+.chat-group-dialog__options { padding: 16px; border-bottom: .5px solid var(--popover-divider); }
+.chat-group-dialog__options h2 { margin: 0 0 8px; color: var(--action-menu-active-text); font-size: 12px; font-weight: 500; line-height: 14.5px; }
+.chat-group-dialog__options label { min-height: 14.5px; display: flex; align-items: center; gap: 24px; margin-bottom: 8px; color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
+.chat-group-dialog__options label:last-child { margin-bottom: 0; }
+.chat-group-dialog__options label > span { min-width: 0; flex: 1; }
+.chat-group-dialog__options [role=checkbox] { width: 14px; height: 14px; flex: none; display: grid; place-items: center; padding: 0; border: 1px solid var(--inbox-filter-checkbox-border); border-radius: 3px; background: transparent; color: white; }
+.chat-group-dialog__options [role=checkbox][data-checked=true] { border-color: var(--activity-highlight-color); background: var(--activity-highlight-color); }
+.chat-group-dialog__options [role=checkbox]:disabled { cursor: not-allowed; opacity: .45; }
+
+/* Rows: a stacked row puts its control under the label; an inline row (switch, fixed value, binding) keeps it on the right. */
+.chat-group-dialog .chat-integration-settings .feature-row { min-height: 0; flex-direction: column; align-items: stretch; gap: 8px; padding: 2px 0; border: 0; }
+.chat-group-dialog .chat-integration-settings .feature-row.chat-inline,
+.chat-group-dialog .chat-integration-settings .feature-row:has(.chat-fixed-value) { flex-direction: row; align-items: center; gap: 24px; padding: 0; }
+.chat-group-dialog .chat-integration-settings .feature-row > div { gap: 4px; }
+.chat-group-dialog .chat-integration-settings .feature-row strong { color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
+.chat-group-dialog .chat-integration-settings .feature-row span { color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
+.chat-group-dialog .chat-integration-settings .feature-row aside { width: 100%; justify-content: flex-start; }
+.chat-group-dialog .chat-integration-settings .feature-row.chat-inline aside,
+.chat-group-dialog .chat-integration-settings .feature-row:has(.chat-fixed-value) aside { width: auto; justify-content: flex-end; }
+.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select { flex: 1; width: auto; min-width: 0; }
+.chat-group-dialog .chat-integration-settings .feature-row aside .chat-projects-picker { width: 100%; }
+.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select-native-wrap { flex: 1; width: auto; min-width: 0; }
+.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select-native-wrap > .settings-select-native { width: 100%; }
+.chat-group-dialog .chat-integration-settings .chat-fixed-value { max-width: 160px; overflow: hidden; color: var(--action-menu-muted); font-size: 12px; font-weight: 450; text-overflow: ellipsis; white-space: nowrap; }
+.chat-group-dialog .chat-integration-settings .chat-binding-row strong { color: var(--action-menu-active-text); font-weight: 500; }
+.chat-group-dialog .chat-integration-settings .chat-binding-row .chat-binding-scope,
+.chat-group-dialog .chat-integration-settings .chat-binding-row .chat-binding-authorization { color: var(--action-menu-muted); }
+.chat-group-dialog .chat-integration-settings .chat-private-notice strong { color: var(--action-menu-active-text); font-weight: 500; }
+.chat-group-dialog .chat-integration-settings .chat-private-notice { padding: 0; }
+.chat-group-dialog .chat-integration-settings .chat-approval { margin-top: 0; border-bottom: 0; }
+
+/* Buttons: the panel's 24px pill (its resting ring, a .5px transparent border, 12px/500 text). */
+.chat-group-dialog .chat-integration-settings .feature-button { box-sizing: border-box; min-width: 24px; height: 24px; padding: 0 8px; border: .5px solid transparent; background: var(--pk-control-phone); box-shadow: var(--pk-control-ring); color: var(--action-menu-text); font-size: 12px; font-weight: 500; line-height: normal; }
+.chat-group-dialog .chat-integration-settings .feature-button:hover { background: var(--pk-control-selected); }
+.chat-group-dialog .chat-integration-settings .feature-button:focus-visible { box-shadow: 0 0 0 var(--control-focus-width) var(--focus-ring); }
+.chat-group-dialog .chat-integration-settings .feature-button.primary { background: var(--activity-highlight-color); box-shadow: none; color: white; }
+.chat-group-dialog .chat-integration-settings .feature-button.danger { color: var(--semantic-danger); }
+.chat-group-dialog .chat-integration-settings .feature-button > svg { width: 12px; height: 12px; }
+.chat-group-dialog .chat-integration-settings .feature-button.chat-icon-button { width: 24px; min-width: 24px; padding: 0; }
+.chat-group-dialog .chat-integration-settings .feature-button.chat-icon-button > svg { width: 14px; height: 14px; }
+.chat-group-dialog .chat-integration-settings .feature-section-action { margin: 0; padding: 16px; }
+@media (pointer: coarse) {
+  .chat-group-dialog .feature-button { height: 28px; }
+  .chat-group-dialog .chat-integration-settings .feature-button { height: 28px; }
+  .chat-group-dialog .chat-integration-settings .feature-button.chat-icon-button { width: 28px; }
 }
