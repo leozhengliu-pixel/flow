@@ -14,7 +14,7 @@ describe('LabelPicker create command', () => {
     const onCreate = vi.fn().mockResolvedValue(undefined)
     render(<I18nProvider><LabelPicker labels={[existing]} onCreate={onCreate} onToggle={vi.fn()} value={[]}/></I18nProvider>)
 
-    await user.click(screen.getByRole('button', { name: 'Add label' }))
+    await user.click(screen.getByRole('button', { name: 'Add labels' }))
     const dialog = await screen.findByRole('dialog', { name: 'Change Labels' })
     await user.type(within(dialog).getByRole('textbox'), 'test')
     const create = await within(dialog).findByRole('option', { name: /Create new workspace label.*test/ })
@@ -27,7 +27,7 @@ describe('LabelPicker create command', () => {
     const user = userEvent.setup()
     render(<I18nProvider><LabelPicker labels={[existing]} onCreate={vi.fn()} onToggle={vi.fn()} value={[]}/></I18nProvider>)
 
-    await user.click(screen.getByRole('button', { name: 'Add label' }))
+    await user.click(screen.getByRole('button', { name: 'Add labels' }))
     const dialog = await screen.findByRole('dialog', { name: 'Change Labels' })
     await user.type(within(dialog).getByRole('textbox'), 'Improvement')
     expect(within(dialog).queryByRole('option', { name: /Create new workspace label/ })).not.toBeInTheDocument()

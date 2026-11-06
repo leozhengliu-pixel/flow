@@ -6,6 +6,11 @@
   .issue-view .issue-properties > .issue-detail-section { margin-left: 4px; }
   /* The identifier sits a font-relative gap (0.43em) before the title, not a fixed 6px. */
   .issue-view .issue-header .issue-breadcrumb-label > strong { margin-right: .4304em; }
+  /* An empty label / project trigger keeps the icon and button on the primary ink; only its placeholder text is muted. */
+  .issue-view .issue-properties :is(.labels-picker--inline .label-project-trigger, .issue-project-trigger) > span:not([data-i18n-ignore]) { color: var(--issue-muted); }
+  .issue-view .issue-properties .label-project-trigger:is(:hover, [aria-expanded=true]) { background: var(--ui-pill-hover-bg); }
+  /* The empty label picker starts on the same edge as the other property triggers, so its popup anchors there too. */
+  .issue-view .issue-properties .labels-picker--inline { margin-left: 1px; }
   .issue-view .issue-command-buttons { height: 28px; }
   .issue-view .issue-work-control { width: 56.5px; height: 28px; border: 0; }
   .issue-view .issue-work-control .issue-work-prompt { margin-right: .5px; }

@@ -1021,6 +1021,7 @@ html:root body .issue-properties .labels-picker--inline:not(#_) {
 html:root body .issue-properties .labels-picker--inline .label-project-trigger:not(#_):has(span) {
   margin-left: -4px;
   padding: 0 10px 0 6px;
+  gap: normal 6px;
 }
 html:root body .issue-properties .estimate-picker .label-project-trigger:not(#_) { color: var(--issue-fg); }
 html:root body .issue-properties .estimate-picker .label-project-trigger > svg:first-child:not(#_) { width: 16px; height: 16px; color: var(--issue-muted); }
@@ -1307,5 +1308,5 @@ html:root body .property-command-surface.property-command-estimate:not(#_) .prop
   html:root body .issue-properties .cycle-picker .label-project-trigger:not(#_) { color: var(--issue-fg); }
   html:root body .property-command-surface.issue-labels-menu .property-command-label { color: var(--pk-text-strong); }
   html:root body .issue-properties .labels-picker--inline .label-project-trigger:not(#_),
-  html:root body .issue-properties .issue-project-trigger:not(#_):has(> span:not([data-i18n-ignore])) { color: var(--issue-muted); }
+  html:root body .issue-properties .issue-project-trigger:not(#_):has(> span:not([data-i18n-ignore])) { color: var(--issue-fg); }
 }

@@ -37,7 +37,7 @@ export function LabelPicker({ value, labels, labelGroups = [], emptyLabel, onTog
       ariaLabel="Add labels"
       customTrigger={({open,activeTrigger,openMenu})=>summary?<button type="button" className="label-project-trigger" aria-label={t('Change labels')} aria-haspopup="dialog" aria-expanded={open} onClick={()=>openMenu('add')}><LabelIcon size={16}/><span>{value.length ? value.length : t('Labels')}</span></button>:<div className="labels-picker-trigger" aria-label="Change or add labels">
         <div className="issue-label-chips" aria-label="Selected labels">{value.map(label => <LabelHoverPreview label={label} key={label.id}><button type="button" className="issue-label-chip" aria-label={`Change or add labels. ${label.name} selected`} aria-haspopup="dialog" aria-expanded={open&&activeTrigger===`label:${label.id}`} onClick={()=>openMenu(`label:${label.id}`)}><i style={{ background: label.color }}/><span data-i18n-ignore>{label.name}</span></button></LabelHoverPreview>)}</div>
-        <button type="button" className="label-project-trigger" aria-label="Add label" aria-haspopup="dialog" aria-expanded={open&&activeTrigger==='add'} onClick={()=>openMenu('add')}>{inline&&value.length?<Plus size={15}/>:<><LabelIcon size={15}/><span>Add label</span></>}</button>
+        <button type="button" className="label-project-trigger" aria-label="Add labels" aria-haspopup="dialog" aria-expanded={open&&activeTrigger==='add'} onClick={()=>openMenu('add')}>{inline&&value.length?<Plus size={15}/>:<><LabelIcon size={15}/><span>Add label</span></>}</button>
       </div>}
       hoverContent={<PropertyShortcutTooltip label="Change or add labels" shortcut="L"/>}
       onChange={onToggle}
