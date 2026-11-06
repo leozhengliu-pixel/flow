@@ -51,7 +51,7 @@ setting them the way you do today and use the file for everything else.
 
 | Section | Applied when |
 | --- | --- |
-| `defaults.workspace` | A workspace is created (from the app or `POST /api/workspaces`). |
+| `defaults.workspace` | A workspace is created (from the app or `POST /api/workspaces`), including its workflow statuses and labels, which its teams share (see [Workflow statuses and labels](#workflow-statuses-and-labels)). |
 | `defaults.team` | A team is created, including a new workspace's first team. A team created with "copy settings from" or as a sub-team takes the other team's settings instead. With `cycles.enabled` and `autoCreate`, the team starts with its current cycle and the upcoming ones. |
 | `defaults.user` | A member's personal settings (and notification preferences) in a workspace are first created: when they create or join the workspace. Members who already have settings keep them. |
 
@@ -79,6 +79,64 @@ unsupported value stops startup) and, like every variable, wins over
 
 The "Getting started" issues of a new workspace are written in its creator's
 language.
+
+### Workflow statuses and labels
+
+Issue statuses and labels belong to a workspace: a new workspace gets one set
+and all its teams share it until a team customizes its own statuses in team
+settings. The file can replace Flow's built-in set for new workspaces:
+
+```yaml
+defaults:
+  workspace:
+    workflowStates:
+      - {name: Backlog, type: backlog, color: "#BEC2C8"}
+      - {name: Todo, type: unstarted, color: "#E2E2E2", default: true}
+      - {name: In Progress, type: started, color: "lch(80% 90 85)"}
+      - {name: In Review, type: started, color: "#4EA7FC"}
+      - {name: Done, type: completed, color: "lch(48% 59.31 288.43)"}
+      - {name: Canceled, type: canceled, color: "#95A2B3"}
+      - {name: Duplicate, type: duplicate, color: "#95A2B3"}
+    labels:
+      - {name: Bug, color: "#EB5757"}
+      - {name: Roadmap, color: "#18B99A", resourceType: project}
+    labelGroups:
+      - name: Area
+        color: "#4EA7FC"
+        labels:
+          - {name: Backend}
+          - {name: Frontend, color: "#BB87FC"}
+```
+
+- `workflowStates` lists the statuses in board order. Each has a `name`
+  (unique, ignoring case), a `type` (`backlog`, `unstarted`, `started`,
+  `completed`, `canceled`, or `duplicate`), and optionally a `color` (`#RRGGBB`
+  or `lch(L% C H)`, default `#6B6F76`), a `description` and a `position`
+  (a number; the list order by default; positions must be unique). Every type
+  from `backlog` to `canceled` needs at least one status, because teams and
+  automations rely on them (Flow also refuses to delete the last status of a
+  type). At most one status has `default: true`: new issues start there; without
+  it the first `backlog` status is the default. The status of type `duplicate`
+  is the reserved canceled status issues marked as duplicates move to (it
+  cannot be renamed, retyped or deleted); without one Flow adds its own
+  "Duplicate" status after the others.
+- `labels` are labels outside a group: `name`, optional `color` (`#RRGGBB`,
+  default `#5E6AD2`), `description` and `resourceType` (`issue`, the default,
+  `project` or `initiative`).
+- `labelGroups` are groups with their `labels` (which take the group's
+  `resourceType`); a group has a `name`, optional `color` (default `#8B8D98`),
+  `description` and `resourceType`.
+- Label names are unique (ignoring case) among the labels of one resource
+  type, in or outside groups; group names are unique per resource type.
+- Setting `labels` or `labelGroups` replaces Flow's built-in labels (Bug,
+  Feature, Improvement) with exactly the listed ones; `labels: []` starts new
+  workspaces without labels. Leave both out to keep the built-in labels, and
+  leave out `workflowStates` to keep the built-in statuses.
+
+As with every default, only workspaces created afterwards get them. Existing
+workspaces keep their statuses and labels, and a team created in an existing
+workspace shares that workspace's statuses, as before. "Copy settings from"
+and sub-teams still copy or inherit the other team's statuses.
 
 ### Validation
 
@@ -250,6 +308,23 @@ defaults:
       loops: true
       ai: true
       triage-intelligence: false
+    workflowStates:                         # replaces the built-in statuses; teams share them
+      - {name: Backlog, type: backlog, color: "#BEC2C8"}
+      - {name: Todo, type: unstarted, color: "#E2E2E2", default: true}
+      - {name: In Progress, type: started, color: "lch(80% 90 85)"}
+      - {name: In Review, type: started, color: "#4EA7FC"}
+      - {name: Done, type: completed, color: "lch(48% 59.31 288.43)"}
+      - {name: Canceled, type: canceled, color: "#95A2B3"}
+      - {name: Duplicate, type: duplicate, color: "#95A2B3"}
+    labels:                                 # labels and labelGroups replace the built-in labels
+      - {name: Bug, color: "#EB5757"}
+      - {name: Feature, color: "#BB87FC"}
+    labelGroups:
+      - name: Area
+        color: "#4EA7FC"
+        labels:
+          - {name: Backend}
+          - {name: Frontend}
   team:
     timezone: Etc/UTC                       # IANA time zone
     defaultPriority: none                   # none | urgent | high | medium | low
@@ -302,6 +377,8 @@ defaults:
 | `defaults.workspace.inviteLinksEnabled` | `false` | boolean |
 | `defaults.workspace.allowedDomains` | `[]` | email domains allowed to join |
 | `defaults.workspace.features.<flag>` | on, except `triage-intelligence` | `ai`, `ai-agent`, `asks`, `audit-log`, `coding-sessions`, `customer-requests`, `dashboards`, `documents`, `emojis`, `initiatives`, `loops`, `pulse`, `recently-deleted`, `releases`, `triage-intelligence` |
+| `defaults.workspace.workflowStates` | Backlog, Todo, In Progress, Done, Canceled (+ Duplicate) | list of `name`, `type`, `color`, `description`, `position`, `default` ([details](#workflow-statuses-and-labels)) |
+| `defaults.workspace.labels` / `labelGroups` | Bug, Feature, Improvement; no groups | lists of labels and groups ([details](#workflow-statuses-and-labels)) |
 | `defaults.team.timezone` | `Etc/UTC` | IANA time zone |
 | `defaults.team.defaultPriority` | `none` | `none`, `urgent`, `high`, `medium`, `low` |
 | `defaults.team.detailedHistory` | `false` | boolean |
@@ -470,7 +547,7 @@ server:
 | SAML metadata XML | Environment (or `FLOW_SAML_METADATA_XML_FILE`) | It can embed signing material; the file refuses it. |
 | Development-only switches (`FLOW_DEV_*`) | Environment | Never part of a production file. |
 | Workspace security (2FA, admin bypass, SCIM, approved applications, MCP allow lists, HIPAA mode, spend limits) | Settings > Security / Usage | Per-workspace decisions made by its admins; a deployment-wide default would grant or remove access silently. |
-| Workflow statuses, labels, templates, project statuses | Settings, per workspace and team | Content rather than switches; new workspaces get Flow's standard set. |
+| Templates, project statuses, and statuses and labels of existing workspaces | Settings, per workspace and team | Content rather than switches; new workspaces get Flow's standard set (statuses and labels: the file's `defaults.workspace` set, if any). |
 | Member roles of invited people, OIDC/SCIM role mapping | Invite dialog, `server.auth.oidc.*`, Settings > SCIM | Role mapping is already a server setting; the role of an invite is chosen by the inviter. |
 | Per-member time zone | The member's browser | Flow records it from the browser for Pulse delivery. |
 

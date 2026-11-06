@@ -30,6 +30,52 @@ type WorkspaceCreationDefaults struct {
 	AllowedDomains []string
 	// FeatureFlags override single entries of the built-in feature flags.
 	FeatureFlags map[string]bool
+	// WorkflowStates replace the built-in issue statuses of a new workspace
+	// (nil keeps them). Its teams share them, as they share the built-in ones.
+	WorkflowStates []WorkflowStateTemplate
+	// CustomLabels is set when Labels and LabelGroups replace the built-in
+	// labels of a new workspace (both may then be empty).
+	CustomLabels bool
+	Labels       []LabelTemplate
+	LabelGroups  []LabelGroupTemplate
+}
+
+// WorkflowStateTypes are the issue status types, in board order. Every
+// team needs at least one status of each (the API refuses to remove the last
+// one), so a configured set must have all of them.
+var WorkflowStateTypes = []string{"backlog", "unstarted", "started", "completed", "canceled"}
+
+// WorkflowStateTemplate is one status of a new workspace's workflow.
+type WorkflowStateTemplate struct {
+	Name        string
+	Type        string
+	Color       string
+	Description string
+	Position    float64
+	// Default marks the status new issues start in.
+	Default bool
+	// Reserved marks the status duplicates are moved to (type canceled); it
+	// cannot be renamed, retyped or deleted.
+	Reserved bool
+}
+
+// LabelTemplate is one label of a new workspace. ResourceType is issue,
+// project or initiative.
+type LabelTemplate struct {
+	Name         string
+	Color        string
+	Description  string
+	ResourceType string
+}
+
+// LabelGroupTemplate is a label group of a new workspace with its labels
+// (which take the group's resource type).
+type LabelGroupTemplate struct {
+	Name         string
+	Color        string
+	Description  string
+	ResourceType string
+	Labels       []LabelTemplate
 }
 
 // TeamCreationDefaults apply to a new team that does not copy its settings

@@ -158,7 +158,7 @@ func ParseFile(path string, content []byte) (*File, error) {
 	if root.Kind == yaml.ScalarNode && root.Tag == "!!null" {
 		return file, nil
 	}
-	parser := fileParser{path: path, file: file}
+	parser := fileParser{path: path, file: file, labels: labelNames{}}
 	if err := parser.section(root, "", fileSchema); err != nil {
 		return nil, err
 	}
@@ -538,6 +538,9 @@ var fileSchema = map[string]*field{
 			"features": {kind: kindBoolMap, keys: workspaceFeatureFlags, apply: func(f *File, value any) {
 				f.Defaults.Workspace.FeatureFlags = value.(map[string]bool)
 			}},
+			"workflowStates": {kind: kindCustom, parse: parseWorkflowStates},
+			"labels":         {kind: kindCustom, parse: parseLabels},
+			"labelGroups":    {kind: kindCustom, parse: parseLabelGroups},
 		}),
 		"team": section(map[string]*field{
 			"timezone": {kind: kindString, check: timezone, apply: func(f *File, value any) {
@@ -610,6 +613,8 @@ var fileSchema = map[string]*field{
 type fileParser struct {
 	path string
 	file *File
+	// labels are the label names read so far, per resource type.
+	labels labelNames
 }
 
 func (p fileParser) errorf(node *yaml.Node, key, format string, args ...any) error {
@@ -811,6 +816,8 @@ func (p fileParser) value(node *yaml.Node, path string, spec *field) error {
 		decoded = flags
 	case kindEnvMap:
 		return p.envMap(node, path)
+	case kindCustom:
+		return spec.parse(p, node, path)
 	}
 	if spec.env != "" {
 		// Every variable has one key, so a value already there came from

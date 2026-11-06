@@ -89,6 +89,23 @@ defaults:
       loops: true
       ai: true
       triage-intelligence: false
+    workflowStates:                         # replaces the built-in statuses; teams share them
+      - {name: Backlog, type: backlog, color: "#BEC2C8"}
+      - {name: Todo, type: unstarted, color: "#E2E2E2", default: true}
+      - {name: In Progress, type: started, color: "lch(80% 90 85)"}
+      - {name: In Review, type: started, color: "#4EA7FC"}
+      - {name: Done, type: completed, color: "lch(48% 59.31 288.43)"}
+      - {name: Canceled, type: canceled, color: "#95A2B3"}
+      - {name: Duplicate, type: duplicate, color: "#95A2B3"}
+    labels:                                 # labels and labelGroups replace the built-in labels
+      - {name: Bug, color: "#EB5757"}
+      - {name: Feature, color: "#BB87FC"}
+    labelGroups:
+      - name: Area
+        color: "#4EA7FC"
+        labels:
+          - {name: Backend}
+          - {name: Frontend}
   team:
     timezone: Etc/UTC                       # IANA time zone
     defaultPriority: none                   # none | urgent | high | medium | low

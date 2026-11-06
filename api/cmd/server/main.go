@@ -1979,7 +1979,7 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		if data.TeamSettings == nil {
 			data.TeamSettings = map[string]domain.TeamSettings{}
 		}
-		settings := domain.TeamSettings{TeamID: team.ID, Timezone: "Etc/UTC", EstimateType: "notUsed", DefaultStateID: "state_backlog", Access: "public", MembershipRestriction: "open", SettingsPermission: "allMembers", LabelPermission: "allMembers", TemplatePermission: "allMembers", AgentSkillPermission: "allMembers", LoopPermission: "allMembers", MemberPermission: "allMembers", SlackNotifications: map[string]bool{}, PRAutomations: map[string]string{}, StaleMonths: 6, AutoArchiveMonths: 6, ProgressOrder: "first", TriageAction: "none", ReleaseAutomations: []domain.TeamAutomationRule{}, TriageRules: []domain.TeamAutomationRule{}, AgentSkills: []domain.TeamAgentSkill{}, ResolvedSummaries: true, ShowInitiatives: true}
+		settings := domain.TeamSettings{TeamID: team.ID, Timezone: "Etc/UTC", EstimateType: "notUsed", DefaultStateID: sharedDefaultStateID(data), Access: "public", MembershipRestriction: "open", SettingsPermission: "allMembers", LabelPermission: "allMembers", TemplatePermission: "allMembers", AgentSkillPermission: "allMembers", LoopPermission: "allMembers", MemberPermission: "allMembers", SlackNotifications: map[string]bool{}, PRAutomations: map[string]string{}, StaleMonths: 6, AutoArchiveMonths: 6, ProgressOrder: "first", TriageAction: "none", ReleaseAutomations: []domain.TeamAutomationRule{}, TriageRules: []domain.TeamAutomationRule{}, AgentSkills: []domain.TeamAgentSkill{}, ResolvedSummaries: true, ShowInitiatives: true}
 		// The operator's team defaults (defaults.team in the config file); a
 		// team that copies another team's settings takes that team's instead.
 		teamDefaults := domain.CurrentCreationDefaults().Team
@@ -6254,6 +6254,28 @@ func reorderIssueForStatus(data *domain.Bootstrap, issue *domain.Issue, placemen
 			issue.SortOrder = value - 1
 		}
 	}
+}
+
+// sharedDefaultStateID is the default status of the workspace's shared
+// statuses, the ones a new team starts with: Backlog in a workspace with the
+// built-in statuses, or the default of the statuses the config file gave it.
+func sharedDefaultStateID(data *domain.Bootstrap) string {
+	fallback := ""
+	for _, state := range data.States {
+		if state.TeamID != "" || state.Reserved {
+			continue
+		}
+		if state.Default {
+			return state.ID
+		}
+		if fallback == "" && state.Type == "backlog" {
+			fallback = state.ID
+		}
+	}
+	if fallback == "" {
+		return "state_backlog"
+	}
+	return fallback
 }
 
 func firstStateOfType(data *domain.Bootstrap, teamID, stateType string) *domain.WorkflowState {

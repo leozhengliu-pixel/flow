@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	appconfig "flow/api/internal/config"
@@ -173,5 +174,110 @@ func TestNoConfigFileKeepsBuiltInDefaults(t *testing.T) {
 	providers := requestJSON[map[string]any](t, handler, "GET", "/api/auth/providers", nil, http.StatusOK)
 	if _, ok := providers["defaultLanguage"]; ok {
 		t.Fatalf("providers = %v", providers)
+	}
+}
+
+const workflowDefaultsFile = `
+defaults:
+  workspace:
+    workflowStates:
+      - {name: Inbox, type: backlog, color: "#BEC2C8"}
+      - {name: Ready, type: unstarted, color: "#E2E2E2", default: true}
+      - {name: Doing, type: started, color: "#F2C94C"}
+      - {name: Review, type: started, color: "#4EA7FC"}
+      - {name: Shipped, type: completed, color: "#5E6AD2"}
+      - {name: Dropped, type: canceled, color: "#95A2B3"}
+    labels:
+      - {name: Bug, color: "#EB5757"}
+    labelGroups:
+      - name: Area
+        color: "#4EA7FC"
+        labels:
+          - {name: Backend}
+          - {name: Frontend}
+`
+
+func stateNames(states []domain.WorkflowState) []string {
+	names := []string{}
+	for _, state := range states {
+		names = append(names, state.Name)
+	}
+	return names
+}
+
+// A new workspace (with its tutorial) gets the configured statuses and
+// labels; its first team and teams created in it later share them and start
+// new issues in the configured default status. The existing workspace and a
+// team created in it keep Flow's built-in statuses and labels.
+func TestConfigFileWorkflowStatesAndLabels(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	before, _ := repository.BootstrapFor("test-workspace")
+	useConfigFileDefaults(t, workflowDefaultsFile)
+	handler := newHandler(&server{store: repository, authDisabled: true, uploadPath: t.TempDir(), workspaceTutorial: true})
+	want := []string{"Inbox", "Ready", "Doing", "Review", "Shipped", "Dropped", "Duplicate"}
+
+	created := requestJSON[domain.Bootstrap](t, handler, "POST", "/api/workspaces", map[string]any{"name": "Workflow", "urlKey": "workflow-test", "region": "us", "tutorial": true}, http.StatusCreated)
+	key := created.Workspace.URLKey
+	workspace, _ := repository.BootstrapFor(key)
+	first := workspace.Teams[0].ID
+	if got := stateNames(statesForTeam(&workspace, first)); !slices.Equal(got, want) {
+		t.Fatalf("first team statuses = %v", got)
+	}
+	ready := stateForTeamByType(&workspace, first, "unstarted")
+	if workspace.TeamSettings[first].DefaultStateID != ready.ID {
+		t.Fatalf("first team default status = %q, want %q", workspace.TeamSettings[first].DefaultStateID, ready.ID)
+	}
+	labels := map[string]domain.IssueLabel{}
+	for _, label := range workspace.Labels {
+		labels[label.Name] = label
+	}
+	if len(workspace.LabelGroups) != 1 || workspace.LabelGroups[0].Name != "Area" || labels["Bug"].GroupID != "" || labels["Backend"].GroupID != workspace.LabelGroups[0].ID || labels["Frontend"].GroupID != workspace.LabelGroups[0].ID {
+		t.Fatalf("labels %+v, groups %+v", workspace.Labels, workspace.LabelGroups)
+	}
+	if _, builtin := labels["Feature"]; builtin {
+		t.Fatalf("built-in labels seeded too: %+v", workspace.Labels)
+	}
+	// The "Getting started" issues sit in the configured statuses.
+	tutorial := 0
+	for _, issue := range workspace.Issues {
+		if issue.Team.ID == first {
+			tutorial++
+			if !slices.Contains(want, issue.State.Name) {
+				t.Fatalf("tutorial issue in status %+v", issue.State)
+			}
+		}
+	}
+	if tutorial == 0 {
+		t.Fatal("no tutorial issues")
+	}
+
+	// A team created later in the new workspace shares its statuses.
+	team := requestJSON[domain.Team](t, handler, "POST", "/api/workspaces/"+key+"/teams", map[string]any{"name": "Platform", "key": "PLT"}, http.StatusCreated)
+	states := requestJSON[[]domain.WorkflowState](t, handler, "GET", "/api/teams/"+team.ID+"/states?workspace="+key, nil, http.StatusOK)
+	if got := stateNames(states); !slices.Equal(got, want) {
+		t.Fatalf("new team statuses = %v", got)
+	}
+	workspace, _ = repository.BootstrapFor(key)
+	if workspace.TeamSettings[team.ID].DefaultStateID != ready.ID {
+		t.Fatalf("new team default status = %q, want %q", workspace.TeamSettings[team.ID].DefaultStateID, ready.ID)
+	}
+	issue := requestJSON[domain.Issue](t, handler, "POST", "/api/issues?workspace="+key, map[string]any{"title": "Configured workflow", "teamId": team.ID}, http.StatusCreated)
+	if issue.State.ID != ready.ID {
+		t.Fatalf("new issue status = %+v, want Ready", issue.State)
+	}
+
+	// The existing workspace keeps its statuses and labels, and so does a
+	// team created in it.
+	existing := requestJSON[domain.Team](t, handler, "POST", "/api/workspaces/test-workspace/teams", map[string]any{"name": "Ops", "key": "OPS"}, http.StatusCreated)
+	data, _ := repository.BootstrapFor("test-workspace")
+	if got, was := stateNames(statesForTeam(&data, existing.ID)), stateNames(statesForTeam(&before, before.Teams[0].ID)); !slices.Equal(got, was) {
+		t.Fatalf("existing workspace statuses %v, were %v", got, was)
+	}
+	if data.TeamSettings[existing.ID].DefaultStateID != "state_backlog" || len(data.Labels) != len(before.Labels) || len(data.LabelGroups) != len(before.LabelGroups) {
+		t.Fatalf("existing workspace changed: default %q, %d labels, %d groups", data.TeamSettings[existing.ID].DefaultStateID, len(data.Labels), len(data.LabelGroups))
 	}
 }

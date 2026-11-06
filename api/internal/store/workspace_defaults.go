@@ -26,9 +26,42 @@ func EmptyWorkspace(name, urlKey, region string, viewer domain.User) domain.Boot
 		SavedViews: []domain.SavedView{}, Notifications: []domain.Notification{}, Loops: []domain.Loop{}, CustomEmojis: []domain.CustomEmoji{}, AgentSessions: []domain.AgentSession{}, AgentSkills: []domain.PersonalAgentSkill{},
 	}
 	data.Labels = defaultWorkspaceLabels(now)
+	applyWorkspaceContentDefaults(&data, now)
 	normalize(&data)
 	applyTeamCreationDefaults(&data, team.ID)
 	return data
+}
+
+// applyWorkspaceContentDefaults gives a new workspace the operator's workflow
+// statuses and labels (defaults.workspace in the config file) instead of the
+// built-in ones. Like those, they belong to the workspace: the first team and
+// every team created later share them until a team customizes its own, and
+// the first team's default status is the configured default.
+func applyWorkspaceContentDefaults(data *domain.Bootstrap, now time.Time) {
+	defaults := domain.CurrentCreationDefaults().Workspace
+	if len(defaults.WorkflowStates) > 0 {
+		data.States = make([]domain.WorkflowState, 0, len(defaults.WorkflowStates))
+		for _, state := range defaults.WorkflowStates {
+			data.States = append(data.States, domain.WorkflowState{ID: idgen.New("state_"), Name: state.Name, Description: state.Description, Color: state.Color, Type: state.Type, Position: state.Position, Default: state.Default, Reserved: state.Reserved})
+		}
+	}
+	if !defaults.CustomLabels {
+		return
+	}
+	data.Labels, data.LabelGroups = []domain.IssueLabel{}, []domain.LabelGroup{}
+	label := func(template domain.LabelTemplate, groupID string) domain.IssueLabel {
+		return domain.IssueLabel{ID: idgen.New("label_"), Name: template.Name, Color: template.Color, Description: template.Description, Scope: "Workspace", ResourceType: template.ResourceType, GroupID: groupID, CreatedAt: now}
+	}
+	for _, template := range defaults.Labels {
+		data.Labels = append(data.Labels, label(template, ""))
+	}
+	for _, template := range defaults.LabelGroups {
+		group := domain.LabelGroup{ID: idgen.New("label_group_"), Name: template.Name, Color: template.Color, Description: template.Description, Scope: "Workspace", ResourceType: template.ResourceType, CreatedAt: now}
+		data.LabelGroups = append(data.LabelGroups, group)
+		for _, item := range template.Labels {
+			data.Labels = append(data.Labels, label(item, group.ID))
+		}
+	}
 }
 
 // applyTeamCreationDefaults gives a new workspace's first team the operator's
@@ -103,6 +136,7 @@ func localSQLiteFixture() domain.Bootstrap {
 	data.Workspace.ID = "workspace_test"
 	data.Users = []domain.User{viewer, other}
 	data.Teams = []domain.Team{team}
+	data.States = states
 	data.Labels = labels
 	data.LabelGroups = canonicalLabelGroups()
 	data.Issues = issues
