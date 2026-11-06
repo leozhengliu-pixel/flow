@@ -286,7 +286,7 @@
   border: 0;
   border-radius: 8px;
   text-align: left;
-  line-height:28px;
+  line-height: normal;
 }
 .team-menu-trigger{position:absolute;z-index:2;right:2px;width:24px;height:24px;display:grid;place-items:center;padding:0;opacity:0;border:0;border-radius:9999px;background:transparent;color:var(--issue-muted);transition:opacity .15s,background-color .15s,color .15s}.team-heading:hover .team-menu-trigger,.team-menu-trigger:focus-visible,.team-menu-trigger[data-state=open]{opacity:1}.team-menu-trigger:hover,.team-menu-trigger[data-state=open]{background:lch(13.845% 1.3 272);color:var(--bright)}.team-menu-trigger svg{width:12px;height:16px;fill:currentColor}.sidebar-team-menu{width:220px}.sidebar-team-menu-search{height:34px;display:flex;align-items:center;gap:7px;margin:-1px -1px 4px;padding:0 8px;border-bottom:.5px solid var(--theme-border-strong)}.sidebar-team-menu-search svg{width:14px;color:var(--theme-text-secondary)}.sidebar-team-menu-search input{min-width:0;flex:1;border:0;outline:0;background:transparent;color:var(--theme-text-primary);font:12px inherit}
 .team-title:hover { color: var(--bright); background: lch(8.445% 1.3 272); }
@@ -337,20 +337,19 @@
   align-items: center;
   gap: 8px;
   margin: 0 -12px -8px;
-  padding: 10px;
+  padding: 10px 10px 10px 15px;
 }
 .sidebar-help {
-  width: 24px;
+  width: 25px;
   height: 24px;
   display: grid;
-  flex: 0 0 24px;
+  flex: 0 0 25px;
   place-items: center;
-  padding: 0 2px;
-  color: var(--text);
+  padding: 0 4px;
+  color: var(--sidebar-nav-fg);
   background: transparent;
   border: 0;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1px var(--theme-control);
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
 }
@@ -615,7 +614,7 @@
 
 :root[data-theme="light"]{--flow-light-icon:lch(18.888% 1.25 282)}
 :root[data-theme="light"] .sidebar{color:var(--muted);background:var(--bg-sidebar)}
-:root[data-theme="light"] .section-action,:root[data-theme="light"] .try-dismiss,:root[data-theme="light"] .sidebar-help{color:var(--faint)}
+:root[data-theme="light"] .section-action,:root[data-theme="light"] .try-dismiss{color:var(--faint)}
 :root[data-theme="light"] .sidebar .workspace-row>button.sidebar-top-action{color:var(--flow-light-icon)}
 :root[data-theme="light"] .sidebar .workspace-row>button.sidebar-compose,
 :root[data-theme="light"] .sidebar-compose svg{color:var(--flow-light-icon)}

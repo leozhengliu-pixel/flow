@@ -65,7 +65,10 @@ test('desktop settings reuse quiet help and label-table controls', async ({ page
   const help = page.locator('.settings-sidebar-footer .sidebar-help')
   await expect(help).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   await expect(help).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)')
-  await expect(help).toHaveCSS('padding', '0px 2px')
+  await expect(help).toHaveCSS('padding', '0px 4px')
+  await expect(help).toHaveCSS('border-radius', '8px')
+  const helpBox = (await help.boundingBox())!
+  expect([helpBox.x, helpBox.width, helpBox.height]).toEqual([15, 25, 24])
   await page.goto(`/${workspaceKey}/settings/issue-labels`)
   await expect(page.getByRole('button', { name: 'Order by Name, sorted ascending', exact: true })).toHaveCSS('gap', '2px')
   await expect(page.getByRole('button', { name: 'Add filter', exact: true })).toHaveCSS('padding', '0px 2px')

@@ -30,10 +30,12 @@ test('matches the desktop sidebar header, section labels and help footer', async
   expect(footer!.y).toBeCloseTo(856, 0)
   expect(footer!.width).toBeCloseTo(244, 0)
   expect(footer!.height).toBeCloseTo(44, 0)
-  await expect(page.locator('.sidebar-footer')).toHaveCSS('padding', '10px')
+  await expect(page.locator('.sidebar-footer')).toHaveCSS('padding', '10px 10px 10px 15px')
 
   const help = await page.locator('.sidebar-footer .sidebar-help').boundingBox()
-  expect(help!.x).toBeCloseTo(10, 0)
+  expect([help!.x, help!.width, help!.height]).toEqual([15, 25, 24])
+  await expect(page.locator('.sidebar-footer .sidebar-help')).toHaveCSS('padding', '0px 4px')
+  await expect(page.locator('.sidebar-footer .sidebar-help')).toHaveCSS('border-radius', '8px')
   await expect(page.locator('.sidebar-footer .sidebar-help')).toHaveCSS('font-size', '12px')
   await expect(page.locator('.sidebar-footer .sidebar-help')).toHaveCSS('font-weight', '500')
 
@@ -67,4 +69,17 @@ test('collapses the desktop sidebar sections with 8px gaps', async ({ page, work
   expect(boxes.workspace.height).toBeCloseTo(29, 0)
   expect(boxes.teams.y - (boxes.workspace.y + boxes.workspace.height)).toBeCloseTo(8, 0)
   expect(boxes.try.y - (boxes.teams.y + boxes.teams.height)).toBeCloseTo(8, 0)
+})
+
+test('keeps the team issue header action 8px inside the main frame', async ({ page, request, workspaceKey }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', 'The issue header layout is desktop-only')
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const data = await (await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })).json()
+  await page.goto(`/${workspaceKey}/team/${data.teams[0].key}/all`)
+  const header = page.locator('main > header').first()
+  await expect(header).toHaveCSS('padding', '0px 8px')
+  const action = header.getByRole('button', { name: /New issue/ }).first()
+  const frame = (await header.boundingBox())!
+  const box = (await action.boundingBox())!
+  expect(frame.x + frame.width - (box.x + box.width)).toBeCloseTo(8, 1)
 })

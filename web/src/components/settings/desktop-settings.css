@@ -32,8 +32,8 @@
   html:root .settings-app .settings-nav-link svg { color: inherit; }
   html:root .settings-app .settings-nav-link:hover { background: var(--set-nav-hover-bg); color: var(--set-nav-active); }
   html:root .settings-app .settings-nav-link.active { background: var(--set-nav-active-bg); color: var(--set-nav-active); }
-  html:root .settings-app .settings-sidebar-footer { flex: 0 0 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px; }
-  html:root .settings-app .settings-sidebar-footer .sidebar-help { position: relative; box-sizing: border-box; width: 24px; height: 24px; display: grid; place-items: center; padding: 0 2px; border: .5px solid transparent; border-radius: 50%; background: transparent; color: var(--set-nav); }
+  html:root .settings-app .settings-sidebar-footer { flex: 0 0 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 15px; }
+  html:root .settings-app .settings-sidebar-footer .sidebar-help { position: relative; box-sizing: border-box; width: 25px; height: 24px; display: grid; place-items: center; padding: 0 4px; border: .5px solid transparent; border-radius: 8px; background: transparent; color: var(--set-nav); }
   html:root .settings-app .settings-main .domain-labels-table-header button { gap: 2px; margin-left: -6.5px; border-width: .5px; }
   .settings-app .settings-main .label-settings-icon-button { padding: 0 2px; }
   html:root .settings-app .settings-main .domain-labels-table-header button.active { color: var(--set-button-text); }
