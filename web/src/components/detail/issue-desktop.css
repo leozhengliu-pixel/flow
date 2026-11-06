@@ -4,6 +4,8 @@
   .issue-view .issue-properties { padding-left: 0; }
   .issue-view .issue-properties > * { margin-left: 4px; }
   .issue-view .issue-properties > .issue-detail-section { margin-left: 4px; }
+  /* The identifier sits a font-relative gap (0.43em) before the title, not a fixed 6px. */
+  .issue-view .issue-header .issue-breadcrumb-label > strong { margin-right: .4304em; }
   .issue-view .issue-command-buttons { height: 28px; }
   .issue-view .issue-work-control { width: 56.5px; height: 28px; border: 0; }
   .issue-view .issue-work-control .issue-work-prompt { margin-right: .5px; }
