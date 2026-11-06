@@ -91,13 +91,25 @@ describe('built-in agent avatar', () => {
   })
 
   it.each([
-    ['[mobile] Skyler Anderson', 'MS'],
+    ['[mobile] Skyler Anderson', 'SA'],
     ['Dev User', 'DU'],
     ['Jean-Luc Picard', 'JP'],
-    ['dev.user@example.test', 'DE'],
+    ['dev.user@example.test', 'DU'],
+    ['dev@example.test', 'DE'],
   ])('renders shared initials for %s', (name, expected) => {
     const view = render(<UserAvatar name={name} />)
     expect(view.container.querySelector('span')).toHaveTextContent(expected)
+    view.unmount()
+  })
+
+  it.each([
+    ['Hui', 'HU', '2'],
+    ['Flow QA OAuth app', 'FOA', '3'],
+    ['O\'Neil', 'O\'', '2'],
+  ])('tells the stylesheet how many initials %s shows', (name, expected, count) => {
+    const view = render(<UserAvatar name={name} />)
+    expect(view.container.querySelector('span')).toHaveTextContent(expected)
+    expect(view.container.querySelector('span')).toHaveAttribute('data-initials', count)
     view.unmount()
   })
 

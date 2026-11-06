@@ -84,7 +84,7 @@ for (const viewport of sizes) for (const colorScheme of ['dark', 'light'] as con
       })
       expect(inset).toEqual({ x: viewport.width < 768 ? 40 : 36, y: viewport.width < 768 ? 14 : 8 })
       const latin = menu.locator(`[data-user-avatar][aria-label="${longName}"]`)
-      await expect(latin).toHaveText('AC')
+      await expect(latin).toHaveText('AMW')
       await expect(menu.locator('[data-user-avatar][aria-label="Q"]')).toHaveText('Q')
       const uploaded = menu.locator('[data-user-avatar][aria-label="Photo Person"] img')
       await expect(uploaded).toHaveAttribute('src', photo)

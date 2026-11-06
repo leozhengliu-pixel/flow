@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Pick avatar initials like the reference: a single name shows its first two letters ("Hui" is HU), two words show one letter each, three or more show the first word and the last two ("Flow QA OAuth app" is FOA), and an email uses its local part.
 - Start team and workspace issue lists and new view drafts ordered by Priority (Manual stays the board default), show triage issues in a new view draft, and keep a draft's display from reading or overwriting the All issues display.
 - Fix the project and initiative Lark/Feishu group dialog: selects and switches now render as Flow's shared select and switch (no oversized chevrons or square checkboxes), rows follow the settings layout, and the form scrolls inside the dialog on desktop and phone.
 - Match avatar initials to the reference: one size-driven font size for every avatar (8px at 14px, 9px at 16, 18 and 20px, 11px at 24px, 14px at 32px) and a weight inherited from the row instead of a bold 600 or 500, so issue replies, property pickers, settings lists and panels read the same everywhere.

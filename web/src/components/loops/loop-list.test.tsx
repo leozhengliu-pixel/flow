@@ -360,7 +360,7 @@ describe('LoopList', () => {
     expect(screen.getAllByRole('rowgroup').map(group => within(group).getAllByRole('button')[0].textContent)).toEqual(['Schedule', 'Issue'])
     await user.click(grouping)
     await user.click(screen.getByRole('option', { name: 'Owner' }))
-    expect(screen.getAllByRole('rowgroup').map(group => within(group).getAllByRole('button')[0].textContent)).toEqual(['TTeammate', 'VViewer'])
+    expect(screen.getAllByRole('rowgroup').map(group => within(group).getAllByRole('button')[0].textContent)).toEqual(['TETeammate', 'VIViewer'])
     await user.click(grouping)
     await user.click(screen.getByRole('option', { name: 'No grouping' }))
     expect(screen.queryByRole('button', { name: /Workspace/ })).toBeNull()

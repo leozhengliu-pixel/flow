@@ -9,7 +9,7 @@ import {
 } from "@/lib/api";
 import type { AuthSession, InviteLinkPreview } from "@/types/flow";
 import { LanguageSelect } from "@/i18n/i18n";
-import { avatarInitials } from "@/lib/avatar-initials";
+import { workspaceInitials } from "@/lib/workspace-initials";
 
 import "./auth-page.css";
 import "./invite-link-accept.css";
@@ -95,7 +95,7 @@ export function InviteLinkAccept({ session, onJoined }: Props) {
           {preview?.workspace.logoUrl ? (
             <img src={preview.workspace.logoUrl} alt="" />
           ) : (
-            avatarInitials(preview?.workspace.name ?? "", "F")
+            preview ? workspaceInitials(preview.workspace.name) : "F"
           )}
         </div>
         <h1>

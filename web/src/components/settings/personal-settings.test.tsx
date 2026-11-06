@@ -229,7 +229,7 @@ describe('personal settings workflows', () => {
     const input = props('profile')
     input.data.viewer = { ...input.data.viewer, displayName: '[mobile] Skyler Anderson' }
     render(<I18nProvider><PersonalSettings {...input}/></I18nProvider>)
-    expect(screen.getByText('MS').closest('.personal-avatar')).not.toBeNull()
+    expect(screen.getByText('SA').closest('.personal-avatar')).not.toBeNull()
   })
 
   it('shows the viewer\'s profile picture when one is set', () => {

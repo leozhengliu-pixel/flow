@@ -54,7 +54,7 @@ test('every avatar consumer has a size, and arbitrary initials fit its bounds', 
     fixture.mount(inventory)
     await document.fonts.ready
   }, inventory)
-  await expect(page.locator('[data-consumer]')).toHaveCount(inventory.length * 2)
+  await expect(page.locator('[data-consumer]')).toHaveCount(inventory.length * 3)
   await expect.poll(() => page.locator('#avatar-consumer-fixture [data-user-avatar]').evaluateAll(avatars => avatars.filter(avatar => {
     const bounds = avatar.getBoundingClientRect()
     return bounds.width <= 0 || bounds.height <= 0
