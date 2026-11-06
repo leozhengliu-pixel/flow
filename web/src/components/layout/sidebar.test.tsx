@@ -263,7 +263,7 @@ describe('sidebar feature flags', () => {
     renderSidebar({ 'customer-requests': true, asks: true, releases: true })
     const menu = await openMore()
     const rows = [...menu.querySelectorAll('[role="menuitem"]')]
-    expect(rows.map(row => row.textContent)).toEqual(['Members', 'Customers', 'Releases', 'Teams', 'Asks', 'Customize sidebar'])
+    expect(rows.map(row => row.textContent)).toEqual(['Customers', 'Members', 'Releases', 'Teams', 'Asks', 'Customize sidebar'])
     // One glyph family: no stroked icon libraries, every glyph is a 16px viewBox that fills with the row colour.
     for (const row of rows) {
       const glyph = row.querySelector(':scope > svg')!

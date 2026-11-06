@@ -65,16 +65,23 @@ export function sidebarEntryAvailable(
 const defaultPersonalOrder: SidebarEntry[] = [
   "inbox", "reviews", "myIssues", "pulse", "drafts", "agent",
 ];
+// The reference app lists Initiatives, Projects, Views and Loops in the section and
+// Customers, Members and Teams under More (Releases sits between Members and Teams).
 const defaultWorkspaceOrder: SidebarEntry[] = [
-  "initiatives", "projects", "loops", "views", "members", "customers",
+  "initiatives", "projects", "views", "loops", "customers", "members",
   "releases", "teams",
+];
+// Earlier defaults. A saved order that still equals one of them was never rearranged.
+const previousDefaultWorkspaceOrders: SidebarEntry[][] = [
+  ["initiatives", "projects", "loops", "views", "members", "customers", "releases", "teams"],
+  ["initiatives", "projects", "loops", "views", "members", "releases", "teams", "customers"],
 ];
 const legacyWorkspaceOrder: SidebarEntry[] = [
   "members", "initiatives", "projects", "teams", "views",
   "releases", "loops", "customers",
 ];
-// Like the reference app: the Workspace section shows Initiatives, Projects, Loops and
-// Views; Members, Teams, Releases (and Customers) live under More. Dashboards
+// Like the reference app: the Workspace section shows Initiatives, Projects, Views and
+// Loops; Customers, Members, Releases and Teams live under More. Dashboards
 // is a tab of the Views page, not a sidebar entry.
 const defaultPreferences: SidebarPreferences = {
   inbox: "always", reviews: "always", myIssues: "always", pulse: "always",
@@ -184,7 +191,7 @@ function readOrder(userId?: string): SidebarOrder {
       personal: normalizeOrder(stored.personal, defaultPersonalOrder),
       // An order saved before the parity change that still equals the
       // old default was never customised: use the new default.
-      workspace: normalizeOrder(sameOrder(stored.workspace, legacyWorkspaceOrder) ? undefined : stored.workspace, defaultWorkspaceOrder),
+      workspace: normalizeOrder(sameOrder(stored.workspace, legacyWorkspaceOrder) || isPreviousDefault(stored.workspace) ? undefined : stored.workspace, defaultWorkspaceOrder),
     };
   } catch {
     return { personal: [...defaultPersonalOrder], workspace: [...defaultWorkspaceOrder] };
@@ -201,6 +208,11 @@ function sameOrder(stored: SidebarEntry[] | undefined, reference: SidebarEntry[]
   const core = stored.filter(entry => !appendedLater.has(entry))
   if (core.some(entry => !reference.includes(entry))) return false
   return core.every((entry, index) => index === 0 || reference.indexOf(core[index - 1]) < reference.indexOf(entry))
+}
+function isPreviousDefault(stored: SidebarEntry[] | undefined) {
+  // Dashboards was a sidebar entry in older builds; it is a Views tab now.
+  const entries = stored?.filter(entry => (entry as string) !== "dashboards")
+  return !!entries && previousDefaultWorkspaceOrders.some(order => sameEntries(entries, order))
 }
 function sameEntries(a: SidebarEntry[], b: SidebarEntry[]) {
   return a.length === b.length && a.every((entry, index) => entry === b[index])
