@@ -88,7 +88,7 @@ export function SavedViewEditor({ actions, ariaLabel = 'New view', mode = 'creat
     return () => removeEventListener('keydown', onKey, true)
   }, [])
   const targetLabel = (option: SavedViewTarget) => option.scope === 'team' || option.labelIsEntityName || !['Personal', 'Workspace'].includes(option.label) ? option.label : t(option.label)
-  return <section className={styles.editor} data-mode={mode} aria-label={t(ariaLabel)}>
+  return <div className={styles.card}><section className={styles.editor} data-mode={mode} aria-label={t(ariaLabel)}>
     <div className={styles.header}>
       <ViewIconPicker ariaLabel={t('Choose icon')} color={shownVisual.color} icon={shownVisual.icon} onChange={next => { setIconTouched(true); setVisual(next) }} triggerClassName={styles.icon}/>
       <div className={styles.fields}>
@@ -126,7 +126,7 @@ export function SavedViewEditor({ actions, ariaLabel = 'New view', mode = 'creat
       </div>
     </div>
     {actions && <div className={styles.actions}>{actions}</div>}
-  </section>
+  </section></div>
 }
 
 function targetKey(target: SavedViewTarget) { return `${target.scope}:${target.teamId ?? ''}` }

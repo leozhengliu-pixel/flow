@@ -1,5 +1,6 @@
 /* The reference app's view card: 0.5px hairline, radius 10, soft shadow; bottom section = filter bar. */
-.editor{flex:none;display:flex;flex-direction:column;min-width:0;border:.5px solid var(--summary-card-border);border-radius:10px;background:var(--theme-surface-2);box-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft)}
+.card{flex:none;min-width:0;border:.5px solid var(--summary-card-border);border-radius:10px;background:var(--theme-surface-2);box-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft)}
+.editor{display:flex;flex-direction:column;min-width:0}
 .header{display:grid;grid-template-columns:28px minmax(0,1fr) auto;column-gap:8px;align-items:start;padding:12px}
 .icon{width:28px;height:28px;border-radius:4px;background:color-mix(in srgb,var(--theme-text-tertiary) 12.5%,transparent)}
 .fields{min-width:0;display:flex;flex-direction:column}
@@ -25,14 +26,14 @@
 @media(--desktop-layout){
   .header{column-gap:5px}
   .fields{display:contents}
-  .name{grid-column:2;grid-row:1;margin:1px 0;width:calc(100% + 6px);color:var(--bright)}
-  .description{grid-column:2/4;grid-row:2;margin:5px 0 0 1px;width:calc(100% - 1px)}
+  .name{grid-column:2;grid-row:1;margin:2px 0;width:calc(100% + 6px);color:var(--bright)}
+  .description{grid-column:2/4;grid-row:2;margin:6px 0 0 1px;width:calc(100% - 1px)}
   .commands{grid-column:3;grid-row:1;gap:8px;padding:2px 0}
   .icon.icon{padding:0 8px;background:var(--view-editor-icon-bg)}
   .saveTo{gap:6px;margin-right:0;color:var(--my-issues-details-muted)}
   .saveTo>button{gap:0;padding:0 8px 0 6px;border:.5px solid transparent}
   .saveTo>button>svg{width:14px;height:14px;margin-right:6px}
-  .cancel{color:var(--text)}
+  .cancel{color:var(--issue-strong-fg)}
   .editor[data-mode=create] .save{background:var(--view-editor-create-bg)}
   .editor[data-mode=create] .save:hover{background:var(--accent-primary-hover)}
   .cancel,.save{padding-inline:8px;border:.5px solid transparent}
