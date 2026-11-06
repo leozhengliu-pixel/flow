@@ -44,7 +44,7 @@ html:root body .project-label-search kbd {
   box-sizing: border-box;
   width: auto;
   min-width: 18px;
-  height: 17px;
+  height: auto;
   display: grid;
   place-items: center;
   padding: 2px 4px;
@@ -52,7 +52,7 @@ html:root body .project-label-search kbd {
   border-radius: 4px;
   background: transparent;
   color: var(--pk-muted);
-  font: 400 11px/12px var(--font);
+  font: 400 11px/1.1 var(--font);
 }
 html:root body .property-command-surface .property-command-search-shortcut > span,
 html:root body .project-label-search .property-command-search-shortcut > span {
