@@ -8,6 +8,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 - On a phone, the SLAs settings page now scrolls 32px past its last rule card, matching the reference, instead of the 96px the other settings pages leave.
+- The "Show all notifications" button under an empty unread inbox list is 1px wider (it has the 0.5px transparent border the other pill buttons have), matching the reference.
 
 - The Flow Agent can file requests from a Lark or Feishu group: in a bound group that takes requests, ask it (`@Flow 把上面这条提成需求`, `@Flow file this as a request`) and it writes the request from the conversation, shows it on an approval card in the thread that only you can approve, and then files it exactly as `@Flow 提需求` does: as you, in the team's triage, with the same request record, link back to the group, thread and confirmation card. It counts as a write in the write ledger on both agent runtimes, and is offered only in such groups: not in direct messages, on the Agent page, in unbound groups or groups without request intake. Flow's public MCP tools are unchanged.
 

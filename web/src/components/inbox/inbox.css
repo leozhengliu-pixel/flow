@@ -816,7 +816,7 @@
 .flow-inbox-snooze-input-wrap input::placeholder { color: var(--pk-faint); opacity: 1; }
 .flow-inbox-snooze-menu .snoozeOption { gap: 8px; padding-right: 12px; }
 .flow-inbox-snooze-menu .snoozeOption time { margin-left: auto; color: var(--theme-text-secondary); font-size: 13px; font-weight: 450; white-space: nowrap; }
-.flow-inbox-list-state--message .flow-inbox-list-state__ghost-action { height: 32px; margin-top: 12px; padding: 0 12px; color: var(--text); background: transparent; border: 0; border-radius: 9999px; font-size: 13px; }
+.flow-inbox-list-state--message .flow-inbox-list-state__ghost-action { height: 32px; margin-top: 12px; padding: 0 12px; color: var(--text); background: transparent; border: .5px solid transparent; border-radius: 9999px; font-size: 13px; }
 .flow-inbox-menu--actions { width: 180px; min-width: 0; }
 .flow-inbox-menu--actions .flow-inbox-menu__separator { height: 10px; background: linear-gradient(transparent 4.5px,var(--theme-border) 4.5px,var(--theme-border) 5px,transparent 5px); }
 .flow-inbox-menu--actions .flow-inbox-menu__item { line-height: normal; }
