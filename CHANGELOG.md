@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Browser E2E expectations follow the round 3 inbox and integrations passes: the notification snooze list has seven presets (including "This evening") in a 306px panel with a 279px field, the actions menu shows two two-key shortcuts, and the featured integration card keeps its own mark colour; the snooze specs run on a fixed 09:00 clock.
+
 - Team settings header: "Team overview" is a button (like the reference) with the reference's 6px/8px padding and chevron gap, and the settings sidebar search field is named "Search…" instead of "Search settings".
 
 - Desktop parity round 4: the agent chat switcher popover is a flat run of 32px chat rows between 6px spacers with no padding (a lone group has no heading, "New chat" only shows while a chat is open, rows highlight only after the pointer or keyboard moves), and the team retire row reads "Prevent creating and updating issues in this team while preserving all historical data".

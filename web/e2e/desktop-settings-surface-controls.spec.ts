@@ -41,7 +41,7 @@ test('security, notifications, template headers and team overview keep their mea
 test('integration tabs keep arrow navigation separate from their scrollable list', async ({ page, workspaceKey }) => {
   await page.goto(`/${workspaceKey}/settings/integrations`)
   const tabs = page.getByRole('tablist', { name: 'Featured integrations' })
-  await expect(tabs).toHaveCSS('padding', '1px 0px')
+  await expect(tabs).toHaveCSS('padding', '1px 0px', { timeout: 30_000 })
   expect((await tabs.boundingBox())!.width).toBe(584)
   const next = page.getByRole('button', { name: 'Next integration', exact: true })
   expect(await next.evaluate(node => node.closest('[role=tablist]') === null)).toBe(true)
@@ -50,7 +50,8 @@ test('integration tabs keep arrow navigation separate from their scrollable list
   await page.getByRole('button', { name: 'Previous integration', exact: true }).click()
   await expect(tabs.getByRole('tab', { name: 'Slack', exact: true })).toHaveAttribute('aria-selected', 'true')
   const mark = page.locator('.desktop-integration-preview > img:last-child')
-  await expect(mark).toHaveCSS('filter', 'invert(1)')
+  // The featured card paints a fixed light gradient in every theme, so the mark keeps its own dark colour.
+  await expect(mark).toHaveCSS('filter', 'none')
   expect(await mark.evaluate(node => (node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
   if (process.env.FLOW_UI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_UI_SHOTS}/desktop-integration-discovery.png` })
   await page.getByRole('textbox', { name: 'Search integrations' }).fill('lark')

@@ -15,12 +15,17 @@ test.beforeEach(async ({ request, workspaceKey, page, context }) => {
   expect((await request.post('/api/workspace/welcome-message/test', { headers })).ok()).toBeTruthy()
 })
 
+// The presets depend on the local time of day ("This evening" is only offered before 17:00), so the clock is fixed at 09:00 local.
+const morning = new Date(2026, 10, 9, 9, 0, 0)
+
 test('row menu fits its labels and typed snooze persists the chosen time', async ({ page, workspaceKey }) => {
+  await page.clock.setFixedTime(morning)
   await page.goto(`/${workspaceKey}/inbox`)
   await page.getByRole('button', { name: 'Notification actions', exact: true }).click()
   const shortcut = page.locator('.flow-inbox-menu--actions kbd')
-  await expect(shortcut.locator('span')).toHaveCount(2)
-  expect(await shortcut.evaluate(e => getComputedStyle(e).paddingLeft)).toBe('0px')
+  await expect(shortcut.locator('span')).toHaveCount(4)
+  await expect(shortcut).toHaveCount(2)
+  expect(await shortcut.first().evaluate(e => getComputedStyle(e).paddingLeft)).toBe('0px')
   const actions = page.locator('.flow-inbox-menu--actions')
   expect(await actions.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true)
   await actions.evaluate(async node => { await Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.finished)) })
@@ -37,20 +42,20 @@ test('row menu fits its labels and typed snooze persists the chosen time', async
   expect(await label.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true)
   await menu.getByRole('menuitem', { name: /Snooze/ }).hover()
   const snooze = page.locator('.flow-inbox-snooze-menu')
-  await expect.poll(async () => Math.round((await snooze.boundingBox())!.width)).toBe(318)
+  await expect.poll(async () => Math.round((await snooze.boundingBox())!.width)).toBe(306)
   const parentRect = (await menu.boundingBox())!
   const snoozeRect = (await snooze.boundingBox())!
   expect(Math.abs(snoozeRect.x - parentRect.x - parentRect.width + 1.5)).toBeLessThanOrEqual(1)
   expect(Math.abs(snoozeRect.y - parentRect.y - 27)).toBeLessThanOrEqual(1)
-  await expect(snooze.locator('time')).toHaveCount(5)
-  expect(Math.abs((await snooze.getByRole('textbox', { name: 'Snooze time' }).boundingBox())!.width - 291)).toBeLessThanOrEqual(1)
+  await expect(snooze.locator('time')).toHaveCount(6)
+  expect(Math.abs((await snooze.getByRole('textbox', { name: 'Snooze time' }).boundingBox())!.width - 279)).toBeLessThanOrEqual(1)
   // The reference's snooze rows are padded 0 18 0 14 like every other menu row.
   expect(await snooze.locator('time').first().evaluate(e => getComputedStyle(e.parentElement!).paddingRight)).toBe('18px')
   await expect(snooze.getByRole('menuitem', { name: 'Custom…' }).locator('svg')).toHaveCount(1)
   await snooze.evaluate(async node => { await Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.finished)) })
   if (process.env.FLOW_UI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_UI_SHOTS}/desktop-notification-snooze.png` })
   const mutation = page.waitForResponse(r => r.request().method() === 'PATCH' && /\/api\/notifications\//.test(r.url()))
-  const start = Date.now()
+  const start = morning.getTime()
   await snooze.getByRole('textbox', { name: 'Snooze time' }).fill('in 3 hours')
   await snooze.getByRole('textbox', { name: 'Snooze time' }).press('Enter')
   const response = await mutation
@@ -63,18 +68,19 @@ test('row menu fits its labels and typed snooze persists the chosen time', async
 })
 
 test('H opens the same complete menu and the three-hour preset snoozes', async ({ page, workspaceKey }) => {
+  await page.clock.setFixedTime(morning)
   await page.goto(`/${workspaceKey}/inbox`)
   const row = page.locator('.flow-inbox-row').first()
   await row.focus()
   await page.keyboard.press('h')
   const snooze = page.getByRole('menu', { name: 'Snooze notification' })
   await expect(snooze.getByRole('textbox', { name: 'Snooze time' })).toBeVisible()
-  await expect(snooze.getByRole('menuitem')).toHaveCount(6)
-  await expect(snooze.locator('time')).toHaveCount(5)
+  await expect(snooze.getByRole('menuitem')).toHaveCount(7)
+  await expect(snooze.locator('time')).toHaveCount(6)
   await expect(snooze.getByRole('menuitem', { name: 'Custom…' }).locator('svg')).toHaveCount(1)
-  await expect.poll(async () => Math.round((await page.locator('.flow-inbox-snooze-menu').boundingBox())!.width)).toBe(318)
+  await expect.poll(async () => Math.round((await page.locator('.flow-inbox-snooze-menu').boundingBox())!.width)).toBe(306)
   const mutation = page.waitForResponse(r => r.request().method() === 'PATCH' && /\/api\/notifications\//.test(r.url()))
-  const start = Date.now()
+  const start = morning.getTime()
   await snooze.getByRole('menuitem', { name: 'In 3 hours', exact: true }).click()
   const response = await mutation
   expect(response.ok()).toBeTruthy()
