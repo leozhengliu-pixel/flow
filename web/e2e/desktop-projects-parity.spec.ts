@@ -100,7 +100,7 @@ test('honors row properties, opens an icon-only date picker and keeps the overvi
   const projectActions = page.getByRole('button', { name: 'Project actions', exact: true })
   await projectActions.click()
   await expect(page.getByRole('menu')).toBeVisible()
-  await expect(page.locator('.project-detail-page__header-action[data-state="open"]')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect(page.locator('.project-detail-page__header-action[data-state="open"]')).toHaveCSS('background-color', 'rgb(45, 45, 47)')
   if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-project-actions.png`, animations: 'disabled' })
   await page.keyboard.press('Escape')
   await rail.getByRole('button', { name: 'Alpha actions', exact: true }).click()

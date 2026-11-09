@@ -67,7 +67,7 @@ export function ProjectMilestoneMenu({ count, milestone, onConvert, onDelete, on
   const visibleGroups = groups.map(group => group.filter(action => shows(action.label))).filter(group => group.length)
   return <DropdownMenu.Root onOpenChange={open => { if (!open) setQuery('') }}>
     <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
-    <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" alignOffset={variant === 'sidebar' ? -25 : 0} className="project-milestone-menu" collisionPadding={8} onClick={event => event.stopPropagation()} onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
+    <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" alignOffset={variant === 'sidebar' ? -20 : 0} className="project-milestone-menu" collisionPadding={8} onClick={event => event.stopPropagation()} onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
       <ProjectMenuSearch label="Filter milestone actions" query={query} onChange={setQuery}/>
       {visibleGroups.map((group, index) => <Fragment key={group[0].key}>{index > 0 && !query && <DropdownMenu.Separator/>}{group.map(action => <Fragment key={action.key}>{action.node}</Fragment>)}</Fragment>)}
       {query && !visibleGroups.length && <div className="project-action-menu__empty">No results</div>}

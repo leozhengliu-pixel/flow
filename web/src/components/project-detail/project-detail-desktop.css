@@ -1,13 +1,21 @@
 @media (--desktop-layout) {
   .project-detail-page { --pd-copy: var(--text); --pd-text: var(--text); }
-  .project-detail-page__header { padding-left: 18px; }
+  .project-detail-page__header { padding-left: 18px; gap: 4px; }
+  .project-detail-page__crumb { margin-left: -4px; padding: 0 4px; gap: 6px; }
+  .project-detail-page__crumb svg { width: 16px; height: 16px; }
   .project-details-sidebar {
     --pd-label: var(--phone-project-panel-label);
     --pd-copy: var(--text);
     --pd-text: var(--text);
   }
   .project-details-sidebar__section { background: var(--project-sidebar-card-bg); border-color: var(--project-sidebar-card-border); }
-  .project-details-sidebar__property .lp-project-property-trigger:not(.is-empty) { color: var(--text); }
+  .project-details-sidebar__property .lp-project-property-trigger:not(.is-empty) { color: var(--project-panel-value-fg); }
+  .project-details-sidebar__property .project-details-sidebar__property-trigger:not(.is-empty, .is-status) { color: var(--project-panel-value-fg); }
+  .project-details-sidebar__milestone strong { color: var(--project-panel-value-fg); }
+  .project-overview__resource .project-resource-title { line-height: normal; }
+  .project-overview__first-update { gap: 6px; line-height: normal; }
+  .project-overview__first-update svg { width: 16px; height: 16px; }
+  .project-details-sidebar .project-label-add { line-height: normal; }
   .project-details-sidebar__property .lp-project-property-trigger > span:last-child { color: inherit; }
   .project-details-sidebar__property .project-label-add { color: var(--pd-label); }
   .project-overview__properties .lp-project-property-trigger > span:last-child { color: inherit; }
@@ -18,16 +26,16 @@
   .project-overview__resources > .project-overview__row-content { column-gap: 2px; margin-left: -1px; }
   .project-detail-page .project-overview .project-overview__inline-add.project-resource-add { padding: 3px 6px; }
   .project-details-sidebar .project-label-control.is-sidebar { padding-left: 0; }
+  :root .project-detail-page .project-detail-page__header-action[data-state="open"] { background: var(--project-toolbar-open-bg); }
   .project-detail-page__header-action,
   .project-detail-page__add-view,
   .project-detail-page__toolbar-button { padding-inline: 2px; }
-  :root .project-detail-page .project-detail-page__header-action[data-state="open"] { background: transparent; }
   .project-details-sidebar__section:not(.is-milestones) > header { margin-inline: 12px; }
   .project-details-sidebar__section:not(.is-milestones) > header > button:first-child { position: relative; left: -8px; padding-inline: 8px; gap: 3px; }
   .project-details-sidebar__section > header > button:last-child:not(:first-child) { padding-inline: 2px; }
   .project-details-sidebar__section.is-milestones > header > button:first-child { gap: 3px; }
   .project-details-sidebar__section > header > .project-details-sidebar__see-all { color: var(--pd-label) !important; }
-  .project-detail-page__toolbar { height: 43.5px; flex-basis: 43.5px; }
+  .project-detail-page__toolbar { height: 43.5px; flex-basis: 43.5px; border-bottom-width: 0; }
   .project-activity { padding-top: 44px; }
   .project-activity__composer > footer { padding-bottom: 12px; }
   .project-activity__composer > footer button.is-submit { padding-inline: 8px; }
@@ -50,10 +58,15 @@
   .project-details-sidebar__property-label { line-height: normal; }
   .project-details-sidebar__section > header > button:first-child { line-height: normal; }
   .project-details-sidebar__milestone { height: 36px; flex-basis: 36px; }
-  .project-details-sidebar__section.is-milestones > header { height: 37px; }
   :root .project-details-sidebar .project-details-sidebar__section > header > .project-details-sidebar__see-all { display: block; padding: 0 !important; font-size: 16px; line-height: 24px; }
   .project-details-sidebar__see-all > span { font-size: 12px; line-height: normal; }
-  .project-milestone-menu { margin-top: 3px; padding-block: 4px; font: 450 13px var(--font); line-height: normal; }
+  .project-milestone-menu { width: 194px; min-width: 194px; padding: 0; border: .5px solid var(--project-menu-border); background: var(--project-menu-bg); font: 450 13px var(--font); line-height: normal; }
+  .project-action-menu.project-action-menu--header { padding: 0; border-color: var(--project-menu-border); background: var(--project-menu-bg); font-weight: 450; }
+  .project-action-menu.project-action-menu--header::before, .project-action-menu.project-action-menu--header::after { content: ""; display: block; height: 6px; }
+  .project-action-menu--header .project-menu-chevron { color: var(--project-menu-chevron-fg); font-weight: 450; }
+  .project-action-menu--header .project-menu-shortcut + .project-menu-chevron { margin-left: -2px; }
+  .project-action-menu--header .project-menu-shortcut kbd { font: 500 11px/1.1 var(--font); }
+  .project-milestone-menu::before, .project-milestone-menu::after { content: ""; display: block; height: 6px; }
   .project-milestone-menu [role=menuitem] { padding-left: 14px; font-weight: 450; }
   :root .project-milestone-menu [role=menuitem] > span.project-milestone-menu__submenu-arrow { color: var(--project-menu-chevron-fg); text-align: right; }
   :root .project-milestone-menu [role=menuitem]:is([data-highlighted], [data-state="open"]) > span.project-milestone-menu__submenu-arrow { color: var(--pk-muted); }
