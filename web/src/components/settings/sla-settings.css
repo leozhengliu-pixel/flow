@@ -92,6 +92,8 @@ body .settings-select-menu.sla-select-menu{z-index:800}
 }
 @media(hover:none){.sla-rule-actions{opacity:1}}
 @media(max-width:760px){
+  /* The reference scrolls 32px past the last rule card on a phone, not the 96px the other settings pages leave. */
+  html:root .settings-app .settings-content:has(>.sla-page){padding-bottom:32px}
   .sla-header{margin-bottom:24px}
   .sla-header p{line-height:18px}
   .sla-rules{margin-top:24px}
