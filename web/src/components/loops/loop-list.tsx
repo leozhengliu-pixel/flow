@@ -44,9 +44,14 @@ const END_COLUMNS: Column[] = ["runs", "lastRun"];
 const COLUMNS: { id: Column; label: string }[] = [
   { id: "trigger", label: "Trigger" },
   { id: "owner", label: "Owner" },
-  { id: "runs", label: "Runs ( 30d )" },
+  { id: "runs", label: "Runs (30d)" },
   { id: "lastRun", label: "Last executed" },
 ];
+/** "Runs (30d)" as the reference lays it out: the parenthesised window is its own text node, with no spaces added. */
+function runsLabel(label: string) {
+  const parts = /^(.*\()(.*)(\).*)$/.exec(label);
+  return parts ? <>{parts[1]}{parts[2]}{parts[3]}</> : label;
+}
 const TRIGGER_ORDER: LoopTriggerType[] = ["schedule", "issue", "project", "initiative", "release", "team", "cycle"];
 type LoopGroup = { key: string; label: string; icon: ReactNode; entityName?: boolean; loops: Loop[] };
 
@@ -398,7 +403,7 @@ export function LoopList({
         <div className={`loops-table${selected.length ? " has-selection" : ""}`} role="table" aria-label={t("Loops")} aria-multiselectable="true" style={{ ["--loops-columns" as string]: gridTemplate }}>
           <div className="loops-table-head" role="row">
             <button role="columnheader" className={sort.key === "name" ? "is-sorted" : undefined} onClick={() => sortBy("name")}>
-              {t("Name")}
+              <span>{t("Name")}</span>
               {sort.key === "name" && (sort.desc ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
             </button>
             {COLUMNS.map((column) => {
@@ -407,7 +412,7 @@ export function LoopList({
               return (
                 <button key={column.id} role="columnheader" className={[sort.key === column.id ? "is-sorted" : "", end ? "is-end" : ""].filter(Boolean).join(" ") || undefined} onClick={() => sortBy(column.id)}>
                   {end && arrow}
-                  {t(column.label)}
+                  <span>{runsLabel(t(column.label))}</span>
                   {!end && arrow}
                 </button>
               );

@@ -60,9 +60,17 @@
 :root :is(.issue-document > .issue-description-root .description-editor, .document-editor .description-editor, .project-overview__description-editor .description-editor, .project-activity__rich .ProseMirror, .project-overview__latest-update-body .ProseMirror, .comment-body .ProseMirror, .reply-body .ProseMirror, .comment-prosemirror, .project-activity__comment-body .ProseMirror, .project-activity__reply-body .ProseMirror, main[class*="_page_"] [class*="messageDocument"]) code:not(.flow-code-block__code, pre code) {
   padding: .5px .25em;
   border-radius: .2em;
-  /* .9375em of the 15px body = 14.0625px; the tracking trims the system monospace's 0.602em advance to the 0.6em of the reference font. */
+  /* .9375em of the 15px body = 14.0625px. The reference font has a 0.6em advance; "Flow Code Metric" scales the system
+     monospace's 0.602em advance down to it, so the tracking is the reference's plain -0.1px. */
+  font-family: "Flow Code Metric", ui-monospace, "SFMono-Regular", Menlo, "Cascadia Mono", "Liberation Mono", Consolas, "DejaVu Sans Mono", Courier, monospace;
   font-size: .9375em;
-  letter-spacing: calc(-.1px - .002em);
+  letter-spacing: -.1px;
+}
+@font-face {
+  font-family: "Flow Code Metric";
+  src: local("SFMono-Regular"), local("SF Mono"), local("Menlo-Regular"), local("Menlo"), local("DejaVu Sans Mono");
+  font-weight: 100 900;
+  size-adjust: 99.6678%;
 }
 
 /* ---- List markers: a glyph hanging 24px left of the text, one level per nesting (disc, circle, disc, circle) ---- */

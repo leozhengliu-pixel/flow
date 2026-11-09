@@ -3,4 +3,5 @@
 .agent-avatar-mark__disc { fill: var(--label-base); }
 
 /* An avatar slot (span) holding the mark draws no disc of its own: the mark is the disc. */
-span[data-agent-avatar-slot] { background: transparent; color: inherit; overflow: hidden; }
+/* The slot only holds the mark, so, like the reference's icon box, it carries no text metrics of its own. */
+span[data-agent-avatar-slot] { background: transparent; color: inherit; overflow: hidden; font-size: 16px; font-weight: 400; line-height: 0; }

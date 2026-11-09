@@ -82,7 +82,7 @@ describe('LoopRunPage recovers from a failed poll', () => {
     await advance(500)
     expect(api.listLoopRuns).toHaveBeenCalledTimes(3)
 
-    expect(screen.getByRole('button', { name: /Manual run/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Manual run/ })).toBeInTheDocument()
     expect(screen.queryByText('Could not load loop runs. Retrying…')).not.toBeInTheDocument()
     await advance(30000)
     expect(api.listLoopRuns).toHaveBeenCalledTimes(3)
@@ -94,17 +94,17 @@ describe('LoopRunPage recovers from a failed poll', () => {
     api.listLoopRuns.mockResolvedValueOnce([running, completed]).mockRejectedValueOnce(bad()).mockResolvedValue([{ ...running, status: 'completed' }, completed])
     renderPage()
     await advance(0)
-    expect(screen.getAllByRole('button', { name: /Manual run/ })).toHaveLength(2)
+    expect(screen.getAllByRole('link', { name: /Manual run/ })).toHaveLength(2)
 
     // The next 1.5s poll fails: the rows stay and a notice shows.
     await advance(1500)
-    expect(screen.getAllByRole('button', { name: /Manual run/ })).toHaveLength(2)
+    expect(screen.getAllByRole('link', { name: /Manual run/ })).toHaveLength(2)
     expect(screen.getByText('Connection lost. Retrying…')).toBeInTheDocument()
 
     // The backoff retry succeeds and the notice goes away.
     await advance(1000)
     expect(screen.queryByText('Connection lost. Retrying…')).not.toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /Manual run/ })).toHaveLength(2)
+    expect(screen.getAllByRole('link', { name: /Manual run/ })).toHaveLength(2)
   })
 
   it('retries the selected run when its first load fails', async () => {

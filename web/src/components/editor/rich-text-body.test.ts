@@ -207,7 +207,9 @@ describe('code block syntax scopes', () => {
   it('sets the code font metrics: 12px / 20px blocks and 0.9375em inline code on the system monospace stack', () => {
     const block = read('code-block/code-block.css')
     expect(block).toMatch(/\.flow-code-block \{[^}]*font-size: 12px;\s*line-height: 20px;[^}]*letter-spacing: -\.002em/)
-    expect(bodyCss).toMatch(/font-size: \.9375em;\s*letter-spacing: calc\(-\.1px - \.002em\)/)
+    // The "Flow Code Metric" face scales the system monospace's 0.602em advance to the reference's 0.6em, so the tracking is a plain -0.1px.
+    expect(bodyCss).toMatch(/font-family: "Flow Code Metric", ui-monospace[^;]*;\s*font-size: \.9375em;\s*letter-spacing: -\.1px/)
+    expect(bodyCss).toMatch(/@font-face \{\s*font-family: "Flow Code Metric";[^}]*size-adjust: 99\.6678%/)
     expect(read('../../styles/foundations.css')).toMatch(/--font-monospace: ui-monospace, "SFMono-Regular", Menlo/)
     expect(read('../../styles/foundations.css')).not.toMatch(/Berkeley/)
   })

@@ -71,6 +71,9 @@ import { AGENT_PAGE_ASK_EVENT, type AgentPageAskDetail } from './agent-ask-reque
 // coding sessions (track G)
 import { ChatCodingSessionCards } from '@/components/coding-sessions/chat-coding-session-cards'
 
+/** The starter examples stay under the composer for a new user; once a few chats exist the list alone remains. */
+const AGENT_EXAMPLES_MAX_CHATS = 3;
+
 export function AgentPage({
   chatSlug,
   data,
@@ -778,13 +781,7 @@ export function AgentPage({
           )}
         </div>
         </div>
-        {!shown && <AgentHistoryList
-          sessions={sessions}
-          hrefFor={(session) => agentPath(data.workspace.urlKey, session.slugId)}
-          onOpen={(session) => onNavigate(agentPath(data.workspace.urlKey, session.slugId))}
-          onOpenInToolbar={(session) => void updateAgentSession(session.id, { location: "toolbar" }).then(saveSession)}
-        />}
-        {!shown && !sessions.length && status?.enabled && !examplesDismissed && <section className={styles.examples} aria-label={t("Get started with some examples")}>
+        {!shown && sessions.length < AGENT_EXAMPLES_MAX_CHATS && status?.enabled && !examplesDismissed && <section className={styles.examples} aria-label={t("Get started with some examples")}>
           <p>{t("Get started with some examples")}</p>
           <button
             aria-label={t("Dismiss")}
@@ -807,6 +804,12 @@ export function AgentPage({
             </button>)}
           </div>
         </section>}
+        {!shown && <AgentHistoryList
+          sessions={sessions}
+          hrefFor={(session) => agentPath(data.workspace.urlKey, session.slugId)}
+          onOpen={(session) => onNavigate(agentPath(data.workspace.urlKey, session.slugId))}
+          onOpenInToolbar={(session) => void updateAgentSession(session.id, { location: "toolbar" }).then(saveSession)}
+        />}
         </div>
         </div>
       </section>

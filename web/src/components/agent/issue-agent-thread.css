@@ -103,7 +103,7 @@
 .issue-agent-session-state .issue-agent-working-text{color:var(--agent-thread-muted)}
 /* A session without a source comment (a delegation) sits in the activity timeline at its chronological position,
    full width like a comment thread. */
-.issue-activity-timeline .timeline-item.agent-session{display:block;padding:8px 0}
+.issue-activity-timeline .timeline-item.agent-session{display:block;margin-inline:-8px;padding:8px 0}
 .issue-activity-timeline .timeline-item.agent-session .issue-agent-threads.is-standalone{margin-top:0;background:var(--agent-thread-surface);border-color:var(--agent-thread-border)}
 /* In a document's comment card (the reference app's inline thread), the agent's replies read like the card's other replies:
    18px avatar header, the body flush under it (no avatar indent), 12px apart, no hairlines; the reply row spans the

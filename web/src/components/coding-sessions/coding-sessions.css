@@ -92,7 +92,7 @@
 .coding-session-empty strong{color:var(--text-body);font:600 15px/23px var(--font)}
 .coding-session-empty span{margin-top:12px;color:var(--theme-text-secondary);font:450 13px/normal var(--font)}
 @media (min-width:801px){
-  .coding-session-page .coding-session-empty strong{color:var(--cs-label-base)}
+  .coding-session-page .coding-session-empty strong{color:var(--text)}
   .coding-session-page .coding-session-icon-button,
   .coding-session-page .coding-session-composer-attach,
   .coding-session-page .coding-session-composer-send{padding:0 2px}
@@ -133,7 +133,7 @@
 .coding-session-prompt header{display:flex;align-items:center;gap:6px;min-width:0;font:500 12px/15px var(--font)}
 .coding-session-prompt header strong{color:var(--cs-label-base);font-weight:500}
 .coding-session-prompt header time{color:var(--cs-label-faint)}
-.coding-session-prompt-avatar{width:14px;height:14px;flex:none;display:grid;place-items:center;overflow:hidden;border-radius:50%;background:var(--avatar,var(--avatar-fallback));color:var(--theme-on-primary);font-size:7px}
+.coding-session-prompt-avatar{width:14px;height:14px;flex:none;display:grid;place-items:center;overflow:hidden;border-radius:50%;background:var(--avatar,var(--avatar-fallback));font-size:8px;font-weight:400}
 .coding-session-prompt-avatar img,.coding-session-prompt-avatar svg{width:100%;height:100%}
 .coding-session-prompt p{margin:0;color:var(--cs-label-base);font:450 13px/20.8px var(--font);white-space:pre-wrap;overflow-wrap:anywhere}
 .coding-session-prompt p code{padding:.5px .25em;border-radius:.2em;background:var(--cs-code-bg);box-shadow:inset 0 0 0 .5px var(--cs-code-ring);font-family:var(--cs-terminal-font);font-size:.9375em}
@@ -392,3 +392,13 @@ a.coding-session-status-row{text-decoration:none}
 /* The page bar's crumb spacing: "›" sits 2px after the issue chip and 4px before the title icon; the title text 14px after it. */
 .coding-session-page-bar .coding-session-dialog-separator{margin:0 -2px 0 -4px}
 .coding-session-page-title h2{margin-left:8px}
+/* Desktop session bar, like the reference's: the issue crumb sits 10px in (its 4px hit area hangs out), the separator trails
+   a 8px margin each side and rides 1px high, and every text line is `normal` so the glyph boxes centre on the 34px row. */
+@media(min-width:801px){
+  .coding-session-page-bar .coding-session-dialog-crumb{margin:0 -5px 0 6px;font:500 13px/normal var(--font)}
+  .coding-session-page-bar .coding-session-dialog-crumb > span{line-height:normal}
+  .coding-session-page-bar .coding-session-dialog-separator{margin:-2px 2px 0;line-height:normal}
+  .coding-session-page-title h2{margin-left:4px;line-height:normal}
+  .coding-session-page .coding-agent-panel-header{padding-left:16px}
+  .coding-session-page .coding-agent-panel-header h3{line-height:normal}
+}

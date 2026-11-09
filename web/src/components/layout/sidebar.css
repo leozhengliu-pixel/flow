@@ -197,7 +197,7 @@
   line-height: 14.5px;
   text-align: left;
 }
-.section-label:hover { color: var(--theme-text-secondary); }
+.section-label:hover { color: var(--bright); background: var(--sidebar-section-hover-bg); }
 /* Section toggles and team rows draw no focus ring; the small controls draw the shared 1px accent ring. */
 .section-label:focus-visible,
 .team-title:focus-visible { outline: 0; }
@@ -637,6 +637,7 @@
 :root[data-theme="light"] .sidebar .workspace-row>button.sidebar-compose{width:28px;height:28px;border-radius:9999px;background:var(--bg-panel);box-shadow:none}
 :root[data-theme="light"] .sidebar .workspace-row>button.sidebar-compose:hover{background:var(--theme-control-hover);color:var(--flow-light-icon)}
 :root[data-theme="light"] .section-label{color:var(--muted)}
+:root[data-theme="light"] .section-label:hover{color:var(--text);background:var(--sidebar-row-hover-light-bg)}
 :root[data-theme="light"] .nav-item:hover,:root[data-theme="light"] .try-item:hover .nav-item{color:lch(9.444% 0 282);background:var(--sidebar-row-hover-light-bg)}
 :root[data-theme="light"] .team-title:hover{color:var(--text);background:lch(91.64% .5 282)}
 :root[data-theme="light"] .sidebar .nav-item.active{height:28px;border-radius:8px;color:lch(9.444% 0 282);background:lch(89.54% .5 282)}

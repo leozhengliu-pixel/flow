@@ -35,7 +35,7 @@ test('keeps loop list, hub and editor metrics tied to their controls', async ({ 
   const loop = await response.json() as Loop
   await page.goto(`/${workspaceKey}/loops/all`)
   await expect(page.getByRole('searchbox', { name: 'Find loops…' })).toHaveCSS('padding', '6px 25px 6px 32px')
-  await expect(page.getByRole('columnheader', { name: 'Runs ( 30d )', exact: true })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Runs (30d)', exact: true })).toBeVisible()
   await expect(page.locator('.loops-badge').first()).toHaveCSS('line-height', 'normal')
   await expect(page.locator('.loops-group-row').first()).toHaveCSS('background-color', 'lch(9.232 0.85 272)')
   await page.goto(`/${workspaceKey}/loops/new?draftId=${loop.id}`)

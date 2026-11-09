@@ -58,7 +58,7 @@ test('run history has its tabs, overflow menu and title disclosure', async ({ pa
   const run = { id: 'audit-run', loopId: loop.id, status: 'completed', trigger: 'manual', triggerLabel: 'Manual run', startedAt: '2026-10-30T10:00:00Z', finishedAt: '2026-10-30T10:00:01Z', output: 'Review complete.' }
   await page.route(`**/api/loops/${loop.id}/runs**`, route => route.fulfill({ json: route.request().url().endsWith('/runs') ? [run] : run }))
   await page.goto(`/${workspaceKey}/loop/${loop.id}/run/${run.id}`)
-  await expect(page.getByRole('button', { name: 'Overview', exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Overview', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'This Loop is disabled', exact: true })).toBeDisabled()
   const instructions = page.getByRole('button', { name: 'Instructions', exact: true })
   await expect(instructions).toHaveAttribute('aria-expanded', 'false')

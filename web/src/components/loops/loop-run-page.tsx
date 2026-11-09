@@ -394,8 +394,23 @@ export function LoopRunPage({
         )}
       </header>
       <nav className="loops-run-tabs" aria-label={t("Loop views")}>
-        <button type="button" onClick={() => onNavigate(loopPath(workspace, loop ?? loopId))}><span>{t("Overview")}</span></button>
-        <button type="button" className="is-active" aria-current="page"><span>{t("Run history")}</span></button>
+        <a
+          href={loopPath(workspace, loop ?? loopId)}
+          onClick={(event) => {
+            if (event.metaKey || event.ctrlKey || event.altKey || event.button !== 0) return;
+            event.preventDefault();
+            onNavigate(loopPath(workspace, loop ?? loopId));
+          }}
+        ><span>{t("Overview")}</span></a>
+        <a
+          href={loopRunPath(workspace, loop ?? loopId)}
+          className="is-active"
+          aria-current="page"
+          onClick={(event) => {
+            if (event.metaKey || event.ctrlKey || event.altKey || event.button !== 0) return;
+            event.preventDefault();
+          }}
+        ><span>{t("Run history")}</span></a>
         <span />
         <button className="loops-primary-button loops-run-now" type="button" aria-label={!loop?.enabled ? t("This Loop is disabled") : undefined} disabled={!loop?.enabled || runBusy} onClick={() => void runNow()}>{!phone && <Play size={14} aria-hidden="true" />}{phone && !loop?.enabled ? t("This Loop is disabled") : t("Run now")}</button>
       </nav>
@@ -456,10 +471,15 @@ export function LoopRunPage({
             <ol>
               {filtered.map((run) => (
                 <li key={run.id}>
-                  <button
+                  <a
                     aria-current={run.id === activeId ? "true" : undefined}
                     className={`loops-run-row${run.id === activeId ? " is-active" : ""}`}
-                    onClick={() => onNavigate(loopRunPath(workspace, loop ?? loopId, run.id))}
+                    href={loopRunPath(workspace, loop ?? loopId, run.id)}
+                    onClick={(event) => {
+                      if (event.metaKey || event.ctrlKey || event.altKey || event.button !== 0) return;
+                      event.preventDefault();
+                      onNavigate(loopRunPath(workspace, loop ?? loopId, run.id));
+                    }}
                   >
                     <Play className="loops-run-trigger" size={14} aria-hidden="true" />
                     <span className="loops-run-row-label" data-i18n-ignore>
@@ -472,7 +492,7 @@ export function LoopRunPage({
                         {t(dayLabel(run.startedAt))}
                       </time>
                     )}
-                  </button>
+                  </a>
                 </li>
               ))}
             </ol>

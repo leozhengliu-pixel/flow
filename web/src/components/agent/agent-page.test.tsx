@@ -361,7 +361,8 @@ describe('agent page composer', () => {
     expect(await screen.findByRole('heading', { name: 'Plan' })).toBeVisible()
     expect(screen.getByRole('list')).toBeVisible()
     expect(screen.getByText('Build').tagName).toBe('STRONG')
-    expect(screen.getByText('Verify').tagName).toBe('CODE')
+    // Inline code keeps its text in an inner span, like the reference.
+    expect(screen.getByText('Verify').closest('code')).not.toBeNull()
   })
   it('renders the reference app answer chrome and sends a suggestion chip as the next message', async () => {
     api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })

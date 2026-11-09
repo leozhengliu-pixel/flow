@@ -64,8 +64,12 @@ describe('LoopRunPage', () => {
   it('lists runs and shows the latest run transcript and answer', async () => {
     const user = userEvent.setup()
     const { onNavigate } = renderPage()
-    expect(await screen.findByRole('button', { name: /Scheduled run/ })).toBeVisible()
+    expect(await screen.findByRole('link', { name: /Scheduled run/ })).toBeVisible()
     expect(screen.getByPlaceholderText('Search runs by issue ID or title…')).toBeVisible()
+    // Like the reference, the loop views and the run rows are links.
+    expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute('href', '/workspace/loop/loop-1')
+    expect(screen.getByRole('link', { name: 'Run history' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: /Scheduled run/ })).toHaveAttribute('href', '/workspace/loop/loop-1/run/run-2')
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(/^Today at/)
     expect(screen.getByRole('button', { name: 'Edit loop' })).toBeVisible()
     expect(screen.getByText('Instructions')).toBeVisible()
@@ -75,7 +79,7 @@ describe('LoopRunPage', () => {
     expect(screen.getByText('Reviewing issues')).toBeInTheDocument()
     expect(screen.getByText('weekly')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Good response' })).toBeVisible()
-    await user.click(screen.getByRole('button', { name: /Scheduled run/ }))
+    await user.click(screen.getByRole('link', { name: /Scheduled run/ }))
     expect(onNavigate).toHaveBeenCalledWith('/workspace/loop/loop-1/run/run-2')
   })
 
@@ -124,10 +128,10 @@ describe('LoopRunPage', () => {
   it('filters runs by search', async () => {
     const user = userEvent.setup()
     renderPage()
-    await screen.findByRole('button', { name: /Scheduled run/ })
+    await screen.findByRole('link', { name: /Scheduled run/ })
     await user.type(screen.getByPlaceholderText('Search runs by issue ID or title…'), 'scheduled')
-    expect(screen.queryByRole('button', { name: /Manual run/ })).toBeNull()
-    expect(screen.getByRole('button', { name: /Scheduled run/ })).toBeVisible()
+    expect(screen.queryByRole('link', { name: /Manual run/ })).toBeNull()
+    expect(screen.getByRole('link', { name: /Scheduled run/ })).toBeVisible()
   })
 
   it('persists 👍 👎 through the feedback endpoint and reflects viewerRating', async () => {
@@ -215,7 +219,7 @@ describe('LoopRunPage', () => {
   it('moves to the next and previous run with ↓/↑', async () => {
     const user = userEvent.setup()
     const { onNavigate } = renderPage('run-1')
-    expect(await screen.findByRole('button', { name: /Scheduled run/ })).toBeVisible()
+    expect(await screen.findByRole('link', { name: /Scheduled run/ })).toBeVisible()
     const next = screen.getByRole('button', { name: 'Go to next run' })
     await waitFor(() => expect(next).toBeEnabled())
     expect(screen.getByRole('button', { name: 'Go to previous run' })).toBeDisabled()

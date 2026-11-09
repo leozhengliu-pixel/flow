@@ -60,6 +60,19 @@ describe('agent page empty state', () => {
     expect(screen.getByText('Create automated loop')).toBeVisible()
   })
 
+  it('keeps the starter examples above the recent chats until a few chats exist', async () => {
+    localStorage.removeItem('flow:agent-examples-dismissed')
+    const view = renderPage([chat('one', 'Create automated loop', 3 * DAY, 'read')])
+    const examples = await screen.findByText('Get started with some examples')
+    expect(screen.getByRole('navigation', { name: 'Recent agent chats' })).toBeVisible()
+    // The examples come first in the document, the chat list follows them.
+    expect(examples.compareDocumentPosition(screen.getByRole('navigation', { name: 'Recent agent chats' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    view.unmount()
+    renderPage([chat('a', 'A', HOUR, 'read'), chat('b', 'B', 2 * HOUR, 'read'), chat('c', 'C', 3 * HOUR, 'read')])
+    expect(screen.getByRole('navigation', { name: 'Recent agent chats' })).toBeVisible()
+    expect(screen.queryByText('Get started with some examples')).not.toBeInTheDocument()
+  })
+
   it('remembers dismissing starter examples', async () => {
     localStorage.removeItem('flow:agent-examples-dismissed')
     renderPage([])

@@ -147,7 +147,7 @@
   max-height: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(220px, 1fr) min-content minmax(0, max-content) minmax(0, 1fr);
+  grid-template-rows: minmax(220px, 1fr) min-content min-content minmax(0, max-content) minmax(0, 1fr);
   isolation: isolate;
 }
 .emptyComposerSlot {
@@ -169,7 +169,7 @@
 }
 .examples {
   position: relative;
-  grid-row: 4;
+  grid-row: 3;
   align-self: start;
   margin-top: 16px;
 }
@@ -244,7 +244,7 @@
   .composer { row-gap: 8px; }
 }
 .history {
-  grid-row: 3;
+  grid-row: 4;
   width: 100%;
   min-height: 0;
   max-height: 100%;
