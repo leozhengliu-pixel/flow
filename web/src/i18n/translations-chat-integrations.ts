@@ -267,7 +267,6 @@ export const chatIntegrationsZhCN: Record<string, string> = {
   "Requests": "需求",
   "Take requests": "接收需求",
   "Submit requests with an explicit request phrase, the reaction below, or the message shortcut. Requests follow their message's thread.": "使用明确的需求指令（提需求、需求、request）、下方表情或消息快捷操作提交需求，并在原消息的话题中跟进。",
-  "Treat every mention as a request": "将每次 @ 机器人视为需求",
   "Request reaction": "需求表情",
   "Adding this reaction to a message submits it as a request.": "给消息添加此表情回复即可提交为需求。",
   "No reaction": "不使用表情",

@@ -543,22 +543,21 @@ description opens the source message's chat.
 A group bound to a team can take requests: members turn the group's
 messages into requests in the team's triage, and the message's thread
 follows the request. A team owner (or a workspace administrator) turns this
-on in the group binding under **Requests**: **Take requests**,
-**Treat every mention as a request** (default off), the
+on in the group binding under **Requests**: **Take requests**, the
 **Request reaction**, the **Request template** and the **Request
 priority** (empty uses the template's or the team's default). The settings
 are saved, authorized and audited with the binding (`requests` in the API:
-`enabled`, `everyMention`, `emoji`, `templateId`, `priority`). Existing
-bindings also default to `everyMention: false`; no existing binding is
-automatically opted in.
+`enabled`, `emoji`, `templateId`, `priority`). The API still accepts
+`everyMention` for compatibility, but it has no effect: a plain mention asks
+the [Flow Agent](#agent-in-groups), and the binding editor no longer offers
+it (saving a binding there drops it).
 
 A member makes a request in any of three ways:
 
 - **Explicitly ask the bot**: `@Flow 提需求 <text>` (also `需求` or
   `request`). Outside issue threads, other mentions go to the
-  [Flow Agent](#agent-in-groups), not to requests, also when **Treat every
-  mention as a request** is on (the setting no longer turns mentions into
-  requests); a bare mention or `@Flow help` gets a short private help card
+  [Flow Agent](#agent-in-groups), not to requests; a bare mention or
+  `@Flow help` gets a short private help card
   with the group's available actions.
   `@Flow 创建事项` / `create issue` still opens the create form.
   A bare `@Flow 提需求` in reply to a message makes
