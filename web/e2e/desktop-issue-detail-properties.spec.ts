@@ -191,7 +191,7 @@ test('keeps row actions ordered, subscription visible, and the coding submenu al
   await expect(menu).toHaveCSS('padding', '0px')
   await expect(menu.getByText('Subscribe', { exact: true })).toBeVisible()
   const labels = await menu.getByRole('menuitem').evaluateAll(nodes => nodes.map(node => node.querySelector('span:not([aria-hidden])')?.textContent))
-  expect(labels.slice(labels.indexOf('Copy'))).toEqual(['Copy', 'Convert to', 'Make a copy…', 'Move', 'Open in', 'Favorite', 'Subscribe', 'Remind me', 'Remove…', 'Delete'])
+  expect(labels.slice(labels.indexOf('Mark as'))).toEqual(['Mark as', 'Remove', 'Copy', 'Convert to', 'Make a copy…', 'Move', 'Open in', 'Favorite', 'Subscribe', 'Remind me', 'Delete'])
   for (const shortcut of await menu.locator('kbd').all()) {
     await expect(shortcut).toHaveCSS('padding-left', '0px')
     await expect(shortcut).toHaveCSS('line-height', '12.1px')
