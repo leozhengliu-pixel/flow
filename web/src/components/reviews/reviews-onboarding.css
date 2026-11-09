@@ -23,3 +23,7 @@
 .reviews-onboarding-features p{margin:0;font:400 15px/24px var(--font)}
 @media(min-width:768px){.reviews-workspace:has(.reviews-onboarding){container-type:inline-size}.reviews-list-pane:has(.reviews-onboarding){overflow:auto}}
 @container(max-width:640px){.reviews-onboarding-hero{grid-template-columns:minmax(0,1fr);gap:32px}.reviews-onboarding-features{gap:32px}}
+/* Secondary onboarding pills use the toolbar pill fill and carry no ring in dark, as the reference. */
+.reviews-onboarding-actions .review-pill-button:not(.is-primary){background:var(--toolbar-icon-pill-bg);color:var(--ui-pill-hover-fg)}
+.reviews-onboarding-actions .review-pill-button:not(.is-primary):hover:not(:disabled){background:var(--toolbar-icon-pill-hover-bg)}
+:root:not([data-theme="light"]) .reviews-onboarding-actions .review-pill-button:not(.is-primary){box-shadow:none}
