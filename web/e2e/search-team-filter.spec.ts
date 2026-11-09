@@ -50,6 +50,8 @@ test('search Team filter sends exact team sets, returns matching issues and surv
   await expect.poll(()=>JSON.parse(new URL(requests.at(-1)!).searchParams.get('filter')!)).toEqual({and:[{field:'team',operator:'notIn',values:[first.id,second.id]}]})
   await page.getByRole('button',{name:'Team operator'}).click()
   await page.getByRole('menuitemradio',{name:'is any of',exact:true}).click()
+  // The value toggle composes onto the applied operator, so wait until "is any of" has taken effect.
+  await expect(page.locator('a[data-result-index]')).toHaveCount(2)
   await page.getByRole('button',{name:'Team values'}).click()
   await page.getByRole('option',{name:/研发/}).click()
   await page.keyboard.press('Escape')
