@@ -8,3 +8,10 @@
 .flow-menu.agent-add-submenu .flow-menu__search input { height: 36px; }
 /* Radix places a menu on whole pixels; the reference app's skill search submenu sits half a pixel above that. */
 .flow-menu.agent-add-submenu.has-search { position: relative; top: -0.5px; }
+/* The reference menu has no padding: its first and last rows are separated from the edge by 6px spacer blocks (the searchable submenu keeps its own layout). */
+.flow-menu.agent-add-menu,
+.flow-menu.agent-add-submenu:not(.has-search) { padding: 0; }
+.flow-menu.agent-add-menu::before,
+.flow-menu.agent-add-menu::after,
+.flow-menu.agent-add-submenu:not(.has-search)::before,
+.flow-menu.agent-add-submenu:not(.has-search)::after { content: ""; display: block; height: 6px; }
