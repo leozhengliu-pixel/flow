@@ -739,7 +739,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :is(.comment-body,.reply-body,.comment-prosemirror) :is(ul,ol){padding-left:20px}
 :is(.comment-body,.reply-body,.comment-prosemirror) li::marker{color:var(--theme-text-secondary)}
 /* Rich-text bodies (documents, issue and project descriptions, project updates): dark-theme values measured from the reference app. Light keeps its existing look and does not read these. */
-:root{--rt-link:lch(80% 80 288.43);--rt-inline-code-bg:color-mix(in srgb,var(--bright) 7%,transparent);--rt-inline-code-border:#3f4042;--rt-hairline:#2c2d2f;--rt-card-border:#3f4042;--rt-agent-chip-bg:#1d1e1f;--rt-agent-chip-border:#343538;--rt-code-border:#29292c;--rt-selection-bg:color-mix(in srgb,var(--muted) 20%,transparent);--rt-selection-focus-bg:color-mix(in srgb,var(--accent-primary) 40%,transparent)}
+:root{--rt-link:lch(80% 80 288.43);--rt-inline-code-bg:color-mix(in srgb,var(--bright) 7.5%,transparent);--rt-inline-code-border:#3f4042;--rt-hairline:#2c2d2f;--rt-card-border:#3f4042;--rt-agent-chip-bg:#1d1e1f;--rt-agent-chip-border:#343538;--rt-code-border:#29292c;--rt-selection-bg:color-mix(in srgb,var(--muted) 20%,transparent);--rt-selection-focus-bg:color-mix(in srgb,var(--accent-primary) 40%,transparent)}
 
 /* Syntax palette of code blocks, measured per TextMate scope in the reference editor (dark, then light). */
 :root{--syntax-control:#ca9cfc;--syntax-keyword:#f79ce0;--syntax-type:#76cff6;--syntax-function:#83dcdc;--syntax-variable:#f7bf8b;--syntax-constant:#8fa6ff;--syntax-string:#ffdf9f;--syntax-regexp:#d85927;--syntax-comment:#959597;--syntax-line-number:#565759}
@@ -1144,3 +1144,5 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 /* The agent composer's "/" menu, its skill hover card and a skill chip, measured against the reference app. */
 :root{--agent-slash-bg:lch(16.433% 1.3 272);--agent-slash-border:lch(29.393% 2.38 272);--agent-slash-focus:lch(24.532% 1.75 272);--agent-slash-text:lch(100% 0 272);--agent-slash-muted:lch(66.215% 1.65 272);--agent-slash-card-text:lch(91.554% 1.65 272);--agent-skill-chip-bg:lch(11.033% 1.3 272);--agent-skill-chip-text:lch(90.826% 1.425 272)}
 :root[data-theme="light"]{--agent-slash-bg:lch(100% 0 282);--agent-slash-border:lch(91.9% 0 282);--agent-slash-focus:lch(95% 0 282);--agent-slash-text:lch(10% 0 282);--agent-slash-muted:lch(40% 1 282);--agent-slash-card-text:lch(20% 1 282);--agent-skill-chip-bg:lch(94.5% 0 282);--agent-skill-chip-text:lch(20% 1 282)}
+/* The session page's dragged chat width; unset (the guaranteed-invalid value) falls back to the default column. */
+:root{--cs-agent-panel-override:initial}

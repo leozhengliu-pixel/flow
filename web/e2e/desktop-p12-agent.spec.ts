@@ -42,7 +42,7 @@ test('loop list owner is interactive and the editor retains compact daily contro
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.keyboard.press('Escape')
   await page.goto(`/${workspaceKey}/loops/new?draftId=${loop.id}`)
-  await expect(page.getByRole('textbox', { name: 'Loop name' })).toHaveCSS('font-size', '32px')
+  await expect(page.getByRole('textbox', { name: 'Loop name' })).toHaveCSS('font-size', '24px')
   await expect(page.getByRole('button', { name: 'Loop level' })).toBeHidden()
   await expect(page.getByRole('group', { name: 'Weekdays' })).toHaveCount(0)
   await expect(page.getByRole('spinbutton', { name: 'Interval', exact: true })).toHaveCSS('height', '26px')

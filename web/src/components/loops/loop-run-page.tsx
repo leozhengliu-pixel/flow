@@ -394,8 +394,8 @@ export function LoopRunPage({
         )}
       </header>
       <nav className="loops-run-tabs" aria-label={t("Loop views")}>
-        <button type="button" onClick={() => onNavigate(loopPath(workspace, loop ?? loopId))}>{t("Overview")}</button>
-        <button type="button" className="is-active" aria-current="page">{t("Run history")}</button>
+        <button type="button" onClick={() => onNavigate(loopPath(workspace, loop ?? loopId))}><span>{t("Overview")}</span></button>
+        <button type="button" className="is-active" aria-current="page"><span>{t("Run history")}</span></button>
         <span />
         <button className="loops-primary-button loops-run-now" type="button" aria-label={!loop?.enabled ? t("This Loop is disabled") : undefined} disabled={!loop?.enabled || runBusy} onClick={() => void runNow()}>{!phone && <Play size={14} aria-hidden="true" />}{phone && !loop?.enabled ? t("This Loop is disabled") : t("Run now")}</button>
       </nav>

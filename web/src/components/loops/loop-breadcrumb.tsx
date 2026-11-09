@@ -61,7 +61,7 @@ export function LoopBreadcrumb({
       )}
       <span aria-hidden="true">›</span>
       {/* A team loop's "Loops" crumb is its team's Loops tab. */}
-      <a {...link(team ? teamLoopsPath(workspace, team.key) : loopsPath(workspace))}>{t("Loops")}</a>
+      <a {...link(team ? teamLoopsPath(workspace, team.key) : loopsPath(workspace))}><span>{t("Loops")}</span></a>
       <span aria-hidden="true">›</span>
       {current ? (
         <>

@@ -56,6 +56,19 @@ describe('coding session panel', () => {
     expect(region.querySelector('.coding-state-badge')).toBeNull()
   })
 
+  it('resizes the chat column with its separator by keyboard, within the 360px floor, and remembers the width', () => {
+    localStorage.removeItem('flow:coding-agent-panel-width')
+    renderPanel(makeSession({ state: 'complete', phase: 'done' }))
+    const separator = screen.getByRole('separator', { name: 'Resize agent chat' })
+    const region = screen.getByRole('region', { name: 'Coding session' })
+    expect(region.style.getPropertyValue('--cs-agent-panel-override')).toBe('')
+    // jsdom has no layout, so every step lands on the floor.
+    fireEvent.keyDown(separator, { key: 'ArrowLeft' })
+    expect(region.style.getPropertyValue('--cs-agent-panel-override')).toBe('360px')
+    expect(localStorage.getItem('flow:coding-agent-panel-width')).toBe('360')
+    localStorage.removeItem('flow:coding-agent-panel-width')
+  })
+
   it('shows plain screenshots in the conversation and keeps before/after pairs in the changes pane', async () => {
     const shot = { id: 'a1', sessionId: 'session-1', kind: 'screenshot', label: 'Empty state', url: '/signed/a1.png', contentUrl: '/api/coding/sessions/session-1/artifacts/a1/content', contentType: 'image/png', sizeBytes: 100, createdAt: '2026-10-18T10:00:00Z' } as const
     renderPanel(makeSession({ artifacts: [shot, { ...shot, id: 'a2', label: 'after', group: 'Login' }] }))
