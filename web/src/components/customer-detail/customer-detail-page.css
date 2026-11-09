@@ -226,8 +226,8 @@
   place-items: center;
   overflow: hidden;
   border-radius: 50%;
-  background: var(--theme-surface-active);
-  color: var(--theme-text-primary);
+  background: var(--avatar, var(--theme-surface-active));
+  color: var(--avatar-initials-fg);
   font-size: 8px;
 }
 

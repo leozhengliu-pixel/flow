@@ -18,7 +18,8 @@ func EmptyWorkspace(name, urlKey, region string, viewer domain.User) domain.Boot
 	workspaceID := idgen.New("workspace_")
 	team := domain.Team{ID: idgen.New("team_"), Name: name, Key: key, Color: "#5E6AD2", CreatedAt: &now, UpdatedAt: &now}
 	data := domain.Bootstrap{
-		Workspace: domain.Workspace{ID: workspaceID, Name: name, URLKey: urlKey, Color: "#5E6AD2", Region: region, CreatedAt: now},
+		// No colour: a workspace without a logo paints its initials in the colour its id maps to (web avatar-color.ts).
+		Workspace: domain.Workspace{ID: workspaceID, Name: name, URLKey: urlKey, Region: region, CreatedAt: now},
 		Viewer:    viewer, Users: []domain.User{viewer}, Teams: []domain.Team{team}, Customers: []domain.Customer{}, States: canonicalWorkflowStates(), Labels: []domain.IssueLabel{}, LabelGroups: []domain.LabelGroup{},
 		Issues: []domain.Issue{}, Cycles: []domain.Cycle{}, CycleSettings: map[string]domain.CycleSettings{}, Projects: []domain.Project{},
 		ProjectStatuses: canonicalProjectStatuses(), ProjectUpdates: map[string][]domain.ProjectUpdate{}, Initiatives: []domain.Initiative{},

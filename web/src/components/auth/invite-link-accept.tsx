@@ -10,6 +10,7 @@ import {
 import type { AuthSession, InviteLinkPreview } from "@/types/flow";
 import { LanguageSelect } from "@/i18n/i18n";
 import { workspaceInitials } from "@/lib/workspace-initials";
+import { workspaceAvatarColor } from "@/lib/avatar-color";
 
 import "./auth-page.css";
 import "./invite-link-accept.css";
@@ -91,7 +92,7 @@ export function InviteLinkAccept({ session, onJoined }: Props) {
         Flow
       </div>
       <section className="auth-panel">
-        <div className="auth-invite-mark" aria-hidden>
+        <div className="auth-invite-mark" aria-hidden style={preview && !preview.workspace.logoUrl ? { background: workspaceAvatarColor(preview.workspace) } : undefined}>
           {preview?.workspace.logoUrl ? (
             <img src={preview.workspace.logoUrl} alt="" />
           ) : (

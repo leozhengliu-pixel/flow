@@ -133,8 +133,8 @@
   place-items: center;
   overflow: hidden;
   border-radius: 50%;
-  background: var(--theme-surface-active);
-  color: var(--theme-text-secondary);
+  background: var(--avatar, var(--theme-surface-active));
+  color: var(--avatar-initials-fg);
   font-size: 9px;
 }
 .document-thread-avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -255,7 +255,6 @@
   .document-thread-card .composer-submit .composer-send { padding: 0 2px; }
   .document-thread-card .composer.compact { overflow: visible; }
   .document-thread-card .composer-submit .composer-send:disabled { background: var(--document-desktop-send-bg); color: var(--action-menu-muted); }
-  .document-thread-draft > .document-thread-avatar { background: var(--document-desktop-avatar-bg); color: var(--issue-activity-avatar-fg); }
 }
 
 .document-thread-quote {

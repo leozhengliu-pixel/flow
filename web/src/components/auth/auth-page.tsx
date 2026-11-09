@@ -19,6 +19,7 @@ import type { AuthSession, InvitationPreview } from '@/types/flow'
 import { LanguageSelect } from '@/i18n/i18n'
 import { createGoogleLoginState, withClientKey } from '@/lib/google-login-state'
 import { workspaceInitials } from '@/lib/workspace-initials'
+import { workspaceAvatarColor } from '@/lib/avatar-color'
 
 import './auth-page.css'
 import { FlowLogo } from '@/components/ui/flow-logo'
@@ -104,7 +105,7 @@ export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Pro
 
   if (mode === 'invite') {
     return <AuthShell>
-      <div className="auth-invite-mark">{invitation ? workspaceInitials(invitation.workspace.name) : 'L'}</div>
+      <div className="auth-invite-mark" style={invitation ? { background: workspaceAvatarColor(invitation.workspace) } : undefined}>{invitation ? workspaceInitials(invitation.workspace.name) : 'L'}</div>
       <h1>{invitation ? `Join ${invitation.workspace.name}` : 'Workspace invitation'}</h1>
       {pending && !invitation ? <GridLoader className="auth-spinner"/> : invitation && <>
         <p><strong>{invitation.email}</strong> was invited as {invitation.role === 'guest' ? 'a guest' : invitation.role === 'admin' ? 'an admin' : 'a member'}.</p>

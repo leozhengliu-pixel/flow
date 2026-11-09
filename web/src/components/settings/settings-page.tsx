@@ -16,6 +16,7 @@ import {
 import { persistUserSettings } from '@/lib/settings-persistence';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { WorkspaceInitials } from '@/components/workspace/workspace-initials';
+import { workspaceAvatarColor } from '@/lib/avatar-color';
 import { settingsSidebarTeams } from './settings-sidebar-teams';
 import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
@@ -1696,7 +1697,7 @@ function WorkspaceLogoControl({
     }
   };
   return (
-    <div className="workspace-logo-control" style={{ '--workspace-logo-color': data.workspace.color } as CSSProperties}>
+    <div className="workspace-logo-control" style={{ '--workspace-logo-color': workspaceAvatarColor(data.workspace) } as CSSProperties}>
       <button
         aria-busy={busy}
         aria-label={t("Logo")}

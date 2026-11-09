@@ -742,7 +742,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   .review-byline-person{display:flex;align-items:flex-start;gap:6px;height:16px;min-width:0;max-width:100%}
   .review-byline-person .review-byline-author{min-width:0;overflow:hidden;text-overflow:ellipsis}
   .review-byline-avatar-slot{display:flex;align-items:center;flex:0 0 18px;height:16px}
-  .review-byline-avatar{width:18px;height:18px;flex:0 0 18px;margin:0;border-radius:50%;background:var(--review-phone-avatar-bg);box-shadow:none;color:var(--review-phone-avatar-fg);font:400 9px/0 var(--font)}
+  .review-byline-avatar{width:18px;height:18px;flex:0 0 18px;margin:0;border-radius:50%;background:var(--avatar,var(--avatar-fallback));box-shadow:none;color:var(--review-phone-avatar-fg);font:400 9px/0 var(--font)}
   html:root body .app .review-byline-author{color:var(--bright);font:450 12px/normal var(--font)}
   html:root body .app .review-byline-dot{color:var(--review-fg-muted);font:450 12px/normal var(--font)}
   .review-byline-branches{display:flex;flex:1 0 100%;align-items:center;gap:0;min-width:0;margin-top:2px}
@@ -807,7 +807,7 @@ html:root body .review-picker-dialog.dialog-content>label>input:not([type=checkb
   html:root body .app .review-activity-state-phone{color:var(--review-icon-color, var(--review-state-open))}
   html:root body .app .review-activity-state-phone:is([data-review-state=open],[data-review-state=draft]) path{fill:currentColor}
   html:root body .app .review-comment{margin:0 -4px;padding:8px;border-radius:8px;background:var(--review-card-bg);box-shadow:0 0 0 1px var(--review-card-border-faint),var(--ui-pill-shadow)}
-  html:root body .app .review-comment-avatar{width:18px;height:18px;flex:0 0 18px;margin-top:5px;border-radius:50%;background:var(--review-phone-avatar-bg);box-shadow:none;color:var(--review-phone-avatar-fg);font-size:9px;line-height:normal}
+  html:root body .app .review-comment-avatar{width:18px;height:18px;flex:0 0 18px;margin-top:5px;border-radius:50%;background:var(--avatar,var(--avatar-fallback));box-shadow:none;color:var(--review-phone-avatar-fg);font-size:9px;line-height:normal}
   html:root body .app .review-comment textarea{font:450 15px/24px var(--font);color:var(--review-fg);height:24px;min-height:24px}
   html:root body .app .review-comment-attach{box-sizing:border-box;width:28px;height:28px;flex:0 0 28px;display:grid;place-items:center;padding:0;border:0;background:transparent;color:var(--review-fg-muted)}
   html:root body .app .review-comment-attach svg{width:14px;height:14px}

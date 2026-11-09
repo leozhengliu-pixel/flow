@@ -29,7 +29,7 @@
       height: 32px;
       margin: 1px;
       outline: 1px solid var(--agent-quote-bar);
-      background: var(--issue-activity-avatar-bg) !important;
+      background: var(--avatar, var(--avatar-fallback)) !important;
       color: var(--issue-activity-avatar-fg) !important;
       font: 400 14px/0 var(--font);
       font-size: 14px !important;

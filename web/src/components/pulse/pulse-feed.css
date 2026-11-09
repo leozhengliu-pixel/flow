@@ -392,7 +392,7 @@
     font-weight: 400;
     line-height: 0;
     color: var(--pulse-phone-avatar-fg);
-    background: var(--pulse-phone-avatar-bg);
+    background: var(--avatar, var(--avatar-fallback));
     box-shadow: none;
     border-style: none;
   }

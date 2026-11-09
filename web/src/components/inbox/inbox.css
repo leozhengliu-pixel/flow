@@ -215,7 +215,7 @@
   place-items: center;
   object-fit: cover;
   color: #fff;
-  background: var(--flow-inbox-avatar, lch(70% 60 220));
+  background: var(--flow-inbox-avatar, var(--avatar-fallback));
   border-radius: 50%;
   font-size: 13px;
   font-weight: 400;

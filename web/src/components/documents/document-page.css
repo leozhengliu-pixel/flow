@@ -147,7 +147,7 @@
 .document-header :is(button, a):focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 .document-save-state { display: flex; align-items: center; gap: 4px; margin-right: 5px; font-size: 11px; }
 .document-save-state.error { color: var(--semantic-danger); }
-.document-presence__avatar { display: grid; place-items: center; width: 22px; height: 22px; flex: 0 0 22px; margin-left: -6px; border: 2px solid var(--bg-panel); border-radius: 50%; background: var(--accent-primary); color: var(--on-accent); font-size: 9px; font-weight: 600; }
+.document-presence__avatar { display: grid; place-items: center; width: 22px; height: 22px; flex: 0 0 22px; margin-left: -6px; border: 2px solid var(--bg-panel); border-radius: 50%; background: var(--avatar, var(--accent-primary)); color: var(--avatar-initials-fg); font-size: 9px; font-weight: 600; }
 
 /* ---------- Edited popover ---------- */
 .document-edited {

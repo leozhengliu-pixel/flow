@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test'
 import { test } from './workspace-fixture'
 import type { BootstrapData, FlowDocument, Issue } from '../src/types/flow'
+import { avatarTone } from '../src/lib/avatar-color'
 
 test.skip(({ isMobile }) => isMobile, 'Desktop review details')
 test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
@@ -18,7 +19,9 @@ test('keeps an empty document send arrow painted and enables it only with text',
   await expect(send).toHaveCSS('opacity', '1')
   await expect(send).toHaveCSS('background-color', 'lch(17.349 1.139 272)')
   await expect(send).toHaveCSS('color', 'lch(64.714 1.425 272)')
-  await expect(draft.locator('.document-thread-avatar')).toHaveCSS('background-color', 'lch(70 60 30)')
+  const viewer = (await (await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })).json() as BootstrapData).viewer
+  const tone = avatarTone(viewer.id)
+  await expect(draft.locator('.document-thread-avatar')).toHaveCSS('background-color', `lch(${tone.lightness} 60 ${tone.hue})`)
   expect(await send.evaluate(el => {
     const r = el.getBoundingClientRect()
     for (let p = el.parentElement; p; p = p.parentElement) {

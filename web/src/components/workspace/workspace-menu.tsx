@@ -9,6 +9,7 @@ import { useOptionalTranslate } from '@/i18n/i18n';
 import { useOnlineStatus } from '@/hooks/use-online-status';
 import { OfflineIndicator } from './offline-indicator';
 import { WorkspaceInitials } from './workspace-initials';
+import { workspaceAvatarColor } from '@/lib/avatar-color';
 import type { AccountBootstrap, BootstrapData, Workspace } from "@/types/flow";
 import {
   DropdownMenu,
@@ -233,7 +234,7 @@ export function WorkspaceAvatar({ workspace }: { workspace: Workspace }) {
     <span
       className="workspace-avatar"
       aria-hidden="true"
-      style={{ background: workspace.color || "#b89b38" }}
+      style={{ background: workspaceAvatarColor(workspace) }}
     >
       {workspace.logoUrl ? (
         <img alt="" src={workspace.logoUrl} />

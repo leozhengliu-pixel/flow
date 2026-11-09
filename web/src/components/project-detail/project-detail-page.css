@@ -1741,7 +1741,7 @@ html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats
   .project-activity__comment-card .avatar {
     margin-right: 1px;
     border: 0;
-    background: var(--pulse-phone-avatar-bg);
+    background: var(--avatar, var(--avatar-fallback));
     box-shadow: none;
     color: var(--pulse-phone-avatar-fg);
     font-weight: 400;

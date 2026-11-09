@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import { leadingCharacters } from "@/lib/avatar-initials";
+import { workspaceAvatarColor } from "@/lib/avatar-color";
 import { toast } from "@/lib/toast";
 import type {
   BootstrapData,
@@ -229,7 +230,7 @@ export function ViewsPage({
   };
   const renderGroupHeader = (group: Extract<ViewListEntry, { kind: "group" }>['group']) => <div className={styles.groupHeader} data-testid="views-group-header">
     <div className={styles.groupIdentity}>
-    <ScopeAvatar kind={group.kind} label={group.label} team={data.teams.find((team) => team.id === group.id)} />
+    <ScopeAvatar color={group.kind === "workspace" ? workspaceAvatarColor(data.workspace) : undefined} kind={group.kind} label={group.label} team={data.teams.find((team) => team.id === group.id)} />
     <strong data-i18n-ignore data-testid="views-group-name">{group.label}</strong>
     <span className={styles.groupScope} data-testid="views-group-scope">{group.kind === "personal" ? `· ${t("Only visible to you")}` : `· ${t("Workspace")}`}</span>
     </div>
@@ -897,16 +898,18 @@ function SortButton({
   );
 }
 function ScopeAvatar({
+  color,
   kind,
   label,
   team,
 }: {
+  color?: string;
   kind: SavedView["scope"];
   label: string;
   team?: Team;
 }) {
   return (
-    <span className={styles.scopeAvatarFrame}><span className={styles.scopeAvatarContent} data-testid="views-group-avatar"><span className={styles.scopeAvatar}>
+    <span className={styles.scopeAvatarFrame}><span className={styles.scopeAvatarContent} data-testid="views-group-avatar"><span className={styles.scopeAvatar} style={color ? { background: color } : undefined}>
       {kind === "personal" ? (
         <UserRound size={13} />
       ) : kind === "team" ? (

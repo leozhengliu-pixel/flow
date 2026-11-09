@@ -25,7 +25,7 @@ html:root:not([data-theme="light"]) .settings-app .feature-ai-compact .feature-s
 .feature-guidance-field:disabled{opacity:.6}
 .feature-guidance-meta{margin:-4px 0 0;padding:0 14px;color:var(--theme-text-secondary);font-size:12px;font-weight:450;line-height:17px}
 /* Installed agent rows: an 18px round avatar centered in the 32px icon slot (16px row padding, 12px gap, name at 60px). */
-.feature-agent-avatar{width:18px!important;height:18px!important;flex:0 0 18px!important;overflow:hidden;border:0!important;border-radius:50%!important;background:var(--accent-primary)!important;color:var(--on-accent)!important;font-size:8px}
+.feature-agent-avatar{width:18px!important;height:18px!important;flex:0 0 18px!important;overflow:hidden;border:0!important;border-radius:50%!important;background:var(--avatar,var(--accent-primary))!important;color:var(--avatar-initials-fg)!important;font-size:8px}
 .feature-agent-avatar img{display:block;width:100%;height:100%;object-fit:cover}
 .feature-ai-settings .feature-agent-avatar{margin:0 7px}
 html:root .settings-app .settings-main .feature-ai-settings .feature-agent-row strong{font-weight:450}
@@ -47,7 +47,7 @@ html:root .settings-app .settings-main .feature-ai-settings .feature-agents-summ
 .feature-filter-spacer{width:30px;height:30px;flex:0 0 30px}
 .feature-value-rule{padding-left:28px}
 .feature-value-rule .feature-row-icon{background:transparent!important;border:0!important}
-.feature-value-avatar{width:16px;height:16px;display:inline-grid;place-items:center;overflow:hidden;border-radius:50%;background:var(--accent-primary);color:var(--on-accent);font-size:7px}
+.feature-value-avatar{width:16px;height:16px;display:inline-grid;place-items:center;overflow:hidden;border-radius:50%;background:var(--avatar,var(--accent-primary));color:var(--avatar-initials-fg);font-size:7px}
 .feature-value-avatar img{width:100%;height:100%;object-fit:cover}
 .feature-value-dot{width:10px;height:10px;display:inline-block;border-radius:50%}
 .feature-value-menu{max-height:320px;overflow-y:auto}
