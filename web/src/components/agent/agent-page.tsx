@@ -761,7 +761,7 @@ export function AgentPage({
               }}
               type="button"
             ><AgentStopIcon /></button></FlowTooltip> : <FlowTooltip label={t("Send message")} shortcut="Enter" sideOffset={8}><button
-              aria-label={t("Submit comment")}
+              aria-label={t("Send message")}
               className={styles.sendButton}
               data-agent-send=""
               // Empty chats keep the accent send control visible; submitting an empty draft is a no-op.

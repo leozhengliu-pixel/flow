@@ -38,7 +38,7 @@ describe('agent page composer', () => {
     await user.click(editor)
     await user.type(editor, 'Draft a project plan')
     expect(editor).toHaveTextContent('Draft a project plan')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit comment' })).toBeDisabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled())
   })
 
   it('shows Flow example cards in an empty Agent state', async () => {
@@ -74,8 +74,8 @@ describe('agent page composer', () => {
     render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={navigate} onOpenSidebar={vi.fn()} onSessionChange={sessionChange}/></I18nProvider>)
     const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
     await user.type(editor, 'Hello')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit comment' })).toBeEnabled())
-    await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/workspace/agent/streamed-chat'))
     expect(streams.streamNewAgentSession).toHaveBeenCalled()
     // The finished chat is saved into the workspace data directly: no full workspace reload.
@@ -94,8 +94,8 @@ describe('agent page composer', () => {
     render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
     await user.type(editor, 'Plan the launch')
-    expect(screen.getByRole('button', { name: 'Submit comment' })).toHaveAttribute('data-state', 'ready')
-    await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+    expect(screen.getByRole('button', { name: 'Send message' })).toHaveAttribute('data-state', 'ready')
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
     // Nothing has come back from the server yet.
     const conversation = await screen.findByRole('group', { name: 'Agent conversation' })
     expect(within(conversation).getByText('Plan the launch')).toBeVisible()
@@ -114,7 +114,7 @@ describe('agent page composer', () => {
   it('keeps the accent send button for an empty composer', async () => {
     api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
     render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit comment' })).toHaveAttribute('data-state', 'ready'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toHaveAttribute('data-state', 'ready'))
   })
 
   it('shows a thinking state before the provider sends its first delta', async () => {
@@ -128,7 +128,7 @@ describe('agent page composer', () => {
     render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
     await user.type(editor, 'Think first')
-    await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
     await waitFor(() => expect(screen.getByText('Thinking…')).toBeVisible())
     await user.click(screen.getByRole('button', { name: 'Stop responding' }))
   })
@@ -150,7 +150,7 @@ describe('agent page composer', () => {
     rerenderWithSlug = () => view.rerender(page('opened'))
     const user = userEvent.setup()
     await user.type(screen.getByRole('textbox', { name: 'Send a message to Flow AI' }), 'Think first')
-    await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
     await waitFor(() => expect(api.getAgentSession).toHaveBeenCalledWith('session-opened'))
     await waitFor(() => expect(screen.getByText('Thinking…')).toBeVisible())
     await user.click(screen.getByRole('button', { name: 'Stop responding' }))
@@ -436,7 +436,7 @@ describe('agent page composer', () => {
       render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
       const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
       await user.type(editor, 'Summarise the launch')
-      await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+      await user.click(screen.getByRole('button', { name: 'Send message' }))
       expect(await screen.findByRole('button', { name: 'Retry' })).toBeVisible()
       // One question, one error row (no extra banner), and the sent text is not put back for a second send.
       expect(within(conversation()).getAllByText('Summarise the launch')).toHaveLength(1)

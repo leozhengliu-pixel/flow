@@ -113,7 +113,7 @@ describe('a stopped reply', () => {
     render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
     await user.type(editor, 'Explain two plus two')
-    await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
     // Token deltas flush on the next frame; rich-text hydration may replace the initial node.
     await waitFor(() => expect(screen.getByText('Two plus')).toBeVisible())
     await user.click(screen.getByRole('button', { name: 'Stop responding' }))
@@ -176,7 +176,7 @@ describe('a stopped reply', () => {
     const user = userEvent.setup()
     render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     await user.type(screen.getByRole('textbox', { name: 'Send a message to Flow AI' }), 'Think')
-    await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
     await waitFor(() => expect(screen.getByText('Thinking…')).toBeVisible())
     await act(async () => { await user.click(screen.getByRole('button', { name: 'Stop responding' })) })
     await waitFor(() => expect(screen.queryByText('Thinking…')).not.toBeInTheDocument())

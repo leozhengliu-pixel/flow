@@ -37,7 +37,7 @@ describe('tooltips over raised agent surfaces', () => {
     expect(await tooltipSurface('Add files and more')).toHaveClass('flow-tooltip-content--elevated')
     await user.unhover(screen.getByRole('button', { name: 'Add files and more' }))
     await user.type(screen.getByRole('textbox', { name: 'Send a message to Flow AI' }), 'Hello')
-    await user.hover(screen.getByRole('button', { name: 'Submit comment' }))
+    await user.hover(screen.getByRole('button', { name: 'Send message' }))
     const send = await tooltipSurface('Send message')
     expect(send).toHaveClass('flow-tooltip-content--elevated')
     expect(send.querySelector('kbd')?.textContent).toBe('Enter')
