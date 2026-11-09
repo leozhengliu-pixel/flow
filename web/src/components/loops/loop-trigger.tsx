@@ -534,16 +534,19 @@ function ScheduleSentence({ config, onChange, readOnly }: { config: Config; onCh
         {readOnly ? (
           <span className="loops-sentence-token">{interval}</span>
         ) : (
-          <input
-            aria-label={t("Interval")}
-            className="loops-interval-input"
-            inputMode="numeric"
-            min={1}
-            max={99}
-            type="number"
-            value={interval}
-            onChange={(item) => onChange({ interval: Math.min(99, Math.max(1, Number(item.target.value) || 1)) })}
-          />
+          <span className="loops-interval">
+            <input
+              aria-label={t("Interval")}
+              className="loops-interval-input"
+              inputMode="numeric"
+              min={1}
+              max={99}
+              type="number"
+              value={interval}
+              onChange={(item) => onChange({ interval: Math.min(99, Math.max(1, Number(item.target.value) || 1)) })}
+            />
+            <ChevronDown aria-hidden="true" size={12} />
+          </span>
         )}
         {readOnly ? (
           <span className="loops-sentence-token">{t(unitLabel)}</span>

@@ -86,7 +86,7 @@ describe('LoopEditor', () => {
     expect(await screen.findByRole('textbox', { name: 'Instructions' })).toHaveTextContent('Route incoming issues.')
     expect(screen.getByText('No connectors added')).toBeVisible()
     const permissions = screen.getByRole('region', { name: 'Capabilities & access' })
-    expect(permissions).toHaveTextContent("Choose which team's data are available to this loop")
+    expect(permissions).toHaveTextContent("Choose which team’s data are available to this loop")
     expect(within(permissions).getByRole('button', { name: 'Team access' })).toHaveTextContent('All public teams')
     expect(within(permissions).getByRole('checkbox', { name: 'Allow changes outside triggering issue' })).toBeChecked()
     expect(within(permissions).getByRole('checkbox', { name: 'Web access' })).not.toBeChecked()

@@ -260,14 +260,14 @@ export function runDuration(startedAt: string, finishedAt?: string, now = Date.n
 /** Instruction placeholder follows the trigger. */
 export function instructionsPlaceholder(triggerType: LoopTriggerType) {
   if (triggerType === "schedule")
-    return "For example, summarize this week's progress, highlight blocked issues, and post a team update…";
+    return "For example, summarize this week’s progress, highlight blocked issues, and post a team update…";
   const entity = ENTITY_NAMES[triggerType].toLowerCase();
   return `For example, review the ${entity}'s changes, check for blockers, and suggest next steps…`;
 }
 
 /** The reference app's permission row copy, shared by the loop page (read-only) and the editor. */
 export const LOOP_PERMISSION_COPY = {
-  teamAccess: "Choose which team's data are available to this loop",
+  teamAccess: "Choose which team’s data are available to this loop",
   outsideTrigger: "Allow this loop to modify data beyond the item that triggered it",
   webSearch: "Allow this loop to search the public web for current information and cite sources",
   codeAccess: "Allow this loop to read or write code and pull requests from",

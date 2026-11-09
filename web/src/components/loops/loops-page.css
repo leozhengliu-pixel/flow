@@ -627,6 +627,8 @@ html:root body .command-dialog.loops-picker-dialog [cmdk-item].is-preview:not(#_
   text-align: center;
   appearance: textfield;
 }
+.loops-interval { display: contents; }
+.loops-interval > svg { display: none; }
 .loops-interval-input::-webkit-inner-spin-button,
 .loops-interval-input::-webkit-outer-spin-button { margin: 0; appearance: none; }
 .loops-trigger-sentence .select-control { height: 28px; min-width: 64px; padding: 0 8px 0 10px; }
@@ -978,7 +980,7 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
   .loops-hub:not(.is-dialog) .loops-hub-categories { margin-top: 0; }
   .loops-hub-composer { height: 104px; gap: 8px; padding: 12px; }
   .loops-hub-composer textarea { min-height: 48px; padding: 2px 6px; }
-  .loops-hub-composer footer { height: 24px; padding: 0; }
+  .loops-hub-composer footer { height: 24px; gap: 12px; padding: 0; }
   .loops-hub-send:disabled { background: var(--loops-schedule-bg); }
   .loops-hub-categories button.is-active { background: var(--bg-active); }
   .loops-section-title,
@@ -995,6 +997,20 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
   .loops-interval-input { height: 26px; background: var(--loops-schedule-bg); border-color: var(--loops-schedule-border); font-weight: 400; }
   .loops-trigger-sentence .select-control { height: 26px; min-width: 0; background: var(--loops-schedule-bg); border-color: var(--loops-schedule-border); font-weight: 400; }
   .loops-permission-row .loops-select-button { height: 30px; font-size: 13px; font-weight: 400; }
+  .loops-name-input { font: 600 24px/32px var(--font); letter-spacing: -0.16px; }
+  .loops-trigger-sentence:not(.is-readonly) .loops-sentence-text,
+  .loops-trigger-button,
+  .loops-trigger-sentence .select-control,
+  .loops-add-connector,
+  .loops-select-button,
+  .loops-permission-row .select-control { color: var(--agent-thread-text); }
+  .loops-permission-row small { color: var(--loops-muted); }
+  .loops-breadcrumb > span[aria-hidden] { margin-top: -2px; }
+  .loops-date-control.date-time-control { padding: 0 12px; }
+  .loops-date-control.date-time-control > svg { display: none; }
+  .loops-interval { position: relative; display: inline-flex; align-items: center; }
+  .loops-interval > svg { position: absolute; right: 9px; display: block; color: var(--theme-text-secondary); pointer-events: none; }
+  .loops-interval-input { field-sizing: content; box-sizing: border-box; width: auto; min-width: 0; padding: 0 28px 0 10px; text-align: left; color: var(--agent-thread-text); }
   .loops-run-body { padding: 16px 8px 48px; }
   .loops-run-header { padding: 0 12px; }
   .loops-run-header h1 { font: 500 13px/16px var(--font); }

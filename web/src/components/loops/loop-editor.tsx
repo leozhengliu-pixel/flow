@@ -344,7 +344,7 @@ function LoopEditorForm({
                   onNavigate(loopsPath(workspace));
                 }}
               >
-                {t("Loops")}
+                <span>{t("Loops")}</span>
               </a>
             )}
             <span aria-hidden="true">›</span>
