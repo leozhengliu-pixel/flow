@@ -451,7 +451,7 @@ function ProjectChatPlatformProperty({ data, integrationConnections, onUpdate, p
   if (!chat.provider) return <ProjectSlackMenu integrationConnections={integrationConnections} onUpdate={onUpdate} project={project}/>
   const groups = (settings?.bindings ?? []).filter(binding => !binding.revokedAt && bindingProjectIds(binding)?.includes(project.id))
   const label = chat.format(t('{name} group'))
-  const value = groups.length === 1 ? groups[0].chatName || label : groups.length > 1 ? t('{count} groups').replace('{count}', String(groups.length)) : chat.format(t('Connect {name} group'))
+  const value = groups.length === 1 ? groups[0].chatName || label : groups.length > 1 ? t('{count} groups').replace('{count}', () => String(groups.length)) : chat.format(t('Connect {name} group'))
   return <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label" data-i18n-ignore>{chat.name}</span>
     <FlowTooltip label={label}><button aria-label={label} className={`project-details-sidebar__property-trigger${groups.length ? '' : ' is-empty'}`} type="button" onClick={() => setOpen(true)}><IntegrationBrandIcon provider={chat.provider} size={16}/><span data-i18n-ignore={groups.length === 1 ? true : undefined}>{value}</span></button></FlowTooltip>
     <ProjectChatGroupDialog open={open} onOpenChange={next => { setOpen(next); if (!next) void reload() }} provider={chat.provider} project={project} data={data}/>

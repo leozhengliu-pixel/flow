@@ -40,7 +40,8 @@ describe('RichComment markdown rendering', () => {
     expect(screen.getByRole('list')).toBeVisible()
     expect(screen.getByText('item one')).toBeVisible()
     expect(screen.getByText('bold').tagName).toBe('STRONG')
-    expect(screen.getByText('inline').tagName).toBe('CODE')
+    // Inline code renders its text in a span inside the code element (the reference's <code><span> structure).
+    expect(screen.getByText('inline').closest('code')).not.toBeNull()
     expect(screen.getByRole('link', { name: 'link' })).toHaveAttribute('href', 'https://linear.app')
     expect(screen.getByText('block code').closest('pre')).not.toBeNull()
     expect(screen.queryByText('## Heading')).not.toBeInTheDocument()
