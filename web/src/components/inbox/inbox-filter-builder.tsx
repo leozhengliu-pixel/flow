@@ -191,7 +191,7 @@ export function InboxFilterBuilder({
             options={fieldOptions}
             onToggle={(property, option) => updateFilters(appendInboxFilterValue(normalizedFilters, property, option))}
           />
-        </> : <Popover.Root modal open={open} onOpenChange={setOpen}>
+        </> : <Popover.Root open={open} onOpenChange={setOpen}>
           <Popover.Trigger asChild>{toolbarTrigger}</Popover.Trigger>
           <Popover.Portal>
             <Popover.Content data-flow-motion="floating"
@@ -401,7 +401,7 @@ function PropertyPicker({
 }) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
-  const [activeIndex, setActiveIndex] = useState(0)
+  const [activeIndex, setActiveIndex] = useState(-1)
   const [focusValuePicker, setFocusValuePicker] = useState(false)
   const hoverTimerRef = useRef<number | undefined>(undefined)
   const propertyRefs = useRef(new Map<string, HTMLButtonElement>())

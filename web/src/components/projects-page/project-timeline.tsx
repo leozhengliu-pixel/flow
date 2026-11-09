@@ -3,7 +3,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronDown } from 'lucide-react'
 import { useDesktopSettings } from '@/hooks/use-desktop-settings'
 import { useI18n } from '@/i18n/i18n'
-import { memo, useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { useCurrentTime } from '@/hooks/use-current-time'
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { MILESTONE_SHAPE_PATH } from '@/components/issue/milestone-progress'
@@ -194,6 +194,15 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
     if (typeof node.scrollTo === 'function') node.scrollTo({ left, behavior: 'smooth' })
     else node.scrollLeft = left
   }
+  // The view toolbar's Today button asks this timeline to centre on today.
+  const scrollToTodayRef = useRef(scrollToToday)
+  useEffect(() => { scrollToTodayRef.current = scrollToToday })
+  useEffect(() => {
+    const onToday = () => scrollToTodayRef.current()
+    window.addEventListener('flow:timeline-today', onToday)
+    return () => window.removeEventListener('flow:timeline-today', onToday)
+  }, [])
+
   const onRootKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.altKey || (event.target as HTMLElement).closest('input,textarea,[contenteditable=true]')) return
     if (event.key === '+' || event.key === '=') { event.preventDefault(); changeZoom(stepTimelineZoom(zoom, -1)) }

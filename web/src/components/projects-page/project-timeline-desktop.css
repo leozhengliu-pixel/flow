@@ -59,7 +59,7 @@
   .lp-project-timeline__bar { top: 24px; }
   .lp-project-timeline__bar > button { box-shadow: var(--project-timeline-desktop-bar-shadow); display: block; font-size: 0; }
   /* The name sits above its bar and slides along it, clear of the names column, so a bar that starts off-screen still reads. */
-  .lp-project-timeline__bar-label { color: var(--theme-text-primary); display: block; font: 450 13px/16px var(--font); height: 16px; left: var(--timeline-names-width); margin: -19px 0 3px; pointer-events: none; position: sticky; white-space: nowrap; width: max-content; }
+  .lp-project-timeline__bar-label { color: var(--text); display: block; font: 500 13px/16px var(--font); height: 16px; left: var(--timeline-names-width); margin: -19px 0 3px .5px; pointer-events: none; position: sticky; white-space: nowrap; width: max-content; }
   /* Group headers keep to the names column, above its backdrop. */
   .lp-project-timeline__group h2 { box-sizing: border-box; padding: 0 13px; width: var(--timeline-names-width); z-index: 6; }
   .lp-project-timeline__milestone { top: 29px; }

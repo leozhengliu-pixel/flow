@@ -26,8 +26,8 @@ describe('inbox row hover actions', () => {
     await user.keyboard('h')
     const menu = screen.getByRole('menu', { name: 'Snooze notification' })
     await waitFor(() => expect(within(menu).getByRole('menuitem', { name: 'An hour from now' })).toHaveFocus())
-    expect(within(menu).getAllByRole('menuitem')).toHaveLength(6)
-    for (const option of within(menu).getAllByRole('menuitem').slice(0, 5)) {
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(new Date().getHours() < 17 ? 7 : 6)
+    for (const option of within(menu).getAllByRole('menuitem').slice(0, -1)) {
       expect(option.querySelector('time')).not.toBeNull()
       expect(option.querySelector('svg')).not.toBeNull()
     }

@@ -13,6 +13,8 @@ import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { DeleteInboxIcon } from './inbox-page-shell'
 import type { Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
+import { useCurrentTime } from '@/hooks/use-current-time'
+import { snoozePresetItems } from './snooze-presets'
 import { InboxCustomSnoozeForm, type InboxNotificationRowData, type InboxSnoozePreset } from './notification-row'
 import { PulseFrequencyDropdownSubmenu } from './pulse-frequency-menu'
 import type { PulseFrequency } from './pulse-summary-model'
@@ -141,7 +143,7 @@ function DetailOptionsFallback(props: InboxDetailPreviewProps) {
 
 function DetailSnoozeMenu({ notification, onSnooze, pending, open, onOpenChange, phone }: Pick<InboxDetailPreviewProps, 'notification' | 'onSnooze' | 'pending'> & { open: boolean; onOpenChange: (open: boolean) => void; phone: boolean }) {
   const [custom, setCustom] = useState(false)
-  const items: Array<[Exclude<InboxSnoozePreset, { kind: 'custom' }>, string]> = [['hour','An hour from now'],['threeHours','In 3 hours'],['tomorrow','Tomorrow'],['nextWeek','Next week'],['month','A month from now']]
+  const items = snoozePresetItems(useCurrentTime())
   const close = () => {
     onOpenChange(false)
     setCustom(false)

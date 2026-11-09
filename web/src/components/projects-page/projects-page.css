@@ -190,8 +190,8 @@
 }
 .lp-projects__header > .lp-projects__icon-button:last-child { margin-left: auto; }
 .lp-projects__new-view-parent { color: var(--lp-text); font-size: 13px; font-weight: 500; }
-.lp-projects__new-view-parent + svg { margin: 0 7px; color: var(--lp-faint); }
-.lp-projects__copy-url { background: var(--theme-surface-1); }
+.lp-projects__new-view-chevron { margin: -2px 8px 0; color: var(--issue-muted); font-size: 13px; font-weight: 500; line-height: normal; }
+.lp-projects__copy-url { background: transparent; }
 
 .lp-projects__header h1 {
   color: var(--theme-text-primary);
@@ -1894,7 +1894,17 @@
 /* View card bottom row: resource pills left, filter / display buttons right. */
 .lp-projects__editor-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
 .lp-projects__editor-actions{display:flex;align-items:center;gap:6px}
-.lp-projects__header > .lp-projects__copy-url:not(:last-child) { margin-left: auto; }
+.lp-projects__header > .lp-projects__copy-url { margin-left: auto; }
+.lp-projects__timeline-pill { display: none; }
+@media (min-width: 768px) {
+  .lp-projects__timeline-pill { box-sizing: border-box; height: 24px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: .5px solid transparent; border-radius: 9999px; background: lch(13.861% 1.139 272); color: lch(90.826% 1.425 272); font: 500 12px var(--font); }
+  .lp-projects__timeline-zoom { gap: 6px; }
+  .lp-projects__editor-actions .lp-projects__icon-button:not(.is-active) { background: lch(13.861% 1.139 272); }
+  .lp-projects__timeline-pill:hover { background: var(--ui-pill-hover-bg); color: var(--project-toolbar-icon-hover-fg); }
+  /* The reference's view card floats 8px inside the frame, and its Copy URL button has no pill background. */
+  .lp-projects__top > div:has(> section[data-mode]) { margin: 8px; }
+  .lp-projects__header > .lp-projects__copy-url.lp-projects__icon-button { background: transparent; }
+}
 .lp-projects__header > .lp-projects__copy-url:not(:last-child) + .lp-projects__icon-button { margin-left: 6px; }
 /* Customers / Revenue columns: revenue is right-aligned. */
 .lp-project-row__customers { min-width: 0; overflow: hidden; }

@@ -82,7 +82,7 @@ export function InboxPageShell({
   activeTab = 'all',
   onTabChange,
   tabCounts,
-  unreadCount = 0,
+  unreadCount,
 }: InboxPageShellProps) {
   const shellRef = useRef<HTMLElement>(null)
   const dragRef = useRef({ active: false, pointerId: -1 })
@@ -168,6 +168,7 @@ export function InboxPageShell({
           onMarkAllRead={onMarkAllRead}
           onOpenSettings={onOpenSettings}
           onOpenSidebar={onOpenSidebar}
+          unreadCount={unreadCount}
           activeTab={activeTab}
           onTabChange={onTabChange}
           tabCounts={tabCounts}
@@ -196,7 +197,7 @@ export function InboxPageShell({
         onPointerCancel={stopResize}
       />
       <section className="flow-inbox__detail" aria-label="Notification preview">
-        {detail ?? <InboxNoSelection unreadCount={unreadCount} />}
+        {detail ?? <InboxNoSelection unreadCount={unreadCount ?? 0} />}
       </section>
     </main>
   )
@@ -229,6 +230,7 @@ export function InboxHeader({
   onMarkAllRead,
   onOpenSettings,
   onOpenSidebar,
+  unreadCount,
 }: InboxHeaderProps) {
   const { t } = useI18n()
   const showRead = displayOptions.showRead
@@ -250,6 +252,7 @@ export function InboxHeader({
             <h2><span>Inbox</span></h2>
             <NotificationActionsMenu
               pending={bulkPending}
+              hasUnread={unreadCount === undefined || unreadCount > 0}
               onMarkAllRead={onMarkAllRead}
               onDeleteAll={onDeleteAll}
               onDeleteAllRead={onDeleteAllRead}
@@ -287,6 +290,7 @@ export function InboxHeader({
 
 function NotificationActionsMenu({
   pending = false,
+  hasUnread = true,
   onMarkAllRead,
   onDeleteAll,
   onDeleteAllRead,
@@ -295,7 +299,7 @@ function NotificationActionsMenu({
 }: Pick<
   InboxPageShellProps,
   'onMarkAllRead' | 'onDeleteAll' | 'onDeleteAllRead' | 'onDeleteAllReadCompleted' | 'onOpenSettings'
-> & { pending?: boolean }) {
+> & { pending?: boolean; hasUnread?: boolean }) {
   const phone = usePhoneLayout()
   const [phoneOpen, setPhoneOpen] = useState(false)
   useInboxShortcut('Backspace', event => {
@@ -347,12 +351,17 @@ function NotificationActionsMenu({
           align="start"
           sideOffset={4}
         >
-          <InboxMenuItem disabled={pending || !onMarkAllRead} icon={<MarkAllReadIcon />} shortcut="⌥U" onSelect={() => onMarkAllRead?.()}>
-            Mark all as read
-          </InboxMenuItem>
-          <DropdownMenu.Separator className="flow-inbox-menu__separator" />
+          {hasUnread ? <>
+            <InboxMenuItem disabled={pending || !onMarkAllRead} icon={<MarkAllReadIcon />} shortcut="⌥U" onSelect={() => onMarkAllRead?.()}>
+              Mark all as read
+            </InboxMenuItem>
+            <DropdownMenu.Separator className="flow-inbox-menu__separator" />
+          </> : null}
           <InboxMenuItem disabled={pending} icon={<DeleteInboxIcon />} onSelect={onDeleteAll}>
             Delete all
+          </InboxMenuItem>
+          <InboxMenuItem disabled={pending} icon={<DeleteInboxIcon />} shortcut="⇧⌫" onSelect={onDeleteAllRead}>
+            Delete all read
           </InboxMenuItem>
           <DropdownMenu.Separator className="flow-inbox-menu__separator" />
           <InboxMenuItem disabled={pending || !onOpenSettings} icon={<SettingsInboxIcon />} onSelect={() => onOpenSettings?.()}>

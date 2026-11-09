@@ -1103,7 +1103,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   :root { --project-sidebar-card-bg: var(--theme-surface-1); --project-sidebar-card-border: var(--theme-control-hover); }
   :root[data-theme-variant="dark"] { --project-sidebar-card-bg: lch(9.232% .85 272); --project-sidebar-card-border: lch(16.793% 1.93 272); }
   :root { --inbox-read-body: lch(65.078% 1.425 272); }
-  :root { --set-integration-search-border: lch(16.32 1.48 272); --set-promo-badge-bg: #fff; --set-promo-badge-fg: #1b1b1b; --set-integration-mark-filter: invert(1); }
+  :root { --set-integration-search-border: lch(16.32 1.48 272); --set-promo-badge-bg: #fff; --set-promo-badge-fg: #1b1b1b; --set-integration-mark-filter: invert(1); --set-feature-card-bg: linear-gradient(135deg, #86c7ec 0%, #b7dcef 48%, #f1ece6 100%); --set-feature-card-fg: #1b1b1b; }
   :root[data-theme="light"] { --set-integration-search-border: lch(84.44 0 282); --set-integration-mark-filter: none; }
   :root { --set-admin-fg: lch(80 80 288.43); }
   :root[data-theme="light"] { --set-admin-fg: lch(50 80 288.43); }

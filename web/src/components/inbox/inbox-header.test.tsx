@@ -34,7 +34,7 @@ describe('inbox header', () => {
     renderHeader()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Notification actions' }))
     const items = screen.getAllByRole('menuitem').map(item => item.textContent)
-    expect(items).toEqual(['Mark all as read⌥U', 'Delete all', 'Go to settings'])
+    expect(items).toEqual(['Mark all as read⌥U', 'Delete all', 'Delete all read⇧⌫', 'Go to settings'])
     const keys = screen.getByLabelText('⌥U').querySelectorAll('span')
     expect([...keys].map(key => key.textContent)).toEqual(['⌥', 'U'])
   })

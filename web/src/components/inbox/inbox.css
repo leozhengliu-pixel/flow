@@ -830,16 +830,18 @@
   .flow-inbox-menu { border-color: var(--pk-border); }
   .flow-inbox-menu__shortcut { color: var(--pk-muted); line-height: 12.1px; }
   .flow-inbox-menu__shortcut > span { line-height: inherit; }
-  .flow-inbox-menu .flow-inbox-menu__item[data-highlighted] { color: var(--pk-text-strong); }
+  .flow-inbox-menu .flow-inbox-menu__item:is([data-highlighted], [data-state="open"]) { color: var(--pk-text-strong); }
   .flow-inbox__icon-button[data-inbox-filter-trigger][aria-expanded=true]:not(:hover) { background: transparent; color: var(--text); }
   :root:not([data-theme="light"]) .flow-inbox-row[data-read="true"]:not([data-active="true"]) .flow-inbox-row__body { color: var(--inbox-read-body); }
   .flow-inbox-list-state--message:has(> .flow-inbox-list-state__ghost-action) { padding-bottom: 11px; }
   .flow-inbox-list-state--message:has(> .flow-inbox-list-state__ghost-action) > strong { line-height: normal; }
   :root .flow-inbox-list-state--message button.flow-inbox-list-state__ghost-action { margin-top: 16px; background: transparent; font-weight: 500; line-height: normal; }
   .flow-inbox-menu--actions .flow-inbox-menu__item { color: var(--pk-text); }
-  .flow-inbox-menu--actions { width: auto; min-width: 182px; }
+  .flow-inbox-menu--actions { width: 181px; min-width: 181px; padding: 0; }
+  .flow-inbox-menu--actions::before, .flow-inbox-menu--actions::after { display: block; height: 6px; content: ""; }
+  .flow-inbox-menu--actions .flow-inbox-menu__separator { height: 12px; background: linear-gradient(transparent 6px, var(--theme-border) 6px, var(--theme-border) 6.5px, transparent 6.5px); }
   .flow-inbox-menu--actions .flow-inbox-menu__shortcut { flex: 0 0 auto; margin-left: 0; padding-left: 0; }
-  .flow-inbox-snooze-menu { width: 318px; height: auto; min-height: 241.5px; }
+  .flow-inbox-snooze-menu { width: 306px; height: auto; min-height: 0; }
   .flow-inbox-snooze-input-wrap { padding-right: 12px; }
   .flow-inbox-row-menu { width: 191px; height: auto; min-height: 0; padding: 0; }
   .flow-inbox-context-snooze { padding: 0; }

@@ -24,9 +24,10 @@ import { GridLoader } from '@/components/ui/grid-loader'
 import { AvatarImage } from '@/components/ui/user-avatar'
 import { useOptionalTranslate } from '@/i18n/i18n'
 import { parseNaturalDateInput } from '@/lib/natural-date'
+import { resolveSnoozeDate, snoozePresetItems } from './snooze-presets'
 
 export type InboxNotificationKind = 'comment' | 'finished' | 'assignment' | 'mention' | 'status' | 'project' | 'review' | 'pulse' | 'generic'
-export type InboxSnoozePreset = 'hour' | 'threeHours' | 'tomorrow' | 'nextWeek' | 'month' | {
+export type InboxSnoozePreset = 'hour' | 'threeHours' | 'evening' | 'tomorrow' | 'nextWeek' | 'month' | {
   kind: 'custom'
   snoozedUntil: string
 }
@@ -332,7 +333,7 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
             <span className="flow-inbox-menu__item-label">{t('Snooze')}</span>
             <kbd className="flow-inbox-menu__shortcut">H</kbd>
             <span className="flow-inbox-menu__trailing flow-inbox-menu__trailing--submenu">▶</span>
-          </>} contentProps={{ 'data-flow-motion': 'floating', 'data-popper-device-pixels': '', className: 'flow-inbox-menu flow-inbox-snooze-menu flow-inbox-context-snooze', sideOffset: phone ? 4 : -1.5, alignOffset: phone ? -37 : -43 }}>
+          </>} contentProps={{ 'data-flow-motion': 'floating', 'data-popper-device-pixels': '', className: 'flow-inbox-menu flow-inbox-snooze-menu flow-inbox-context-snooze', sideOffset: phone ? 4 : -1.5, alignOffset: phone ? -37 : -43, ref: phone ? undefined : highlightFirstSnoozeOption }}>
             <RowSnoozeMenu notification={notification} disabled={disabled} onSnooze={props.onSnooze} />
           </MenuSubmenu>
           {pulse && props.onPulseFrequencyChange ? (
@@ -370,13 +371,7 @@ function RowSnoozeMenu({ notification, disabled, onSnooze }: { notification: Inb
   const [invalid, setInvalid] = useState(false)
   const t = useOptionalTranslate()
   const now = useCurrentTime()
-  const items: Array<[Exclude<InboxSnoozePreset, { kind: 'custom' }>, string]> = [
-    ['hour', 'An hour from now'],
-    ['threeHours', 'In 3 hours'],
-    ['tomorrow', 'Tomorrow'],
-    ['nextWeek', 'Next week'],
-    ['month', 'A month from now'],
-  ]
+  const items = snoozePresetItems(now)
   const optionDate = (preset: Exclude<InboxSnoozePreset, { kind: 'custom' }>) => new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(resolveSnoozeDate(now, preset))
   const submitQuery = () => {
     if (disabled) return
@@ -428,13 +423,7 @@ function KeyboardSnoozeMenu({ notification, disabled, onSnooze }: {
   const [invalid, setInvalid] = useState(false)
   const t = useOptionalTranslate()
   const now = useCurrentTime()
-  const presets: Array<[Exclude<InboxSnoozePreset, { kind: 'custom' }>, string]> = [
-    ['hour', 'An hour from now'],
-    ['threeHours', 'In 3 hours'],
-    ['tomorrow', 'Tomorrow'],
-    ['nextWeek', 'Next week'],
-    ['month', 'A month from now'],
-  ]
+  const presets = snoozePresetItems(now)
 
   if (custom) {
     return <InboxCustomSnoozeForm
@@ -494,16 +483,10 @@ function moveSnoozeFocus(event: KeyboardEvent<HTMLDivElement>) {
   options[next]?.focus()
 }
 
-function resolveSnoozeDate(now: Date, preset: Exclude<InboxSnoozePreset, { kind: 'custom' }>) {
-  const next = new Date(now)
-  if (preset === 'hour') return new Date(next.getTime() + 60 * 60 * 1000)
-  if (preset === 'threeHours') return new Date(next.getTime() + 3 * 60 * 60 * 1000)
-  next.setSeconds(0, 0)
-  next.setHours(9, 0, 0, 0)
-  if (preset === 'tomorrow') next.setDate(next.getDate() + 1)
-  else if (preset === 'nextWeek') next.setDate(next.getDate() + ((8 - next.getDay()) % 7 || 7))
-  else if (preset === 'month') next.setMonth(next.getMonth() + 1)
-  return next
+/** The desktop snooze list opens with its first preset highlighted, ready for Enter. */
+function highlightFirstSnoozeOption(node: HTMLDivElement | null) {
+  if (!node) return
+  window.requestAnimationFrame(() => node.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true }))
 }
 
 export function InboxCustomSnoozeForm({ disabled = false, onCancel, onConfirm }: { disabled?: boolean; onCancel: () => void; onConfirm: (preset: Extract<InboxSnoozePreset, { kind: 'custom' }>) => void }) {

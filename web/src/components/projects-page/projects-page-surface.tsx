@@ -4,7 +4,10 @@ import { CustomerGlyph } from '@/components/customer/customer-filter-glyphs'
 import { ProjectCustomerFilterValues } from './project-customer-filter'
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Virtuoso } from 'react-virtuoso'
-import { AlignLeft, BarChart3, CalendarDays, ChevronRight, CircleDot, FileText, Flag, GitBranch, HeartPulse, Link2, Network, Tags, UserRound, Users } from 'lucide-react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { ChevronDown } from 'lucide-react'
+import { TIMELINE_ZOOMS, TIMELINE_ZOOM_LABELS, normalizeTimelineZoom, type TimelineZoom } from './project-timeline-model'
+import { AlignLeft, BarChart3, CalendarDays, CircleDot, FileText, Flag, GitBranch, HeartPulse, Link2, Network, Tags, UserRound, Users } from 'lucide-react'
 import {
   AddViewIcon,
   CheckIcon,
@@ -145,8 +148,18 @@ export function ProjectsPageSurface({
   const toggleSurface = (kind: 'filter' | 'display', origin: 'toolbar' | 'editor') => {
     setOpenSurface(current => current?.kind === kind && current.origin === origin ? null : { kind, origin })
   }
+  // The reference's timeline layout carries Today and the zoom picker in the view toolbar, between Filter and Display.
+  const timelineControls = settings.layout === 'timeline' ? <>
+    <button aria-label="Center the timeline on today’s date" className="lp-projects__timeline-pill" onClick={() => window.dispatchEvent(new Event('flow:timeline-today'))} type="button">Today</button>
+    <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Zoom" className="lp-projects__timeline-pill lp-projects__timeline-zoom" type="button">{TIMELINE_ZOOM_LABELS[normalizeTimelineZoom(settings.timelineZoom)]}<ChevronDown size={8}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="lp-project-timeline__zoom-options" data-flow-motion="floating" align="end" sideOffset={4}>
+      <DropdownMenu.RadioGroup value={normalizeTimelineZoom(settings.timelineZoom)} onValueChange={value => { if (TIMELINE_ZOOMS.includes(value as TimelineZoom)) updateSettings({ ...settings, timelineZoom: value as TimelineZoom }) }}>
+        {TIMELINE_ZOOMS.map(option => <DropdownMenu.RadioItem key={option} value={option}>{TIMELINE_ZOOM_LABELS[option]}</DropdownMenu.RadioItem>)}
+      </DropdownMenu.RadioGroup>
+    </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+  </> : null
   const editorActions = <>
     <IconButton active={openSurface?.kind === 'filter' && openSurface.origin === 'editor'} buttonRef={editorFilterTriggerRef} label="Add filter" onClick={() => toggleSurface('filter', 'editor')}><FilterIcon /></IconButton>
+    {timelineControls}
     <IconButton active={openSurface?.kind === 'display' && openSurface.origin === 'editor'} badge={filterCount > 0} buttonRef={editorDisplayTriggerRef} label="Display options" onClick={() => toggleSurface('display', 'editor')}><DisplayIcon /></IconButton>
   </>
   const surfaceMenu = (origin: 'toolbar' | 'editor') => <>
@@ -187,7 +200,7 @@ export function ProjectsPageSurface({
     <div className="lp-projects__top" data-projects-header>
       <header className="lp-projects__header">
         <button type="button" data-sidebar-trigger className="lp-projects__mobile-menu" aria-label="Open workspace sidebar" onClick={onOpenAppSidebar}><SidebarLeftIcon/></button>
-        {creatingView ? <><span className="lp-projects__new-view-parent">Views</span><ChevronRight size={13}/><h1>All projects</h1><IconButton className="lp-projects__copy-url" label="Copy URL" onClick={() => void navigator.clipboard.writeText(window.location.href)}><Link2 size={14}/></IconButton><IconButton active={sidebarOpen} label={sidebarOpen ? 'Close Insights' : 'Open Insights'} onClick={onToggleSidebar}><InsightsIcon/></IconButton></> : <><h1>Projects</h1><button aria-label="New project" className="lp-projects__new-project" onClick={onCreateProject} type="button"><PlusIcon/><span>New project</span></button></>}
+        {creatingView ? <><span className="lp-projects__new-view-parent">Views</span><span className="lp-projects__new-view-chevron" aria-hidden="true">›</span><h1>All projects</h1><IconButton className="lp-projects__copy-url" label="Copy URL" onClick={() => void navigator.clipboard.writeText(window.location.href)}><Link2 size={14}/></IconButton></> : <><h1>Projects</h1><button aria-label="New project" className="lp-projects__new-project" onClick={onCreateProject} type="button"><PlusIcon/><span>New project</span></button></>}
       </header>
       {/* The reference app: the view card carries the resource pills and its own filter / display buttons; the toolbar hides while it is open. */}
       {creatingView && viewEditor?.(<div className="lp-projects__editor-row"><nav aria-label="View resource" className="lp-projects__views"><button className="lp-projects__view ui-pill" type="button" onClick={() => onNewViewResourceChange?.('issues')}>Issues</button><button aria-current="page" className="lp-projects__view ui-pill" type="button">Projects</button></nav><div className="lp-projects__editor-actions">{editorActions}</div></div>)}
@@ -204,6 +217,7 @@ export function ProjectsPageSurface({
             label="Add filter"
             onClick={() => toggleSurface('filter', 'toolbar')}
           ><FilterIcon /></IconButton>
+          {timelineControls}
           <IconButton
             active={openSurface?.kind === 'display' && openSurface.origin === 'toolbar'}
             badge={filterCount > 0}

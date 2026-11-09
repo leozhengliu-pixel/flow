@@ -62,7 +62,7 @@
 .document-history-panel {
   display: grid;
   flex: 1;
-  grid-template-columns: minmax(0, 23fr) minmax(0, 7fr);
+  grid-template-columns: minmax(0, 76.663fr) minmax(0, 23.337fr);
   min-height: 0;
   margin: 0 16px 16px;
   overflow: hidden;

@@ -29,6 +29,7 @@ import { inboxActorOptions, inboxNotificationCategory, matchesInboxFilter as not
 import { InboxPage, type InboxPageAdapter } from './inbox-page'
 import type { InboxDisplayOptions, InboxTab } from './inbox-page-shell'
 import type { InboxNotificationKind, InboxNotificationRowData, InboxSnoozePreset } from './notification-row'
+import { resolveSnoozeDate } from './snooze-presets'
 import { effectivePulseFrequency, isPulseSummaryNotification, pulseSummaryText, pulseSummaryTitle, type PulseFrequency } from './pulse-summary-model'
 import { agentReplyLine, finishedSessionTarget, pointsAtSessionCard } from './agent-reply-notification'
 import { PulseSummaryView } from './pulse-summary-view'
@@ -1000,20 +1001,5 @@ function InitiativeGlyph({ color = 'currentColor' }: { color?: string }) {
 
 function resolveSnoozedUntil(preset: InboxSnoozePreset): string {
   if (typeof preset === 'object') return preset.snoozedUntil
-  const now = new Date()
-  if (preset === 'hour') return new Date(now.getTime() + 60 * 60 * 1000).toISOString()
-  if (preset === 'threeHours') return new Date(now.getTime() + 3 * 60 * 60 * 1000).toISOString()
-
-  const next = new Date(now)
-  next.setSeconds(0, 0)
-  next.setHours(9, 0, 0, 0)
-  if (preset === 'tomorrow') {
-    next.setDate(next.getDate() + 1)
-  } else if (preset === 'nextWeek') {
-    const daysUntilMonday = (8 - next.getDay()) % 7 || 7
-    next.setDate(next.getDate() + daysUntilMonday)
-  } else if (preset === 'month') {
-    next.setMonth(next.getMonth() + 1)
-  }
-  return next.toISOString()
+  return resolveSnoozeDate(new Date(), preset).toISOString()
 }

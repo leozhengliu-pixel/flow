@@ -64,7 +64,7 @@ describe('InboxFilterBuilder', () => {
     const pointerMenu = screen.getByRole('dialog', { name: 'Add filter' })
     expect(pointerMenu).toHaveAttribute('data-additional', 'false')
     expect(within(pointerMenu).getByText('F')).toBeInTheDocument()
-    expect(within(pointerMenu).getByRole('option', { name: 'Notification type' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(pointerMenu).getByRole('option', { name: 'Notification type' })).toHaveAttribute('aria-selected', 'false')
 
     unmount()
     render(<I18nProvider><InboxFilterBuilder filters={[]} onFiltersChange={vi.fn()} /></I18nProvider>)
@@ -146,7 +146,7 @@ describe('InboxFilterBuilder', () => {
     const notificationType = screen.getByRole('option', { name: 'Notification type' })
     const priority = screen.getByRole('option', { name: 'Issue priority' })
 
-    expect(notificationType).toHaveAttribute('aria-selected', 'true')
+    expect(notificationType).toHaveAttribute('aria-selected', 'false')
     await waitFor(() => expect(screen.getByRole('searchbox', {name:'Add Filter'})).toHaveFocus(), { timeout: 3000 })
     await user.hover(priority)
 
