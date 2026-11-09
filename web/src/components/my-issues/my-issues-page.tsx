@@ -12,13 +12,14 @@ import type { IssueConversionKind } from '@/components/issue/issue-options-menu'
 import { MyIssuesBulkActionBar, type MyIssuesBulkAction, type MyIssuesBulkActionOption } from './my-issues-bulk-action-bar'
 import { MyIssuesDetailsPane, type MyIssuesSummaryItem, type MyIssuesSummaryTab } from './my-issues-details-pane'
 import { MyIssuesFilterBar, type MyIssuesAppliedFilter } from './my-issues-filter-bar'
+import { MyIssuesAssignedEmpty } from './my-issues-assigned-empty'
 import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from './my-issues-list'
 import { defaultMyIssuesDisplayOptions, desktopDisplayDefaults, issueDisplayEqual } from './my-issues-display-defaults'
 import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, type MyIssuesFilterOption, type MyIssuesView } from './my-issues-surface'
 import { useMyIssuesController } from './use-my-issues-controller'
 import { assigneeUpdate } from '@/lib/agent-members'
 import { workflowStatusOptions } from '@/lib/team-workflow'
-import { applyExplorerFilters, executeExplorerBulkAction, explorerBoardGroupUpdate, explorerEstimateBulkOptions, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
+import { applyExplorerFilters, executeExplorerBulkAction, explorerBoardGroupUpdate, explorerEstimateBulkOptions, explorerFilterOptions, explorerPropertyOptions, cycleChipName, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useI18n } from '@/i18n/i18n'
 import { InsightHiddenNotice, SavedViewInsightsPanel, type SavedViewInsightsConfig } from '@/components/issue-explorer/saved-view-panels'
 import { IssueBoard } from '@/components/issue-explorer/issue-board'
@@ -272,6 +273,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onShowGroup={id => controller.changeDisplay({ ...controller.display, hiddenGroupIds: controller.display.hiddenGroupIds.filter(value => value !== id) })}
         onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
         query={myIssuesPagedQuery}
+        emptyState={desktop && controller.view === 'assigned' && !controller.filters.length ? <MyIssuesAssignedEmpty onCreateIssue={onCreateIssue ? () => onCreateIssue() : undefined}/> : undefined}
         collapsedGroupIds={collapsedGroups}
         displayProperties={split || (controller.detailsOpen && previewIssueId) ? splitProperties : controller.display.properties}
         nestedSubIssues={controller.display.nestedSubIssues}
@@ -300,6 +302,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onPropertyChange={changeProperty}
         onSelectIssue={controller.selectIssue}
       /> : <MyIssuesList
+        emptyState={desktop && controller.view === 'assigned' && !controller.filters.length ? <MyIssuesAssignedEmpty onCreateIssue={onCreateIssue ? () => onCreateIssue() : undefined}/> : undefined}
         groups={displayedGroups.filter(group => !controller.display.hiddenGroupIds.includes(group.id) && !controller.display.hiddenGroupIds.includes(group.parentGroupId ?? ''))}
         loading={loading}
         error={error}
@@ -451,7 +454,7 @@ function optimisticRow(row: MyIssuesRowData, input: IssueUpdateInput, data: Boot
     delegate: input.delegateId === undefined ? row.delegate : input.delegateId ? (() => { const user = data.users.find(item => item.id === input.delegateId); return user ? { id: user.id, name: user.displayName, avatarUrl: user.avatarUrl } : row.delegate })() : undefined,
     project: input.projectId === undefined ? row.project : input.projectId ? data.projects.find(project => project.id === input.projectId) : undefined,
     cycleId: input.cycleId === undefined ? row.cycleId : input.cycleId || undefined,
-    cycleName: input.cycleId === undefined ? row.cycleName : data.cycles.find(cycle => cycle.id === input.cycleId)?.name,
+    cycleName: input.cycleId === undefined ? row.cycleName : cycleChipName(data.cycles.find(cycle => cycle.id === input.cycleId)),
     dueDate: input.dueDate === undefined ? row.dueDate : input.dueDate || undefined,
     labels: input.labelIds === undefined ? row.labels : input.labelIds.map(id => data.labels.find(label => label.id === id)).filter((label): label is NonNullable<typeof label> => Boolean(label)),
     sortOrder: input.sortOrder === undefined ? row.sortOrder : input.sortOrder,

@@ -13,3 +13,5 @@
 .actions > a { background: var(--ui-pill-bg); color: var(--text); }
 .actions > a:hover { background: var(--ui-pill-hover-bg); color: var(--ui-pill-hover-fg); }
 .actions kbd { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 2px; border: .5px solid color-mix(in srgb, var(--on-accent) 40%, transparent); border-radius: 4px; color: var(--on-accent); font: 500 11px/12.1px var(--font); }
+/* The reference's desktop Documentation pill rests on the subtle surface (chroma .689), a step above the shared pill token. */
+@media (min-width: 1024px) { :global(:root:not([data-theme="light"])) .actions > a { background: var(--empty-pill-bg); } }

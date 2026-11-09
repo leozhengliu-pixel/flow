@@ -8,7 +8,7 @@ import type { MyIssuesProperty } from './my-issues-surface'
 /**
  * Display properties the issues in scope cannot have, so the display menu leaves them out: Cycle without cycles,
  * Estimate without estimates, SLA without SLAs, Release without release pipelines, and "My activity date" outside
- * the activity tab. `teamIds` are the teams the list covers; without them every team counts.
+ * the activity tab; Creator is not offered on desktop. `teamIds` are the teams the list covers; without them every team counts.
  */
 export function unavailableDisplayProperties(data: BootstrapData, teamIds?: readonly string[], options: { activity?: boolean } = {}): MyIssuesProperty[] {
   const scope = teamIds?.length ? teamIds : (data.teams ?? []).map(team => team.id)
@@ -18,5 +18,7 @@ export function unavailableDisplayProperties(data: BootstrapData, teamIds?: read
   if (!slaFeatureEnabled(data)) hidden.push('sla')
   if (!workspaceFeatureEnabled(data.workspaceSettings?.featureFlags, 'releases') || !data.releasePipelines?.length) hidden.push('release')
   if (!options.activity) hidden.push('myActivity')
+  // The reference's desktop menu has no Creator chip (the phone sheet does); only the desktop callers pass this list.
+  hidden.push('creator')
   return hidden
 }

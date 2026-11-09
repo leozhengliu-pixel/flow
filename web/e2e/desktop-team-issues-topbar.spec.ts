@@ -46,7 +46,7 @@ test('keeps the desktop issue filter at the window edge and applies a status', a
   await expect(choices).toBeVisible()
   const rootBox = (await menu.boundingBox())!
   const valueBox = (await page.locator('[data-level="1"]').boundingBox())!
-  expect(valueBox.x + valueBox.width - rootBox.x).toBe(3)
+  expect(valueBox.x + valueBox.width - rootBox.x).toBe(2)
   if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-filter.png`, animations: 'disabled' })
   await choices.getByRole('option', { name: /Todo/ }).click()
   await expect(menu).toBeHidden()

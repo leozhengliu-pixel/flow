@@ -62,7 +62,7 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     creatorName: issue.creator.displayName,
     isAssignedToViewer:issue.assignee?.id===data?.viewer.id,
     cycleId: issue.cycleId,
-    cycleName: issue.cycleId ? index?.cyclesById.get(issue.cycleId)?.name : undefined,
+    cycleName: issue.cycleId ? cycleChipName(index?.cyclesById.get(issue.cycleId)) : undefined,
     addedToCycle:issue.addedToCycle,
     agentSessionId:issue.agentSessionId,
     agentSessionState:issue.agentSessionState,
@@ -529,7 +529,7 @@ export function optimisticExplorerRow(row: MyIssuesRowData, input: IssueUpdateIn
     project: input.projectId === undefined ? row.project : input.projectId ? data.projects.find(project => project.id === input.projectId) : undefined,
     dueDate: input.dueDate === undefined ? row.dueDate : input.dueDate || undefined,
     cycleId: input.cycleId === undefined ? row.cycleId : input.cycleId || undefined,
-    cycleName: input.cycleId === undefined ? row.cycleName : data.cycles.find(cycle => cycle.id === input.cycleId)?.name,
+    cycleName: input.cycleId === undefined ? row.cycleName : cycleChipName(data.cycles.find(cycle => cycle.id === input.cycleId)),
     labels: input.labelIds === undefined ? row.labels : input.labelIds.map(id => data.labels.find(label => label.id === id)).filter((label): label is NonNullable<typeof label> => Boolean(label)),
     updatedAt: new Date().toISOString(),
     sortOrder: input.sortOrder === undefined ? row.sortOrder : input.sortOrder,
@@ -781,4 +781,9 @@ export function matchesAgentSessionFilter(issue: Pick<MyIssuesRowData, 'agentSes
     : value === '' ? !issue.agentSessionId
       : value.startsWith('state:') ? Boolean(issue.agentSessionId && issue.agentSessionState && agentSessionStatesFor(value).includes(issue.agentSessionState as never))
         : issue.agentSessionId === value)
+}
+
+/** An unnamed cycle shows its number on the row chip. */
+export function cycleChipName(cycle?: { name?: string; number?: number }) {
+  return cycle?.name || (cycle?.number === undefined ? undefined : String(cycle.number))
 }

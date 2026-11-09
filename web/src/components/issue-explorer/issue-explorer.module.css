@@ -52,7 +52,7 @@
   .filterBar [data-filter-chip]{height:24px}
   .filterBar [data-filter-chip]>span,.filterBar [data-filter-chip]>button{height:23px}
   .filterBar [data-applied-filter-commands]{gap:0}
-  .filterBar [data-applied-filter-commands] button:first-child{padding-inline:8.5px;border:0;border-radius:9999px;background:transparent;color:var(--text);font-weight:500;line-height:normal}
+  .filterBar [data-applied-filter-commands] button:first-child{padding-inline:8px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--text);font-weight:500;line-height:normal}
   .filterBar [data-applied-filter-commands] button:last-child{min-width:45px;padding-inline:8.5px;border:0;border-radius:9999px;background:var(--project-toolbar-bg);box-shadow:0 0 0 .5px var(--ui-pill-ring);color:var(--text);font-weight:500;line-height:normal}
 }
 
@@ -190,3 +190,6 @@
   [data-issue-explorer]:has([data-new-content-view-header-title]) [data-my-issues-group-header] [class*="groupCount"]{color:var(--phone-group-started-count)}
   [data-issue-explorer]:has([data-new-content-view-header-title]) [data-row-avatar]{line-height:24px}
 }
+
+/* The new view header separates "Views" and the name with a 13px text "›", 8px either side (the icon chevron is 21px wide, .2px short of it). */
+.crumbSeparator{margin:-2px 8px 0;color:var(--issue-muted);font:500 13px var(--font);line-height:normal}

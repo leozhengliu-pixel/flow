@@ -46,6 +46,8 @@
 .valueItem{font-family:inherit}
 .valueMetaLine{display:contents}
 .valueLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The reference sets its 12px count inside a 13px line box, so the count's glyph box sits .25px lower than a bare 12px span's (its 15.5px line box starts .25px into the 16px line). */
+.countLine{font-size:13px;line-height:normal}
 .valueItem .count{flex:none;margin-left:auto;padding-left:4px;color:var(--pk-faint);font-size:12px;font-weight:450;white-space:nowrap}
 .valueItem>[data-agent-badge]{margin-left:0}
 .checkbox{box-sizing:border-box;width:14px;height:14px;flex:0 0 14px;display:grid;place-items:center;border:1px solid var(--sub-checkbox-border);border-radius:3px;color:var(--on-accent);opacity:0}
@@ -69,9 +71,12 @@
   .rootMenu[data-layout=issues][data-variant=root]{width:207px}
   .rootSearch{gap:14px}
   .valueMenu{width:max-content}
+  .countLine{vertical-align:-.25px}
   .rootSearch kbd{padding-inline:2px}
   .rootItem[data-selected=true],.rootItem[aria-selected=true],.valueItem[aria-selected=true],.valueItem:hover{color:var(--bright)}
-  .rootItem[data-selected=true] .rootChevron,.rootItem[aria-selected=true] .rootChevron{color:var(--pk-muted)}
+  /* The row that owns the open submenu keeps a bright marker while the pointer is in that submenu; under the pointer it dims. */
+  .rootItem[data-selected=true]:not(:hover) .rootChevron,.rootItem[aria-selected=true]:not(:hover) .rootChevron{color:var(--bright)}
+  .rootItem[data-selected=true]:hover .rootChevron,.rootItem[aria-selected=true]:hover .rootChevron{color:var(--pk-muted)}
   .rootItem:hover .rootChevron{color:var(--pk-muted)}
   .rootChevron{text-align:right}
   .valueItem .count{padding-left:0;line-height:normal}

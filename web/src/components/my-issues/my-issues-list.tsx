@@ -258,6 +258,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
   }), [collapsedGroupIds, groups, hideGroupHeaders, nestedSubIssues])
   useSelectHoveredRowWithX(entries, selectedIds, onSelectIssue)
   const estimateSettingsFor = useTeamEstimateSettings()
+  const desktopList = useDesktopLayout()
   const identifierColumn = useIdentifierColumnWidth(groups.flatMap(group => group.issues.map(issue => issue.identifier)))
   const listStyle = { '--issue-identifier-width': identifierColumn.width === undefined ? 'max-content' : `${identifierColumn.width}px` } as CSSProperties
   const groupEstimate = (group: MyIssuesGroupData) => displayProperties.has('estimate') ? sumEstimatePoints(group.issues, estimateSettingsFor) : undefined
@@ -272,7 +273,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
   const renderEntry = (entry: MyIssuesListEntry) => entry.kind === 'parent'
     ? <MyIssuesParentGroupHeader label={entry.label} count={entry.count}/>
     : entry.kind === 'group'
-    ? <div style={{ paddingBottom: !entry.collapsed && !entry.group.issues.length ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(entry.group)}/></div>
+    ? <div style={{ paddingBottom: (entry.collapsed ? desktopList : !entry.group.issues.length) ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} estimateSum={groupEstimate(entry.group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(entry.group)}/></div>
     : <div style={{ paddingBottom: entry.groupEnd ? 2 : 0 }}><MyIssuesRow issue={entry.issue} active={activeIssueId === entry.issue.id} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/></div>
   if (entries.length > VIRTUALIZATION_THRESHOLD) return <>{identifierColumn.probe}<Virtuoso
     className={styles.virtualList}
@@ -293,7 +294,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
       const collapsed = collapsedGroupIds.has(group.id)
       const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
       const parentHeader = group.parentGroupId && groups[index - 1]?.parentGroupId !== group.parentGroupId
-      return <section className={styles.group} key={group.id} aria-labelledby={hideGroupHeaders ? undefined : `my-issues-group-${group.id}`} data-subgroup={group.parentGroupId ? true : undefined}>
+      return <section className={styles.group} data-collapsed={collapsed || undefined} key={group.id} aria-labelledby={hideGroupHeaders ? undefined : `my-issues-group-${group.id}`} data-subgroup={group.parentGroupId ? true : undefined}>
         {parentHeader && <MyIssuesParentGroupHeader label={group.parentLabel ?? ''} count={groups.filter(item => item.parentGroupId === group.parentGroupId).reduce((total, item) => total + item.issues.length, 0)}/>}
         {!hideGroupHeaders && <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} estimateSum={groupEstimate(group)} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange} {...groupMenuActions(group)}/>}
         {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} active={activeIssueId === issue.id} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}

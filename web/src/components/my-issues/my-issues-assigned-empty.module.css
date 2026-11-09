@@ -1,0 +1,12 @@
+/* The reference's empty Assigned tab (measured at 1440x900): a 161x120 illustration 20px above a 13px/500 line, the primary button 20px below. */
+.empty { box-sizing: border-box; height: 100%; min-height: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 120px 60px; color: var(--issue-muted); }
+.art { display: block; width: 161.29px; height: 120px; flex: none; overflow: hidden; margin-bottom: 20px; }
+.frame { fill: var(--issue-muted); }
+.face { fill: var(--issue-dim); }
+.reflection { fill: var(--issue-dim); opacity: .6; }
+.ringDashed { stroke: var(--issue-dim); opacity: .6; stroke-width: 1.5; stroke-dasharray: 3 3; }
+.ringOuter { fill: var(--bg-panel); stroke: var(--bright); stroke-width: 1.5; }
+.ringInner { stroke: var(--issue-dim); stroke-width: 1.5; }
+.empty > strong { margin-bottom: 20px; color: var(--issue-muted); font-size: 13px; font-weight: 500; line-height: normal; }
+.empty > button { display: inline-flex; align-items: center; justify-content: center; height: 28px; padding: 0 10px; border: .5px solid transparent; border-radius: 9999px; background: var(--accent-primary); color: var(--on-accent); font: 500 12px var(--font); line-height: normal; cursor: pointer; }
+.empty > button:hover { background: var(--accent-primary-hover); }

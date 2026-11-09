@@ -20,6 +20,8 @@
   font-size: 13px;
   line-height: 18px;
 }
+/* The reference sets the text in its own span inside the card; the span's color is the 63.3% text step. */
+@media (min-width: 1024px) { :global(:root:not([data-theme="light"])) .emptyCard > span { color: var(--summary-empty-text); font-weight: 450; } }
 
 .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
 

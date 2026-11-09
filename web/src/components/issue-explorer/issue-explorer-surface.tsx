@@ -133,6 +133,7 @@ export function IssueExplorerSurface({
               { id: 'views', label: t('Views') },
               { id: 'all-issues', label: <span className={draftName ? undefined : styles.draftPlaceholder} data-i18n-ignore>{draftName || draftPlaceholder || t('All issues')}</span>, current: true },
             ]}
+            separator={phone ? undefined : <span aria-hidden="true" className={styles.crumbSeparator}>›</span>}
           />
           <span className={styles.headerEnd}>
             <ScopedFlowTooltip label={t('Copy URL')}><button className={styles.headerAction} type="button" aria-label={t('Copy URL')} onClick={() => void navigator.clipboard.writeText(window.location.href)}>

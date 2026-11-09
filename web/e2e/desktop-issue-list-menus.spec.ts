@@ -136,7 +136,7 @@ test('new-view title stays editable while its bright fallback and full-width des
   await expect(page.getByRole('button', { name: 'Choose icon', exact: true })).toHaveCSS('padding', '0px 8px')
   await expect(page.getByRole('button', { name: 'Create view', exact: true })).toHaveCSS('background-color', 'lch(47.918 59.303 288.421)')
   await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCSS('color', 'lch(90.826 1.425 272)')
-  await expect(page.getByRole('button', { name: /^Save to Personal/ })).toHaveCSS('padding', '0px 8px 0px 6px')
+  await expect(page.getByRole('button', { name: /^Save to Workspace/ })).toHaveCSS('padding', '0px 8px 0px 6px')
   await expect(page.locator('[class*="saveActions"]')).toHaveCSS('gap', '6px')
   if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-new-view.png`, animations: 'disabled' })
   const metrics = await name.evaluate(input => {

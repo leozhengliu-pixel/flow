@@ -305,7 +305,7 @@ function ValueMenu({ field, filters, label, layer, minSearchOptions, onClose, on
 }
 
 /** Submenus overlap their parent's edge by 2px and line their first row up with the hovered row. */
-const SUBMENU_SIDE_OFFSET = -2
+const SUBMENU_SIDE_OFFSET = -1
 /** Border + 6px list padding, plus the 36.5px search band when it is shown. */
 function submenuAlignOffset(hideSearch: boolean) { return hideSearch ? -6.5 : -43 }
 
@@ -335,12 +335,13 @@ function FilterValueItems({ activeId, field, isSelected = () => false, layer, on
 
 function FilterValueItem({ field, layer, option, active, selected, nestedOpen, onActive, onNestedOpen, onChoose }: { field: MyIssuesFilterKey; layer: number; option: MyIssuesFilterOption; active:boolean; selected:boolean; nestedOpen:boolean; onActive:()=>void; onNestedOpen:(open:boolean)=>void; onChoose:(option:MyIssuesFilterOption)=>void }) {
   const {t}=useI18n()
+  const desktop = useDesktopLayout()
   const kind = valueRowKind(field, option)
   const label = isSystemOption(field, option) ? t(option.label) : option.label
   // The reference app's customer tier values carry no image.
   const mark = kind === 'plain' || option.kind === 'customerTier' ? null : <span className={styles.optionSlot} aria-hidden="true"><OptionMark field={field} option={option}/></span>
   // The reference app shows counts on selectable values only (not on categories or one-click relation rows).
-  const count = (optionCount(option)??0)>0 && kind === 'check' ? <span className={styles.valueMetaLine}><span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span></span> : null
+  const count = (optionCount(option)??0)>0 && kind === 'check' ? <span className={styles.valueMetaLine}>{desktop ? <span className={styles.countLine}><span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span></span> : <span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span>}</span> : null
   if(option.numberInput)return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} data-row-kind={kind} onMouseMove={()=>{onActive();onNestedOpen(true)}}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span><span className={styles.submenuMarker} aria-hidden="true">▶</span></button></Popover.Trigger><Popover.Portal><NumberValueMenu field={field} layer={layer} option={option} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
   if(option.children&&(option.children.length||field==='customers'))return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} data-row-kind={kind} onMouseMove={()=>{onActive();onNestedOpen(true)}}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span><span className={styles.submenuMarker} aria-hidden="true">▶</span></button></Popover.Trigger><Popover.Portal><NestedValueMenu category={option} field={field} label={option.label} layer={layer} options={option.children} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
   if(kind!=='check')return <button type="button" role="option" aria-selected={active} className={styles.valueItem} data-row-kind={kind} onMouseMove={onActive} onClick={()=>onChoose(option)}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span>{count}</button>

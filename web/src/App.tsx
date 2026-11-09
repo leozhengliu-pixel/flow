@@ -6653,7 +6653,7 @@ function App() {
                   ? duplicateSavedView
                   : undefined
               }
-              defaultSaveScope={viewsTeam ? "team" : "personal"}
+              defaultSaveScope={viewsTeam ? "team" : window.matchMedia(DESKTOP_LAYOUT_QUERY).matches ? "workspace" : "personal"}
               viewHref={(view) =>
                 viewsTeam
                   ? teamIssuesPath(data.workspace.urlKey, viewsTeam.key, view)

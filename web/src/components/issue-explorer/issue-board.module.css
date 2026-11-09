@@ -111,7 +111,8 @@
 .columnActions{display:flex;align-items:center;gap:8px;margin-left:auto}
 @media(min-width:1024px){
   .board{padding-left:0}
-  .column{width:356px;min-width:356px}
+  /* Each 356px column carries 4px of inset per side and the next column starts 8px early: the reference's headers and card panels sit 348px apart. */
+  .column{width:356px;min-width:356px;margin-right:-8px}
   .columnHeaderWrap,.cards{margin-inline:4px}
   .columnHeader strong{margin-left:2px}
   .headerButton{padding-inline:2px}

@@ -206,6 +206,8 @@
 }
 
 @media(--desktop-layout){
+  /* The parent crumb of a flat sub-issue row follows the title flush: the reference pulls it back over the row's 8px gap. */
+  .titleProperties>.parentTrail:not(.boardParentTrail){margin-left:-8px}
   .identifier{letter-spacing:-.26px;font-feature-settings:"calt","cpsp","tnum"}
   .row[data-selected=true] .identifier,.row[data-selected=true] .rowDate{color:var(--issue-selected-identifier-fg)}
   .groupHeader{gap:8px;padding-left:0}
@@ -214,7 +216,7 @@
   .title{color:var(--bright)}
 }
 @media(min-width:1024px){
-  .contextMenu{min-width:175px;max-height:calc(100dvh - 20px);padding:0}
+  .contextMenu{min-width:180px;max-height:calc(100dvh - 20px);padding:0}
   .contextMenuList{padding:6px 0}
   .contextSubmenu:not(.issueSubmenu){width:max-content;width:calc-size(max-content,round(size,1px));min-width:175px;padding:0}
   .contextMenu .menuItem>kbd{padding-left:0;font-size:11px;line-height:12.1px}
@@ -238,3 +240,8 @@
   .groupEstimate{margin-left:3px}
 }
 .identifierProbe{position:absolute;visibility:hidden;pointer-events:none;white-space:nowrap;font-size:13px;font-variant-numeric:tabular-nums;font-feature-settings:"calt","cpsp","tnum";letter-spacing:0}
+
+/* A folded group on desktop keeps its header's 2px trailing margin plus the group's own 2px, like an empty group (the reference pitch is 40px). */
+@media(--desktop-layout){
+  .group[data-collapsed=true]{padding-bottom:4px}
+}

@@ -18,7 +18,7 @@ export function MyIssuesSummaryCard({ summary, onItemSelect }: { summary: MyIssu
   const [active, setActive] = useState<MyIssuesSummaryTab>('labels')
   const tabRefs = useRef<Partial<Record<MyIssuesSummaryTab, HTMLButtonElement | null>>>({})
   const empty = !summary.labels.length && !summary.priority.length && !summary.projects.length
-  if (empty) return <aside className={`${styles.card} ${styles.emptyCard}`} aria-label="Issue view details">No issue details</aside>
+  if (empty) return <aside className={`${styles.card} ${styles.emptyCard}`} aria-label="Issue view details"><span>No issue details</span></aside>
   const items = summary[active] ?? []
   const moveFocus = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const next = event.key === 'ArrowRight' ? (index + 1) % TABS.length

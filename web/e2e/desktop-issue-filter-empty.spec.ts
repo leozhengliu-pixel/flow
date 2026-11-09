@@ -22,7 +22,9 @@ test('counts the hidden issues and clears the real filters without changing the 
   expect(rect?.height).toBe(57)
   expect(await card.evaluate(node => getComputedStyle(node).borderRadius)).toBe('5px')
   const action = card.getByRole('button', { name: 'Clear Filters', exact: true })
-  expect(await action.boundingBox()).toMatchObject({ width: 104, height: 24 })
+  const actionBox = (await action.boundingBox())!
+  expect(actionBox.width).toBeCloseTo(104.05, 1)
+  expect(actionBox.height).toBe(24)
   expect((await action.locator('span').boundingBox())!.height).toBeLessThan(16)
   if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/desktop-filter-band.png`, animations: 'disabled' })
   await action.click()

@@ -352,7 +352,8 @@ export function buildIssueGroups(rows: MyIssuesRowData[], display: MyIssuesDispl
     && (display.showTriageIssues !== false || !isTriage(row))
     && (options.skipCompletedWindow || withinCompletedWindow(row, display.completedWindow, options)))
   projected = [...projected].sort(issueComparator(display.ordering, display.orderDirection, { manualOrder: options.manualOrder, completedByRecency: display.orderCompletedByRecency, states: options.states ?? options.data?.states }))
-  const nested = display.nestedSubIssues ? nestIssueRows(projected) : undefined
+  // A board lists every sub-issue as its own card (with its parent crumb); only lists nest them under a matching parent.
+  const nested = display.nestedSubIssues && display.layout !== 'board' ? nestIssueRows(projected) : undefined
   if (nested) projected = nested.rows
   const rootOf = (row: MyIssuesRowData) => nested?.roots.get(row.id) ?? row
   const grouping = display.grouping
@@ -375,7 +376,8 @@ export function buildIssueGroups(rows: MyIssuesRowData[], display: MyIssuesDispl
     const [descriptor] = groupDescriptors({ priority } as MyIssuesRowData, 'priority')
     if (!primary.has(descriptor.id)) primary.set(descriptor.id, { descriptor, issues: [] })
   }
-  const ordered = sortGroups([...primary.values()], display.groupOrder)
+  // Board columns follow the workflow (Backlog, Todo, In Progress, …); the list default puts the started statuses first.
+  const ordered = sortGroups([...primary.values()], display.groupOrder ?? (display.layout === 'board' ? 'asc' : undefined))
   const subGrouping = display.subGrouping && display.subGrouping !== 'none' && display.subGrouping !== grouping && grouping !== 'none' ? display.subGrouping : undefined
   return ordered.flatMap(({ descriptor, issues }) => {
     const group = toGroup(descriptor, issues)

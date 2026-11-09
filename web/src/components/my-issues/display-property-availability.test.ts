@@ -14,17 +14,17 @@ const data = (overrides: Record<string, unknown> = {}) => ({
 
 describe('unavailableDisplayProperties', () => {
   it('leaves out what no team in scope has', () => {
-    expect(unavailableDisplayProperties(data(), ['a'])).toEqual(['cycle', 'sla', 'release', 'myActivity'])
-    expect(unavailableDisplayProperties(data(), ['b'])).toEqual(['estimate', 'sla', 'release', 'myActivity'])
+    expect(unavailableDisplayProperties(data(), ['a'])).toEqual(['cycle', 'sla', 'release', 'myActivity', 'creator'])
+    expect(unavailableDisplayProperties(data(), ['b'])).toEqual(['estimate', 'sla', 'release', 'myActivity', 'creator'])
   })
 
   it('counts every team when none is given', () => {
-    expect(unavailableDisplayProperties(data())).toEqual(['sla', 'release', 'myActivity'])
+    expect(unavailableDisplayProperties(data())).toEqual(['sla', 'release', 'myActivity', 'creator'])
   })
 
-  it('offers SLA and Release once they exist, and My activity date on the activity tab', () => {
+  it('offers SLA and Release once they exist, and My activity date on the activity tab; Creator is a phone-only property', () => {
     const rich = data({ settings: { sla: { enabled: true } }, releasePipelines: [{ id: 'p' }] })
-    expect(unavailableDisplayProperties(rich, undefined, { activity: true })).toEqual([])
+    expect(unavailableDisplayProperties(rich, undefined, { activity: true })).toEqual(['creator'])
     expect(unavailableDisplayProperties(data({ releasePipelines: [{ id: 'p' }], workspaceSettings: { featureFlags: { releases: false } } }), ['a', 'b'])).toContain('release')
   })
 })
