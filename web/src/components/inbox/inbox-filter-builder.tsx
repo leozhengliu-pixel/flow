@@ -191,7 +191,7 @@ export function InboxFilterBuilder({
             options={fieldOptions}
             onToggle={(property, option) => updateFilters(appendInboxFilterValue(normalizedFilters, property, option))}
           />
-        </> : <Popover.Root open={open} onOpenChange={setOpen}>
+        </> : <Popover.Root modal open={open} onOpenChange={setOpen}>
           <Popover.Trigger asChild>{toolbarTrigger}</Popover.Trigger>
           <Popover.Portal>
             <Popover.Content data-flow-motion="floating"
