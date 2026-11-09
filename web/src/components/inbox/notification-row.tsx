@@ -332,7 +332,7 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
             <span className="flow-inbox-menu__item-label">{t('Snooze')}</span>
             <kbd className="flow-inbox-menu__shortcut">H</kbd>
             <span className="flow-inbox-menu__trailing flow-inbox-menu__trailing--submenu">▶</span>
-          </>} contentProps={{ 'data-flow-motion': 'floating', className: 'flow-inbox-menu flow-inbox-snooze-menu flow-inbox-context-snooze', sideOffset: phone ? 4 : -1.5, alignOffset: phone ? -37 : -43 }}>
+          </>} contentProps={{ 'data-flow-motion': 'floating', 'data-popper-device-pixels': '', className: 'flow-inbox-menu flow-inbox-snooze-menu flow-inbox-context-snooze', sideOffset: phone ? 4 : -1.5, alignOffset: phone ? -37 : -43 }}>
             <RowSnoozeMenu notification={notification} disabled={disabled} onSnooze={props.onSnooze} />
           </MenuSubmenu>
           {pulse && props.onPulseFrequencyChange ? (

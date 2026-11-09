@@ -55,7 +55,7 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot
       </button>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content align="end" className="document-edited-popover" collisionPadding={phone ? 0 : 10} data-flow-motion="floating" onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
+      <Popover.Content align="end" className="document-edited-popover" data-popper-device-pixels="" collisionPadding={phone ? 0 : 10} data-flow-motion="floating" onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
         <label className="document-view-options">
           <span>{t('Show author names')}</span>
           <Toggle checked={showAuthorNames} label={t(showAuthorNames ? 'Hide author names' : 'Show author names')} onChange={onShowAuthorNames}/>

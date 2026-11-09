@@ -458,6 +458,8 @@ html:root body .triage-snooze-dialog [cmdk-item]:not(#_) { font-size: 15px; }
 /* Issue header actions for an issue in Triage: Accept / Decline / Duplicate / Snooze round icon buttons. */
 .issue-triage-header-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; padding-left: 8px; }
 .issue-triage-header-actions + .issue-command-strip { margin-left: 8px; }
+/* The triage panel's command strip starts where its 44px header ends (the reference's strip sits in the content box below the header). */
+@media (--desktop-layout) { .issue-view--triage .issue-header--triage .issue-command-strip { top: 44px; } }
 .issue-triage-header-button {
   width: 28px;
   height: 28px;

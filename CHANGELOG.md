@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Keep the desktop display options panel, the document info and subscribers popovers and the notification snooze submenu on the device-pixel position the layout gives them (half pixels at 2x) like the reference, which only snaps its menus and pickers to whole pixels; the triage panel's command buttons sit at the end of its 44px header.
 - Match the desktop sidebar team menu and workspace menu to the reference: menu rows use an 8px icon gap, "Leave team…" has no icon column, the open team row's more button keeps no extra fill, and both panels have no padding of their own (6px spacer rows open and close the list).
 - Match the desktop keyboard shortcuts panel to the reference: the title is a content-sized heading centred in the 24px row it shares with the close button (half a pixel lower), keeping the 71px search start.
 - Match the desktop command menu to the reference: the query row and the list lay out at the panel's full 720px border-box width (rows and shortcut hints sit 1px further right) and the list is the panel height minus the 46px query row.

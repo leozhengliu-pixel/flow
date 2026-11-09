@@ -22,7 +22,7 @@ export function MenuSubmenu({ kit: Kit = ContextMenu, label, trigger, children, 
   trigger: ReactNode
   children: ReactNode
   triggerProps?: Omit<ComponentProps<typeof ContextMenu.SubTrigger>, 'ref'> & SubmenuRef & { 'data-menu-item'?: string }
-  contentProps?: Omit<ComponentProps<typeof ContextMenu.SubContent>, 'ref'> & SubmenuRef & { 'data-flow-motion'?: string; 'data-menu'?: string }
+  contentProps?: Omit<ComponentProps<typeof ContextMenu.SubContent>, 'ref'> & SubmenuRef & { 'data-flow-motion'?: string; 'data-menu'?: string; 'data-popper-device-pixels'?: string }
   open?: boolean
   onOpenChange?: (open: boolean) => void
   phoneFilter?: boolean
