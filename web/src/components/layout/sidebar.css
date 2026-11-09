@@ -313,6 +313,8 @@
 .team-links .nav-icon,
 .team-links .nav-icon svg { width: 14px; height: 14px; flex-basis: 14px; }
 .team-cycle-links{position:relative;display:grid;gap:1px;margin-left:-19px;padding-left:19px}.team-cycle-links>.team-sub-link,.team-cycle-links>.sidebar-item-menu-trigger>.team-sub-link{width:calc(100% - 20px);margin-left:20px;padding:0}.team-cycle-links>i{position:absolute;left:31.5px;top:1px;width:1px;height:calc(100% - 2px);border-radius:.5px;background:lch(13.395% 1.48 272);pointer-events:none}
+/* The cycle links' label is the full-width row carrying the item's 6px / 9px padding and 6px column gap. */
+.team-cycle-links .team-sub-link>.nav-label{flex:1 1 auto;box-sizing:border-box;padding:0 9px 0 6px;column-gap:6px}
 
 .try-item { position: relative; height: 28px; }
 .try-item .nav-item { padding-right: 30px; }

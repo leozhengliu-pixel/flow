@@ -57,6 +57,7 @@ const ICONS: Record<string, LucideIcon> = {
   "Create related": SquarePlus,
   "Mark as": Flag,
   "Remove…": CircleMinus,
+  "Remove": CircleMinus,
   "Open in": ExternalLink,
   Unfavorite: Star,
   "Team…": Users,

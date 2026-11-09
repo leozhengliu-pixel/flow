@@ -1,5 +1,5 @@
 import { format, formatDistanceToNow } from 'date-fns'
-import { Archive, Bell, BellOff, CheckCircle2, ChevronRight, Copy, Edit3, Ellipsis, Link2, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
+import { Archive, ArrowUp, Bell, BellOff, CheckCircle2, ChevronRight, Copy, Edit3, Ellipsis, Link2, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
 import type { ActivityEvent, Comment, ThreadSubscription, ThreadSubscriptionState, WorkflowState } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
 import { PersonCardHover } from '@/components/property/assignee-hover-card'
@@ -242,7 +242,7 @@ export function ActivityTimeline({
                       <Avatar id={item.user.id} name={attributedActorName(item.user, item.botActor)} avatarUrl={attributedActorAvatar(item.user, item.botActor)} />
                       <strong data-i18n-ignore>{attributedActorName(item.user, item.botActor)}</strong><ViaApp user={item.user} botActor={item.botActor} />
                       <a href={`#comment-${item.id}`} title={format(new Date(item.createdAt), 'PPpp')}>
-                        {desktop ? activityTimeLabel(item.createdAt, now, locale) : formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
+                        {desktop ? <span>{activityTimeLabel(item.createdAt, now, locale)}</span> : formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
                       </a>
                       {item.editedAt && <span>{t('(edited)')}</span>}
                       <div className="comment-card__actions">
@@ -363,9 +363,16 @@ export function ActivityTimeline({
                         }}
                       />
                     </div>
+                  ) : desktop && replyUser ? (
+                    // The idle desktop reply is a one-line composer: the placeholder, the attach button and a send button that waits for text.
+                    <form className="comment-thread__reply" data-reply-idle="" onSubmit={event => event.preventDefault()} onClick={() => setReplying(item.id)}>
+                      <Avatar id={replyUser.id} name={replyUser.displayName} avatarUrl={replyUser.avatarUrl}/>
+                      <button type="button" className="comment-thread__reply-open" aria-label={t('Reply')}><span>{t('Leave a reply…')}</span></button>
+                      <button type="button" className="comment-thread__reply-tool" aria-label={t('Attach images, files, or videos')}><Paperclip size={14}/></button>
+                      <button type="submit" className="comment-thread__reply-send" aria-label={t('Submit comment')} disabled><ArrowUp size={14}/></button>
+                    </form>
                   ) : (
                     <button type="button" className="comment-thread__reply" aria-label={t('Reply')} onClick={() => setReplying(item.id)}>
-                      {desktop && replyUser && <Avatar id={replyUser.id} name={replyUser.displayName} avatarUrl={replyUser.avatarUrl}/>}
                       <span>{t('Leave a reply…')}</span>
                     </button>
                   )}

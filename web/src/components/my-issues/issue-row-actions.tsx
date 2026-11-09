@@ -184,6 +184,10 @@ function ActionGroups({ row, onDelete }: { row: MyIssuesRowData; onDelete?: () =
       <Item label="Blocking issue…" onSelect={() => createRelated({ related: { issueId: row.id, kind: 'blocking' } })}/>
     </Sub>}
     <Sub label="Mark as">{MARK_AS.map(mark => <Sub key={mark.id} label={mark.label} shortcut={mark.shortcut} issueSearch><IssueSearch data={data} exclude={row.id} onPick={target => markAs(mark, target)}/></Sub>)}</Sub>
+    {(parent || row.parentId || relations.length > 0) && <Sub label="Remove">
+      {row.parentId && <Item label={`Parent issue${parent ? ` ${parent.identifier}` : ''}`} onSelect={() => void update({ parentId: '' }, 'Parent removed')}/>}
+      {relations.map(relation => <Item key={relation.id} label={relationName(relation)} onSelect={() => removeRelation(relation)}/>)}
+    </Sub>}
     <Separator/>
     <Sub label="Copy">
       <Item label="Copy ID" shortcut="⌘ ." onSelect={() => copy(row.identifier, 'ID copied')}/>
@@ -217,10 +221,6 @@ function ActionGroups({ row, onDelete }: { row: MyIssuesRowData; onDelete?: () =
       <Item label="Next week" onSelect={() => remind(nextMonday())}/>
       <Item label="A month from now" onSelect={() => { const date = at(0); date.setMonth(date.getMonth() + 1); remind(date) }}/>
     </Sub>
-    {(parent || row.parentId || relations.length > 0) && <Sub label="Remove…">
-      {row.parentId && <Item label={`Parent issue${parent ? ` ${parent.identifier}` : ''}`} onSelect={() => void update({ parentId: '' }, 'Parent removed')}/>}
-      {relations.map(relation => <Item key={relation.id} label={relationName(relation)} onSelect={() => removeRelation(relation)}/>)}
-    </Sub>}
     {remove && <><Separator/><Item top label="Delete" shortcut="⌘ ⌫" onSelect={remove}/></>}
   </>
 }

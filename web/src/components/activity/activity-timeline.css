@@ -198,7 +198,7 @@
   min-width: 18px;
   flex: 0 0 18px;
   margin-right: 9px;
-  color: var(--on-accent);
+  color: var(--avatar-initials-fg);
   font-size: 8px;
   line-height: 18px;
 }
@@ -218,6 +218,7 @@
   font-size: 13px;
   white-space: nowrap;
 }
+.issue-activity-timeline .comment-thread .comment-card > header > a { margin-left: 8px; color: lch(63.304 1.425 272); font-weight: 450; line-height: normal; }
 .issue-activity-timeline .comment-card__actions {
   display: flex;
   align-items: center;
@@ -294,6 +295,6 @@
 }
 .issue-activity-timeline .comment-thread .comment-reply strong { display: inline; font-size: 13px; line-height: 20px; }
 .issue-activity-timeline .comment-thread .comment-reply > header > .avatar { align-self: center; margin-top: 0; }
-:root[data-theme="light"] .issue-activity-timeline .comment-thread .comment-card > header > .avatar { color: var(--on-accent); }
+:root[data-theme="light"] .issue-activity-timeline .comment-thread .comment-card > header > .avatar { color: var(--avatar-initials-fg); }
 .issue-activity-timeline .timeline-item.agent-session { border-radius: 8px; }
 .issue-activity-timeline .timeline-item.agent-session[data-activity-highlight] { --activity-highlight-inset: ; }

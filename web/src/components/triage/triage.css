@@ -122,6 +122,7 @@
 .flow-triage-row:hover::before { background: var(--triage-row-hover-bg); }
 .flow-triage-row[data-selected]::before,
 .flow-triage-row[data-state='open']::before { background: var(--triage-row-selected-bg); }
+.flow-triage-row[data-selected] :is(.flow-triage-row__id, .flow-triage-row__creator, .flow-triage-row__date) { color: var(--triage-row-selected-meta-fg); }
 .flow-triage-row:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-inset); }
 .flow-triage-row__line { min-width: 0; display: flex; align-items: center; gap: 8px; line-height: 16px; }
 .flow-triage-row__line.is-meta { gap: 6px; }
@@ -145,8 +146,9 @@
   overflow: hidden;
   border-radius: 50%;
   background: var(--avatar-fallback);
-  color: var(--on-accent);
-  font-size: 8px;
+  color: var(--avatar-initials-fg);
+  font-size: 9px;
+  font-weight: 400;
 }
 .flow-triage-row__avatar img { width: 100%; height: 100%; object-fit: cover; }
 .flow-triage-row__creator { min-width: 0; overflow: hidden; color: var(--triage-row-meta-fg); font-size: 12px; font-weight: 450; text-overflow: ellipsis; white-space: nowrap; }
@@ -166,6 +168,7 @@
   .flow-triage-page [data-split-view='triage'] [data-split-view-list] { border-right: .5px solid transparent; }
   .flow-triage-row { margin: 0; padding: 0; justify-content: flex-start; }
   .flow-triage-row__line:not(.is-meta) { height: 16px; margin-top: 10px; }
+  .flow-triage-row__line.is-meta { height: 15px; }
   .flow-triage-row::before { inset-inline: 8px; }
   .flow-triage-row__line { margin-inline: 22px; }
   .flow-triage-row__title { color: var(--bright); line-height: normal; }
@@ -517,7 +520,7 @@ html:root body .triage-snooze-dialog [cmdk-item]:not(#_) { font-size: 15px; }
   .issue-view--triage .issue-mobile-properties .core-property-trigger,
   .issue-view--triage .issue-mobile-properties .label-project-trigger { background: var(--sub-button); }
   .issue-view--triage .issue-mobile-properties .core-property-trigger > span,
-  .issue-view--triage .issue-mobile-properties .label-project-trigger > span { font-weight: 450; }
+  .issue-view--triage .issue-mobile-properties .label-project-trigger > span { font-weight: 450; line-height: normal; }
   .issue-view--triage .issue-mobile-properties .core-property-trigger.muted { color: var(--issue-muted); }
   .issue-view--triage .issue-mobile-properties .core-property-trigger > svg,
   .issue-view--triage .issue-mobile-properties .label-project-trigger > svg { width: 14px; height: 14px; flex-basis: 14px; }

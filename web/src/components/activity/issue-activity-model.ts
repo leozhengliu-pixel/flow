@@ -62,7 +62,7 @@ export function describeIssueActivityParts(event: ActivityEvent, context?: Activ
     return { type: 'issue', id: issue?.id ?? id, label: issue?.identifier ?? t('another issue') }
   }
   if (event.type === 'issue.created') {
-    if (!m.recurringFrom) return text(t('created the issue'))
+    if (!m.recurringFrom) return text(t('created'))
     return mergeText(phrase('created the issue from the recurring schedule of {issue}', { issue: { type: 'issue', id: m.recurringFromId || m.recurringFrom, label: m.recurringFrom } }))
   }
   if (event.type === 'issue.updated') {

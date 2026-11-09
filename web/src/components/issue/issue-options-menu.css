@@ -3,7 +3,7 @@
 .issue-options-popover>[cmdk-root],.issue-options-submenu>[cmdk-root]{display:flex;flex-direction:column;max-height:inherit;min-height:0}
 .issue-options-popover [cmdk-list],.issue-options-submenu [cmdk-list]{padding:6px 0;overflow:auto;min-height:0;scrollbar-width:none}
 .issue-options-filter{position:absolute;left:-99999px;width:1px;height:1px;padding:0;opacity:0}
-.issue-options-item{position:relative;display:flex;align-items:center;gap:8px;height:32px;min-width:0;padding:0 18px 0 14px;border:0;background:transparent;color:var(--issue-menu-text);font-size:13px;font-weight:450;line-height:normal;outline:0;cursor:default}
+.issue-options-item{position:relative;display:flex;align-items:center;gap:8px;height:32px;width:max-content;min-width:100%;padding:0 18px 0 14px;border:0;background:transparent;color:var(--issue-menu-text);font-size:13px;font-weight:450;line-height:normal;outline:0;cursor:default}
 .issue-options-item::before{content:"";position:absolute;inset:0 6px;border-radius:8px;background:transparent;pointer-events:none}
 .issue-options-item>*{position:relative;z-index:1}
 .issue-options-item[data-disabled=true]{opacity:.5}
@@ -57,7 +57,7 @@
 :root[data-theme="light"] .issue-link-dialog{border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-dialog);color:var(--theme-text-primary)}
 :root[data-theme="light"] .issue-link-dialog input{background:var(--theme-surface-1);color:var(--theme-text-primary)}
 /* "Remove ▸": "<Relation> <ID>" then the linked issue's title, muted; the surface grows to 383px, then the title truncates. */
-.issue-options-submenu[data-menu="Remove"]{width:max-content;max-width:383px}
+.issue-options-submenu[data-menu="Remove"]{width:max-content;width:calc-size(max-content,round(size,1px));max-width:383px}
 .issue-options-remove-text{min-width:0;flex:1 1 auto;display:flex;align-items:center;gap:4px}
 .issue-options-remove-text>.issue-options-label{flex:0 1 auto}
 .issue-options-remove-title{min-width:0;flex:1 1 auto;margin-left:4px;overflow:hidden;color:var(--pk-faint);text-overflow:ellipsis;white-space:nowrap}

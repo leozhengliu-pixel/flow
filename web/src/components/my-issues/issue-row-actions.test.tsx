@@ -45,7 +45,7 @@ describe('row context menu', () => {
     for (const label of ['More properties', 'Mark as', 'Copy', 'Convert to', 'Make a copy…', 'Move', 'Open in', 'Favorite', 'Remind me', 'Delete']) expect(await screen.findByText(label)).toBeInTheDocument()
     for (const label of ['Assign to me', 'Archive', 'Relations']) expect(screen.queryByText(label)).not.toBeInTheDocument()
     const labels = screen.getAllByRole('menuitem').map(item => item.querySelector('span:not([aria-hidden])')?.textContent)
-    expect(labels.slice(labels.indexOf('Copy'))).toEqual(['Copy', 'Convert to', 'Make a copy…', 'Move', 'Open in', 'Favorite', 'Subscribe', 'Remind me', 'Remove…', 'Delete'])
+    expect(labels.slice(labels.indexOf('Mark as'))).toEqual(['Mark as', 'Remove', 'Copy', 'Convert to', 'Make a copy…', 'Move', 'Open in', 'Favorite', 'Subscribe', 'Remind me', 'Delete'])
     fireEvent.click(screen.getByText(/^(Subscribe|Unsubscribe)$/))
     expect(onUpdateIssue).toHaveBeenCalledWith(row.id, expect.objectContaining({ subscriberIds: expect.any(Array) }))
   })

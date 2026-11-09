@@ -51,7 +51,7 @@
   .issue-view .issue-document > .composer .composer-tools > button,
   .issue-view .issue-document > .composer .composer-send:disabled { color: var(--issue-muted); }
   .issue-view .issue-activity-timeline .comment-thread { background: var(--issue-comment-bg); }
-  .issue-view .issue-activity-timeline .timeline-item.comment { padding-top: 9px; }
+  .issue-view .issue-activity-timeline .timeline-item.comment { padding-top: 10px; }
   .issue-view .issue-activity-timeline .comment-thread .comment-card { padding: 16px; }
   .issue-view .issue-activity-timeline .comment-thread .comment-body { margin-top: 4px; }
   .issue-view .issue-activity-timeline .comment-card__actions { gap: 0; margin-right: -5px; transform: translateY(-1px); }
@@ -59,7 +59,13 @@
   .issue-view .issue-activity-timeline .comment-thread__reply { position: relative; height: 46.5px; padding: 11px 16px 11px 43px; font: 450 15px/24px var(--font); }
   .issue-view .issue-activity-timeline .comment-thread__reply:not(:hover) { color: var(--issue-desktop-comment-placeholder); }
   .issue-view .comment-thread__reply > span:last-child { letter-spacing: -.1px; }
-  .issue-view .comment-thread__reply > .avatar { position: absolute; left: 16px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); font-size: 8px; }
+  .issue-view .comment-thread__reply > .avatar { position: absolute; left: 16px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); font-size: 9px; font-weight: 400; }
+  .issue-view .issue-activity-timeline .comment-thread__reply[data-reply-idle] { display: flex; align-items: center; gap: 12px; height: 46px; margin-top: .5px; padding: 0; border-top: 0; border-radius: 0; cursor: text; }
+  .issue-view .comment-thread__reply[data-reply-idle]::before { content: ''; position: absolute; inset: -.5px 0 auto; height: .5px; background: var(--theme-border); }
+  .issue-view .comment-thread__reply[data-reply-idle] button { flex: none; width: 24px; height: 24px; display: grid; place-items: center; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--issue-reply-tool-fg); font: 500 12px/normal var(--font); cursor: pointer; transition: border .15s ease, background-color .15s ease, color .15s ease, opacity .15s ease; }
+  .issue-view .comment-thread__reply[data-reply-idle] .comment-thread__reply-open { flex: 1; width: auto; height: 24px; place-items: center start; padding: 0; border: 0; color: inherit; font: inherit; letter-spacing: -.1px; text-align: left; cursor: text; }
+  .issue-view .comment-thread__reply[data-reply-idle] .comment-thread__reply-open { margin-left: 43px; }
+  .issue-view .comment-thread__reply[data-reply-idle] .comment-thread__reply-send { margin-right: 18px; padding: 0; border-radius: 12px; background: var(--issue-reply-send-bg); overflow: hidden; opacity: 1; }
   .issue-view .issue-activity-timeline .activity-event-group { min-height: 36.8px; width: 100%; display: flex; align-items: flex-start; gap: 16px; margin-top: 10px; padding: 2px 0 0 8px; border: 0; background: transparent; color: var(--issue-muted); font: 450 12px/16.8px var(--font); text-align: left; }
   .issue-view .activity-event-group[aria-expanded=true] > svg { transform: rotate(90deg); }
   .issue-view .issue-parent-context { font-size: 13px; font-weight: 450; }

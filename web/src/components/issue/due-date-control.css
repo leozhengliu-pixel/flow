@@ -55,7 +55,9 @@ html:root .due-date-options { padding: 6px 0; }
 .due-date-options button {
   position: relative;
   box-sizing: border-box;
-  width: 100%;
+  /* The panel width is rounded to a whole pixel; the widest row keeps its natural width so its text never wraps. */
+  width: max-content;
+  min-width: 100%;
   height: 32px;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto;

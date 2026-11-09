@@ -3055,6 +3055,7 @@ export const zhCN: Record<string, string> = {
   "Add to milestone…": "添加到里程碑…",
   "Move to milestone…": "移动到里程碑…",
   "Create new sub-issue": "创建子事项",
+  "created": "创建了",
   "created the issue": "创建了该事项",
   "User ID": "用户 ID / 工号",
   "Unknown user": "未知用户",

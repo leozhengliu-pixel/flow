@@ -82,7 +82,7 @@ describe('issue activity timeline', () => {
     const events: ActivityEvent[] = Array.from({ length: 20 }, (_, i) => ({ id: `save-${i}`, createdAt: '2026-09-08T06:00:00Z', type: 'issue.updated', actor: viewer, metadata: { description: 'updated', descriptionBefore: 'old', descriptionStateBefore: 'private snapshot' } }))
     events.unshift({ id: 'created', createdAt: '2026-08-01T00:00:00Z', type: 'issue.created', actor: viewer, metadata: {} })
     const { container } = render(<I18nProvider><ActivityTimeline events={events} comments={[]} viewerId={viewer.id} context={makeBootstrap()} onReply={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} onReaction={vi.fn()}/></I18nProvider>)
-    expect(screen.getByText(/created the issue/)).toBeVisible()
+    expect(screen.getByText(/^created$/)).toBeVisible()
     expect(screen.queryByText(/older activities/)).not.toBeInTheDocument()
     expect(container.querySelectorAll('.timeline-item')).toHaveLength(1)
     expect(container.textContent).not.toMatch(/descriptionBefore|private snapshot|changed description/)

@@ -1146,3 +1146,5 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :root[data-theme="light"]{--agent-slash-bg:lch(100% 0 282);--agent-slash-border:lch(91.9% 0 282);--agent-slash-focus:lch(95% 0 282);--agent-slash-text:lch(10% 0 282);--agent-slash-muted:lch(40% 1 282);--agent-slash-card-text:lch(20% 1 282);--agent-skill-chip-bg:lch(94.5% 0 282);--agent-skill-chip-text:lch(20% 1 282)}
 /* The session page's dragged chat width; unset (the guaranteed-invalid value) falls back to the default column. */
 :root{--cs-agent-panel-override:initial}
+
+:root{--issue-reply-tool-fg:lch(90.826 1.425 272);--issue-reply-send-bg:lch(13.861 1.139 272);--triage-row-selected-meta-fg:lch(65.078 1.425 272)}

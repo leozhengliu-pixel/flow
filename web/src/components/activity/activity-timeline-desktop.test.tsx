@@ -45,7 +45,7 @@ describe('desktop issue activity', () => {
   it('does not group across a comment or include the issue creation row', () => {
     render(<I18nProvider><ActivityTimeline {...props} events={[{ ...event('0'), type: 'issue.created' }, event('1'), event('2'), event('3')]} comments={[comment('middle', '2026-10-01T10:02:30Z')]}/></I18nProvider>)
     expect(screen.queryByRole('button', { name: /Show .* events/ })).not.toBeInTheDocument()
-    expect(screen.getByText(/created the issue/)).toBeVisible()
+    expect(screen.getByText(/^created$/)).toBeVisible()
   })
 
   it('hides only the redundant parent event and renders a fetched issue identifier and title as a plain link', async () => {

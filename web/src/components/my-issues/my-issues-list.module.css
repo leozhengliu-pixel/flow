@@ -68,7 +68,7 @@
 :global(:where(:root[data-theme="light"])) .contextMenu,:global(:where(:root[data-theme="light"])) .contextSubmenu{border-color:var(--lx-popover-border);background:var(--lx-surface);box-shadow:var(--lx-popover-shadow)}
 .menuItem>.menuIcon{width:16px;height:16px;flex:0 0 16px;margin:0 8px 0 0;color:var(--issue-muted)}
 :global(:where(:root[data-theme="light"])) .menuItem>.menuIcon{color:var(--lx-item-icon)}
-.contextMenu{width:max-content;min-width:180px;max-width:calc(100vw - 20px)}
+.contextMenu{width:max-content;width:calc-size(max-content,round(size,1px));min-width:180px;max-width:calc(100vw - 20px)}
 .contextMenu .menuItem>span:not(:only-child){white-space:nowrap}
 .contextMenu .menuItem>kbd{padding-left:12px;white-space:nowrap}
 /* Issue search submenus (set parent, relations): picker header, then status icon, muted identifier, title. */
@@ -216,7 +216,7 @@
 @media(min-width:1024px){
   .contextMenu{min-width:175px;max-height:calc(100dvh - 20px);padding:0}
   .contextMenuList{padding:6px 0}
-  .contextSubmenu:not(.issueSubmenu){width:max-content;min-width:175px;padding:0}
+  .contextSubmenu:not(.issueSubmenu){width:max-content;width:calc-size(max-content,round(size,1px));min-width:175px;padding:0}
   .contextMenu .menuItem>kbd{padding-left:0;font-size:11px;line-height:12.1px}
   .menuChevron{box-sizing:content-box;display:grid;place-items:center;width:16px;height:16px}
   .menuItem>kbd+.menuChevron{margin-left:6px;padding-left:0}
