@@ -158,6 +158,15 @@ html:root body .command-dialog [cmdk-item][data-selected=true] .estimate-icon {
    reference app's 13px/15.6px rows and 12px group headers. The Ask Flow hint sits
    over the query row's right edge instead of shrinking the input. */
 @media (--desktop-layout) {
+  /* The reference lays its input row and list out at the panel's full 720px border-box width, so the hairline border
+     sits over the right edge of the content instead of shrinking it; the list is the panel height minus the 46px
+     input row. */
+  .command-dialog > [cmdk-root] {
+    width: calc(100% + 1px);
+  }
+  .command-dialog [cmdk-list] {
+    max-height: min(404px, calc(76vh - 46px));
+  }
   html:root body .command-dialog .command-input {
     position: relative;
     padding: 6px 5px 0 6px;
