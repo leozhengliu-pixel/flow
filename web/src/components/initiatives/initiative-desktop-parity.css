@@ -6,7 +6,8 @@
   .li-detail-header > .li-detail-copy { width: 24px; height: 24px; }
   .li-detail .li-detail-all, .li-detail .li-detail-separator { display: none; }
   .li-page .li-row { padding-right: 0; }
-  .li-page .li-row, .li-page .li-columns { column-gap: 12px; }
+  .li-page .li-row, .li-page .li-columns { column-gap: 6px; }
+  .li-page .li-toolbar-actions .li-icon-button { background: var(--project-toolbar-bg); color: var(--project-toolbar-icon-fg); }
   .li-page .li-columns button { padding-inline: 6px; }
   .li-page .li-columns button:not([aria-label="Order by Name"]) { margin-inline: -6px; }
   .li-page .li-columns { color: var(--issue-muted); font-weight: 450; }
