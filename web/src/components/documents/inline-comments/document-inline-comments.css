@@ -251,6 +251,7 @@
 @media (--desktop-layout) {
   .document-thread-avatar { font-weight: 400; }
   .document-thread-card .composer-submit { margin-right: -2px; }
+  .document-thread-card .comment-prosemirror p.is-editor-empty:first-child::before { color: var(--pk-faint); }
   .document-thread-card .composer-submit .composer-send { padding: 0 2px; }
   .document-thread-card .composer.compact { overflow: visible; }
   .document-thread-card .composer-submit .composer-send:disabled { background: var(--document-desktop-send-bg); color: var(--action-menu-muted); }
