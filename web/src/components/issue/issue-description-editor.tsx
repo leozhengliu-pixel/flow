@@ -593,7 +593,8 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       const trigger = current.view.coordsAtPos(next.range.from)
       const triggerBox = compactInsertMenu ? current.view.dom.querySelector('.description-slash-trigger')?.getBoundingClientRect() : undefined
       const left = Math.max(8, Math.min(triggerBox?.left ?? trigger.left - 3, window.innerWidth - width - 8))
-      const top = caret.bottom + 6
+      // The compact (document) insert menu hangs 4px under the slash chip; the issue description menu keeps 6px under the caret.
+      const top = caret.bottom + (compactInsertMenu ? 4 : 6)
       const caretTop = caret.top
       setMenuPosition(position => position.left === left && position.top === top && position.caretTop === caretTop ? position : { left, top, caretTop })
     })
