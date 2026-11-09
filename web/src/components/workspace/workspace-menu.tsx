@@ -46,6 +46,11 @@ export function WorkspaceMenu({
   const [switching, setSwitching] = useState(false);
   const switchFrame = useRef<number | undefined>(undefined);
   const sequence = useRef<{ key: string; at: number }>({ key: "", at: 0 });
+  // Set by O then W while the menu is closed: the content then mounts with the
+  // cascade trigger focused and its submenu open, so the opening focus never lands on the first item.
+  const cascadeOnOpen = useRef(false);
+  const openRef = useRef(false);
+  useEffect(() => { openRef.current = open }, [open]);
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
       if (isEditable(event.target)) return;
@@ -68,8 +73,10 @@ export function WorkspaceMenu({
         now - sequence.current.at < 900
       ) {
         event.preventDefault();
+        const wasOpen = openRef.current;
         setOpen(true);
         if (phone) setSwitching(true);
+        else if (!wasOpen) cascadeOnOpen.current = true;
         else {
           window.cancelAnimationFrame(switchFrame.current ?? 0);
           switchFrame.current = window.requestAnimationFrame(() => {
@@ -135,7 +142,7 @@ export function WorkspaceMenu({
   };
   return (
     <>
-      <DropdownMenu open={open} onOpenChange={next => { setOpen(next); if (!next) { window.cancelAnimationFrame(switchFrame.current ?? 0); setSwitching(false) } }}>
+      <DropdownMenu open={open} onOpenChange={next => { setOpen(next); if (!next) { cascadeOnOpen.current = false; window.cancelAnimationFrame(switchFrame.current ?? 0); setSwitching(false) } }}>
         <DropdownMenuTrigger
           className="workspace-menu-trigger"
           aria-label={`${workspace.name} ${t('Workspace Menu')}`}
@@ -148,6 +155,13 @@ export function WorkspaceMenu({
           align="start"
           sideOffset={4}
           className="workspace-primary-menu"
+          onOpenAutoFocus={event => {
+            if (!cascadeOnOpen.current) return
+            cascadeOnOpen.current = false
+            event.preventDefault()
+            document.querySelector<HTMLElement>('[data-workspace-switch-trigger]')?.focus({ preventScroll: true })
+            setSwitching(true)
+          }}
           onPointerMove={event => {
             const item = (event.target as Element).closest<HTMLElement>('[role="menuitem"]')
             if (switching && item && !item.hasAttribute('data-workspace-switch-trigger') && !item.hasAttribute('data-disabled')) { setSwitching(false); item.focus({ preventScroll: true }) }

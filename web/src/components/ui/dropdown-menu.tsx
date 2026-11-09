@@ -30,7 +30,8 @@ export function DropdownMenuTrigger({ asChild, onClick, ...props }: P.DropdownMe
   return <Trigger type="button" aria-haspopup="dialog" aria-expanded={menu.open} data-state={menu.open ? 'open' : 'closed'} {...props} onClick={event => { onClick?.(event); if (!event.defaultPrevented) menu.setOpen(!menu.open) }}/>
 }
 
-export function DropdownMenuContent({ className, sideOffset = 6, children, ...props }: P.DropdownMenuContentProps) {
+// Radix forwards onOpenAutoFocus to the menu content but leaves it out of the DropdownMenu prop type.
+export function DropdownMenuContent({ className, sideOffset = 6, children, ...props }: P.DropdownMenuContentProps & { onOpenAutoFocus?: (event: Event) => void }) {
   const menu = useContext(PhoneMenuContext)
   if (menu) return <PhoneDropdownMenuContent menu={menu} label={props['aria-label']} onCloseAutoFocus={props.onCloseAutoFocus}>{children}</PhoneDropdownMenuContent>
   return <P.Portal><P.Content data-flow-motion="floating" sideOffset={sideOffset} className={cn('menu-content',className)} {...props}>{children}</P.Content></P.Portal>

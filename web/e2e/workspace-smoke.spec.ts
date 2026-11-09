@@ -74,7 +74,7 @@ test('streams Agent reasoning, tools, and text into the conversation', async ({ 
   const editor = page.getByRole('textbox', { name: 'Send a message to Flow AI' })
   await expect(editor).toHaveAttribute('contenteditable', 'true')
   await editor.fill('Review the workspace')
-  await page.getByRole('button', { name: 'Submit comment' }).click()
+  await page.getByRole('button', { name: 'Send message' }).click()
   await expect(page.getByRole('heading', { name: 'Result' })).toBeVisible()
   // Tool calls are flat rows inside the "Worked for N seconds" group, which may
   // already be open; provider reasoning stays hidden (agent-work-group.tsx).

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -67,6 +67,23 @@ describe("workspace menu", () => {
     expect(onLogout).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(window, { key: "Œ", code: "KeyQ", altKey: true, shiftKey: true });
     expect(onLogout).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens O then W with focus on Switch workspace and the submenu open, never on the first item', async () => {
+    const data = makeBootstrap({ viewerRole: 'member' });
+    const account = { viewer, workspaces: [{ workspace: data.workspace, role: 'Member', joinedAt: '' }] } as unknown as AccountBootstrap;
+    render(<WorkspaceMenu account={account} data={data} onSettings={vi.fn()} onSwitch={vi.fn()} onCreate={vi.fn()} onLogout={vi.fn().mockResolvedValue(undefined)} />);
+    const settingsFocus = vi.fn();
+    document.addEventListener('focusin', event => { if ((event.target as Element).textContent?.startsWith('Settings') && (event.target as Element).getAttribute('role') === 'menuitem') settingsFocus() });
+    fireEvent.keyDown(window, { key: 'o' });
+    fireEvent.keyDown(window, { key: 'w' });
+    const trigger = await screen.findByRole('menuitem', { name: /Switch workspace/ });
+    await waitFor(() => expect(trigger).toHaveFocus());
+    await waitFor(() => expect(trigger).toHaveAttribute('data-state', 'open'));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 80)) });
+    expect(settingsFocus).not.toHaveBeenCalled();
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute('data-state', 'open');
   });
 
   it('replaces the workspace name with an Offline pill while the browser is offline', () => {
