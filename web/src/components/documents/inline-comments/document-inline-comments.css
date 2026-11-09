@@ -47,7 +47,7 @@
 }
 
 /* Narrow pages (and with the agent rail open): no room beside the text, so the open thread (or the composer) is a 360px
-   popover 5px under the text it is about, 12.5px left of the selection. Other threads stay hidden until clicked. */
+   popover 5px under the text it is about, 12px left of the selection. Other threads stay hidden until clicked. */
 .document-inline-gutter.is-popover { left: 0; width: 100%; height: 0; }
 .document-inline-gutter.is-popover .document-thread-card {
   width: 360px;
@@ -250,7 +250,7 @@
 
 @media (--desktop-layout) {
   .document-thread-avatar { font-weight: 400; }
-  .document-thread-card .composer-submit { margin-right: -4px; }
+  .document-thread-card .composer-submit { margin-right: -2px; }
   .document-thread-card .composer-submit .composer-send { padding: 0 2px; }
   .document-thread-card .composer.compact { overflow: visible; }
   .document-thread-card .composer-submit .composer-send:disabled { background: var(--document-desktop-send-bg); color: var(--action-menu-muted); }

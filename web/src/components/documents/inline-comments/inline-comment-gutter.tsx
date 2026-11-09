@@ -38,9 +38,9 @@ const MAX_QUOTE = 4000
 
 /** Viewports narrower than this (CSS px; the reference app flips between 1230 and 1232) show the open thread as a popover, not a gutter card. */
 export const GUTTER_MIN_VIEWPORT = 1232
-/** The popover is 360px wide, starts 12.5px left of the text it is about and sits just under it. */
+/** The popover is 360px wide, starts 12px left of the text it is about and sits just under it. */
 const POPOVER_WIDTH = 360
-const POPOVER_INSET = 12.5
+const POPOVER_INSET = 12
 const POPOVER_GAP = 8
 
 /** The open thread a `#comment-<id>` deep link points at (the link may name the thread's root or one of its replies). */
@@ -264,7 +264,7 @@ export function InlineCommentGutter({ comments, viewer, users, editor, shell, dr
     } catch { return 0 }
   }, [editor, shell])
 
-  /** Popover placement: under the text of the range, 12.5px left of it, kept inside the page. */
+  /** Popover placement: under the text of the range, 12px left of it, kept inside the page. */
   const popoverStyle = useCallback((range: AnchorRange | undefined): React.CSSProperties => {
     if (!editor || editor.isDestroyed || !shell || !range) return { top: 0, left: 0 }
     try {
