@@ -37,11 +37,16 @@
   .project-details-sidebar__section > header > .project-details-sidebar__see-all { color: var(--pd-label) !important; }
   .project-detail-page__toolbar { height: 43.5px; flex-basis: 43.5px; border-bottom-width: 0; }
   .project-activity { padding-top: 44px; }
+  :root .project-detail-page__toolbar-button.ui-pill { --ui-pill-bg: var(--project-toolbar-bg); }
+  :root .project-detail-page__toolbar-actions > button[aria-label="Display options"]:not(:hover, [data-state="open"], [aria-expanded="true"]) { background: var(--project-toolbar-bg); }
+  .project-activity__composer > header { height: 24px; }
   .project-activity__composer > footer { padding-bottom: 12px; }
+  .project-activity__composer > footer button { box-sizing: border-box; border: .5px solid transparent; }
   .project-activity__composer > footer button.is-submit { padding-inline: 8px; }
-  .project-activity__composer > header > div { background: var(--project-activity-tabs-bg); border-color: var(--project-activity-tabs-border); }
-  .project-activity__composer > header > div button { color: var(--phone-project-panel-label); }
-  .project-activity__composer > header > div button[aria-selected="true"] { background: var(--project-activity-tab-selected-bg); box-shadow: var(--project-activity-tab-selected-shadow); color: var(--phone-project-panel-text); }
+  .project-activity__composer > header > div { height: 24px; border-width: 0; background: var(--project-activity-tabs-bg); border-color: var(--project-activity-tabs-border); }
+  .project-activity__composer > header > div button { position: relative; isolation: isolate; color: var(--phone-project-panel-label); }
+  .project-activity__composer > header > div button[aria-selected="true"] { background: transparent; color: var(--phone-project-panel-text); }
+  .project-activity__composer > header > div button[aria-selected="true"]::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--project-activity-tab-selected-bg); box-shadow: var(--project-activity-tab-selected-shadow); }
   .project-activity__composer > footer > div button.project-activity__attach { padding: 0 2px; }
   .project-detail-page__toolbar-actions > [data-project-insights] { order: -1; }
   .project-overview__property-section,

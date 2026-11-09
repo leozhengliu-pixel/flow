@@ -24,7 +24,12 @@
   .li-page .li-health.is-onTrack .li-phone-health { color: var(--project-health-on-track); }
   .li-page .li-health.is-atRisk .li-phone-health { color: var(--project-health-at-risk); }
   .li-page .li-health.is-offTrack .li-phone-health { color: var(--project-health-off-track); }
-  .li-detail-toolbar { height: 43.5px; flex-basis: 43.5px; padding: 0 8px; border-bottom-color: transparent; }
+  .li-detail-toolbar { height: 43.5px; flex-basis: 43.5px; padding: 0 8px; border-bottom-width: 0; }
+  .li-overview .li-properties .lp-project-property-trigger,
+  .li-overview .li-properties .lp-project-property-trigger > span:last-child { color: var(--text); }
+  .li-overview .li-resource-add > span { color: var(--issue-dim); }
+  .li-detail .li-initiative-projects > header > h2,
+  .li-latest-update__body, .li-latest-update__body p { color: var(--text); }
   .li-detail-toolbar nav { gap: 4px; }
   .li-detail-toolbar nav > a { box-sizing: border-box; height: 28px; padding: 0 10px; border: .5px solid transparent; border-radius: 9999px; font: 500 12px var(--font); line-height: normal; }
   .li-detail .li-detail-toolbar button { height: 28px; padding-inline: 2px; }
@@ -41,8 +46,8 @@
   .li-overview-title { margin-bottom: 20px; }
   .li-overview-title > .li-overview-icon { box-sizing: border-box; width: 36px; height: 36px; margin: 0 0 12px; padding: 0 8px; transform: none; border-radius: 6px !important; background: color-mix(in srgb, var(--view-color) 17.5%, transparent) !important; }
   .li-overview-icon > svg { width: 24px; height: 24px; }
-  .li-detail .li-title-input { height: 32px; padding: 0; transform: none; font: 600 24px/32px var(--font); letter-spacing: 0; }
-  .li-detail .li-summary-input { height: 23px; margin-top: 4px; padding: 0; transform: none; font: 450 15px/23px var(--font); letter-spacing: 0; }
+  .li-detail .li-title-input { height: 32px; padding: 0; transform: none; font: 600 24px/32px var(--font); letter-spacing: -.16px; }
+  .li-detail .li-summary-input { height: 23px; margin-top: 4px; padding: 0; transform: none; font: 450 15px/23px var(--font); letter-spacing: -.1px; }
   .li-overview > section { min-height: 28px; gap: 16px; margin-top: 12px; padding: 0; }
   .li-overview > section:first-of-type { margin-top: 0; }
   .li-overview .li-resources__content { min-height: 28px; margin: 0; }
@@ -118,7 +123,7 @@
   .li-detail-sidebar .li-target-glyph { width: 16px; height: 16px; }
   .li-detail-sidebar .label-project-picker { padding: 0; }
   .li-detail-sidebar .labels-picker[data-empty="true"] .issue-label-chips { display: none; }
-  .li-detail-sidebar .label-project-trigger { gap: 6px; color: var(--phone-project-panel-label); font-size: 12px; font-weight: 450; }
+  .li-detail-sidebar .label-project-trigger { gap: normal 6px; color: var(--phone-project-panel-label); font-size: 12px; font-weight: 450; }
   .li-detail-sidebar .label-project-trigger > svg { width: 16px; height: 16px; }
   .li-detail-sidebar .flow-disclosure-triangle { width: 16px; height: 16px; }
   .li-detail-sidebar > section:first-child dt:has(+ dd .li-properties--leadTeam),
