@@ -126,7 +126,7 @@ export function DocumentMenuItems({ ctx, document, variant, team, showAuthorName
     {variant === 'page' && !phone && onToggleAuthorNames && <FlowMenuItem icon={<FlowGlyph name="creator"/>} label={showAuthorNames ? 'Hide author names' : 'Show author names'} shortcut="⇧ A" onSelect={onToggleAuthorNames}/>}
     <FlowMenuItem icon={<IssueActionGlyph label="Show document history" fallback={null}/>} label="Show document history" onSelect={() => ui('history')}/>
     {!phone && access}
-    {!phone && <FlowMenuSeparator/>}
+    {!phone && canDelete && <FlowMenuSeparator/>}
     {canDelete && <FlowMenuItem icon={<FlowGlyph name="delete"/>} label="Delete" onSelect={() => void deleteDocumentWithConfirm(ctx, document, onDeleted)}/>}
     {phone && access}
   </>
