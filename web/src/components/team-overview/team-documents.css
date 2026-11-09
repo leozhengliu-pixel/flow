@@ -304,7 +304,7 @@
   .team-docs-row { margin-inline: 0; }
   .team-docs-row-inner { padding-inline: 18px; column-gap: 6px; }
   .team-docs-check { flex-basis: 22px; width: 22px; }
-  .team-docs-title > .team-docs-icon { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; margin: -4px; padding: 0; border: 0; border-radius: 4px; background: transparent; }
+  .team-docs-title > .team-docs-icon { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; margin: -4px; padding: 0 8px; justify-content: center; border: 0; border-radius: 4px; background: transparent; }
   .team-docs-icon > svg { width: 16px; height: 16px; flex: none; }
   .team-docs-icon:hover { background: var(--theme-surface-hover); }
   .team-docs-date { flex-basis: 120px; width: 120px; }
