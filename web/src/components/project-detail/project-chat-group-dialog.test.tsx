@@ -98,3 +98,19 @@ it('shows the placeholder on the phone select while no option is chosen', () => 
     expect(native.selectedOptions[0]).toHaveTextContent('Select group')
   } finally { window.matchMedia = original }
 })
+
+it("starts on the project's only shareable team", async () => {
+  const form = await openForm()
+  expect(within(form).getByRole('combobox', { name: 'Team' })).not.toHaveTextContent('Select team')
+})
+
+it('saves the project scope after the team is picked', async () => {
+  const save = vi.spyOn(api, 'saveChatBinding').mockResolvedValue({})
+  const form = await openForm()
+  const user = userEvent.setup()
+  await user.click(await within(form).findByRole('combobox', { name: 'Group' }))
+  await user.click(await screen.findByRole('option', { name: 'Room' }))
+  await user.click(within(form).getByLabelText(/I approve sharing/))
+  await user.click(within(form).getByRole('button', { name: 'Save group binding' }))
+  expect(save).toHaveBeenCalledWith('feishu', expect.objectContaining({ chatId: 'oc_room', projectIds: [project.id] }))
+})

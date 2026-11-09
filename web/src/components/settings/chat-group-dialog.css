@@ -48,6 +48,9 @@
 .chat-group-dialog .chat-integration-settings .chat-muted { color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
 .chat-group-dialog .feature-button.chat-group-dialog__connect { display: inline-flex; margin: 16px; }
 
+/* The dialog sits at z-index 701 (overlay 700); the shared select's menu is portaled to the body at 500, i.e. under the overlay, so its options could not be clicked. The popper wrapper copies this z-index. */
+body:has(.chat-group-dialog) .settings-select-menu { z-index: 1100; }
+
 /* The notification options: the panel's own checkbox rows. */
 .chat-group-dialog__options { padding: 16px; border-bottom: .5px solid var(--popover-divider); }
 .chat-group-dialog__options h2 { margin: 0 0 8px; color: var(--action-menu-active-text); font-size: 12px; font-weight: 500; line-height: 14.5px; }
@@ -58,20 +61,22 @@
 .chat-group-dialog__options [role=checkbox][data-checked=true] { border-color: var(--activity-highlight-color); background: var(--activity-highlight-color); }
 .chat-group-dialog__options [role=checkbox]:disabled { cursor: not-allowed; opacity: .45; }
 
-/* Rows: a stacked row puts its control under the label; an inline row (switch, fixed value, binding) keeps it on the right. */
-.chat-group-dialog .chat-integration-settings .feature-row { min-height: 0; flex-direction: column; align-items: stretch; gap: 8px; padding: 2px 0; border: 0; }
-.chat-group-dialog .chat-integration-settings .feature-row.chat-inline,
-.chat-group-dialog .chat-integration-settings .feature-row:has(.chat-fixed-value) { flex-direction: row; align-items: center; gap: 24px; padding: 0; }
-.chat-group-dialog .chat-integration-settings .feature-row > div { gap: 4px; }
+/* Rows: the copy on the left and the control on the right, as the panel's "Update schedule" row sets its Change button. A select is the same 24px pill as the buttons, so a row stays one line tall. */
+.chat-group-dialog .chat-integration-settings .feature-row { min-height: 24px; flex-direction: row; align-items: center; gap: 24px; padding: 0; border: 0; }
+.chat-group-dialog .chat-integration-settings .feature-row > div { flex: 1 1 auto; gap: 4px; }
 .chat-group-dialog .chat-integration-settings .feature-row strong { color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
 .chat-group-dialog .chat-integration-settings .feature-row span { color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
-.chat-group-dialog .chat-integration-settings .feature-row aside { width: 100%; justify-content: flex-start; }
-.chat-group-dialog .chat-integration-settings .feature-row.chat-inline aside,
-.chat-group-dialog .chat-integration-settings .feature-row:has(.chat-fixed-value) aside { width: auto; justify-content: flex-end; }
-.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select { flex: 1; width: auto; min-width: 0; }
-.chat-group-dialog .chat-integration-settings .feature-row aside .chat-projects-picker { width: 100%; }
-.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select-native-wrap { flex: 1; width: auto; min-width: 0; }
-.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select-native-wrap > .settings-select-native { width: 100%; }
+.chat-group-dialog .chat-integration-settings .feature-row aside { flex: none; width: auto; max-width: 60%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select { width: auto; max-width: 180px; min-width: 96px; height: 24px; padding: 0 22px 0 8px; border-radius: 9999px; font-size: 12px; font-weight: 500; line-height: normal; }
+.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select > span:last-child { right: 8px; }
+/* A select row with a description puts the select under it, so the copy keeps the dialog's width. */
+.chat-group-dialog .chat-integration-settings .feature-row:not(.chat-inline):has(> div > span) { flex-wrap: wrap; row-gap: 8px; }
+.chat-group-dialog .chat-integration-settings .feature-row:not(.chat-inline):has(> div > span) > div { flex-basis: 100%; }
+.chat-group-dialog .chat-integration-settings .feature-row:not(.chat-inline):has(> div > span) aside { max-width: 100%; justify-content: flex-start; }
+.chat-group-dialog .chat-integration-settings .feature-row aside .chat-projects-picker { width: auto; max-width: 180px; }
+.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select-native-wrap { width: auto; max-width: 100%; height: 28px; }
+.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select-native-wrap > .settings-select-native { width: 100%; max-width: 100%; height: 28px; padding: 0 26px 0 10px; text-overflow: ellipsis; border-radius: 9999px; font-size: 12px; font-weight: 500; }
+.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select-native-wrap > span { height: 28px; right: 8px; }
 .chat-group-dialog .chat-integration-settings .chat-fixed-value { max-width: 160px; overflow: hidden; color: var(--action-menu-muted); font-size: 12px; font-weight: 450; text-overflow: ellipsis; white-space: nowrap; }
 .chat-group-dialog .chat-integration-settings .chat-binding-row strong { color: var(--action-menu-active-text); font-weight: 500; }
 .chat-group-dialog .chat-integration-settings .chat-binding-row .chat-binding-scope,

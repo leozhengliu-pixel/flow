@@ -129,7 +129,12 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
   const inDialog = useInChatGroupDialog();
   const { chats, cursor, hasMore, loading, error, loadChats } = useBotChats(provider);
   const [chatId, setChatId] = useState(binding?.chatId ?? "");
-  const [teamId, setTeamId] = useState(binding?.teamId ?? fixedTeamId ?? "");
+  const [teamId, setTeamId] = useState(() => {
+    if (binding?.teamId ?? fixedTeamId) return binding?.teamId ?? fixedTeamId ?? "";
+    // A project's dialog starts on its only shareable team.
+    const own = fixedProjectId ? data.projects.find((project) => project.id === fixedProjectId)?.teamIds.filter((id) => bindableTeamIds.includes(id)) ?? [] : [];
+    return own.length === 1 ? own[0] : "";
+  });
   const [projectIds, setProjectIds] = useState<string[]>(bindingProjectIds(binding) ?? (fixedProjectId ? [fixedProjectId] : []));
   const [templateId, setTemplateId] = useState(binding?.templateId ?? "");
   const [events, setEvents] = useState<ChatIntegrationEvent[]>(binding?.events ?? defaultEvents ?? ["issue.created", "issue.status_changed", "issue.assignee_changed"]);
@@ -192,7 +197,7 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
         {hasMore && <FieldRow label={<span className="chat-muted">{t("More groups are available.")}</span>}><button type="button" className="feature-button" disabled={loading || !cursor} onClick={() => void loadChats(cursor)}>{t("Load more groups")}</button></FieldRow>}
         {fixedTeamId
           ? <FieldRow label={t("Team")} description={!teams.length ? t("You can't bind groups for this team.") : undefined}><span className="chat-fixed-value" data-i18n-ignore>{fixedTeam?.name}</span></FieldRow>
-          : <FieldRow label={t("Team")} description={!teams.length ? t("No teams you manage can be shared.") : undefined}><SettingsSelect label={t("Team")} options={teams.map((team) => ({ value: team.id, label: team.name, entityName: true }))} value={teamId || NO_SELECTION} placeholder={t("Select team")} disabled={!teams.length} onChange={(value) => { setTeamId(value); setProjectIds([]); setTemplateId(""); setRequestTemplateId(""); setApproved(false); }} /></FieldRow>}
+          : <FieldRow label={t("Team")} description={!teams.length ? t("No teams you manage can be shared.") : undefined}><SettingsSelect label={t("Team")} options={teams.map((team) => ({ value: team.id, label: team.name, entityName: true }))} value={teamId || NO_SELECTION} placeholder={t("Select team")} disabled={!teams.length} onChange={(value) => { setTeamId(value); setProjectIds(fixedProjectId ? [fixedProjectId] : []); setTemplateId(""); setRequestTemplateId(""); setApproved(false); }} /></FieldRow>}
         {fixedProjectId
           ? <FieldRow label={t("Project")}><span className="chat-fixed-value" data-i18n-ignore>{fixedProject?.name}</span></FieldRow>
           : <FieldRow label={t("Projects")} description={t("Updates and group actions cover the issues of these projects only.")}><ChatProjectsPicker projects={projects} selectedIds={projectIds} onChange={(ids) => { setProjectIds(ids); setTemplateId(""); setRequestTemplateId(""); setApproved(false); }} /></FieldRow>}

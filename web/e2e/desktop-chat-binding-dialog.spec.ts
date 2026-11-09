@@ -78,17 +78,16 @@ for (const theme of ['light', 'dark']) {
         const inline = root.querySelector('.feature-row.chat-inline')!
         const inlineAside = inline.querySelector('aside')!.getBoundingClientRect()
         const inlineCopy = inline.querySelector('div')!.getBoundingClientRect()
-        return { outside, bigIcons: chevrons.length, selectHeight: select.height, selectWidth: select.width, toggleWidth: toggle.width, toggleHeight: toggle.height, stackedGap: stackedControl.top - stackedCopy.bottom, stackedLeft: [stackedCopy.left, stackedControl.left], inlineGap: inlineAside.left - inlineCopy.right, inlineSameRow: Math.abs(inlineAside.top + inlineAside.height / 2 - (inlineCopy.top + inlineCopy.height / 2)) < 1.5, scrolls: root.scrollWidth > root.clientWidth + 1 }
+        return { outside, bigIcons: chevrons.length, selectHeight: select.height, selectWidth: select.width, toggleWidth: toggle.width, toggleHeight: toggle.height, selectRow: { sameLine: Math.abs(stackedControl.top + stackedControl.height / 2 - (stackedCopy.top + stackedCopy.height / 2)) < 1.5, controlRight: Math.round((box.right - stackedControl.right) * 100) / 100, height: Math.round(select.height * 100) / 100 }, inlineGap: inlineAside.left - inlineCopy.right, inlineSameRow: Math.abs(inlineAside.top + inlineAside.height / 2 - (inlineCopy.top + inlineCopy.height / 2)) < 1.5, scrolls: root.scrollWidth > root.clientWidth + 1 }
       })
       expect(geometry.outside).toEqual([])
       expect(geometry.bigIcons).toBe(0)
       expect(geometry.scrolls).toBe(false)
-      expect(geometry.selectHeight).toBeLessThanOrEqual(36)
+      expect(geometry.selectHeight).toBe(24)
       expect(geometry.selectWidth).toBeGreaterThan(80)
       expect([geometry.toggleWidth, geometry.toggleHeight]).toEqual([30, 20])
-      // A stacked row (a select) puts the control 8px under its label; an inline row (a switch) keeps the label left of the control.
-      expect(geometry.stackedGap).toBe(8)
-      expect(geometry.stackedLeft[0]).toBe(geometry.stackedLeft[1])
+      // Every row keeps its label on the left and its control on the right of the same line; a select is the panel's 24px pill, 16px inside the .5px border.
+      expect(geometry.selectRow).toEqual({ sameLine: true, controlRight: 16.5, height: 24 })
       expect(geometry.inlineSameRow).toBe(true)
       expect(geometry.inlineGap).toBeGreaterThanOrEqual(24)
 
