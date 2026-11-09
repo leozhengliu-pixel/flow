@@ -269,8 +269,8 @@ test('shows persisted initiative updates with a docked, collapsible properties a
     await expect(heading).toHaveCSS('padding', '0px 12px 0px 0px')
   }
   await expect(page.locator('.li-active-projects')).toHaveCSS('min-width', '32px')
-  await expect(page.locator('.li-row')).toHaveCSS('column-gap', '12px')
-  await expect(page.locator('.li-columns')).toHaveCSS('column-gap', '12px')
+  await expect(page.locator('.li-row')).toHaveCSS('column-gap', '6px')
+  await expect(page.locator('.li-columns')).toHaveCSS('column-gap', '6px')
   await expect(page.getByRole('button', { name: 'Order by Status', exact: true })).toHaveCSS('margin', '0px -6px')
   await expect(page.locator('.li-cell--status')).toHaveCSS('width', '100px')
   await expect(page.locator('.li-cell--priority')).toHaveCSS('width', '56px')
