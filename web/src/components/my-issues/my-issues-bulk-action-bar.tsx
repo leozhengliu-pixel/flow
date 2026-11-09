@@ -74,7 +74,7 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
   const options = pendingAction ? actionOptions?.(pendingAction) ?? [] : []
   return <>
     <div className={styles.bar} role="toolbar" aria-label={`${count} selected issues`} data-my-issues-bulk-bar="true" data-error={Boolean(error)}>
-      <span className={styles.count}>{loading ? 'Updating...' : `${count}\u00a0selected`}</span>
+      <span className={styles.count}>{loading ? 'Updating...' : <><span className={styles.countNumber}>{count}</span>{' selected'}</>}</span>
       <button className={styles.actionsButton} aria-label={t('Open command menu')} aria-expanded={open} disabled={loading} onClick={() => setOpen(true)}>{t('Actions')}<span className={styles.desktopShortcut} aria-hidden="true"><CommandIcon size={14}/></span><ChevronRight className={styles.phoneChevron} size={12}/></button>
       <button className={styles.iconButton} aria-label="Ask Flow" tabIndex={-1} disabled={loading} onClick={() => { setAgentIssues([...selectedIssues]); setAgentOpen(true); onAskFlow?.(selectedIssues) }}><AgentPointerIcon/></button>
       <button className={styles.clearButton} aria-label="Clear selected" disabled={loading} onClick={onClear}><X size={15}/></button>

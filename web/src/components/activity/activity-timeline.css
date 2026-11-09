@@ -219,6 +219,8 @@
   white-space: nowrap;
 }
 .issue-activity-timeline .comment-thread .comment-card > header > a { margin-left: 8px; color: lch(63.304 1.425 272); font-weight: 450; line-height: normal; }
+/* "via <app>" continues the name like the reference's inline run: same weight and ink as the time, the separating space kept. */
+.issue-activity-timeline .comment-thread .comment-card > header > span.via-app { margin-left: 0; color: lch(63.304 1.425 272); font-weight: 500; white-space: pre; }
 .issue-activity-timeline .comment-card__actions {
   display: flex;
   align-items: center;
