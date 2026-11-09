@@ -20,6 +20,19 @@ test('an always-ask connector tool is held and its approved call carries the app
   assert.equal(await server.toolMetaResolver({ runContext, serverName: 'flow', toolName: 'external_auto', arguments: {} }), undefined)
 })
 
+// file_request (a request filed from a Lark or Feishu group) is a Flow session tool that Flow lists as always
+// asking: it is held like an always-ask connector tool and its approved call carries the approval.
+test('a Flow session tool that always asks is held and its approved call carries the approval', async () => {
+  const server = flowMcpServer('http://flow.invalid', 'flowrun_test') as any
+  const context = newRunContext('s', 'file this as a request', [])
+  const runContext = { context }
+  const filing = { name: 'file_request', inputSchema: { type: 'object' }, _meta: { 'flow/approval': 'always' } }
+  assert.equal(await server.toolFilter({ runContext, agent: {}, serverName: 'flow' }, filing), true)
+  assert.equal(approvalKind(context, 'file_request'), 'flow')
+  assert.deepEqual(await server.toolMetaResolver({ runContext, serverName: 'flow', toolName: 'file_request', arguments: {} }), { [approvedMeta]: true })
+  assert.equal(await server.toolMetaResolver({ runContext, serverName: 'flow', toolName: 'get_issue', arguments: {} }), undefined)
+})
+
 // Only connector calls get the long limit (Flow may hold one for a question to the person); Flow's own tools keep
 // 60 s. The SDK has one request limit, set to the longest; each call is cut at its own.
 test('connector tools get the long call limit, Flow tools keep 60 s', async () => {

@@ -319,12 +319,41 @@ func chatRequestIssueURL(s *server, record domain.ChatIntegrationRecord, issue d
 	return fmt.Sprintf("%s/%s/issue/%s", s.chatAppOrigin(), url.PathEscape(record.WorkspaceKey), url.PathEscape(issue.Identifier))
 }
 
-// chatCreateRequest reserves the message, creates the request's issue and
-// request record as the member, claims the message's thread and queues the
-// confirmation.
+// chatCreateRequest makes a request from a message and tells the member
+// privately when it cannot (chatFileRequest).
 func (s *server) chatCreateRequest(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, identity domain.ChatIdentity, metadata domain.Bootstrap, job domain.ChatJob, draft chatRequestDraft) error {
+	outcome, err := s.chatFileRequest(ctx, record, binding, identity, metadata, job, draft)
+	switch {
+	case err != nil:
+		return err
+	case outcome.Code != "":
+		return s.chatSendActionError(ctx, record, metadata, identity, job, outcome.Code)
+	case outcome.Existing != nil:
+		return s.chatRequestExists(ctx, record, identity, metadata, job, *outcome.Existing, draft)
+	case outcome.Busy:
+		return nil
+	}
+	return s.chatUpdateMessageFormResult(ctx, record, chatLanguage(metadata, identity.UserID, record.Provider), draft.FormMessageID, outcome.Issue, false)
+}
+
+// chatRequestOutcome is how chatFileRequest ended: the new request's issue,
+// the message's existing request, another member making it right now (Busy),
+// or a refusal (Code, a chatActionErrorText code).
+type chatRequestOutcome struct {
+	Issue    domain.Issue
+	Existing *domain.ChatIntakeRequest
+	Busy     bool
+	Code     string
+}
+
+// chatFileRequest reserves the message, creates the request's issue and
+// request record as the member, claims the message's thread and queues the
+// confirmation. Callers tell the member the outcome: privately for a mention,
+// a reaction or the shortcut (chatCreateRequest), or through the Flow Agent's
+// answer (chat_group_requests.go).
+func (s *server) chatFileRequest(ctx context.Context, record domain.ChatIntegrationRecord, binding domain.ChatBinding, identity domain.ChatIdentity, metadata domain.Bootstrap, job domain.ChatJob, draft chatRequestDraft) (chatRequestOutcome, error) {
 	language := chatLanguage(metadata, identity.UserID, record.Provider)
-	fail := func(code string) error { return s.chatSendActionError(ctx, record, metadata, identity, job, code) }
+	fail := func(code string) (chatRequestOutcome, error) { return chatRequestOutcome{Code: code}, nil }
 	if !chatValidPlatformID(draft.MessageID, "om_") || draft.ChatID != binding.ChatID {
 		return fail("chat_message_unavailable")
 	}
@@ -332,26 +361,26 @@ func (s *server) chatCreateRequest(ctx context.Context, record domain.ChatIntegr
 	reservation := domain.ChatIntakeRequest{ConnectionID: record.ConnectionID, ChatID: binding.ChatID, MessageID: draft.MessageID, BindingID: binding.ID, IssueID: issueID, RequesterID: identity.UserID, RequesterOpenID: identity.OpenID, Source: draft.Source, Status: domain.ChatRequestPending}
 	request, reserved, err := s.store.ReserveChatIntakeRequest(ctx, record.WorkspaceKey, reservation)
 	if err != nil {
-		return err
+		return chatRequestOutcome{}, err
 	}
 	if !reserved {
 		switch {
 		case request.Status == domain.ChatRequestCreated:
-			return s.chatRequestExists(ctx, record, identity, metadata, job, request, draft)
+			return chatRequestOutcome{Existing: &request}, nil
 		case request.Kind == "issue":
-			return errors.New("message conversion in progress")
+			return chatRequestOutcome{}, errors.New("message conversion in progress")
 		case request.RequesterID == identity.UserID:
 			// This requester's earlier attempt stopped: resume it.
 		case time.Since(request.UpdatedAt) > chatRequestReservationTimeout:
 			if err := s.store.DeleteChatIntakeRequest(ctx, record.WorkspaceKey, record.ConnectionID, request.ID); err != nil {
-				return err
+				return chatRequestOutcome{}, err
 			}
 			if request, reserved, err = s.store.ReserveChatIntakeRequest(ctx, record.WorkspaceKey, reservation); err != nil || !reserved {
-				return err
+				return chatRequestOutcome{Busy: err == nil}, err
 			}
 		default:
 			// Another member is making this request right now.
-			return nil
+			return chatRequestOutcome{Busy: true}, nil
 		}
 	}
 	release := func() error {
@@ -362,20 +391,20 @@ func (s *server) chatCreateRequest(ctx context.Context, record domain.ChatIntegr
 	}
 	if !slices.ContainsFunc(chatCreatableTeams(metadata), func(team domain.Team) bool { return team.ID == binding.TeamID }) {
 		if err := release(); err != nil {
-			return err
+			return chatRequestOutcome{}, err
 		}
 		return fail("chat_request_forbidden")
 	}
 	if templateID := binding.Requests.TemplateID; templateID != "" && !chatBindingTemplatePermitted(metadata, binding, templateID) {
 		if err := release(); err != nil {
-			return err
+			return chatRequestOutcome{}, err
 		}
 		return fail("chat_team_unavailable")
 	}
 	title, description := chatRequestContent(record, binding, draft, language)
 	if title == "" || utf8.RuneCountInString(title) > 1000 {
 		if err := release(); err != nil {
-			return err
+			return chatRequestOutcome{}, err
 		}
 		return fail("chat_request_empty")
 	}
@@ -388,19 +417,19 @@ func (s *server) chatCreateRequest(ctx context.Context, record domain.ChatIntegr
 	if err := s.chatAuthorizedMutation(store.WithIssueCreationKey(ctx, issueID), record.WorkspaceKey, identity.UserID, http.MethodPost, "/api/issue-records", input, &issue); err != nil {
 		code, err := chatMutationCode(err, "chat_action_failed")
 		if err != nil {
-			return err
+			return chatRequestOutcome{}, err
 		}
 		if code == "chat_action_forbidden" {
 			code = "chat_request_forbidden"
 		}
 		if err := release(); err != nil {
-			return err
+			return chatRequestOutcome{}, err
 		}
 		return fail(code)
 	}
 	askID, err := s.chatRecordRequestAsk(ctx, record, identity.UserID, issue, binding.Requests.TemplateID)
 	if err != nil {
-		return err
+		return chatRequestOutcome{}, err
 	}
 	// The message's thread carries the request; the confirmation card is its
 	// first reply. A message inside another resource's thread cannot give
@@ -408,7 +437,7 @@ func (s *server) chatCreateRequest(ctx context.Context, record domain.ChatIntegr
 	sourceMessage := draft.MessageID
 	claimed, err := s.chatClaimMessageThread(ctx, record, binding, issue.ID, firstNonEmpty(draft.RootID, draft.MessageID), "request")
 	if err != nil {
-		return err
+		return chatRequestOutcome{}, err
 	}
 	if !claimed {
 		if thread, err := s.store.ChatThread(ctx, record.WorkspaceKey, record.ConnectionID, binding.ChatID, domain.ChatThreadResourceIssue, issue.ID); err != nil || thread.Origin != "request" {
@@ -422,13 +451,13 @@ func (s *server) chatCreateRequest(ctx context.Context, record domain.ChatIntegr
 	payload, _ := json.Marshal(result)
 	_, err = s.store.EnqueueChatJob(ctx, domain.ChatJob{ID: "chat_result_" + job.DedupKey, WorkspaceKey: record.WorkspaceKey, ConnectionID: record.ConnectionID, Kind: "card", DedupKey: chatKey(job.DedupKey, "result"), Payload: payload, RunAt: time.Now().UTC()})
 	if err != nil {
-		return err
+		return chatRequestOutcome{}, err
 	}
 	request.IssueID, request.AskID, request.Status = issue.ID, askID, domain.ChatRequestCreated
 	if err := s.store.UpdateChatIntakeRequest(ctx, record.WorkspaceKey, request); err != nil {
-		return err
+		return chatRequestOutcome{}, err
 	}
-	return s.chatUpdateMessageFormResult(ctx, record, language, draft.FormMessageID, issue, false)
+	return chatRequestOutcome{Issue: issue}, nil
 }
 
 // chatRequestExists answers a member asking again for a message that is

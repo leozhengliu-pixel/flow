@@ -7,7 +7,7 @@ import type { ModelCallRecord } from './models.js'
 
 export type Elicitation =
   | { kind: 'select'; callId: string; arguments?: string; body: string; options: { label: string; value: string }[]; allowFreeText: boolean }
-  | { kind: 'approval'; approval: 'connector'; callIds: string[]; calls?: HeldCall[]; body: string; options: { label: string; value: string }[] }
+  | { kind: 'approval'; approval: 'connector' | 'flow'; callIds: string[]; calls?: HeldCall[]; body: string; options: { label: string; value: string }[] }
 
 /** A call held for the person's approval. */
 export type HeldCall = { callId: string; name: string; arguments: string }

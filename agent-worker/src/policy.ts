@@ -3,10 +3,12 @@ import type { FlowRunContext } from './context.js'
 /**
  * Port of api/cmd/server/agent_approval_policy.go (+ agentToolNeedsApproval in agent_stream.go) as an Agents SDK
  * `needsApproval` policy. Flow writes apply immediately, deletes (one item or many) and status updates the agent
- * wrote itself included. The only calls that ask are tools of an MCP connector set to always ask
- * (`context.alwaysAskTools`); a worker without that connector information asks for nothing.
+ * wrote itself included. The only calls that ask are the tools Flow's /mcp lists with `_meta["flow/approval"] =
+ * "always"` (`context.alwaysAskTools`): tools of an MCP connector set to always ask, and Flow session tools that
+ * always wait for the person (file_request, a request filed from a Lark or Feishu group). A worker without that
+ * information asks for nothing.
  */
-export type ApprovalKind = 'connector'
+export type ApprovalKind = 'connector' | 'flow'
 
 const approvalWords = new Set([
   'approve', 'approved', 'yes', 'y', 'ok', 'okay', 'sure', 'confirm', 'confirmed', 'proceed', 'go ahead', 'do it', 'yes please', 'lgtm',
@@ -20,10 +22,12 @@ export function isApprovalWord(text: string): boolean {
 }
 
 export function approvalKind(context: FlowRunContext, tool: string): ApprovalKind | null {
-  return tool.startsWith('external_') && context.alwaysAskTools?.includes(tool) ? 'connector' : null
+  if (!context.alwaysAskTools?.includes(tool)) return null
+  return tool.startsWith('external_') ? 'connector' : 'flow'
 }
 
 /** The question an approval shows. */
-export function approvalPreview(_kind: ApprovalKind, calls: { name: string; arguments: string }[]): string {
-  return `Run ${calls.map(call => `**${call.name}**`).join(', ')} with an external connector?`
+export function approvalPreview(kind: ApprovalKind, calls: { name: string; arguments: string }[]): string {
+  const names = calls.map(call => `**${call.name}**`).join(', ')
+  return kind === 'connector' ? `Run ${names} with an external connector?` : `Run ${names}?`
 }

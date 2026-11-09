@@ -71,9 +71,10 @@ export function groupOf(tool: string): string | undefined {
 
 /**
  * Tools Flow's /mcp lists to a run only while its session gives them (api/cmd/server/agent_runtime_session_tools.go):
- * the conversation's file tools, a loop builder's chip question and the web tools. Offered whenever listed.
+ * the conversation's file tools, a loop builder's chip question, the web tools, and file_request (a request filed
+ * from a Lark or Feishu group; it always waits for the person's approval). Offered whenever listed.
  */
-export const sessionTools = new Set(['read_file', 'transcribe_media', 'ask_question', 'fetch_url', 'web_search'])
+export const sessionTools = new Set(['read_file', 'transcribe_media', 'ask_question', 'fetch_url', 'web_search', 'file_request'])
 
 /** Session tools whose call waits for the person (a chip question: up to 5 minutes on Flow). */
 export const waitingTools = new Set(['ask_question'])

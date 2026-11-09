@@ -412,6 +412,22 @@ unbound internal groups of the app's tenant that the bot is in.
 - **Approvals**: a call that waits for approval gets its card in the
   thread. Only the member whose turn asked can approve or reject it; anyone
   else who clicks is told privately who can.
+- **Filing requests**: in a bound group that takes
+  [requests](#requests-from-group-messages), the member can ask the agent
+  to file one from the conversation: `@Flow 把上面这条提成需求` or
+  `@Flow file this as a request`. The agent writes the title and
+  description and picks the message it is about (by default the thread's
+  root: the message the member replied to, or their own message when it
+  starts no thread); an approval card in the thread shows the request, and
+  only the asking member can approve it. Once approved, the request is filed
+  exactly as `@Flow 提需求 <text>` files it: as the member, in the team's
+  triage, the same request record and link back to the group, the message's
+  thread as the request's thread and the same confirmation card there. It
+  counts as a write in the write ledger, on either agent runtime. The agent
+  has this only in that group's conversations: not in direct messages, not
+  on the Agent page (also not when the member continues the same chat there),
+  not in unbound groups or groups without request intake, and not when the
+  workspace turns off the agent's write tools.
 - **Agent page**: each conversation is an Agent chat of its member, marked
   **Lark · *group*** or **飞书 · *group*** on the Agent page.
 - **Unlinked members** get the link card privately (once per thread for
@@ -427,9 +443,9 @@ Quick commands keep their meaning: `@Flow create issue <title>` /
 `@Flow help` / `@Flow 帮助` (or a bare mention) sends the group's help card
 privately, and `@Flow switch workspace` / `切换工作区` changes the remembered
 workspace. Replies in an [issue thread](#issue-threads) stay comments,
-mentioned or not. A plain mention is never a request: the agent tells
-members to send `@Flow 提需求 <text>` (or react with the binding's reaction)
-when they want one; it cannot file a request itself.
+mentioned or not. A plain mention is never a request by itself: the agent
+files one only when the member asks for a request and approves it (see
+**Filing requests** above).
 
 The thread's state (its group, whether the bot started it, its last 30
 messages as Flow received them) and each member's chat of it (kept with
@@ -552,7 +568,7 @@ are saved, authorized and audited with the binding (`requests` in the API:
 the [Flow Agent](#agent-in-groups), and the binding editor no longer offers
 it (saving a binding there drops it).
 
-A member makes a request in any of three ways:
+A member makes a request in any of four ways:
 
 - **Explicitly ask the bot**: `@Flow 提需求 <text>` (also `需求` or
   `request`). Outside issue threads, other mentions go to the
@@ -566,6 +582,11 @@ A member makes a request in any of three ways:
   type, such as `OK`, `THUMBSUP`, `DONE` or `JIAYI`).
 - **The message shortcut**: **Submit as request** in the
   [create form](#create-an-issue-from-a-message).
+- **Ask the Flow Agent**: `@Flow 把上面这条提成需求` or `@Flow file this as a
+  request`; the [agent](#agent-in-groups) writes the request from the
+  conversation and files it once the member approves its card in the thread.
+  The agent writes the title and description; the rest is as for an
+  explicit `提需求`.
 
 The request is the same record as Flow's other requests: an Ask with the
 source `feishu` or `lark`, and its issue in the team's triage (the team's

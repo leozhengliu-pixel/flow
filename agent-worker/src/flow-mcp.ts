@@ -98,6 +98,8 @@ class FlowMcpServer extends MCPServerStreamableHttp {
  *   connector is set to always ask carries `_meta["flow/approval"] = "always"`: the filter adds it to
  *   `context.alwaysAskTools`, so the call is held for approval (policy.ts), and the approved call is sent with
  *   `_meta["flow/approved"] = true` (Flow refuses it otherwise). Flow records their action activities itself.
+ *   A Flow session tool that always waits for the person (file_request) carries the same `_meta` and is held and
+ *   sent approved the same way.
  *   A connector may ask the person mid-call (MCP elicitation, answered on Flow): `onConnectorCall` lets the
  *   session watch for those questions while a connector call is in flight (connector-elicitation.ts).
  * - `customDataExtractor` keeps `isError` and Flow's change-set card (`structuredContent.change`) on the tool output
@@ -107,7 +109,7 @@ export function flowMcpServer(flowUrl: string, token: string, options: FlowMcpOp
   const toolFilter: MCPToolFilterCallable<FlowRunContext> = async ({ runContext }, tool) => {
     const context = runContext.context
     if (!allowlisted(context.allowlist, tool.name)) return false
-    if (isConnectorTool(tool.name) && (tool as { _meta?: Record<string, unknown> })._meta?.[approvalMeta] === 'always') {
+    if ((tool as { _meta?: Record<string, unknown> })._meta?.[approvalMeta] === 'always') {
       context.alwaysAskTools ??= []
       if (!context.alwaysAskTools.includes(tool.name)) context.alwaysAskTools.push(tool.name)
     }

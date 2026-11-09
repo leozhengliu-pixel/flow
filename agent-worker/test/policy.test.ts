@@ -24,6 +24,14 @@ test('connector tools ask only when their connector is set to always ask', () =>
   assert.ok(!isApprovalWord('no'))
 })
 
+test('a Flow session tool listed as always asking (file_request) waits for approval', () => {
+  const context = newRunContext('s', '把上面这条提成需求', [])
+  assert.equal(approvalKind(context, 'file_request'), null)
+  context.alwaysAskTools = ['file_request']
+  assert.equal(approvalKind(context, 'file_request'), 'flow')
+  assert.ok(toolOffered('file_request', []))
+})
+
 test('tool groups: core always, groups by intent, hidden never', () => {
   assert.ok(toolOffered('get_issue', []))
   assert.ok(!toolOffered('save_issue', []))

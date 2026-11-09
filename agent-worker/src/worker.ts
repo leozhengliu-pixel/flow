@@ -536,8 +536,8 @@ function toElicitation(items: RunToolApprovalItem[]): Elicitation {
     const request = parseAskUser(ask.arguments)
     return { kind: 'select', callId: ask.callId, arguments: ask.arguments, body: request.question, options: request.options, allowFreeText: request.allowFreeText }
   }
-  // Only connector tools set to always ask are held (see policy.ts).
-  const kind: ApprovalKind = 'connector'
+  // Only the tools Flow lists as always asking are held (see policy.ts): connector tools, or Flow's file_request.
+  const kind: ApprovalKind = calls.every(call => call.name.startsWith('external_')) ? 'connector' : 'flow'
   return {
     kind: 'approval',
     approval: kind,
@@ -549,8 +549,10 @@ function toElicitation(items: RunToolApprovalItem[]): Elicitation {
 }
 
 const writePrefixes = ['save_', 'delete_', 'create_', 'triage_', 'update_', 'merge_', 'submit_', 'resolve_', 'restore_', 'external_']
+/** Writes outside the prefixes: a request filed from a group (a Flow session tool). */
+const writeTools = new Set(['file_request'])
 function isWriteTool(name: string) {
-  return writePrefixes.some(prefix => name.startsWith(prefix))
+  return writeTools.has(name) || writePrefixes.some(prefix => name.startsWith(prefix))
 }
 
 /** Network-level failures worth one transparent retry (the provider never finished the response). */

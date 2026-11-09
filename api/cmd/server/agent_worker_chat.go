@@ -107,6 +107,9 @@ type workerChatRunInfo struct {
 	// configured), as an in-process reply does; the worker adds it when its protocol has one.
 	HostedWebSearch bool             `json:"hostedWebSearch,omitempty"`
 	HeldCalls       []workerHeldCall `json:"heldCalls,omitempty"`
+	// GroupRequests is the Lark or Feishu group the reply may file a request from (file_request, offered through
+	// /mcp as a session tool; chat_group_requests.go), set when a member asked in a group that takes requests.
+	GroupRequests *chatGroupRequestScope `json:"groupRequests,omitempty"`
 }
 
 type workerHeldCall struct {
@@ -194,6 +197,9 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 	runID := newWorkerChatRunID()
 	started := time.Now().UTC()
 	info := workerChatRunInfo{MessageID: "agent_message_" + runID, LinkBase: agentLinkBaseURL(r), MaxTurns: s.agentMaxToolTurns(), MaxCalls: s.agentMaxToolCalls(), Request: latest, Chinese: containsHan(latest), Started: started.UnixMilli(), Groups: newAgentChatToolset(*session).names(), LoopBuilder: len(session.LoopIDs) > 0, LoopQuestions: writer != nil && sessionHasDraftLoop(data, *session), HostedWebSearch: s.agentRunHostedWebSearch(prompt.web)}
+	if scope, ok := chatGroupRequestsFrom(r.Context()); ok {
+		info.GroupRequests = &scope
+	}
 	heldMessage, heldPart, approval, decision, hasHeld := pendingAgentApproval(session)
 	if hasHeld {
 		for _, call := range approval.Calls {
@@ -1166,6 +1172,8 @@ func (c *workerChatReply) toolTitle(ctx context.Context, name string, parameter 
 	switch {
 	case isAgentFileTool(name):
 		return agentFileToolTitle(c.s.agentRunSessionToolContext(ctx, c.run), call)
+	case name == chatGroupRequestTool:
+		return chatGroupRequestTitle(call.Result)
 	case name == "save_loop":
 		// As the in-process reply labels a save_loop row.
 		title := saveLoopToolTitle(call.Result)

@@ -15,7 +15,10 @@ export type FlowRunContext = {
   allowlist?: string[]
   /** The function calls of each model turn in this request, in order (from the model observer). */
   turns: TurnCall[][]
-  /** Connector (external_) tools whose connector is set to always ask; the only calls that wait for approval. */
+  /**
+   * Tools /mcp lists with `_meta["flow/approval"] = "always"`: connector (external_) tools whose connector is set to
+   * always ask, and Flow session tools that always wait (file_request). The only calls that wait for approval.
+   */
   alwaysAskTools?: string[]
   /** ask_user answers by call id, filled in by the host before it approves the held call. */
   answers: Record<string, string>

@@ -152,7 +152,12 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 				// And the tools its session gives it (agent_runtime_session_tools.go).
 				for _, tool := range s.agentRunSessionTools(r.Context(), actor.Run.run) {
 					if actor.Run.allows(s, tool, readonly) {
-						listed = append(listed, map[string]any{"name": tool.Name, "description": tool.Description, "inputSchema": json.RawMessage(tool.InputSchema), "annotations": map[string]any{"readOnlyHint": tool.Access == "read", "destructiveHint": false}})
+						entry := map[string]any{"name": tool.Name, "description": tool.Description, "inputSchema": json.RawMessage(tool.InputSchema), "annotations": map[string]any{"readOnlyHint": tool.Access == "read", "destructiveHint": false}}
+						if agentRunSessionToolNeedsApproval(tool.Name) {
+							// The worker holds every call for the person's approval and sends it approved.
+							entry["_meta"] = map[string]any{agentRunApprovalMeta: connectorToolApprovalAlways}
+						}
+						listed = append(listed, entry)
 					}
 				}
 			}
@@ -188,6 +193,12 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 							return
 						}
 						s.callMCPRunLoopQuestion(w, r, request.ID, actor.Run, params.Arguments)
+						return
+					}
+					if agentRunSessionToolNeedsApproval(tool.Name) && params.Meta[agentRunApprovedMeta] != true {
+						err := fmt.Errorf("%s waits for the user's approval; it was not run", tool.Name)
+						s.recordAgentRunFlowWrite(r.Context(), actor.Run.run, tool.Name, nil, nil, agentWriteNotRun, err.Error())
+						s.writeMCPToolResult(w, r, request.ID, nil, err)
 						return
 					}
 					s.callMCPRunTool(w, r, request.ID, actor.Run, tool, params.Arguments, readonly)

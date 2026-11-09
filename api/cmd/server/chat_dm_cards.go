@@ -580,6 +580,12 @@ func chatDMApprovalPreview(call *domain.AgentToolCall, zh bool) string {
 	if call == nil || len(call.Arguments) == 0 || string(call.Arguments) == "{}" || string(call.Arguments) == "null" {
 		return ""
 	}
+	if agentToolBaseName(call.Name) == chatGroupRequestTool {
+		// The request as it will be filed: its title, then its description.
+		if preview := chatGroupRequestPreview(call.Arguments); preview != "" {
+			return chatTruncateText(chatDMRedact(preview, zh), 600)
+		}
+	}
 	return chatTruncateText(chatDMRedact(string(call.Arguments), zh), 600)
 }
 

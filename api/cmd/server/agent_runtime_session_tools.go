@@ -27,13 +27,16 @@ import (
 //     the call shows the chip question on the reply and waits for the answer (or a Stop), outside the tool budget.
 //   - fetch_url, and web_search with a configured search provider, for a chat or a comment-thread run while the
 //     workspace lets Flow Agent use the web (loop_web.go; a loop run has them as its loop's tools).
+//   - file_request, for a chat run answering a member in a Lark or Feishu group that takes requests
+//     (chat_group_requests.go; the run's info carries the group). It is listed with _meta flow/approval = always,
+//     so the worker holds every call for the member's approval, and a call without _meta flow/approved is refused.
 //
 // The worker offers whatever /mcp lists of these, so Flow alone decides when a run has them.
 
 // agentRunSessionToolDefinitions are the session tools as /mcp publishes them, schemas resolved for checking.
 var agentRunSessionToolDefinitions = sync.OnceValue(func() map[string]flowMCPTool {
 	tools := map[string]flowMCPTool{}
-	for _, definition := range append([]agentProviderTool{agentFileToolDefinitions[readFileTool], agentFileToolDefinitions[transcribeMediaTool], loopQuestionToolDefinition}, webToolDefinitions...) {
+	for _, definition := range append([]agentProviderTool{agentFileToolDefinitions[readFileTool], agentFileToolDefinitions[transcribeMediaTool], loopQuestionToolDefinition, chatGroupRequestToolDefinition}, webToolDefinitions...) {
 		var schema jsonschema.Schema
 		if err := json.Unmarshal(definition.Parameters, &schema); err != nil {
 			panic(fmt.Sprintf("session tool %s: %v", definition.Name, err))
@@ -56,7 +59,15 @@ func (s *server) agentRunSessionToolContext(ctx context.Context, run store.Agent
 	if s.agentRunWebAccess(run) {
 		ctx = withAgentWebTools(ctx)
 	}
+	if info, chat := workerChatInfo(run); chat && info.GroupRequests != nil {
+		ctx = withChatGroupRequests(ctx, *info.GroupRequests)
+	}
 	return ctx
+}
+
+// agentRunSessionToolNeedsApproval reports whether every call of a session tool waits for the person: file_request.
+func agentRunSessionToolNeedsApproval(name string) bool {
+	return name == chatGroupRequestTool
 }
 
 // agentRunWebAccess reports whether a chat or built-in session run may use the web now: the workspace lets Flow
@@ -95,6 +106,9 @@ func (s *server) agentRunSessionTools(ctx context.Context, run store.AgentRun) [
 		for _, tool := range s.agentWebToolList() {
 			tools = append(tools, definitions[tool.Name])
 		}
+	}
+	if _, ok := chatGroupRequestsFrom(ctx); ok && s.agent.ToolsEnabled && s.agent.WriteTools {
+		tools = append(tools, definitions[chatGroupRequestTool])
 	}
 	return tools
 }

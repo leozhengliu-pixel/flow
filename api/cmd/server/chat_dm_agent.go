@@ -697,6 +697,10 @@ func (s *server) chatDMAgentCall(ctx context.Context, dm chatDMRequest, method, 
 	ctx = context.WithValue(ctx, chatDMOriginKey{}, origin)
 	if dm.context != nil {
 		ctx = context.WithValue(ctx, chatGroupContextKey{}, *dm.context)
+		if dm.context.Requests != nil {
+			// This reply may file a request from the group (chat_group_requests.go).
+			ctx = withChatGroupRequests(ctx, *dm.context.Requests)
+		}
 	}
 	raw, err := json.Marshal(input)
 	if err != nil {

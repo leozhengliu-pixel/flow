@@ -363,6 +363,10 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	if writer != nil && sessionHasDraftLoop(data, *session) {
 		extraTools = append(extraTools, loopQuestionToolDefinition)
 	}
+	// A reply to a member in a Lark or Feishu group that takes requests can file one (chat_group_requests.go).
+	if _, ok := chatGroupRequestsFrom(r.Context()); ok && s.agent.WriteTools {
+		extraTools = append(extraTools, chatGroupRequestToolDefinition)
+	}
 	r = r.WithContext(context.WithValue(r.Context(), agentExtraToolsKey{}, extraTools))
 	if writer != nil {
 		live = s.startAgentLiveReply(r, session.ID, messageID, started)
@@ -905,6 +909,9 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			if callErr == nil && isAgentFileTool(call.Name) {
 				call.Title = agentFileToolTitle(r.Context(), call)
 			}
+			if callErr == nil && agentToolBaseName(call.Name) == chatGroupRequestTool {
+				call.Title = chatGroupRequestTitle(call.Result)
+			}
 			key := "tool:" + call.ID
 			if index, ok := partIndex[key]; ok {
 				parts[index].Status = call.Status
@@ -1228,8 +1235,13 @@ func cleanAgentSessionTitle(text string) string {
 // for the user. Flow writes (issues, documents, projects, views, deletes to
 // trash…) apply immediately, and so do MCP connector tools, unless their
 // connector is set to always ask (see connectorTool.needsApproval). A connector tool that is no longer offered
-// does not wait: its execution is refused.
+// does not wait: its execution is refused. A request filed from a group conversation (file_request,
+// chat_group_requests.go) always waits for the member; where it is not offered its execution is refused.
 func agentToolNeedsApproval(ctx context.Context, name string) bool {
+	if agentToolBaseName(name) == chatGroupRequestTool {
+		_, offered := chatGroupRequestsFrom(ctx)
+		return offered
+	}
 	if !strings.HasPrefix(name, "external_") {
 		return false
 	}
@@ -1318,6 +1330,13 @@ func (s *server) runAgentToolCall(r *http.Request, data domain.Bootstrap, call d
 	}
 	if isAgentFileTool(call.Name) {
 		return s.executeAgentFileTool(r.Context(), call)
+	}
+	if agentToolBaseName(call.Name) == chatGroupRequestTool {
+		// As the member, exactly as their own “@Flow 提需求” (chat_group_requests.go).
+		if !s.agent.WriteTools {
+			return nil, fmt.Errorf("Agent tool is not enabled: %s", call.Name)
+		}
+		return s.executeChatGroupRequest(r.Context(), workspaceKey(r), data.Viewer, call)
 	}
 	definitions, err := s.agentToolDefinitions()
 	if err != nil {

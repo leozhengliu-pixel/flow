@@ -55,6 +55,9 @@ var agentChangeToolAccess = sync.OnceValue(func() map[string]string {
 			access[strings.TrimPrefix(item.Name, "mcp__flow.")] = item.Access
 		}
 	}
+	// A session tool that writes: a request filed from a group conversation (chat_group_requests.go). It is a
+	// write in the ledger and marks a worker run as having written.
+	access[chatGroupRequestTool] = chatGroupRequestToolDefinition.Access
 	return access
 })
 
