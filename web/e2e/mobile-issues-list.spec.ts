@@ -781,7 +781,7 @@ test.describe('mobile Team issues board scrolled to the hidden columns', () => {
     expect(rowBox?.x).toBe(40)
     expect(rowBox?.width).toBe(338)
     expect(rowBox?.height).toBe(37)
-    await expect(rows.first()).toContainText('Backlog')
+    await expect(rows.first()).toContainText('In Progress')
     const name = rows.first().locator('div > span')
     const nameBox = await name.boundingBox()
     expect(Math.abs((nameBox?.x ?? 0) - 80.5)).toBeLessThanOrEqual(1)
