@@ -243,6 +243,13 @@ func (s *server) handleChatWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	command, dedup, ignored, err := s.chatCommandForEnvelopeReason(ctx, record, envelope)
+	var toast chatToastError
+	if errors.As(err, &toast) {
+		// Another member's card in a group thread (chat_group_agent.go).
+		diagnostic.handled(ctx, "refused", ignored, chatEnvelopeLogAttrs(envelope)...)
+		writeJSON(w, http.StatusOK, toast.toast())
+		return
+	}
 	if err != nil {
 		// Invalid/expired actions do not enter the queue; this response is visible
 		// only to the clicker and never changes a shared group card.
@@ -322,6 +329,16 @@ func (s *server) chatCommandForEnvelopeReason(ctx context.Context, record domain
 			return command, dedup, "", nil
 		}
 		text, mentioned, ok := chatThreadReplyText(record, envelope)
+		// A reply in a thread the bot started continues its conversation,
+		// with or without a mention (chat_group_agent.go).
+		if ok && !mentioned && threadReason != chatThreadNotThread {
+			if thread, found := s.chatGroupThreadFor(ctx, record, event.Message.RootID); found && thread.Started && thread.ChatID == event.Message.ChatID {
+				if command, dedup, accepted := chatGroupAgentCommand(record, envelope, text, false); accepted {
+					return command, dedup, "", nil
+				}
+				return chatInboundCommand{}, "", "agent_thread_reply_empty", nil
+			}
+		}
 		switch {
 		case !ok && event.Message.MessageType != "text" && event.Message.MessageType != "post":
 			return chatInboundCommand{}, "", "message_type_unsupported", nil
@@ -341,11 +358,19 @@ func (s *server) chatCommandForEnvelopeReason(ctx context.Context, record domain
 		if title, matched := chatCreateTitle(text); matched {
 			return chatInboundCommand{Kind: "create_form", OpenID: event.Sender.SenderID.OpenID, ChatID: event.Message.ChatID, MessageID: event.Message.MessageID, Title: title}, chatKey(record.ConnectionID, "message", event.Message.MessageID), "", nil
 		}
-		// Any other mention of the bot may be a request (chat_requests.go).
+		// An explicit request (chat_requests.go).
 		if command, dedup, ok := s.chatRequestMentionCommand(ctx, record, envelope, text); ok {
 			return command, dedup, "", nil
 		}
-		return chatInboundCommand{Kind: "group_help", OpenID: event.Sender.SenderID.OpenID, ChatID: event.Message.ChatID, MessageID: event.Message.MessageID}, chatKey(record.ConnectionID, "message", event.Message.MessageID), "", nil
+		// A bare mention, or "help", gets the group's help card privately.
+		if strings.TrimSpace(text) == "" || chatDMCommandIs(text, "help", "帮助") {
+			return chatInboundCommand{Kind: "group_help", OpenID: event.Sender.SenderID.OpenID, ChatID: event.Message.ChatID, MessageID: event.Message.MessageID}, chatKey(record.ConnectionID, "message", event.Message.MessageID), "", nil
+		}
+		// Anything else asks the Flow Agent (chat_group_agent.go).
+		if command, dedup, accepted := chatGroupAgentCommand(record, envelope, text, true); accepted {
+			return command, dedup, "", nil
+		}
+		return chatInboundCommand{}, "", "content_too_large", nil
 	case "im.message.reaction.created_v1":
 		command, dedup, ok := s.chatRequestReactionCommand(ctx, record, envelope)
 		if !ok {
@@ -378,6 +403,9 @@ func (s *server) chatCommandForEnvelopeReason(ctx context.Context, record domain
 			}
 		}
 		if !chatActionMatches(stored, action, event.Operator.OpenID, chatID, event.Context.MessageID) {
+			if refusal, ok := chatGroupActionRefusal(stored, event.Operator.OpenID, chatID, event.Context.MessageID); ok {
+				return chatInboundCommand{}, "", "card_action_other_member", refusal
+			}
 			return chatInboundCommand{}, "", "card_action_mismatch", chatInvalid("card action expired")
 		}
 		// Personal forms are single use even when a double click has another
@@ -505,7 +533,7 @@ func (s *server) processChatJob(ctx context.Context, job domain.ChatJob) error {
 	err = s.processChatInbound(ctx, record, job, command)
 	// A command that fails inside Flow for good answers its member (a
 	// direct message answers in its own conversation, chatDMFailure).
-	if err != nil && command.OpenID != "" && command.Kind != "dm_message" && chatProcessingErrorMessage(err) != "" && chatJobFinal(err, job) {
+	if err != nil && command.OpenID != "" && command.Kind != "dm_message" && command.Kind != chatGroupAgentKind && chatProcessingErrorMessage(err) != "" && chatJobFinal(err, job) {
 		if noticeErr := s.chatSendPersonalText(ctx, record, command.OpenID, chatActionErrorText("chat_processing_failed", chatLanguage(domain.Bootstrap{}, "", record.Provider)), job.DedupKey+":processing"); noticeErr != nil {
 			slog.WarnContext(ctx, "chat failure notice not delivered", "job_id", job.ID, "connection_id", job.ConnectionID, "error_kind", chatFailureKind(noticeErr))
 		}

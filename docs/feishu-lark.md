@@ -46,6 +46,12 @@ not supported by this connection flow.
    as well; with only `im:message.group_at_msg:readonly`, a reply becomes a
    comment when it mentions the bot.
 
+   For the [Flow Agent in groups](#agent-in-groups), grant the direct
+   message permissions above (`im:message` replies in the mention's thread
+   and updates the answer), and `im:message.group_msg` so replies in the
+   bot's thread continue without a mention and the agent can read the
+   thread and the group's recent messages.
+
    Flow needs no contact scopes, the contact directory, phone numbers, or
    email addresses.
 4. Register the redirect URL
@@ -366,6 +372,69 @@ deleted with the account, and a reply that is running stops and says so. The
 conversation state (which chat a message continues, the chosen workspace) is
 kept with the linked account for 30 days.
 
+### Agent in groups
+
+Mentioning the bot in a group talks to the Flow Agent exactly as a
+[direct message](#direct-messages-with-the-bot) does: `@Flow what's left
+for the release?` or `@Flow 把 DEV-12 指派给我`. It works in bound and
+unbound internal groups of the app's tenant that the bot is in.
+
+- **As the member who asked**: the agent runs as the member who mentioned
+  the bot, with exactly their Flow permissions (nothing beyond what they can
+  see and change in Flow), their request rate limits, tool budget, write
+  ledger and approvals, on either agent runtime. Everyone in the group can
+  read the answer, so it shares what the asker chose to ask about.
+- **Bound groups** give the agent the binding's team and projects as the
+  default scope: "create an issue" without a team creates it there. The
+  conversation runs in the binding's workspace.
+- **Unbound groups** use the member's workspace as direct messages do: the
+  workspace where they linked their account through this bot, or, when they
+  are linked in several, the remembered choice; otherwise the choice card is
+  sent to them privately and the mention runs once they pick.
+- **The answer** is one card replied in the thread of the mention, updated
+  as it streams, with the steps, the final answer, follow-up suggestions and
+  **Open in Flow**, like a direct message's card.
+- **Follow-ups**: anyone replying in the bot's thread continues the
+  conversation. With `im:message.group_msg` a reply needs no mention; with
+  only `im:message.group_at_msg:readonly` it must mention the bot. Each turn
+  runs as its speaker, in that speaker's own Agent chat of the thread (their
+  first turn starts it, with the thread so far as context). A mention inside
+  a thread the bot did not start answers in that thread; there, follow-ups
+  mention the bot.
+- **Context**: the agent is told the group's name, its default scope, the
+  thread so far and the group's 20 most recent messages (sender names and
+  text only, each shortened, about 12,000 characters in all), as context
+  written by members, not instructions. Reading them needs
+  `im:message.group_msg`; sender names come from the messages' mentions,
+  the members' linked Flow accounts and the group's member list. Without the
+  permission the agent gets the thread's messages Flow received and its own
+  answers.
+- **Approvals**: a call that waits for approval gets its card in the
+  thread. Only the member whose turn asked can approve or reject it; anyone
+  else who clicks is told privately who can.
+- **Agent page**: each conversation is an Agent chat of its member, marked
+  **Lark · *group*** or **飞书 · *group*** on the Agent page.
+- **Unlinked members** get the link card privately (once per thread for
+  replies without a mention); nothing is posted in the group.
+- **Private notices**: access changes, limits, sensitive data protection and
+  the workspace choice go to the member's own conversation with the bot,
+  never to the group. Workspaces with sensitive data protection answer as
+  direct messages do, privately and without content.
+
+Quick commands keep their meaning: `@Flow create issue <title>` /
+`@Flow 创建事项 <title>` opens the [create form](#notifications-and-issue-actions),
+`@Flow 提需求 <text>` makes a [request](#requests-from-group-messages),
+`@Flow help` / `@Flow 帮助` (or a bare mention) sends the group's help card
+privately, and `@Flow switch workspace` / `切换工作区` changes the remembered
+workspace. Replies in an [issue thread](#issue-threads) stay comments,
+mentioned or not. A plain mention is never a request: the agent tells
+members to send `@Flow 提需求 <text>` (or react with the binding's reaction)
+when they want one; it cannot file a request itself.
+
+The thread's state (its group, whether the bot started it, its last 30
+messages as Flow received them) and each member's chat of it (kept with
+their linked account, deleted when they unlink) expire after 30 days.
+
 Mention the bot with `@Flow create issue <title>` or `@Flow 创建事项 <title>`.
 The bot sends a personal confirmation form with the bound team/project,
 title, state, priority, and assignee. After creation it replies to the source
@@ -486,9 +555,11 @@ automatically opted in.
 A member makes a request in any of three ways:
 
 - **Explicitly ask the bot**: `@Flow 提需求 <text>` (also `需求` or
-  `request`). Outside issue threads, plain mentions get a short private help card with the group's
-  available actions, not a request. Only opting into **Treat every mention
-  as a request** makes other non-command mentions requests.
+  `request`). Outside issue threads, other mentions go to the
+  [Flow Agent](#agent-in-groups), not to requests, also when **Treat every
+  mention as a request** is on (the setting no longer turns mentions into
+  requests); a bare mention or `@Flow help` gets a short private help card
+  with the group's available actions.
   `@Flow 创建事项` / `create issue` still opens the create form.
   A bare `@Flow 提需求` in reply to a message makes
   the request from that message.
@@ -511,8 +582,8 @@ project.
 - A member who cannot create issues in the team is told privately (code
   `chat_request_forbidden`), and the message stays free for someone else.
 - In a group that does not take requests, an explicit `提需求` is refused
-  privately (`chat_requests_disabled`); plain mentions get the help card and
-  unrelated reactions are ignored.
+  privately (`chat_requests_disabled`); plain mentions go to the Flow Agent
+  and unrelated reactions are ignored.
 - One message creates one item, either an issue or a request, whoever asks
   and however: a second mention or the shortcut answers privately with the existing item, a
   second reaction does nothing. The records are kept per connection
@@ -708,8 +779,13 @@ Agent chat's `session_id`) when the Flow Agent answered, otherwise
 `dm_not_linked`, `dm_quick_*`, `dm_link_preview`, `dm_workspace_choice_pending`,
 `dm_workspace_access_refused`, `dm_agent_not_configured`,
 `dm_agent_disabled_for_member`, `dm_agent_rate_limited`, `dm_agent_error`
-and similar. No record at all for a message means the platform did not send
-it: check the event subscription and the message permissions.
+and similar. Group mentions for the [agent](#agent-in-groups) log the same
+records with `group_agent_queued` (with `continues_chat` and `bound`),
+`group_not_linked`, `group_not_internal`, `group_unreadable` or
+`group_quick_switch_workspace` first; a click by another member on a card
+in the bot's thread is `refused` with `card_action_other_member`. No record
+at all for a message means the platform did not send it: check the event
+subscription and the message permissions.
 
 ## Verification
 

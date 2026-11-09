@@ -28,6 +28,8 @@ type chatDMReplyJob struct {
 	Chinese   bool               `json:"chinese,omitempty"`
 	Started   bool               `json:"started,omitempty"`
 	Final     *chatDMReplyView   `json:"final,omitempty"`
+	// Group is set for a mention in a group (chat_group_agent.go).
+	Group *chatGroupReply `json:"group,omitempty"`
 }
 
 // The mutex orders checkpoints, heartbeats and platform writes. Every write
@@ -76,6 +78,10 @@ var errChatDMThreadBusy = errors.New("chat thread is answering another message")
 func chatDMReplyThreadKey(dm chatDMRequest, sessionID string) string {
 	if sessionID != "" {
 		return chatKey(dm.target.Workspace, "session", sessionID)
+	}
+	if dm.group != nil {
+		// Each member of a group thread has their own chat of it.
+		return chatKey(dm.record.ConnectionID, dm.group.Root, dm.command.OpenID, "group")
 	}
 	root := firstNonEmpty(chatString(dm.command.Values, "rootId"), chatString(dm.command.Values, "parentId"), dm.command.MessageID)
 	return chatKey(dm.record.ConnectionID, root, "message")
@@ -181,7 +187,7 @@ func (s *server) processChatDMReplyJob(l *chatDMReplyLease) error {
 	if err != nil {
 		return err
 	}
-	dm := chatDMRequest{record: record, identity: identity, command: p.Command, job: job, zh: p.Chinese}
+	dm := chatDMRequest{record: record, identity: identity, command: p.Command, job: job, zh: p.Chinese, group: p.Group}
 	targets, err := s.chatDMTargets(l.ctx, record, identity)
 	if err != nil {
 		return err
@@ -247,6 +253,11 @@ func (s *server) processChatDMReplyJob(l *chatDMReplyLease) error {
 		return s.chatDMDeliverReplyFinal(l, dm, view)
 	}
 	text, resources, _ := chatDMContent(chatString(p.Command.Values, "messageType"), chatRawString(p.Command.Values, "content"))
+	if dm.group != nil {
+		// The mention's text, with the bot's mention removed and members'
+		// mentions as names; the group's messages are the agent's context.
+		text = p.Command.Text
+	}
 	attachments, problem, err := s.chatDMAttachments(l.ctx, record, p.Command.MessageID, resources, dm.zh)
 	if err != nil {
 		return err
@@ -260,6 +271,10 @@ func (s *server) processChatDMReplyJob(l *chatDMReplyLease) error {
 	}
 	if err := s.chatDMEnsureReplyCard(l, dm, chatDMReplyView{Status: "working"}); err != nil {
 		return err
+	}
+	if dm.group != nil {
+		groupContext := s.chatGroupContext(l.ctx, dm)
+		dm.context = &groupContext
 	}
 	if err := l.update(func(p *chatDMReplyJob) { p.Started = true }, "", nil); err != nil {
 		return err
@@ -347,7 +362,7 @@ func (s *server) chatDMEnsureReplyCard(l *chatDMReplyLease, dm chatDMRequest, vi
 		if l.payload.CardID != "" {
 			return nil
 		}
-		id, _, err := s.chatDMSend(ctx, dm.record, dm.command.OpenID, dm.command.MessageID, dm.job.DedupKey+":reply", chatDMReplyCard(view, dm.zh))
+		id, _, err := s.chatDMPost(ctx, dm, dm.job.DedupKey+":reply", chatDMReplyCardFor(dm, view), false)
 		if err != nil {
 			return err
 		}
@@ -368,18 +383,21 @@ func (s *server) chatDMDeliverReplyFinal(l *chatDMReplyLease, dm chatDMRequest, 
 	}
 	return l.update(func(p *chatDMReplyJob) { p.Final = &view }, "", func(ctx context.Context) error {
 		if l.payload.SessionID != "" && view.Status != "stopped" && dm.identity.UserID == l.payload.UserID {
-			thread := chatDMThread{Kind: "session", OpenID: dm.command.OpenID, WorkspaceKey: l.payload.Workspace, SessionID: l.payload.SessionID}
-			s.chatDMRememberThread(ctx, dm.record, dm.identity.UserID, dm.command.MessageID, thread)
-			s.chatDMRememberThread(ctx, dm.record, dm.identity.UserID, l.payload.CardID, thread)
+			reply := dm
+			reply.target.Workspace = l.payload.Workspace
+			s.chatDMRememberReply(ctx, reply, l.payload.SessionID, l.payload.CardID)
 		}
 		if view.Retry != "" {
 			action := chatDMAction{Kind: "dm_retry", OpenID: dm.command.OpenID, PersonalChatID: dm.command.ChatID, PersonalMessage: l.payload.CardID, WorkspaceKey: l.payload.Workspace, SessionID: l.payload.SessionID, ReplyJobID: l.job.ID, Chinese: dm.zh}
+			if dm.group != nil {
+				action.Group, action.Approver = true, s.chatGroupMemberName(ctx, dm.identity.UserID)
+			}
 			raw, _ := json.Marshal(action)
 			if err := s.store.PutChatAction(ctx, domain.ChatAction{ID: view.Retry, WorkspaceKey: dm.record.WorkspaceKey, ConnectionID: dm.record.ConnectionID, UserID: dm.identity.UserID, Payload: raw, ExpiresAt: time.Now().Add(chatDMStateLifetime)}); err != nil {
 				return err
 			}
 		}
-		return s.chatDMUpdate(ctx, dm.record, l.payload.CardID, chatDMReplyCard(view, dm.zh))
+		return s.chatDMUpdate(ctx, dm.record, l.payload.CardID, chatDMReplyCardFor(dm, view))
 	})
 }
 

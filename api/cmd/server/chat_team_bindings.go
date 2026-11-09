@@ -144,6 +144,12 @@ func (s *server) chatBindingPermitted(ctx context.Context, record domain.ChatInt
 // group of the application's tenant and, when checkMembership is set, whether
 // the bot is in it. Team and initiative bindings share it.
 func (s *server) chatGroupPermitted(ctx context.Context, record domain.ChatIntegrationRecord, chatID string, checkMembership bool) error {
+	_, err := s.chatGroupDetails(ctx, record, chatID, checkMembership)
+	return err
+}
+
+// chatGroupDetails is chatGroupPermitted with the group's name.
+func (s *server) chatGroupDetails(ctx context.Context, record domain.ChatIntegrationRecord, chatID string, checkMembership bool) (string, error) {
 	var response struct {
 		Data struct {
 			Name      string `json:"name"`
@@ -153,13 +159,13 @@ func (s *server) chatGroupPermitted(ctx context.Context, record domain.ChatInteg
 		} `json:"data"`
 	}
 	if err := s.chatPlatformRequest(ctx, record, http.MethodGet, "/open-apis/im/v1/chats/"+url.PathEscape(chatID), nil, &response); err != nil {
-		return err
+		return "", err
 	}
 	if response.Data.TenantKey != record.TenantKey {
-		return chatGroupRefusal{"This group belongs to another tenant"}
+		return "", chatGroupRefusal{"This group belongs to another tenant"}
 	}
 	if response.Data.External == nil || *response.Data.External || (response.Data.ChatMode != "group" && response.Data.ChatMode != "topic") {
-		return chatGroupRefusal{"Only internal groups of the application's tenant can be bound"}
+		return "", chatGroupRefusal{"Only internal groups of the application's tenant can be bound"}
 	}
 	if checkMembership {
 		var member struct {
@@ -168,10 +174,10 @@ func (s *server) chatGroupPermitted(ctx context.Context, record domain.ChatInteg
 			} `json:"data"`
 		}
 		if err := s.chatPlatformRequest(ctx, record, http.MethodGet, "/open-apis/im/v1/chats/"+url.PathEscape(chatID)+"/members/is_in_chat", nil, &member); err != nil || !member.Data.IsInChat {
-			return chatGroupRefusal{"Add the bot to this group before binding it"}
+			return "", chatGroupRefusal{"Add the bot to this group before binding it"}
 		}
 	}
-	return nil
+	return response.Data.Name, nil
 }
 
 // chatTeamOwner reports whether the viewer administers the team: a team

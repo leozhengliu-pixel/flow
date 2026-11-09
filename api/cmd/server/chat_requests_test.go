@@ -205,17 +205,17 @@ func TestChatRequestFromAMentionLandsInTriageAndRepliesInTheThread(t *testing.T)
 		t.Fatal("second request recorded for the same message")
 	}
 
-	// Plain mentions get help by default, including existing bindings that
-	// have no everyMention field. A create command keeps its meaning.
+	// Plain mentions ask the Flow Agent, even when a binding still has
+	// everyMention on. A create command keeps its meaning.
 	command, _, accepted, err := f.s.chatCommandForEnvelope(t.Context(), f.record, f.mentionEnvelope(f.identity.OpenID, "om_implicit", "the login page is slow", ""))
-	if err != nil || !accepted || command.Kind != "group_help" {
+	if err != nil || !accepted || command.Kind != chatGroupAgentKind {
 		t.Fatalf("implicit request: %+v %v %v", command, accepted, err)
 	}
 	f.binding.Requests.EveryMention = true
 	f.enableRequests(t, f.binding.Requests, nil)
 	command, _, accepted, err = f.s.chatCommandForEnvelope(t.Context(), f.record, f.mentionEnvelope(f.identity.OpenID, "om_implicit_opt_in", "the login page is slow", ""))
-	if err != nil || !accepted || command.Kind != chatRequestKind || chatString(command.Values, "text") != "the login page is slow" {
-		t.Fatalf("opt-in request: %+v %v %v", command, accepted, err)
+	if err != nil || !accepted || command.Kind != chatGroupAgentKind || command.Text != "the login page is slow" {
+		t.Fatalf("every mention: %+v %v %v", command, accepted, err)
 	}
 	command, _, accepted, _ = f.s.chatCommandForEnvelope(t.Context(), f.record, f.mentionEnvelope(f.identity.OpenID, "om_create", "创建事项 Fix export", ""))
 	if !accepted || command.Kind != "create_form" {
@@ -293,8 +293,8 @@ func TestChatRequestRefusalsFlagOffAndPermission(t *testing.T) {
 	platform, messages := f.requestPlatform(t)
 	messages["om_flag_off"] = chatRequestMessage{chat: f.binding.ChatID, text: "Something"}
 
-	// Off: an explicit request is refused privately; a plain mention and a
-	// reaction are not requests at all.
+	// Off: an explicit request is refused privately; help and a reaction
+	// are not requests at all.
 	if !f.accept(t, f.mentionEnvelope(f.identity.OpenID, "om_explicit_off", "提需求 Dark mode", "")) {
 		t.Fatal("explicit request not accepted")
 	}
@@ -302,8 +302,8 @@ func TestChatRequestRefusalsFlagOffAndPermission(t *testing.T) {
 	if text := f.lastText(t); !strings.Contains(text, "chat_requests_disabled") || f.sent[len(f.sent)-1]["receive_id"] != f.identity.OpenID {
 		t.Fatalf("requests-off refusal: %s", text)
 	}
-	if !f.accept(t, f.mentionEnvelope(f.identity.OpenID, "om_plain_off", "hello there", "")) || f.accept(t, f.reactionEnvelope(f.identity.OpenID, "om_flag_off", "OK")) {
-		t.Fatal("plain mention help or ignored reaction not handled with requests off")
+	if !f.accept(t, f.mentionEnvelope(f.identity.OpenID, "om_plain_off", "help", "")) || f.accept(t, f.reactionEnvelope(f.identity.OpenID, "om_flag_off", "OK")) {
+		t.Fatal("help or ignored reaction not handled with requests off")
 	}
 	f.runJobs(t, "inbound")
 	if !strings.Contains(f.sent[len(f.sent)-1]["content"].(string), "此群中的 Flow") {
@@ -580,11 +580,19 @@ func TestChatMessageShortcutChoicesAreExclusivePerMessage(t *testing.T) {
 	}
 }
 
-func TestChatPlainMentionsGetPrivateGroupHelpWithoutCreatingRequests(t *testing.T) {
+// A bare mention or help gets the group's help card privately; other plain
+// mentions ask the Flow Agent. Neither makes a request.
+func TestChatGroupHelpAndPlainMentionsMakeNoRequests(t *testing.T) {
 	f := newChatWorkflowFixture(t)
 	platform, _ := f.requestPlatform(t)
 	f.enableRequests(t, &domain.ChatBindingRequests{Enabled: true, Emoji: "DONE"}, nil)
-	for _, text := range []string{"What's new?", "", "requested access yesterday"} {
+	for _, text := range []string{"What's new?", "requested access yesterday"} {
+		command, _, accepted, err := f.s.chatCommandForEnvelope(t.Context(), f.record, f.mentionEnvelope(f.identity.OpenID, "om_agent_"+chatKey(text)[:8], text, ""))
+		if err != nil || !accepted || command.Kind != chatGroupAgentKind || command.Text != text {
+			t.Fatalf("%q did not ask the agent: %+v %v", text, command, err)
+		}
+	}
+	for _, text := range []string{"", "help", "帮助"} {
 		messageID := "om_help_" + chatKey(text)[:8]
 		calls := len(platform.calls)
 		if !f.accept(t, f.mentionEnvelope(f.identity.OpenID, messageID, text, "")) {
@@ -592,7 +600,7 @@ func TestChatPlainMentionsGetPrivateGroupHelpWithoutCreatingRequests(t *testing.
 		}
 		f.runJobs(t, "inbound")
 		help := chatCallsMention(platform.since(calls), "此群中的 Flow")
-		if len(help) != 1 || help[0].body["receive_id"] != f.identity.OpenID || !strings.Contains(help[0].body["content"].(string), "DONE") || !strings.Contains(help[0].body["content"].(string), "request") {
+		if len(help) != 1 || help[0].body["receive_id"] != f.identity.OpenID || !strings.Contains(help[0].body["content"].(string), "DONE") || !strings.Contains(help[0].body["content"].(string), "request") || !strings.Contains(help[0].body["content"].(string), "Flow Agent 会在该消息的话题中回复") {
 			t.Fatalf("group help: %+v", platform.since(calls))
 		}
 		if _, err := f.s.store.ChatIntakeRequestForMessage(t.Context(), f.record.WorkspaceKey, f.record.ConnectionID, messageID); !errors.Is(err, sql.ErrNoRows) {

@@ -31,6 +31,9 @@ type chatDMMessage struct {
 	ReceiveID string
 	Card      map[string]any
 	Raw       string
+	// InThread and ChatID: a reply in a group thread (chat_group_agent.go).
+	InThread bool
+	ChatID   string
 }
 
 type chatDMFixture struct {
@@ -43,6 +46,13 @@ type chatDMFixture struct {
 	provider  *httptest.Server
 	calls     atomic.Int32
 	inputs    []string
+	// Groups (chat_group_agent_test.go): the group of each message, the
+	// messages the platform lists per container ("chat:oc_…",
+	// "thread:omt_…"), and whether the app may read them.
+	groupChats    map[string]string
+	history       map[string]string
+	historyDenied bool
+	members       string
 }
 
 // newChatDMFixture: a connected Feishu app with the workspace viewer linked
@@ -56,7 +66,7 @@ func newChatDMFixture(t *testing.T, script func(call int, input string) string) 
 		t.Fatal("the default transport was replaced")
 	}
 	base := newChatWorkflowFixture(t)
-	f := &chatDMFixture{chatWorkflowFixture: base, updates: map[string][]string{}, resources: map[string][]byte{}}
+	f := &chatDMFixture{chatWorkflowFixture: base, updates: map[string][]string{}, resources: map[string][]byte{}, groupChats: map[string]string{}, history: map[string]string{}, members: "[]"}
 	previousEvery, previousCheck := chatDMUpdateEvery, chatDMLinkCheckEvery
 	chatDMUpdateEvery, chatDMLinkCheckEvery = 5*time.Millisecond, 20*time.Millisecond
 	t.Cleanup(func() { chatDMUpdateEvery, chatDMLinkCheckEvery = previousEvery, previousCheck })
@@ -85,6 +95,25 @@ func newChatDMFixture(t *testing.T, script func(call int, input string) string) 
 				return respond(400, "application/json", `{"code":234003,"msg":"resource not found"}`)
 			}
 			return respond(200, "application/octet-stream", string(content))
+		case strings.HasPrefix(path, "/open-apis/im/v1/chats/") && strings.HasSuffix(path, "/members") && r.Method == http.MethodGet:
+			f.mu.Lock()
+			members := f.members
+			f.mu.Unlock()
+			return respond(200, "application/json", `{"code":0,"data":{"items":`+members+`}}`)
+		case strings.HasPrefix(path, "/open-apis/im/v1/chats/") && r.Method == http.MethodGet:
+			name := "Release crew"
+			if path == "/open-apis/im/v1/chats/"+f.binding.ChatID {
+				name = "Web team"
+			}
+			return respond(200, "application/json", fmt.Sprintf(`{"code":0,"data":{"name":%q,"external":false,"tenant_key":%q,"chat_mode":"group"}}`, name, f.record.TenantKey))
+		case path == "/open-apis/im/v1/messages" && r.Method == http.MethodGet:
+			f.mu.Lock()
+			denied, items := f.historyDenied, f.history[r.URL.Query().Get("container_id_type")+":"+r.URL.Query().Get("container_id")]
+			f.mu.Unlock()
+			if denied {
+				return respond(400, "application/json", `{"code":230027,"msg":"Lack of necessary permissions"}`)
+			}
+			return respond(200, "application/json", `{"code":0,"data":{"items":`+firstNonEmpty(items, "[]")+`}}`)
 		case strings.HasPrefix(path, "/open-apis/im/v1/messages/") && r.Method == http.MethodPatch:
 			var payload struct {
 				Content string `json:"content"`
@@ -98,13 +127,14 @@ func newChatDMFixture(t *testing.T, script func(call int, input string) string) 
 		case strings.HasPrefix(path, "/open-apis/im/v1/messages") && r.Method == http.MethodPost:
 			raw, _ := io.ReadAll(r.Body)
 			var payload struct {
-				ReceiveID string `json:"receive_id"`
-				MsgType   string `json:"msg_type"`
-				Content   string `json:"content"`
-				UUID      string `json:"uuid"`
+				ReceiveID     string `json:"receive_id"`
+				MsgType       string `json:"msg_type"`
+				Content       string `json:"content"`
+				UUID          string `json:"uuid"`
+				ReplyInThread bool   `json:"reply_in_thread"`
 			}
 			_ = json.Unmarshal(raw, &payload)
-			message := chatDMMessage{ReceiveID: payload.ReceiveID, Raw: payload.Content}
+			message := chatDMMessage{ReceiveID: payload.ReceiveID, Raw: payload.Content, InThread: payload.ReplyInThread, ChatID: chatDMTestChat}
 			if strings.HasSuffix(path, "/reply") {
 				message.ReplyTo = strings.TrimSuffix(strings.TrimPrefix(path, "/open-apis/im/v1/messages/"), "/reply")
 			}
@@ -119,13 +149,18 @@ func newChatDMFixture(t *testing.T, script func(call int, input string) string) 
 			for _, existing := range f.messages {
 				if existing.ID == "om_dm_"+payload.UUID {
 					f.mu.Unlock()
-					return respond(200, "application/json", fmt.Sprintf(`{"code":0,"data":{"message_id":%q,"chat_id":%q}}`, existing.ID, chatDMTestChat))
+					return respond(200, "application/json", fmt.Sprintf(`{"code":0,"data":{"message_id":%q,"chat_id":%q}}`, existing.ID, existing.ChatID))
 				}
 			}
 			message.ID = "om_dm_" + payload.UUID
+			// A reply to a group's message is in that group.
+			if group := f.groupChats[message.ReplyTo]; group != "" {
+				message.ChatID = group
+				f.groupChats[message.ID] = group
+			}
 			f.messages = append(f.messages, message)
 			f.mu.Unlock()
-			return respond(200, "application/json", fmt.Sprintf(`{"code":0,"data":{"message_id":%q,"chat_id":%q}}`, message.ID, chatDMTestChat))
+			return respond(200, "application/json", fmt.Sprintf(`{"code":0,"data":{"message_id":%q,"chat_id":%q}}`, message.ID, message.ChatID))
 		}
 		return respond(200, "application/json", `{"code":0}`)
 	}))
@@ -199,6 +234,15 @@ func (f *chatDMFixture) reply(t *testing.T, messageID, text, rootID, parentID st
 // click presses a card button (or submits its form) as the member.
 func (f *chatDMFixture) click(t *testing.T, message chatDMMessage, label string, form map[string]string) {
 	t.Helper()
+	if got := f.clickAs(t, f.identity.OpenID, message, label, form); strings.Contains(got, "expired") {
+		t.Fatalf("card callback: %s", got)
+	}
+}
+
+// clickAs presses a card button as openID in the card's chat and returns the
+// callback's answer.
+func (f *chatDMFixture) clickAs(t *testing.T, openID string, message chatDMMessage, label string, form map[string]string) string {
+	t.Helper()
 	actionID := chatDMButtonAction(message.Card, label)
 	if actionID == "" {
 		t.Fatalf("no %q button on card %s", label, message.Raw)
@@ -209,8 +253,8 @@ func (f *chatDMFixture) click(t *testing.T, message chatDMMessage, label string,
 	f.events++
 	envelope.Header.EventID = fmt.Sprintf("evt_dm_%d", f.events)
 	envelope.Header.EventType = "card.action.trigger"
-	envelope.Event.Operator.TenantKey, envelope.Event.Operator.OpenID = f.record.TenantKey, f.identity.OpenID
-	envelope.Event.Context.MessageID, envelope.Event.Context.ChatID = message.ID, chatDMTestChat
+	envelope.Event.Operator.TenantKey, envelope.Event.Operator.OpenID = f.record.TenantKey, openID
+	envelope.Event.Context.MessageID, envelope.Event.Context.ChatID = message.ID, firstNonEmpty(message.ChatID, chatDMTestChat)
 	raw, _ := json.Marshal(actionID)
 	envelope.Event.Action.Value = map[string]json.RawMessage{"actionId": raw}
 	envelope.Event.Action.FormValue = map[string]json.RawMessage{}
@@ -218,10 +262,12 @@ func (f *chatDMFixture) click(t *testing.T, message chatDMMessage, label string,
 		raw, _ := json.Marshal(value)
 		envelope.Event.Action.FormValue[key] = raw
 	}
-	if got := f.callback(t, envelope, time.Now(), true); got.Code != http.StatusOK || strings.Contains(got.Body.String(), "expired") {
+	got := f.callback(t, envelope, time.Now(), true)
+	if got.Code != http.StatusOK {
 		t.Fatalf("card callback: %d %s", got.Code, got.Body.String())
 	}
 	f.process(t)
+	return got.Body.String()
 }
 
 func (f *chatDMFixture) process(t *testing.T) {

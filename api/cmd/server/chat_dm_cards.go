@@ -192,6 +192,26 @@ func chatDMToolLabel(call *domain.AgentToolCall) string {
 // chatDMSend replies to the member's message (or sends a new message to them
 // when replyTo is empty). key makes the send idempotent across retries.
 func (s *server) chatDMSend(ctx context.Context, record domain.ChatIntegrationRecord, openID, replyTo, key string, card map[string]any) (messageID, chatID string, err error) {
+	return s.chatDMSendMessage(ctx, record, openID, replyTo, key, card, false)
+}
+
+// chatDMPost answers the request's message. In a direct message it replies
+// to the member's message. In a group (chat_group_agent.go) it replies in the
+// message's thread, or, when private, sends the card to the member's own
+// conversation with the bot so nothing personal reaches the group.
+func (s *server) chatDMPost(ctx context.Context, dm chatDMRequest, key string, card map[string]any, private bool) (messageID, chatID string, err error) {
+	switch {
+	case dm.group == nil:
+		return s.chatDMSend(ctx, dm.record, dm.command.OpenID, dm.command.MessageID, key, card)
+	case private:
+		return s.chatDMSend(ctx, dm.record, dm.command.OpenID, "", key, card)
+	}
+	return s.chatDMSendMessage(ctx, dm.record, dm.command.OpenID, dm.command.MessageID, key, card, true)
+}
+
+// chatDMSendMessage is chatDMSend; inThread replies in the thread of replyTo
+// (starting one when it has none).
+func (s *server) chatDMSendMessage(ctx context.Context, record domain.ChatIntegrationRecord, openID, replyTo, key string, card map[string]any, inThread bool) (messageID, chatID string, err error) {
 	content, _ := json.Marshal(card)
 	if len(content) > 28<<10 {
 		return "", "", chatInvalid("card exceeds the platform limit")
@@ -199,7 +219,11 @@ func (s *server) chatDMSend(ctx context.Context, record domain.ChatIntegrationRe
 	var result chatMessageResult
 	uuid := chatKey(key, "dm")[:32]
 	if replyTo != "" {
-		err = s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages/"+url.PathEscape(replyTo)+"/reply", map[string]any{"msg_type": "interactive", "content": string(content), "uuid": uuid}, &result)
+		body := map[string]any{"msg_type": "interactive", "content": string(content), "uuid": uuid}
+		if inThread {
+			body["reply_in_thread"] = true
+		}
+		err = s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages/"+url.PathEscape(replyTo)+"/reply", body, &result)
 	} else {
 		err = s.chatWorkflowRequest(ctx, record, http.MethodPost, "/open-apis/im/v1/messages?receive_id_type=open_id", map[string]any{"receive_id": openID, "msg_type": "interactive", "content": string(content), "uuid": uuid}, &result)
 	}
@@ -482,6 +506,16 @@ func chatDMSplitSuggestions(text string) (string, []string) {
 }
 
 func chatDMReplyCard(view chatDMReplyView, zh bool) map[string]any {
+	return chatDMReplyCardIn(view, zh, false)
+}
+
+// chatDMReplyCardFor is the reply card of the request: in a group thread it
+// says how to continue there.
+func chatDMReplyCardFor(dm chatDMRequest, view chatDMReplyView) map[string]any {
+	return chatDMReplyCardIn(view, dm.zh, dm.group != nil)
+}
+
+func chatDMReplyCardIn(view chatDMReplyView, zh, group bool) map[string]any {
 	title, template := chatDMText(zh, "Flow Agent", "Flow Agent"), "blue"
 	elements := []map[string]any{}
 	answer, suggestions := chatDMSplitSuggestions(view.Text)
@@ -531,7 +565,11 @@ func chatDMReplyCard(view chatDMReplyView, zh bool) map[string]any {
 		elements = append(elements, chatDMButtons(chatDMActionButton(chatDMText(zh, "Retry", "重试"), view.Retry, "primary")))
 	}
 	if view.Status == "done" || view.Status == "failed" || view.Status == "stopped" {
-		elements = append(elements, chatDMNote(chatDMText(zh, "Reply to this message to continue the conversation.", "回复这条消息即可继续对话。")))
+		if group {
+			elements = append(elements, chatDMNote(chatDMText(zh, "Reply in this thread and mention Flow to continue the conversation.", "在此话题中回复并 @Flow 即可继续对话。")))
+		} else {
+			elements = append(elements, chatDMNote(chatDMText(zh, "Reply to this message to continue the conversation.", "回复这条消息即可继续对话。")))
+		}
 	}
 	return chatDMCard(title, template, elements...)
 }

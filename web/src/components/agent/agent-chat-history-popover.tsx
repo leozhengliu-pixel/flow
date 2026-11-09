@@ -238,7 +238,7 @@ function ChatHistoryDialog({
           {unread && <span aria-hidden="true" className={styles.dot} />}
           {unread && <span className="sr-only">{t("Unread")}: </span>}
           <span className={styles.rowTitleText} data-i18n-ignore>{chatHistoryTitle(session, newChat)}</span>
-          <AgentOriginBadge origin={session.origin} />
+          <AgentOriginBadge origin={session.origin} chat={session.originChat} />
         </span>
         <span className={styles.rowMeta}>
           {toolbarIds.has(session.id) && <span>{t("Toolbar")}</span>}

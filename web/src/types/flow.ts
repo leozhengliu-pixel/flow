@@ -3254,8 +3254,10 @@ export interface AgentSession {
   updatedAt: string;
   /** When the owner last saw the chat; it is unread while `updatedAt` is later. Missing on chats from before read tracking. */
   lastReadAt?: string;
-  /** The chat platform of a conversation started in a direct message with the workspace's Lark or Feishu bot. */
+  /** The chat platform of a conversation started with the workspace's Lark or Feishu bot (a direct message or a group mention). */
   origin?: "lark" | "feishu";
+  /** The group's name, for a conversation started by mentioning the bot in a group. */
+  originChat?: string;
 }
 export interface PersonalAgentSkill {
   id: UUID;

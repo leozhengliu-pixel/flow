@@ -374,5 +374,10 @@ func (s *server) chatCallbackToast(ctx context.Context, record domain.ChatIntegr
 	if err == nil && json.Unmarshal(stored.Payload, &action) == nil && chatQuickActionKind(action.Kind) {
 		return map[string]any{"toast": map[string]any{"type": "info", "content": "Updating…", "i18n": map[string]string{"en_us": "Updating…", "zh_cn": "正在更新…"}}}
 	}
+	// A card in a group thread is answered there (chat_group_agent.go).
+	var group chatDMAction
+	if err == nil && json.Unmarshal(stored.Payload, &group) == nil && group.Group {
+		return map[string]any{"toast": map[string]any{"type": "info", "content": "Processing…", "i18n": map[string]string{"en_us": "Processing…", "zh_cn": "处理中…"}}}
+	}
 	return map[string]any{"toast": map[string]any{"type": "info", "content": "Processing. The result will arrive in your Flow bot conversation.", "i18n": map[string]string{"en_us": "Processing. The result will arrive in your Flow bot conversation.", "zh_cn": "处理中，结果将发送到你与 Flow 机器人的会话。"}}}
 }

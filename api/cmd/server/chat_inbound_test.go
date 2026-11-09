@@ -651,10 +651,10 @@ func TestChatInboundGroupCreateCommandShapes(t *testing.T) {
 			}
 		})
 	}
-	// Words that only start like the command are help, not a create.
+	// Words that only start like the command ask the agent, not a create.
 	for _, text := range []string{"@_user_1 create issues faster", "@_user_1 创建 一个想法"} {
 		command, _, _, _ := f.s.chatCommandForEnvelopeReason(t.Context(), f.record, f.groupMessage("om_not_create", "text", chatTextContent(text), f.botMention()))
-		if command.Kind != "group_help" {
+		if command.Kind != chatGroupAgentKind {
 			t.Fatalf("%q: %+v", text, command)
 		}
 	}

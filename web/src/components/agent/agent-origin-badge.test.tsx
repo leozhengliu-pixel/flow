@@ -14,6 +14,7 @@ function session(id: string, title: string, extra: Partial<AgentSession> = {}): 
 const sessions = [
   session('lark', 'Weekly status', { origin: 'lark' }),
   session('feishu', '本周进展', { origin: 'feishu' }),
+  session('group', 'Release checklist', { origin: 'lark', originChat: 'Release crew' }),
   session('app', 'Started in Flow'),
 ]
 
@@ -31,6 +32,13 @@ describe('AgentOriginBadge', () => {
     expect(screen.getByText('Started in Flow').closest('a')!.querySelector('[data-agent-origin]')).toBeNull()
   })
 
+  it('names the group of a chat started by a group mention', () => {
+    renderList()
+    const group = within(screen.getByText('Release checklist').closest('a')!).getByText('Lark · Release crew')
+    expect(group).toHaveAttribute('data-agent-origin', 'lark')
+    expect(group).toHaveAttribute('title', 'Started in a Lark group')
+  })
+
   it('shows 飞书 in Chinese', async () => {
     localStorage.setItem(LOCALE_STORAGE_KEY, 'zh-CN')
     try {
@@ -38,11 +46,12 @@ describe('AgentOriginBadge', () => {
       const feishu = await screen.findByText('飞书')
       expect(feishu).toHaveAttribute('title', '在飞书私聊中发起')
       expect(screen.getByText('Lark')).toHaveAttribute('title', '在 Lark 私聊中发起')
+      expect(screen.getByText('Lark · Release crew')).toHaveAttribute('title', '在 Lark 群聊中发起')
     } finally { localStorage.removeItem(LOCALE_STORAGE_KEY) }
   })
 
   it('translates its strings', () => {
-    for (const source of ['Started in a Lark direct message', 'Started in a Feishu direct message', 'Feishu']) {
+    for (const source of ['Started in a Lark direct message', 'Started in a Feishu direct message', 'Started in a Lark group', 'Started in a Feishu group', 'Feishu']) {
       expect(translateToChinese(source), source).not.toBe(source)
     }
   })

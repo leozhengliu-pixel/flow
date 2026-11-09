@@ -1075,7 +1075,10 @@ func (s *server) buildAgentChatPrompt(r *http.Request, data *domain.Bootstrap, s
 	contextMentions := agentMentionPrompt(mergeAgentProjects(selectedAgentProjects(data.Projects, session.ProjectIDs), refs.Projects), mergeAgentDocuments(selectedAgentDocuments(data.Documents, session.DocumentIDs), refs.Documents), selectedAgentUsers(data.Users, session.UserIDs))
 	contextMentions += agentInitiativePrompt(*data, initiatives)
 	contextTeams := append(agentProjectTeamIDs(mergeAgentProjects(selectedAgentProjects(data.Projects, session.ProjectIDs), refs.Projects)), agentInitiativeTeamIDs(initiatives)...)
-	prompt.system = buildWorkspaceAgentPrompt(*data, contextIssues, skills, agentChatToolRule, s.agentWriteAccessNote()+webNote, contextMentions+loopBuilderPrompt(*data, session), contextTeams...)
+	// A reply to a mention in a Lark or Feishu group also knows the group (chat_group_agent.go).
+	group, _ := r.Context().Value(chatGroupContextKey{}).(chatGroupAgentContext)
+	contextTeams = append(contextTeams, group.TeamIDs...)
+	prompt.system = buildWorkspaceAgentPrompt(*data, contextIssues, skills, agentChatToolRule, s.agentWriteAccessNote()+webNote, contextMentions+loopBuilderPrompt(*data, session)+group.Prompt, contextTeams...)
 	// Replayed replies need their offloaded text and tool results.
 	prompt.messages = agentProviderHistory(s.withAgentBodies(r, session), prompt.system, agentIssueTitles(contextIssues))
 	return prompt, nil

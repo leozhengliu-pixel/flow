@@ -82,7 +82,7 @@ export function AgentHistoryList({
                         <span className="sr-only">{t("Unread")}: </span>
                       </>}
                       <span className={styles.historyTitle} data-agent-chat-title="" data-i18n-ignore>{session.title}</span>
-                      <AgentOriginBadge origin={session.origin} />
+                      <AgentOriginBadge origin={session.origin} chat={session.originChat} />
                       <time className={styles.historyTime} dateTime={session.updatedAt}>{formatAgentHistoryTime(session.updatedAt, t, undefined, phone)}</time>
                     </a>
                   </FlowContextMenuTrigger>

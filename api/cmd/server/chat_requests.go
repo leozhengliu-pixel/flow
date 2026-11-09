@@ -79,22 +79,18 @@ func (s *server) chatRequestBindings(ctx context.Context, record domain.ChatInte
 	})
 }
 
-// chatRequestMentionCommand turns a group message that mentions the bot into
-// a request command: with a request prefix anywhere the bot is, and without
-// one only when the binding opts in. A bare mention replying to a
-// message makes the request from that message.
-func (s *server) chatRequestMentionCommand(ctx context.Context, record domain.ChatIntegrationRecord, envelope chatWebhookEnvelope, text string) (chatInboundCommand, string, bool) {
+// chatRequestMentionCommand turns a group message that mentions the bot with
+// a request prefix into a request command. Any other mention goes to the Flow
+// Agent (chat_group_agent.go), which tells members how to file a request;
+// the binding's everyMention no longer applies. A bare "@Flow 提需求"
+// replying to a message makes the request from that message.
+func (s *server) chatRequestMentionCommand(_ context.Context, record domain.ChatIntegrationRecord, envelope chatWebhookEnvelope, text string) (chatInboundCommand, string, bool) {
 	message := envelope.Event.Message
 	body, explicit := chatRequestText(text)
-	if !explicit && !slices.ContainsFunc(s.chatRequestBindings(ctx, record), func(binding domain.ChatBinding) bool {
-		return binding.ChatID == message.ChatID && binding.Requests.EveryMention
-	}) {
+	if !explicit {
 		return chatInboundCommand{}, "", false
 	}
-	values := map[string]json.RawMessage{"source": json.RawMessage(strconv.Quote(domain.ChatRequestSourceMention))}
-	if explicit {
-		values["explicit"] = json.RawMessage(`"true"`)
-	}
+	values := map[string]json.RawMessage{"source": json.RawMessage(strconv.Quote(domain.ChatRequestSourceMention)), "explicit": json.RawMessage(`"true"`)}
 	source := message.MessageID
 	switch {
 	case body != "":
@@ -105,8 +101,6 @@ func (s *server) chatRequestMentionCommand(ctx context.Context, record domain.Ch
 	case message.ParentID != "" && chatValidPlatformID(message.ParentID, "om_"):
 		source = message.ParentID
 		values["read"] = json.RawMessage(`"true"`)
-	case !explicit:
-		return chatInboundCommand{}, "", false
 	}
 	command := chatInboundCommand{Kind: chatRequestKind, OpenID: envelope.Event.Sender.SenderID.OpenID, ChatID: message.ChatID, MessageID: source, Values: values}
 	return command, chatKey(record.ConnectionID, "message", message.MessageID), true
@@ -196,7 +190,8 @@ func (s *server) processChatRequest(ctx context.Context, record domain.ChatInteg
 		}
 		return nil
 	}
-	if source == domain.ChatRequestSourceMention && !explicit && !binding.Requests.EveryMention {
+	if source == domain.ChatRequestSourceMention && !explicit {
+		// Queued before mentions went to the agent.
 		return s.chatSendGroupHelp(ctx, record, job, command)
 	}
 	identity, err := s.store.ChatIdentityForOpenID(ctx, record.WorkspaceKey, record.ConnectionID, command.OpenID)

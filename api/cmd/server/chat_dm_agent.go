@@ -52,6 +52,11 @@ import (
 //
 // The conversation state (reply chains, the chosen workspace) is kept as the
 // member's chat actions, which unlinking deletes; it expires after 30 days.
+//
+// A mention of the bot in a group runs through the same pipeline
+// (chat_group_agent.go): chatDMRequest.group sends its reply card and
+// approvals into the mention's thread and its notices to the member
+// privately (chatDMPost).
 
 const (
 	chatDMThreadPrefix    = "chat_dm_thread_"
@@ -75,11 +80,24 @@ var chatDMReplies sync.WaitGroup
 
 type chatDMOriginKey struct{}
 
+// chatDMOrigin is where an Agent chat is started from: the platform, and the
+// group's name for a mention in a group (chat_group_agent.go).
+type chatDMOrigin struct {
+	Provider string
+	Chat     string
+}
+
 // chatDMSessionOrigin is the platform an Agent chat is started from, set only
-// on the requests of a direct message.
+// on the requests of a direct message or a group mention.
 func chatDMSessionOrigin(ctx context.Context) string {
-	origin, _ := ctx.Value(chatDMOriginKey{}).(string)
-	return origin
+	origin, _ := ctx.Value(chatDMOriginKey{}).(chatDMOrigin)
+	return origin.Provider
+}
+
+// chatDMSessionOriginChat is the group an Agent chat is started from.
+func chatDMSessionOriginChat(ctx context.Context) string {
+	origin, _ := ctx.Value(chatDMOriginKey{}).(chatDMOrigin)
+	return origin.Chat
 }
 
 // chatDMThread is what a message of the conversation belongs to: an Agent
@@ -112,6 +130,10 @@ type chatDMAction struct {
 	AssigneeIDs     []string            `json:"assigneeIds,omitempty"`
 	Pending         *chatInboundCommand `json:"pending,omitempty"`
 	Chinese         bool                `json:"zh,omitempty"`
+	// Group marks a card in a group thread (chat_group_agent.go): only its
+	// member (OpenID) may use it; Approver names them to anyone else.
+	Group    bool   `json:"group,omitempty"`
+	Approver string `json:"approver,omitempty"`
 }
 
 type chatDMPendingAction struct {
@@ -136,6 +158,11 @@ type chatDMRequest struct {
 	job      domain.ChatJob
 	zh       bool
 	metadata domain.Bootstrap
+	// group is set for a mention in a group (chat_group_agent.go): replies go
+	// into the message's thread, notices to the member privately.
+	group *chatGroupReply
+	// context is what the agent is told about the group (set on its reply).
+	context *chatGroupAgentContext
 }
 
 func (dm chatDMRequest) authContext(ctx context.Context) context.Context {
@@ -166,6 +193,8 @@ func (s *server) processChatDirectMessage(ctx context.Context, record domain.Cha
 	switch command.Kind {
 	case "dm_message":
 		return true, s.chatDMMessage(ctx, record, job, command)
+	case chatGroupAgentKind:
+		return true, s.chatGroupAgentMessage(ctx, record, job, command)
 	case "card_action":
 		stored, err := s.store.GetChatAction(ctx, record.WorkspaceKey, record.ConnectionID, command.ActionID)
 		if err != nil {
@@ -338,15 +367,16 @@ func (s *server) chatDMFailure(ctx context.Context, dm chatDMRequest, err error)
 	if failure.Message == chatReconnectMessage || failure.Status == http.StatusUnauthorized {
 		card := s.chatDMLinkCard(dm.target.Workspace, dm.zh)
 		card["elements"] = append([]map[string]any{chatCardText(chatDMText(dm.zh, "Your linked chat account has expired.", "你关联的聊天账号已过期。"))}, card["elements"].([]map[string]any)...)
-		_, _, sendErr := s.chatDMSend(ctx, dm.record, dm.command.OpenID, dm.command.MessageID, dm.job.DedupKey+":expired", card)
+		_, _, sendErr := s.chatDMPost(ctx, dm, dm.job.DedupKey+":expired", card, true)
 		return sendErr
 	}
 	return s.chatDMNotice(ctx, dm, chatDMText(dm.zh, "Your Flow access to this workspace has changed. Open Flow and check your access.", "你在这个工作区的 Flow 权限已变化。请打开 Flow 检查你的权限。"))
 }
 
-// chatDMNotice replies with a short message card.
+// chatDMNotice replies with a short message card (privately, for a group
+// mention).
 func (s *server) chatDMNotice(ctx context.Context, dm chatDMRequest, text string) error {
-	_, _, err := s.chatDMSend(ctx, dm.record, dm.command.OpenID, dm.command.MessageID, dm.job.DedupKey+":notice", chatDMNoticeCard("Flow", text))
+	_, _, err := s.chatDMPost(ctx, dm, dm.job.DedupKey+":notice", chatDMNoticeCard("Flow", text), true)
 	return err
 }
 
@@ -495,13 +525,14 @@ func (s *server) chatDMWorkspaceChoice(ctx context.Context, dm chatDMRequest, ta
 	card := chatDMCard(chatDMText(dm.zh, "Choose a workspace", "选择工作区"), "blue",
 		chatCardText(chatDMText(dm.zh, "You're linked in several Flow workspaces. Which one should Flow use in this chat? Send “switch workspace” to change it later.", "你关联了多个 Flow 工作区。这个对话要使用哪一个？之后发送“切换工作区”即可更改。")),
 		chatDMButtons(buttons...))
-	_, err := s.chatDMSendWithActions(ctx, dm, dm.job.DedupKey+":workspace", card, actions, chatDMFormLifetime)
+	_, err := s.chatDMSendWithActions(ctx, dm, dm.job.DedupKey+":workspace", card, actions, chatDMFormLifetime, false)
 	return err
 }
 
 // chatDMSendWithActions saves the card's actions, replies with the card and
-// ties the actions to the message it became.
-func (s *server) chatDMSendWithActions(ctx context.Context, dm chatDMRequest, key string, card map[string]any, actions []chatDMPendingAction, lifetime time.Duration) (string, error) {
+// ties the actions to the message it became. For a group mention the card is
+// private unless inThread (an approval in the reply's thread).
+func (s *server) chatDMSendWithActions(ctx context.Context, dm chatDMRequest, key string, card map[string]any, actions []chatDMPendingAction, lifetime time.Duration, inThread bool) (string, error) {
 	expires := time.Now().UTC().Add(lifetime)
 	stored := make([]domain.ChatAction, 0, len(actions))
 	for _, item := range actions {
@@ -512,11 +543,13 @@ func (s *server) chatDMSendWithActions(ctx context.Context, dm chatDMRequest, ke
 		}
 		stored = append(stored, action)
 	}
-	messageID, chatID, err := s.chatDMSend(ctx, dm.record, dm.command.OpenID, dm.command.MessageID, key, card)
+	messageID, chatID, err := s.chatDMPost(ctx, dm, key, card, !inThread)
 	if err != nil {
 		return "", err
 	}
-	chatID = firstNonEmpty(chatID, dm.command.ChatID)
+	if dm.group == nil || inThread {
+		chatID = firstNonEmpty(chatID, dm.command.ChatID)
+	}
 	for index, item := range actions {
 		item.Action.PersonalChatID, item.Action.PersonalMessage = chatID, messageID
 		stored[index].Payload, _ = json.Marshal(item.Action)
@@ -536,6 +569,10 @@ func (s *server) chatDMCardAction(ctx context.Context, record domain.ChatIntegra
 		return err
 	}
 	dm := chatDMRequest{record: record, identity: identity, command: command, job: job, zh: zh}
+	if action.Group {
+		// A card in a group thread: notices go to the member privately.
+		dm.group = &chatGroupReply{ChatID: command.ChatID}
+	}
 	if !linked {
 		_, _, err = s.chatDMSend(ctx, record, command.OpenID, "", job.DedupKey+":link", s.chatDMLinkCard(record.WorkspaceKey, zh))
 		return err
@@ -562,8 +599,13 @@ func (s *server) chatDMCardAction(ctx context.Context, record domain.ChatIntegra
 		if err := s.chatDMUpdate(ctx, record, command.MessageID, chatDMNoticeCard(chatDMText(zh, "Workspace", "工作区"), chatDMText(zh, "Flow uses "+target.Name+" in this chat. Send “switch workspace” to change it.", "这个对话使用 "+target.Name+"。发送“切换工作区”即可更改。"))); err != nil {
 			return err
 		}
-		if action.Pending != nil && action.Pending.Kind == "dm_message" && action.Pending.OpenID == command.OpenID {
-			return s.chatDMMessage(ctx, record, job, *action.Pending)
+		if action.Pending != nil && action.Pending.OpenID == command.OpenID {
+			switch action.Pending.Kind {
+			case "dm_message":
+				return s.chatDMMessage(ctx, record, job, *action.Pending)
+			case chatGroupAgentKind:
+				return s.chatGroupAgentMessage(ctx, record, job, *action.Pending)
+			}
 		}
 		return nil
 	case "dm_approval":
@@ -588,6 +630,9 @@ func (s *server) chatDMCardAction(ctx context.Context, record domain.ChatIntegra
 		// The action ID, not the click event, deduplicates repeated clicks.
 		dm.job.DedupKey = chatKey(record.ConnectionID, command.ActionID, "retry")
 		dm.command = reply.Command
+		if reply.Group != nil {
+			dm.group = reply.Group
+		}
 		return s.chatDMStartReply(ctx, dm, action.SessionID)
 	}
 	return nil
@@ -625,7 +670,7 @@ func (s *server) chatDMAnswerApproval(ctx context.Context, dm chatDMRequest, act
 // chatDMStartReply answers with the Flow Agent: a new chat, or the next
 // message of sessionID. Only the durable queue starts the reply or its card.
 func (s *server) chatDMStartReply(ctx context.Context, dm chatDMRequest, sessionID string) error {
-	payload, err := json.Marshal(chatDMReplyJob{Command: dm.command, UserID: dm.identity.UserID, Workspace: dm.target.Workspace, SessionID: sessionID, ThreadKey: chatDMReplyThreadKey(dm, sessionID), Chinese: dm.zh})
+	payload, err := json.Marshal(chatDMReplyJob{Command: dm.command, UserID: dm.identity.UserID, Workspace: dm.target.Workspace, SessionID: sessionID, ThreadKey: chatDMReplyThreadKey(dm, sessionID), Chinese: dm.zh, Group: dm.group})
 	if err != nil {
 		return err
 	}
@@ -645,7 +690,14 @@ func (s *server) chatDMAgentCall(ctx context.Context, dm chatDMRequest, method, 
 	ctx = context.WithValue(ctx, workspaceKeyContextKey{}, dm.target.Workspace)
 	ctx = store.ContextWithActor(ctx, user)
 	ctx = context.WithValue(ctx, agentBaseURLKey{}, s.chatAppOrigin())
-	ctx = context.WithValue(ctx, chatDMOriginKey{}, dm.record.Provider)
+	origin := chatDMOrigin{Provider: dm.record.Provider}
+	if dm.group != nil {
+		origin.Chat = firstNonEmpty(dm.group.ChatName, dm.group.ChatID)
+	}
+	ctx = context.WithValue(ctx, chatDMOriginKey{}, origin)
+	if dm.context != nil {
+		ctx = context.WithValue(ctx, chatGroupContextKey{}, *dm.context)
+	}
 	raw, err := json.Marshal(input)
 	if err != nil {
 		return err
@@ -1038,9 +1090,7 @@ func (r *chatDMReply) follow(ctx context.Context, done chan struct{}) {
 			return
 		}
 		if sessionID != "" && !threaded {
-			thread := chatDMThread{Kind: "session", OpenID: r.dm.command.OpenID, WorkspaceKey: r.dm.target.Workspace, SessionID: sessionID}
-			r.s.chatDMRememberThread(persist, record, r.dm.identity.UserID, r.dm.command.MessageID, thread)
-			r.s.chatDMRememberThread(persist, record, r.dm.identity.UserID, r.cardID, thread)
+			r.s.chatDMRememberReply(persist, r.dm, sessionID, r.cardID)
 			r.mu.Lock()
 			r.threaded = true
 			r.mu.Unlock()
@@ -1061,7 +1111,8 @@ func (r *chatDMReply) follow(ctx context.Context, done chan struct{}) {
 			r.deliveryErr = err
 			return
 		}
-		raw, _ := json.Marshal(chatDMReplyCard(view, zh))
+		card := chatDMReplyCardFor(r.dm, view)
+		raw, _ := json.Marshal(card)
 		shown := bytes.Equal(raw, last)
 		if !shown || finished {
 			err := r.lease.update(func(p *chatDMReplyJob) {
@@ -1069,7 +1120,7 @@ func (r *chatDMReply) follow(ctx context.Context, done chan struct{}) {
 					p.Final = &view
 				}
 			}, "", func(deliveryCtx context.Context) error {
-				return r.s.chatDMUpdate(deliveryCtx, record, r.cardID, chatDMReplyCard(view, zh))
+				return r.s.chatDMUpdate(deliveryCtx, record, r.cardID, card)
 			})
 			if err != nil {
 				r.deliveryErr = err
@@ -1086,6 +1137,10 @@ func (r *chatDMReply) follow(ctx context.Context, done chan struct{}) {
 			if shown && sessionID != "" {
 				r.s.chatDMMarkSessionRead(persist, r.dm.target.Workspace, r.dm.identity.UserID, sessionID)
 			}
+			if shown && r.dm.group != nil {
+				// The thread's transcript keeps the answer for later turns.
+				r.s.chatGroupRecordAnswer(persist, r.dm, r.cardID, view)
+			}
 			return
 		}
 	}
@@ -1096,17 +1151,39 @@ func (r *chatDMReply) sendApproval(ctx context.Context, sessionID string, approv
 	approveID := "chat_action_" + chatKey(dm.record.ConnectionID, approval.ID, "approve")
 	rejectID := "chat_action_" + chatKey(dm.record.ConnectionID, approval.ID, "reject")
 	base := chatDMAction{Kind: "dm_approval", OpenID: dm.command.OpenID, WorkspaceKey: dm.target.Workspace, SessionID: sessionID, ApprovalID: approval.ID, Label: approval.Label, Preview: approval.Preview, Chinese: dm.zh}
+	if dm.group != nil {
+		// In the reply's thread, where only this member may answer it.
+		base.Group, base.Approver = true, r.s.chatGroupMemberName(ctx, dm.identity.UserID)
+	}
 	approve, reject := base, base
 	approve.Decision, approve.Sibling = "approve", rejectID
 	reject.Decision, reject.Sibling = "reject", approveID
 	card := chatDMApprovalCard(approval.Label, approval.Preview, approveID, rejectID, "", dm.zh)
-	messageID, err := r.s.chatDMSendWithActions(ctx, dm, dm.job.DedupKey+":approval:"+approval.ID, card, []chatDMPendingAction{{ID: approveID, Action: approve}, {ID: rejectID, Action: reject}}, agentApprovalTimeout+time.Minute)
+	if dm.group != nil {
+		card["elements"] = append(card["elements"].([]map[string]any), chatDMNote(chatDMText(dm.zh, "Only "+base.Approver+" can approve or reject this.", "只有 "+base.Approver+" 可以批准或拒绝。")))
+	}
+	messageID, err := r.s.chatDMSendWithActions(ctx, dm, dm.job.DedupKey+":approval:"+approval.ID, card, []chatDMPendingAction{{ID: approveID, Action: approve}, {ID: rejectID, Action: reject}}, agentApprovalTimeout+time.Minute, true)
 	if err != nil {
 		log.Printf("Chat direct message workspace=%s: %v", dm.record.WorkspaceKey, err)
 		return
 	}
 	r.approvalCards[approval.ID] = chatDMApprovalCardState{MessageID: messageID, Label: approval.Label, Preview: approval.Preview}
-	r.s.chatDMRememberThread(ctx, dm.record, dm.identity.UserID, messageID, chatDMThread{Kind: "session", OpenID: dm.command.OpenID, WorkspaceKey: dm.target.Workspace, SessionID: sessionID})
+	if dm.group == nil {
+		r.s.chatDMRememberThread(ctx, dm.record, dm.identity.UserID, messageID, chatDMThread{Kind: "session", OpenID: dm.command.OpenID, WorkspaceKey: dm.target.Workspace, SessionID: sessionID})
+	}
+}
+
+// chatDMRememberReply keeps which Agent chat the reply belongs to, so a reply
+// continues it: in a direct message, replies to the member's message or the
+// card; in a group, the member's next message in the thread.
+func (s *server) chatDMRememberReply(ctx context.Context, dm chatDMRequest, sessionID, cardID string) {
+	if dm.group != nil {
+		s.chatGroupRememberSession(ctx, dm, sessionID)
+		return
+	}
+	thread := chatDMThread{Kind: "session", OpenID: dm.command.OpenID, WorkspaceKey: dm.target.Workspace, SessionID: sessionID}
+	s.chatDMRememberThread(ctx, dm.record, dm.identity.UserID, dm.command.MessageID, thread)
+	s.chatDMRememberThread(ctx, dm.record, dm.identity.UserID, cardID, thread)
 }
 
 // stillLinked: the member's accounts (through this bot and in the target

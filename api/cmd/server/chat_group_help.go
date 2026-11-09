@@ -20,7 +20,10 @@ func (s *server) chatSendGroupHelp(ctx context.Context, record domain.ChatIntegr
 		binding = domain.ChatBinding{}
 	}
 	language := chatGroupLanguage(record, binding)
-	elements := []map[string]any{}
+	// Mentioning the bot asks the Flow Agent (chat_group_agent.go), bound or
+	// not.
+	elements := []map[string]any{chatCardText(chatT(language, "help_agent"))}
+	actions := len(elements)
 	if binding.AllowCreate {
 		elements = append(elements, chatCardText(chatT(language, "help_create")))
 	}
@@ -33,7 +36,7 @@ func (s *server) chatSendGroupHelp(ctx context.Context, record domain.ChatIntegr
 	if binding.AllowUpdate {
 		elements = append(elements, chatCardText(chatT(language, "help_update")))
 	}
-	if len(elements) == 0 {
+	if len(elements) == actions {
 		elements = append(elements, chatCardText(chatT(language, "help_off")))
 	}
 	message := chatInteractive(chatCard(chatT(language, "help_title"), elements...))

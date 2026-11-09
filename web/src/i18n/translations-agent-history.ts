@@ -8,6 +8,9 @@ export const agentHistoryZhCN: Record<string, string> = {
   // A chat started in a direct message with the workspace's chat bot
   "Started in a Lark direct message": "在 Lark 私聊中发起",
   "Started in a Feishu direct message": "在飞书私聊中发起",
+  // A chat started by mentioning the bot in a group
+  "Started in a Lark group": "在 Lark 群聊中发起",
+  "Started in a Feishu group": "在飞书群聊中发起",
   // Bottom-right chat history popover
   "Chat history…": "对话历史…",
   "Related to this issue": "与此事项相关",

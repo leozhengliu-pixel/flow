@@ -379,8 +379,11 @@ type AgentSession struct {
 	// DeletedAt marks a chat the owner deleted: hidden everywhere, restorable until the retention window passes.
 	DeletedAt *time.Time `json:"deletedAt,omitempty"`
 	// Origin names the chat platform of a conversation started in a direct message with the workspace's Lark or
-	// Feishu bot; empty for chats started in Flow.
+	// Feishu bot, or by mentioning the bot in a group; empty for chats started in Flow.
 	Origin string `json:"origin,omitempty" enum:"lark,feishu"`
+	// OriginChat is the name of the group a conversation was started in by mentioning the bot; empty for direct
+	// messages and chats started in Flow.
+	OriginChat string `json:"originChat,omitempty"`
 }
 
 type PersonalAgentSkill struct {

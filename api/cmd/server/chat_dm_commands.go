@@ -90,7 +90,7 @@ func (s *server) chatDMNewIssueForm(ctx context.Context, dm chatDMRequest, title
 			chatSelect("priority", chatDMText(dm.zh, "Priority", "优先级"), "0", chatDMPriorityOptions(dm.zh)),
 			chatSubmit(actionID, chatDMText(dm.zh, "Create issue", "创建事项")),
 		))
-	_, err := s.chatDMSendWithActions(ctx, dm, dm.job.DedupKey+":create", card, []chatDMPendingAction{{ID: actionID, Action: action}}, chatDMFormLifetime)
+	_, err := s.chatDMSendWithActions(ctx, dm, dm.job.DedupKey+":create", card, []chatDMPendingAction{{ID: actionID, Action: action}}, chatDMFormLifetime, false)
 	return err
 }
 
