@@ -130,11 +130,15 @@
 .document-icon-button svg { width: 14px; height: 14px; color: var(--issue-header-icon); }
 .document-icon-button:hover,
 .document-icon-button[data-state="open"],
+.document-icon-button[data-open],
 .document-icon-button.is-active {
   background: var(--issue-header-hover-bg);
 }
+/* The tooltip trigger wrapped around the popover trigger owns data-state, so the open popover is flagged separately. */
+.document-icon-button[data-open] { color: var(--issue-header-icon-hover); }
 .document-icon-button:hover svg,
 .document-icon-button[data-state="open"] svg,
+.document-icon-button[data-open] svg,
 .document-icon-button.is-active svg,
 .document-icon-button[aria-checked="true"] svg { color: var(--issue-header-icon-hover); }
 /* A favorited document: the reference's filled yellow star, at rest and on hover. */
@@ -700,6 +704,7 @@ button.document-icon.is-empty:hover,
   .document-subscribers__search { background: transparent; }
   .document-subscribers__avatar-wrap { width: 16px; height: 16px; flex: 0 0 16px; }
   .document-subscribers__row .document-meta-avatar { width: 16px; height: 16px; flex-basis: 16px; font-size: 9px; line-height: 16px; }
+  .document-subscribers__row .document-meta-avatar[data-initials="3"] { font-size: 5px; }
   .document-subscribers__avatar-label { display: none; }
   .document-subscribers__list { padding: 6px 0; }
   .document-subscribers__row { height: 32px; padding: 0 18px 0 14px; }
@@ -711,7 +716,7 @@ button.document-icon.is-empty:hover,
   .document-subscribers__row:is(:hover, :focus-visible):not(:disabled) .document-subscribers__name { color: var(--bright); }
   .document-subscribers__filter { font-weight: 400; }
   .document-subscribers__filter { padding: 10px 0 9px; }
-  .document-subscribers__group { height: 30px; align-items: flex-start; padding: 8px 14px 0; color: var(--pk-muted); }
+  .document-subscribers__group { height: 30px; align-items: flex-start; padding: 8px 14px; color: var(--pk-muted); }
   .document-subscribers__badge {
     box-sizing: border-box;
     display: inline-flex;

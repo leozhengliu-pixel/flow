@@ -66,7 +66,7 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
   return <Popover.Root open={open} onOpenChange={next => { onOpenChange(next); if (!next) setQuery('') }}>
     <ScopedFlowTooltip label={changeLabel} shortcut={DOCUMENT_PAGE_SHORTCUTS.subscribers} disabled={open}>
       <Popover.Trigger asChild>
-        <button aria-label={changeLabel} aria-busy={busy || undefined} className="document-icon-button" data-subscribed={subscribed} disabled={disabled} type="button">
+        <button aria-label={changeLabel} aria-busy={busy || undefined} className="document-icon-button" data-open={open || undefined} data-subscribed={subscribed} disabled={disabled} type="button">
           <span aria-hidden="true" className="document-bell">
             <span className="document-bell__layer" data-visible={!subscribed}><FlowBellIcon/></span>
             <span className="document-bell__layer" data-visible={subscribed}><FlowBellCheckIcon/></span>
