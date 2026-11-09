@@ -166,3 +166,34 @@ test('the same non-owner role and one-version history omit inapplicable controls
   expect(Math.abs(box.height - 721)).toBeLessThanOrEqual(1)
   if (process.env.FLOW_CI_SHOTS) await page.screenshot({ path: `${process.env.FLOW_CI_SHOTS}/docs-history.png`, animations: 'disabled' })
 })
+
+test('the selected text moves to a new document from ⌘K, not from the selection toolbar', async ({ page, request, workspaceKey }) => {
+  const response = await request.post('/api/documents', { headers: { 'X-Workspace-Key': workspaceKey }, data: { title: '[audit] Move selection', content: 'Keep this paragraph.\n\nMove this paragraph away.' } })
+  expect(response.status()).toBe(201)
+  const doc = await response.json() as FlowDocument
+  await page.goto(`/${workspaceKey}/document/${doc.slugId}`)
+  const editor = page.getByRole('textbox', { name: 'Document content', exact: true })
+  await expect(editor).toContainText('Move this paragraph away.')
+  // The toolbar stays as the reference has it.
+  await editor.locator('p').nth(1).click({ clickCount: 3 })
+  await expect(page.getByRole('button', { name: 'Create issue from selection', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Move selection to new document', exact: true })).toHaveCount(0)
+  // The palette lists the command only for a selection, and acts on the selection made before it opened.
+  // ⌘K inside the focused editor is the link shortcut, so the palette opens once focus has left the text (the selection stays).
+  await page.locator('main > header').click({ position: { x: 900, y: 20 } })
+  await page.keyboard.press('ControlOrMeta+k')
+  const option = page.getByRole('option', { name: /Move selection to new document/ })
+  await expect(option).toBeVisible()
+  await option.click()
+  await expect(page).not.toHaveURL(new RegExp(doc.slugId))
+  await expect(page.getByRole('textbox', { name: 'Document content', exact: true })).toContainText('Move this paragraph away.')
+  await page.goBack()
+  await expect(editor).toContainText('Keep this paragraph.')
+  await expect(editor).not.toContainText('Move this paragraph away.')
+  // Without a selection the command is not offered.
+  await editor.locator('p').first().click()
+  await page.locator('main > header').click({ position: { x: 900, y: 20 } })
+  await page.keyboard.press('ControlOrMeta+k')
+  await expect(page.getByRole('option', { name: /Duplicate/ }).first()).toBeVisible()
+  await expect(page.getByRole('option', { name: /Move selection to new document/ })).toHaveCount(0)
+})

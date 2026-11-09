@@ -35,6 +35,8 @@ export interface DocumentCommandContext {
   /** A multi-selection (list rows): commands then apply to each of them; `document` is the first. */
   documents?: FlowDocument[]
   onAskAgent?: () => void
+  /** Set while the document editor holds a text selection the viewer may move into a new document. */
+  onMoveSelection?: () => void
 }
 
 /** A selected release (pipeline list): the surface supplies its row actions, as the reference app's "Release · v1.2.0" palette. */

@@ -5,7 +5,7 @@ import { askAgentAboutSelection } from '@/components/editor/selection-issue'
 import type { SelectedDescription } from '@/components/issue/editor/structured-blocks'
 import { IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
 import { SelectionIssueProvider } from '@/components/editor/selection-issue-provider'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useResetOnChange } from '@/hooks/use-reset-on-change'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
@@ -25,7 +25,7 @@ import { queueFlowMenuShortcut } from '@/components/ui/menu-shortcuts'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
 import { documentSelectionActions } from '@/components/documents/document-selection-actions'
-import { addSubscription, listDocumentPermissions, removeSubscription, replaceDocumentPermissions, restoreDocumentRevision, updateDocument, uploadDocumentAttachment } from '@/lib/api'
+import { addSubscription, createDocument, listDocumentPermissions, removeSubscription, replaceDocumentPermissions, restoreDocumentRevision, updateDocument, uploadDocumentAttachment } from '@/lib/api'
 import type { BootstrapData, Comment, DocumentPermission, FlowDocument, TrashEntry, User } from '@/types/flow'
 
 import './document-page.css'
@@ -42,6 +42,8 @@ import { DocumentBreadcrumb, type DocumentOrigin } from './document-breadcrumb'
 import { DeletedDocumentMenuItems } from './document-deleted-menu'
 import { DocumentEditedPopover } from './document-edited-popover'
 import { DocumentHistoryDialog } from './document-history-dialog'
+import { documentPath } from '@/lib/app-routes'
+import { moveDocumentSelection } from './move-document-selection'
 import { DocumentMenuItems } from './document-menu'
 import { DocumentSubscribersPopover } from './document-subscribers-popover'
 import { DocumentTemplateChip } from './document-template-chip'
@@ -76,7 +78,6 @@ function latestRevision(document: FlowDocument) {
 export function DocumentPage({ data, document, onReload, onBack, origin, openHistoryRequest, onHistoryRequestHandled, onOpenSidebar, onNavigate, deletedEntry }: DocumentPageProps) {
   const { t } = useI18n()
   const deleted = Boolean(deletedEntry)
-  useRegisterCommandContext(deleted ? undefined : { kind: 'document', document })
   const [title, setTitle] = useState(document.title)
   const editorState = document.contentData ? JSON.stringify(document.contentData) : document.contentState
   const [body, setBody] = useState({ value: document.content, state: editorState })
@@ -147,6 +148,44 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   // Like the reference app: the selection goes to the floating chat as a chip and the editor lets go of it (the toolbar closes).
   // The quoted text keeps a faint highlight while its chip is in the chat.
   const askAgent = (selection: SelectedDescription, editor?: Editor) => askAgentAboutSelection(selection, editor ?? liveEditor ?? undefined)
+  const moveSelectionToNewDocument = async (selection: SelectedDescription, editor?: Editor) => {
+    if (!editor || !selection.text.trim()) return
+    try {
+      const firstLine = selection.text.split(/\r?\n/, 1)[0].trim().slice(0, 120)
+      const { created, removed } = await moveDocumentSelection(editor, selection, content => createDocument({
+        title: firstLine,
+        ...content,
+        projectIds: document.projectIds,
+        teamIds: document.teamIds,
+      }))
+      if (!removed) throw new Error(t('The selected content changed. The new document was created without removing the source.'))
+      window.clearTimeout(pending.current)
+      await updateDocument(document.id, { content: editor.getMarkdown(), contentData: editor.getJSON() as Record<string, unknown> })
+      await persistEditorRef.current?.()
+      await onReload()
+      toast.success(t('Selection moved to new document'))
+      navigate(documentPath(data.workspace.urlKey, created))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('Could not move selection to new document'))
+    }
+  }
+  // ⌘K offers "Move selection to new document" while the editor holds a text selection. The editor keeps its selection while
+  // the palette has focus, so the command acts on what was selected before it opened.
+  const hasTextSelection = useSyncExternalStore(
+    useCallback((notify: () => void) => {
+      if (!liveEditor || liveEditor.isDestroyed) return () => undefined
+      liveEditor.on('selectionUpdate', notify)
+      return () => { liveEditor.off('selectionUpdate', notify) }
+    }, [liveEditor]),
+    () => Boolean(liveEditor && !liveEditor.isDestroyed && !liveEditor.state.selection.empty
+      && liveEditor.state.doc.textBetween(liveEditor.state.selection.from, liveEditor.state.selection.to).trim()),
+  )
+  const moveCurrentSelection = () => {
+    if (!liveEditor || liveEditor.isDestroyed) return
+    const { from, to } = liveEditor.state.selection
+    void moveSelectionToNewDocument({ from, to, text: liveEditor.state.doc.textBetween(from, to, '\n') }, liveEditor)
+  }
+  useRegisterCommandContext(deleted ? undefined : { kind: 'document', document, onMoveSelection: canEdit && hasTextSelection ? moveCurrentSelection : undefined })
   const defaultDocumentIcon = !document.icon
   const lastRevision = document.revisions.length ? latestRevision(document) : undefined
   const lastEditor = lastRevision?.author ?? document.creator

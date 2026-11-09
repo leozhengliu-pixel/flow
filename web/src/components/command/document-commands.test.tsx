@@ -86,6 +86,18 @@ describe('document commands in ⌘K', () => {
     expect(onAskAgent).toHaveBeenCalledOnce()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
+  it('moves the editor selection into a new document only when the page offers it', async () => {
+    const onMoveSelection = vi.fn()
+    const { user } = setup({ kind: 'document', document: launch, onMoveSelection })
+    await user.click(option('Move selection to new document'))
+    expect(onMoveSelection).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+  it('does not list the move command without a text selection', async () => {
+    setup({ kind: 'document', document: launch })
+    await screen.findByRole('option', { name: /Ask agent|Duplicate/ }).catch(() => undefined)
+    expect(screen.queryByRole('option', { name: /Move selection to new document/ })).not.toBeInTheDocument()
+  })
   beforeEach(() => {
     localStorage.setItem('flow:locale', 'en-US')
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })

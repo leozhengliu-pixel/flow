@@ -129,6 +129,7 @@ export function documentCommands({ context, data: source, page: current, query, 
   const doc = docs[0]
   const actions: ContextAction[] = doc ? documentActions(ctx, docs, { host, close, pathname }) : []
   if (doc && context?.kind === 'document' && context.onAskAgent) actions.push({ id: 'doc-ask-agent', label: 'Ask agent', icon: <AgentCursorGlyph/>, run: () => { close(); context.onAskAgent?.() } })
+  if (doc && context?.kind === 'document' && context.onMoveSelection) actions.push({ id: 'doc-move-selection', label: 'Move selection to new document', icon: <FilePlus2/>, keywords: 'selection text move extract split', run: () => { close(); context.onMoveSelection?.() } })
   const options = pageOptions({ ctx, data, docs, page: current, query, t, open, choose })
   return { global, actions, options }
 }
