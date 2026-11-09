@@ -36,6 +36,11 @@
 .workspace-region-menu{width:min(400px,calc(100vw - 24px))}
 /* Labels never wrap: "Switch workspace" sits on one line beside its "O then W" shortcut. */
 .workspace-primary-menu .menu-item{white-space:nowrap}
+@media (min-width: 768px) {
+  /* The reference panel has no padding of its own: 6px spacer rows open and close the list. */
+  .menu-content.workspace-primary-menu{padding:0}
+  .menu-content.workspace-primary-menu::before,.menu-content.workspace-primary-menu::after{content:"";display:block;height:6px}
+}
 
 @media (max-width: 767px) {
   html:root .sidebar .workspace-row > button.workspace-menu-trigger[data-state="open"] { background: var(--phone-workspace-trigger-open-bg); }

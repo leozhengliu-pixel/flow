@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Match the desktop sidebar team menu and workspace menu to the reference: menu rows use an 8px icon gap, "Leave team…" has no icon column, the open team row's more button keeps no extra fill, and both panels have no padding of their own (6px spacer rows open and close the list).
 - Match the desktop keyboard shortcuts panel to the reference: the title is a content-sized heading centred in the 24px row it shares with the close button (half a pixel lower), keeping the 71px search start.
 - Match the desktop command menu to the reference: the query row and the list lay out at the panel's full 720px border-box width (rows and shortcut hints sit 1px further right) and the list is the panel height minus the 46px query row.
 - Match the desktop documents area to the reference more closely: the document selection toolbar matches the reference ("Move selection to new document" now lives in the ⌘K command menu while the editor holds a text selection), an open subscribers popover keeps the bell highlighted, the history version rows and the comment composer (placeholder colour, 12px inset, send button overhang) use the reference's measurements, the documents list keeps a 2px gap above a group that follows rows and centres each document glyph in its button, the slash menu hangs 4px under its chip with 5px separator margins, and the insert menu draws the reference's glyphs. The document menu no longer shows a trailing separator when Delete is not offered.

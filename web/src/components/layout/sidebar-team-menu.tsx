@@ -105,7 +105,7 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
     else if (label === 'Leave team…') void leave()
     else if (label === 'Copy URL') void navigator.clipboard.writeText(`${location.origin}${teamHomePath(data.workspace.urlKey, team.key)}`).then(() => toast.success(t('Team URL copied to clipboard'))).catch(error => toast.error(t('Could not copy URL'), { description: String(error) }))
   }
-  const icon = (label: string) => label === 'Team settings' ? <TeamSettingsIcon/> : label === 'Open archive' ? <TeamArchiveIcon/> : label === notifyLabel ? (chat.provider ? <IntegrationBrandIcon provider={chat.provider} size={16}/> : <SlackIcon monochrome/>) : label === 'Leave team…' ? <span className="sidebar-team-menu-icon-spacer"/> : <ViewGlyph color="currentColor" icon={label === 'Copy URL' ? 'Link' : label === 'Subscribe' ? 'Subscribe' : 'Favorite'}/>
+  const icon = (label: string) => label === 'Team settings' ? <TeamSettingsIcon/> : label === 'Open archive' ? <TeamArchiveIcon/> : label === notifyLabel ? (chat.provider ? <IntegrationBrandIcon provider={chat.provider} size={16}/> : <SlackIcon monochrome/>) : label === 'Leave team…' ? null : <ViewGlyph color="currentColor" icon={label === 'Copy URL' ? 'Link' : label === 'Subscribe' ? 'Subscribe' : 'Favorite'}/>
   return <DropdownMenu.Root open={open} onOpenChange={value => { setOpen(value); if (!value) setQuery('') }}>
     <DropdownMenu.Trigger asChild onPointerDown={event => {
       // Opening on pointerdown can put a menu item under the same pointerup.
