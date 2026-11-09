@@ -214,7 +214,7 @@ test('shows persisted initiative updates with a docked, collapsible properties a
   await expect(addOwner.locator('svg')).toHaveCSS('width', '18px')
   await expect(addOwner.locator('span').last()).toHaveCSS('color', 'lch(63.304 1.425 272)')
   await expect(rail.getByRole('button', { name: 'Change initiative target date', exact: true }).locator('span').last()).toHaveCSS('color', 'lch(63.304 1.425 272)')
-  const addLabel = rail.getByRole('button', { name: 'Add label', exact: true })
+  const addLabel = rail.getByRole('button', { name: 'Add labels', exact: true })
   await expect(addLabel).toHaveCSS('font-size', '12px')
   await expect(addLabel).toHaveCSS('font-weight', '450')
   const labelBox = await addLabel.boundingBox()

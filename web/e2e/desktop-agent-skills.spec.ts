@@ -37,8 +37,8 @@ test.describe('agent skills in Agent personalization', () => {
     expect((await header.boundingBox())!.width).toBe(640)
     const rows = page.locator('.agent-skills-row')
     await expect(rows).toHaveCount(3)
-    // 16px padding around the 15.5px name and the 1px + 14.5px + 2px timestamp block; the separators are overlays and add no height.
-    for (let index = 0; index < 3; index++) expect((await rows.nth(index).boundingBox())!.height).toBe(65)
+    // 16px padding around the 15.5px name and the 4px + 1px + 14.5px + 1px timestamp block; the separators are overlays and add no height.
+    for (let index = 0; index < 3; index++) expect((await rows.nth(index).boundingBox())!.height).toBe(68)
     expect(await rows.first().evaluate(row => { const line = getComputedStyle(row, '::after'); return [line.position, line.borderBottomWidth, line.left, line.right] })).toEqual(['absolute', '0.5px', '16px', '16px'])
     expect(await rows.last().evaluate(row => getComputedStyle(row, '::after').content)).toBe('none')
     await expect(rows.first().locator('strong')).toHaveText('Release notes')
@@ -107,12 +107,12 @@ test.describe('agent skills in Agent personalization', () => {
     await discard.getByRole('button', { name: 'Cancel' }).click()
     await expect(page).toHaveURL(new RegExp(`/settings/skill/${first.id}$`))
     await page.getByRole('button', { name: 'Cancel' }).click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Discard' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click()
     await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/settings/account/agents$`))
 
     const row = page.locator('.agent-skills-row', { hasText: 'Long single line' })
     await row.getByRole('button', { name: 'Open menu' }).click()
-    await expect(page.getByRole('menuitem')).toHaveText(['Edit', 'Use in chat', 'Delete'])
+    await expect(page.getByRole('menuitem')).toHaveText(['Edit', /^Move to team/, 'Use in chat', 'Delete'])
     await page.getByRole('menuitem', { name: 'Delete' }).click()
     await expect(page.getByRole('dialog').getByText('Delete the skill "Long single line"?')).toBeVisible()
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
@@ -137,7 +137,7 @@ test.describe('agent skills in Agent personalization', () => {
     const skillPath = `/${workspaceKey}/settings/skill/${first.id}`
     await page.goto(listPath)
     await page.locator('.agent-skills-row', { hasText: first.name }).click({ button: 'right' })
-    await expect(page.getByRole('menuitem')).toHaveText(['Edit', 'Use in chat', 'Delete'])
+    await expect(page.getByRole('menuitem')).toHaveText(['Edit', /^Move to team/, 'Use in chat', 'Delete'])
     await page.getByRole('menuitem', { name: 'Edit', exact: true }).click()
     await expect(page).toHaveURL(new RegExp(`${skillPath}$`))
     await page.getByRole('textbox', { name: 'Skill name' }).fill('Unsaved title')
@@ -154,7 +154,7 @@ test.describe('agent skills in Agent personalization', () => {
     await expect(page).toHaveURL(new RegExp(`${skillPath}$`))
     await expect(page.getByRole('textbox', { name: 'Skill name' })).toHaveValue('Unsaved title')
     await page.evaluate(() => window.history.back())
-    await page.getByRole('dialog').getByRole('button', { name: 'Discard', exact: true }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click()
     await expect(page).toHaveURL(new RegExp(`${listPath}$`))
     expect((await skillsOf(request, workspaceKey)).find(skill => skill.id === first.id)?.name).toBe(first.name)
 

@@ -64,8 +64,9 @@
 @media (max-width: 760px) {
   .agent-skills-header { height: 50px; padding: 11px 10.66px; }
   .agent-skills-create { width: 28px; height: 28px; }
-  /* Rows keep the header's phone inset so names line up with the count above them. */
-  .agent-skills-row { padding: 10.66px; }
+  /* Rows keep the header's phone inset so names line up with the count above them; they are 68px tall like the desktop's (16px above and below), with a 28px menu button. */
+  .agent-skills-row { grid-template-columns: minmax(0, 1fr) 28px; padding: 16px 10.66px; }
+  .agent-skills-row > .agent-skill-menu-trigger { width: 28px; height: 28px; }
   .agent-skills-row:not(:last-child)::after { right: 10.66px; left: 10.66px; }
 }
 

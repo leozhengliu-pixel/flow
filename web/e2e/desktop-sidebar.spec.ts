@@ -77,7 +77,9 @@ test('keeps the team issue header action 8px inside the main frame', async ({ pa
   const data = await (await request.get('/api/bootstrap', { headers: { 'X-Workspace-Key': workspaceKey } })).json()
   await page.goto(`/${workspaceKey}/team/${data.teams[0].key}/all`)
   const header = page.locator('main > header').first()
-  await expect(header).toHaveCSS('padding', '0px 8px')
+  // The 8px insets sit on the header's one inner row (the header itself has none).
+  await expect(header).toHaveCSS('padding', '0px')
+  await expect(header.locator('[data-header-row]')).toHaveCSS('padding', '0px 8px')
   const action = header.getByRole('button', { name: /New issue/ }).first()
   const frame = (await header.boundingBox())!
   const box = (await action.boundingBox())!

@@ -32,7 +32,7 @@ test.describe('agent skills on a phone', () => {
     const plus = (await header.getByRole('link', { name: 'Create skill' }).boundingBox())!
     expect([plus.width, plus.height]).toEqual([28, 28])
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-    expect((await page.locator('.agent-skills-row').first().boundingBox())!.height).toBeCloseTo(54.32, 1)
+    expect((await page.locator('.agent-skills-row').first().boundingBox())!.height).toBe(68)
     const title = (await page.locator('.agent-skills-row strong').first().boundingBox())!
     const count = (await header.getByRole('heading').boundingBox())!
     expect(Math.abs(title.x - count.x)).toBeLessThan(0.5)

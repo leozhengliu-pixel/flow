@@ -121,7 +121,7 @@ test('keeps the team Issues top bar controls, view pills and tool group at the d
       .map(button => ({ label: button.getAttribute('aria-label') ?? '', rect: { x: button.getBoundingClientRect().x, width: button.getBoundingClientRect().width } }))
       .sort((a, b) => a.rect.x - b.rect.x)
     return {
-      header: { ...rect(header)!, paddingLeft: getComputedStyle(header).paddingLeft },
+      header: { ...rect(header)!, paddingLeft: getComputedStyle(header.querySelector('[data-header-row]')!).paddingLeft },
       icon: rect(icon),
       star: rect(star),
       bell: rect(bell),

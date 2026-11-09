@@ -21,6 +21,8 @@ async function settle(page: import('@playwright/test').Page) {
 }
 
 test('desktop settings pages start their content at the same 72.5px under the hairline panel border', async ({ page, request, workspaceKey }) => {
+  // Eight full page loads against the dev server: about 28s on a CI runner, so the default 30s limit is a coin flip.
+  test.setTimeout(90_000)
   const headers = { 'X-Workspace-Key': workspaceKey }
   const bootstrap = await (await request.get('/api/bootstrap', { headers })).json() as { teams: { key: string }[] }
   const pages: [string, string][] = [
