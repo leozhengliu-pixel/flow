@@ -25,7 +25,7 @@ import { queueFlowMenuShortcut } from '@/components/ui/menu-shortcuts'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
 import { documentSelectionActions } from '@/components/documents/document-selection-actions'
-import { addSubscription, createDocument, listDocumentPermissions, removeSubscription, replaceDocumentPermissions, restoreDocumentRevision, updateDocument, uploadDocumentAttachment } from '@/lib/api'
+import { addSubscription, listDocumentPermissions, removeSubscription, replaceDocumentPermissions, restoreDocumentRevision, updateDocument, uploadDocumentAttachment } from '@/lib/api'
 import { documentPath } from '@/lib/app-routes'
 import type { BootstrapData, Comment, DocumentPermission, FlowDocument, TrashEntry, User } from '@/types/flow'
 
@@ -44,7 +44,6 @@ import { DeletedDocumentMenuItems } from './document-deleted-menu'
 import { DocumentEditedPopover } from './document-edited-popover'
 import { DocumentHistoryDialog } from './document-history-dialog'
 import { DocumentMenuItems } from './document-menu'
-import { moveDocumentSelection } from './move-document-selection'
 import { DocumentSubscribersPopover } from './document-subscribers-popover'
 import { DocumentTemplateChip } from './document-template-chip'
 import { DOCUMENT_PAGE_SHORTCUTS, useDocumentPageShortcuts, useDocumentUiActions } from './use-document-page-shortcuts'
@@ -149,27 +148,6 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   // Like the reference app: the selection goes to the floating chat as a chip and the editor lets go of it (the toolbar closes).
   // The quoted text keeps a faint highlight while its chip is in the chat.
   const askAgent = (selection: SelectedDescription, editor?: Editor) => askAgentAboutSelection(selection, editor ?? liveEditor ?? undefined)
-  const moveSelectionToNewDocument = async (selection: SelectedDescription, editor?: Editor) => {
-    if (!editor || !selection.text.trim()) return
-    try {
-      const firstLine = selection.text.split(/\r?\n/, 1)[0].trim().slice(0, 120)
-      const { created, removed } = await moveDocumentSelection(editor, selection, content => createDocument({
-        title: firstLine,
-        ...content,
-        projectIds: document.projectIds,
-        teamIds: document.teamIds,
-      }))
-      if (!removed) throw new Error(t('The selected content changed. The new document was created without removing the source.'))
-      window.clearTimeout(pending.current)
-      await updateDocument(document.id, { content: editor.getMarkdown(), contentData: editor.getJSON() as Record<string, unknown> })
-      await persistEditorRef.current?.()
-      await onReload()
-      toast.success(t('Selection moved to new document'))
-      navigate(documentPath(data.workspace.urlKey, created))
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('Could not move selection to new document'))
-    }
-  }
   const defaultDocumentIcon = !document.icon
   const lastRevision = document.revisions.length ? latestRevision(document) : undefined
   const lastEditor = lastRevision?.author ?? document.creator
@@ -344,7 +322,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
               readOnly={!canEdit} editorRef={setLiveEditor}
               onPersistReady={persist => { persistEditorRef.current = persist }}
               onUploadFile={async file => (await uploadDocumentAttachment(document.id, file)).url}
-              selectionActions={{ ...documentSelectionActions({ data, document, t, onAskAgent: askAgent, onComment: canComment ? startComment : undefined }), onMoveToNewDocument: canEdit ? moveSelectionToNewDocument : undefined }}
+              selectionActions={documentSelectionActions({ data, document, t, onAskAgent: askAgent, onComment: canComment ? startComment : undefined })}
               onChange={snapshot => { setBody({ value: snapshot.markdown, state: snapshot.documentJSON }); schedule({ content: snapshot.markdown, contentData: snapshot.document as Record<string, unknown> }) }}
               onPersist={async (snapshot, sync) => { const saved = await updateDocument(document.id, { content: snapshot.markdown, contentState: snapshot.contentState, contentData: snapshot.document as Record<string, unknown>, ...sync }); await onReload(); return saved }}/>}
         </DocumentContentProvider>

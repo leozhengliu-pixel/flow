@@ -104,10 +104,10 @@ test('document insert and inline comments fit the same article without reflow', 
   await expect(editor).toContainText('Select this paragraph')
   const before = (await page.locator('.document-title').boundingBox())!.x
   await editor.locator('p').first().click({ clickCount: 3 })
-  await expect(page.getByRole('button', { name: 'Move selection to new document', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Create issue from selection', exact: true })).toBeVisible()
   const divider = (await page.locator('.selection-toolbar-separator').boundingBox())!
-  const move = (await page.getByRole('button', { name: 'Move selection to new document', exact: true }).boundingBox())!
-  expect(divider.x).toBeLessThan(move.x)
+  const createIssue = (await page.getByRole('button', { name: 'Create issue from selection', exact: true }).boundingBox())!
+  expect(divider.x).toBeLessThan(createIssue.x)
   await page.getByRole('button', { name: 'Comment', exact: true }).click()
   const composer = page.locator('.document-thread-card.is-draft')
   await expect(composer).toBeVisible()
