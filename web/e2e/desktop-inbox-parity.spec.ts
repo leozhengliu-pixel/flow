@@ -94,20 +94,43 @@ test('welcome document keeps its measured layout and Flow resources in view', as
   await page.getByText('Welcome to Flow', { exact: true }).click()
   const mark = page.locator('.flow-inbox-welcome__mark')
   const title = page.getByRole('heading', { name: 'Welcome to Flow' })
-  const video = page.locator('.flow-inbox-welcome__video')
+  const player = page.locator('.flow-welcome-player')
+  const video = player.locator('video')
+  const controls = player.locator('.flow-welcome-player__controls')
   await expect(title).toBeVisible()
-  for (const [element, expected] of [[mark, { x: 608.5, y: 108.5, width: 44, height: 44 }], [title, { x: 608.5, y: 176.5, width: 759, height: 46 }], [video, { x: 608.5, y: 300.5, width: 759, height: 426.94 }]] as const) {
+  // Measured from the reference capture of the welcome notification (1440x900): the player box, its video and the control pill.
+  for (const [name, element, expected] of [
+    ['mark', mark, { x: 608.5, y: 108.5, width: 44, height: 44 }],
+    ['title', title, { x: 608.5, y: 176.5, width: 759, height: 46 }],
+    ['player', player, { x: 608.5, y: 300.5, width: 759, height: 426.94 }],
+    ['video', video, { x: 609, y: 301, width: 758, height: 425.94 }],
+    ['controls', controls, { x: 625, y: 674.94, width: 726, height: 36 }],
+    ['play', player.getByRole('button', { name: /^Play/ }), { x: 629, y: 678.94, width: 28, height: 28 }],
+    ['mute', player.getByRole('button', { name: /^Mute/ }), { x: 659, y: 678.94, width: 28, height: 28 }],
+    ['seek', player.getByRole('slider', { name: 'Seek' }), { x: 735.32, y: 690.94, width: 425.36, height: 4 }],
+    ['rate', player.getByRole('combobox', { name: /Change playback rate/ }), { x: 1209, y: 678.94, width: 48, height: 28 }],
+    ['download', player.getByRole('button', { name: 'Download' }), { x: 1259, y: 678.94, width: 28, height: 28 }],
+    ['picture-in-picture', player.getByRole('button', { name: /^Picture-in-Picture/ }), { x: 1289, y: 678.94, width: 28, height: 28 }],
+    ['full window', player.getByRole('button', { name: /^Full window/ }), { x: 1319, y: 678.94, width: 28, height: 28 }],
+  ] as const) {
     const rect = (await element.boundingBox())!
-    for (const dimension of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(rect[dimension] - expected[dimension]), `${element} ${dimension}`).toBeLessThanOrEqual(1)
+    for (const dimension of ['x', 'y', 'width', 'height'] as const) expect(rect[dimension], `${name} ${dimension}`).toBeCloseTo(expected[dimension], 2)
   }
-  await expect(page.getByText('Introductory video unavailable')).toBeVisible()
+  // A playable video of Flow's own: poster and captions, never autoplaying, idle at 00:00 with the duration not loaded yet.
+  await expect(video).toHaveAttribute('poster', '/media/flow-intro-poster.jpg')
+  await expect(video.locator('track[kind="captions"]')).toHaveAttribute('src', '/media/flow-intro.en.vtt')
+  await expect(video.locator('source')).toHaveCount(2)
+  expect(await video.evaluate(element => { const media = element as HTMLVideoElement; return [media.autoplay, media.paused, media.loop] })).toEqual([false, true, false])
+  await expect(player.getByRole('timer')).toHaveText('00:00')
+  await expect(page.getByText('Introductory video unavailable')).toHaveCount(0)
   const docs = page.getByRole('link', { name: 'Flow documentation' })
   const support = page.getByRole('link', { name: 'Community and support' })
   await expect(docs).toHaveAttribute('href', 'https://github.com/leozhengliu-pixel/flow/tree/main/docs')
   await expect(support).toHaveAttribute('href', 'https://github.com/leozhengliu-pixel/flow/issues')
   const resources = (await page.getByRole('heading', { name: 'Resources' }).boundingBox())!
-  expect(resources.y).toBeLessThan(760)
-  expect((await support.boundingBox())!.y).toBeLessThan(850)
+  expect(resources.y).toBeCloseTo(751.44, 2)
+  expect((await docs.boundingBox())!.y).toBeCloseTo(784.44, 2)
+  expect((await support.boundingBox())!.y).toBeCloseTo(838.44, 2)
   await expect(page.getByText('Issue is no longer available')).toHaveCount(0)
 })
 
