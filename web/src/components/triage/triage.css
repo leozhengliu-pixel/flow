@@ -145,7 +145,7 @@
   place-items: center;
   overflow: hidden;
   border-radius: 50%;
-  background: var(--avatar-fallback);
+  background: var(--avatar, var(--avatar-fallback));
   color: var(--avatar-initials-fg);
   font-size: 9px;
   font-weight: 400;

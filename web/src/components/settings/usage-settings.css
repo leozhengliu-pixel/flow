@@ -132,7 +132,7 @@ button.usage-th:hover { background: var(--bg-hover); }
 .usage-col-name strong { overflow: hidden; color: var(--set-button-text); font-size: 13px; font-weight: 500; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 .usage-col-name small { overflow: hidden; color: var(--set-desc); font-size: 12px; font-weight: 500; line-height: 15px; text-overflow: ellipsis; white-space: nowrap; }
 .usage-tr:not(.usage-thead) .usage-col-name { padding-left: 0; }
-.usage-avatar { width: 24px; height: 24px; flex: none; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--avatar-fallback-alt); color: var(--on-accent); font-size: 10px; }
+.usage-avatar { width: 24px; height: 24px; flex: none; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--avatar, var(--avatar-fallback-alt)); color: var(--on-accent); font-size: 10px; }
 .usage-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .usage-limit-cell { padding: 0 4px; margin-left: -3px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--set-button-text); font: 500 13px/normal var(--font); }
 .usage-limit-cell:hover { background: var(--bg-hover); }
