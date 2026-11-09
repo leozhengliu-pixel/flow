@@ -112,7 +112,7 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
       // Wait for the completed click; retain Radix keyboard activation.
       if (event.button === 0) event.preventDefault()
     }} onClick={() => setOpen(value => !value)}>{children}</DropdownMenu.Trigger>
-    <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" data-phone-menu={phone ? '' : undefined} ref={content} className="sidebar-popover sidebar-team-menu" side={narrow ? 'bottom' : 'right'} align={narrow ? 'end' : 'start'} sideOffset={narrow ? 4 : -24} collisionPadding={8} onKeyDown={event => {
+    <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" data-phone-menu={phone ? '' : undefined} ref={content} className="sidebar-popover sidebar-team-menu" side="bottom" align={narrow ? 'end' : 'start'} sideOffset={4} collisionPadding={8} onKeyDown={event => {
       if (event.defaultPrevented || !content.current?.contains(event.target as Node) || event.target === search.current || event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey) return
       event.preventDefault(); event.stopPropagation(); setQuery(value => value + event.key); search.current?.focus()
     }}>

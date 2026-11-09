@@ -297,6 +297,9 @@
   .team-heading:has(.team-menu-trigger:hover) .team-title { color: var(--bright); background: var(--theme-surface-1); }
   .team-menu-trigger { padding: 0 2px; }
   .team-menu-trigger:hover, .team-menu-trigger[data-state=open] { background: transparent; }
+  /* While its menu is open and the pointer is on the menu, the reference trigger keeps the regular text colour. */
+  .team-menu-trigger[data-state=open] { color: var(--workspace-trigger-fg); }
+  .team-menu-trigger:hover { color: var(--bright); }
   /* The reference panel has no padding of its own: 6px spacer rows open and close the list. */
   .sidebar-team-menu:not(.sidebar-item-menu) { padding: 0; }
   .sidebar-team-menu:not(.sidebar-item-menu) [role="menuitem"] { gap: 8px; }

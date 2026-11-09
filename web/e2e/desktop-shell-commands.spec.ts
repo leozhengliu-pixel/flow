@@ -71,10 +71,13 @@ test('desktop shell commands keep commands first, list real shortcuts and open t
   expect(radius).toBe('21px')
   const chips = await dialog.locator('.properties [data-property], .properties button[aria-label="More actions"]').evaluateAll(elements => elements.map(element => element.getAttribute('data-property') ?? 'more'))
   expect(chips).toEqual(['status', 'priority', 'assignee', 'project', 'estimate', 'labels', 'cycle', 'more'].filter(chip => chips.includes(chip)))
-  await expect(dialog.getByRole('combobox', { name: /Assignee/ })).toContainText('Assignee')
+  await expect(dialog.getByRole('combobox', { name: /^Change assignee/ })).toContainText('Assignee')
+  // The cycle chip only exists for a team that has cycles turned on.
   const cycle = dialog.getByRole('combobox', { name: 'Add to cycle' })
-  await expect(cycle).toBeVisible()
-  const cycleBox = await cycle.boundingBox()
-  expect(cycleBox?.width).toBe(32)
-  expect(cycleBox?.height).toBe(24)
+  if (chips.includes('cycle')) {
+    await expect(cycle).toBeVisible()
+    const cycleBox = await cycle.boundingBox()
+    expect(cycleBox?.width).toBe(32)
+    expect(cycleBox?.height).toBe(24)
+  } else await expect(cycle).toHaveCount(0)
 })

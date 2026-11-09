@@ -1,6 +1,8 @@
 /* Restore version dialog. Own file: no dependence on document-page.css. */
 .dialog-content.document-history-dialog {
-  --history-top: 6.66dvh;
+  /* The reference leaves a third of the free height above the dialog and two thirds below it. */
+  --history-height: min(721px, calc(100dvh - 179px));
+  --history-top: calc((100dvh - var(--history-height)) / 3);
   top: var(--history-top);
   top: var(--history-top) !important;
   left: 50vw !important;
@@ -9,7 +11,7 @@
   flex-direction: column;
   box-sizing: border-box;
   width: min(1020px, calc(100vw - 32px));
-  height: min(721px, calc(100dvh - 179px));
+  height: var(--history-height);
   max-height: calc(100dvh - 16px);
   padding: 0;
   overflow: hidden;
@@ -60,9 +62,9 @@
 .document-history-panel {
   display: grid;
   flex: 1;
-  grid-template-columns: minmax(0, 1fr) 229px;
+  grid-template-columns: minmax(0, 23fr) minmax(0, 7fr);
   min-height: 0;
-  margin: 0 17px 17px;
+  margin: 0 16px 16px;
   overflow: hidden;
   border: .5px solid var(--theme-border-strong);
   border-radius: 8px;
@@ -196,7 +198,7 @@
   overflow: hidden;
   border-radius: 50%;
   background: var(--avatar, var(--accent-primary));
-  color: var(--on-accent);
+  color: var(--avatar-initials-fg);
   font-size: 9px;
   line-height: 1;
 }

@@ -240,7 +240,7 @@
   overflow: hidden;
   border-radius: 50%;
   background: var(--avatar, var(--chart-cyan)); /* background: var(--chart-cyan); */
-  color: var(--on-accent);
+  color: var(--avatar-initials-fg);
   font-size: 9px;
   line-height: 18px;
   text-align: center;
@@ -484,7 +484,10 @@ button.document-icon.is-empty:hover,
   /* The tooltip trigger wrapped around the popover trigger owns data-state, so an open popover is flagged separately. */
   .document-icon-button[data-open] { background: var(--issue-header-hover-bg); color: var(--issue-header-icon-hover); }
   .document-icon-button[data-open] svg { color: var(--issue-header-icon-hover); }
-  .document-actions-menu { width: max-content; min-width: 264px; }
+  /* The reference's document menu is a fixed 264px list without padding; spacer blocks separate its first and last rows from the edge. */
+  .document-actions-menu { width: 264px; min-width: 264px; padding: 0; }
+  .document-actions-menu::before,
+  .document-actions-menu::after { content: ""; display: block; height: 6px; }
   .document-header { padding: 0; gap: 12px; }
   .document-header-title-group { min-width: 0; display: flex; align-items: center; gap: 6px; }
   .document-breadcrumbs { padding-left: 18px; }
@@ -729,6 +732,10 @@ button.document-icon.is-empty:hover,
     line-height: 16px;
     gap: 2px;
   }
+  /* The reference keeps the name and the agent badge in a baseline-aligned row whose badge cell is half a pixel taller than the pill. */
+  .document-subscribers__identity { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  .document-subscribers__badge-line { display: block; line-height: normal; }
+  .document-subscribers__badge-wrap { display: inline-flex; align-items: center; }
   .document-subscribers__document { display: none; }
 }
 

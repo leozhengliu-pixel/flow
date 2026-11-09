@@ -56,7 +56,8 @@
 @media (min-width: 801px) {
   .team-home-topbar { gap: 6px; }
   .team-home-topbar.is-documents { gap: 12px; padding: 0; }
-  .team-home-topbar.is-documents .team-home-topbar-row { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 18px; }
+  /* The reference's toolbar row is 43.5px (the 0.5px panel border sits above the 44px band), so its centred controls land on the quarter pixel. */
+  .team-home-topbar.is-documents .team-home-topbar-row { min-width: 0; flex: 1; display: flex; align-items: center; align-self: flex-start; gap: 8px; height: 43.5px; padding: 0 8px 0 18px; }
   .team-home-topbar.is-documents .team-home-title-row { min-width: 0; display: flex; align-items: center; gap: 6px; }
 }
 .team-home-topbar.is-documents h2 { font-weight: 450; }

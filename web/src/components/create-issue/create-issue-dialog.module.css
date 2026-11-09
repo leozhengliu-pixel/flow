@@ -283,6 +283,7 @@
 @media (--desktop-layout) {
   .footer { border-top: 0; }
   .header .team { color: var(--create-issue-fg); }
+  .header .team > span { color: var(--bright); }
   .header h2 { font-weight: 450; }
   .breadcrumb { color: var(--create-issue-icon-fg); }
   .properties :global(.mini-property-trigger) { color: var(--create-issue-icon-fg); }

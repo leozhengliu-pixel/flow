@@ -8,6 +8,7 @@ export const templatesZhCN: Record<string, string> = {
   "{issue}, {project}, or {document} templates sections.": "{issue}、{project}或{document}模板设置。",
   "Change assignee. Currently no one is assigned.": "更改负责人。当前未分配。",
   "Change priority. No priority is selected": "更改优先级。当前未设置优先级",
+  "Change estimate. No estimate is selected": "更改估点。当前未设置估点",
   "Create new document template": "新建文档模板",
   "Delete the template \"{name}\"?": "删除模板“{name}”？",
   "Set priority to…": "将优先级设为…",

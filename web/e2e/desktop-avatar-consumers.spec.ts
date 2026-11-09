@@ -102,8 +102,8 @@ test('Latin initials take the reference font size for their avatar size and inhe
       const text = avatar.querySelector('.user-avatar-initials') as HTMLElement, initials = getComputedStyle(text), parent = getComputedStyle(avatar.parentElement!)
       const consumer = avatar.closest('[data-consumer]')?.getAttribute('data-consumer')
       // The reference never sets a weight on the avatar: the initials sit at the weight of the row they are in. Document thread avatars
-      // set 400 on purpose (the reference's document comment avatars measure 400 inside a 450 card).
-      const inherits = initials.fontWeight === parent.fontWeight || avatar.classList.contains('document-thread-avatar') && initials.fontWeight === '400'
+      // set 400 on purpose (the reference's document comment avatars measure 400 inside a 450 card), and so do the owner avatars of the team documents list.
+      const inherits = initials.fontWeight === parent.fontWeight || (avatar.classList.contains('document-thread-avatar') || avatar.classList.contains('team-docs-avatar')) && initials.fontWeight === '400'
       // The size is the table's, never a scaled-down fit, and the letters stay inside the avatar.
       const bounds = text.getBoundingClientRect(), slot = avatar.getBoundingClientRect()
       const inside = bounds.left >= slot.left - 0.02 && bounds.right <= slot.right + 0.02 && bounds.top >= slot.top - 0.02 && bounds.bottom <= slot.bottom + 0.02
