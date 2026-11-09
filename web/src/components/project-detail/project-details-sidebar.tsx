@@ -39,6 +39,7 @@ import { IntegrationBrandIcon } from '@/components/settings/integration-brand-ic
 import { useChatPlatform } from '@/lib/chat-platform'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { ProjectChatGroupDialog } from './project-chat-group-dialog'
+import { bindingProjectIds, useChatIntegrationSettings } from '@/components/settings/chat-binding-support'
 
 export function ProjectDetailsSidebar({ data, featureFlags, issueSummary, availableIssueLabels, initiatives, integrationConnections, labelGroups, labels, onCreateLabel, onConvertMilestone, onCreateMilestone, onDeleteMilestone, onMoveMilestone, onOpenIssueFilter, onOpenMilestoneIssues, onReorderMilestones, onTabChange, onUpdate, onUpdateProject, onUpdateMilestone, project, projectIssues, projectRelations, projects, projectStatuses, projectUpdates, tab, teams, users, viewer, pickerRequest, onPickerRequestHandled }: {
   pickerRequest?: ProjectPickerRequest
@@ -445,11 +446,15 @@ function ProjectChatPlatformProperty({ data, integrationConnections, onUpdate, p
   const chat = useChatPlatform(data)
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
+  // The groups bound to this project, like the Slack property shows its #channel; a revoked binding no longer posts.
+  const { settings, reload } = useChatIntegrationSettings(chat.provider)
   if (!chat.provider) return <ProjectSlackMenu integrationConnections={integrationConnections} onUpdate={onUpdate} project={project}/>
+  const groups = (settings?.bindings ?? []).filter(binding => !binding.revokedAt && bindingProjectIds(binding)?.includes(project.id))
   const label = chat.format(t('{name} group'))
+  const value = groups.length === 1 ? groups[0].chatName || label : groups.length > 1 ? t('{count} groups').replace('{count}', String(groups.length)) : chat.format(t('Connect {name} group'))
   return <div className="project-details-sidebar__property"><span className="project-details-sidebar__property-label" data-i18n-ignore>{chat.name}</span>
-    <FlowTooltip label={label}><button aria-label={label} className="project-details-sidebar__property-trigger is-empty" type="button" onClick={() => setOpen(true)}><IntegrationBrandIcon provider={chat.provider} size={16}/><span>{chat.format(t('Connect {name} group'))}</span></button></FlowTooltip>
-    <ProjectChatGroupDialog open={open} onOpenChange={setOpen} provider={chat.provider} project={project} data={data}/>
+    <FlowTooltip label={label}><button aria-label={label} className={`project-details-sidebar__property-trigger${groups.length ? '' : ' is-empty'}`} type="button" onClick={() => setOpen(true)}><IntegrationBrandIcon provider={chat.provider} size={16}/><span data-i18n-ignore={groups.length === 1 ? true : undefined}>{value}</span></button></FlowTooltip>
+    <ProjectChatGroupDialog open={open} onOpenChange={next => { setOpen(next); if (!next) void reload() }} provider={chat.provider} project={project} data={data}/>
   </div>
 }
 

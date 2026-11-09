@@ -224,6 +224,7 @@ export const chatIntegrationsZhCN: Record<string, string> = {
   "Connect {name} group…": "连接 {name} 群…",
   "Connect a {name} group": "连接 {name} 群",
   "{name} group": "{name} 群",
+  "{count} groups": "{count} 个群",
   "Connect {name}": "连接 {name}",
   "Set up {name}": "配置 {name}",
   "Open settings": "打开设置",
