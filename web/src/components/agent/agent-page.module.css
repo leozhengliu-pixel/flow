@@ -903,10 +903,11 @@
   grid-template-columns: 16px minmax(0, 1fr) !important;
 }
 @media (min-width: 801px) {
-  .historyMenu { background: var(--pk-surface); box-shadow: var(--shadow-control); }
-  .historyMenu:has(.noHistory) { padding: 2px 14px 4px; }
+  /* The reference menu is 320px of content inside its 0.5px border; the empty state pads its own row. */
+  .historyMenu { box-sizing: content-box; max-height: 407px; border-color: var(--pk-border); background: var(--pk-surface); box-shadow: var(--shadow-control); }
+  .historyMenu:has(.noHistory) { padding: 0; }
   .historyMenu:has(.noHistory) [role="listbox"] { padding: 0; }
-  .noHistory { height: 36px; justify-items: start; color: var(--inbox-filter-arrow); font: 450 13px/normal var(--font); }
+  .noHistory { height: 36px; padding: 2px 14px 4px; box-sizing: content-box; justify-items: start; color: var(--inbox-filter-arrow); font: 450 13px/normal var(--font); }
 }
 @media (max-width: 767px) {
   :global([data-radix-popper-content-wrapper]):has(> .historyMenu) {

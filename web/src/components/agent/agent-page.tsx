@@ -497,7 +497,7 @@ export function AgentPage({
               alignOffset={8}
               className={styles.historyMenu}
               side="bottom"
-              sideOffset={3}
+              sideOffset={phone ? 3 : 4}
               onOpenAutoFocus={(event) => event.preventDefault()}
               onKeyDown={(event) => { if (event.key !== "Escape") setHistoryInteracting(true); onHistoryKeyDown(event); }}
             >
