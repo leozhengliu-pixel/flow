@@ -130,15 +130,11 @@
 .document-icon-button svg { width: 14px; height: 14px; color: var(--issue-header-icon); }
 .document-icon-button:hover,
 .document-icon-button[data-state="open"],
-.document-icon-button[data-open],
 .document-icon-button.is-active {
   background: var(--issue-header-hover-bg);
 }
-/* The tooltip trigger wrapped around the popover trigger owns data-state, so the open popover is flagged separately. */
-.document-icon-button[data-open] { color: var(--issue-header-icon-hover); }
 .document-icon-button:hover svg,
 .document-icon-button[data-state="open"] svg,
-.document-icon-button[data-open] svg,
 .document-icon-button.is-active svg,
 .document-icon-button[aria-checked="true"] svg { color: var(--issue-header-icon-hover); }
 /* A favorited document: the reference's filled yellow star, at rest and on hover. */
@@ -485,6 +481,9 @@ button.document-icon.is-empty:hover,
 }
 
 @media (min-width: 801px) {
+  /* The tooltip trigger wrapped around the popover trigger owns data-state, so an open popover is flagged separately. */
+  .document-icon-button[data-open] { background: var(--issue-header-hover-bg); color: var(--issue-header-icon-hover); }
+  .document-icon-button[data-open] svg { color: var(--issue-header-icon-hover); }
   .document-actions-menu { width: max-content; min-width: 264px; }
   .document-header { padding: 0; gap: 12px; }
   .document-header-title-group { min-width: 0; display: flex; align-items: center; gap: 6px; }

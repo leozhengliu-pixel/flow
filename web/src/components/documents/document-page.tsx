@@ -26,7 +26,6 @@ import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
 import { documentSelectionActions } from '@/components/documents/document-selection-actions'
 import { addSubscription, listDocumentPermissions, removeSubscription, replaceDocumentPermissions, restoreDocumentRevision, updateDocument, uploadDocumentAttachment } from '@/lib/api'
-import { documentPath } from '@/lib/app-routes'
 import type { BootstrapData, Comment, DocumentPermission, FlowDocument, TrashEntry, User } from '@/types/flow'
 
 import './document-page.css'

@@ -1,4 +1,4 @@
-import { SLASH_MENU_GLYPHS } from './editor/slash-menu-glyphs'
+import { SLASH_MENU_GLYPHS } from './editor/slash-menu-glyph-map'
 import { ChevronsDownUp, Code2, Heading1, Heading2, Heading3, Heading4, Image as ImageIcon, Lightbulb, List, ListOrdered, ListTodo, Minus, Paperclip, Quote, Radical, Table2, Workflow } from 'lucide-react'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
