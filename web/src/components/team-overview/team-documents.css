@@ -293,6 +293,8 @@
   .team-docs-heading { gap: 2px; }
   .team-docs-heading-label { font-weight: 450; }
   .team-docs-group { margin: 0 8px 2px; padding-left: 2px; }
+  /* A group that follows rows keeps the same 2px gap above it as below its header. */
+  .team-docs-row + .team-docs-group { margin-top: 2px; }
   .team-docs-heading svg { opacity: 0; }
   .team-docs-heading:is(:hover, :focus-visible, [data-active]) svg { opacity: 1; }
   .team-docs-heading[data-active] svg { color: var(--project-toolbar-icon-fg); }
@@ -302,7 +304,7 @@
   .team-docs-row { margin-inline: 0; }
   .team-docs-row-inner { padding-inline: 18px; column-gap: 6px; }
   .team-docs-check { flex-basis: 22px; width: 22px; }
-  .team-docs-title > .team-docs-icon { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; margin: -4px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; }
+  .team-docs-title > .team-docs-icon { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; margin: -4px; padding: 0; border: 0; border-radius: 4px; background: transparent; }
   .team-docs-icon > svg { width: 16px; height: 16px; flex: none; }
   .team-docs-icon:hover { background: var(--theme-surface-hover); }
   .team-docs-date { flex-basis: 120px; width: 120px; }
