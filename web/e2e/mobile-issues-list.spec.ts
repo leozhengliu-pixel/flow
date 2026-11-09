@@ -781,7 +781,8 @@ test.describe('mobile Team issues board scrolled to the hidden columns', () => {
     expect(rowBox?.x).toBe(40)
     expect(rowBox?.width).toBe(338)
     expect(rowBox?.height).toBe(37)
-    await expect(rows.first()).toContainText('In Progress')
+    // Board columns follow the workflow, so the hidden-statuses column opens with Backlog (the reference's first row carries the Backlog glyph).
+    await expect(rows.first()).toContainText('Backlog')
     const name = rows.first().locator('div > span')
     const nameBox = await name.boundingBox()
     expect(Math.abs((nameBox?.x ?? 0) - 80.5)).toBeLessThanOrEqual(1)

@@ -70,8 +70,8 @@
 @media(--desktop-layout){
   .rootMenu[data-layout=issues][data-variant=root]{width:207px}
   .rootSearch{gap:14px}
-  /* The reference rounds a content-sized menu to whole pixels (the widest row then lays out at its natural width). */
-  .valueMenu{width:max-content;width:calc-size(max-content,round(size,1px))}
+  /* The reference sizes a content-sized menu to whole pixels. Rounding up keeps the widest label from losing its last fraction of a pixel to the ellipsis. */
+  .valueMenu{width:max-content;width:calc-size(max-content,round(up,size,1px))}
   .countLine{vertical-align:-.25px}
   .rootSearch kbd{padding-inline:2px}
   .rootItem[data-selected=true],.rootItem[aria-selected=true],.valueItem[aria-selected=true],.valueItem:hover{color:var(--bright)}

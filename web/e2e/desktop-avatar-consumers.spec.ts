@@ -103,7 +103,10 @@ test('Latin initials take the reference font size for their avatar size and inhe
       const consumer = avatar.closest('[data-consumer]')?.getAttribute('data-consumer')
       // The reference never sets a weight on the avatar: the initials sit at the weight of the row they are in. Document thread avatars
       // set 400 on purpose (the reference's document comment avatars measure 400 inside a 450 card), and so do the owner avatars of the team documents list.
-      const inherits = initials.fontWeight === parent.fontWeight || (avatar.classList.contains('document-thread-avatar') || avatar.classList.contains('team-docs-avatar')) && initials.fontWeight === '400'
+      // The triage list creator avatar (9px/400) and the coding session prompt avatar (8px/400) sit in 16px/400 wrappers in the reference
+      // (desktop-ref issues-list/triage-ref.json, agent/session-chat-ref.json), while the fixture row here is the 450 body.
+      const at400 = ['document-thread-avatar', 'team-docs-avatar', 'flow-triage-row__avatar', 'coding-session-prompt-avatar'].some(name => avatar.classList.contains(name))
+      const inherits = initials.fontWeight === parent.fontWeight || at400 && initials.fontWeight === '400'
       // The size is the table's, never a scaled-down fit, and the letters stay inside the avatar.
       const bounds = text.getBoundingClientRect(), slot = avatar.getBoundingClientRect()
       const inside = bounds.left >= slot.left - 0.02 && bounds.right <= slot.right + 0.02 && bounds.top >= slot.top - 0.02 && bounds.bottom <= slot.bottom + 0.02

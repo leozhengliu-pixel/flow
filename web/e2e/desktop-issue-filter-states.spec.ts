@@ -67,10 +67,11 @@ async function clearFilters(page: Page) {
 async function expectLabelsFit(menu: Locator) {
   const labels = menu.locator('[class*="valueLabel"]')
   expect(await labels.count()).toBeGreaterThan(0)
-  expect(await labels.evaluateAll(elements => elements.every(element => {
+  expect(await labels.evaluateAll(elements => elements.flatMap(element => {
     const range = document.createRange(); range.selectNodeContents(element)
-    return range.getBoundingClientRect().width <= element.getBoundingClientRect().width + .01
-  }))).toBe(true)
+    const text = range.getBoundingClientRect().width, box = element.getBoundingClientRect().width
+    return text <= box + .01 ? [] : [`${element.textContent}: text ${text} box ${box}`]
+  }))).toEqual([])
 }
 
 for (const viewport of sizes) for (const colorScheme of ['dark', 'light'] as const) for (const locale of ['en-US', 'zh-CN'] as const) {
@@ -157,7 +158,7 @@ for (const viewport of sizes) for (const colorScheme of ['dark', 'light'] as con
       const field = async (name: string) => {
         const option = root.locator(`[cmdk-item][data-value="${name}"]`)
         await option.scrollIntoViewIfNeeded()
-        if (viewport.width < 768) await option.click()
+        if (viewport.width < 768) await option.tap()
         else await option.hover()
       }
       await field('Status')
@@ -228,7 +229,7 @@ for (const viewport of sizes) for (const colorScheme of ['dark', 'light'] as con
       await field('Customers')
       await expectLabelsFit(page.locator('[data-level="1"]'))
       const numberCategory = page.locator('[data-level="1"]').getByRole('option', { name: /^(Customer count|客户数量)$/ })
-      if (viewport.width < 768) await numberCategory.click()
+      if (viewport.width < 768) await numberCategory.tap()
       else await numberCategory.hover()
       const numberMenu = page.locator('[data-number-input]')
       await expect(numberMenu).toBeVisible()
