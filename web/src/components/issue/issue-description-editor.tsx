@@ -1,3 +1,4 @@
+import { SLASH_MENU_GLYPHS } from './editor/slash-menu-glyphs'
 import { ChevronsDownUp, Code2, Heading1, Heading2, Heading3, Heading4, Image as ImageIcon, Lightbulb, List, ListOrdered, ListTodo, Minus, Paperclip, Quote, Radical, Table2, Workflow } from 'lucide-react'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
@@ -422,30 +423,32 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       setSlash(closedSlash)
     }
     const tableAction = (command: { id: string; label: string; keywords?: string; icon: EditorCommand['icon']; run: () => void }): EditorCommand => ({ id: `table-${command.id}`, group: 'table', label: command.label, keywords: command.keywords, icon: command.icon, run: execute(command.run) })
+    // The desktop document insert menu draws the reference's glyphs; other editors keep the line icons.
+    const glyphs: Partial<typeof SLASH_MENU_GLYPHS> = compactInsertMenu ? SLASH_MENU_GLYPHS : {}
     const base: EditorCommand[] = [
-      { id: 'heading-1', group: 'headings', label: 'Heading 1', keywords: 'h1 title', shortcut: '⌘⌥1', icon: Heading1, run: execute(() => editor.chain().focus().toggleHeading({ level: 1 }).run()) },
-      { id: 'heading-2', group: 'headings', label: 'Heading 2', keywords: 'h2 title', shortcut: '⌘⌥2', icon: Heading2, run: execute(() => editor.chain().focus().toggleHeading({ level: 2 }).run()) },
-      { id: 'heading-3', group: 'headings', label: 'Heading 3', keywords: 'h3 subtitle', shortcut: '⌘⌥3', icon: Heading3, run: execute(() => editor.chain().focus().toggleHeading({ level: 3 }).run()) },
+      { id: 'heading-1', group: 'headings', label: 'Heading 1', keywords: 'h1 title', shortcut: '⌘⌥1', icon: glyphs.heading1 ?? Heading1, run: execute(() => editor.chain().focus().toggleHeading({ level: 1 }).run()) },
+      { id: 'heading-2', group: 'headings', label: 'Heading 2', keywords: 'h2 title', shortcut: '⌘⌥2', icon: glyphs.heading2 ?? Heading2, run: execute(() => editor.chain().focus().toggleHeading({ level: 2 }).run()) },
+      { id: 'heading-3', group: 'headings', label: 'Heading 3', keywords: 'h3 subtitle', shortcut: '⌘⌥3', icon: glyphs.heading3 ?? Heading3, run: execute(() => editor.chain().focus().toggleHeading({ level: 3 }).run()) },
       { id: 'heading-4', group: 'headings', searchOnly: compactInsertMenu, label: 'Heading 4', keywords: 'h4 subheading', shortcut: '⌘⌥4', icon: Heading4, run: execute(() => editor.chain().focus().toggleHeading({ level: 4 }).run()) },
-      { id: 'bullet-list', group: 'lists', label: 'Bulleted list', keywords: 'unordered bullets', shortcut: '⌘⇧8', icon: List, run: execute(() => editor.chain().focus().toggleBulletList().run()) },
-      { id: 'number-list', group: 'lists', label: 'Numbered list', keywords: 'ordered numbers', shortcut: '⌘⇧9', icon: ListOrdered, run: execute(() => editor.chain().focus().toggleOrderedList().run()) },
-      { id: 'checklist', group: 'lists', label: 'Checklist', keywords: 'todo task checkbox', shortcut: '⌘⇧7', icon: ListTodo, run: execute(() => editor.chain().focus().toggleTaskList().run()) },
-      { id: 'media', group: 'media', label: 'Insert media…', keywords: 'image picture photo video screenshot', icon: ImageIcon, run: execute(() => pickDescriptionFiles(files => insertPickedFiles(editor.view, files, getUploadImage()), 'image/*,video/*')) },
-      { id: 'file', group: 'media', label: 'Attach files…', keywords: 'attachment upload pdf', shortcut: '⌘⇧U', icon: Paperclip, run: execute(() => pickDescriptionFiles(files => insertPickedFiles(editor.view, files, getUploadImage()))) },
-      { id: 'code-block', group: 'blocks', label: 'Code block', keywords: 'source snippet', shortcut: '⌘⇧\\', icon: Code2, run: execute(() => editor.chain().focus().toggleCodeBlock().run()) },
-      { id: 'diagram', group: 'blocks', label: 'Diagram', keywords: 'mermaid flowchart sequence', icon: Workflow, run: execute(() => {
+      { id: 'bullet-list', group: 'lists', label: 'Bulleted list', keywords: 'unordered bullets', shortcut: '⌘⇧8', icon: glyphs.bulletList ?? List, run: execute(() => editor.chain().focus().toggleBulletList().run()) },
+      { id: 'number-list', group: 'lists', label: 'Numbered list', keywords: 'ordered numbers', shortcut: '⌘⇧9', icon: glyphs.numberedList ?? ListOrdered, run: execute(() => editor.chain().focus().toggleOrderedList().run()) },
+      { id: 'checklist', group: 'lists', label: 'Checklist', keywords: 'todo task checkbox', shortcut: '⌘⇧7', icon: glyphs.checklist ?? ListTodo, run: execute(() => editor.chain().focus().toggleTaskList().run()) },
+      { id: 'media', group: 'media', label: 'Insert media…', keywords: 'image picture photo video screenshot', icon: glyphs.media ?? ImageIcon, run: execute(() => pickDescriptionFiles(files => insertPickedFiles(editor.view, files, getUploadImage()), 'image/*,video/*')) },
+      { id: 'file', group: 'media', label: 'Attach files…', keywords: 'attachment upload pdf', shortcut: '⌘⇧U', icon: glyphs.attach ?? Paperclip, run: execute(() => pickDescriptionFiles(files => insertPickedFiles(editor.view, files, getUploadImage()))) },
+      { id: 'code-block', group: 'blocks', label: 'Code block', keywords: 'source snippet', shortcut: '⌘⇧\\', icon: glyphs.codeBlock ?? Code2, run: execute(() => editor.chain().focus().toggleCodeBlock().run()) },
+      { id: 'diagram', group: 'blocks', label: 'Diagram', keywords: 'mermaid flowchart sequence', icon: glyphs.diagram ?? Workflow, run: execute(() => {
         // The reference app's diagram is a Mermaid code block, opened on its (empty) source.
         const { $from } = editor.state.selection
         if ($from.parent.isTextblock && !$from.parent.textContent) editor.chain().focus().setCodeBlock({ language: 'mermaid' }).run()
         else editor.chain().focus().insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' } }).run()
       }) },
-      { id: 'math', group: 'blocks', label: 'LaTeX math block', keywords: 'latex math equation formula', icon: Radical, run: execute(() => {
+      { id: 'math', group: 'blocks', label: 'LaTeX math block', keywords: 'latex math equation formula', icon: glyphs.math ?? Radical, run: execute(() => {
         const { $from } = editor.state.selection
         if ($from.parent.type.name === 'paragraph' && !$from.parent.content.size) editor.chain().focus().setNode('mathBlock').run()
         else editor.chain().focus().insertContent({ type: 'mathBlock' }).run()
       }) },
-      { id: 'collapse', group: 'blocks', label: 'Collapsible section', keywords: 'details toggle fold', shortcut: '⌘⇧6', icon: ChevronsDownUp, run: execute(() => editor.chain().focus().setDetails().run()) },
-      { id: 'quote', group: 'blocks', label: 'Blockquote', keywords: 'blockquote citation', shortcut: '⌥⇧.', icon: Quote, run: execute(() => editor.chain().focus().toggleBlockquote().run()) },
+      { id: 'collapse', group: 'blocks', label: 'Collapsible section', keywords: 'details toggle fold', shortcut: '⌘⇧6', icon: glyphs.collapse ?? ChevronsDownUp, run: execute(() => editor.chain().focus().setDetails().run()) },
+      { id: 'quote', group: 'blocks', label: 'Blockquote', keywords: 'blockquote citation', shortcut: '⌥⇧.', icon: glyphs.quote ?? Quote, run: execute(() => editor.chain().focus().toggleBlockquote().run()) },
       { id: 'callout', group: 'blocks', searchOnly: compactInsertMenu, label: 'Callout', keywords: 'aside note warning info', icon: Lightbulb, run: execute(() => {
         if (editor.can().wrapIn('callout')) editor.chain().focus().wrapIn('callout').run()
         else editor.chain().focus().insertContent({ type: 'callout', content: [{ type: 'paragraph' }] }).run()
