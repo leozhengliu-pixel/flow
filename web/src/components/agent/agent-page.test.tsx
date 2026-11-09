@@ -312,11 +312,18 @@ describe('agent page composer', () => {
       id: 'session-history', slugId: 'history', userId: 'user-1', title: 'Workspace review', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [],
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     }
+    const old: AgentSession = { ...session, id: 'session-old', slugId: 'old', title: 'Old review', updatedAt: new Date(Date.now() - 30 * 86_400_000).toISOString() }
     const navigate = vi.fn()
     const user = userEvent.setup()
-    render(<I18nProvider><AgentPage chatSlug="history" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={navigate} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+    const { unmount } = render(<I18nProvider><AgentPage chatSlug="history" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={navigate} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Switch agent chat' }))
+    // A single group has no heading, like the reference's list.
+    expect(screen.queryByRole('group', { name: 'Today' })).not.toBeInTheDocument()
+    unmount()
+    render(<I18nProvider><AgentPage chatSlug="history" data={makeBootstrap({ agentSessions: [session, old], agentSkills: [] })} onNavigate={navigate} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     await user.click(screen.getByRole('button', { name: 'Switch agent chat' }))
     expect(screen.getByRole('group', { name: 'Today' })).toBeVisible()
+    expect(screen.getByRole('group', { name: 'Older' })).toBeVisible()
     await user.hover(screen.getByRole('option', { name: 'New chat' }))
     await user.keyboard('{Enter}')
     expect(navigate).toHaveBeenCalledWith('/workspace/agent')

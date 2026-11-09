@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Desktop parity round 4: the agent chat switcher popover is a flat run of 32px chat rows between 6px spacers with no padding (a lone group has no heading, "New chat" only shows while a chat is open, rows highlight only after the pointer or keyboard moves), and the team retire row reads "Prevent creating and updating issues in this team while preserving all historical data".
+
 - A project connected to a Lark or Feishu group shows it in the project sidebar: the group's name (or "N groups" when several are bound) instead of "Connect group", refreshed when the group dialog closes; revoked bindings no longer count.
 - The issue list filter value menu rounds its content-sized width up to a whole pixel, so the widest label no longer loses a fraction of a pixel to its ellipsis.
 - Desktop parity round 3 for issue pages and lists: the sidebar Current and Upcoming cycle links carry the row padding and column gap on the row itself, the issue list filter value menu rounds its content-sized width to whole pixels, the bulk action bar count uses regular weight with a tabular number, and an app-authored comment's "via <app>" continues the name in the 500 weight and tertiary ink.

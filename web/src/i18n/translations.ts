@@ -1462,8 +1462,8 @@ export const zhCN: Record<string, string> = {
   "Leave team": "离开团队",
   "Remove yourself as a member of this team": "从此团队中移除你的成员身份",
   "Retire team": "停用团队",
-  "Prevent creating and updating issues while preserving historical data":
-    "禁止创建和更新事项，同时保留历史数据",
+  "Prevent creating and updating issues in this team while preserving all historical data":
+    "禁止在此团队中创建和更新事项，同时保留所有历史数据",
   "Permanently delete this team and all of its owned data":
     "永久删除此团队及其所有数据",
   "Issue intake email created": "事项接收邮箱已创建",

@@ -375,14 +375,15 @@ export function AgentPage({
   const phone = usePhoneLayout();
   const [historyInteracting, setHistoryInteracting] = useState(false);
   const historyListRef = useRef<HTMLDivElement>(null);
+  const hasShown = Boolean(shown);
   const historyOptions = useMemo(
     () => [
-      ...(!phone ? [{ id: "__new__", label: t("New chat") }] : []),
+      ...(!phone && hasShown ? [{ id: "__new__", label: t("New chat") }] : []),
       ...[...sessions]
         .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
         .map((item) => ({ id: item.id, label: item.title })),
     ],
-    [sessions, t, phone],
+    [sessions, t, phone, hasShown],
   );
   const {
     activeId: historyActiveId,
@@ -430,7 +431,22 @@ export function AgentPage({
     },
     [historyFilteredOptions, sessions, phone, historyQuery, t],
   );
-  const historyListHeight = historyGroups.reduce((height, group) => group.top + group.headingHeight + group.sessions.length * 46 + 6, 12);
+  // Desktop list like the reference: one flat run of 32px rows between 6px spacers; headings only separate several groups.
+  const desktopHistoryRows = useMemo(() => {
+    type Row =
+      | { kind: "heading"; key: string; label: string }
+      | { kind: "row"; id: string; title: string; section: string; unread: boolean; current: boolean; time: string };
+    const rows: Row[] = [];
+    if (phone) return rows;
+    if (historyFilteredOptions.some(({ id }) => id === "__new__")) rows.push({ kind: "row", id: "__new__", title: t("New chat"), section: "new", unread: false, current: false, time: "" });
+    const headed = historyGroups.length > 1;
+    for (const group of historyGroups) {
+      if (headed) rows.push({ kind: "heading", key: group.id, label: group.label });
+      for (const item of group.sessions) rows.push({ kind: "row", id: item.id, title: item.title, section: group.id, unread: agentSessionUnread(item), current: current?.id === item.id, time: formatAgentHistoryTime(item.updatedAt, t) });
+    }
+    return rows;
+  }, [phone, historyFilteredOptions, historyGroups, current?.id, t]);
+  const historyListHeight =historyGroups.reduce((height, group) => group.top + group.headingHeight + group.sessions.length * 46 + 6, 12);
   useEffect(() => {
     if (phone && historyOpen && historyInteracting) historyListRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: "nearest" });
   }, [phone, historyOpen, historyInteracting, historyActiveId]);
@@ -515,18 +531,47 @@ export function AgentPage({
               />
               <div role="listbox" aria-label={t("Chat history")} ref={historyListRef}>
                 {phone && <div className={styles.historyListSpacer} style={{ height: historyListHeight }} />}
-                {(phone || historyGroups.length > 0) && historyFilteredOptions.some(({ id }) => id === "__new__") && <button
-                  aria-selected={historyActiveId === "__new__"}
-                  className={styles.newChat}
-                  onMouseMove={() => setHistoryActiveId("__new__")}
-                  onClick={() => chooseHistory(historyOptions[0])}
-                  role="option"
-                  type="button"
-                >
-                  <Plus />
-                  <span>{t("New chat")}</span>
-                </button>}
-                {historyGroups.map((group, groupIndex) => (
+                {!phone && historyGroups.length > 0 && (
+                  <div>
+                    <ul className={styles.historyList} role="presentation" style={{ height: 12 + desktopHistoryRows.length * 32 }}>
+                      <div className={styles.historySpacer} />
+                      {desktopHistoryRows.map((row, index) => row.kind === "heading" ? (
+                        <div key={row.key} aria-label={t(row.label)} data-history-group={row.key} className={styles.historyHeading} role="group" style={{ top: 6 + index * 32 }}>{t(row.label)}</div>
+                      ) : (
+                        <li
+                          key={row.id}
+                          aria-selected={historyInteracting && historyActiveId === row.id}
+                          className={styles.historyRow}
+                          data-history-section={row.section}
+                          onClick={() => chooseHistory(historyFilteredOptions.find(({ id }) => id === row.id)!)}
+                          onMouseMove={() => { setHistoryInteracting(true); setHistoryActiveId(row.id); }}
+                          role="option"
+                          style={{ top: 6 + index * 32 }}
+                        >
+                          <div className={styles.historyRowBg} />
+                          <div className={styles.historyRowBody}>
+                            <div className={styles.historyRowTitle}>
+                              <span>
+                                <span>
+                                  <i aria-hidden="true" data-unread={row.unread || undefined}>{row.id === "__new__" && <Plus />}</i>
+                                  <span data-i18n-ignore>{row.title}</span>
+                                </span>
+                              </span>
+                            </div>
+                            {(row.current || row.time) && <div className={styles.historyRowMeta}>
+                              <div>
+                                {row.current && <span>{t("Current")}</span>}
+                                {row.time && <span>{row.time}</span>}
+                              </div>
+                            </div>}
+                          </div>
+                        </li>
+                      ))}
+                      <div className={styles.historySpacer} style={{ marginTop: desktopHistoryRows.length * 32 }} />
+                    </ul>
+                  </div>
+                )}
+                {phone && historyGroups.map((group, groupIndex) => (
                   <Fragment key={group.label}>
                     {(!phone || groupIndex > 0) && <div className={styles.historySeparator} role="separator" style={phone ? { top: group.top - 12 } : undefined}>
                       <span data-testid="agent-chat-switcher-divider" />

@@ -905,8 +905,41 @@
 @media (min-width: 801px) {
   /* The reference menu is 320px of content inside its 0.5px border; the empty state pads its own row. */
   .historyMenu { box-sizing: content-box; max-height: 407px; border-color: var(--pk-border); background: var(--pk-surface); box-shadow: var(--shadow-control); }
+  .historyMenu, .historyMenu [role="listbox"] { padding: 0; }
+  /* Rows sit absolutely between two 6px spacers inside a list, like the reference's chat list. */
+  .historyList { position: relative; margin: 0; padding: 0; list-style: none; }
+  .historySpacer { height: 6px; }
+  .historyMenu .historyRow[role="option"] {
+    position: absolute;
+    left: 0;
+    box-sizing: border-box;
+    width: 100%;
+    height: 32px;
+    display: block;
+    padding: 0 18px 0 14px;
+    border-radius: 0;
+    background: transparent;
+    color: var(--pk-text);
+    font: 400 13px/19.5px var(--font);
+    cursor: default;
+  }
+  .historyMenu .historyRow[role="option"]:hover,
+  .historyMenu .historyRow[role="option"][aria-selected="true"] { background: transparent; }
+  .historyRowBg { position: absolute; inset: 0 6px; z-index: -1; border-radius: 8px; }
+  .historyRow[aria-selected="true"] .historyRowBg { background: var(--agent-chat-history-hover); }
+  .historyRowBody { display: flex; align-items: center; gap: 8px; height: 100%; overflow: hidden; font-weight: 450; line-height: normal; }
+  .historyRowTitle { display: flex; flex: 1 1 auto; gap: 4px; min-width: 0; }
+  .historyMenu .historyRow span { color: inherit; font-size: 13px; }
+  .historyRowTitle > span, .historyRowTitle > span > span { display: flex; overflow: hidden; }
+  .historyRowTitle > span > span > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .historyRowTitle i { position: relative; flex: 0 0 24px; height: 100%; display: flex; align-items: center; width: 24px; }
+  .historyRowTitle i svg { width: 14px; height: 14px; }
+  .historyRowTitle i[data-unread]::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--agent-chat-history-dot); }
+  .historyRowMeta { flex: 0 0 auto; display: flex; gap: 6px; }
+  .historyRowMeta > div { display: flex; gap: 8px; }
+  .historyMenu .historyRow .historyRowMeta span { color: var(--agent-chat-history-faint); }
+  .historyHeading { position: absolute; left: 0; box-sizing: border-box; width: 100%; height: 32px; display: flex; align-items: center; padding: 0 14px; color: var(--agent-chat-history-muted); font-size: 12px; font-weight: 500; }
   .historyMenu:has(.noHistory) { padding: 0; }
-  .historyMenu:has(.noHistory) [role="listbox"] { padding: 0; }
   .noHistory { height: 36px; padding: 2px 14px 4px; box-sizing: content-box; justify-items: start; color: var(--inbox-filter-arrow); font: 450 13px/normal var(--font); }
 }
 @media (max-width: 767px) {
@@ -1426,6 +1459,11 @@
 :global(:root[data-theme="light"]) .historyMenu [role="option"][aria-selected="true"],
 :global(:root[data-theme="light"]) .historyMenu [role="option"] span { color: var(--theme-text-secondary); }
 :global(:root[data-theme="light"]) .historyMenu time { color: var(--theme-text-tertiary); }
+:global(:root[data-theme="light"]) .historyMenu .historyRow[role="option"],
+:global(:root[data-theme="light"]) .historyMenu .historyRow[role="option"]:hover,
+:global(:root[data-theme="light"]) .historyMenu .historyRow[role="option"][aria-selected="true"] { color: var(--pk-text); }
+:global(:root[data-theme="light"]) .historyMenu .historyRow[role="option"] span { color: inherit; }
+:global(:root[data-theme="light"]) .historyMenu .historyRow .historyRowMeta span { color: var(--agent-chat-history-faint); }
 :global(:root[data-theme="light"]) .historyGroup { color: var(--theme-text-tertiary); }
 :global(:root[data-theme="light"]) .danger { color: var(--semantic-danger); }
 :global(:root[data-theme="light"]) .attachments > span { border-color: var(--theme-border); background: var(--theme-surface-hover); }

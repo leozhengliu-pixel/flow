@@ -675,7 +675,7 @@ function TeamOverview({
         )}
         <TeamRow
           title={team.retiredAt ? "Restore team" : "Retire team"}
-          description="Prevent creating and updating issues while preserving historical data"
+          description="Prevent creating and updating issues in this team while preserving all historical data"
         >
           <ScopedFlowTooltip label={retireReason ? t(retireReason) : undefined}>
             <span className="settings-action-hint">
