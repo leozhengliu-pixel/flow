@@ -1,5 +1,6 @@
 import { useI18n } from '@/i18n/i18n'
 import { FlowLogo } from '@/components/ui/flow-logo'
+import { WelcomeVideoPlayer } from './welcome-video-player'
 import './workspace-welcome-inbox-view.css'
 
 export function WorkspaceWelcomeInboxView({ title, message }: { title: string; message: string }) {
@@ -8,9 +9,7 @@ export function WorkspaceWelcomeInboxView({ title, message }: { title: string; m
     <div className="flow-inbox-welcome__mark" aria-hidden="true"><span>F</span><FlowLogo size={44}/></div>
     <h1>{title}</h1>
     <p>{message || t('Learn the essentials and explore core workflows')}</p>
-    <div className="flow-inbox-welcome__video" role="img" aria-label={t('Welcome video')}>
-      <span className="flow-inbox-welcome__video-placeholder">{t('Introductory video unavailable')}</span>
-    </div>
+    <WelcomeVideoPlayer/>
     <section className="flow-inbox-welcome__resources">
       <h2>{t('Resources')}</h2>
       <ul>

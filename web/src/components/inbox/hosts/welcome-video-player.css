@@ -1,0 +1,31 @@
+.flow-welcome-player{position:relative;overflow:hidden;box-sizing:border-box;border:.5px solid var(--theme-border);border-radius:6px;background:#1a1a1b;box-shadow:0 .5px 1px 1px rgb(0 0 0 / .3);color:rgb(255 255 255 / .75);outline:none}
+.flow-welcome-player__video{display:block;width:100%;aspect-ratio:758 / 425.94;object-fit:cover;background:#1a1a1b;cursor:pointer}
+.flow-welcome-player__caption{position:absolute;left:16px;right:16px;bottom:64px;margin:0;text-align:center;pointer-events:none;color:#fff;font-size:15px;font-weight:500;line-height:22px;text-shadow:0 1px 3px rgb(0 0 0 / .85),0 0 12px rgb(0 0 0 / .6)}
+.flow-welcome-player__controls{position:absolute;left:16px;right:16px;bottom:16px;height:36px;border-radius:9999px;background:rgb(46 46 47 / .94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.flow-welcome-player__bar{display:flex;box-sizing:border-box;height:100%;align-items:center;gap:2px;padding:4px}
+.flow-welcome-player__button{display:inline-flex;width:28px;height:28px;flex:none;align-items:center;justify-content:center;border:0;border-radius:9999px;padding:0;background:transparent;color:#fff;cursor:pointer;text-decoration:none;transition:background .1s}
+.flow-welcome-player__button:hover:not(:disabled){background:rgb(255 255 255 / .12)}
+.flow-welcome-player__button:focus-visible,.flow-welcome-player__rate:focus-visible,.flow-welcome-player__seek:focus-visible,.flow-welcome-player__volume-track:focus-visible{outline:2px solid var(--accent-primary);outline-offset:1px}
+.flow-welcome-player__button:disabled{opacity:.4;cursor:default}
+.flow-welcome-player__volume{position:relative;display:flex}
+.flow-welcome-player__volume-popover{position:absolute;left:0;bottom:100%;display:flex;width:32px;height:80px;box-sizing:border-box;align-items:center;justify-content:center;border-radius:6px;background:rgb(46 46 47 / .94);opacity:0;pointer-events:none;transition:opacity .15s}
+.flow-welcome-player__volume:hover .flow-welcome-player__volume-popover,.flow-welcome-player__volume:focus-within .flow-welcome-player__volume-popover{opacity:1;pointer-events:auto}
+.flow-welcome-player__volume-track{position:relative;display:flex;width:4px;height:56px;align-items:flex-end;overflow:hidden;border-radius:9999px;background:rgb(255 255 255 / .2);cursor:pointer;touch-action:none}
+.flow-welcome-player__volume-track span{display:block;width:100%;background:#fff}
+.flow-welcome-player__timeline{display:flex;min-width:0;flex:1;align-items:center;gap:8px;padding:0 4px}
+.flow-welcome-player__time{flex:none;min-width:34.32px;color:rgb(255 255 255 / .55);font-size:12px;font-weight:500;font-variant-numeric:tabular-nums}
+.flow-welcome-player__time:last-child{text-align:right}
+.flow-welcome-player__seek{position:relative;height:4px;min-width:0;flex:1;border-radius:9999px;background:rgb(255 255 255 / .2);cursor:pointer;touch-action:none;transition:opacity .25s cubic-bezier(.25,.46,.45,.94)}
+.flow-welcome-player__seek:before{content:"";position:absolute;inset:-12px 0}
+.flow-welcome-player__seek-fill{position:relative;height:100%;overflow:hidden;border-radius:9999px}
+.flow-welcome-player__seek-fill span{display:block;height:100%;background:#fff}
+.flow-welcome-player__rate{box-sizing:border-box;width:48px;height:28px;flex:none;appearance:none;border:0;border-radius:9999px;padding:0 6px;background:transparent;color:rgb(255 255 255 / .75);font:inherit;font-size:12px;font-weight:500;line-height:19.2px;text-align:center;text-align-last:center;cursor:pointer;transition:opacity .25s cubic-bezier(.25,.46,.45,.94),background .1s cubic-bezier(.25,.46,.45,.94)}
+.flow-welcome-player__rate:hover{background:rgb(255 255 255 / .12)}
+.flow-welcome-player__rate option{color:#111}
+@media (prefers-reduced-motion:reduce){.flow-welcome-player *{transition:none!important}}
+@media (max-width:800px){
+  .flow-welcome-player__video{height:240px;aspect-ratio:auto}
+  .flow-welcome-player__controls{left:8px;right:8px;bottom:8px}
+  .flow-welcome-player__caption{left:8px;right:8px;bottom:52px;font-size:13px;line-height:18px}
+  .flow-welcome-player__rate,.flow-welcome-player__download,.flow-welcome-player__pip{display:none}
+}
