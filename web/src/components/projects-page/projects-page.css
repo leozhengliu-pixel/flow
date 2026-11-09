@@ -1894,7 +1894,7 @@
 /* View card bottom row: resource pills left, filter / display buttons right. */
 .lp-projects__editor-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
 .lp-projects__editor-actions{display:flex;align-items:center;gap:6px}
-.lp-projects__header > .lp-projects__copy-url { margin-left: auto; }
+.lp-projects__header > .lp-projects__copy-url:not(:last-child) { margin-left: auto; }
 .lp-projects__timeline-pill { display: none; }
 @media (min-width: 768px) {
   .lp-projects__timeline-pill { box-sizing: border-box; height: 24px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: .5px solid transparent; border-radius: 9999px; background: lch(13.861% 1.139 272); color: lch(90.826% 1.425 272); font: 500 12px var(--font); }
