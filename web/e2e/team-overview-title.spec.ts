@@ -8,7 +8,7 @@ for(const width of [375,390])test(`keeps long team titles above the overview sho
   await page.setViewportSize({width,height:844})
   await page.goto(`/${workspaceKey}/settings/teams/QA`)
   const title=page.locator('.team-settings-header h1')
-  const link=page.getByRole('link',{name:'Team overview',exact:true})
+  const link=page.getByRole('button',{name:'Team overview',exact:true})
   await expect(title).toContainText('Quality assurance')
   const heading=(await title.boundingBox())!,shortcut=(await link.boundingBox())!
   expect(shortcut.y).toBeGreaterThanOrEqual(heading.y+heading.height)

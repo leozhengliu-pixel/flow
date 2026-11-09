@@ -680,7 +680,7 @@ export function SettingsPage(props: SettingsPageProps) {
           <label className="settings-search">
             <SettingsSearchGlyph size={16} />
             <input
-              aria-label="Search settings"
+              aria-label={t("Search…")}
               aria-controls="settings-search-results"
               aria-expanded={Boolean(trimmedQuery)}
               placeholder={t("Search…")}

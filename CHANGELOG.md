@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Team settings header: "Team overview" is a button (like the reference) with the reference's 6px/8px padding and chevron gap, and the settings sidebar search field is named "Search…" instead of "Search settings".
+
 - Desktop parity round 4: the agent chat switcher popover is a flat run of 32px chat rows between 6px spacers with no padding (a lone group has no heading, "New chat" only shows while a chat is open, rows highlight only after the pointer or keyboard moves), and the team retire row reads "Prevent creating and updating issues in this team while preserving all historical data".
 
 - A project connected to a Lark or Feishu group shows it in the project sidebar: the group's name (or "N groups" when several are bound) instead of "Connect group", refreshed when the group dialog closes; revoked bindings no longer count.

@@ -56,7 +56,7 @@ it('shows team visibility, working section links, actual members and workflow st
   const data = makeBootstrap({ teamMembers: [{ teamId: team.id, userId: viewer.id } as never], teamSettings: {}, cycleSettings: {}, documentTemplates: [], projectTemplates: [] })
   render(wrap(<TeamWorkflowSettings data={data} team={team} section="overview" onNavigate={vi.fn()} onReload={vi.fn()} onOpenTeams={vi.fn()}/>))
   expect(screen.getByText('Accessible to all workspace members')).toBeVisible()
-  expect(screen.getByRole('link', { name: 'Team overview' })).toHaveAttribute('href', '/workspace/team/TST/overview')
+  expect(screen.getByRole('button', { name: 'Team overview' })).toBeVisible()
   expect(screen.getByText('1 member')).toBeVisible()
   expect(screen.getByRole('link', { name: /Labels available to this team’s projects/ })).toHaveAttribute('href', '/workspace/settings/teams/TST/project-labels')
   expect(screen.getByRole('link', { name: /Customize the statuses issues go through/ })).toHaveTextContent('3 statuses')

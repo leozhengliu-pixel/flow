@@ -370,7 +370,7 @@ export function TeamWorkflowSettings({
           </h1>
           {section === "overview" ? <p>{t(team.private || data.teamSettings?.[team.id]?.access === 'private' ? 'Only accessible to team members' : 'Accessible to all workspace members')}</p> : section === "templates" ? <TeamTemplatesDescription workspaceSlug={data.workspace.urlKey} /> : section === "notifications" ? <p>{chat.format(t(chatCopy.page))}</p> : TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
         </div>
-        {section === 'overview' && <a className="team-overview-shortcut" href={teamHomePath(data.workspace.urlKey, team.key)}>{t('Team overview')}<ChevronRight size={14}/></a>}
+        {section === 'overview' && <TeamOverviewShortcut path={teamHomePath(data.workspace.urlKey, team.key)}/>}
       </header>
       {section === "overview" && (
         <TeamOverview
@@ -405,7 +405,14 @@ export function TeamWorkflowSettings({
   );
 }
 
-type TeamSectionComponent = ComponentType<{
+/** The header's "Team overview" button opens the team's own home page. */
+function TeamOverviewShortcut({ path }: { path: string }) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  return <button className="team-overview-shortcut" type="button" onClick={() => navigate(path)}>{t('Team overview')}<ChevronRight size={14}/></button>;
+}
+
+type TeamSectionComponent =ComponentType<{
   data: BootstrapData;
   team: Team;
   onReload: () => Promise<void>;

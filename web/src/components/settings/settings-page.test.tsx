@@ -119,7 +119,7 @@ it("filters settings using translated labels", async () => {
     </I18nProvider>,
   );
 
-  const search = screen.getByRole("textbox", { name: "搜索设置" });
+  const search = screen.getByRole("textbox", { name: "搜索…" });
   await user.type(search, "文档");
   expect(screen.getByRole("button", { name: "文档" })).toBeVisible();
   expect(screen.queryByRole("button", { name: "工作区" })).toBeNull();
@@ -131,7 +131,7 @@ it("searches page sections and individual settings, then navigates with keyboard
   const input = props();
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
 
-  const search = screen.getByRole("textbox", { name: "Search settings" });
+  const search = screen.getByRole("textbox", { name: "Search…" });
   await user.type(search, "theme");
   expect(screen.getByRole("button", { name: "Code & reviews" })).toBeVisible();
   expect(screen.getByRole("button", { name: "Code theme" })).toBeVisible();
@@ -149,7 +149,7 @@ it("shows an empty state and clears the query with Escape", async () => {
   const user = userEvent.setup();
   render(<I18nProvider><SettingsPage {...props()} /></I18nProvider>);
 
-  const search = screen.getByRole("textbox", { name: "Search settings" });
+  const search = screen.getByRole("textbox", { name: "Search…" });
   await user.type(search, "does-not-exist");
   expect(screen.getByText("No matching settings")).toBeVisible();
   await user.keyboard("{Escape}");
@@ -159,7 +159,7 @@ it("shows an empty state and clears the query with Escape", async () => {
 it("focuses settings search with slash", () => {
   render(<I18nProvider><SettingsPage {...props()} /></I18nProvider>);
 
-  const search = screen.getByRole("textbox", { name: "搜索设置" });
+  const search = screen.getByRole("textbox", { name: "搜索…" });
   fireEvent.keyDown(window, { key: "/" });
   expect(search).toHaveFocus();
 });
@@ -189,7 +189,7 @@ it('shows Asks settings read-only to regular members with a searchable enable co
   expect(await screen.findByRole('checkbox', { name: 'Enable Asks' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Asks' })).toHaveAttribute('aria-current', 'page');
   const user = userEvent.setup();
-  await user.type(screen.getByRole('textbox', { name: 'Search settings' }), 'Enable Asks');
+  await user.type(screen.getByRole('textbox', { name: "Search…" }), 'Enable Asks');
   await user.click(screen.getByRole('button', { name: 'Enable Asks' }));
   expect(input.onNavigate).toHaveBeenCalledWith('asks');
   await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Enable Asks' }).closest('.feature-row')).toHaveClass('settings-search-target'));
@@ -203,7 +203,7 @@ it('limits Your teams to memberships and searches joined team identifiers', asyn
   expect(screen.getByRole('button', { name: 'Team 8' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Team 999' })).not.toBeInTheDocument();
   expect(document.querySelectorAll('.settings-team-icon')).toHaveLength(1);
-  await user.type(screen.getByRole('textbox', { name: '搜索设置' }), 'T8');
+  await user.type(screen.getByRole('textbox', { name: '搜索…' }), 'T8');
   await user.click(screen.getByRole('button', { name: 'Team 8' }));
   expect(input.onNavigate).toHaveBeenCalledWith('team', 'T8', undefined);
 });
@@ -219,7 +219,7 @@ it('searches team settings and opens the matching section', async () => {
   };
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
 
-  await user.type(screen.getByRole('textbox', { name: 'Search settings' }), 'cycle duration');
+  await user.type(screen.getByRole('textbox', { name: "Search…" }), 'cycle duration');
   expect(screen.getByRole('button', { name: 'Engineering' })).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Cycle duration' }));
   expect(input.onNavigate).toHaveBeenCalledWith('team', 'ENG', 'cycles');
@@ -480,7 +480,7 @@ it('disables the team danger zone for members with the reference app\'s reasons'
   const input = props();
   memberOfOnlyTeam(input);
   input.teamSection = 'overview';
-  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  render(<MemoryRouter><I18nProvider><SettingsPage {...input}/></I18nProvider></MemoryRouter>);
   const leave = await screen.findByRole('button', { name: 'Leave team…' }, { timeout: 5000 });
   expect(leave).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Retire…' })).toBeDisabled();
