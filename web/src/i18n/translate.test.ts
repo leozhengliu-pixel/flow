@@ -58,7 +58,7 @@ describe('lazy Chinese dictionary', () => {
     vi.resetModules()
     const { translateToChinese, loadChineseDictionary } = await import('./translate')
     await loadChineseDictionary()
-    for (const text of ['Autofix bugs', 'Triage agent', 'Slack Q&A assistant', 'Weekly wrap', 'Feature request report', 'Security alerts', 'Start a coding session', 'Route the issue to an owner', 'Reply in the Slack thread', 'Share the highlights', 'Post a weekly report', 'Alert the Slack channel', 'Cycle options']) {
+    for (const text of ['Autofix bugs', 'Triage agent', 'Slack Q&A assistant', 'Weekly wrap', 'Feature request report', 'Security alerts', 'Start coding session', 'Assign owner', 'Reply in thread', 'Share highlights', 'Share report', 'Alert channel', 'Project hygiene', 'Raise priority', 'Cycle options']) {
       expect(translateToChinese(text)).not.toBe(text)
     }
   })

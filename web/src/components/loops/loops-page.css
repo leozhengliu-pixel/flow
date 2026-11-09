@@ -462,6 +462,8 @@ html:root[data-theme="light"] body .dialog-content .loops-hub-composer textarea 
 .loops-template-description { max-width: 280px; margin-top: 4px; color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; line-height: 18px; }
 .loops-template-footer { min-height: 25px; display: flex; align-items: center; gap: 2px; padding: 0; color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; }
 .loops-template-footer > svg { flex: none; color: var(--theme-text-secondary); }
+.loops-template-flow { display: contents; }
+.loops-template-trigger-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .loops-template-trigger,
 .loops-template-action { display: inline-flex; align-items: center; gap: 6px; color: var(--theme-text-secondary); }
 .loops-template-trigger svg,
@@ -923,6 +925,11 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
   .loops-add-connector,
   .loops-run-edit { color: var(--text); }
   .loops-template-description { max-width: none; color: var(--loops-muted); }
+  .loops-template-card strong { line-height: normal; }
+  .loops-template-footer { gap: 8px; }
+  .loops-template-flow { display: inline-flex; align-items: center; gap: 6px; }
+  .loops-template-flow > svg { width: 12px; height: 12px; }
+  .loops-template-trigger-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
   .loops-hub-categories { width: max-content; max-width: 100%; gap: 2px; border-radius: 5px; }
   .loops-hub-categories button { margin: 2px; padding: 4px 12px; border: 0.5px solid transparent; font-weight: 500; }
   .loops-add-connector > svg { width: 16px; height: 16px; }

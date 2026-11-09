@@ -31,7 +31,7 @@ func waitForLoopRuns(t *testing.T, handler http.Handler, loopID string, count in
 func TestLoopTemplatesAndDraftLifecycle(t *testing.T) {
 	_, handler := newLoopTestServer(t, &fakeLoopProvider{})
 	templates := requestJSON[[]map[string]any](t, handler, http.MethodGet, "/api/loop-templates", nil, http.StatusOK)
-	if len(templates) != 6 || templates[1]["id"] != "triage-agent" || templates[1]["requiresTeam"] != true || templates[1]["triggerLabel"] != "On triage" || templates[2]["triggerLabel"] != "Hourly" {
+	if len(templates) != 8 || templates[1]["id"] != "triage-agent" || templates[1]["requiresTeam"] != true || templates[1]["triggerLabel"] != "Triage" || templates[2]["triggerLabel"] != "Hourly" {
 		t.Fatalf("templates = %v", templates)
 	}
 	if config := templates[3]["triggerConfig"].(map[string]any); config["unit"] != "week" || config["startDate"] == nil {

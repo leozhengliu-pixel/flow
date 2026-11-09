@@ -17,8 +17,8 @@ import { LoopCreateHub } from './loop-create-hub'
 import { resetLoopTemplateCache, takeLoopAgentAutostart } from './loop-data'
 
 const templates: LoopTemplate[] = [
-  { id: 'triage-agent', name: 'Triage agent', description: 'Reviews incoming issues, adds context, and routes each one to the right owner.', icon: 'Inbox', color: '#5e6ad2', triggerLabel: 'On triage', triggerIcon: 'triage', actionLabel: 'Route the issue to an owner', actionIcon: 'route', requiresTeam: true, levelHint: 'Triage loops must belong to a team', triggerType: 'issue', triggerConfig: { event: 'triage' }, instructions: 'Route it' },
-  { id: 'weekly-wrap', name: 'Weekly wrap', description: "Summarizes the week's accomplishments.", icon: 'Calendar', color: '#4cb782', triggerLabel: 'Weekly', triggerIcon: 'weekly', actionLabel: 'Share the highlights', actionIcon: 'share', requiresTeam: false, triggerType: 'schedule', triggerConfig: { unit: 'week' }, instructions: 'Wrap up' },
+  { id: 'triage-agent', name: 'Triage agent', description: 'Reviews incoming issues, adds context, and routes each one to the right owner.', icon: 'Inbox', color: '#5e6ad2', triggerLabel: 'On triage', triggerIcon: 'triage', actionLabel: 'Assign owner', actionIcon: 'route', requiresTeam: true, levelHint: 'Triage loops must belong to a team', triggerType: 'issue', triggerConfig: { event: 'triage' }, instructions: 'Route it' },
+  { id: 'weekly-wrap', name: 'Weekly wrap', description: "Summarizes the week's accomplishments.", icon: 'Calendar', color: '#4cb782', triggerLabel: 'Weekly', triggerIcon: 'weekly', actionLabel: 'Share highlights', actionIcon: 'share', requiresTeam: false, triggerType: 'schedule', triggerConfig: { unit: 'week' }, instructions: 'Wrap up' },
 ]
 
 function renderHub() {
@@ -47,8 +47,8 @@ describe('LoopCreateHub', () => {
     expect(screen.getByRole('navigation', { name: 'Loop template categories' })).toBeVisible()
     const card = await screen.findByRole('button', { name: /Triage agent/ })
     expect(card).toHaveTextContent('On triage')
-    expect(card).toHaveTextContent('Route the issue to an owner')
-    expect(screen.getByRole('button', { name: /Weekly wrap/ })).toHaveTextContent('Share the highlights')
+    expect(card).toHaveTextContent('Assign owner')
+    expect(screen.getByRole('button', { name: /Weekly wrap/ })).toHaveTextContent('Share highlights')
   })
 
   it('asks where a team-only template goes, disables Workspace, then creates the draft and opens the editor', async () => {

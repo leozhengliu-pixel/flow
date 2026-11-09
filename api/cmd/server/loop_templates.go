@@ -56,8 +56,8 @@ const triageLevelHint = "Triage loops must belong to a team"
 
 var loopTemplates = []loopTemplate{
 	{
-		ID: "autofix-bugs", Name: "Autofix bugs", Description: "Investigates new bug reports and starts a coding session when it finds a clear fix.",
-		Icon: "Bug", Color: "#eb5757", TriggerLabel: "On triage", TriggerIcon: "Triage", ActionLabel: "Start a coding session", ActionIcon: "Code",
+		ID: "autofix-bugs", Name: "Autofix bugs", Description: "Investigates new bug reports and starts a coding session when it finds a clear fix",
+		Icon: "Bug", Color: "#eb5757", TriggerLabel: "Triage", TriggerIcon: "Triage", ActionLabel: "Start coding session", ActionIcon: "Code",
 		RequiresTeam: true, LevelHint: triageLevelHint, TriggerType: "issue", CodeAccess: "readWrite",
 		TriggerConfig: map[string]any{"event": "triage", "filters": []any{map[string]any{"field": "label", "operator": "is", "value": "Bug"}}},
 		Instructions: `Investigate each new bug report that arrives in triage and start a coding session only when you find a clear, low-risk fix.
@@ -77,7 +77,7 @@ Never close the issue or mark it done yourself; the team reviews every fix.`,
 	},
 	{
 		ID: "triage-agent", Name: "Triage agent", Description: "Reviews incoming issues, adds context, and routes each one to the right owner.",
-		Icon: "Triage", Color: "#f2994a", TriggerLabel: "On triage", TriggerIcon: "Triage", ActionLabel: "Route the issue to an owner", ActionIcon: "Assignee",
+		Icon: "Triage", Color: "#f2994a", TriggerLabel: "Triage", TriggerIcon: "Triage", ActionLabel: "Assign owner", ActionIcon: "Assignee",
 		RequiresTeam: true, LevelHint: triageLevelHint, TriggerType: "issue", CodeAccess: "disabled",
 		TriggerConfig: map[string]any{"event": "triage"},
 		Instructions: `Triage each incoming issue so it reaches the right owner with enough context to act on it.
@@ -99,7 +99,7 @@ Do not invent details or make low-confidence ownership changes. When ownership i
 	},
 	{
 		ID: "slack-qa", Name: "Slack Q&A assistant", Description: "Answers product questions from the team in a selected Slack channel.",
-		Icon: "Slack", Color: "#4a154b", TriggerLabel: "Hourly", TriggerIcon: "Clock", ActionLabel: "Reply in the Slack thread", ActionIcon: "Slack",
+		Icon: "Slack", Color: "#4a154b", TriggerLabel: "Hourly", TriggerIcon: "Clock", ActionLabel: "Reply in thread", ActionIcon: "Slack",
 		TriggerType: "schedule", CodeAccess: "read",
 		schedule: map[string]any{"interval": 1, "unit": "hour", "time": "09:00"},
 		Instructions: `Every hour, answer new product questions the team asked in the selected Slack channel.
@@ -118,7 +118,7 @@ End the run with a summary listing the questions you answered and the ones you c
 	},
 	{
 		ID: "weekly-wrap", Name: "Weekly wrap", Description: "Summarizes the week's accomplishments for a person or team and shares the highlights.",
-		Icon: "Calendar", Color: "#5e6ad2", TriggerLabel: "Weekly", TriggerIcon: "Clock", ActionLabel: "Share the highlights", ActionIcon: "Megaphone",
+		Icon: "Calendar", Color: "#5e6ad2", TriggerLabel: "Weekly", TriggerIcon: "Calendar", ActionLabel: "Share highlights", ActionIcon: "Megaphone",
 		TriggerType: "schedule", CodeAccess: "disabled",
 		schedule: map[string]any{"interval": 1, "unit": "week", "time": "16:00", "weekdays": []any{"fri"}},
 		Instructions: `Every Friday afternoon, summarize what the team accomplished this week and share the highlights.
@@ -135,7 +135,7 @@ End the run with a summary listing the questions you answered and the ones you c
 	},
 	{
 		ID: "feature-request-report", Name: "Feature request report", Description: "Groups recent feature requests into a weekly report with themes and customer impact.",
-		Icon: "Lightbulb", Color: "#26b5ce", TriggerLabel: "Weekly", TriggerIcon: "Clock", ActionLabel: "Post a weekly report", ActionIcon: "Document",
+		Icon: "Lightbulb", Color: "#26b5ce", TriggerLabel: "Weekly", TriggerIcon: "Calendar", ActionLabel: "Share report", ActionIcon: "Document",
 		TriggerType: "schedule", CodeAccess: "disabled",
 		schedule: map[string]any{"interval": 1, "unit": "week", "time": "09:00", "weekdays": []any{"mon"}},
 		Instructions: `Every Monday morning, turn last week's feature requests into a report the product team can act on.
@@ -151,8 +151,41 @@ End the run with a summary listing the questions you answered and the ones you c
 		},
 	},
 	{
+		ID: "update-issue-priority", Name: "Update issue priority based on demand", Description: "Raises issue priority when duplicate reports or customer requests reach a chosen threshold.",
+		Icon: "Megaphone", Color: "#f2994a", TriggerLabel: "Daily", TriggerIcon: "Calendar", ActionLabel: "Raise priority", ActionIcon: "Chart",
+		TriggerType: "schedule", CodeAccess: "disabled",
+		schedule: map[string]any{"interval": 1, "unit": "day", "time": "09:00"},
+		Instructions: `Every morning, raise the priority of issues that more people are asking for.
+
+1. Find open issues that gained duplicate reports or linked customer requests since the last run.
+2. Count the distinct reporters and customers behind each issue, including requests on duplicates that were merged into it.
+3. When an issue reaches the threshold for the next priority level, raise its priority by one level. Never lower a priority and never change issues that are already Urgent.
+4. Add a short comment on each issue you changed with the number of reports or requests, the customers involved and the new priority.
+5. End the run with a summary listing the issues you raised and the issues that are close to their threshold.`,
+		Questions: []loopTemplateQuestion{
+			{Question: "How many reports or requests should raise the priority?", Options: []string{"3 or more", "5 or more", "10 or more"}},
+			{Question: "Which issues should the loop check?", Options: []string{"All open issues", "Only this team"}},
+		},
+	},
+	{
+		ID: "project-hygiene", Name: "Project hygiene", Description: "Reviews active projects for stale updates, missing details, and overdue work.",
+		Icon: "Box", Color: "#4cb782", TriggerLabel: "Weekly", TriggerIcon: "Calendar", ActionLabel: "Notify project leads", ActionIcon: "Bell",
+		TriggerType: "schedule", CodeAccess: "disabled",
+		schedule: map[string]any{"interval": 1, "unit": "week", "time": "09:00", "weekdays": []any{"mon"}},
+		Instructions: `Every Monday morning, check that active projects are healthy and tell their leads what needs attention.
+
+1. List the active projects. For each one check the last project update, the lead, the target date, the description and the health.
+2. Flag projects with no update in the last two weeks, no lead, no target date or no description, and projects with overdue issues or milestones.
+3. Message each project lead (or the project's creator when there is no lead) with a short list of what to fix and links to the project and the overdue work.
+4. Do not edit the projects yourself. End the run with a summary of the projects you flagged and the ones that are in good shape.`,
+		Questions: []loopTemplateQuestion{
+			{Question: "How stale should a project update be before it is flagged?", Options: []string{"1 week", "2 weeks", "1 month"}},
+			{Question: "Who should be notified?", Options: []string{"The project lead", "The lead and the team"}},
+		},
+	},
+	{
 		ID: "security-alerts", Name: "Security alerts", Description: "Alerts a Slack channel and sets an SLA whenever a security issue is reported.",
-		Icon: "Shield", Color: "#eb5757", TriggerLabel: "On issue change", TriggerIcon: "Issue", ActionLabel: "Alert the Slack channel", ActionIcon: "Slack",
+		Icon: "Shield", Color: "#eb5757", TriggerLabel: "Issue updated", TriggerIcon: "Issue", ActionLabel: "Alert channel", ActionIcon: "Slack",
 		TriggerType: "issue", CodeAccess: "disabled",
 		TriggerConfig: map[string]any{"event": "labels", "value": "Security"},
 		Instructions: `Whenever an issue is labeled Security, make sure the right people know right away and that it has an SLA.

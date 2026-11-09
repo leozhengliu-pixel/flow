@@ -203,12 +203,14 @@ export function LoopCreateHub({
                   <span className="loops-template-footer">
                     <span className="loops-template-trigger" title={t(item.triggerLabel)}>
                       <LoopGlyph icon={item.triggerIcon || item.triggerLabel} size={14} />
-                      <span className="sr-only">{t(item.triggerLabel)}</span>
+                      <span className="loops-template-trigger-label">{t(item.triggerLabel)}</span>
                     </span>
-                    <ArrowRight aria-hidden="true" size={14} />
-                    <span className="loops-template-action">
-                      <LoopGlyph icon={item.actionIcon || item.actionLabel} size={14} />
-                      <span>{t(item.actionLabel)}</span>
+                    <span className="loops-template-flow">
+                      <ArrowRight aria-hidden="true" size={14} />
+                      <span className="loops-template-action">
+                        <LoopGlyph icon={item.actionIcon || item.actionLabel} size={14} />
+                        <span>{t(item.actionLabel)}</span>
+                      </span>
                     </span>
                   </span>
                 </button>

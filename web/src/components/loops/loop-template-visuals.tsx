@@ -1,5 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
-import { Bug, CalendarDays, FileText, MessageSquare, ShieldAlert, type LucideProps } from "lucide-react";
+import { Box, Bug, CalendarDays, FileText, Megaphone, MessageSquare, ShieldAlert, type LucideProps } from "lucide-react";
 import { WorkflowStatusGlyph } from "@/components/issue/issue-icons";
 import { TRIAGE_STATUS } from "@/components/triage/triage-model";
 
@@ -27,6 +27,8 @@ const TEMPLATE_VISUALS: Record<string, TemplateVisual> = {
   "slack-qa": { serverIcon: "Slack", serverColor: "#4a154b", color: "#9b8afb", render: lucide(MessageSquare) },
   "weekly-wrap": { serverIcon: "Calendar", serverColor: "#5e6ad2", color: "#5e6ad2", render: lucide(CalendarDays) },
   "feature-request-report": { serverIcon: "Lightbulb", serverColor: "#26b5ce", color: "#4cb782", render: lucide(FileText) },
+  "update-issue-priority": { serverIcon: "Megaphone", serverColor: "#f2994a", color: "#f2994a", render: lucide(Megaphone) },
+  "project-hygiene": { serverIcon: "Box", serverColor: "#4cb782", color: "#4cb782", render: lucide(Box) },
   "security-alerts": { serverIcon: "Shield", serverColor: "#eb5757", color: "#eb5757", render: lucide(ShieldAlert) },
 };
 
