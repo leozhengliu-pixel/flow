@@ -18,6 +18,18 @@ describe('issue grouping engine', () => {
     expect(groups.map(group => group.label)).toEqual(['Urgent', 'High', 'Medium', 'Low', 'No priority'])
   })
 
+  it('orders status groups started, unstarted, backlog, triage, completed, canceled when no group order is stored, and keeps a stored order exactly', () => {
+    const states = [
+      { id: 'triage', name: 'Triage', type: 'triage' as const, color: '#999' }, { id: 'backlog', name: 'Backlog', type: 'backlog' as const, color: '#999' }, open,
+      { id: 'progress', name: 'In Progress', type: 'started' as const, color: '#f2c94c' }, done, { id: 'canceled', name: 'Canceled', type: 'canceled' as const, color: '#999' },
+    ]
+    const rows = states.map((state, index) => row(String(index + 1), { state: state as MyIssuesRowData['state'] }))
+    const names = (groupOrder: 'asc' | 'desc' | undefined) => buildIssueGroups(rows, { ...createIssueDisplayOptions({ grouping: 'status', completedWindow: 'all' }), groupOrder }).map(group => group.label)
+    expect(names(undefined)).toEqual(['In Progress', 'Todo', 'Backlog', 'Triage', 'Done', 'Canceled'])
+    expect(names('asc')).toEqual(['Triage', 'Backlog', 'Todo', 'In Progress', 'Done', 'Canceled'])
+    expect(names('desc')).toEqual(['Canceled', 'Done', 'In Progress', 'Todo', 'Backlog', 'Triage'])
+  })
+
   it('places an issue in every label group it carries', () => {
     const a = { id: 'a', name: 'Bug', color: '#f00' }, b = { id: 'b', name: 'Frontend', color: '#0f0' }
     const groups = buildIssueGroups([row('1', { labels: [a, b] }), row('2')], createIssueDisplayOptions({ grouping: 'label', completedWindow: 'all' }))

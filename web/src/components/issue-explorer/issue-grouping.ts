@@ -13,6 +13,8 @@ export const PRIORITY_LABELS = ['No priority', 'Urgent', 'High', 'Medium', 'Low'
 /** The reference app order: Urgent → Low, then No priority. */
 const PRIORITY_RANK = [4, 0, 1, 2, 3]
 const STATE_TYPE_RANK: Record<string, number> = { triage: 0, backlog: 1, unstarted: 2, started: 3, completed: 4, canceled: 5 }
+/** The reference's default status group order (a view with no stored group order): In Progress, Todo, Backlog, Triage, Done, Canceled. */
+const DEFAULT_STATE_TYPE_RANK: Record<string, number> = { started: 0, unstarted: 1, backlog: 2, triage: 3, completed: 4, canceled: 5 }
 const COMPLETED_TYPES = new Set(['completed', 'canceled'])
 const DAY = 86_400_000
 
@@ -393,9 +395,11 @@ function collect(rows: MyIssuesRowData[], descriptorsFor: (row: MyIssuesRowData)
   return groups
 }
 
-function sortGroups<T extends { descriptor: GroupDescriptor }>(groups: T[], order: 'asc' | 'desc') {
+function sortGroups<T extends { descriptor: GroupDescriptor }>(groups: T[], order: 'asc' | 'desc' | undefined) {
+  // No stored order: status groups follow the reference default (state type, then workflow position within it).
+  const rankOf = (descriptor: GroupDescriptor) => order === undefined && descriptor.stateType && typeof descriptor.rank === 'number' ? (DEFAULT_STATE_TYPE_RANK[descriptor.stateType] ?? 9) * 1000 + descriptor.rank % 1000 : descriptor.rank
   const sorted = [...groups].sort((left, right) => {
-    const a = left.descriptor.rank, b = right.descriptor.rank
+    const a = rankOf(left.descriptor), b = rankOf(right.descriptor)
     return typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b))
   })
   return order === 'desc' ? sorted.reverse() : sorted

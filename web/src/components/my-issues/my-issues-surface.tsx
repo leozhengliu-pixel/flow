@@ -31,7 +31,8 @@ export interface MyIssuesDisplayOptions {
   grouping: MyIssuesGrouping
   /** The parent label group used by the `labelGroup` grouping (the reference app "group by label group"). */
   labelGroupId?: string
-  groupOrder: 'asc' | 'desc'
+  /** Unset means the reference default: status groups run started, unstarted, backlog, triage, completed, canceled; other groupings run ascending. A stored value keeps exactly its own order. */
+  groupOrder?: 'asc' | 'desc'
   subGrouping: MyIssuesGrouping
   ordering: MyIssuesOrdering
   /** Unset means the ordering field's natural direction (the reference app `viewOrderingDirection`). */

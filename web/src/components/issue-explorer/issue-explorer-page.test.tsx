@@ -87,9 +87,10 @@ describe('complete issue grouping', () => {
 
   it('shows full counts and later groups without loading more pages', async () => {
     const { container } = render(page(dataWithGroups(160, 230)))
-    await waitFor(() => expect(screen.getByText('Backlog').closest('header')).toHaveTextContent('160'))
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse group' }))
+    // Status groups run started, unstarted, backlog when the view stores no group order.
     await waitFor(() => expect(screen.getByText('In progress').closest('header')).toHaveTextContent('230'))
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse group' }))
+    await waitFor(() => expect(screen.getByText('Backlog').closest('header')).toHaveTextContent('160'))
     expect(container.querySelectorAll('a[href*="/issue/"]').length).toBeLessThan(80)
     fireEvent.click(screen.getByRole('button', { name: 'Group by priority' }))
     // Priority groups follow the reference app order: Urgent before High.

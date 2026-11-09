@@ -128,6 +128,10 @@ html:root body .property-command-surface .property-command-group {
   color: var(--pk-muted);
   font: 500 12px/normal var(--font);
 }
+/* The reference's label list starts with its heading at the top edge of the list (no 6px lead-in above "Frequently used" / "Workspace labels"). */
+html:root body .property-command-surface.property-command-labels:not(.phone-menu-surface) .property-command-options:has(> .property-command-group:first-child) {
+  padding-top: 0;
+}
 html:root body .property-command-surface .people-menu-avatar,
 html:root body .property-command-surface .core-person-picker-avatar {
   width: 16px;

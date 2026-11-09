@@ -830,7 +830,7 @@ function countItems(items: Omit<MyIssuesSummaryItem, 'count'>[]) { const values 
 /** The board route keeps the reference board default: Manual ordering with empty columns shown. */
 const BOARD_ROUTE_DISPLAY = { layout: 'board', showEmptyGroups: true, ordering: 'importance' } as const satisfies Partial<MyIssuesDisplayOptions>
 /** The reference app defaults: a list groups by status and orders by priority; team/workspace/custom views hide triage issues (they live in Triage) while a new view draft shows them. */
-function defaultDisplay(view: TeamIssuesRouteView, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { return { ...defaultMyIssuesDisplayOptions, ...(isDesktop() ? desktopDisplayDefaults() : {}), grouping: 'status', ordering: 'priority', completedWindow: view === 'all' ? 'all' : 'none', showTriageIssues: false, ...(isDesktop() ? {} : { properties: new Set(defaultMyIssuesDisplayOptions.properties) }), ...overrides } }
+function defaultDisplay(view: TeamIssuesRouteView, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { return { ...defaultMyIssuesDisplayOptions, ...(isDesktop() ? desktopDisplayDefaults() : {}), grouping: 'status', groupOrder: undefined, ordering: 'priority', completedWindow: view === 'all' ? 'all' : 'none', showTriageIssues: false, ...(isDesktop() ? {} : { properties: new Set(defaultMyIssuesDisplayOptions.properties) }), ...overrides } }
 function initialPropertyFilters(data: BootstrapData, labelId?: string, statusId?: string): MyIssuesAppliedFilter[] | undefined {
   const filters: MyIssuesAppliedFilter[] = []
   const label = data.labels.find(item => item.id === labelId)

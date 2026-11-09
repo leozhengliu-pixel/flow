@@ -34,3 +34,17 @@ it.each(['Personal', 'Workspace', 'Test team'])('persists configured filters and
   expect(screen.getByText('Included high priority')).toBeInTheDocument()
   expect(screen.queryByText('Excluded low priority')).not.toBeInTheDocument()
 }, 15000)
+
+it.each([
+  ['the workspace Views page', false, 'personal' as const, 'Save to Personal'],
+  ['a team Views page', true, 'team' as const, 'Save to Test team'],
+])('a new view from %s starts at the reference default destination and keeps a changed choice', async (_page, teamPage, defaultSaveScope, name) => {
+  const user = userEvent.setup()
+  const data = makeBootstrap({ favorites: [], issues: [makeIssue({ id: 'one', title: 'One' })] })
+  const scope = teamPage ? { kind: 'team' as const, team: data.teams[0] } : { kind: 'workspace' as const }
+  render(<I18nProvider><VirtuosoMockContext.Provider value={{ viewportHeight: 440, itemHeight: 44 }}><IssueExplorerPage data={data} scope={scope} view="all" viewHref={() => '#'} creatingView defaultSaveScope={defaultSaveScope} onNavigateView={vi.fn()} onCreateSavedView={vi.fn()} onOpenIssue={vi.fn()} onUpdateIssue={vi.fn()} onUpdateIssues={vi.fn()} onDeleteIssues={vi.fn()}/></VirtuosoMockContext.Provider></I18nProvider>)
+  expect(screen.getByRole('button', { name })).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: /^Save to / }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'Workspace' }))
+  expect(screen.getByRole('button', { name: 'Save to Workspace' })).toBeInTheDocument()
+})

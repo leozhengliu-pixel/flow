@@ -133,10 +133,10 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
               <button
                 type="button"
                 className={styles.orderButton}
-                aria-label={`Group ordering: ${options.groupOrder === 'asc' ? 'ascending' : 'descending'}`}
+                aria-label={`Group ordering: ${options.groupOrder === 'desc' ? 'descending' : 'ascending'}`}
                 title="Group ordering"
-                data-order={options.groupOrder}
-                onClick={() => change({ groupOrder: options.groupOrder === 'asc' ? 'desc' : 'asc' })}
+                data-order={options.groupOrder ?? 'asc'}
+                onClick={() => change({ groupOrder: options.groupOrder === 'desc' ? 'asc' : 'desc' })}
               ><span className={styles.desktopSortIcon}><ArrowDownUp size={14} /></span><PhoneSortIcon kind="group" /></button>
               <SelectControl ariaLabel="Grouping" value={options.grouping} options={visibleGroupingOptions} onChange={grouping => change({ grouping, layout: grouping === 'focus' ? 'list' : options.layout, ...(grouping === 'labelGroup' && !options.labelGroupId ? { labelGroupId: labelGroupOptions[0]?.id } : {}) })} />
             </div>
