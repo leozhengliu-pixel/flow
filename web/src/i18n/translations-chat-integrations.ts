@@ -1,4 +1,7 @@
 export const chatIntegrationsZhCN: Record<string, string> = {
+  "Group notifications": "群通知",
+  "Send notifications to a group.": "向群发送通知。",
+  "Send notifications to a {name} group.": "向{name}群发送通知。",
   "account": "账户",
   "Last checked": "上次检查",
   "Save settings": "保存设置",

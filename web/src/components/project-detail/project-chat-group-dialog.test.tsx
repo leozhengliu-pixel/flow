@@ -33,7 +33,6 @@ afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
 
 async function openForm() {
   render(<MemoryRouter><I18nProvider><ProjectChatGroupDialog open onOpenChange={vi.fn()} provider="feishu" project={{ ...project, teamIds: ['team-1'] }} data={makeBootstrap()}/></I18nProvider></MemoryRouter>)
-  await userEvent.setup().click(await screen.findByRole('button', { name: 'Connect Feishu group' }))
   return screen.findByRole('form', { name: 'Add group binding' })
 }
 
@@ -56,9 +55,9 @@ it('renders selects as the shared settings select with a sized chevron', async (
   }
 })
 
-it('renders the notification options as the panel checkboxes and the Flow-only options as the shared switch', async () => {
+it('renders the notification options as checkbox rows and the Flow-only options as the shared switch', async () => {
   const form = await openForm()
-  const options = within(form).getByRole('heading', { name: 'Notifications' }).parentElement!
+  const options = form.querySelector('.chat-group-dialog__options')!
   const checkboxes = [...options.querySelectorAll('button[role="checkbox"]')]
   expect(checkboxes.map(box => box.getAttribute('aria-label'))).toEqual(['Issue created', 'Status changed', 'Assignee changed', 'Comment added', 'Project update published', 'Initiative update published'])
   expect(within(form).getByRole('checkbox', { name: 'Issue created' })).toBeChecked()
@@ -69,10 +68,19 @@ it('renders the notification options as the panel checkboxes and the Flow-only o
   expect(within(form).getByRole('checkbox', { name: 'Allow creating issues' })).toBeChecked()
 })
 
-it('gives every icon in the dialog an explicit size', async () => {
+it("leads with the project notifications switch, as the reference's Slack window does", async () => {
+  const form = await openForm()
+  const head = form.querySelector('.chat-dialog-head')!
+  expect(head).toHaveTextContent('Project notifications')
+  expect(head).toHaveTextContent('Send notifications to a Feishu group.')
+  expect(within(head as HTMLElement).getByRole('checkbox', { name: 'Binding enabled' })).toBeChecked()
+  expect(screen.getByRole('dialog')).toHaveTextContent('Feishu notifications for')
+})
+
+it('gives every icon in the dialog an explicit size (the project glyph is sized by its own class)', async () => {
   await openForm()
   const dialog = screen.getByRole('dialog')
-  const unsized = [...dialog.querySelectorAll('svg, img')].filter(icon => !icon.getAttribute('width') || !icon.getAttribute('height'))
+  const unsized = [...dialog.querySelectorAll('svg, img')].filter(icon => !icon.matches('svg[class*="glyph"]') && (!icon.getAttribute('width') || !icon.getAttribute('height')))
   expect(unsized.map(icon => icon.outerHTML.slice(0, 80))).toEqual([])
 })
 
@@ -81,11 +89,7 @@ it('lays rows out as copy on the left and the control on the right', async () =>
   const row = within(form).getByRole('combobox', { name: 'Card language' }).closest('.feature-row')!
   expect(row.firstElementChild?.tagName).toBe('DIV')
   expect(row.firstElementChild).toHaveTextContent('Card language')
-  expect(row.firstElementChild).toHaveTextContent('The language of the cards and messages Flow posts in this group.')
   expect(row.lastElementChild?.tagName).toBe('ASIDE')
-  // The read-only project shows its name as a muted value in the control column.
-  const value = within(form).getAllByText('Project one').find(element => element.classList.contains('chat-fixed-value'))!
-  expect(value.parentElement?.tagName).toBe('ASIDE')
 })
 
 it('shows the placeholder on the phone select while no option is chosen', () => {

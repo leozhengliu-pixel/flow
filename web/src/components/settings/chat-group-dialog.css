@@ -1,8 +1,11 @@
 /*
- * The chat group dialog. Its sizes follow the reference app's project notification panel, the one place that app connects a chat
- * channel: a 334.21px panel with an 8px radius and a .5px border, 16px sections split by .5px dividers, 12px titles (500) and
- * options (450), 14px checkboxes, 14.5px lines on an 8px rhythm, and 24px pill buttons (28px on touch screens). Flow's own rows
- * (group, team, card language, requests) keep the settings controls but sit on the same spacing.
+ * The chat group dialog. Its structure and sizes follow the reference app's project Slack window (measured from a 2x capture of it,
+ * dark theme): a 700px dialog with a .5px border and 13px radius, 20px padding, a 26px header row (the chat app's 18px mark, the
+ * title, the subject's 16px icon and name, and a close button whose 9px cross is centred 34px from the right edge), a 20px
+ * description line 17px under it, a 1px divider inset 20px 17px below that, a switch section (title over description, a 30x20
+ * switch on the right), and then rows on a 32px pitch with the label on the left and the control on the right; a checkbox is
+ * 14px and sits centred in the switch's 30px column. Flow's own rows (group, team, template, card language, group actions,
+ * requests) use the same rows, two to a line.
  */
 .chat-group-dialog {
   box-sizing: border-box;
@@ -10,93 +13,108 @@
   z-index: 701;
   left: 50%;
   top: 50%;
-  width: min(334.21px, calc(100vw - 32px));
+  width: min(700px, calc(100vw - 32px));
   max-width: none;
   max-height: calc(100dvh - 48px);
   display: flex;
   flex-direction: column;
-  padding: 0;
+  padding: 20px 0 0;
   overflow: hidden;
   border: .5px solid var(--tooltip-border);
-  border-radius: 8px;
+  border-radius: 13px;
   background: var(--tooltip-bg);
   box-shadow: var(--shadow-control);
   color: var(--action-menu-text);
   transform: translate(-50%, -50%);
 }
-.chat-group-dialog .dialog-close { top: 12px; right: 12px; }
-.chat-group-dialog__header { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 16px 48px 16px 16px; border-bottom: .5px solid var(--popover-divider); }
-.chat-group-dialog__header h2 { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; color: var(--action-menu-active-text); font-size: 12px; font-weight: 500; line-height: 14.5px; }
-.chat-group-dialog__header h2 > img { flex: none; width: 16px; height: 16px; }
-.chat-group-dialog__header h2 > span { min-width: 0; overflow-wrap: anywhere; }
-.chat-group-dialog__header h2 > span > span { color: var(--action-menu-text); }
-.chat-group-dialog__header p { margin: 0; color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
-.chat-group-dialog__body { box-sizing: border-box; min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
-
-/* Sections: the shared settings card becomes a 16px section split by a divider, and the heading above it joins it. */
-.chat-group-dialog .chat-integration-settings .feature-section { margin-top: 0; }
-.chat-group-dialog .chat-integration-settings .feature-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; overflow: visible; border: 0; border-bottom: .5px solid var(--popover-divider); border-radius: 0; background: none; box-shadow: none; }
-.chat-group-dialog .chat-integration-settings .chat-subheading { margin: 0; padding: 16px 16px 0; color: var(--action-menu-active-text); font-size: 12px; font-weight: 500; line-height: 14.5px; }
-.chat-group-dialog .chat-integration-settings .chat-subheading + .feature-card { padding-top: 8px; }
-.chat-group-dialog .chat-integration-settings .chat-binding-editor > header { margin: 0; padding: 16px; border-bottom: .5px solid var(--popover-divider); }
-.chat-group-dialog .chat-integration-settings .chat-binding-editor > header h2 { display: none; }
-.chat-group-dialog .chat-integration-settings .chat-binding-editor > header p { margin: 0; color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
-.chat-group-dialog .chat-integration-settings .chat-binding-editor .chat-integration-alert { margin: 0; padding: 16px; border-bottom: .5px solid var(--popover-divider); }
-.chat-group-dialog .chat-integration-settings .chat-fieldset { display: block; gap: 0; padding: 0; border: 0; }
-.chat-group-dialog .chat-integration-settings > :is(p, a, button) { margin: 16px; }
-.chat-group-dialog .chat-integration-settings > .chat-integration-alert { margin: 0; padding: 16px; border-bottom: .5px solid var(--popover-divider); }
-.chat-group-dialog .chat-integration-settings .chat-muted { color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
-.chat-group-dialog .feature-button.chat-group-dialog__connect { display: inline-flex; margin: 16px; }
+.chat-group-dialog__header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 26px; padding: 0 20px; }
+.chat-group-dialog__header h2 { display: flex; align-items: center; gap: 12px; min-width: 0; margin: 0; color: var(--action-menu-active-text); font-size: 18px; font-weight: 500; line-height: 26px; }
+.chat-group-dialog__header h2 > img, .chat-group-dialog__header h2 > svg { flex: none; }
+.chat-group-dialog__header h2 > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-group-dialog__close { flex: none; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--action-menu-muted); }
+.chat-group-dialog__close:hover { background: var(--pk-control-selected); color: var(--action-menu-active-text); }
+.chat-group-dialog__close:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: var(--control-focus-offset); }
+.chat-group-dialog__description { flex: none; margin: 17px 0 0; padding: 0 20px; color: var(--action-menu-muted); font-size: 13px; font-weight: 400; line-height: 20px; }
+.chat-group-dialog__body { box-sizing: border-box; min-height: 0; flex: 1 1 auto; margin: 17px 20px 0; border-top: 1px solid var(--popover-divider); overflow-y: auto; overscroll-behavior: contain; }
 
 /* The dialog sits at z-index 701 (overlay 700); the shared select's menu is portaled to the body at 500, i.e. under the overlay, so its options could not be clicked. The popper wrapper copies this z-index. */
 body:has(.chat-group-dialog) .settings-select-menu { z-index: 1100; }
 
-/* The notification options: the panel's own checkbox rows. */
-.chat-group-dialog__options { padding: 16px; border-bottom: .5px solid var(--popover-divider); }
-.chat-group-dialog__options h2 { margin: 0 0 8px; color: var(--action-menu-active-text); font-size: 12px; font-weight: 500; line-height: 14.5px; }
-.chat-group-dialog__options label { min-height: 14.5px; display: flex; align-items: center; gap: 24px; margin-bottom: 8px; color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
-.chat-group-dialog__options label:last-child { margin-bottom: 0; }
+/* The binding form. */
+.chat-dialog-form .chat-fieldset { display: block; gap: 0; min-width: 0; margin: 0; padding: 0; border: 0; }
+.chat-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 0 12px; }
+.chat-dialog-head > div, .chat-dialog-approval > div { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.chat-dialog-head strong { color: var(--action-menu-active-text); font-size: 13px; font-weight: 500; line-height: 20px; }
+.chat-dialog-head span, .chat-dialog-approval span { color: var(--action-menu-muted); font-size: 12px; font-weight: 400; line-height: 20px; }
+.chat-dialog-approval strong { color: var(--action-menu-muted); font-size: 12px; font-weight: 400; line-height: 20px; }
+.chat-dialog-form .chat-integration-alert { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 16px 0 0; padding: 8px 12px; border-radius: 8px; color: var(--semantic-danger); font-size: 12px; line-height: 16px; }
+
+/* Rows: the label on the left, the control on the right, on a 32px pitch. */
+.chat-dialog-form .feature-row { box-sizing: border-box; min-height: 32px; flex-direction: row; align-items: center; gap: 24px; padding: 0; border: 0; }
+.chat-dialog-form .feature-row > div { min-width: 0; flex: 1 1 auto; gap: 0; }
+.chat-dialog-form .feature-row strong, .chat-dialog-form .feature-row span { color: var(--action-menu-muted); font-size: 12px; font-weight: 400; line-height: 20px; }
+.chat-dialog-form .feature-row aside { flex: none; max-width: 70%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.chat-dialog-form .feature-row .chat-fixed-value { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-dialog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
+.chat-dialog-approval { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 32px; margin-top: 8px; }
+.chat-dialog-note { display: flex; gap: 8px; margin: 8px 0 0; color: var(--action-menu-muted); font-size: 12px; line-height: 16px; }
+.chat-dialog-note strong { color: var(--action-menu-active-text); font-weight: 500; }
+.chat-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin: 12px 0 0; padding: 0 0 16px; }
+
+/* Selects are the 24px pill the dialog's buttons are. */
+.chat-dialog-form .feature-row aside .settings-select { box-sizing: border-box; width: auto; max-width: 200px; min-width: 96px; height: 24px; padding: 0 22px 0 8px; border-radius: 9999px; font-size: 12px; font-weight: 500; line-height: normal; }
+.chat-dialog-form .feature-row aside .settings-select > span:last-child { right: 8px; }
+.chat-dialog-form .feature-row aside .chat-projects-picker { width: auto; max-width: 200px; }
+
+/* The notification options: the reference's checkbox rows (label left, a 14px box centred in the switch's 30px column). */
+.chat-group-dialog__options label { box-sizing: border-box; min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 24px; color: var(--action-menu-muted); font-size: 12px; font-weight: 400; line-height: 20px; }
 .chat-group-dialog__options label > span { min-width: 0; flex: 1; }
-.chat-group-dialog__options [role=checkbox] { width: 14px; height: 14px; flex: none; display: grid; place-items: center; padding: 0; border: 1px solid var(--inbox-filter-checkbox-border); border-radius: 3px; background: transparent; color: white; }
+.chat-group-dialog__options [role=checkbox] { width: 14px; height: 14px; flex: none; display: grid; place-items: center; margin-right: 8px; padding: 0; border: 1px solid var(--inbox-filter-checkbox-border); border-radius: 3px; background: transparent; color: white; }
 .chat-group-dialog__options [role=checkbox][data-checked=true] { border-color: var(--activity-highlight-color); background: var(--activity-highlight-color); }
 .chat-group-dialog__options [role=checkbox]:disabled { cursor: not-allowed; opacity: .45; }
 
-/* Rows: the copy on the left and the control on the right, as the panel's "Update schedule" row sets its Change button. A select is the same 24px pill as the buttons, so a row stays one line tall. */
-.chat-group-dialog .chat-integration-settings .feature-row { min-height: 24px; flex-direction: row; align-items: center; gap: 24px; padding: 0; border: 0; }
-.chat-group-dialog .chat-integration-settings .feature-row > div { flex: 1 1 auto; gap: 4px; }
-.chat-group-dialog .chat-integration-settings .feature-row strong { color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
-.chat-group-dialog .chat-integration-settings .feature-row span { color: var(--action-menu-muted); font-size: 12px; font-weight: 450; line-height: 14.5px; }
-.chat-group-dialog .chat-integration-settings .feature-row aside { flex: none; width: auto; max-width: 60%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select { width: auto; max-width: 180px; min-width: 96px; height: 24px; padding: 0 22px 0 8px; border-radius: 9999px; font-size: 12px; font-weight: 500; line-height: normal; }
-.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select > span:last-child { right: 8px; }
-/* A select row with a description puts the select under it, so the copy keeps the dialog's width. */
-.chat-group-dialog .chat-integration-settings .feature-row:not(.chat-inline):has(> div > span) { flex-wrap: wrap; row-gap: 8px; }
-.chat-group-dialog .chat-integration-settings .feature-row:not(.chat-inline):has(> div > span) > div { flex-basis: 100%; }
-.chat-group-dialog .chat-integration-settings .feature-row:not(.chat-inline):has(> div > span) aside { max-width: 100%; justify-content: flex-start; }
-.chat-group-dialog .chat-integration-settings .feature-row aside .chat-projects-picker { width: auto; max-width: 180px; }
-.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select-native-wrap { width: auto; max-width: 100%; height: 28px; }
-.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select-native-wrap > .settings-select-native { width: 100%; max-width: 100%; height: 28px; padding: 0 26px 0 10px; text-overflow: ellipsis; border-radius: 9999px; font-size: 12px; font-weight: 500; }
-.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select-native-wrap > span { height: 28px; right: 8px; }
-.chat-group-dialog .chat-integration-settings .chat-fixed-value { max-width: 160px; overflow: hidden; color: var(--action-menu-muted); font-size: 12px; font-weight: 450; text-overflow: ellipsis; white-space: nowrap; }
-.chat-group-dialog .chat-integration-settings .chat-binding-row strong { color: var(--action-menu-active-text); font-weight: 500; }
-.chat-group-dialog .chat-integration-settings .chat-binding-row .chat-binding-scope,
-.chat-group-dialog .chat-integration-settings .chat-binding-row .chat-binding-authorization { color: var(--action-menu-muted); }
-.chat-group-dialog .chat-integration-settings .chat-private-notice strong { color: var(--action-menu-active-text); font-weight: 500; }
-.chat-group-dialog .chat-integration-settings .chat-private-notice { padding: 0; }
-.chat-group-dialog .chat-integration-settings .chat-approval { margin-top: 0; border-bottom: 0; }
+/* Buttons: the 24px pill (its resting ring, a .5px transparent border, 12px/500 text). */
+.chat-group-dialog .feature-button { box-sizing: border-box; min-width: 24px; height: 24px; padding: 0 8px; border: .5px solid transparent; border-radius: 9999px; background: var(--pk-control-phone); box-shadow: var(--pk-control-ring); color: var(--action-menu-text); font-size: 12px; font-weight: 500; line-height: normal; }
+.chat-group-dialog .feature-button:hover { background: var(--pk-control-selected); }
+.chat-group-dialog .feature-button:focus-visible { box-shadow: 0 0 0 var(--control-focus-width) var(--focus-ring); }
+.chat-group-dialog .feature-button.primary { background: var(--activity-highlight-color); box-shadow: none; color: white; }
+.chat-group-dialog .feature-button.danger { color: var(--semantic-danger); }
+.chat-group-dialog .feature-button > svg { width: 12px; height: 12px; }
+.chat-group-dialog .feature-button.chat-icon-button { width: 24px; padding: 0; }
+.chat-group-dialog .feature-button.chat-icon-button > svg { width: 14px; height: 14px; }
+.chat-group-dialog .feature-button.chat-dialog-add, .chat-group-dialog .feature-button.chat-group-dialog__connect { margin: 12px 0 16px; }
+.chat-group-dialog .chat-muted { color: var(--action-menu-muted); font-size: 12px; font-weight: 400; line-height: 20px; }
+.chat-group-dialog .project-chat-groups > p { margin: 12px 0; }
 
-/* Buttons: the panel's 24px pill (its resting ring, a .5px transparent border, 12px/500 text). */
-.chat-group-dialog .chat-integration-settings .feature-button { box-sizing: border-box; min-width: 24px; height: 24px; padding: 0 8px; border: .5px solid transparent; background: var(--pk-control-phone); box-shadow: var(--pk-control-ring); color: var(--action-menu-text); font-size: 12px; font-weight: 500; line-height: normal; }
-.chat-group-dialog .chat-integration-settings .feature-button:hover { background: var(--pk-control-selected); }
-.chat-group-dialog .chat-integration-settings .feature-button:focus-visible { box-shadow: 0 0 0 var(--control-focus-width) var(--focus-ring); }
-.chat-group-dialog .chat-integration-settings .feature-button.primary { background: var(--activity-highlight-color); box-shadow: none; color: white; }
-.chat-group-dialog .chat-integration-settings .feature-button.danger { color: var(--semantic-danger); }
-.chat-group-dialog .chat-integration-settings .feature-button > svg { width: 12px; height: 12px; }
-.chat-group-dialog .chat-integration-settings .feature-button.chat-icon-button { width: 24px; min-width: 24px; padding: 0; }
-.chat-group-dialog .chat-integration-settings .feature-button.chat-icon-button > svg { width: 14px; height: 14px; }
-.chat-group-dialog .chat-integration-settings .feature-section-action { margin: 0; padding: 16px; }
+/* Bindings already connected, and the initiative form, keep the settings rows inside the same dialog. */
+.chat-group-dialog .chat-integration-settings .feature-card { display: flex; flex-direction: column; gap: 0; padding: 8px 0 0; overflow: visible; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.chat-group-dialog .chat-integration-settings .feature-section { margin-top: 0; }
+.chat-group-dialog .chat-integration-settings .chat-subheading { margin: 12px 0 0; color: var(--action-menu-active-text); font-size: 13px; font-weight: 500; line-height: 20px; }
+.chat-group-dialog .chat-integration-settings .chat-binding-editor > header { margin: 12px 0 0; padding: 0; }
+.chat-group-dialog .chat-integration-settings .chat-binding-editor > header h2 { display: none; }
+.chat-group-dialog .chat-integration-settings .chat-binding-editor > header p { margin: 0; color: var(--action-menu-muted); font-size: 13px; line-height: 20px; }
+.chat-group-dialog .chat-integration-settings .chat-fieldset { display: block; padding: 0; border: 0; }
+.chat-group-dialog .chat-integration-settings .feature-row { box-sizing: border-box; min-height: 32px; flex-direction: row; align-items: center; gap: 24px; padding: 0; border: 0; }
+.chat-group-dialog .chat-integration-settings .feature-row > div { flex: 1 1 auto; gap: 0; }
+.chat-group-dialog .chat-integration-settings .feature-row strong, .chat-group-dialog .chat-integration-settings .feature-row span { color: var(--action-menu-muted); font-size: 12px; font-weight: 400; line-height: 20px; }
+.chat-group-dialog .chat-integration-settings .feature-row aside { flex: none; width: auto; max-width: 70%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.chat-group-dialog .chat-integration-settings .feature-row aside .settings-select { width: auto; max-width: 200px; min-width: 96px; height: 24px; padding: 0 22px 0 8px; border-radius: 9999px; font-size: 12px; font-weight: 500; line-height: normal; }
+.chat-group-dialog .chat-integration-settings .chat-binding-row strong { color: var(--action-menu-active-text); font-weight: 500; }
+.chat-group-dialog .chat-integration-settings .feature-section-action, .chat-group-dialog .chat-integration-settings .chat-actions { margin: 12px 0 0; padding: 0 0 16px; }
+
+@media (max-width: 767px) {
+  /* On a phone the dialog takes the width of the screen less an 8px gap each side, with one column and native selects. Its placement is the shared dialog placement. */
+  .chat-group-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 32px); }
+  .chat-dialog-grid { grid-template-columns: minmax(0, 1fr); }
+  .chat-group-dialog__header { height: auto; min-height: 26px; align-items: flex-start; }
+  .chat-group-dialog__header h2 { flex-wrap: wrap; font-size: 16px; gap: 4px 8px; }
+  .chat-group-dialog__header h2 > span { overflow: visible; text-overflow: clip; white-space: normal; }
+  .chat-dialog-form .feature-row aside, .chat-group-dialog .chat-integration-settings .feature-row aside { max-width: 60%; }
+  .chat-dialog-form .feature-row aside .settings-select-native-wrap, .chat-group-dialog .chat-integration-settings .feature-row aside .settings-select-native-wrap { width: auto; max-width: 100%; height: 28px; }
+  .chat-dialog-form .feature-row aside .settings-select-native-wrap > .settings-select-native, .chat-group-dialog .chat-integration-settings .feature-row aside .settings-select-native-wrap > .settings-select-native { width: 100%; max-width: 100%; height: 28px; padding: 0 26px 0 10px; border-radius: 9999px; font-size: 12px; font-weight: 500; text-overflow: ellipsis; }
+  .chat-dialog-form .feature-row aside .settings-select-native-wrap > span, .chat-group-dialog .chat-integration-settings .feature-row aside .settings-select-native-wrap > span { height: 28px; right: 8px; }
+}
 @media (pointer: coarse) {
   .chat-group-dialog .feature-button { height: 28px; }
-  .chat-group-dialog .chat-integration-settings .feature-button { height: 28px; }
-  .chat-group-dialog .chat-integration-settings .feature-button.chat-icon-button { width: 28px; }
+  .chat-group-dialog .feature-button.chat-icon-button { width: 28px; }
 }

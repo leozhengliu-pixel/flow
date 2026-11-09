@@ -34,9 +34,9 @@ async function mockChat(page: Page, locale: string, theme: string) {
 
 for (const theme of ['light', 'dark']) {
   for (const locale of ['en-US', 'zh-CN']) {
-    test(`project chat group dialog uses the shared controls ${theme} ${locale}`, async ({ page, request, workspaceKey }) => {
+    test(`project chat group dialog has the reference window's structure ${theme} ${locale}`, async ({ page, request, workspaceKey }) => {
       const headers = { 'X-Workspace-Key': workspaceKey }
-      const projectResponse = await request.post('/api/projects', { headers, data: { name: 'Chat dialog project' } })
+      const projectResponse = await request.post('/api/projects', { headers, data: { name: 'Compare Test' } })
       expect(projectResponse.status()).toBe(201)
       const project = await projectResponse.json() as Project
       await mockChat(page, locale, theme)
@@ -46,116 +46,64 @@ for (const theme of ['light', 'dark']) {
       await page.locator('.project-details-sidebar__property-trigger.is-empty', { hasText: /Feishu|飞书/ }).click()
       const dialog = page.locator('.project-chat-group-dialog')
       await expect(dialog).toBeVisible()
-      await dialog.locator('button.feature-button', { hasText: /Connect Feishu group|连接 ?飞书 ?群/ }).click()
       const form = dialog.locator('form.chat-binding-editor')
       await expect(form).toBeVisible()
       await expect(page.locator('html')).toHaveAttribute('data-locale', locale)
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await page.evaluate(() => document.fonts.ready)
+      await page.waitForTimeout(400)
+      if (shots) await page.screenshot({ path: `${shots}/dialog-${theme}-${locale}.png` })
 
-      // Selects are the shared settings select; the notification options are the panel's checkboxes and the Flow-only options the shared switch.
-      const selects = form.locator('button.settings-select')
-      expect(await selects.count()).toBeGreaterThanOrEqual(3)
-      const toggles = form.locator('input[data-control="toggle"]')
-      expect(await toggles.count()).toBeGreaterThanOrEqual(5)
-      expect(await form.locator('.chat-group-dialog__options button[role="checkbox"]').count()).toBe(6)
-
-      if (shots) {
-        await dialog.scrollIntoViewIfNeeded()
-        await page.screenshot({ path: `${shots}/dialog-${theme}-${locale}.png` })
-      }
-      const geometry = await dialog.evaluate(root => {
-        const box = root.getBoundingClientRect()
-        const outside = [...root.querySelectorAll<HTMLElement | SVGElement>('*')].filter(element => {
-          const rect = element.getBoundingClientRect()
-          return rect.width > 0 && (rect.left < box.left - 0.5 || rect.right > box.right + 0.5)
-        }).map(element => `${element.tagName}.${element.getAttribute('class') ?? ''}`)
-        const chevrons = [...root.querySelectorAll('svg')].map(svg => svg.getBoundingClientRect()).filter(rect => rect.width > 24 || rect.height > 24)
-        const select = root.querySelector('button.settings-select')!.getBoundingClientRect()
-        const toggle = root.querySelector('input[data-control="toggle"]')!.getBoundingClientRect()
-        const stacked = root.querySelector('.feature-row:not(.chat-inline)')!
-        const stackedCopy = stacked.querySelector('div')!.getBoundingClientRect()
-        const stackedControl = stacked.querySelector('aside')!.getBoundingClientRect()
-        const inline = root.querySelector('.feature-row.chat-inline')!
-        const inlineAside = inline.querySelector('aside')!.getBoundingClientRect()
-        const inlineCopy = inline.querySelector('div')!.getBoundingClientRect()
-        return { outside, bigIcons: chevrons.length, selectHeight: select.height, selectWidth: select.width, toggleWidth: toggle.width, toggleHeight: toggle.height, selectRow: { sameLine: Math.abs(stackedControl.top + stackedControl.height / 2 - (stackedCopy.top + stackedCopy.height / 2)) < 1.5, controlRight: Math.round((box.right - stackedControl.right) * 100) / 100, height: Math.round(select.height * 100) / 100 }, inlineGap: inlineAside.left - inlineCopy.right, inlineSameRow: Math.abs(inlineAside.top + inlineAside.height / 2 - (inlineCopy.top + inlineCopy.height / 2)) < 1.5, scrolls: root.scrollWidth > root.clientWidth + 1 }
-      })
-      expect(geometry.outside).toEqual([])
-      expect(geometry.bigIcons).toBe(0)
-      expect(geometry.scrolls).toBe(false)
-      expect(geometry.selectHeight).toBe(24)
-      expect(geometry.selectWidth).toBeGreaterThan(80)
-      expect([geometry.toggleWidth, geometry.toggleHeight]).toEqual([30, 20])
-      // Every row keeps its label on the left and its control on the right of the same line; a select is the panel's 24px pill, 16px inside the .5px border.
-      expect(geometry.selectRow).toEqual({ sameLine: true, controlRight: 16.5, height: 24 })
-      expect(geometry.inlineSameRow).toBe(true)
-      expect(geometry.inlineGap).toBeGreaterThanOrEqual(24)
-
-      // The reference app's project notification panel: 334.21px wide, 8px radius, 16px sections, 12px titles at 500 and options at 450
-      // on 14.5px lines, 14px checkboxes 22.5px apart, 24px pill buttons.
-      const panel = await dialog.evaluate(root => {
-        const css = (el: Element, ...props: string[]) => Object.fromEntries(props.map(prop => [prop, getComputedStyle(el).getPropertyValue(prop)]))
+      const measured = await dialog.evaluate(root => {
         const round = (value: number) => Math.round(value * 100) / 100
-        const rect = (el: Element) => { const r = el.getBoundingClientRect(); return { width: round(r.width), height: round(r.height) } }
-        const options = root.querySelector('.chat-group-dialog__options')!
-        const labels = [...options.querySelectorAll('label')]
-        const checkboxes = [...options.querySelectorAll('[role="checkbox"]')]
-        const buttons = [...root.querySelectorAll('.chat-actions button')]
+        const box = root.getBoundingClientRect()
+        const rel = (el: Element) => { const r = el.getBoundingClientRect(); return { x: round(r.left - box.left), y: round(r.top - box.top), w: round(r.width), h: round(r.height), right: round(box.right - r.right), bottom: round(box.bottom - r.bottom) } }
+        const css = (el: Element, ...props: string[]) => Object.fromEntries(props.map(prop => [prop, getComputedStyle(el).getPropertyValue(prop)]))
+        const q = (selector: string) => root.querySelector(selector)!
+        const header = q('.chat-group-dialog__header')
+        const title = q('.chat-group-dialog__header h2')
+        const icons = [...title.querySelectorAll(':scope > img, :scope > svg')].map(rel)
+        const checkboxes = [...root.querySelectorAll('.chat-group-dialog__options [role=checkbox]')]
+        const labels = [...root.querySelectorAll('.chat-group-dialog__options label')]
+        const toggle = q('.chat-dialog-head input[data-control="toggle"]')
         return {
-          root: { width: root.getBoundingClientRect().width, ...css(root, 'border-top-left-radius', 'padding-top') },
-          header: css(root.querySelector('.chat-group-dialog__header')!, 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'row-gap'),
-          title: css(root.querySelector('.chat-group-dialog__header h2')!, 'font-size', 'font-weight', 'line-height'),
-          description: css(root.querySelector('.chat-group-dialog__header p')!, 'font-size', 'font-weight', 'line-height'),
-          options: css(options, 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'border-bottom-style'),
-          optionsTitle: css(options.querySelector('h2')!, 'font-size', 'font-weight', 'line-height', 'margin-bottom'),
-          label: css(labels[0], 'font-size', 'font-weight', 'line-height', 'column-gap'),
+          root: { w: box.width, ...css(root, 'border-top-width', 'border-top-left-radius', 'padding-top') },
+          header: { ...rel(header), ...css(title, 'font-size', 'font-weight', 'line-height') },
+          icons,
+          close: rel(q('.chat-group-dialog__close')),
+          description: { ...rel(q('.chat-group-dialog__description')), ...css(q('.chat-group-dialog__description'), 'font-size', 'font-weight', 'line-height') },
+          divider: { ...rel(q('.chat-group-dialog__body')), ...css(q('.chat-group-dialog__body'), 'border-top-width') },
+          head: { ...rel(q('.chat-dialog-head')), title: css(q('.chat-dialog-head strong'), 'font-size', 'font-weight', 'line-height'), description: css(q('.chat-dialog-head span'), 'font-size', 'font-weight', 'line-height') },
+          toggle: rel(toggle),
+          checkboxes: checkboxes.map(rel),
           pitch: labels.slice(1).map((label, index) => round(label.getBoundingClientRect().top - labels[index].getBoundingClientRect().top)),
-          checkbox: { ...rect(checkboxes[0]), ...css(checkboxes[0], 'border-top-left-radius') },
-          checkboxRight: round(options.getBoundingClientRect().right - checkboxes[0].getBoundingClientRect().right),
-          buttons: buttons.map(button => ({ height: round(button.getBoundingClientRect().height), ...css(button, 'font-size', 'font-weight', 'border-top-left-radius', 'padding-left', 'padding-right') })),
+          label: css(labels[0], 'font-size', 'font-weight', 'line-height'),
+          checkbox: css(checkboxes[0], 'border-top-left-radius', 'border-top-width'),
+          group: rel(root.querySelector('.chat-dialog-rows .feature-row')!),
+          height: box.height,
         }
       })
-      expect(panel.root.width).toBeCloseTo(334.21, 1)
-      expect(panel.root).toMatchObject({ 'border-top-left-radius': '8px', 'padding-top': '0px' })
-      expect(panel.header).toEqual({ 'padding-top': '16px', 'padding-right': '48px', 'padding-bottom': '16px', 'padding-left': '16px', 'row-gap': '8px' })
-      expect(panel.title).toEqual({ 'font-size': '12px', 'font-weight': '500', 'line-height': '14.5px' })
-      expect(panel.description).toEqual({ 'font-size': '12px', 'font-weight': '450', 'line-height': '14.5px' })
-      expect(panel.options).toEqual({ 'padding-top': '16px', 'padding-right': '16px', 'padding-bottom': '16px', 'padding-left': '16px', 'border-bottom-style': 'solid' })
-      expect(panel.optionsTitle).toEqual({ 'font-size': '12px', 'font-weight': '500', 'line-height': '14.5px', 'margin-bottom': '8px' })
-      expect(panel.label).toEqual({ 'font-size': '12px', 'font-weight': '450', 'line-height': '14.5px', 'column-gap': '24px' })
-      expect(panel.pitch).toEqual([22.5, 22.5, 22.5, 22.5, 22.5])
-      expect(panel.checkbox).toMatchObject({ width: 14, height: 14, 'border-top-left-radius': '3px' })
-      expect(panel.checkboxRight).toBe(16)
-      expect(panel.buttons.length).toBe(2)
-      for (const button of panel.buttons) expect(button).toMatchObject({ height: 24, 'font-size': '12px', 'font-weight': '500', 'border-top-left-radius': '9999px', 'padding-left': '8px', 'padding-right': '8px' })
-
-      // A toggle flips like a switch.
-      const first = toggles.first()
-      const before = await first.isChecked()
-      await first.click()
-      expect(await first.isChecked()).toBe(!before)
-      // A select opens its shared menu.
-      await selects.nth(1).click()
-      await expect(page.getByRole('listbox')).toBeVisible()
-      await page.keyboard.press('Escape')
-      await expect(page.getByRole('listbox')).toBeHidden()
-
-      // The form scrolls inside the dialog, which stays on screen with its actions reachable.
-      const bottom = await dialog.evaluate(root => {
-        const body = root.querySelector<HTMLElement>('.chat-group-dialog__body')!
-        const scrollable = body.scrollHeight > body.clientHeight
-        body.scrollTop = body.scrollHeight
-        const box = root.getBoundingClientRect()
-        const save = [...root.querySelectorAll('button')].find(button => /Save group binding|保存群绑定/.test(button.textContent ?? ''))!.getBoundingClientRect()
-        return { scrollable, top: box.top, bottom: box.bottom, viewport: innerHeight, saveBottom: save.bottom }
-      })
-      expect(bottom.scrollable).toBe(true)
-      expect(bottom.top).toBeGreaterThanOrEqual(0)
-      expect(bottom.bottom).toBeLessThanOrEqual(bottom.viewport)
-      expect(bottom.saveBottom).toBeLessThanOrEqual(bottom.bottom)
-      await page.keyboard.press('Escape')
-      await expect(dialog).toBeHidden()
+      // The reference's project Slack window, measured from a 2x capture (dark): a 700px dialog with a .5px border, 13px radius and 20px
+      // padding; a 26px header row with an 18px app mark, an 18px/500 title, a 16px subject icon and a 28px close button 20px from the
+      // edge; a 13px description 17px under it; a 1px divider inset 20px, 17px below that; a switch section with a 13px/500 title and a
+      // 12px description over a 30x20 switch; then rows on a 32px pitch, 12px labels, 14px checkboxes centred in the switch's 30px column.
+      expect(measured.root).toEqual({ w: 700, 'border-top-width': '0.5px', 'border-top-left-radius': '13px', 'padding-top': '20px' })
+      expect(measured.header).toMatchObject({ x: 0.5, y: 20.5, w: 699, h: 26, 'font-size': '18px', 'font-weight': '500', 'line-height': '26px' })
+      expect(measured.icons.map(({ x, y, w, h }) => ({ ...(x === 20.5 ? { x } : {}), y, w, h }))).toEqual([{ x: 20.5, y: 24.5, w: 18, h: 18 }, { y: 25.5, w: 16, h: 16 }])
+      expect(measured.close).toMatchObject({ y: 19.5, w: 28, h: 28, right: 20.5 })
+      expect(measured.description).toMatchObject({ y: 63.5, h: 20, 'font-size': '13px', 'font-weight': '400', 'line-height': '20px' })
+      expect(measured.divider).toMatchObject({ x: 20.5, y: 100.5, w: 659, right: 20.5, 'border-top-width': '1px' })
+      expect(measured.head).toMatchObject({ x: 20.5, y: 101.5, w: 659, title: { 'font-size': '13px', 'font-weight': '500', 'line-height': '20px' }, description: { 'font-size': '12px', 'font-weight': '400', 'line-height': '20px' } })
+      expect(measured.toggle).toMatchObject({ y: 128, w: 30, h: 20, right: 20.5 })
+      expect(measured.group).toMatchObject({ x: 20.5, y: 170.5, w: 659, h: 32 })
+      expect(measured.checkboxes.map(({ x, w, h, right }) => ({ x, w, h, right }))).toEqual(Array.from({ length: 6 }, () => ({ x: 657.5, w: 14, h: 14, right: 28.5 })))
+      expect(measured.checkboxes.map(box => box.y)).toEqual([211.5, 243.5, 275.5, 307.5, 339.5, 371.5])
+      expect(measured.pitch).toEqual([32, 32, 32, 32, 32])
+      expect(measured.label).toEqual({ 'font-size': '12px', 'font-weight': '400', 'line-height': '20px' })
+      expect(measured.checkbox).toEqual({ 'border-top-left-radius': '3px', 'border-top-width': '1px' })
+      expect(measured.height).toBe(592)
       expect(errors).toEqual([])
+      await page.unrouteAll({ behavior: 'ignoreErrors' })
     })
   }
 }

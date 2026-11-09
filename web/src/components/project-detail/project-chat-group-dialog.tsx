@@ -4,6 +4,7 @@ import { ChatBindingEditor, ChatBindingRow } from '@/components/settings/chat-gr
 import { bindingProjectIds, confirmRemoveBinding, confirmRevokeBinding, useChatIntegrationSettings } from '@/components/settings/chat-binding-support'
 import { ChatGroupDialog } from '@/components/settings/chat-group-dialog'
 import { AppLink } from '@/components/ui/app-link'
+import { ProjectGlyph } from '@/components/views/project-glyph'
 import { useI18n } from '@/i18n/i18n'
 import { integrationSettingsPath } from '@/lib/app-routes'
 import { chatErrorMessage, removeChatBinding, revokeChatBinding, saveChatBinding } from '@/lib/chat-integrations-api'
@@ -20,12 +21,12 @@ import type { BootstrapData, Project } from '@/types/flow'
 export function ProjectChatGroupDialog({ open, onOpenChange, provider, project, data }: { open: boolean; onOpenChange: (open: boolean) => void; provider: ChatIntegrationProvider; project: Project; data?: BootstrapData }) {
   const { t } = useI18n()
   const name = chatProviderName(provider, t)
-  return <ChatGroupDialog open={open} onOpenChange={onOpenChange} provider={provider} subject={project.name} description={t('Connect a {name} group to receive notifications about this project.').replace('{name}', () => name)} className="project-chat-group-dialog">
-    {open && <ProjectChatGroups provider={provider} project={project} data={data}/>}
+  return <ChatGroupDialog open={open} onOpenChange={onOpenChange} provider={provider} subject={project.name} subjectIcon={<ProjectGlyph project={project} size={16}/>} description={t('Connect a {name} group to receive notifications about this project.').replace('{name}', () => name)} className="project-chat-group-dialog">
+    {open && <ProjectChatGroups provider={provider} project={project} data={data} onClose={() => onOpenChange(false)}/>}
   </ChatGroupDialog>
 }
 
-function ProjectChatGroups({ provider, project, data }: { provider: ChatIntegrationProvider; project: Project; data?: BootstrapData }) {
+function ProjectChatGroups({ provider, project, data, onClose }: { provider: ChatIntegrationProvider; project: Project; data?: BootstrapData; onClose: () => void }) {
   const { t } = useI18n()
   const name = chatProviderName(provider, t)
   const { settings, loading, error, setError, reload } = useChatIntegrationSettings(provider)
@@ -51,8 +52,8 @@ function ProjectChatGroups({ provider, project, data }: { provider: ChatIntegrat
       onRemove={() => void (async () => { if (await confirmRemoveBinding(binding, t)) await mutate(`remove:${binding.id}`, () => removeChatBinding(provider, binding.id), 'Group binding removed') })()}/>)}</div>}
     {!teamIds.length
       ? <p className="chat-muted">{t("Only owners of this project's teams can connect groups to it.")}</p>
-      : data && (adding
-        ? <ChatBindingEditor provider={provider} data={data} bindableTeamIds={teamIds} privateTeamIds={settings.permissions?.teams.privateTeamIds} fixedProjectId={project.id} defaultEvents={['project.update_created', 'issue.created', 'issue.status_changed']} busy={Boolean(busy)} onCancel={() => setAdding(false)} onSave={input => mutate('binding', () => saveChatBinding(provider, input), 'Group binding saved', () => setAdding(false))}/>
-        : <button type="button" className="feature-button" disabled={Boolean(busy)} onClick={() => setAdding(true)}>{t('Connect {name} group').replace('{name}', () => name)}</button>)}
+      : data && (adding || !bindings.length
+        ? <ChatBindingEditor provider={provider} data={data} bindableTeamIds={teamIds} privateTeamIds={settings.permissions?.teams.privateTeamIds} fixedProjectId={project.id} defaultEvents={['project.update_created', 'issue.created', 'issue.status_changed']} notificationsTitle={t('Project notifications')} notificationsDescription={t('Send notifications to a {name} group.').replace('{name}', () => name)} busy={Boolean(busy)} onCancel={() => bindings.length ? setAdding(false) : onClose()} onSave={input => mutate('binding', () => saveChatBinding(provider, input), 'Group binding saved', () => setAdding(false))}/>
+        : <button type="button" className="feature-button chat-dialog-add" disabled={Boolean(busy)} onClick={() => setAdding(true)}>{t('Connect {name} group').replace('{name}', () => name)}</button>)}
   </div>
 }

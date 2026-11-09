@@ -4,7 +4,7 @@ import type { FormEvent, ReactNode } from "react";
 
 import { PropertyMenu } from "@/components/property/property-menu";
 import { GridLoader } from "@/components/ui/grid-loader";
-import { NotificationCheckbox, NotificationOptionSection } from "@/components/ui/notification-controls";
+import { NotificationCheckbox } from "@/components/ui/notification-controls";
 import { useI18n } from "@/i18n/i18n";
 import type { ChatBinding, ChatBindingInput, ChatBindingLanguage, ChatBindingRequests, ChatIntegrationEvent, ChatIntegrationProvider } from "@/types/chat-integrations";
 import type { BootstrapData, Project } from "@/types/flow";
@@ -110,7 +110,7 @@ export function ChatBindingRow({ binding, data, busy, canEdit, onEdit, onRevoke,
   </div>;
 }
 
-export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeamIds = [], binding, fixedTeamId, fixedProjectId, defaultEvents, busy, onCancel, onSave }: {
+export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeamIds = [], binding, fixedTeamId, fixedProjectId, defaultEvents, notificationsTitle, notificationsDescription, busy, onCancel, onSave }: {
   provider: ChatIntegrationProvider;
   data: BootstrapData;
   bindableTeamIds: string[];
@@ -121,6 +121,9 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
   /** The project dialog binds its project only. */
   fixedProjectId?: string;
   defaultEvents?: ChatIntegrationEvent[];
+  /** In the dialog: the title and description of the switch that turns the binding on. */
+  notificationsTitle?: string;
+  notificationsDescription?: string;
   busy: boolean;
   onCancel: () => void;
   onSave: (input: ChatBindingInput) => Promise<void>;
@@ -185,6 +188,54 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
   const fixedTeam = fixedTeamId ? data.teams.find((team) => team.id === fixedTeamId) : undefined;
   const fixedProject = fixedProjectId ? data.projects.find((project) => project.id === fixedProjectId) : undefined;
 
+  if (inDialog) {
+    const groupSettled = !loading && chats.length > 0 && !error;
+    const requestTemplateOptions = [{ value: NO_SELECTION, label: t("No template") }, ...templates.map((template) => ({ value: template.id, label: template.name, entityName: true }))];
+    return <form className="chat-binding-editor chat-dialog-form" onSubmit={submit} aria-label={title}>
+      <fieldset className="chat-fieldset" disabled={busy}>
+        {error && <div className="chat-integration-alert" role="alert"><span>{error}</span><button type="button" className="feature-button" disabled={loading} onClick={() => void loadChats(cursor)}><RefreshCw size={14} aria-hidden="true" />{t("Retry")}</button></div>}
+        <div className="chat-dialog-head">
+          <div><strong>{notificationsTitle ?? t("Group notifications")}</strong><span>{notificationsDescription ?? t("Send notifications to a group.")}</span></div>
+          <SettingsToggle label={t("Binding enabled")} checked={enabled} onChange={setEnabled} />
+        </div>
+        <div className="chat-dialog-rows">
+          <FieldRow label={t("Group")} description={groupSettled ? undefined : groupStatus}>
+            <SettingsSelect label={t("Group")} options={chatOptions} value={chatId || NO_SELECTION} placeholder={t("Select chat group")} disabled={loading || !chatOptions.length} onChange={(value) => { setChatId(value); setApproved(false); }} />
+            <button type="button" className="feature-button chat-icon-button" aria-label={t("Refresh groups")} title={t("Refresh groups")} disabled={loading} onClick={() => void loadChats()}>{loading ? <GridLoader size={14} /> : <RefreshCw size={14} aria-hidden="true" />}</button>
+          </FieldRow>
+          {hasMore && <FieldRow label={<span className="chat-muted">{t("More groups are available.")}</span>}><button type="button" className="feature-button" disabled={loading || !cursor} onClick={() => void loadChats(cursor)}>{t("Load more groups")}</button></FieldRow>}
+        </div>
+        <div className="chat-group-dialog__options">{CHAT_BINDING_EVENTS.map((item) => <NotificationCheckbox key={item.value} label={t(item.label)} checked={events.includes(item.value)} onChange={(checked) => changeEvent(item.value, checked)} />)}</div>
+        <div className="chat-dialog-grid">
+          {fixedTeamId
+            ? <FieldRow label={t("Team")}><span className="chat-fixed-value" data-i18n-ignore>{fixedTeam?.name}</span></FieldRow>
+            : <FieldRow label={t("Team")}><SettingsSelect label={t("Team")} options={teams.map((team) => ({ value: team.id, label: team.name, entityName: true }))} value={teamId || NO_SELECTION} placeholder={t("Select team")} disabled={!teams.length} onChange={(value) => { setTeamId(value); setProjectIds(fixedProjectId ? [fixedProjectId] : []); setTemplateId(""); setRequestTemplateId(""); setApproved(false); }} /></FieldRow>}
+          {!fixedProjectId && <FieldRow label={t("Projects")}><ChatProjectsPicker projects={projects} selectedIds={projectIds} onChange={(ids) => { setProjectIds(ids); setTemplateId(""); setRequestTemplateId(""); setApproved(false); }} /></FieldRow>}
+          <FieldRow label={t("Default template")}><SettingsSelect label={t("Default template")} options={requestTemplateOptions} value={templateId || NO_SELECTION} disabled={!teamId || !allowCreate} onChange={(value) => setTemplateId(value === NO_SELECTION ? "" : value)} /></FieldRow>
+          <FieldRow label={t("Card language")}><SettingsSelect label={t("Card language")} options={[{ value: PLATFORM_LANGUAGE, label: t(provider === "lark" ? "Platform default (English)" : "Platform default (Chinese)") }, ...CHAT_BINDING_LANGUAGES]} value={language || PLATFORM_LANGUAGE} onChange={(value) => setLanguage(value === PLATFORM_LANGUAGE ? "" : value as ChatBindingLanguage)} /></FieldRow>
+          <FieldRow label={t("Allow creating issues")}><SettingsToggle label={t("Allow creating issues")} checked={allowCreate} onChange={(value) => { setAllowCreate(value); setApproved(false); }} /></FieldRow>
+          <FieldRow label={t("Allow updating issues")}><SettingsToggle label={t("Allow updating issues")} checked={allowUpdate} onChange={(value) => { setAllowUpdate(value); setApproved(false); }} /></FieldRow>
+          <FieldRow label={t("Take requests")}><SettingsToggle label={t("Take requests")} checked={requestsEnabled} onChange={(value) => { setRequestsEnabled(value); setApproved(false); }} /></FieldRow>
+          {requestsEnabled && <>
+            <FieldRow label={t("Treat every mention as a request")}><SettingsToggle label={t("Treat every mention as a request")} checked={everyMention} onChange={(value) => { setEveryMention(value); setApproved(false); }} /></FieldRow>
+            <FieldRow label={t("Request reaction")}><SettingsSelect label={t("Request reaction")} options={emojiOptions} value={requestEmoji || NO_EMOJI} onChange={(value) => setRequestEmoji(value === NO_EMOJI ? "" : value)} /></FieldRow>
+            <FieldRow label={t("Request template")}><SettingsSelect label={t("Request template")} options={requestTemplateOptions} value={requestTemplateId || NO_SELECTION} disabled={!teamId} onChange={(value) => setRequestTemplateId(value === NO_SELECTION ? "" : value)} /></FieldRow>
+            <FieldRow label={t("Request priority")}><SettingsSelect label={t("Request priority")} options={[{ value: DEFAULT_PRIORITY, label: t("Team default") }, ...REQUEST_PRIORITIES.map((item) => ({ value: item.value, label: t(item.label) }))]} value={requestPriority || DEFAULT_PRIORITY} onChange={(value) => setRequestPriority(value === DEFAULT_PRIORITY ? "" : value)} /></FieldRow>
+          </>}
+        </div>
+        {privateTeam && <p className="chat-dialog-note" role="note"><Lock size={13} aria-hidden="true" /><span><strong>{t("This team is private")}</strong> {t("Binding doesn't add anyone to the team or change who can see it in Flow. Everyone in the group sees the selected updates; group actions still use each member's own Flow permissions.")}</span></p>}
+        <div className="chat-dialog-approval">
+          <div><strong>{t("Share with this group")}</strong><span>{t("I approve sharing this team's selected updates with everyone in this group.")}</span></div>
+          <SettingsToggle label={t("I approve sharing this team's selected updates with everyone in this group.")} checked={approved} onChange={setApproved} />
+        </div>
+        <div className="chat-actions chat-dialog-actions">
+          <button type="button" className="feature-button" disabled={busy} onClick={onCancel}>{t("Cancel")}</button>
+          <button type="submit" className="feature-button primary" disabled={busy || !valid}>{busy ? <GridLoader size={14} /> : <Check size={14} aria-hidden="true" />}{t("Save group binding")}</button>
+        </div>
+      </fieldset>
+    </form>;
+  }
+
   return <form className="feature-section chat-binding-editor" onSubmit={submit} aria-label={title}>
     <header><h2>{title}</h2><p role="status">{groupStatus}</p></header>
     <fieldset className="chat-fieldset" disabled={busy}>
@@ -204,14 +255,10 @@ export function ChatBindingEditor({ provider, data, bindableTeamIds, privateTeam
         <FieldRow label={t("Default template")}><SettingsSelect label={t("Default template")} options={[{ value: NO_SELECTION, label: t("No template") }, ...templates.map((template) => ({ value: template.id, label: template.name, entityName: true }))]} value={templateId || NO_SELECTION} disabled={!teamId || !allowCreate} onChange={(value) => setTemplateId(value === NO_SELECTION ? "" : value)} /></FieldRow>
         <FieldRow label={t("Card language")} description={t("The language of the cards and messages Flow posts in this group.")}><SettingsSelect label={t("Card language")} options={[{ value: PLATFORM_LANGUAGE, label: t(provider === "lark" ? "Platform default (English)" : "Platform default (Chinese)") }, ...CHAT_BINDING_LANGUAGES]} value={language || PLATFORM_LANGUAGE} onChange={(value) => setLanguage(value === PLATFORM_LANGUAGE ? "" : value as ChatBindingLanguage)} /></FieldRow>
       </div>
-      {inDialog
-        ? <NotificationOptionSection className="chat-group-dialog__options" title={t("Notifications")}>{CHAT_BINDING_EVENTS.map((item) => <NotificationCheckbox key={item.value} label={t(item.label)} checked={events.includes(item.value)} onChange={(checked) => changeEvent(item.value, checked)} />)}</NotificationOptionSection>
-        : <>
-          <h3 className="chat-subheading">{t("Notifications")}</h3>
-          <div className="feature-card">
-            {CHAT_BINDING_EVENTS.map((item) => <FieldRow key={item.value} inline label={t(item.label)}><SettingsToggle label={t(item.label)} checked={events.includes(item.value)} onChange={(checked) => changeEvent(item.value, checked)} /></FieldRow>)}
-          </div>
-        </>}
+      <h3 className="chat-subheading">{t("Notifications")}</h3>
+      <div className="feature-card">
+        {CHAT_BINDING_EVENTS.map((item) => <FieldRow key={item.value} inline label={t(item.label)}><SettingsToggle label={t(item.label)} checked={events.includes(item.value)} onChange={(checked) => changeEvent(item.value, checked)} /></FieldRow>)}
+      </div>
       <h3 className="chat-subheading">{t("Group actions")}</h3>
       <div className="feature-card">
         <FieldRow inline label={t("Binding enabled")}><SettingsToggle label={t("Binding enabled")} checked={enabled} onChange={setEnabled} /></FieldRow>

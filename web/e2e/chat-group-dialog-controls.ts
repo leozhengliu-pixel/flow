@@ -41,7 +41,6 @@ export async function exerciseChatGroupDialog({ page, request, workspaceKey, isM
   await page.locator('.project-details-sidebar__property-trigger.is-empty', { hasText: /Feishu/ }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
-  await dialog.getByRole('button', { name: /Connect Feishu group/ }).click()
   await expect(dialog.getByRole('button', { name: 'Save group binding' })).toBeVisible()
 
   // Desktop: the Radix select (a combobox) and its menu; phone: the native select.
@@ -71,11 +70,14 @@ export async function exerciseChatGroupDialog({ page, request, workspaceKey, isM
 
   if (!isMobile) {
     // The keyboard: open with Enter, move with the arrows, choose with Enter.
+    // Park the pointer outside the menu: one resting over an option would re-highlight it as the menu opens.
+    await page.mouse.move(2, 2)
     await dialog.getByRole('combobox', { name: 'Group' }).focus()
     await page.keyboard.press('Enter')
     await expect(page.getByRole('listbox')).toBeVisible()
     await expect(page.getByRole('option', { name: 'Product launch' })).toBeFocused()
     await page.keyboard.press('ArrowDown')
+    await expect(page.getByRole('option', { name: 'Operations' })).toBeFocused()
     await page.keyboard.press('Enter')
     await expect(page.getByRole('listbox')).toBeHidden()
     expect(await value('Group')).toContain('Operations')
