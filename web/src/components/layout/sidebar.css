@@ -494,7 +494,7 @@
 .nav-unread[data-badge-style="dot"]{width:8px;height:8px;overflow:hidden;color:transparent;font-size:0;border-radius:50%;background:var(--sidebar-badge-dot)}
 /* Keyboard shortcuts panel: 360 wide, 12px from the right, top and bottom of the window at every width. */
 .dialog-content.sidebar-shortcuts-dialog{box-sizing:border-box;left:auto;right:12px;top:12px;bottom:12px;transform:none;width:min(360px,calc(100vw - 24px));height:auto;display:flex;flex-direction:column;overflow:hidden;padding:0;border:1px solid var(--sub-editor-border);border-radius:12px;background:var(--dialog-bg);box-shadow:var(--shadow-control);color:var(--theme-text-primary)}
-.sidebar-shortcuts-dialog h2{flex:none;margin:0;padding:20px 20px 15px;color:var(--release-title-fg);font-size:15px;font-weight:600;line-height:23px}
+.sidebar-shortcuts-header{display:contents}.sidebar-shortcuts-dialog h2{flex:none;margin:0;padding:20px 20px 15px;color:var(--release-title-fg);font-size:15px;font-weight:600;line-height:23px}
 .sidebar-shortcuts-dialog>.dialog-close{top:20px;right:20px;width:24px;height:24px;border-radius:9999px;color:var(--theme-text-primary)}
 .sidebar-shortcuts-search{position:relative;flex:none;height:44px;margin:0 20px 25px;color:var(--theme-text-secondary)}
 .sidebar-shortcuts-search svg{position:absolute;left:14px;top:50%;width:15px;height:15px;transform:translateY(-50%);pointer-events:none}
@@ -514,7 +514,9 @@
 .sidebar-shortcuts-empty{margin:28px 4px;color:var(--theme-text-secondary);font-size:13px;text-align:center}
 @media (--desktop-layout) {
   .sidebar-shortcuts-dialog { --theme-text-secondary: var(--shortcut-muted); }
-  .sidebar-shortcuts-dialog h2 { margin: 20px 20px 15px; padding: 0; }
+  /* The reference title is a content-sized heading centred in the 24px row it shares with the close button. */
+  .sidebar-shortcuts-header { box-sizing: content-box; flex: none; display: flex; align-items: center; min-height: 24px; padding: 20px 20px 14px; }
+  .sidebar-shortcuts-dialog h2 { margin: 0; padding: 0; }
   .sidebar-shortcuts-dialog > .dialog-close { padding: 0 2px; }
 }
 .sidebar-customize-group { display: flex; flex-direction: column; gap: 8px; margin: 0; }

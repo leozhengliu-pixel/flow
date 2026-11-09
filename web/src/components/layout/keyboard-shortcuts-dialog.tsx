@@ -136,7 +136,7 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: { open: boolean;
 
   return <Dialog open={open} onOpenChange={next => { onOpenChange(next); if (!next) setQuery('') }}>
     <DialogContent aria-describedby={undefined} className="sidebar-shortcuts-dialog" closeLabel={t('Close dialog')}>
-      <DialogTitle>{t('Keyboard Shortcuts')}</DialogTitle>
+      <header className="sidebar-shortcuts-header"><DialogTitle>{t('Keyboard Shortcuts')}</DialogTitle></header>
       <div className="sidebar-shortcuts-search"><Search size={15}/><input aria-label={t('Search shortcuts')} autoFocus placeholder={t('Search shortcuts')} value={query} onChange={event => setQuery(event.target.value)}/></div>
       <div className="sidebar-shortcuts-scroll">
         {filtered.length ? filtered.map(group => <section key={group.title}>
