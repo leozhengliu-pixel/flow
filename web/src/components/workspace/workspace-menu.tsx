@@ -73,10 +73,11 @@ export function WorkspaceMenu({
         now - sequence.current.at < 900
       ) {
         event.preventDefault();
-        const wasOpen = openRef.current;
+        // A menu still playing its exit animation stays mounted: reopening it runs no opening focus, so it takes the frame path.
+        const mounts = !openRef.current && !document.querySelector(".workspace-primary-menu");
         setOpen(true);
         if (phone) setSwitching(true);
-        else if (!wasOpen) cascadeOnOpen.current = true;
+        else if (mounts) cascadeOnOpen.current = true;
         else {
           window.cancelAnimationFrame(switchFrame.current ?? 0);
           switchFrame.current = window.requestAnimationFrame(() => {
