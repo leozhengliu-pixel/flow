@@ -20,7 +20,7 @@ export function CyclesPage({cycles,issues,settings,team,estimateSettings,onOpen,
   const visible=useMemo(()=>cycleListOrder(cycles),[cycles])
   const teamBreadcrumb=<span className="cycle-team-breadcrumb" data-i18n-ignore><span className="cycle-team-breadcrumb__label"><TeamIcon team={team} size={16}/><span>{team.name}</span></span><span aria-hidden="true" className="cycle-team-breadcrumb__separator">›</span></span>
   const earliestUpcoming=[...visible].filter(item=>item.status==='upcoming').sort((a,b)=>a.startsAt.localeCompare(b.startsAt))[0]?.id
-  return <main className="main-panel flow-cycles-page"><header className="flow-cycles-header">
+  return <main className="main-panel flow-cycles-page"><header className="flow-cycles-header" data-empty={settings.enabled&&!visible.length?'true':undefined}>
     <button className="cycles-mobile-menu" aria-label={t('Open sidebar')} data-sidebar-trigger onClick={onOpenSidebar}><Menu className="cycle-desktop-glyph"/><SidebarLeftIcon className="cycle-phone-glyph"/></button>
     {teamBreadcrumb}<h1>{t('Cycles')}</h1>
     <button className="cycle-top-icon" role="switch" aria-label={t(settings.favoriteView?'Remove from favorites':'Add to favorites')} aria-checked={Boolean(settings.favoriteView)} onClick={()=>void onUpdateSettings({favoriteView:!settings.favoriteView})}>
