@@ -81,7 +81,8 @@
 .coding-review-actions{display:inline-flex;align-items:center;gap:2px}
 
 /* Session view: changes (left) + agent panel (right) */
-.coding-session-panel{display:flex;align-items:stretch;gap:0;min-width:0;min-height:0;color:var(--theme-text-primary);font:450 13px/18px var(--font)}
+.coding-agent-resize{display:none}
+.coding-session-panel{position:relative;display:flex;align-items:stretch;gap:0;min-width:0;min-height:0;color:var(--theme-text-primary);font:450 13px/18px var(--font)}
 .coding-session-changes{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:12px;padding:16px;overflow:auto}
 .coding-session-overview{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
 .coding-session-meta{display:flex;align-items:center;gap:8px;margin-left:auto;color:var(--theme-text-secondary);font-size:12px}
@@ -101,9 +102,14 @@
   .coding-session-page .cs-text{letter-spacing:-.0866667px}
   .coding-session-page .cs-turn-footer:not([data-links]) .cs-composer-spacer{display:none}
   .coding-session-page .cs-turn-footer .cs-copy{color:var(--cs-label-base)}
+  .coding-session-page .cs-turn-footer{margin-top:4px}
+  /* The 7px drag strip straddles the agent panel's left edge, from the panel's top margin to the page bottom. */
+  .coding-agent-resize{position:absolute;z-index:2;top:12px;bottom:0;right:calc(var(--cs-agent-panel-override,clamp(360px,calc(560px - 12px),60%)) + 4px);display:block;width:7px;cursor:col-resize;outline:0}
+  .coding-agent-resize:focus-visible{background:var(--focus-ring)}
+  .coding-session-panel.is-agent-hidden .coding-agent-resize{display:none}
 }
 /* The chat column is 560px wide with its 4px + 8px margins (a fixed width, like the reference), and gives way on narrow pages. */
-.coding-agent-panel{--cs-agent-panel-width:clamp(360px,calc(560px - 12px),60%);flex:0 0 var(--cs-agent-panel-width);width:var(--cs-agent-panel-width);max-width:100%;min-height:0;display:flex;flex-direction:column;margin:12px 8px 8px 4px;border:.5px solid var(--cs-panel-border);border-radius:8px;background:var(--cs-bg-base);overflow:hidden}
+.coding-agent-panel{--cs-agent-panel-width:var(--cs-agent-panel-override,clamp(360px,calc(560px - 12px),60%));flex:0 0 var(--cs-agent-panel-width);width:var(--cs-agent-panel-width);max-width:100%;min-height:0;display:flex;flex-direction:column;margin:12px 8px 8px 4px;border:.5px solid var(--cs-panel-border);border-radius:8px;background:var(--cs-bg-base);overflow:hidden}
 .coding-agent-panel[hidden]{display:none}
 .coding-agent-panel-surface{display:contents}
 .coding-agent-panel-header{flex:none;display:flex;align-items:center;gap:8px;min-width:0;height:48px;box-sizing:border-box;padding:8px 6px 8px 15px}

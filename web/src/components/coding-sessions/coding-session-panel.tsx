@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { GitBranch, RotateCcw } from 'lucide-react'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
@@ -39,6 +39,16 @@ export function CodingSessionView({ sessionId, initial, ...props }: CodingSessio
   return <CodingSessionErrorBoundary><CodingSessionPanel session={session} onChange={apply} {...props}/></CodingSessionErrorBoundary>
 }
 
+const AGENT_WIDTH_KEY = 'flow:coding-agent-panel-width'
+const MIN_AGENT_WIDTH = 360
+const AGENT_PANEL_MARGIN = 8
+function readAgentWidth() {
+  try {
+    const stored = Number(localStorage.getItem(AGENT_WIDTH_KEY))
+    return Number.isFinite(stored) && stored >= MIN_AGENT_WIDTH ? stored : null
+  } catch { return null }
+}
+
 /** The agent avatar with the session's status dot (the reference app's 18px avatar with a 6px dot ringed in the panel colour). */
 export function CodingAgentAvatar({ state, stalled }: { state: CodingSession['state']; /** Failed, or the agent never answered: the red dot. */ stalled?: boolean }) {
   return <span className="coding-agent-avatar" data-state={state} data-stalled={stalled || undefined} aria-hidden="true"><AgentAvatarMark/><span className="coding-agent-avatar-dot"/></span>
@@ -55,6 +65,31 @@ export function CodingSessionPanel({ session, data, onChange, onDismiss, onOpenS
   const busyRef = useRef(false)
   const [error, setError] = useState('')
   const changes = useRef<HTMLDivElement>(null)
+  const row = useRef<HTMLElement>(null)
+  const [agentWidth, setAgentWidth] = useState<number | null>(readAgentWidth)
+  const resizeAgent = (width: number) => {
+    const next = Math.round(Math.min(Math.max(width, MIN_AGENT_WIDTH), Math.max(MIN_AGENT_WIDTH, (row.current?.clientWidth ?? 0) * 0.6)))
+    setAgentWidth(next)
+    try { localStorage.setItem(AGENT_WIDTH_KEY, String(next)) } catch { /* private mode: the width only lasts for this view */ }
+  }
+  const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const bounds = row.current?.getBoundingClientRect()
+    if (!bounds || event.button !== 0) return
+    event.preventDefault()
+    const target = event.currentTarget
+    target.setPointerCapture(event.pointerId)
+    // The panel keeps an 8px margin at the row's right edge.
+    const move = (moved: PointerEvent) => resizeAgent(bounds.right - AGENT_PANEL_MARGIN - moved.clientX)
+    const stop = () => { target.removeEventListener('pointermove', move); target.removeEventListener('pointerup', stop); target.removeEventListener('pointercancel', stop) }
+    target.addEventListener('pointermove', move)
+    target.addEventListener('pointerup', stop)
+    target.addEventListener('pointercancel', stop)
+  }
+  const resizeWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const current = row.current?.querySelector('.coding-agent-panel')?.getBoundingClientRect().width ?? MIN_AGENT_WIDTH
+    if (event.key === 'ArrowLeft') { event.preventDefault(); resizeAgent(current + 16) }
+    if (event.key === 'ArrowRight') { event.preventDefault(); resizeAgent(current - 16) }
+  }
   /** Runs a session action; false when it failed (the error shows under the panel). */
   const run = async (action: () => Promise<CodingSession | void>, done?: string) => {
     if (busyRef.current) return false
@@ -75,7 +110,7 @@ export function CodingSessionPanel({ session, data, onChange, onDismiss, onOpenS
   })
   const openChanges = () => changes.current?.querySelector('.coding-diff, .coding-session-empty')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 
-  return <section className={`coding-session-panel${agentHidden ? ' is-agent-hidden' : ''}${className ? ` ${className}` : ''}`} data-state={session.state} data-phase={session.phase} aria-label={t('Coding session')}>
+  return <section ref={row} className={`coding-session-panel${agentHidden ? ' is-agent-hidden' : ''}${className ? ` ${className}` : ''}`} style={agentWidth ? { '--cs-agent-panel-override': `${agentWidth}px` } as CSSProperties : undefined} data-state={session.state} data-phase={session.phase} aria-label={t('Coding session')}>
     <div className="coding-session-changes" ref={changes}>
       {session.state === 'stale' && session.stoppedBy && <p className="coding-session-muted">{t('Stopped by {name}').replace('{name}', () => data.users.find(user => user.id === session.stoppedBy)?.displayName || t('a member'))}</p>}
       <CodingPullRequests session={session} reviews={data.reviews ?? []} busy={busy} onFixChecks={(_, review) => void startOther(() => startReviewCodingSession(review.id, { kind: 'fix' }), 'Started a session to fix failing checks')}/>
@@ -84,6 +119,7 @@ export function CodingSessionPanel({ session, data, onChange, onDismiss, onOpenS
       <CodingSessionArtifacts sessionId={session.id} artifacts={session.artifacts} refreshKey={session.updatedAt} withScreenshots={false}/>
       <CodingDiffViewer session={session}/>
     </div>
+    {!agentHidden && <div className="coding-agent-resize" role="separator" aria-orientation="vertical" aria-label={t('Resize agent chat')} aria-valuemin={MIN_AGENT_WIDTH} tabIndex={0} onPointerDown={startResize} onKeyDown={resizeWithKeyboard}/>}
     <CodingAgentPanel session={session} data={data} onChange={onChange} onDismiss={onDismiss} onOpenChanges={openChanges} hidden={agentHidden} error={error}/>
   </section>
 }
