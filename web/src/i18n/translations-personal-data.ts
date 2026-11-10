@@ -1,5 +1,5 @@
 /**
- * Chinese copy for personal data rights: Account › Profile "Your data" (download your data) and "Danger zone" (delete
+ * Chinese copy for personal data rights: Account › Security & access "Your data" (download your data) and "Danger zone" (delete
  * account), the admin's "Erase personal data" on Settings › Members, and the pseudonymous "Deleted user". Merged into
  * zhCN by translations.ts, filling gaps only.
  */

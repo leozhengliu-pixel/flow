@@ -1181,8 +1181,6 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
           </Action>
         </PersonalRow>
       </PersonalSection>
-      <YourData p={p} />
-      <DeleteAccount data={data} p={p} />
       <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
         <DialogContent className="personal-dialog">
           <DialogTitle>
@@ -1209,14 +1207,15 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
 
 const EXPORT_PENDING: ReadonlyArray<PersonalDataExport["status"]> = ["queued", "running"];
 
-/** Account › Profile › "Download your data": request a zip of your own data, then download it until it expires. */
+/** Account › Security & access › "Download your data" (below the sections the reference page has): request a zip of your own data, then download it until it expires. */
 function YourData({ p }: { p: PersonalTranslate }) {
   const { locale } = useI18n();
   const [exports, setExports] = useState<PersonalDataExport[]>([]);
   const [busy, setBusy] = useState(false);
   const refresh = useCallback(async () => {
     try {
-      setExports(await fetchPersonalDataExports());
+      const items = await fetchPersonalDataExports();
+      setExports(Array.isArray(items) ? items : []);
     } catch {
       setExports([]);
     }
@@ -1281,7 +1280,7 @@ function YourData({ p }: { p: PersonalTranslate }) {
   );
 }
 
-/** Account › Profile › "Delete account": deletes the account after the person types their email. */
+/** Account › Security & access › "Delete account": deletes the account after the person types their email. */
 function DeleteAccount({ data, p }: { data: PersonalProps["data"]; p: PersonalTranslate }) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
@@ -2526,6 +2525,9 @@ function SecurityOverview({
           />
         )}
       </PersonalSection>
+      {/* Flow-only personal data rights, after the sections the reference page has. */}
+      <YourData p={p} />
+      <DeleteAccount data={data} p={p} />
       <Dialog
         open={Boolean(selectedSession)}
         onOpenChange={(open) => !open && setSelectedSession(null)}

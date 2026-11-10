@@ -10,7 +10,7 @@ legal advice.
 
 ## Access and portability: download your data
 
-**Account › Profile › Your data › Download your data** (or
+**Account › Security & access › Your data › Download your data** (or
 `POST /api/account/data-exports`) prepares a zip of JSON files with the signed-in
 person's own data, in the background. The zip holds:
 
@@ -108,7 +108,7 @@ restoring one brings the account back, so re-run the erasure after a restore.
 
 ## Deleting your own account
 
-**Account › Profile › Danger zone › Delete account** (or `DELETE /api/account`
+**Account › Security & access › Danger zone › Delete account** (or `DELETE /api/account`
 with `{"confirmation": "<your email>"}`; an account without an email confirms
 with its display name). The person types their email to confirm. On success the
 session cookie is cleared and every other session is signed out.

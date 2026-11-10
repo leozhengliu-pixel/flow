@@ -29,6 +29,7 @@ const api = vi.hoisted(() => ({
   updatePasskey: vi.fn(), deletePasskey: vi.fn(), fetchCommitSigningKey: vi.fn(),
   addCommitSigningKey: vi.fn(), removeCommitSigningKey: vi.fn(),
   unlinkAccountIdentity: vi.fn(),
+  fetchPersonalDataExports: vi.fn().mockResolvedValue([]), requestPersonalDataExport: vi.fn(), deleteAccount: vi.fn(),
 }))
 vi.mock('@/lib/api', () => api)
 
@@ -120,6 +121,7 @@ describe('personal settings workflows', () => {
     api.removeMember.mockResolvedValue(undefined)
     api.listPushSubscriptions.mockResolvedValue([])
     api.fetchAccountSessions.mockResolvedValue([])
+    api.fetchPersonalDataExports.mockResolvedValue([])
     api.createAPIKey.mockResolvedValue({ key: { id: 'key-1' }, secret: 'flow_test_secret' })
     api.updateAPIKey.mockResolvedValue({ id: 'key-1', name: 'Updated key', scopes: ['read'], teamIds: [] })
     api.revokeAPIKey.mockResolvedValue(undefined)
@@ -369,6 +371,29 @@ describe('personal settings workflows', () => {
     expect(dialog).toHaveTextContent('Revoke all other sessions?')
     await user.click(within(dialog).getByRole('button', { name: 'Revoke all' }))
     expect(api.revokeOtherAccountSessions).toHaveBeenCalledOnce()
+  })
+
+  it('offers your data and account deletion below the security sections, not on the profile page', async () => {
+    const user = userEvent.setup()
+    const { unmount } = render(<I18nProvider><PersonalSettings {...props('profile')}/></I18nProvider>)
+    expect(screen.queryByRole('button', { name: 'Request export' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Delete account…' })).toBeNull()
+    unmount()
+
+    api.fetchAccountSessions.mockResolvedValue([])
+    render(<MemoryRouter><I18nProvider><PersonalSettings {...props('account-security')}/></I18nProvider></MemoryRouter>)
+    const headings = (await screen.findAllByRole('heading')).map((heading) => heading.textContent)
+    expect(headings.indexOf('Your data')).toBeGreaterThan(headings.indexOf('Authorized applications'))
+    expect(headings.indexOf('Danger zone')).toBeGreaterThan(headings.indexOf('Your data'))
+    await user.click(screen.getByRole('button', { name: 'Request export' }))
+    expect(api.requestPersonalDataExport).toHaveBeenCalledOnce()
+
+    await user.click(screen.getByRole('button', { name: 'Delete account…' }))
+    const dialog = await screen.findByRole('dialog')
+    const confirm = within(dialog).getByRole('button', { name: 'Delete account' })
+    expect(confirm).toBeDisabled()
+    await user.type(within(dialog).getByRole('textbox', { name: 'Type your email to confirm' }), viewer.email)
+    expect(confirm).toBeEnabled()
   })
 
   it('keeps security empty states actionable and localizes them', async () => {
