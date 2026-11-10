@@ -412,38 +412,46 @@
 .sidebar-popover [role="menuitem"] > svg { width: 15px; height: 15px; flex: 0 0 15px; color: #929297; fill: currentColor; stroke-width: 1.5; }
 .sidebar-popover [role="separator"] { height: .5px; margin: 5px 4px; background: var(--theme-border-strong); }
 .sidebar-help-menu {
-  width: 223px;
-  min-width: 223px;
-  padding: 6px 0;
+  width: 270px;
+  min-width: 270px;
+  padding: 0;
   background: var(--theme-surface-2);
   border-radius: 12px;
 }
+/* 6px spacers above the first row and below the last (the panel itself has no padding). */
+.sidebar-help-menu::before,
+.sidebar-help-menu::after { content: ""; display: block; height: 6px; }
 .sidebar-help-menu [role="menuitem"] {
   width: auto;
   margin: 0 6px;
-  gap: 14px;
+  gap: 8px;
   padding: 0 12px 0 8px;
+  font-weight: 450;
 }
-.sidebar-help-menu [role="menuitem"] > svg { width: 14px; height: 14px; flex-basis: 14px; fill: none; }
+.sidebar-help-menu [role="menuitem"] > svg { width: 16px; height: 16px; flex-basis: 16px; fill: none; }
 .sidebar-help-menu [role="menuitem"] > svg.slack-icon { fill: currentColor; }
-.sidebar-help-menu .sidebar-news-item { gap: 10px; }
-.sidebar-help-menu kbd { color: lch(60.621% 1.2 272); font: 500 10px/1 var(--font); }
+.sidebar-help-menu kbd { color: lch(60.621% 1.2 272); font: 500 11px/12.1px var(--font); }
 .sidebar-help-label {
   height: 30px;
   display: flex;
   align-items: center;
-  padding: 0 14px;
+  padding: 8px 14px;
   color: lch(60.621% 1.2 272);
   font-size: 12px;
+  font-weight: 500;
 }
 .sidebar-help-menu .news-dot {
   width: 6px;
   height: 6px;
   flex: 0 0 6px;
-  margin: 0 4px;
+  margin: 0 5px;
   border-radius: 50%;
   background: lch(60.621% 1.2 272);
 }
+:root[data-theme="light"] body .sidebar-help-menu { border-color: var(--border-card); }
+:root[data-theme="light"] .sidebar-help-label,
+:root[data-theme="light"] .sidebar-help-menu .news-dot { color: var(--text-label); }
+:root[data-theme="light"] .sidebar-help-menu .news-dot { background: var(--text-label); }
 .sidebar-popover .menu-end { margin-left: auto; }
 
 /* More menu: 175px wide, 32px rows inset 6px with 8px corners, a 16px icon slot (14px glyph, 1px each side)

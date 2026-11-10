@@ -63,8 +63,10 @@ export function sidebarEntryAvailable(
 }
 
 const defaultPersonalOrder: SidebarEntry[] = [
-  "inbox", "reviews", "myIssues", "pulse", "drafts", "agent",
+  "inbox", "myIssues", "reviews", "pulse", "drafts", "agent",
 ];
+// The personal order before Reviews moved below My issues; a saved copy of it was never rearranged.
+const previousDefaultPersonalOrder: SidebarEntry[] = ["inbox", "reviews", "myIssues", "pulse", "drafts", "agent"];
 // The reference app lists Initiatives, Projects, Views and Loops in the section and
 // Customers, Members and Teams under More (Releases sits between Members and Teams).
 const defaultWorkspaceOrder: SidebarEntry[] = [
@@ -188,7 +190,7 @@ function readOrder(userId?: string): SidebarOrder {
   try {
     const stored = JSON.parse(readStored("flow.sidebar.order", userId) ?? "{}") as Partial<SidebarOrder>;
     return {
-      personal: normalizeOrder(stored.personal, defaultPersonalOrder),
+      personal: normalizeOrder(stored.personal && sameEntries(stored.personal, previousDefaultPersonalOrder) ? undefined : stored.personal, defaultPersonalOrder),
       // An order saved before the parity change that still equals the
       // old default was never customised: use the new default.
       workspace: normalizeOrder(sameOrder(stored.workspace, legacyWorkspaceOrder) || isPreviousDefault(stored.workspace) ? undefined : stored.workspace, defaultWorkspaceOrder),
@@ -223,9 +225,7 @@ function normalizeOrder(stored: SidebarEntry[] | undefined, defaults: SidebarEnt
     ? stored.filter((entry, index) => allowed.has(entry) && stored.indexOf(entry) === index)
     : [];
   const merged = [...valid, ...defaults.filter((entry) => !valid.includes(entry))];
-  return defaults === defaultPersonalOrder
-    ? ["inbox", "reviews", ...merged.filter((entry) => entry !== "inbox" && entry !== "reviews")] as SidebarEntry[]
-    : merged;
+  return merged;
 }
 function reorderEntries(entries: SidebarEntry[], active: SidebarEntry, target: SidebarEntry) {
   const sourceIndex = entries.indexOf(active), targetIndex = entries.indexOf(target);

@@ -58,6 +58,7 @@ import {
   settingsPath,
   teamDocumentsPath,
   teamHomePath,
+  teamTriagePath,
   teamInitiativesPath,
   teamIssuesPath,
   teamProjectsPath,
@@ -71,6 +72,8 @@ import { DirectoryDisplayMenu } from "@/components/workspace-directory/directory
 import { personUsername } from "@/lib/people";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { ProjectIcon, SlackIcon } from "@/components/issue/issue-icons";
+import { TriageIcon } from "@/components/layout/sidebar";
+import { useTriageCount } from "@/components/triage/use-triage-count";
 import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
 import { DocumentGlyph } from "@/components/documents/document-icon";
 import { TabsOverflowIcon } from "@/components/my-issues/my-issues-icons";
@@ -130,6 +133,7 @@ export function TeamOverviewPage({
     "loops",
   );
   const canManageMembers = canManageTeamSettings(data, team.id, "members");
+  const triageCount = useTriageCount(data, team);
   const hierarchy = useMemo(() => teamHierarchy(data.teams, data.teamSettings), [data.teams, data.teamSettings]);
   const parentTeam = hierarchy.byId.get(data.teamSettings[team.id]?.parentTeamId ?? '');
   const childTeams = (hierarchy.children.get(team.id) ?? []).filter(item => !item.retiredAt);
@@ -632,11 +636,6 @@ export function TeamOverviewPage({
             </section>
           </div>
           <aside className="team-home-rail">
-            {parentTeam && <section className="team-home-hierarchy"><span>{t('Parent team')}</span><a title={hierarchy.path(parentTeam.id)} href={teamHomePath(data.workspace.urlKey, parentTeam.key)} onClick={event => {event.preventDefault(); onNavigate(teamHomePath(data.workspace.urlKey, parentTeam.key));}}><TeamIcon team={parentTeam} size={18}/><span>{parentTeam.name}</span></a></section>}
-            <section className="team-home-hierarchy"><span>{t('Sub-teams')}</span>
-              {childTeams.map(child => <a key={child.id} href={teamHomePath(data.workspace.urlKey, child.key)} onClick={event => {event.preventDefault(); onNavigate(teamHomePath(data.workspace.urlKey, child.key));}}><TeamIcon team={child} size={18}/><span>{child.name}</span><small>{child.key}</small></a>)}
-              {(data.viewerRole === 'admin' || data.viewerRole === 'owner') && !hierarchy.parentError('', team.id) && <button type="button" onClick={() => onNavigate(`${newTeamPath(data.workspace.urlKey)}?parentTeamId=${encodeURIComponent(team.id)}`)}><Plus size={16}/>{t('Create sub-team')}</button>}
-            </section>
             <section className="team-home-members">
               <span>{t("Members")}</span>
               <div className="team-home-member-row">
@@ -704,18 +703,24 @@ export function TeamOverviewPage({
                   label={t("Team settings")}
                   onNavigate={onNavigate}
                 />
+                {triageCount !== undefined && <TeamShortcut
+                  href={teamTriagePath(data.workspace.urlKey, team.key)}
+                  icon={<TriageIcon />}
+                  label={t("Triage")}
+                  onNavigate={onNavigate}
+                />}
                 <TeamShortcut
                   href={teamIssuesPath(data.workspace.urlKey, team.key)}
                   icon={<IssuesHomeIcon />}
                   label={t("Issues")}
                   onNavigate={onNavigate}
                 />
-                <TeamShortcut
+                {data.cycleSettings?.[team.id]?.enabled && (<TeamShortcut
                   href={teamCyclesPath(data.workspace.urlKey, team.key)}
                   icon={<TeamCycleIcon />}
                   label={t("Cycles")}
                   onNavigate={onNavigate}
-                />
+                />)}
                 <TeamShortcut
                   href={teamInitiativesPath(data.workspace.urlKey, team.key)}
                   icon={<InitiativeHomeIcon />}
@@ -735,6 +740,11 @@ export function TeamOverviewPage({
                   onNavigate={onNavigate}
                 />
               </div>
+            </section>
+            {parentTeam && <section className="team-home-hierarchy"><span>{t('Parent team')}</span><a title={hierarchy.path(parentTeam.id)} href={teamHomePath(data.workspace.urlKey, parentTeam.key)} onClick={event => {event.preventDefault(); onNavigate(teamHomePath(data.workspace.urlKey, parentTeam.key));}}><TeamIcon team={parentTeam} size={18}/><span>{parentTeam.name}</span></a></section>}
+            <section className="team-home-hierarchy"><span>{t('Sub-teams')}</span>
+              {childTeams.map(child => <a className="team-home-subteam" key={child.id} href={teamHomePath(data.workspace.urlKey, child.key)} onClick={event => {event.preventDefault(); onNavigate(teamHomePath(data.workspace.urlKey, child.key));}}><TeamIcon team={child} size={18}/><span>{child.name}</span></a>)}
+              {(data.viewerRole === 'admin' || data.viewerRole === 'owner') && !hierarchy.parentError('', team.id) && <button type="button" onClick={() => onNavigate(`${newTeamPath(data.workspace.urlKey)}?parentTeamId=${encodeURIComponent(team.id)}`)}><Plus size={16}/>{t('Create sub-team')}</button>}
             </section>
           </aside>
         </div>

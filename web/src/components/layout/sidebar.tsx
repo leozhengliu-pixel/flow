@@ -19,13 +19,14 @@ import {
   Folder,
   FolderOpen,
   Keyboard,
+  LifeBuoy,
   MessageCircle,
   MoreHorizontal,
   Pause,
   Play,
   Plus,
-  Search,
   Settings,
+  Users,
   X,
 } from "lucide-react";
 import { useCurrentTime } from "@/hooks/use-current-time";
@@ -96,6 +97,7 @@ import {
   releasePath,
   reviewsPath,
   settingsPath,
+  integrationSettingsPath,
   teamCyclesPath,
   teamHomePath,
   teamInitiativesPath,
@@ -832,7 +834,7 @@ export function Sidebar({
           </Section>}
 
           <Section label="Try" storageKey="try">
-            {phone && !dismissedTry.includes("import") && (
+            {!dismissedTry.includes("import") && (
               <TryItem
                 icon={<IssuesIcon />}
                 label="Import issues"
@@ -851,7 +853,7 @@ export function Sidebar({
                   onDismiss={() => dismissTry("invite")}
                 />
               )}
-            {!dismissedTry.includes("cycles") && data.teams[0] ? (
+            {!dismissedTry.includes("cycles") && data.teams[0] && data.cycleSettings[data.teams[0].id]?.enabled ? (
               <TryItem
                 icon={<FlowCycleIcon />}
                 label="Cycles"
@@ -864,9 +866,8 @@ export function Sidebar({
               <TryItem
                 icon={<GitHubIcon />}
                 label="Connect GitHub"
-                onClick={() =>
-                  toast.info("GitHub is not connected in this workspace.")
-                }
+                to={integrationSettingsPath(workspaceSlug, "github")}
+                onClick={close}
                 onDismiss={() => dismissTry("github")}
               />
             )}
@@ -2406,6 +2407,12 @@ export function HelpMenu({
     window.addEventListener('flow:open-help-menu', openHelp);
     return () => window.removeEventListener('flow:open-help-menu', openHelp);
   }, []);
+  const sendFlare = () => {
+    const url = new URL('https://github.com/leozhengliu-pixel/flow/issues/new');
+    url.searchParams.set('title', t('Support diagnostics'));
+    url.searchParams.set('body', `${t('Browser:')} ${navigator.userAgent}\n${t('Page:')} ${location.pathname}\n\n${t('Describe the problem:')}\n`);
+    openExternal(url.toString());
+  };
   if (phone) {
     return <><button className="sidebar-help" type="button" aria-label={t('Open Help menu')} onClick={() => { onPhoneOpen?.(); setOpen(true) }}><ViewGlyph icon="QuestionMark" color="currentColor"/></button>
       <PhoneHelpMenu open={open} onOpenChange={setOpen} onSettings={onSettings} onShortcuts={onShortcuts}/>
@@ -2429,18 +2436,8 @@ export function HelpMenu({
           className="sidebar-popover sidebar-help-menu"
           side="top"
           align="start"
-          sideOffset={4}
+          sideOffset={0}
         >
-          <DropdownMenu.Item
-            onSelect={() =>
-              openExternal(
-                "https://github.com/leozhengliu-pixel/flow/tree/main/docs",
-              )
-            }
-          >
-            <Search />
-            Search for help…
-          </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() =>
               openExternal(
@@ -2460,6 +2457,10 @@ export function HelpMenu({
           >
             <MessageCircle />
             Contact us
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={sendFlare}>
+            <LifeBuoy />
+            Send flare
           </DropdownMenu.Item>
           <DropdownMenu.Item onSelect={onShortcuts}>
             <Keyboard />
@@ -2482,6 +2483,16 @@ export function HelpMenu({
           <DropdownMenu.Item onSelect={onSettings}>
             <Settings />
             Settings<kbd className="menu-end">G then S</kbd>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() =>
+              openExternal(
+                "https://github.com/leozhengliu-pixel/flow/discussions",
+              )
+            }
+          >
+            <Users />
+            Community
           </DropdownMenu.Item>
           <DropdownMenu.Label className="sidebar-help-label">
             What’s new
@@ -2540,7 +2551,7 @@ function FlowIcon({ name, style }: { name: string; style?: CSSProperties }) {
     </svg>
   );
 }
-function TriageIcon() {
+export function TriageIcon() {
   const phone = usePhoneLayout();
   if (phone) return <PhoneTriageIcon />;
   return (

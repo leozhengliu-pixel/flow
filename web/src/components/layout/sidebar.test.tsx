@@ -170,9 +170,9 @@ describe('sidebar feature flags', () => {
     expect(container.querySelector('.sidebar-help use')).toHaveAttribute('href', '#QuestionMark')
   })
 
-  it('offers a dismissible phone import entry without adding it to desktop navigation', async () => {
+  it('offers a dismissible import entry on desktop and phone', async () => {
     const desktop = renderSidebar({})
-    expect(desktop.container.querySelector('.sidebar-section-try a[href$="/settings/import-export"]')).toBeNull()
+    expect(desktop.container.querySelector('.sidebar-section-try a[href$="/settings/import-export"]')).toHaveTextContent('Import issues')
     desktop.unmount()
     const media = Object.assign(new EventTarget(), { matches: true, media: '(max-width: 767px)' })
     vi.stubGlobal('matchMedia', () => media)

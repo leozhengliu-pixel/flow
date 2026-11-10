@@ -39,6 +39,7 @@
 @media (min-width: 768px) {
   /* The reference panel has no padding of its own: 6px spacer rows open and close the list. */
   .menu-content.workspace-primary-menu{width:225px;padding:0}
+  html:root[data-theme="light"] body .menu-content.workspace-primary-menu{padding:0}
   .menu-content.workspace-primary-menu::before,.menu-content.workspace-primary-menu::after{content:"";display:block;height:6px}
   /* Label, then the shortcut and chevron as one group: 8px between label and shortcut, 6px to the chevron. */
   .menu-content.workspace-primary-menu .menu-item{gap:8px}

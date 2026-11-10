@@ -67,8 +67,8 @@ describe('sidebar row layout', () => {
       const section = document.querySelector('.sidebar-section-try') as HTMLElement
       const items = within(section)
       const invite = items.getByRole('link', { name: 'Invite people' })
-      const cycles = items.getByRole('link', { name: 'Cycles' })
-      const github = items.getByRole('button', { name: 'Connect GitHub' })
+      const cycles = items.getByRole('link', { name: 'Import issues' })
+      const github = items.getByRole('link', { name: 'Connect GitHub' })
 
       for (const item of [invite, cycles, github]) {
         expect(item).toHaveClass('nav-item')
@@ -127,7 +127,7 @@ describe('sidebar row layout', () => {
     await user.keyboard('{Escape}')
     await user.click(screen.getByRole('button', { name: 'Dismiss Invite people' }))
     expect(screen.queryByRole('link', { name: 'Invite people' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Connect GitHub' })).toHaveClass('nav-item')
+    expect(screen.getByRole('link', { name: 'Connect GitHub' })).toHaveClass('nav-item')
   })
 })
 

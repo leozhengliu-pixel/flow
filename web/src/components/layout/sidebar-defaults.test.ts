@@ -46,6 +46,18 @@ describe('sidebar order migration', () => {
     expect(result.current.order.workspace).toEqual(['initiatives', 'projects', 'loops', 'views', 'teams', 'members', 'customers', 'releases'])
   })
 
+  it('lists My issues before Reviews by default and treats the old personal default as uncustomised', () => {
+    const { result } = renderHook(() => useSidebarCustomizationState('usr_fresh'))
+    expect(result.current.order.personal).toEqual(['inbox', 'myIssues', 'reviews', 'pulse', 'drafts', 'agent'])
+    localStorage.setItem('flow.sidebar.order:usr_oldp', JSON.stringify({ personal: ['inbox', 'reviews', 'myIssues', 'pulse', 'drafts', 'agent'] }))
+    expect(renderHook(() => useSidebarCustomizationState('usr_oldp')).result.current.order.personal).toEqual(['inbox', 'myIssues', 'reviews', 'pulse', 'drafts', 'agent'])
+  })
+
+  it('keeps a personal order the user rearranged, including Agent first', () => {
+    localStorage.setItem('flow.sidebar.order:usr_agent', JSON.stringify({ personal: ['agent', 'inbox', 'myIssues', 'reviews', 'pulse', 'drafts'] }))
+    expect(renderHook(() => useSidebarCustomizationState('usr_agent')).result.current.order.personal[0]).toBe('agent')
+  })
+
   it('keeps an order the user rearranged', () => {
     localStorage.setItem('flow.sidebar.order:usr_custom', JSON.stringify({ workspace: ['views', 'projects', 'initiatives'] }))
     const { result } = renderHook(() => useSidebarCustomizationState('usr_custom'))
