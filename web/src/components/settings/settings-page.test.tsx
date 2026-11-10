@@ -239,7 +239,7 @@ it('shows members the workspace feature pages and hides administration', () => {
   const labels = navLabels();
   for (const visible of ['Preferences', 'Labels', 'Templates', 'SLAs', 'Statuses', 'Updates', 'AI & agents', 'Loops', 'Initiatives', 'Documents', 'Customer requests', 'Releases', 'Pulse', 'Asks', 'Emojis', 'Integrations', 'Join or create a team'])
     expect(labels).toContain(visible);
-  for (const hidden of ['Workspace', 'Members', 'Security', 'API', 'Applications', 'Billing', 'Usage & limits', 'Import & export'])
+  for (const hidden of ['Workspace', 'Members', 'Permissions', 'Security', 'API', 'Applications', 'Billing', 'Usage & limits', 'Import & export'])
     expect(labels).not.toContain(hidden);
 });
 
@@ -251,10 +251,22 @@ it('lists Usage & limits without billing or a plan pill for admins', () => {
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
   const labels = navLabels();
   const admin = labels.slice(labels.indexOf('Workspace'));
-  expect(admin.slice(0, 9)).toEqual(['Workspace', 'Teams', 'Members', 'Security', 'MCP connectors', 'API', 'Applications', 'Usage & limits', 'Import & export']);
+  expect(admin.slice(0, 10)).toEqual(['Workspace', 'Teams', 'Members', 'Permissions', 'Security', 'MCP connectors', 'API', 'Applications', 'Usage & limits', 'Import & export']);
   expect(labels).not.toContain('Billing');
   expect(screen.queryByRole('button', { name: 'Free plan' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Open Help menu' })).toBeInTheDocument();
+});
+
+it('shows the workspace Permissions page with its settings for admins', () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  input.page = 'permissions';
+  input.data = { ...input.data, viewerRole: 'owner' };
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  expect(screen.getByRole('heading', { level: 1, name: 'Permissions' })).toBeInTheDocument();
+  for (const row of ['New user invitations', 'Team creation', 'Workspace initiatives', 'Manage workspace labels', 'Manage workspace templates', 'Manage pinned views', 'Manage loops', 'Modify agent guidance', 'API key creation', 'Import data'])
+    expect(screen.getByText(row)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Permissions' })).toHaveAttribute('aria-current', 'page');
 });
 
 it('hides workspace templates from members when only admins manage templates', () => {

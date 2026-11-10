@@ -1,8 +1,11 @@
 /* Settings › Usage & limits and its sub-pages, measured from the reference app at 1272x676. */
 .usage-page .settings-page-header p { max-width: none; line-height: 22px; }
 html:root .settings-app .settings-main .usage-page > .settings-page-header { margin-bottom: 31px; }
-.usage-docs-link { display: inline-flex; align-items: center; gap: 2px; color: var(--set-text); font-weight: 450; text-decoration: none; }
-.usage-docs-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+.usage-feature-link { color: var(--set-button-text); font-weight: 450; text-decoration: none; }
+.usage-feature-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+.usage-docs-link { margin-left: -3px; padding: 1px 4px; border-radius: 8px; color: var(--set-text); font-weight: 450; text-decoration: none; white-space: nowrap; }
+.usage-docs-link::after { content: "\2197"; margin-left: 4px; }
+.usage-docs-link:hover { background: var(--bg-hover); }
 .usage-page em { color: var(--set-button-text); font-style: normal; }
 
 .usage-card {
@@ -25,7 +28,7 @@ html:root .settings-app .settings-main .usage-page > .settings-page-header { mar
 .usage-link-row { display: flex; align-items: center; gap: 12px; height: 66px; padding: 0 16px; cursor: pointer; font: inherit; }
 .usage-link-row:hover { background: var(--bg-hover); }
 .usage-link-row .usage-row-copy { flex: 1; }
-.usage-row-meta { line-height: 15px; color: var(--set-desc); font-size: 12px; font-weight: 450; }
+.usage-row-meta { margin-bottom: 1px; line-height: normal; color: var(--set-desc); font-size: 12px; font-weight: 450; }
 .usage-chevron { flex: none; color: var(--set-desc); }
 .usage-icon-box { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: 8px; background: color-mix(in lch, var(--set-text) 6%, transparent); color: var(--set-desc); }
 

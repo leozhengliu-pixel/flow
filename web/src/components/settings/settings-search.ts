@@ -764,6 +764,29 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
     ],
   },
   {
+    id: 'permissions',
+    title: 'Permissions',
+    section: 'Administration',
+    keywords: ['roles', 'who can', 'access'],
+    groups: [
+      {
+        title: 'Permissions',
+        items: [
+          { title: 'New user invitations', keywords: ['invite'] },
+          { title: 'Team creation', keywords: ['create team'] },
+          { title: 'Workspace initiatives' },
+          { title: 'Manage workspace labels' },
+          { title: 'Manage workspace templates' },
+          { title: 'Manage pinned views' },
+          { title: 'Manage loops' },
+          { title: 'Modify agent guidance', keywords: ['prompts'] },
+          { title: 'API key creation' },
+          { title: 'Import data' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'security',
     title: 'Security',
     section: 'Administration',

@@ -134,7 +134,7 @@ export function CommandMenu({
   onNavigateMembers: () => void
   onNavigateSettings?: () => void
   onReportPerformance?: () => void
-  /** "Create a team…", listed when Settings › Security "Team creation" allows the viewer. */
+  /** "Create a team…", listed when Settings › Permissions "Team creation" allows the viewer. */
   onCreateTeam?: () => void
   onNavigateCustomers: () => void
   /** "Go to customers" (G then Q); omitted when customer requests are off or for guests, which also hides the other customer commands. */

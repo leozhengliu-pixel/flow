@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Archive, ArchiveRestore, ArrowDown, ArrowUp, MoreHorizontal, RotateCcw, Search, Settings, SquareStack, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowDown, ArrowUp, ChevronDown, MoreHorizontal, RotateCcw, Search, Settings, SquareStack, Trash2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDesktopSettings } from '@/hooks/use-desktop-settings';
 import { usePhoneLayout } from '@/hooks/use-phone-layout';
@@ -18,6 +18,7 @@ import { useI18n } from "@/i18n/i18n";
 import { deleteTeam, listDeletedTeams, restoreDeletedTeam, updateTeam } from "@/lib/api";
 import { settingsPath, teamIssuesPath } from "@/lib/app-routes";
 import { teamContentAccessible } from "@/lib/team-access";
+import { teamHierarchy } from "@/lib/team-hierarchy";
 import { DELETE_TEAM_DESCRIPTION } from "@/lib/team-deletion";
 import type { BootstrapData, DeletedTeam, Team } from "@/types/flow";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
@@ -93,6 +94,8 @@ export function WorkspaceTeamsSettings({
       const compared = typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b));
       return (descending ? -compared : compared) || left.name.localeCompare(right.name);
     });
+  const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(() => new Set());
+  const teamRows = teamHierarchy(data.teams, data.teamSettings).rows(teams, collapsedTeams);
   function visibilityLabel(team: Team) {
     const access = data.teamSettings?.[team.id]?.access;
     if (team.private || access === "private") return "Private";
@@ -198,7 +201,7 @@ export function WorkspaceTeamsSettings({
             <span>{teams.length}</span>
           </div>
         )}
-        {teams.map((team) => (
+        {teamRows.map(({ team, depth, hasChildren }) => (
           <div
             className="settings-member-directory-row settings-teams-row"
             key={team.id}
@@ -209,12 +212,39 @@ export function WorkspaceTeamsSettings({
               if (event.key === "Enter") onOpen(team);
             }}
           >
-            <span>
+            <span className="settings-teams-name" style={depth > 0 ? { paddingLeft: depth * 27 } : undefined}>
+              {depth > 0 && (
+                <>
+                  <i className="settings-team-branch-line" style={{ left: depth * 27 - 19 }} aria-hidden="true" />
+                  <svg className="settings-team-branch-elbow" style={{ left: depth * 27 - 19 }} width="10" height="9" viewBox="0 0 10 9" fill="none" aria-hidden="true">
+                    <path d="M.5 0v4.5a4 4 0 0 0 4 4H10" stroke="currentColor" strokeWidth="1" />
+                  </svg>
+                </>
+              )}
               <span className="settings-team-icon" style={{ color: team.color }}>
                 <ViewGlyph color={team.color} icon={team.icon || "Team"} />
               </span>
               <strong>{team.name}</strong>
               <small>{team.key}</small>
+              {desktop && hasChildren && (
+                <button
+                  type="button"
+                  className="settings-team-collapse"
+                  aria-label={t(collapsedTeams.has(team.id) ? "Expand team" : "Collapse team")}
+                  aria-expanded={!collapsedTeams.has(team.id)}
+                  data-collapsed={collapsedTeams.has(team.id) || undefined}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setCollapsedTeams((current) => {
+                      const next = new Set(current);
+                      if (!next.delete(team.id)) next.add(team.id);
+                      return next;
+                    });
+                  }}
+                >
+                  <ChevronDown size={16} aria-hidden="true" />
+                </button>
+              )}
             </span>
             <span className="settings-teams-description">{data.teamSettings?.[team.id]?.description ?? ""}</span>
             <span>{t(visibility === "Retired" && team.retiredAt ? formatDate(team.retiredAt, { dateStyle: "medium" }) : visibilityLabel(team))}</span>

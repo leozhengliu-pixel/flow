@@ -115,7 +115,7 @@ export function SLASettings({
         <section className="sla-card">
           <div className="sla-row">
             <div className="sla-row-copy">
-              <strong>{t("SLAs")}</strong>
+              <strong>{t("Enable SLAs")}</strong>
               <span>{t("Workspace-wide access to issue SLA automations and notifications")}</span>
             </div>
             <SettingsToggle

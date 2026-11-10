@@ -155,14 +155,22 @@
   .desktop-integration-preview > img:last-child { filter: none; }
   .desktop-integration-feature-copy { display: flex; align-items: center; gap: 12px; width: 100%; padding: 16px; }
   .desktop-integration-feature-copy > span { display: flex; flex-direction: column; min-width: 0; }
-  .desktop-integration-feature-copy strong { font: 600 15px/23px var(--font); }
-  .desktop-integration-feature-copy small { font: 450 15px/23px var(--font); }
+  .desktop-integration-feature-copy > span > span:first-child { font: 600 15px/23px var(--font); }
+  .desktop-integration-feature-copy > span > span:last-child { font: 450 15px/23px var(--font); }
   .desktop-integration-strip { height: 29px; display: flex; align-items: center; margin-top: 16px; }
   .desktop-integration-strip > div { box-sizing: border-box; height: 29px; display: flex; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; gap: 8px; padding: 1px 0; }
-  .desktop-integration-strip button { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 8px; height: 28px; padding: 0; border: 0; background: transparent; color: var(--set-desc); font: 500 13px var(--font); white-space: nowrap; }
+  .desktop-integration-strip button { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 8px; height: 27px; padding: 2px 16px; border: 0; background: transparent; color: var(--set-desc); font: 600 15px/23px var(--font); white-space: nowrap; }
   .desktop-integration-strip button[aria-selected=true], .desktop-integration-strip button:hover { color: var(--set-text); }
-  .desktop-integration-strip > button { flex: 0 0 28px; width: 28px; padding: 0 2px; }
+  .desktop-integration-strip > button { flex: 0 0 28px; width: 28px; height: 28px; padding: 0 2px; font: 500 12px/normal var(--font); }
   .desktop-integration-catalog { margin-top: 48px; }
+  .desktop-integration-group + .desktop-integration-group { margin-top: 48px; }
+  .desktop-integration-group h3 { margin: 0 16px 16px; color: var(--set-group-desc); font: 500 11px/normal var(--font); text-transform: uppercase; }
+  .desktop-integration-group ul { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+  .desktop-integration-card { box-sizing: border-box; width: 100%; height: 156px; display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 0; border-radius: 8px; background: var(--set-card); box-shadow: var(--set-card-shadow); color: var(--set-text); text-align: left; overflow: hidden; }
+  .desktop-integration-card:hover { background: var(--bg-hover); }
+  .desktop-integration-card-head { display: flex; align-items: center; gap: 8px; height: 36px; font: 500 13px/normal var(--font); }
+  .desktop-integration-card-head > svg, .desktop-integration-card-head > img { flex: none; border-radius: 6px; }
+  .desktop-integration-card-copy { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; color: var(--set-desc); font: 450 12px/normal var(--font); }
   html:root .settings-app .settings-main .settings-control > .settings-action:last-child { margin-right: -6px; border-width: .5px; }
   html:root .settings-app .settings-main .settings-row .settings-action:has(> svg) { padding-left: 10px; }
   html:root .settings-app .settings-main .settings-row .settings-action > svg { width: 16px; height: 16px; }
@@ -175,4 +183,14 @@
   html:root .settings-app .settings-main .personal-security-api-key-header > h3.is-empty { color: var(--set-desc); font-weight: 450; }
   html:root .settings-app .settings-main .personal-channel > span:nth-child(2) { gap: 3px; }
   html:root .settings-app .settings-main .pt-list-card > header h3 { padding: 0; }
+}
+
+/* Settings > Teams: sub-teams nest under their parent with a branch connector and a collapse toggle. */
+@media (--desktop-layout) {
+  html:root .settings-app .settings-main .settings-teams-row > .settings-teams-name { position: relative; }
+  html:root .settings-app .settings-main .settings-team-branch-line { position: absolute; top: -9px; width: 1px; height: 24px; background: var(--set-sep); }
+  html:root .settings-app .settings-main .settings-team-branch-elbow { position: absolute; top: 14px; color: var(--set-sep); }
+  html:root .settings-app .settings-main .settings-team-collapse { width: 22px; height: 24px; box-sizing: border-box; display: inline-grid; place-items: center; margin-left: -1px; padding: 0 6px 0 0; border: 0; border-radius: 6px; background: transparent; color: var(--shortcut-muted); cursor: pointer; }
+  html:root .settings-app .settings-main .settings-team-collapse[data-collapsed] svg { transform: rotate(-90deg); }
+  html:root .settings-app .settings-main .settings-team-collapse:hover { background: var(--bg-hover); }
 }

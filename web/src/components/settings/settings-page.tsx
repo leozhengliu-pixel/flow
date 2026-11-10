@@ -449,6 +449,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
       { id: "workspace", label: "Workspace", glyph: "workspace" },
       { id: "teams", label: "Teams", glyph: "teams" },
       { id: "members", label: "Members", glyph: "members" },
+      { id: "permissions", label: "Permissions", glyph: "permissions" },
       { id: "security", label: "Security", glyph: "security" },
       { id: "mcps", label: "MCP connectors", glyph: "mcp" },
       { id: "api", label: "API", glyph: "code" },
@@ -1384,6 +1385,8 @@ function SettingsBodyContent(
         onBack={() => props.onNavigate("security")}
       />
     );
+  if (page === "permissions")
+    return <PermissionsPage data={props.data} onReload={props.onReload} />;
   if (page === "security")
     return (
       <>
@@ -2190,6 +2193,45 @@ export function MembersPage({
   );
 }
 
+function PermissionsPage({ data, onReload }: { data: BootstrapData; onReload: () => Promise<void> }) {
+  const [settings, setSettings] = useState(data.workspaceSettings);
+  useResetOnChange([data.workspaceSettings], () => setSettings(data.workspaceSettings));
+  const save = async (next: WorkspaceSettings) => {
+    setSettings(next);
+    try {
+      await updateWorkspacePreferences(next);
+      await onReload();
+      toast.success("Permissions saved");
+    } catch (error) {
+      setSettings(data.workspaceSettings);
+      toast.error(error instanceof Error ? error.message : "Could not save permissions");
+    }
+  };
+  const permission = (title: string, settingKey: SecuritySettingKey, description: string) => (
+    <PermissionRow title={title} description={description} settingKey={settingKey} settings={settings} save={save} />
+  );
+  return (
+    <>
+      <PageTitle>Permissions</PageTitle>
+      <Section title="Members and teams" description="Control who can manage admins, invite members, and create teams">
+        {permission("New user invitations", "invitePermission", "Who can invite new members to the workspace")}
+        {permission("Team creation", "teamCreatePermission", "Who can create new teams")}
+      </Section>
+      <Section title="Workspace management" description="Control who can manage initiatives, labels, templates, views, loops, and agent guidance">
+        {permission("Workspace initiatives", "initiativePermission", "Who can create workspace level initiatives")}
+        {permission("Manage workspace labels", "labelPermission", "Who can create, update, and delete workspace labels")}
+        {permission("Manage workspace templates", "templatePermission", "Who can manage workspace templates")}
+        {permission("Manage pinned views", "pinnedViewPermission", "Who can pin views to workspace pages and edit, reorder, or remove them")}
+        {permission("Manage loops", "loopPermission", "Who can create, update, and delete workspace loops")}
+        {permission("Modify agent guidance", "agentGuidancePermission", "Who can modify workspace-level agent guidance prompts")}
+      </Section>
+      <Section title="API and integrations" description="Control who can create API keys and import data">
+        {permission("API key creation", "apiKeyPermission", "Who can create API keys to interact with the Flow API on their behalf")}
+        {permission("Import data", "importPermission", "Who can import data from other services")}
+      </Section>
+    </>
+  );
+}
 function SecurityPage({
   data,
   onReload,
@@ -2248,9 +2290,6 @@ function SecurityPage({
       emailAuthEnabled: next.includes("email") || next.includes("passkey"),
     });
   };
-  const permission = (title: string, settingKey: SecuritySettingKey, description: string) => (
-    <PermissionRow title={title} description={description} settingKey={settingKey} settings={settings} save={save} />
-  );
   const identityProviders = data.identityProviders?.length ?? 0;
   const authenticationPolicy = <>
     {toggle("Disable authentication bypass for admins", "disableAdminBypass", "When enabled, admins are restricted to the enabled authentication methods")}
@@ -2293,18 +2332,6 @@ function SecurityPage({
         </Group>
       </Section>
       <Section grouped title="Workspace management">
-        <Group title="Permissions" description="Choose who can perform various actions across the workspace">
-          {permission("New user invitations", "invitePermission", "Who can invite new members to the workspace")}
-          {permission("Team creation", "teamCreatePermission", "Who can create new teams")}
-          {permission("Workspace initiatives", "initiativePermission", "Who can create workspace level initiatives")}
-          {permission("Manage workspace labels", "labelPermission", "Who can create, update, and delete workspace labels")}
-          {permission("Manage workspace templates", "templatePermission", "Who can manage workspace templates")}
-          {permission("Manage pinned views", "pinnedViewPermission", "Who can pin views to team pages and edit, reorder, or remove them")}
-          {permission("Manage loops", "loopPermission", "Who can create, update, and delete workspace loops")}
-          {permission("API key creation", "apiKeyPermission", "Who can create API keys to interact with the Flow API on their behalf")}
-          {permission("Import data", "importPermission", "Who can import data from other services")}
-          {permission("Modify agent guidance", "agentGuidancePermission", "Who can modify workspace-level agent guidance prompts")}
-        </Group>
         <Group title="File uploads" description="Restrict the file types users are allowed to upload. Images and videos remain allowed.">
           <Row title="Restrict file uploads" description={settings.restrictFileUploads ? `${settings.allowedFileExtensions?.length ?? 0} allowed file types` : undefined}>
             <ActionButton onClick={() => setUploadPolicyOpen(true)}>Configure</ActionButton>

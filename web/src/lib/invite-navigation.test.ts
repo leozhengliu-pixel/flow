@@ -9,7 +9,7 @@ function data(role: BootstrapData['viewerRole'], invitePermission?: string) {
   return { ...base, workspaceSettings: { ...base.workspaceSettings, invitePermission } } as BootstrapData
 }
 
-describe('canInviteMembers (Settings › Security "New user invitations")', () => {
+describe('canInviteMembers (Settings › Permissions "New user invitations")', () => {
   it('lets only admins invite by default and when set to admins', () => {
     for (const value of [undefined, '', 'admins']) {
       expect(canInviteMembers(data('member', value))).toBe(false)

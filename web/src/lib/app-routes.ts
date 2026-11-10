@@ -90,6 +90,7 @@ export type SettingsPageId =
   | "workspace"
   | "teams"
   | "members"
+  | "permissions"
   | "security"
   | "mcps"
   | "authentication"
@@ -1969,6 +1970,7 @@ const SETTINGS_PAGES = new Set<SettingsPageId>([
   "workspace",
   "teams",
   "members",
+  "permissions",
   "security",
   "authentication",
   "audit-log",

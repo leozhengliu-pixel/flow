@@ -116,7 +116,7 @@ export function WorkspaceDirectoryPage({
   onReload: (teamId?: string) => Promise<void>;
 }) {
   const {t}=useI18n();
-  // Settings › Security "New user invitations" and "Team creation" decide who may invite or create teams.
+  // Settings › Permissions "New user invitations" and "Team creation" decide who may invite or create teams.
   const canInvite = canInviteMembers(data);
   const canCreateTeam = roleAllowed(data.viewerRole, data.workspaceSettings?.teamCreatePermission);
   const [inviteOpen, setInviteOpen] = useState(inviteOnOpen && canInvite);

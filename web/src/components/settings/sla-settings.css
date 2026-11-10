@@ -93,9 +93,12 @@ body .settings-select-menu.sla-select-menu{z-index:800}
 @media(hover:none){.sla-rule-actions{opacity:1}}
 @media(max-width:760px){
   /* The reference scrolls 32px past the last rule card on a phone, not the 96px the other settings pages leave. */
-  html:root .settings-app .settings-content:has(>.sla-page){padding-bottom:32px}
+  html:root .settings-app .settings-content:has(>.sla-page){box-sizing:border-box;min-height:calc(100vh - 91.5px);padding-bottom:32px}
   .sla-header{margin-bottom:24px}
   .sla-header p{line-height:18px}
+  .sla-reset .sla-row{padding:16px 16px 16px 10.66px}
+  .sla-reset .sla-row-copy{gap:3px}
+  .sla-reset .sla-row-copy span{line-height:normal}
   .sla-rules{margin-top:24px}
   .sla-rules-copy div{line-height:18px}
   .sla-add-rule{height:36px}

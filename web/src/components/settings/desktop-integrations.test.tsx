@@ -26,7 +26,8 @@ describe('desktop integrations discovery', () => {
 
   it('switches featured services in both directions, opens details, and searches the full working catalog', async () => {
     const open = mount(false)
-    expect(screen.getByText('No enabled integrations')).toBeVisible()
+    expect(screen.queryByText('No enabled integrations')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Enabled' })).not.toBeInTheDocument()
     const tabs = screen.getByRole('tablist')
     await userEvent.click(within(tabs).getByRole('tab', { name: 'Feishu' }))
     expect(screen.getByRole('tab', { name: 'Feishu' })).toHaveAttribute('aria-selected', 'true')

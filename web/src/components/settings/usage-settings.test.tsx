@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
@@ -26,9 +27,9 @@ function renderUsage(view?: 'analytics' | 'spend-limits' | 'user-limits' | 'loop
     workspaceSettings: { ...makeBootstrap().workspaceSettings, spendLimits } as never,
   })
   render(
-    <I18nProvider>
+    <MemoryRouter><I18nProvider>
       <UsageSettings data={data} view={view} onOpenView={onOpenView} onReload={onReload} />
-    </I18nProvider>,
+    </I18nProvider></MemoryRouter>,
   )
   return { onOpenView, onReload }
 }

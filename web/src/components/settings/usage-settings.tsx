@@ -1,11 +1,12 @@
-import { ArrowUpRight, ChevronRight, Presentation } from "lucide-react";
+import { ChevronRight, Presentation } from "lucide-react";
 import { CodingUsageBlock } from "./coding-sessions/coding-usage-block";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useI18n } from "@/i18n/i18n";
 import { updateWorkspacePreferences } from "@/lib/api";
 import { formatCredits, useAICredits } from "@/lib/ai-credits";
-import type { UsageSettingsView } from "@/lib/app-routes";
+import { settingsPath, type UsageSettingsView } from "@/lib/app-routes";
 import { toast } from "@/lib/toast";
 import type { BootstrapData, SpendLimitReset, SpendLimitSettings } from "@/types/flow";
 import { SettingsCrumb, SettingsPageTitle, SettingsSelect } from "./settings-primitives";
@@ -65,7 +66,6 @@ function DocsLink({ children }: { children: string }) {
   return (
     <a className="usage-docs-link" href={DOCS_URL} target="_blank" rel="noreferrer">
       {children}
-      <ArrowUpRight size={11} aria-hidden="true" />
     </a>
   );
 }
@@ -97,7 +97,7 @@ function UsageOverview({ data, onOpenView }: UsageProps) {
           <div>
             <h3>{t("AI credits")}</h3>
             <p>
-              {t("Credits apply to usage of")} <em>{t("Coding sessions")}</em> {t("and")} <em>{t("Loops")}</em>. <DocsLink>{t("Docs")}</DocsLink>
+              {t("Credits apply to usage of")} <Link className="usage-feature-link" to={settingsPath(data.workspace.urlKey, "coding-sessions")}>{t("Coding sessions")}</Link> {t("and")} <Link className="usage-feature-link" to={settingsPath(data.workspace.urlKey, "loops")}>{t("Loops")}</Link>. <DocsLink>{t("Docs")}</DocsLink>
             </p>
           </div>
         </header>
