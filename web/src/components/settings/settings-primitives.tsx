@@ -187,6 +187,7 @@ const withSuffix = (option: { label: string; suffix?: string }) =>
 
 export function SettingsSelect({
   align = "end",
+  alignOffset,
   className = "",
   disabled,
   entityName,
@@ -196,9 +197,12 @@ export function SettingsSelect({
   options,
   placeholder,
   searchPlaceholder,
+  nativeSuffix = true,
   value,
 }: {
   align?: "start" | "center" | "end";
+  /** Shifts the open menu along its alignment edge, in px. */
+  alignOffset?: number;
   className?: string;
   disabled?: boolean;
   entityName?: (value: string) => boolean;
@@ -210,6 +214,8 @@ export function SettingsSelect({
   placeholder?: string;
   /** Opens a searchable menu (long lists) instead of the plain select. */
   searchPlaceholder?: string;
+  /** false: the phone's native select lists the plain labels, without the muted suffixes the desktop menu shows. */
+  nativeSuffix?: boolean;
   value: string;
 }) {
   const phone = usePhoneLayout();
@@ -219,7 +225,7 @@ export function SettingsSelect({
       : option,
   );
   const selected = normalized.find((option) => option.value === value);
-  if (!disabled && (searchPlaceholder || isPeopleProperty(label))) return <PropertyMenu label={label} ariaLabel={label} value={selected?.label} selectedId={value} options={normalized.map(option => ({ id: option.value, label: option.label, icon: option.icon, disabled: option.disabled, i18nIgnore: option.entityName, keywords: 'keywords' in option ? option.keywords : undefined }))} onChange={onChange} triggerClassName={className || 'settings-select'} surfaceClassName={menuClassName} searchPlaceholder={searchPlaceholder ?? "Search people…"} trigger={searchPlaceholder
+  if (!disabled && (searchPlaceholder || isPeopleProperty(label))) return <PropertyMenu label={label} ariaLabel={label} value={selected?.label} selectedId={value} options={normalized.map(option => ({ id: option.value, label: option.label, icon: option.icon, disabled: option.disabled, i18nIgnore: option.entityName, keywords: 'keywords' in option ? option.keywords : undefined }))} onChange={onChange} triggerClassName={className || 'settings-select'} surfaceClassName={menuClassName} align={searchPlaceholder ? align : undefined} searchPlaceholder={searchPlaceholder ?? "Search people…"} trigger={searchPlaceholder
     ? <><span className="settings-select-value">{selected?.icon}<span data-i18n-ignore={selected?.entityName || undefined}>{selected?.label ?? (placeholder || value)}</span></span><span aria-hidden="true"><SettingsChevron /></span></>
     : <span className="settings-select-value">{selected?.icon}{selected?.label ?? value}</span>}/>
   return (
@@ -250,6 +256,7 @@ export function SettingsSelect({
       <SelectPrimitive.Portal>
         <SelectPrimitive.Content data-flow-motion="floating"
           align={align}
+          alignOffset={alignOffset}
           className={menuClassName || "settings-select-menu"}
           collisionPadding={8}
           position="popper"
@@ -295,7 +302,7 @@ export function SettingsSelect({
           {/* A value that matches no option shows the placeholder, not the first option. */}
           {!selected && <option disabled hidden value={value}>{placeholder || value}</option>}
           {normalized.map((option) => (
-            <option disabled={option.disabled} key={option.value} value={option.value}>{withSuffix(option)}</option>
+            <option disabled={option.disabled} key={option.value} value={option.value}>{nativeSuffix ? withSuffix(option) : option.label}</option>
           ))}
         </select>
         <span aria-hidden="true"><SettingsChevron /></span>

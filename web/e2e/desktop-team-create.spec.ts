@@ -41,7 +41,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       expect(created.status()).toBe(201)
       const parent = await created.json()
       await page.goto(`/${workspaceKey}/settings/new-team?parentTeamId=${encodeURIComponent(parent.id)}`)
-      await expect(page.getByRole('combobox', { name: 'Parent team', exact: true })).toContainText('Parent QA')
+      await expect(page.getByRole('combobox', { name: 'Set parent team', exact: true })).toContainText('Parent QA')
       await expect(page.getByRole('combobox', { name: 'Copy from team', exact: true })).toBeDisabled()
     })
   })

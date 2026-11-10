@@ -212,10 +212,11 @@ export function TeamCreateSettings({
           <SettingsRow
             title={t("Parent team")}
             description={parentError ?? t("Settings and workflows will be inherited from the parent team")}
-            className={`team-create-inline-row${parentError ? " has-error" : ""}`}
+            className={`team-create-inline-row team-create-parent-row${parentError ? " has-error" : ""}`}
           >
             <SettingsSelect
-              label={t("Parent team")}
+              label={t("Set parent team")}
+              align="end"
               placeholder={t("No parent team")}
               searchPlaceholder={t("Set parent team…")}
               value={parentTeamId}
@@ -234,9 +235,13 @@ export function TeamCreateSettings({
             "Control who can access the team and its content. Private teams are visible only to team members and workspace admins.",
           )}
         >
-          <SettingsRow title={t("Team access")}>
+          <SettingsRow title={t("Team access")} className="team-create-stack-row">
             <SettingsSelect
               label={t("Team access")}
+              align="start"
+              nativeSuffix={false}
+              alignOffset={-2}
+              menuClassName="settings-select-menu team-create-access-menu"
               value={accessValue}
               options={accessOptions}
               onChange={(value) => setPrivateTeam(value === "private")}
@@ -250,7 +255,8 @@ export function TeamCreateSettings({
         >
           <SettingsRow title={t("Timezone")} className="team-create-stack-row">
             <SettingsSelect
-              label={t("Timezone")}
+              label={t("Set timezone")}
+              align="end"
               searchPlaceholder={t("Search timezones…")}
               value={timezone}
               options={timezones.map((option) => ({ value: option.value, label: option.label, keywords: option.keywords, entityName: true }))}
@@ -269,6 +275,7 @@ export function TeamCreateSettings({
             <span title={parentTeamId ? t("Sub-teams must copy settings from their parent") : undefined}>
               <SettingsSelect
                 label={t("Copy from team")}
+                align="end"
                 disabled={Boolean(parentTeamId)}
                 placeholder={t("Don’t copy")}
                 searchPlaceholder={t("Select a team…")}

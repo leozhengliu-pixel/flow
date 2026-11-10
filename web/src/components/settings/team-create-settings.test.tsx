@@ -50,10 +50,10 @@ describe('TeamCreateSettings', () => {
     expect(screen.getByRole('textbox', { name: 'Icon & Name' })).toHaveAttribute('placeholder', 'e.g. Engineering')
     expect(screen.getByRole('textbox', { name: 'Icon & Name' })).toHaveFocus()
     expect(screen.getByRole('textbox', { name: 'Identifier' })).toHaveAttribute('placeholder', 'e.g. ENG')
-    expect(screen.getByRole('combobox', { name: 'Parent team' })).toHaveTextContent('No parent team')
+    expect(screen.getByRole('combobox', { name: 'Set parent team' })).toHaveTextContent('No parent team')
     expect(screen.getByRole('combobox', { name: 'Copy from team' })).toHaveTextContent('Don’t copy')
     // The default timezone is the one the workspace's teams use.
-    expect(screen.getByRole('combobox', { name: 'Timezone' })).toHaveTextContent(timezoneLabel('America/Los_Angeles'))
+    expect(screen.getByRole('combobox', { name: 'Set timezone' })).toHaveTextContent(timezoneLabel('America/Los_Angeles'))
     expect(screen.queryByText(/upgrade|Business|plan/i)).not.toBeInTheDocument()
   })
 
@@ -96,7 +96,7 @@ describe('TeamCreateSettings', () => {
   it('preselects the parent team, which fixes the copy source and is sent with the team', async () => {
     const user = userEvent.setup()
     const { onCreate } = renderForm({ parentTeamId: 'eng', initialName: 'Platform' })
-    expect(screen.getByRole('combobox', { name: 'Parent team' })).toHaveTextContent('Engineering')
+    expect(screen.getByRole('combobox', { name: 'Set parent team' })).toHaveTextContent('Engineering')
     expect(screen.getByRole('combobox', { name: 'Copy from team' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Create team' }))
     await waitFor(() => expect(onCreate).toHaveBeenCalled())

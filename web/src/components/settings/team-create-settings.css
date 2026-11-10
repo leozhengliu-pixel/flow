@@ -1,7 +1,7 @@
 /* Settings › Create a new team. The page reuses the team settings header, section cards and rows; only what the form adds is styled here. */
 html:root .settings-app .settings-main .settings-content .team-create-settings .team-settings-header > div { gap: 0; }
 html:root .settings-app .settings-main .settings-content .team-create-settings .team-settings-header > div > p { margin: 4px 0 0; color: var(--set-group-desc); }
-html:root .settings-app .settings-main .settings-content .team-create-settings .settings-row-copy > span { margin-bottom: .5px; }
+html:root .settings-app .settings-main .settings-content .team-create-settings .team-create-stack-row > .settings-row-copy > span { margin-bottom: .5px; }
 html:root .settings-app .settings-main .settings-content .team-create-settings .team-settings-header { margin-bottom: 32px; }
 html:root .settings-app .settings-main .team-create-settings .settings-row.has-error .settings-row-copy > span { color: var(--set-danger); }
 
@@ -65,10 +65,23 @@ html:root .settings-app .settings-main .team-create-settings .settings-control >
 }
 html:root .settings-app .settings-main .team-create-settings .settings-control > .settings-input:focus { outline: var(--control-focus-width, 1px) solid var(--focus-ring, var(--set-primary)); outline-offset: 0; }
 
-html:root .settings-app .settings-main .team-create-settings .settings-select { padding: 0 28px 0 10px; }
+html:root .settings-app .settings-main .team-create-settings .settings-select:not(.settings-select-native) { padding: 0 28px 0 10px; }
 /* Picker triggers (parent team, timezone, copy source): 13px/500 button, value 450, a placeholder reads muted. */
 html:root .settings-app .settings-main .team-create-settings .settings-select .settings-select-value > span { font-weight: 450; }
 html:root .settings-app .settings-main .team-create-settings .settings-select[data-empty="true"] .settings-select-value > span { color: var(--set-desc); }
+
+/* Team access: the leading word reads in the label colour, the rest muted, in the trigger and in the open menu. */
+html:root .settings-app .settings-main .team-create-settings button[aria-label="Team access"] .settings-select-value > span { color: var(--set-label); }
+html:root .settings-app .settings-main .team-create-settings .settings-select-suffix,
+html:root body:has(.team-create-settings) .settings-select-menu .settings-select-suffix { color: var(--set-desc); font-weight: 450; }
+html:root body:has(.team-create-settings) .settings-select-menu .settings-select-option-content > span { color: var(--set-label); font-weight: 450; }
+
+/* The reference's access menu starts 1.5px left of its trigger, at a fractional position; the menu snaps to whole pixels, the remaining 0.22px is item padding. */
+body .team-create-access-menu .settings-select-option { padding-left: 12.22px; }
+
+/* An open picker keeps the raised control fill; the parent picker panel is 175px wide and sits 1px lower than the default. */
+html:root .settings-app .settings-main .team-create-settings .settings-select[data-state="open"] { background: var(--lx-control-hover, var(--dropdown-hover)); }
+html:root body:has(.team-create-settings button[aria-label="Set parent team"][aria-expanded="true"]) .property-command-surface { width: 175px !important; min-width: 175px !important; margin-top: 1px; }
 
 .team-create-footer { display: flex; justify-content: flex-end; margin: 0 0 40px; }
 .team-create-footer .settings-action { height: 32px; padding: 0 12px; border: .5px solid transparent; border-radius: 9999px; font: 500 13px/normal var(--font); }
@@ -89,7 +102,10 @@ html:root .settings-app .settings-main .team-create-settings .settings-select[da
   html:root .settings-app .settings-main .settings-content .team-create-settings .team-create-stack-row > .settings-control > .settings-input { width: 100%; height: 36px; }
   html:root .settings-app .settings-main .settings-content .team-create-settings .team-create-stack-row > .settings-control .settings-select { width: 100%; }
   html:root .settings-app .settings-main .settings-content .team-create-settings .team-create-stack-row > .settings-control > .team-icon-name-control { width: 200px; }
-  html:root .settings-app .settings-main .settings-content .team-create-settings .settings-select { height: 30px; padding: 0 28px 0 10px; box-shadow: none; color: var(--set-control-text); font: 500 13px/normal var(--font); }
+  html:root .settings-app .settings-main .settings-content .team-create-settings .settings-select:not(.settings-select-native) { height: 30px; padding: 0 28px 0 10px; box-shadow: none; color: var(--set-control-text); font: 500 13px/normal var(--font); }
+  html:root .settings-app .settings-main .settings-content .team-create-settings .team-create-stack-row { --settings-select-width: 100%; }
+  html:root .settings-app .settings-main .settings-content .team-create-settings .team-create-parent-row .settings-select { max-width: 125px; }
+  html:root .settings-app .settings-main .settings-content .team-create-settings .team-create-parent-row .settings-select > span:first-child { text-overflow: clip; }
   html:root .settings-app .settings-main .settings-content .team-create-settings .settings-select .settings-select-value,
   html:root .settings-app .settings-main .settings-content .team-create-settings .settings-select .settings-select-value > span { font-size: 13px; }
   html:root .settings-app .settings-main .settings-content .team-create-settings .team-create-footer .settings-action { height: 36px; }
