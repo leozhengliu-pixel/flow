@@ -45,7 +45,7 @@ describe('insights fullscreen', () => {
     expect(within(settings).getByRole('checkbox', { name: 'Show archived issues' })).not.toBeChecked()
     expect(within(settings).getByRole('checkbox', { name: 'Hide No Priority' })).not.toBeChecked()
     // The reference app hides the footer while you follow the view's shared default.
-    expect(within(settings).queryByRole('button', { name: 'Set default for everyone' })).toBeNull()
+    expect(within(settings).queryByRole('button', { name: 'Save current insight' })).toBeNull()
     expect(within(panel).queryByRole('list', { name: 'Issues' })).toBeNull()
     expect(panel.querySelector('[aria-live="polite"]')).toHaveTextContent('3 issues')
   })
@@ -101,8 +101,8 @@ describe('insights fullscreen', () => {
     openFullscreen()
     expect(screen.getByRole('checkbox', { name: 'Hide No Priority' })).toBeChecked()
     expect(screen.getByRole('button', { name: 'Reset' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Set default for everyone' })).toHaveTextContent('Set default for everyone')
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Set default for everyone' })) })
+    expect(screen.getByRole('button', { name: 'Save current insight' })).toHaveTextContent('Set default for everyone')
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save current insight' })) })
     expect(confirm).toHaveBeenCalledWith('Save insight', expect.objectContaining({ confirmLabel: 'Save', danger: false }))
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ slice: 'status', segment: 'priority', hideEmptySegment: true }))
     expect(localStorage.getItem('flow:saved-view:fullscreen-insight:insights')).toBeNull()
@@ -110,7 +110,7 @@ describe('insights fullscreen', () => {
 
   it('hides "Set default for everyone" when the viewer cannot change the shared default', () => {
     setup({ canSetDefault: false })
-    expect(screen.queryByRole('button', { name: 'Set default for everyone' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Save current insight' })).toBeNull()
   })
 
   it('translates the fullscreen breadcrumb', () => {

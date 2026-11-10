@@ -46,7 +46,7 @@
 .axisLabels { position: absolute; bottom: 0; height: 30px; pointer-events: none; }
 .axisLabel {
   position: absolute;
-  top: 3px;
+  top: 3.25px;
   display: flex;
   align-items: center;
   gap: 4px;

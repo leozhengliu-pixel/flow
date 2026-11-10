@@ -183,7 +183,7 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
   const showReset = personal && hasSharedDefault
   const setDefault = (showSetDefault || showReset) && <footer className={styles.footer}>
     {showReset && <button type="button" className={styles.resetDefault} onClick={reset}>{t('Reset')}</button>}
-    {showSetDefault && <button type="button" className={styles.setDefault} disabled={saving} onClick={() => void save()}>{t(saving ? 'Saving…' : 'Set default for everyone')}</button>}
+    {showSetDefault && <button type="button" className={styles.setDefault} aria-label={t('Save current insight')} disabled={saving} onClick={() => void save()}><span>{t(saving ? 'Saving…' : 'Set default for everyone')}</span></button>}
   </footer>
   const icon = viewIcon ?? <ViewGlyph color={view.color} icon={view.icon}/>
   const controls = (layout: 'row' | 'column') => <InsightControls config={config} data={data} layout={layout} onMeasure={selectMeasure} onToggleStatuses={toggleStatuses} onChange={patchConfig}/>

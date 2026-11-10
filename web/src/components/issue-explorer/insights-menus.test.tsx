@@ -116,7 +116,7 @@ describe('Insights menus', () => {
 
   it('keeps "Set default for everyone" available while the view has no shared default', () => {
     setup()
-    expect(screen.getByRole('button', { name: 'Set default for everyone' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Save current insight' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'Reset' })).toBeNull()
   })
 

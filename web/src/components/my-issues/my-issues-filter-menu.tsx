@@ -183,7 +183,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
   return <><Popover.Root open={open} onOpenChange={close}>
     <Popover.Trigger asChild>{isValidElement(trigger) ? cloneElement(trigger, { 'aria-expanded': open, 'data-filter-menu-trigger': variant === 'root' ? '' : undefined } as object) : trigger}</Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content ref={setRootElement} aria-label={t(variant === 'advanced' ? 'Filter' : desktop ? 'Menu' : 'Add Filter…')} data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-layout={layout} data-surface={surface} data-variant={variant} data-submenu-open={activeField ? true : undefined} style={{ zIndex: rootLayer, maxHeight: menuMaxHeight }} side="bottom" align={flushEnd ? 'end' : align} alignOffset={flushEnd ? -4000 : align === 'center' ? -15 : 0} sideOffset={desktop ? menuOffset : 3} collisionPadding={collisionPadding} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (keepFocus.current) { keepFocus.current = false; event.preventDefault() } }} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
+      <Popover.Content ref={setRootElement} aria-label={t(variant === 'advanced' ? 'Filter' : desktop ? 'Menu' : 'Add Filter…')} data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-layout={layout} data-surface={surface} data-variant={variant} data-submenu-open={activeField ? true : undefined} style={{ zIndex: rootLayer, maxHeight: menuMaxHeight, marginTop: menuOffset < 3.5 ? .5 : undefined }} side="bottom" align={flushEnd ? 'end' : align} alignOffset={flushEnd ? -4000 : align === 'center' ? -15 : 0} sideOffset={desktop ? menuOffset : 3} collisionPadding={collisionPadding} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (keepFocus.current) { keepFocus.current = false; event.preventDefault() } }} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
         <Command label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} className={styles.rootCommand} defaultValue={variant === 'root' ? '__none__' : undefined} loop filter={(value, search, keywords) => value.startsWith('__ai__') ? 0.0001 : defaultFilter(value, search, keywords)}>
           <div className={styles.rootSearch}>
             <Command.Input aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} placeholder={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} autoFocus value={query} onValueChange={setQuery}/>
@@ -268,7 +268,8 @@ function useFilterMenuHeight(element: HTMLDivElement | null, enabled: boolean, q
       const anchorBottom = triggerElement ? triggerElement.getBoundingClientRect().bottom : element.getBoundingClientRect().top - offset
       // Only a pure function of the trigger and the content, so the decision cannot flip-flop with the offset it sets.
       const snug = Boolean(onOffset) && natural + anchorBottom <= innerHeight - 9.5 + .01 && natural + anchorBottom + 3.5 > innerHeight - 11
-      onOffset?.(snug ? .25 : 3.5)
+      // Radix rounds the placement to whole pixels, so the half pixel under the trigger is the content's own margin.
+      onOffset?.(snug ? 0 : 3.5)
       setHeight(snug ? undefined : partialMenuHeight(rows, leading, trailing, available))
     }
     const observer = new ResizeObserver(measure)

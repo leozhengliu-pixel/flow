@@ -214,9 +214,9 @@
   .li-empty--planned > div a { border-color: transparent; }
   .li-empty--planned > div button { gap: 6px; border-color: transparent; }
   .li-empty--planned .li-empty-shortcut { display: inline-flex; align-items: center; gap: 3px; opacity: 1; }
-  .li-empty--planned .li-empty-shortcut kbd { min-width: 18px; height: auto; display: inline-flex; align-items: center; justify-content: center; padding: 2px; border: .5px solid rgb(255 255 255 / .4); border-radius: 4px; font: 500 11px/12.1px var(--font); }
-  .li-empty--planned .li-empty-shortcut span { font-size: 10px; font-weight: 450; line-height: 11px; opacity: 1; }
+  .li-empty--planned .li-empty-shortcut kbd { min-width: 18px; height: auto; display: inline-flex; align-items: center; justify-content: center; padding: 2px; border: .5px solid color-mix(in srgb, var(--pt-primary-fg, currentColor) 40%, transparent); border-radius: 4px; font: 500 11px/12.1px var(--font); }
+  .li-empty--planned .li-empty-shortcut span { font-size: 10px; font-weight: 450; line-height: 11px; margin-top: .9px; opacity: 1; }
 }
 @media (min-width: 901px) {
-  :root[data-theme="light"] .li-empty--planned > div button { background: #6d78d5; }
+  :root[data-theme="light"] .li-empty--planned > div button { background: var(--pt-primary); }
 }
