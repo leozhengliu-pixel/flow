@@ -65,6 +65,22 @@ func TestScheduledWorkspaceDeletionPurgesAfterTheGracePeriod(t *testing.T) {
 	if err := f.repository.PutIntegrationOAuthTokens(ctx, key, "integration_gl", store.IntegrationOAuthTokens{AccessToken: "glpat-access", RefreshToken: "gl-refresh"}); err != nil {
 		t.Fatal(err)
 	}
+	// A member's "Download your data" archive holds the workspace's data.
+	people, err := f.repository.WorkspaceUserIDs(ctx, f.workspace.ID)
+	if err != nil || len(people) == 0 {
+		t.Fatalf("workspace people = %v, %v", people, err)
+	}
+	export, _, err := f.repository.CreatePersonalDataExport(ctx, people[0], time.Now().UTC(), time.Hour, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := personalDataObjectPrefix + export.ID + ".zip"
+	if err := os.WriteFile(filepath.Join(f.uploads, archive), []byte("zip"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.repository.FinishPersonalDataExport(ctx, export.ID, archive, 3, "", time.Now().UTC(), time.Now().UTC().Add(personalDataExportTTL)); err != nil {
+		t.Fatal(err)
+	}
 	// Another workspace and a file it is not involved with stay.
 	other, err := f.repository.CreateWorkspace(ctx, "Other", "other-space", "us")
 	if err != nil {
@@ -94,6 +110,12 @@ func TestScheduledWorkspaceDeletionPurgesAfterTheGracePeriod(t *testing.T) {
 	if f.fileExists(f.attachment) {
 		t.Fatal("attachment file left behind")
 	}
+	if f.fileExists(archive) {
+		t.Fatal("a member's data export archive was left behind")
+	}
+	if item, err := f.repository.PersonalDataExport(ctx, people[0], export.ID); err != nil || item.Status != store.PersonalDataExportExpired {
+		t.Fatalf("export after the purge = %+v, %v", item, err)
+	}
 	if !f.fileExists("unrelated.txt") {
 		t.Fatal("a file the workspace does not use was deleted")
 	}
@@ -116,7 +138,7 @@ func TestScheduledWorkspaceDeletionPurgesAfterTheGracePeriod(t *testing.T) {
 	if receipt.Status != store.WorkspacePurgeCompleted || receipt.CompletedAt == nil || receipt.WorkspaceKey != key || receipt.RequestRef == "" {
 		t.Fatalf("receipt = %#v", receipt)
 	}
-	for _, name := range []string{"objects.uploads", "issue_records", "workspace_states", "workspace_memberships", "connector_secrets", "domain_events"} {
+	for _, name := range []string{"objects.uploads", "objects.personal_data_exports", "issue_records", "workspace_states", "workspace_memberships", "connector_secrets", "domain_events"} {
 		if receipt.Counts[name] <= 0 {
 			t.Errorf("receipt count %s = %d", name, receipt.Counts[name])
 		}

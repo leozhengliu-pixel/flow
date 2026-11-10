@@ -98,6 +98,22 @@ func (s *server) purgeWorkspace(ctx context.Context, receipt store.WorkspaceDele
 	if err := s.deleteWorkspaceObjects(ctx, target, &receipt); err != nil {
 		return fail("objects", err)
 	}
+	// "Download your data" archives of the workspace's people hold its data.
+	// The people are read while the membership rows still name them; their
+	// archives go now and again once the workspace left the catalog, for an
+	// export requested in between.
+	people, err := s.store.WorkspaceUserIDs(ctx, target.ID)
+	if err != nil {
+		return fail("data exports", err)
+	}
+	expireExports := func() bool {
+		deleted, err := s.expirePersonalDataExports(ctx, people)
+		receipt.AddCount("objects.personal_data_exports", deleted)
+		return err == nil || fail("data exports", err)
+	}
+	if !expireExports() {
+		return false
+	}
 	if inCatalog {
 		counts := map[string]int64{}
 		err := s.store.RemoveWorkspaceFromCatalog(ctx, target.Key, counts)
@@ -111,9 +127,12 @@ func (s *server) purgeWorkspace(ctx context.Context, receipt store.WorkspaceDele
 		if err := s.deleteWorkspaceObjects(ctx, target, &receipt); err != nil {
 			return fail("objects", err)
 		}
+		if !expireExports() {
+			return false
+		}
 	}
 	counts := map[string]int64{}
-	err := s.store.PurgeWorkspaceRows(ctx, target, counts)
+	err = s.store.PurgeWorkspaceRows(ctx, target, counts)
 	for name, n := range counts {
 		receipt.AddCount(name, n)
 	}

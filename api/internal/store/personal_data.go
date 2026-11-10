@@ -33,6 +33,10 @@ var (
 	// data a workspace admin erased from that workspace: its old content is
 	// attributed to the same pseudonymous id, so rejoining would re-identify it.
 	ErrErasedFromWorkspace = errors.New("this account's personal data was erased from the workspace; it cannot join it again")
+	// ErrPersonalDataExportGone is returned by FinishPersonalDataExport when
+	// the job was expired or deleted while it was being built (a workspace
+	// purge or an account erasure): the caller deletes the archive it wrote.
+	ErrPersonalDataExportGone = errors.New("personal data export was withdrawn")
 )
 
 // DepartureRoleErased marks a former member whose personal data was erased
@@ -169,14 +173,37 @@ func (s *SQLiteStore) StartPersonalDataExport(ctx context.Context, id string) (b
 }
 
 // FinishPersonalDataExport records a built export (objectKey and size, until
-// expires) or its failure (errText).
+// expires) or its failure (errText). It returns ErrPersonalDataExportGone
+// when the job no longer waits for its archive (expired or deleted since it
+// started), so the archive is not left in object storage unrecorded.
 func (s *SQLiteStore) FinishPersonalDataExport(ctx context.Context, id, objectKey string, size int64, errText string, now, expires time.Time) error {
 	status := PersonalDataExportCompleted
 	if errText != "" {
 		status, objectKey, size = PersonalDataExportFailed, "", 0
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE personal_data_exports SET status=?,object_key=?,size=?,error_text=?,completed_at=?,expires_at=? WHERE id=?`, status, objectKey, size, storableText(errText, 512), now.UTC().Format(time.RFC3339Nano), expires.UTC().Format(time.RFC3339Nano), id)
-	return err
+	result, err := s.db.ExecContext(ctx, `UPDATE personal_data_exports SET status=?,object_key=?,size=?,error_text=?,completed_at=?,expires_at=? WHERE id=? AND status IN ('queued','running')`, status, objectKey, size, storableText(errText, 512), now.UTC().Format(time.RFC3339Nano), expires.UTC().Format(time.RFC3339Nano), id)
+	if err != nil {
+		return err
+	}
+	if count, err := result.RowsAffected(); err == nil && count == 0 {
+		return ErrPersonalDataExportGone
+	}
+	return nil
+}
+
+// LivePersonalDataExports lists the exports of userIDs that are queued,
+// being built or downloadable (every one that has or will have an archive).
+func (s *SQLiteStore) LivePersonalDataExports(ctx context.Context, userIDs []string) ([]PersonalDataExportRecord, error) {
+	items := []PersonalDataExportRecord{}
+	for start := 0; start < len(userIDs); start += 500 {
+		clause, args := bindList("user_id", userIDs[start:min(start+500, len(userIDs))])
+		page, err := s.queryPersonalDataExports(ctx, `SELECT `+personalDataExportColumns+` FROM personal_data_exports WHERE `+clause+` AND status IN ('queued','running','completed') ORDER BY created_at`, args...)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, page...)
+	}
+	return items, nil
 }
 
 // ExpiredPersonalDataExports lists exports whose download expired but whose

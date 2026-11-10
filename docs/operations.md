@@ -136,7 +136,10 @@ coordination one replica runs it) purges the workspace permanently:
    its records use are deleted: attachments and assets in the uploads store,
    workspace logos and application icons, coding artifacts, archived sandbox
    logs, snapshot archives and harness state, and cached Pulse audio. A file
-   another workspace owns or attaches is left alone.
+   another workspace owns or attaches is left alone. The "Download your
+   data" archives of its current and former members are deleted as well
+   (they hold the workspace's data; the exports show as expired), again
+   after step 3 for any requested in between.
 3. The workspace leaves the catalog: its members lose access at once and
    every replica drops its copy.
 4. Every row it owns is deleted in batches of 1000, in every table that holds
@@ -203,7 +206,8 @@ The audit log lives in its own append-only tables: `audit_events` (one row per
 entry, per workspace, numbered by `seq`) and `audit_chain_heads` (each
 workspace's last `seq` and hash, and the last entry retention removed). Rows
 are written in the same transaction as the change they describe and are never
-updated. Include both tables in backups and keep backups at least as long as
+updated, except that erasing a person rewrites their personal details (see
+below). Include both tables in backups and keep backups at least as long as
 `FLOW_AUDIT_LOG_RETENTION_DAYS`.
 
 - **Retention.** Entries older than `FLOW_AUDIT_LOG_RETENTION_DAYS` (default
@@ -213,7 +217,10 @@ updated. Include both tables in backups and keep backups at least as long as
   without it, replicas that prune at the same time take turns on each
   workspace's chain head row, so nothing is deleted twice or out of order.
 - **Tamper evidence.** Each row's `hash` is SHA-256 over the previous row's
-  hash and every stored column. `GET /api/workspace/audit-log/verify` checks
+  hash, every identifying column (ids, `seq`, time, actor type, action,
+  resource, result) and `personal_digest`, a SHA-256 commitment over a random
+  per-row salt (`personal_salt`) and the personal columns (`actor`, `ip`,
+  `user_agent`, `metadata`). `GET /api/workspace/audit-log/verify` checks
   one workspace (admins); `server audit-verify` (same configuration as the
   server, `--config` accepted) checks every workspace and the instance-level
   log and prints one JSON line per chain, exiting `1` when any chain does not
@@ -222,6 +229,20 @@ updated. Include both tables in backups and keep backups at least as long as
   a SIEM (Settings › Security › Audit log stream) or export
   `GET /api/workspace/audit-log?format=csv` regularly, and keep the reported
   `headHash` values outside Flow.
+- **Erasure.** Deleting an account, or an admin erasing a member's personal
+  data, rewrites that person's entries in the affected chains (every chain
+  for an account deletion, the workspace's for a workspace erasure): their
+  name, email and avatar become the pseudonymous "Deleted user" identity
+  (same id), their client address and browser are dropped, and their name
+  and email leave the details of entries about them. The row's salt is
+  removed and its `personal_digest` kept, so the chain still verifies and the
+  digest no longer reveals the old values. Each batch of up to 500 rewritten
+  entries appends a `personal_data_redacted` entry (actor `system`, resource
+  the person's id, details the rewritten `seq` ranges); verification fails
+  on an entry without a salt that no later such entry lists. What an erased
+  entry's personal columns say is therefore no longer tamper-evident; its
+  ids, action, resource, time and result still are. Entries already
+  delivered to an audit log stream are not recalled.
 - **Instance-level entries.** Sign-in attempts for an email no account has,
   and account events of accounts in no workspace, are stored with an empty
   `workspace_id`; read them with

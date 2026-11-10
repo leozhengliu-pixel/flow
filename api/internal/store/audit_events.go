@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -23,7 +24,10 @@ import (
 // (PruneAuditEvents), which only removes a workspace's oldest rows.
 //
 // Every row is numbered per workspace (seq, in commit order) and chained:
-// hash = SHA-256 of the previous row's hash and the row's stored columns.
+// hash = SHA-256 of the previous row's hash and the row's stored columns,
+// where the personal columns (actor, ip, user_agent, metadata) enter through
+// a salted commitment (personal_digest) so that erasing a person can rewrite
+// them without breaking the chain (audit_redaction.go).
 // audit_chain_heads keeps each workspace's last seq and hash, and the seq and
 // hash of the last row retention removed, so VerifyAuditChain can tell an
 // edited, removed or inserted row from the regular pruning of old ones.
@@ -179,7 +183,7 @@ func (s *SQLiteStore) ensureAuditEvents(ctx context.Context) error {
 	}
 	id := "VARCHAR(191)"
 	for _, statement := range []string{
-		`CREATE TABLE IF NOT EXISTS audit_events(id ` + id + ` PRIMARY KEY,workspace_id ` + id + ` NOT NULL,seq BIGINT NOT NULL,created_at VARCHAR(40) NOT NULL,actor_type VARCHAR(32) NOT NULL,actor_id ` + id + ` NOT NULL,user_id ` + id + ` NOT NULL,actor ` + text + ` NOT NULL,action ` + id + ` NOT NULL,resource_type ` + id + ` NOT NULL,resource_id ` + id + ` NOT NULL,ip VARCHAR(64) NOT NULL,user_agent ` + id + ` NOT NULL,result VARCHAR(32) NOT NULL,metadata ` + text + ` NOT NULL,prev_hash VARCHAR(64) NOT NULL,hash VARCHAR(64) NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS audit_events(id ` + id + ` PRIMARY KEY,workspace_id ` + id + ` NOT NULL,seq BIGINT NOT NULL,created_at VARCHAR(40) NOT NULL,actor_type VARCHAR(32) NOT NULL,actor_id ` + id + ` NOT NULL,user_id ` + id + ` NOT NULL,actor ` + text + ` NOT NULL,action ` + id + ` NOT NULL,resource_type ` + id + ` NOT NULL,resource_id ` + id + ` NOT NULL,ip VARCHAR(64) NOT NULL,user_agent ` + id + ` NOT NULL,result VARCHAR(32) NOT NULL,metadata ` + text + ` NOT NULL,prev_hash VARCHAR(64) NOT NULL,hash VARCHAR(64) NOT NULL,personal_salt VARCHAR(64) NOT NULL DEFAULT '',personal_digest VARCHAR(64) NOT NULL DEFAULT '')`,
 		`CREATE TABLE IF NOT EXISTS audit_chain_heads(workspace_id ` + id + ` PRIMARY KEY,seq BIGINT NOT NULL,hash VARCHAR(64) NOT NULL,pruned_seq BIGINT NOT NULL,pruned_hash VARCHAR(64) NOT NULL)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS audit_events_seq ON audit_events(workspace_id,seq)`,
 		`CREATE INDEX IF NOT EXISTS audit_events_time ON audit_events(workspace_id,created_at)`,
@@ -189,6 +193,13 @@ func (s *SQLiteStore) ensureAuditEvents(ctx context.Context) error {
 			statement = strings.Replace(statement, " IF NOT EXISTS", "", 1)
 		}
 		if _, err := s.db.ExecContext(ctx, statement); err != nil && !(s.dialect == "mysql" && isDuplicateIndex(err)) {
+			return err
+		}
+	}
+	// A table created before the personal commitment columns (a pre-release
+	// build) gains them; its earlier rows do not verify.
+	for _, column := range []string{"personal_salt", "personal_digest"} {
+		if _, err := s.db.ExecContext(ctx, `ALTER TABLE audit_events ADD COLUMN `+column+` VARCHAR(64) NOT NULL DEFAULT ''`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
 			return err
 		}
 	}
@@ -204,6 +215,9 @@ type auditRow struct {
 	userID, actor, action, resourceType string
 	resourceID, ip, userAgent, result   string
 	metadata, prevHash, hash            string
+	// personalSalt and personalDigest commit to the personal columns; an
+	// erased row keeps the digest and has no salt (audit_redaction.go).
+	personalSalt, personalDigest string
 }
 
 type auditActor struct {
@@ -332,11 +346,35 @@ func auditRowFor(workspaceID string, entry domain.AuditLogEntry) (auditRow, erro
 	}, nil
 }
 
-// digest is the row's chain hash: SHA-256 over the previous hash and every
-// stored column, each followed by a unit separator.
+// sealPersonal gives the row a fresh random salt and the commitment to its
+// personal columns.
+func (row *auditRow) sealPersonal() error {
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return err
+	}
+	row.personalSalt = hex.EncodeToString(salt)
+	row.personalDigest = row.personalCommitment()
+	return nil
+}
+
+// personalCommitment is SHA-256 over the salt and the personal columns. With
+// a random salt it reveals nothing about them, so it can stay after an
+// erasure removed the salt and the values.
+func (row auditRow) personalCommitment() string {
+	return unitDigest(row.personalSalt, row.actor, row.ip, row.userAgent, row.metadata)
+}
+
+// digest is the row's chain hash: SHA-256 over the previous hash, every
+// stored column but the personal ones and the commitment to those, each
+// followed by a unit separator.
 func (row auditRow) digest() string {
+	return unitDigest(row.prevHash, row.workspaceID, strconv.FormatInt(row.seq, 10), row.id, row.createdAt, row.actorType, row.actorID, row.userID, row.action, row.resourceType, row.resourceID, row.result, row.personalDigest)
+}
+
+func unitDigest(parts ...string) string {
 	hash := sha256.New()
-	for _, part := range []string{row.prevHash, row.workspaceID, strconv.FormatInt(row.seq, 10), row.id, row.createdAt, row.actorType, row.actorID, row.userID, row.actor, row.action, row.resourceType, row.resourceID, row.ip, row.userAgent, row.result, row.metadata} {
+	for _, part := range parts {
 		hash.Write([]byte(part))
 		hash.Write([]byte{0x1f})
 	}
@@ -406,10 +444,13 @@ func insertAuditEntriesTx(ctx context.Context, tx *sqlTx, workspaceID string, en
 		if err != nil {
 			return fmt.Errorf("audit entry %s: %w", entry.ID, err)
 		}
+		if err := row.sealPersonal(); err != nil {
+			return fmt.Errorf("audit entry %s: %w", entry.ID, err)
+		}
 		row.seq, row.prevHash = head.seq+1, head.hash
 		row.hash = row.digest()
-		if _, err := tx.ExecContext(ctx, `INSERT INTO audit_events(id,workspace_id,seq,created_at,actor_type,actor_id,user_id,actor,action,resource_type,resource_id,ip,user_agent,result,metadata,prev_hash,hash) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			row.id, row.workspaceID, row.seq, row.createdAt, row.actorType, row.actorID, row.userID, row.actor, row.action, row.resourceType, row.resourceID, row.ip, row.userAgent, row.result, row.metadata, row.prevHash, row.hash); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO audit_events(id,workspace_id,seq,created_at,actor_type,actor_id,user_id,actor,action,resource_type,resource_id,ip,user_agent,result,metadata,prev_hash,hash,personal_salt,personal_digest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			row.id, row.workspaceID, row.seq, row.createdAt, row.actorType, row.actorID, row.userID, row.actor, row.action, row.resourceType, row.resourceID, row.ip, row.userAgent, row.result, row.metadata, row.prevHash, row.hash, row.personalSalt, row.personalDigest); err != nil {
 			return fmt.Errorf("audit entry %s: %w", entry.ID, err)
 		}
 		head.seq, head.hash = row.seq, row.hash
@@ -515,14 +556,14 @@ type AuditQuery struct {
 	Limit int
 }
 
-const auditColumns = `id,workspace_id,seq,created_at,actor_type,actor_id,user_id,actor,action,resource_type,resource_id,ip,user_agent,result,metadata,prev_hash,hash`
+const auditColumns = `id,workspace_id,seq,created_at,actor_type,actor_id,user_id,actor,action,resource_type,resource_id,ip,user_agent,result,metadata,prev_hash,hash,personal_salt,personal_digest`
 
 func scanAuditRows(rows *sql.Rows) ([]auditRow, error) {
 	defer rows.Close()
 	result := []auditRow{}
 	for rows.Next() {
 		var row auditRow
-		if err := rows.Scan(&row.id, &row.workspaceID, &row.seq, &row.createdAt, &row.actorType, &row.actorID, &row.userID, &row.actor, &row.action, &row.resourceType, &row.resourceID, &row.ip, &row.userAgent, &row.result, &row.metadata, &row.prevHash, &row.hash); err != nil {
+		if err := rows.Scan(&row.id, &row.workspaceID, &row.seq, &row.createdAt, &row.actorType, &row.actorID, &row.userID, &row.actor, &row.action, &row.resourceType, &row.resourceID, &row.ip, &row.userAgent, &row.result, &row.metadata, &row.prevHash, &row.hash, &row.personalSalt, &row.personalDigest); err != nil {
 			return nil, err
 		}
 		result = append(result, row)
@@ -721,6 +762,9 @@ func (s *SQLiteStore) VerifyAuditChain(ctx context.Context, workspaceID string) 
 	}
 	expectedSeq, expectedHash := head.prunedSeq+1, head.prunedHash
 	after := int64(-1)
+	// Erased rows (no salt) must be listed by a later redaction record.
+	var redactions auditRedactions
+	redactionsLoaded := false
 	for {
 		rows, err := s.db.QueryContext(ctx, `SELECT `+auditColumns+` FROM audit_events WHERE workspace_id=? AND seq>? AND seq<=? ORDER BY seq LIMIT `+strconv.Itoa(auditVerifyPage), workspaceID, after, head.seq)
 		if err != nil {
@@ -751,6 +795,22 @@ func (s *SQLiteStore) VerifyAuditChain(ctx context.Context, workspaceID string) 
 			}
 			if row.digest() != row.hash {
 				return fail(row.seq, "the entry was changed after it was written")
+			}
+			if row.personalSalt != "" {
+				if row.personalCommitment() != row.personalDigest {
+					return fail(row.seq, "the entry was changed after it was written")
+				}
+			} else {
+				if !redactionsLoaded || !redactions.covers(row.seq) {
+					// Load (or reload, for an erasure committed since).
+					if redactions, err = s.loadAuditRedactions(ctx, workspaceID); err != nil {
+						return AuditChainReport{}, err
+					}
+					redactionsLoaded = true
+				}
+				if !redactions.covers(row.seq) {
+					return fail(row.seq, "the entry's personal details were removed without an erasure record")
+				}
 			}
 			if report.Entries == 0 {
 				report.FirstSeq = row.seq

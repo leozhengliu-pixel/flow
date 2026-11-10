@@ -92,6 +92,14 @@ func TestPersonalDataExportJobsAreRateLimited(t *testing.T) {
 	if item, _ := repository.PersonalDataExport(ctx, "usr_admin", first.ID); item.Status != PersonalDataExportExpired || item.ObjectKey != "" {
 		t.Fatalf("after purge = %+v", item)
 	}
+	// A job withdrawn while it was built (expired by a workspace purge, or
+	// deleted with the account) does not record its archive.
+	if err := repository.FinishPersonalDataExport(ctx, first.ID, "personal_data_export_late.zip", 10, "", now, now.Add(time.Hour)); !errors.Is(err, ErrPersonalDataExportGone) {
+		t.Fatalf("finishing a withdrawn job = %v", err)
+	}
+	if live, err := repository.LivePersonalDataExports(ctx, []string{"usr_admin", "usr_other"}); err != nil || len(live) != 0 {
+		t.Fatalf("live exports = %+v, %v", live, err)
+	}
 }
 
 func TestErasedMemberCannotRejoinTheWorkspace(t *testing.T) {

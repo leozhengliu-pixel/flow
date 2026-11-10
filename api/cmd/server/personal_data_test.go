@@ -187,6 +187,49 @@ func testPersonalDataExport(t *testing.T, repo *store.SQLiteStore) {
 	}
 }
 
+// auditMentions lists the audit chains (workspace ids) whose entries still
+// show any of texts.
+func auditMentions(t *testing.T, repo *store.SQLiteStore, texts ...string) []string {
+	t.Helper()
+	ctx := context.Background()
+	chains, err := repo.AuditWorkspaces(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := []string{}
+	for _, chain := range chains {
+		entries, err := repo.ListAuditEntries(ctx, chain, store.AuditQuery{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := json.Marshal(entries)
+		for _, text := range texts {
+			if strings.Contains(strings.ToLower(string(raw)), strings.ToLower(text)) {
+				found = append(found, chain)
+				break
+			}
+		}
+	}
+	return found
+}
+
+// requireAuditChainsVerify is what `server audit-verify` checks: every chain
+// (each workspace's and the instance log) verifies.
+func requireAuditChainsVerify(t *testing.T, repo *store.SQLiteStore) {
+	t.Helper()
+	ctx := context.Background()
+	chains, err := repo.AuditWorkspaces(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, chain := range chains {
+		report, err := repo.VerifyAuditChain(ctx, chain)
+		if err != nil || !report.Valid {
+			t.Fatalf("audit chain %q does not verify: %+v, %v", chain, report, err)
+		}
+	}
+}
+
 func TestAccountDeletionErasesPersonalData(t *testing.T) {
 	for name, repo := range favoriteTabTestStores(t) {
 		t.Run(name, func(t *testing.T) { testAccountDeletionErasesPersonalData(t, repo) })
@@ -195,8 +238,25 @@ func TestAccountDeletionErasesPersonalData(t *testing.T) {
 
 func testAccountDeletionErasesPersonalData(t *testing.T, repo *store.SQLiteStore) {
 	f := newPersonalDataFixture(t, repo, "delete")
+	// The person's export request and sign-ins are in the audit log, by name.
+	authRequest[domain.PersonalDataExport](t, f.member, http.MethodPost, f.baseURL+"/api/account/data-exports", nil, "", http.StatusAccepted)
+	if len(auditMentions(t, repo, f.user.Email)) == 0 {
+		t.Fatal("setup: the audit log does not name the person")
+	}
 	authRequest[map[string]any](t, f.member, http.MethodDelete, f.baseURL+"/api/account", map[string]string{"confirmation": "someone-else@example.com"}, "", http.StatusBadRequest)
 	authRequest[any](t, f.member, http.MethodDelete, f.baseURL+"/api/account", map[string]string{"confirmation": strings.ToUpper(f.user.Email)}, "", http.StatusNoContent)
+	// The audit log keeps what they did under the pseudonymous identity, and
+	// every chain still verifies.
+	if chains := auditMentions(t, repo, f.user.Email, f.user.DisplayName); len(chains) > 0 {
+		t.Fatalf("audit chains %v still name the person", chains)
+	}
+	erasedAudit := authRequest[[]domain.AuditLogEntry](t, f.admin, http.MethodGet, f.baseURL+"/api/workspace/audit-log", nil, "test-workspace", http.StatusOK)
+	if !slices.ContainsFunc(erasedAudit, func(entry domain.AuditLogEntry) bool {
+		return entry.Action == "data_export_requested" && entry.Actor.ID == f.user.ID && entry.Actor.DisplayName == domain.DeletedUserDisplayName && entry.IP == ""
+	}) {
+		t.Fatal("the person's own audit entries were not kept pseudonymously")
+	}
+	requireAuditChainsVerify(t, repo)
 
 	// Signed out everywhere, and the sign-in is gone.
 	authRequest[map[string]any](t, f.member, http.MethodGet, f.baseURL+"/api/account/bootstrap", nil, "", http.StatusUnauthorized)
@@ -235,8 +295,14 @@ func testAccountDeletionErasesPersonalData(t *testing.T, repo *store.SQLiteStore
 	// A deleted person cannot be newly assigned.
 	authRequest[map[string]any](t, f.admin, http.MethodPatch, f.baseURL+"/api/issues/"+f.issue.ID, map[string]any{"assigneeId": f.user.ID}, "test-workspace", http.StatusBadRequest)
 	audit := authRequest[[]domain.AuditLogEntry](t, f.admin, http.MethodGet, f.baseURL+"/api/workspace/audit-log", nil, "test-workspace", http.StatusOK)
-	if !slices.ContainsFunc(audit, func(entry domain.AuditLogEntry) bool { return entry.Action == "erased" && entry.ResourceID == f.user.ID }) {
+	if !slices.ContainsFunc(audit, func(entry domain.AuditLogEntry) bool {
+		return entry.Action == "erased" && entry.ResourceID == f.user.ID
+	}) {
 		t.Fatal("the erasure was not audited")
+	}
+	// Their data export archives are gone with the account.
+	if exports, err := repo.LivePersonalDataExports(context.Background(), []string{f.user.ID}); err != nil || len(exports) != 0 {
+		t.Fatalf("exports left: %+v, %v", exports, err)
 	}
 }
 
@@ -284,6 +350,13 @@ func TestAdminErasesAMemberInTheirWorkspaceOnly(t *testing.T) {
 	if leaks := f.repo.PersonalDataLeaks(context.Background(), "test-workspace", f.user.Email, f.user.DisplayName); len(leaks) > 0 {
 		t.Fatalf("stored copies keep personal data: %v", leaks)
 	}
+	// This workspace's audit log no longer names them (their own workspace's
+	// still does: the account lives on there), and every chain verifies.
+	metadata, _ := f.repo.WorkspaceMetadataFields("test-workspace", "workspace")
+	if chains := auditMentions(t, f.repo, f.user.Email, f.user.DisplayName); slices.Contains(chains, metadata.Workspace.ID) {
+		t.Fatalf("the workspace's audit log still names the person: %v", chains)
+	}
+	requireAuditChainsVerify(t, f.repo)
 	// The workspace cannot take the account back (its old content would be
 	// re-identified), and a second erasure finds nobody.
 	invitations := authRequest[[]domain.Invitation](t, f.admin, http.MethodPost, f.baseURL+"/api/workspaces/test-workspace/invitations", map[string]any{"emails": []string{f.user.Email}, "role": "member"}, "", http.StatusCreated)

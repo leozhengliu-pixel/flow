@@ -211,6 +211,7 @@ var workspacePurgeExempt = map[string]string{
 	"auth_email_events":           "user accounts (account deletion)",
 	"coding_signing_keys":         "per-user commit signing keys",
 	"personal_connections":        "per-user connections",
+	"personal_data_exports":       "per-account Download your data jobs (user_id only); a workspace purge expires its members' archives (server expireMemberDataExports), account erasure deletes the jobs and archives",
 	"oauth_clients":               "instance OAuth client registrations",
 	"schema_migrations":           "schema bookkeeping",
 	"search_index_settings":       "instance search settings",

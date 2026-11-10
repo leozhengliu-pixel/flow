@@ -166,9 +166,18 @@ never delete data.
 
 ## Retention of other data
 
-- Audit log entries keep the pseudonymous id of the person; their name and email
-  in the entries are scrubbed as above. Audit storage and retention are
-  described in the audit log documentation.
+- Audit log entries keep the pseudonymous id of the person; their name, email,
+  avatar, client address and browser are removed from the entries (for an
+  account deletion in every workspace's log and the instance log, for an
+  admin's erasure in that workspace's log), and the log's hash chain still
+  verifies: each rewrite is recorded by a `personal_data_redacted` entry. See
+  [Audit log](operations.md#audit-log) for how the chain covers erased
+  entries. Entries already sent to an audit log stream (SIEM) stay there.
+- "Download your data" archives are deleted with the account (a job still
+  being prepared deletes its archive when it finishes). When a workspace is
+  purged after its deletion grace period, the archives of its current and
+  former members are deleted too, since they hold the workspace's data; the
+  exports show as expired.
 - Domain events are pruned after `FLOW_DOMAIN_EVENT_RETENTION_DAYS` (90 by
   default); retained events about an erased person lose their personal fields.
 - Search index documents are rebuilt from records as they change; they hold

@@ -37,7 +37,7 @@ const (
 	personalDataExportTTL = 7 * 24 * time.Hour
 	// personalDataExportWindow/Limit rate-limit the requests per account.
 	personalDataExportWindow = 24 * time.Hour
-	personalDataExportLimit = 3
+	personalDataExportLimit  = 3
 	// personalDataObjectPrefix names the archives in object storage (a flat
 	// key: the local driver keeps one directory). No content references
 	// them, so the /uploads/ route never serves them.
@@ -178,8 +178,47 @@ func (s *server) buildPersonalDataExport(id, userID string) {
 		failure = "The export could not be prepared"
 	}
 	if err := s.store.FinishPersonalDataExport(ctx, id, key, size, failure, time.Now().UTC(), now.Add(personalDataExportTTL)); err != nil {
+		if errors.Is(err, store.ErrPersonalDataExportGone) && key != "" {
+			// Withdrawn while it was built (a workspace purge or the account's
+			// erasure): the archive must not outlive its job.
+			if storage, storageErr := s.storage(); storageErr == nil {
+				if err := storage.Delete(ctx, key); err != nil && !errors.Is(err, os.ErrNotExist) {
+					log.Printf("personal data export %s: delete withdrawn archive: %v", id, err)
+				}
+			}
+			return
+		}
 		log.Printf("personal data export %s: %v", id, err)
 	}
+}
+
+// expirePersonalDataExports deletes the archives of every queued, running or
+// downloadable export of userIDs and marks the jobs expired (a job being
+// built deletes its archive when it finishes). It reports how many archives
+// it deleted. A workspace purge runs it for the workspace's people, whose
+// archives hold the workspace's data.
+func (s *server) expirePersonalDataExports(ctx context.Context, userIDs []string) (int64, error) {
+	items, err := s.store.LivePersonalDataExports(ctx, userIDs)
+	if err != nil || len(items) == 0 {
+		return 0, err
+	}
+	storage, err := s.storage()
+	if err != nil {
+		return 0, err
+	}
+	var deleted int64
+	for _, item := range items {
+		if item.ObjectKey != "" {
+			if err := storage.Delete(ctx, item.ObjectKey); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return deleted, err
+			}
+			deleted++
+		}
+		if err := s.store.ExpirePersonalDataExport(ctx, item.ID); err != nil {
+			return deleted, err
+		}
+	}
+	return deleted, nil
 }
 
 func (s *server) writePersonalDataArchive(ctx context.Context, id, userID string) (string, int64, error) {
@@ -618,16 +657,15 @@ func (s *server) eraseAccount(ctx context.Context, userID string) error {
 			return err
 		}
 	}
-	exports, err := s.store.ListPersonalDataExports(ctx, userID)
-	if err != nil {
-		return err
+	// The archives go before the jobs that name them; a failure stops here so
+	// a retry still finds them.
+	if _, err := s.expirePersonalDataExports(ctx, []string{userID}); err != nil {
+		return fmt.Errorf("data export archives: %w", err)
 	}
-	if storage, err := s.storage(); err == nil {
-		for _, item := range exports {
-			if item.ObjectKey != "" {
-				_ = storage.Delete(ctx, item.ObjectKey)
-			}
-		}
+	// Every audit log chain that names them, the instance log and workspaces
+	// they left included, while the account still has its email.
+	if _, err := s.store.RedactAuditPerson(ctx, nil, userID, s.accountEmail(ctx, userID)); err != nil {
+		return fmt.Errorf("audit log: %w", err)
 	}
 	return s.store.EraseAccount(ctx, userID)
 }
@@ -689,8 +727,27 @@ func (s *server) erasePersonInWorkspace(ctx context.Context, key, userID string)
 	s.pruneIssueSuggestionTargets(ctx, key, func(item domain.IssueSuggestion) bool {
 		return item.Type == "assignee" && item.SuggestedUserID == userID
 	})
-	_, err = s.store.ScrubPersonCopies(ctx, key, userID)
+	if _, err := s.store.ScrubPersonCopies(ctx, key, userID); err != nil {
+		return err
+	}
+	// The workspace's audit log keeps what they did, as the pseudonymous
+	// person (store/audit_redaction.go); the chain still verifies.
+	workspaceID, err := s.store.WorkspaceIDForKey(ctx, key)
+	if err != nil {
+		return err
+	}
+	_, err = s.store.RedactAuditPerson(ctx, []string{workspaceID}, userID, s.accountEmail(ctx, userID))
 	return err
+}
+
+// accountEmail is the account's email while it still has one ("" after the
+// account was erased or when it has none).
+func (s *server) accountEmail(ctx context.Context, userID string) string {
+	user, err := s.store.UserByID(ctx, userID)
+	if err != nil {
+		return ""
+	}
+	return user.Email
 }
 
 // eraseMember handles POST /api/workspaces/{workspaceKey}/members/{userId}/erase:
