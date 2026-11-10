@@ -189,6 +189,7 @@ func main() {
 	}
 	registerInternalErrorEndpoint(applicationConfig.Storage.Endpoint)
 	trashRetention = applicationConfig.Retention.Trash
+	workspaceDeletionGrace = applicationConfig.Retention.WorkspaceDeletionGrace
 	repository.SetChangeLogMinRows(applicationConfig.Retention.ChangeLogMinRows)
 	redisCoordinator, err := coordination.Open(context.Background(), applicationConfig.Redis)
 	if err != nil {
@@ -2322,6 +2323,7 @@ func (s *server) updateCustomer(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteCustomer(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	var uploads []string
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer.deleted", id, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Customers, func(customer domain.Customer) bool { return customer.ID == id })
 		if index < 0 {
@@ -2333,18 +2335,31 @@ func (s *server) deleteCustomer(w http.ResponseWriter, r *http.Request) {
 		data.Customers = slices.Delete(data.Customers, index, index+1)
 		appendAudit(data, "deleted", "customer", removed.ID, map[string]any{"title": removed.Name, "permanent": true})
 		removeResourcePreferences(data, "customer", removed.ID)
+		uploads = nil
+		for _, request := range data.CustomerRequests {
+			if request.CustomerID == id {
+				raw, _ := json.Marshal(request.Attachments)
+				uploads = append(uploads, store.AttachmentUploads(raw)...)
+			}
+		}
 		data.CustomerRequests = slices.DeleteFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.CustomerID == id })
 		// Its requests already in the trash can no longer be restored.
-		data.Trash = slices.DeleteFunc(data.Trash, func(entry domain.TrashEntry) bool {
+		trashedRequest := func(entry domain.TrashEntry) bool {
 			var request domain.CustomerRequest
 			return entry.ResourceType == "customer_request" && json.Unmarshal(entry.Payload, &request) == nil && request.CustomerID == id
-		})
+		}
+		uploads = append(uploads, trashedUploads(data.Trash, trashedRequest)...)
+		data.Trash = slices.DeleteFunc(data.Trash, trashedRequest)
 		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return draftBelongsToResource(item, "customer", id) })
 		for projectIndex := range data.Projects {
 			data.Projects[projectIndex].Customers = slices.DeleteFunc(data.Projects[projectIndex].Customers, func(value string) bool { return value == id })
 		}
 		return nil
 	})
+	if err == nil {
+		// The deleted requests' attachment files.
+		s.releaseTrashedUploads(r.Context(), workspaceKey(r), uploads)
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 

@@ -172,6 +172,9 @@ var nonMetadataTableBuilders = map[string]bool{
 	"syncIssueIndexRows":         true,
 	"ExchangeOAuthGrant":         true,
 	"deleteRowsByIDs":            true,
+	// The workspace purge deletes the rows of a workspace that already left
+	// the catalog, its cache revisions included, and drops its metadata cache.
+	"deleteWorkspaceRows": true,
 }
 
 // expectedWorkspaceArg is the index of the bound value naming the workspace a

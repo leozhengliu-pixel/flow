@@ -96,6 +96,10 @@ type RetentionConfig struct {
 	// Trash is how long deleted items stay restorable before they are purged
 	// (FLOW_TRASH_RETENTION_DAYS, default 30).
 	Trash time.Duration
+	// WorkspaceDeletionGrace is how long a workspace scheduled for deletion
+	// can still be restored before it and its data are purged
+	// (FLOW_WORKSPACE_DELETION_GRACE_DAYS, default 30).
+	WorkspaceDeletionGrace time.Duration
 	// ChangeLogMinRows is how many of each workspace's newest changes pruning
 	// always keeps, whatever their age (FLOW_CHANGE_LOG_MIN_ROWS, default 10000).
 	ChangeLogMinRows int
@@ -273,9 +277,10 @@ func Load() (Config, error) {
 			MigrationLockTimeout: duration("FLOW_DATABASE_MIGRATION_LOCK_TIMEOUT", store.DefaultStartupLockTimeout),
 		},
 		Retention: RetentionConfig{
-			DomainEvents:     time.Duration(integer("FLOW_DOMAIN_EVENT_RETENTION_DAYS", 90)) * 24 * time.Hour,
-			Trash:            time.Duration(integer("FLOW_TRASH_RETENTION_DAYS", 30)) * 24 * time.Hour,
-			ChangeLogMinRows: integer("FLOW_CHANGE_LOG_MIN_ROWS", store.DefaultChangeLogMinRows),
+			DomainEvents:           time.Duration(integer("FLOW_DOMAIN_EVENT_RETENTION_DAYS", 90)) * 24 * time.Hour,
+			Trash:                  time.Duration(integer("FLOW_TRASH_RETENTION_DAYS", 30)) * 24 * time.Hour,
+			ChangeLogMinRows:       integer("FLOW_CHANGE_LOG_MIN_ROWS", store.DefaultChangeLogMinRows),
+			WorkspaceDeletionGrace: time.Duration(integer("FLOW_WORKSPACE_DELETION_GRACE_DAYS", 30)) * 24 * time.Hour,
 		},
 		Redis: coordination.Config{
 			Mode: value("FLOW_REDIS_MODE", "disabled"), URL: secret("FLOW_REDIS_URL"), Addrs: csvRaw(value("FLOW_REDIS_ADDRS", "")),
@@ -421,6 +426,9 @@ func (c Config) Validate() error {
 	}
 	if c.Retention.Trash < 24*time.Hour {
 		return fmt.Errorf("FLOW_TRASH_RETENTION_DAYS must be at least 1")
+	}
+	if c.Retention.WorkspaceDeletionGrace < 24*time.Hour || c.Retention.WorkspaceDeletionGrace > 3650*24*time.Hour {
+		return fmt.Errorf("FLOW_WORKSPACE_DELETION_GRACE_DAYS must be between 1 and 3650")
 	}
 	redisMode := strings.ToLower(strings.TrimSpace(c.Redis.Mode))
 	if redisMode != "disabled" && redisMode != "standalone" && redisMode != "cluster" {

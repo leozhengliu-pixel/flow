@@ -96,6 +96,8 @@ func (s *server) maintainStorage(ctx context.Context, now time.Time, eventRetent
 			log.Printf("Agent chat purge workspace=%s: %v", key, err)
 		}
 	}
+	// Workspaces whose deletion grace period ended (workspace_deletion.go).
+	s.purgeDeletedWorkspaces(ctx, now)
 	if err := s.migrateOffloadedContent(ctx); err != nil && ctx.Err() == nil {
 		log.Printf("Content offload migration: %v", err)
 	}
@@ -147,7 +149,8 @@ func maintenanceSleep(ctx context.Context) bool {
 // purgeExpiredTrash permanently deletes a workspace's expired trash entries,
 // at most trashPurgeBatch per write, with what they keep alive elsewhere
 // (deleted documents' comment threads and collaboration logs, deleted loops'
-// run history). It returns how many entries it purged.
+// run history, attachment files nothing else uses). It returns how many
+// entries it purged.
 func (s *server) purgeExpiredTrash(ctx context.Context, key string, now time.Time) (int, error) {
 	purged := 0
 	for {
@@ -172,7 +175,7 @@ func (s *server) purgeExpiredTrash(ctx context.Context, key string, now time.Tim
 			documentIDs, _ := trashedDocumentOwners(current.Trash, inBatch)
 			return store.MutationScope{Resources: documentIDs}
 		}})
-		var collaborationIDs, loopIDs []string
+		var collaborationIDs, loopIDs, uploads []string
 		removed := 0
 		err := s.store.MutateWorkspace(scope, key, "schedules.maintained", "advanced_schedules", nil, func(next *domain.Bootstrap) error {
 			documentIDs, documentCollaborationIDs := trashedDocumentOwners(next.Trash, inBatch)
@@ -180,12 +183,13 @@ func (s *server) purgeExpiredTrash(ctx context.Context, key string, now time.Tim
 				delete(next.Comments, documentID)
 			}
 			loops := trashedLoopIDs(next.Trash, inBatch)
+			files := trashedUploads(next.Trash, inBatch)
 			before := len(next.Trash)
 			next.Trash = slices.DeleteFunc(next.Trash, inBatch)
 			if removed = before - len(next.Trash); removed == 0 {
 				return store.ErrNoMutation
 			}
-			collaborationIDs, loopIDs = documentCollaborationIDs, loops
+			collaborationIDs, loopIDs, uploads = documentCollaborationIDs, loops, files
 			return nil
 		})
 		if err != nil {
@@ -196,6 +200,7 @@ func (s *server) purgeExpiredTrash(ctx context.Context, key string, now time.Tim
 		}
 		s.purgeDocumentContent(ctx, key, collaborationIDs)
 		s.purgeLoopRuns(ctx, key, loopIDs)
+		s.releaseTrashedUploads(ctx, key, uploads)
 		purged += removed
 		if len(batch) < trashPurgeBatch {
 			return purged, nil

@@ -416,9 +416,10 @@ var fileSchema = map[string]*field{
 			}),
 		}),
 		"retention": section(map[string]*field{
-			"domainEventDays":  envInt("FLOW_DOMAIN_EVENT_RETENTION_DAYS", 0, 36500),
-			"trashDays":        envInt("FLOW_TRASH_RETENTION_DAYS", 1, 36500),
-			"changeLogMinRows": envInt("FLOW_CHANGE_LOG_MIN_ROWS", 0, 1<<30),
+			"domainEventDays":       envInt("FLOW_DOMAIN_EVENT_RETENTION_DAYS", 0, 36500),
+			"trashDays":             envInt("FLOW_TRASH_RETENTION_DAYS", 1, 36500),
+			"workspaceDeletionDays": envInt("FLOW_WORKSPACE_DELETION_GRACE_DAYS", 1, 3650),
+			"changeLogMinRows":      envInt("FLOW_CHANGE_LOG_MIN_ROWS", 0, 1<<30),
 		}),
 		"auth": section(map[string]*field{
 			"disabled":       envBool("FLOW_AUTH_DISABLED"),

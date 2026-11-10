@@ -348,6 +348,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureCodingSessions", s.ensureCodingSessions},
 		{"ensureFileUploads", s.ensureFileUploads},
 		{"ensureOffloadedContent", s.ensureOffloadedContent},
+		{"ensureWorkspaceDeletionReceipts", s.ensureWorkspaceDeletionReceipts},
 		{"loadOrSeed", s.loadOrSeed},
 		{"seedWorkspaceOwners", func(ctx context.Context) error {
 			if strings.EqualFold(strings.TrimSpace(config.FixtureProfile), "test") {

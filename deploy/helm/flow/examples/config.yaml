@@ -38,6 +38,7 @@ server:
   retention:
     trashDays: 30                           # FLOW_TRASH_RETENTION_DAYS
     domainEventDays: 90                     # FLOW_DOMAIN_EVENT_RETENTION_DAYS
+    workspaceDeletionDays: 30               # FLOW_WORKSPACE_DELETION_GRACE_DAYS
   auth:
     email:
       enabled: true                         # FLOW_AUTH_EMAIL_ENABLED

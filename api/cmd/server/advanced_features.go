@@ -3314,7 +3314,7 @@ func trashedDocumentOwners(entries []domain.TrashEntry, keep func(domain.TrashEn
 
 func (s *server) purgeTrashEntry(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var purgedCollaborationIDs, purgedLoopIDs []string
+	var purgedCollaborationIDs, purgedLoopIDs, purgedUploads []string
 	workspace := workspaceKey(r)
 	scope := store.WithMutationScope(r.Context(), store.MutationScope{Resolve: func(data domain.Bootstrap) store.MutationScope {
 		documentIDs, _ := trashedDocumentOwners(data.Trash, func(entry domain.TrashEntry) bool { return entry.ID == id })
@@ -3327,6 +3327,7 @@ func (s *server) purgeTrashEntry(w http.ResponseWriter, r *http.Request) {
 		}
 		purgedCollaborationIDs, workspace = collaborationIDs, data.Workspace.URLKey
 		purgedLoopIDs = trashedLoopIDs(data.Trash, func(entry domain.TrashEntry) bool { return entry.ID == id })
+		purgedUploads = trashedUploads(data.Trash, func(entry domain.TrashEntry) bool { return entry.ID == id })
 		before := len(data.Trash)
 		if !workspaceAdminRole(data.ViewerRole) {
 			entryIndex := slices.IndexFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id })
@@ -3347,6 +3348,7 @@ func (s *server) purgeTrashEntry(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		s.purgeDocumentContent(r.Context(), workspace, purgedCollaborationIDs)
 		s.purgeLoopRuns(r.Context(), workspace, purgedLoopIDs)
+		s.releaseTrashedUploads(r.Context(), workspace, purgedUploads)
 	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
@@ -4054,12 +4056,18 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 		scope.Resources = append(scope.Resources, expiredDocuments...)
 		return scope
 	}})
-	var purgedCollaborationIDs, purgedLoopIDs []string
+	var purgedCollaborationIDs, purgedLoopIDs, purgedUploads []string
+	var mutationErr error
 	defer func() {
 		s.purgeDocumentContent(ctx, key, purgedCollaborationIDs)
 		s.purgeLoopRuns(ctx, key, purgedLoopIDs)
+		// Files go only with a purge that committed: a failed write leaves
+		// the entries restorable.
+		if mutationErr == nil {
+			s.releaseTrashedUploads(ctx, key, purgedUploads)
+		}
 	}()
-	_ = s.store.MutateWorkspace(mutationCtx, key, "schedules.maintained", "advanced_schedules", nil, func(next *domain.Bootstrap) error {
+	mutationErr = s.store.MutateWorkspace(mutationCtx, key, "schedules.maintained", "advanced_schedules", nil, func(next *domain.Bootstrap) error {
 		// The trigger above can stay true when a reminder cannot be
 		// delivered (for example the recipient's inbox is off). Skip the
 		// write and realtime event when nothing changed, so page loads do not
@@ -4110,11 +4118,12 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 			delete(next.Comments, documentID)
 		}
 		expiredLoops := trashedLoopIDs(next.Trash, func(entry domain.TrashEntry) bool { return trashExpired(entry, now) })
+		expiredUploads := trashedUploads(next.Trash, func(entry domain.TrashEntry) bool { return trashExpired(entry, now) })
 		next.Trash = slices.DeleteFunc(next.Trash, func(item domain.TrashEntry) bool { return trashExpired(item, now) })
 		if bytes.Equal(before, fingerprint()) && len(expiredDocuments) == 0 {
 			return store.ErrNoMutation
 		}
-		purgedCollaborationIDs, purgedLoopIDs = expiredCollaborationIDs, expiredLoops
+		purgedCollaborationIDs, purgedLoopIDs, purgedUploads = expiredCollaborationIDs, expiredLoops, expiredUploads
 		return nil
 	})
 }

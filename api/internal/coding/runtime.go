@@ -633,9 +633,14 @@ func (s *Service) HarnessStateKey(ctx context.Context, token string) (string, er
 	if _, err := s.sessionFor(ctx, grant); err != nil {
 		return "", err
 	}
-	// A flat key, like coding artifacts': the local object store driver
-	// refuses keys with directories.
-	return "coding-harness_" + grant.WorkspaceKey + "_" + grant.SessionID + ".tar.zst", nil
+	return HarnessStateObjectKey(grant.WorkspaceKey, grant.SessionID), nil
+}
+
+// HarnessStateObjectKey is the object key of a coding session's saved
+// harness state. It is flat, like coding artifacts': the local object store
+// driver refuses keys with directories.
+func HarnessStateObjectKey(workspaceKey, sessionID string) string {
+	return "coding-harness_" + workspaceKey + "_" + sessionID + ".tar.zst"
 }
 
 // AuthenticateLLMCaller implements llmproxy.Authenticator: the token must

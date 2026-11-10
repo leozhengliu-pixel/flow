@@ -2,11 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func deriveAllowedAuthServices(settings domain.WorkspaceSettings, providers []domain.IdentityProvider) []string {
@@ -95,13 +97,17 @@ func authServiceLabels(services []string) []string {
 func (s *server) deleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("workspaceKey")
 	updated, err := s.store.ScheduleWorkspaceDeletion(r.Context(), key)
-	respondMutation(w, err, http.StatusOK, updated)
+	respondMutation(w, err, http.StatusOK, newWorkspaceDeletionView(updated))
 }
 
 func (s *server) cancelWorkspaceDeletion(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("workspaceKey")
 	updated, err := s.store.CancelWorkspaceDeletion(r.Context(), key)
-	respondMutation(w, err, http.StatusOK, updated)
+	if errors.Is(err, store.ErrWorkspacePurging) {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	respondMutation(w, err, http.StatusOK, newWorkspaceDeletionView(updated))
 }
 
 func (s *server) workspaceAccessStatus(w http.ResponseWriter, r *http.Request) {
@@ -145,9 +151,10 @@ func (s *server) workspaceAccessStatus(w http.ResponseWriter, r *http.Request) {
 		"allowedAuthServices": services,
 		"allowedAuthLabels":   authServiceLabels(services),
 		"workspace": map[string]any{
-			"name":                data.Workspace.Name,
-			"urlKey":              data.Workspace.URLKey,
-			"deletionRequestedAt": data.Workspace.DeletionRequestedAt,
+			"name":                 data.Workspace.Name,
+			"urlKey":               data.Workspace.URLKey,
+			"deletionRequestedAt":  data.Workspace.DeletionRequestedAt,
+			"deletionScheduledFor": workspaceDeletionScheduledFor(data.Workspace),
 		},
 	})
 }

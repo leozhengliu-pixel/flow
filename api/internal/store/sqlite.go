@@ -47,18 +47,21 @@ type SQLiteStore struct {
 	agentRunWake      agentRunWaker                      // see AgentRunWake
 	agentRunCancel    agentRunWaker                      // see AgentRunCancelWake
 	coordinator       WorkspaceCoordinator
-	fixtureProfile    string
-	fixturePassword   string
-	maxStateBytes     int
-	lifecycle         context.Context
-	stopLifecycle     context.CancelFunc
-	apiKeyUseOnce     sync.Once
-	apiKeyUseMu       sync.Mutex
-	apiKeyUseTimes    map[string]time.Time
-	apiKeyUseQueue    chan apiKeyUse
-	apiKeyUseWorkers  sync.WaitGroup
-	apiKeyUseClosed   bool
-	teamMembershipMu  sync.Mutex
+	// deletionMu serializes starting a workspace purge with canceling the
+	// deletion (workspace_purge.go).
+	deletionMu       sync.Mutex
+	fixtureProfile   string
+	fixturePassword  string
+	maxStateBytes    int
+	lifecycle        context.Context
+	stopLifecycle    context.CancelFunc
+	apiKeyUseOnce    sync.Once
+	apiKeyUseMu      sync.Mutex
+	apiKeyUseTimes   map[string]time.Time
+	apiKeyUseQueue   chan apiKeyUse
+	apiKeyUseWorkers sync.WaitGroup
+	apiKeyUseClosed  bool
+	teamMembershipMu sync.Mutex
 	// changeLogMinRows: see SetChangeLogMinRows.
 	changeLogMinRows atomic.Int64
 	// startupCacheDrops lists workspaces whose metadata records a startup
@@ -2189,12 +2192,23 @@ func (s *SQLiteStore) ScheduleWorkspaceDeletion(ctx context.Context, workspaceKe
 	return updated, err
 }
 
+// CancelWorkspaceDeletion keeps a workspace scheduled for deletion. Once the
+// permanent purge started it returns ErrWorkspacePurging.
 func (s *SQLiteStore) CancelWorkspaceDeletion(ctx context.Context, workspaceKey string) (domain.Workspace, error) {
 	var updated domain.Workspace
-	err := s.MutateWorkspace(ctx, workspaceKey, "workspace.deletion_canceled", workspaceKey, nil, func(data *domain.Bootstrap) error {
-		data.Workspace.DeletionRequestedAt = nil
-		updated = data.Workspace
-		return nil
+	err := s.withDeletionLock(ctx, workspaceKey, func() error {
+		if data, ok := s.BootstrapFor(workspaceKey); ok {
+			if started, err := s.workspacePurgeStarted(ctx, data.Workspace.ID); err != nil {
+				return err
+			} else if started {
+				return ErrWorkspacePurging
+			}
+		}
+		return s.MutateWorkspace(ctx, workspaceKey, "workspace.deletion_canceled", workspaceKey, nil, func(data *domain.Bootstrap) error {
+			data.Workspace.DeletionRequestedAt = nil
+			updated = data.Workspace
+			return nil
+		})
 	})
 	return updated, err
 }
@@ -2218,87 +2232,26 @@ func (s *SQLiteStore) WorkspaceAccessStatus(ctx context.Context, workspaceKey, u
 	return exists, true, role, data, true
 }
 
+// DeleteWorkspace permanently deletes a workspace now: it leaves the catalog,
+// then every row it owns and its offloaded content are deleted
+// (PurgeWorkspaceRows). Uploaded files are the server's to delete, which also
+// records a receipt (cmd/server/workspace_deletion.go); scheduled deletion
+// goes through there.
 func (s *SQLiteStore) DeleteWorkspace(ctx context.Context, workspaceKey string) error {
-	if s.coordinator == nil {
-		return s.deleteWorkspace(ctx, workspaceKey)
-	}
-	var workspaceID string
-	err := s.coordinator.WithWorkspaceLock(ctx, "__workspace_catalog__", func() error {
+	data, ok := s.BootstrapFor(workspaceKey)
+	if !ok && s.coordinator != nil {
 		if err := s.ReloadAllWorkspaces(ctx); err != nil {
 			return err
 		}
-		if data, ok := s.BootstrapFor(workspaceKey); ok {
-			workspaceID = data.Workspace.ID
-		}
-		return s.deleteWorkspace(ctx, workspaceKey)
-	})
-	if err == nil {
-		s.publishWorkspaceEvent(ctx, workspaceKey, "workspace.deleted", workspaceID, map[string]string{"urlKey": workspaceKey})
+		data, ok = s.BootstrapFor(workspaceKey)
 	}
-	return err
-}
-
-func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) error {
-	s.lockWorkspaceWrites()
-	defer s.unlockWorkspaceWrites()
-	data, ok := s.workspaces[workspaceKey]
 	if !ok {
 		return fmt.Errorf("workspace not found")
 	}
-	remaining := map[string]domain.Bootstrap{}
-	for key, value := range s.workspaces {
-		if key != workspaceKey {
-			remaining[key] = value
-		}
-	}
-	nextWorkspaceKey := firstWorkspaceKey(remaining)
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
+	if err := s.RemoveWorkspaceFromCatalog(ctx, workspaceKey, nil); err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	if err := deleteChatWorkspace(ctx, tx, workspaceKey); err != nil {
-		return err
-	}
-	for _, table := range workspaceRecordTables {
-		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE workspace_key=?", workspaceKey); err != nil {
-			return err
-		}
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_states WHERE workspace_key = ?`, workspaceKey); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM team_memberships WHERE workspace_id = ?`, data.Workspace.ID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_memberships WHERE workspace_id = ?`, data.Workspace.ID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_departures WHERE workspace_id = ?`, data.Workspace.ID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_invitations WHERE workspace_id = ?`, data.Workspace.ID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE auth_account_state SET last_workspace_key='',updated_at=? WHERE last_workspace_key=?`, time.Now().UTC().Format(time.RFC3339Nano), workspaceKey); err != nil {
-		return err
-	}
-	now := time.Now().UTC()
-	viewerRaw, _ := json.Marshal(s.viewer)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO account_state(id,last_workspace_key,viewer,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,viewer=excluded.viewer,updated_at=excluded.updated_at`, nextWorkspaceKey, viewerRaw, now.Format(time.RFC3339Nano)); err != nil {
-		return err
-	}
-	if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: idgen.New("evt_"), Type: "workspace.deleted", AggregateID: data.Workspace.ID, Payload: []byte(`{}`), CreatedAt: now.Format(time.RFC3339Nano), WorkspaceID: data.Workspace.ID}); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	s.forgetChatSnapshotFlag(workspaceKey)
-	s.issueGroupCounts.drop(workspaceKey)
-	s.workspaces = remaining
-	s.lastWorkspaceKey = nextWorkspaceKey
-	return nil
+	return s.PurgeWorkspaceRows(ctx, WorkspacePurgeTarget{Key: workspaceKey, ID: data.Workspace.ID}, map[string]int64{})
 }
 
 func (s *SQLiteStore) publishWorkspaceEvent(ctx context.Context, workspaceKey, eventType, aggregateID string, payload any) {

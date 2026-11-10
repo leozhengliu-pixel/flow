@@ -303,6 +303,7 @@ server:
   retention:
     trashDays: 30                           # FLOW_TRASH_RETENTION_DAYS
     domainEventDays: 90                     # FLOW_DOMAIN_EVENT_RETENTION_DAYS
+    workspaceDeletionDays: 30               # FLOW_WORKSPACE_DELETION_GRACE_DAYS
   auth:
     email:
       enabled: true                         # FLOW_AUTH_EMAIL_ENABLED
@@ -556,6 +557,7 @@ server:
 | `retention.changeLogMinRows` | `FLOW_CHANGE_LOG_MIN_ROWS` | number |
 | `retention.domainEventDays` | `FLOW_DOMAIN_EVENT_RETENTION_DAYS` | number |
 | `retention.trashDays` | `FLOW_TRASH_RETENTION_DAYS` | number |
+| `retention.workspaceDeletionDays` | `FLOW_WORKSPACE_DELETION_GRACE_DAYS` | number |
 | `smtp.from` | `FLOW_SMTP_FROM` | text |
 | `smtp.host` | `FLOW_SMTP_HOST` | text |
 | `smtp.port` | `FLOW_SMTP_PORT` | number |
@@ -665,7 +667,8 @@ Flow keeps history it no longer serves out of the database, or bounded:
 | --- | --- | --- |
 | `FLOW_DOMAIN_EVENT_RETENTION_DAYS` | `90` | Days the `domain_events` log keeps an event; `0` keeps every event. Values below `7` are raised to `7`, because the log is also the change log behind `/api/realtime/changes`. |
 | `FLOW_CHANGE_LOG_MIN_ROWS` | `10000` | Newest changes per workspace that pruning always keeps, however old. `0` keeps only the age window. |
-| `FLOW_TRASH_RETENTION_DAYS` | `30` | Days deleted items stay in "Recently deleted" before they are deleted permanently. Minimum 1. |
+| `FLOW_TRASH_RETENTION_DAYS` | `30` | Days deleted items stay in "Recently deleted" before they are deleted permanently, with the attachment files nothing else uses. Minimum 1. |
+| `FLOW_WORKSPACE_DELETION_GRACE_DAYS` | `30` | Days a workspace scheduled for deletion can still be restored (Cancel deletion) before it, its files and every row it owns are purged. 1 to 3650. Backups keep the data until they expire: see [Workspace deletion](operations.md#workspace-deletion). |
 | `FLOW_AGENT_TRANSCRIPT_OFFLOAD_BYTES` | `8192` | Agent replies and tool results larger than this are stored outside the database row, with a short summary left in the row. Minimum 1024. |
 | `FLOW_CONTENT_CACHE_BYTES` | `134217728` | In-process cache of recently loaded content stored outside rows (document versions, agent replies). |
 | `FLOW_SEARCH_INDEX_MAX_CHARS` | `20000` | Characters of each issue and document indexed for full-text search. Text past the limit is still stored and shown but is not found by search. `0` indexes everything. |

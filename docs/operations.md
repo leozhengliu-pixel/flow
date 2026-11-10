@@ -104,6 +104,90 @@ Never rely on the `domain_events` table as the only backup; workspace state is
 stored in `workspace_states`. Events older than
 `FLOW_DOMAIN_EVENT_RETENTION_DAYS` are pruned.
 
+Backups keep deleted data until they expire: a workspace purged after its
+deletion grace period (see [Workspace deletion](#workspace-deletion)), an
+item purged from Recently deleted and an attachment file that was deleted are
+all still in every backup, database dump, S3 object version and volume
+snapshot taken before the purge. Set the retention of those backups (and of
+S3 noncurrent object versions) so they expire within the time you promise for
+deletion, for example 30 to 35 days, and do not restore a purged workspace
+from a backup except to recover from a disaster; if you must, purge it again
+afterwards. Restoring an older backup brings back workspaces purged since.
+
+## Workspace deletion
+
+Deleting a workspace (Settings → Workspace → Danger zone, or
+`DELETE /api/workspaces/{key}`, admins only) schedules it for deletion. The
+workspace stays usable and admins can cancel during the grace period
+(`FLOW_WORKSPACE_DELETION_GRACE_DAYS`, `retention.workspaceDeletionDays`,
+default 30 days): **Cancel deletion** in the Danger zone or
+`POST /api/workspaces/{key}/cancel-deletion`. Both endpoints return the
+workspace with `deletionRequestedAt` and `deletionScheduledFor` (when the
+purge becomes due); `GET /api/workspaces/{key}/access-status` reports both
+too.
+
+After the grace period the storage maintenance pass (hourly; with Redis
+coordination one replica runs it) purges the workspace permanently:
+
+1. A receipt is recorded in `workspace_deletion_receipts` with status
+   `purging`. From then on the deletion can no longer be canceled (the cancel
+   endpoint answers 409).
+2. The sealed credentials of its integrations and connectors and the files
+   its records use are deleted: attachments and assets in the uploads store,
+   workspace logos and application icons, coding artifacts, archived sandbox
+   logs, snapshot archives and harness state, and cached Pulse audio. A file
+   another workspace owns or attaches is left alone.
+3. The workspace leaves the catalog: its members lose access at once and
+   every replica drops its copy.
+4. Every row it owns is deleted in batches of 1000, in every table that holds
+   workspace data (issues, documents, comments, content and metadata records,
+   search documents, agent runs and sessions, coding sessions, chat
+   integrations, webhooks and their deliveries and signing secrets, audit
+   stream secrets, SCIM data, API keys, OAuth grants issued for it, domain
+   events, recently viewed items and search history), together with the
+   document versions and agent transcript parts in the content store
+   (`FLOW_S3_CONTENT_PREFIX`) and its cache entries in Redis.
+5. The receipt is marked `completed` with the time and the number of rows and
+   objects deleted per table and kind.
+
+Every step can run again. A purge interrupted by a crash, a restart or an
+error stays `purging` and the next pass finishes it; the receipt's
+`last_error` names the step that failed. Each start and finish is logged:
+
+```text
+Workspace purge started workspace_id=ws_… requested_at=2026-10-01T09:00:00Z request=evt_…
+Workspace purged workspace_id=ws_… requested_at=2026-10-01T09:00:00Z request=evt_… rows=48211 objects=312
+```
+
+The receipt is the instance's record that a workspace was purged. It holds
+the workspace ID and URL key, the ID of the domain event that scheduled the
+deletion (`request_ref`), when it was requested, started and completed, and
+the counts, and no names, email addresses or content. List it with SQL:
+
+```sql
+SELECT workspace_id, workspace_key, request_ref, requested_at, completed_at, status, counts, last_error
+FROM workspace_deletion_receipts ORDER BY started_at DESC;
+```
+
+Not covered by the purge:
+
+- Backups, database dumps, S3 object versions and volume snapshots taken
+  earlier keep the data until they expire (see [Backup boundary](#backup-boundary)).
+- Accounts: people keep their Flow account (and their other workspaces).
+- Volume snapshots of coding environments (`volumesnapshot` strategy) live in
+  the cluster; snapshot archives in object storage are deleted.
+- The agent worker's local session files (`.runtime/sessions`) are keyed by
+  session, not by workspace; they stay until the worker's state directory is
+  cleared.
+- Rows written under an earlier URL key of a renamed workspace in tables that
+  are not renamed with it, and domain events written before events carried a
+  workspace ID.
+
+Deleting a trashed item permanently (Recently deleted → Delete permanently,
+or when its trash retention ends) also deletes the attachment files of the
+purged issue, document, project or customer request that no remaining issue
+or trash entry attaches. Deleting a customer does the same for its requests.
+
 ## Database size
 
 `scripts/db-size-report/` has read-only reports for MySQL, PostgreSQL and
