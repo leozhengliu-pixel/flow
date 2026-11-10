@@ -3,8 +3,6 @@ package store
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -95,14 +93,7 @@ func workspaceRenameTables() []string {
 // workspaceCredentialOwners are the fixed owners connector credentials are
 // stored under besides members: provider credentials of integrations, GitLab
 // member sign-in apps and integration OAuth tokens.
-var workspaceCredentialOwners = []string{"provider", "gitlab-member-oauth", "integration-oauth"}
-
-// workspaceCredentialID is the connector_secrets id of a credential owned by
-// owner in a workspace (the server's connectorSecretID; a test keeps them
-// equal). Public identifiers are hashed into a stable storage key.
-func workspaceCredentialID(workspace, owner, id string) string {
-	return fmt.Sprintf("credential_%x", sha256.Sum256([]byte(workspace+"\x00"+owner+"\x00"+id)))
-}
+var workspaceCredentialOwners = []string{"provider", "gitlab-member-oauth", integrationOAuthOwner}
 
 // WorkspaceKeyMove names a workspace whose objects move from one URL key to
 // another.
@@ -564,31 +555,21 @@ func (s *SQLiteStore) WorkspaceCredentialSecretIDs(ctx context.Context, workspac
 	}
 	ids := make([]string, len(pairs))
 	for index, pair := range pairs {
-		ids[index] = workspaceCredentialID(workspaceKey, pair[0], pair[1])
+		ids[index] = ConnectorSecretID(workspaceKey, pair[0], pair[1])
 	}
 	return ids, nil
 }
 
 // resealConnectorSecret re-encrypts a sealed credential for another id: the
 // id is the ciphertext's associated data (PutConnectorSecret), so a renamed
-// row must be sealed again to stay readable.
+// row must be sealed again to stay readable. It opens with the keyring (the
+// current key or a retired one) and seals under the current key.
 func resealConnectorSecret(id string, encrypted []byte, next string) ([]byte, error) {
-	aead, err := connectorCipher()
+	plain, _, err := openSecret(encrypted, []byte(id))
 	if err != nil {
 		return nil, err
 	}
-	if len(encrypted) < aead.NonceSize() {
-		return nil, errors.New("invalid connector ciphertext")
-	}
-	plain, err := aead.Open(nil, encrypted[:aead.NonceSize()], encrypted[aead.NonceSize():], []byte(id))
-	if err != nil {
-		return nil, errors.New("connector credential decryption failed")
-	}
-	nonce := make([]byte, aead.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, err
-	}
-	return aead.Seal(nonce, nonce, plain, []byte(next)), nil
+	return sealSecret(plain, []byte(next))
 }
 
 // moveWorkspaceCredentials moves the stored credentials of pairs from
@@ -605,8 +586,8 @@ func moveWorkspaceCredentials(ctx context.Context, tx *sqlTx, pairs [][2]string,
 		byOld := map[string]string{}
 		olds := make([]string, len(batch))
 		for index, pair := range batch {
-			olds[index] = workspaceCredentialID(oldKey, pair[0], pair[1])
-			byOld[olds[index]] = workspaceCredentialID(newKey, pair[0], pair[1])
+			olds[index] = ConnectorSecretID(oldKey, pair[0], pair[1])
+			byOld[olds[index]] = ConnectorSecretID(newKey, pair[0], pair[1])
 		}
 		clause, args := bindList("id", olds)
 		rows, err := tx.QueryContext(ctx, `SELECT id,ciphertext,expires_at FROM connector_secrets WHERE `+clause, args...)

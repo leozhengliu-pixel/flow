@@ -54,6 +54,15 @@ func renameFixture(t *testing.T) (*SQLiteStore, *memoryObjects, domain.AgentSess
 	if err := repo.PutConnectorSecret(ctx, credentialIDForTest("test-workspace", "provider", "integration_rename"), []byte(`{"token":"provider"}`), time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
+	// The integration's OAuth tokens, sealed under a key that is retired
+	// (FLOW_CONNECTOR_SECRET_PREVIOUS_KEYS) by the time of the rename.
+	retired := base64.StdEncoding.EncodeToString([]byte(strings.Repeat("r", 32)))
+	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", retired)
+	if err := repo.PutIntegrationOAuthTokens(ctx, "test-workspace", "integration_rename", IntegrationOAuthTokens{AccessToken: "glpat-rename", RefreshToken: "gl-refresh-rename"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32))))
+	t.Setenv("FLOW_CONNECTOR_SECRET_PREVIOUS_KEYS", retired)
 	for _, statement := range []struct {
 		query string
 		args  []any
@@ -159,6 +168,12 @@ func TestWorkspaceRenameMovesEveryKeyedRowAndObject(t *testing.T) {
 	}
 	if secret, err := repo.ReadConnectorSecret(ctx, credentialIDForTest(newKey, "provider", "integration_rename"), false); err != nil || string(secret) != `{"token":"provider"}` {
 		t.Errorf("provider credential under the new key: %q (%v)", secret, err)
+	}
+	if tokens, found, err := repo.IntegrationOAuthTokens(ctx, newKey, "integration_rename"); err != nil || !found || tokens.AccessToken != "glpat-rename" || tokens.RefreshToken != "gl-refresh-rename" {
+		t.Errorf("integration OAuth tokens under the new key: found=%v err=%v", found, err)
+	}
+	if _, found, _ := repo.IntegrationOAuthTokens(ctx, oldKey, "integration_rename"); found {
+		t.Error("integration OAuth tokens left under the old key")
 	}
 	var stale int
 	if err := repo.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM connector_secrets WHERE id=?`, credentialIDForTest(oldKey, "provider", "integration_rename")).Scan(&stale); err != nil || stale != 0 {
