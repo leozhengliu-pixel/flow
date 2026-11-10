@@ -2296,6 +2296,19 @@ export interface AuditLogEntry {
   resourceId: UUID;
   metadata?: Record<string, unknown>;
   createdAt: string;
+  /** Who acted: user, api_key, oauth_app, scim, agent or system. */
+  actorType?: string;
+  /** The user, API key, OAuth client, SCIM token or agent run that acted. */
+  actorId?: string;
+  /** Client address as the instance keeps it (truncated by default). */
+  ip?: string;
+  /** Browser and operating system ("Chrome on macOS"). */
+  userAgent?: string;
+  /** success or failure. */
+  result?: string;
+  /** Position in the workspace's audit log and its chain hash. */
+  seq?: number;
+  hash?: string;
 }
 export interface TrashEntry {
   id: UUID;

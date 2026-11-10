@@ -317,9 +317,8 @@ func TestGoogleCalendarLinkFlowStoresSealedTokensAndReadsOnlyOutOfOffice(t *test
 }
 
 func auditActionsFor(repo *store.SQLiteStore, resource string) []string {
-	data, _ := repo.WorkspaceMetadataFields("test-workspace", "auditLog")
 	actions := []string{}
-	for _, entry := range data.AuditLog {
+	for _, entry := range auditLogEntries(repo, "test-workspace") {
 		if entry.ResourceType == resource {
 			actions = append(actions, entry.Action)
 		}

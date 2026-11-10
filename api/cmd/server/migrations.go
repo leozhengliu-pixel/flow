@@ -909,6 +909,7 @@ func (s *server) rollbackMigration(w http.ResponseWriter, r *http.Request) {
 func (s *server) downloadMigrationBundle(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
 	bundle := domain.MigrationBundle{Version: 1, Source: "flow", ExportedAt: time.Now().UTC(), Workspace: data.Workspace, Users: data.Users, Teams: data.Teams, States: data.States, Labels: data.Labels, LabelGroups: data.LabelGroups, Projects: data.Projects, ProjectUpdates: data.ProjectUpdates, Cycles: data.Cycles, Initiatives: data.Initiatives, InitiativeUpdates: data.InitiativeUpdates, Issues: data.Issues, Comments: data.Comments, Activities: data.Activities, Releases: data.Releases, ReleasePipelines: data.ReleasePipelines, Customers: data.Customers, CustomerRequests: data.CustomerRequests, SLARules: data.SLARules, IssueSLAs: data.IssueSLAs, SLAEvents: data.SLAEvents, Subscriptions: data.Subscriptions}
+	s.recordAudit(r.Context(), data.Workspace.URLKey, newAuditEntry(requestActor(s, r), "downloaded", "migration_bundle", data.Workspace.ID, map[string]any{"issues": len(data.Issues), "users": len(data.Users)}))
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", data.Workspace.URLKey+"-migration-bundle.json"))
 	_ = json.NewEncoder(w).Encode(bundle)

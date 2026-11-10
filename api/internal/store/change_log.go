@@ -61,6 +61,11 @@ func insertDomainEvent(ctx context.Context, db domainEventExecer, row domainEven
 		if err := tx.queueEventCacheRevisions(ctx, row); err != nil {
 			return nil, err
 		}
+		// The transaction that records a mutation's event commits the
+		// audit entries the mutation staged (audit_events.go).
+		if collector := auditCollectorFrom(ctx); collector != nil {
+			tx.audit = collector
+		}
 	}
 	var workspace any = row.WorkspaceID
 	if row.WorkspaceID == "" && row.WorkspaceKey != "" {

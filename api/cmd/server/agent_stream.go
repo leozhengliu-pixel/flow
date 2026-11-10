@@ -489,7 +489,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	textApprovalRetried := false
 	// The reply's write calls and their outcomes (agent_action_outcomes.go); outcomeNudged is set once an answer
 	// reporting outcomes no tool produced was sent back.
-	ledger := &agentWriteLedger{}
+	ledger := &agentWriteLedger{audit: s.agentWriteAudit(r.Context(), data.Workspace.URLKey, data.Viewer, "agent_session", session.ID)}
 	outcomeNudged := false
 	chinese := containsHan(agentLatestUserMessage(*session))
 	// The answer stopped at the provider's output limit instead of ending.

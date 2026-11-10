@@ -88,7 +88,7 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.authDisabled {
 			viewer := s.store.Account().Viewer
-			ctx := context.WithValue(r.Context(), authUserContextKey{}, viewer)
+			ctx := context.WithValue(s.withAuditRequest(r, viewer, nil), authUserContextKey{}, viewer)
 			ctx = store.ContextWithActor(ctx, viewer)
 			ctx = store.ContextWithRealtimeClient(ctx, r.Header.Get("X-Client-ID"))
 			r = r.WithContext(ctx)
@@ -99,7 +99,7 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			return
 		}
 		if publicAuthPath(r.URL.Path) {
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, r.WithContext(s.withAuditRequest(r, domain.User{}, nil)))
 			return
 		}
 		// Never silently fall back to a browser cookie when an Authorization
@@ -149,7 +149,7 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			}
 			user.Via = via
 		}
-		ctx := context.WithValue(r.Context(), authUserContextKey{}, user)
+		ctx := context.WithValue(s.withAuditRequest(r, user, apiKey), authUserContextKey{}, user)
 		if apiKey != nil {
 			ctx = context.WithValue(ctx, apiKeyContextKey{}, *apiKey)
 			ctx = context.WithValue(ctx, workspaceKeyContextKey{}, apiWorkspace)
@@ -1850,6 +1850,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	session, token, err := s.store.Login(r.Context(), input.Email, input.Password)
 	if err != nil {
+		s.recordSignInFailure(r, input.Email, signInFailureReason(err))
 		writeErrorFor(w, r, http.StatusUnauthorized, err)
 		return
 	}
@@ -1860,7 +1861,10 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(sessionCookieName); err == nil {
-		_ = s.store.Logout(r.Context(), cookie.Value)
+		user, authErr := s.store.AuthenticateSession(r.Context(), cookie.Value)
+		if s.store.Logout(r.Context(), cookie.Value) == nil && authErr == nil {
+			s.recordAccountAudit(r, user, "", "signed_out", store.AuditResultSuccess, nil)
+		}
 	}
 	clearSessionCookie(w, r)
 	w.WriteHeader(http.StatusNoContent)
@@ -1952,6 +1956,7 @@ func (s *server) tokenLogin(w http.ResponseWriter, r *http.Request) {
 	_ = input.InviteLink
 	session, token, err := s.store.LoginWithAuthToken(r.Context(), input.Email, input.AuthToken, input.ForceReauth)
 	if err != nil {
+		s.recordSignInFailure(r, input.Email, signInFailureReason(err))
 		writeErrorFor(w, r, http.StatusUnauthorized, err)
 		return
 	}
@@ -2363,6 +2368,9 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 					return errInvalid
 				}
 				member.Role = input.Role
+				if before.Role != member.Role {
+					appendAudit(workspace, "role_changed", "workspace_member", userID, map[string]any{"userId": userID, "roleBefore": before.Role, "roleAfter": member.Role})
+				}
 			}
 			if input.DisplayName != "" || input.Username != "" || input.Email != "" {
 				user := member.User
@@ -2396,9 +2404,13 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.Role != "" {
+		roleBefore, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
 		if err := s.store.UpdateMemberRole(r.Context(), data.Workspace.ID, userID, input.Role); err != nil {
 			respondMutation(w, err, http.StatusOK, nil)
 			return
+		}
+		if roleBefore != input.Role {
+			s.recordAudit(r.Context(), r.PathValue("workspaceKey"), newAuditEntry(requestActor(s, r), "role_changed", "workspace_member", userID, map[string]any{"userId": userID, "roleBefore": roleBefore, "roleAfter": input.Role}))
 		}
 	}
 	if input.DisplayName != "" || input.Username != "" || input.Email != "" {

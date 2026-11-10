@@ -304,6 +304,9 @@ server:
     trashDays: 30                           # FLOW_TRASH_RETENTION_DAYS
     domainEventDays: 90                     # FLOW_DOMAIN_EVENT_RETENTION_DAYS
     workspaceDeletionDays: 30               # FLOW_WORKSPACE_DELETION_GRACE_DAYS
+    auditLogDays: 180                       # FLOW_AUDIT_LOG_RETENTION_DAYS (0 keeps every entry)
+  auditLog:
+    ip: truncated                           # FLOW_AUDIT_LOG_IP: truncated | full | off
   auth:
     email:
       enabled: true                         # FLOW_AUTH_EMAIL_ENABLED
@@ -554,6 +557,8 @@ server:
 | `redis.readTimeout` | `FLOW_REDIS_READ_TIMEOUT` | duration |
 | `redis.tls` | `FLOW_REDIS_TLS` | boolean |
 | `redis.writeTimeout` | `FLOW_REDIS_WRITE_TIMEOUT` | duration |
+| `auditLog.ip` | `FLOW_AUDIT_LOG_IP` | `truncated`, `full` or `off` |
+| `retention.auditLogDays` | `FLOW_AUDIT_LOG_RETENTION_DAYS` | number |
 | `retention.changeLogMinRows` | `FLOW_CHANGE_LOG_MIN_ROWS` | number |
 | `retention.domainEventDays` | `FLOW_DOMAIN_EVENT_RETENTION_DAYS` | number |
 | `retention.trashDays` | `FLOW_TRASH_RETENTION_DAYS` | number |
@@ -669,6 +674,8 @@ Flow keeps history it no longer serves out of the database, or bounded:
 | `FLOW_CHANGE_LOG_MIN_ROWS` | `10000` | Newest changes per workspace that pruning always keeps, however old. `0` keeps only the age window. |
 | `FLOW_TRASH_RETENTION_DAYS` | `30` | Days deleted items stay in "Recently deleted" before they are deleted permanently, with the attachment files nothing else uses. Minimum 1. |
 | `FLOW_WORKSPACE_DELETION_GRACE_DAYS` | `30` | Days a workspace scheduled for deletion can still be restored (Cancel deletion) before it, its files and every row it owns are purged. 1 to 3650. Backups keep the data until they expire: see [Workspace deletion](operations.md#workspace-deletion). |
+| `FLOW_AUDIT_LOG_RETENTION_DAYS` | `180` | Days the audit log keeps an entry; `0` keeps every entry. The default meets the six months China's Cybersecurity Law (Art. 21) requires network operators to keep logs for; set it longer when your policy or regulator asks for more. Entries older than this are deleted by the hourly maintenance pass, oldest first, and the audit chain stays verifiable (see [Audit log](operations.md#audit-log)). |
+| `FLOW_AUDIT_LOG_IP` | `truncated` | How audit entries keep the client address (as `FLOW_TRUSTED_PROXIES` resolves it): `truncated` zeroes the last IPv4 octet and keeps an IPv6 /48, `full` keeps the address, `off` keeps none. Use `full` when your security policy requires the exact source address of every audited action. |
 | `FLOW_AGENT_TRANSCRIPT_OFFLOAD_BYTES` | `8192` | Agent replies and tool results larger than this are stored outside the database row, with a short summary left in the row. Minimum 1024. |
 | `FLOW_CONTENT_CACHE_BYTES` | `134217728` | In-process cache of recently loaded content stored outside rows (document versions, agent replies). |
 | `FLOW_SEARCH_INDEX_MAX_CHARS` | `20000` | Characters of each issue and document indexed for full-text search. Text past the limit is still stored and shown but is not found by search. `0` indexes everything. |

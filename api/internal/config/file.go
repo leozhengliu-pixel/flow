@@ -420,6 +420,10 @@ var fileSchema = map[string]*field{
 			"trashDays":             envInt("FLOW_TRASH_RETENTION_DAYS", 1, 36500),
 			"workspaceDeletionDays": envInt("FLOW_WORKSPACE_DELETION_GRACE_DAYS", 1, 3650),
 			"changeLogMinRows":      envInt("FLOW_CHANGE_LOG_MIN_ROWS", 0, 1<<30),
+			"auditLogDays":          envInt("FLOW_AUDIT_LOG_RETENTION_DAYS", 0, 36500),
+		}),
+		"auditLog": section(map[string]*field{
+			"ip": envString("FLOW_AUDIT_LOG_IP", "truncated", "full", "off"),
 		}),
 		"auth": section(map[string]*field{
 			"disabled":       envBool("FLOW_AUTH_DISABLED"),

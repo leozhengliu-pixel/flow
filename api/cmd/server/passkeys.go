@@ -217,6 +217,7 @@ func (s *server) finishPasskeyRegistration(w http.ResponseWriter, r *http.Reques
 		respondMutation(w, err, http.StatusBadRequest, nil)
 		return
 	}
+	s.recordAccountAudit(r, actor, "", "passkey_added", store.AuditResultSuccess, map[string]any{"passkeyId": created.ID, "passkeyName": created.Name})
 	writeJSON(w, http.StatusCreated, passkeyPublic(created))
 }
 
@@ -275,5 +276,6 @@ func (s *server) deletePasskey(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusNoContent, nil)
 		return
 	}
+	s.recordAccountAudit(r, actor, "", "passkey_removed", store.AuditResultSuccess, map[string]any{"passkeyId": r.PathValue("id")})
 	w.WriteHeader(http.StatusNoContent)
 }

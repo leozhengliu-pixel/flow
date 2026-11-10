@@ -245,6 +245,7 @@ func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 	}
 	picture := stringClaim(claims, "picture")
 	if subject == "" || nonce != state.Nonce || (email != "" && !allowedExternalEmail(email, s.externalAuth.config.AllowedDomains)) {
+		s.recordSignInFailure(r, email, "identity_not_allowed")
 		redirectAuthError(w, r, appURL, "identity is not allowed")
 		return
 	}
@@ -259,6 +260,7 @@ func (s *server) finishOIDC(w http.ResponseWriter, r *http.Request) {
 	}
 	session, sessionToken, err := s.store.LoginExternalIdentity(r.Context(), providerID, issuer, subject, username, email, name, picture, string(claimsJSON), s.externalAuth.config.AutoProvision)
 	if err != nil {
+		s.recordSignInFailure(r, email, signInFailureReason(err))
 		redirectAuthError(w, r, appURL, "could not create Flow session")
 		return
 	}
@@ -355,6 +357,7 @@ func (s *server) finishSAML(w http.ResponseWriter, r *http.Request) {
 		flowSession, token, err = s.store.LoginExternal(r.Context(), email, name, "", s.externalAuth.config.AutoProvision)
 	}
 	if err != nil {
+		s.recordSignInFailure(r, email, signInFailureReason(err))
 		writeError(w, http.StatusForbidden, "could not create Flow session")
 		return
 	}

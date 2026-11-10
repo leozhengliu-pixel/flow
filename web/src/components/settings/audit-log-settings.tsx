@@ -93,7 +93,7 @@ export function AuditLogSettings({ data }: { data: BootstrapData }) {
   };
   return (
     <>
-      <SettingsPageTitle description="Workspace events are retained for 90 days and available to workspace owners.">
+      <SettingsPageTitle description="Workspace events are retained for 180 days unless your instance keeps them longer, and are available to workspace admins.">
         Audit log
       </SettingsPageTitle>
       <div className="settings-audit-intro">

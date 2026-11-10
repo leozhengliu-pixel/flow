@@ -218,6 +218,7 @@ func (s *server) revokeOtherSessions(w http.ResponseWriter, r *http.Request) {
 	}
 	cookie, _ := r.Cookie(sessionCookieName)
 	err := s.store.RevokeOtherSessions(r.Context(), authUser(r).ID, cookie.Value)
+	s.recordAccountResult(r, authUser(r), "sessions_revoked", err)
 	if err != nil {
 		respondMutation(w, err, http.StatusNoContent, nil)
 		return
@@ -238,6 +239,7 @@ func (s *server) changeAccountPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.store.ChangePassword(r.Context(), authUser(r).ID, input.CurrentPassword, input.NewPassword)
+	s.recordAccountResult(r, authUser(r), "password_changed", err)
 	respondMutation(w, err, http.StatusOK, map[string]bool{"changed": err == nil})
 }
 
@@ -1419,6 +1421,7 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 		}
 		created = domain.APIKey{ID: idgen.New("api_key_"), Name: input.Name, Prefix: secret[:min(len(secret), 17)], SecretHash: secretHash(secret), CreatorID: actor.ID, Scopes: scopes, TeamIDs: teamIDs, TeamRestriction: restriction, CreatedAt: time.Now().UTC(), ExpiresAt: expiresAt}
 		data.APIKeys = append([]domain.APIKey{created}, data.APIKeys...)
+		appendAudit(data, "created", "api_key", created.ID, map[string]any{"name": created.Name, "prefix": created.Prefix, "scopes": created.Scopes, "teamRestriction": created.TeamRestriction})
 		return created.ID, nil
 	})
 	if err != nil {
@@ -1588,6 +1591,7 @@ func (s *server) rotateAPIKeySecret(w http.ResponseWriter, r *http.Request) {
 		data.APIKeys[index].SecretHash = secretHash(secret)
 		data.APIKeys[index].Prefix = secret[:min(len(secret), 17)]
 		rotated = publicAPIKey(data.APIKeys[index])
+		appendAudit(data, "secret_rotated", "api_key", id, map[string]any{"name": rotated.Name, "prefix": rotated.Prefix})
 		return nil
 	})
 	if err != nil {
@@ -1609,6 +1613,7 @@ func (s *server) revokeAPIKey(w http.ResponseWriter, r *http.Request) {
 		}
 		now := time.Now().UTC()
 		data.APIKeys[index].RevokedAt = &now
+		appendAudit(data, "revoked", "api_key", id, map[string]any{"name": data.APIKeys[index].Name, "prefix": data.APIKeys[index].Prefix, "ownerId": data.APIKeys[index].CreatorID})
 		return nil
 	})
 	if err != nil {

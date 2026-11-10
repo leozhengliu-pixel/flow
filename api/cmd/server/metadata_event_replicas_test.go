@@ -408,6 +408,7 @@ func TestMetadataEventTwoReplicaGate(t *testing.T) {
 	}
 	defer repo.Close()
 	data, ok := repo.WorkspaceMetadata(contractReplicaWorkspace)
+	audit := auditLogEntries(repo, contractReplicaWorkspace)
 	if !ok {
 		t.Fatal("workspace missing")
 	}
@@ -472,7 +473,7 @@ func TestMetadataEventTwoReplicaGate(t *testing.T) {
 			if _, err := migrationByID(&data, id); err != nil {
 				t.Fatalf("lost preview %s", id)
 			}
-			if !slices.ContainsFunc(data.AuditLog, func(a domain.AuditLogEntry) bool { return a.ResourceID == id && a.Action == "previewed" }) {
+			if !slices.ContainsFunc(audit, func(a domain.AuditLogEntry) bool { return a.ResourceID == id && a.Action == "previewed" }) {
 				t.Fatalf("lost preview audit %s", id)
 			}
 			marker := "?"

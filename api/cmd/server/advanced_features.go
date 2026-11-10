@@ -300,12 +300,22 @@ type deletedInitiativePayload struct {
 	Updates    []domain.InitiativeUpdate `json:"updates"`
 }
 
+// appendAudit records that the mutation's viewer did action to a resource.
 func appendAudit(data *domain.Bootstrap, action, resourceType, resourceID string, metadata map[string]any) {
-	now := time.Now().UTC()
-	data.AuditLog = append([]domain.AuditLogEntry{{ID: idgen.New("audit_"), Actor: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), Action: action, ResourceType: resourceType, ResourceID: resourceID, Metadata: metadata, CreatedAt: now}}, data.AuditLog...)
-	if len(data.AuditLog) > 1000 {
-		data.AuditLog = data.AuditLog[:1000]
+	appendAuditEntries(data, domain.AuditLogEntry{ID: idgen.New("audit_"), Actor: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), Action: action, ResourceType: resourceType, ResourceID: resourceID, Metadata: metadata, CreatedAt: time.Now().UTC()})
+}
+
+// appendAuditEntries is how every workspace mutation writes the audit log:
+// it stages entries (oldest first) on data.AuditLog, and the store inserts
+// them into the append-only audit_events table in the mutation's own
+// transaction (store/audit_events.go). Writes outside a mutation use
+// server.recordAudit or server.recordAccountAudit.
+func appendAuditEntries(data *domain.Bootstrap, entries ...domain.AuditLogEntry) {
+	staged := make([]domain.AuditLogEntry, 0, len(entries)+len(data.AuditLog))
+	for index := len(entries) - 1; index >= 0; index-- {
+		staged = append(staged, entries[index])
 	}
+	data.AuditLog = append(staged, data.AuditLog...)
 }
 
 func appendTrash(data *domain.Bootstrap, resourceType, resourceID, title string, value any) error {
@@ -3856,6 +3866,17 @@ func (s *server) completeExport(workspaceKey, id string) {
 }
 
 func (s *server) downloadExport(w http.ResponseWriter, r *http.Request) {
+	// The download is audited once the read snapshot is released: the
+	// snapshot allows no write transaction and may hold the only database
+	// connection.
+	auditCtx := r.Context()
+	var audit *domain.AuditLogEntry
+	var auditWorkspace string
+	defer func() {
+		if audit != nil {
+			s.recordAudit(auditCtx, auditWorkspace, *audit)
+		}
+	}()
 	ctx, release, err := s.store.BeginWorkspaceRead(r.Context(), workspaceKey(r))
 	if err != nil {
 		issueRecordsError(w, err)
@@ -3886,6 +3907,8 @@ func (s *server) downloadExport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "export is still being prepared")
 		return
 	}
+	entry := newAuditEntry(requestActor(s, r), "downloaded", "export", job.ID, map[string]any{"format": job.Format, "filename": job.Filename})
+	audit, auditWorkspace = &entry, data.Workspace.URLKey
 	filename := job.Filename
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	if job.Format == "csv" {

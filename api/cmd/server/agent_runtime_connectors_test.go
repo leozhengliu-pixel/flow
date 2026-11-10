@@ -288,9 +288,8 @@ func TestWorkerRunConnectorCallRecordsActivityAndIsError(t *testing.T) {
 	if result, _ := second.Metadata["result"].(string); !strings.HasPrefix(result, "Error: ") || !strings.Contains(result, "search backend unavailable") {
 		t.Fatalf("failed action = %+v", second)
 	}
-	metadata, _ := f.s.store.WorkspaceMetadata(f.data.Workspace.URLKey)
 	audited := 0
-	for _, entry := range metadata.AuditLog {
+	for _, entry := range auditLogOf(t, f.s.store, f.data.Workspace.URLKey) {
 		if entry.Action == "agent_run.mcp_tool_call" && entry.ResourceID == run.ID {
 			audited++
 			if entry.Metadata["outcome"] != "ok" && entry.Metadata["outcome"] != "toolError" {

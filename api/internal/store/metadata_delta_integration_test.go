@@ -70,8 +70,9 @@ func TestExternalMetadataDeltaRoundTrip(t *testing.T) {
 	if loaded.Workspace.Name != "Delta Renamed" || len(loaded.SavedViews) != 1 || loaded.SavedViews[0].ID != "view_b" || string(loaded.ProjectDisplayDefault) != `{"layout":"board"}` {
 		t.Fatalf("delta writes were not persisted: name=%q views=%v display=%s", loaded.Workspace.Name, loaded.SavedViews, loaded.ProjectDisplayDefault)
 	}
-	if len(loaded.AuditLog) == 0 || loaded.AuditLog[0].ID != "audit_delta" || loaded.Teams[0].ArchivedAt == nil || loaded.Teams[0].ID != created.Teams[0].ID {
-		t.Fatalf("team archive delta lost order or data: audit=%v team=%+v", loaded.AuditLog, loaded.Teams[0])
+	audit, err := reopened.ListAuditEntries(ctx, created.Workspace.ID, AuditQuery{})
+	if err != nil || len(audit) == 0 || audit[0].ID != "audit_delta" || loaded.Teams[0].ArchivedAt == nil || loaded.Teams[0].ID != created.Teams[0].ID {
+		t.Fatalf("team archive delta lost order or data: audit=%v team=%+v err=%v", audit, loaded.Teams[0], err)
 	}
 	_ = reopened.DeleteWorkspace(ctx, workspaceKey)
 }

@@ -247,15 +247,15 @@ func TestCodingMCPGatewayForwardsWithServerSideCredential(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("upstream tool calls: %d", calls)
 	}
-	audit, _ := e.repo.WorkspaceMetadataFields("test-workspace", "auditLog")
+	audit := auditLogOf(t, e.repo, "test-workspace")
 	audited := false
-	for _, entry := range audit.AuditLog {
+	for _, entry := range audit {
 		if entry.Action == "coding_session.mcp_tool_call" && entry.ResourceID == session.ID && entry.Metadata["tool"] == "search_code" && entry.Metadata["mcpServerId"] == "mcp-sourcebot-production" && entry.Metadata["outcome"] == "ok" {
 			audited = true
 		}
 	}
 	if !audited {
-		t.Fatalf("the tool call was not audited: %+v", audit.AuditLog)
+		t.Fatalf("the tool call was not audited: %+v", audit)
 	}
 
 	// Refusals: no or a forged token, a server not enabled for coding

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 )
@@ -142,6 +143,7 @@ func (s *server) finishMFA(w http.ResponseWriter, r *http.Request) {
 	}
 	credential, err := instance.ValidateLogin(s.mfaWebAuthnUser(actor), challenge.Session, response)
 	if err != nil {
+		s.recordAccountAudit(r, actor, "", "mfa_verification", store.AuditResultFailure, map[string]any{"method": "passkey"})
 		writeError(w, 403, "second factor verification failed")
 		return
 	}
@@ -201,5 +203,6 @@ func (s *server) finishMFA(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "could not save authentication verification")
 		return
 	}
+	s.recordAccountAudit(r, actor, "", "mfa_verification", store.AuditResultSuccess, map[string]any{"method": "passkey"})
 	writeJSON(w, 200, map[string]bool{"verified": true})
 }

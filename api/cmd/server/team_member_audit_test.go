@@ -361,9 +361,8 @@ func TestSCIMTeamMembershipChangesAreAuditedWithTheConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	scimRequest(t, handler, http.MethodPatch, "/scim/v2/test-workspace/Groups/"+group["id"].(string), token.Secret, map[string]any{"displayName": "engineering", "members": []map[string]string{}}, http.StatusOK)
-	data, _ := repository.WorkspaceMetadata("test-workspace")
 	var entries []domain.AuditLogEntry
-	for _, entry := range data.AuditLog {
+	for _, entry := range auditLogOf(t, repository, "test-workspace") {
 		if entry.ResourceType == "team_member" && entry.ResourceID == userID {
 			entries = append(entries, entry)
 		}
@@ -383,9 +382,8 @@ func TestMCPSaveTeamMembershipChangesAreAudited(t *testing.T) {
 	created := mcpObject(t, f, "save_team", map[string]any{"name": "Platform", "key": "plt", "members": []string{"Test member"}})
 	teamID := created["id"].(string)
 	mcpObject(t, f, "save_team", map[string]any{"id": "PLT", "removeMembers": []string{"Test member"}})
-	data, _ := f.repository.WorkspaceMetadata(f.data.Workspace.URLKey)
 	actions := []string{}
-	for _, entry := range data.AuditLog {
+	for _, entry := range auditLogOf(t, f.repository, f.data.Workspace.URLKey) {
 		if entry.ResourceType == "team_member" && entry.ResourceID == "usr_member" && entry.Metadata["teamId"] == teamID {
 			if entry.Metadata["source"] != "api" || entry.Metadata["apiKeyId"] != "contract-key" {
 				t.Fatalf("MCP audit metadata = %v", entry.Metadata)
@@ -414,9 +412,8 @@ func TestDevelopmentModeTeamMemberChangesAreAudited(t *testing.T) {
 	}
 	requestJSON[any](t, handler, http.MethodPut, "/api/workspaces/test-workspace/teams/"+teamID+"/members/"+userID, map[string]any{"member": false}, http.StatusNoContent)
 	requestJSON[any](t, handler, http.MethodPut, "/api/workspaces/test-workspace/teams/"+teamID+"/members/"+userID, map[string]any{"member": true, "origin": "sync"}, http.StatusNoContent)
-	data, _ := repository.WorkspaceMetadata("test-workspace")
 	actions := []string{}
-	for _, entry := range data.AuditLog {
+	for _, entry := range auditLogOf(t, repository, "test-workspace") {
 		if entry.ResourceType == "team_member" && entry.ResourceID == userID {
 			actions = append(actions, entry.Action+":"+entry.Metadata["origin"].(string))
 		}

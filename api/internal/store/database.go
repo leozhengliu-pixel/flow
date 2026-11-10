@@ -108,6 +108,9 @@ type sqlTx struct {
 	// numbering: this transaction assigns change-log cursors
 	// (sequenceWorkspaceBatch); commit hooks skip it.
 	numbering bool
+	// audit: the mutation whose staged audit entries this transaction
+	// inserts when it commits (audit_events.go).
+	audit *auditCollector
 }
 
 // notificationSignal names a notification that is news to its recipient.
@@ -136,6 +139,12 @@ func (tx *sqlTx) Commit() error {
 	if hooks != nil && hooks.beforeCommit != nil {
 		hooks.beforeCommit(tx)
 	}
+	// The audit chain head is a row every audited write of the workspace
+	// shares: it is locked late, just before the counters every writer shares.
+	if err := tx.flushAudit(); err != nil {
+		_ = tx.Tx.Rollback()
+		return err
+	}
 	if err := tx.flushIssueCounts(); err != nil {
 		_ = tx.Tx.Rollback()
 		return err
@@ -146,6 +155,9 @@ func (tx *sqlTx) Commit() error {
 	}
 	if err := tx.Tx.Commit(); err != nil {
 		return err
+	}
+	if tx.audit != nil {
+		tx.audit.pending = nil
 	}
 	if hooks != nil && hooks.afterCommit != nil {
 		hooks.afterCommit(tx)
@@ -335,6 +347,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureWorkspaceMetadataRecords", s.ensureWorkspaceMetadataRecords},
 		{"ensureApplicationAgents", s.ensureApplicationAgents},
 		{"ensureAuditStreamSecrets", s.ensureAuditStreamSecrets},
+		{"ensureAuditEvents", s.ensureAuditEvents},
 		{"ensureWebhookDeliveries", s.ensureWebhookDeliveries},
 		{"applySearchIndexCap", s.applySearchIndexCap},
 		{"ensureMetadataSearchIndex", s.ensureMetadataSearchIndex},

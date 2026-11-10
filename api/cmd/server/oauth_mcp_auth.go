@@ -273,6 +273,7 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not authorize client")
 		return
 	}
+	s.recordAudit(r.Context(), workspace.Workspace.URLKey, newAuditEntry(actor, "authorized", "oauth_authorization", authorizationID, map[string]any{"clientId": client.ClientID, "clientName": client.ClientName, "scopes": scopes, "actor": firstNonEmpty(input.Actor, "user")}))
 	if newInstallation {
 		// Like the reference app, the installing administrator gets "The … application has been installed in your workspace".
 		s.notifyApplicationInstalled(workspace, actor, client.ClientName, input.TeamIDs, input.AllPublicTeams)
@@ -369,9 +370,13 @@ func (s *server) revokeOAuthAuthorization(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	authorizations, _ := s.store.WorkspaceMetadataFields(workspace.Workspace.URLKey, "oauthAuthorizations")
 	err := s.store.RevokeOAuthAuthorizationRecords(r.Context(), workspace.Workspace.URLKey, id, actor.ID)
 	if errors.Is(err, store.ErrAuthForbidden) || store.IsOAuthNotFound(err) {
 		err = errNotFound
+	}
+	if err == nil {
+		s.recordOAuthRevocation(r, authorizations, actor, id)
 	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }

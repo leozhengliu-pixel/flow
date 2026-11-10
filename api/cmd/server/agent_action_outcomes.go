@@ -48,6 +48,9 @@ type agentWriteOutcome struct {
 
 type agentWriteLedger struct {
 	outcomes []agentWriteOutcome
+	// audit, when set, writes each recorded outcome to the audit log
+	// (server.agentWriteAudit).
+	audit func(agentWriteOutcome)
 }
 
 // agentIsFlowWriteTool reports whether name is a Flow tool that changes workspace data.
@@ -104,7 +107,11 @@ func (l *agentWriteLedger) record(ctx context.Context, call domain.AgentToolCall
 		return
 	}
 	if tool, ok := agentLedgerTool(ctx, call.Name); ok {
-		l.outcomes = append(l.outcomes, agentWriteOutcomeFor(tool, call, status, reason))
+		outcome := agentWriteOutcomeFor(tool, call, status, reason)
+		l.outcomes = append(l.outcomes, outcome)
+		if l.audit != nil {
+			l.audit(outcome)
+		}
 	}
 }
 

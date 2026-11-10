@@ -538,6 +538,9 @@ func (s *server) unlinkAccountIdentity(w http.ResponseWriter, r *http.Request) {
 func (s *server) revokeAccountSession(w http.ResponseWriter, r *http.Request) {
 	cookie, _ := r.Cookie(sessionCookieName)
 	err := s.store.RevokeSession(r.Context(), authUser(r).ID, r.PathValue("id"), cookie.Value)
+	if err == nil {
+		s.recordAccountAudit(r, authUser(r), "", "session_revoked", store.AuditResultSuccess, map[string]any{"sessionId": r.PathValue("id")})
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 

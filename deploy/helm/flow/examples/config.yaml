@@ -39,6 +39,9 @@ server:
     trashDays: 30                           # FLOW_TRASH_RETENTION_DAYS
     domainEventDays: 90                     # FLOW_DOMAIN_EVENT_RETENTION_DAYS
     workspaceDeletionDays: 30               # FLOW_WORKSPACE_DELETION_GRACE_DAYS
+    auditLogDays: 180                       # FLOW_AUDIT_LOG_RETENTION_DAYS (0 keeps every entry)
+  auditLog:
+    ip: truncated                           # FLOW_AUDIT_LOG_IP: truncated | full | off
   auth:
     email:
       enabled: true                         # FLOW_AUTH_EMAIL_ENABLED

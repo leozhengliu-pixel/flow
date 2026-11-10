@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -682,6 +683,9 @@ func (s *SQLiteStore) ResetPassword(ctx context.Context, token, password string)
 		_, _ = s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE user_id=?`, userID)
 		err = s.revokeChatIdentities(ctx, userID)
 		s.accountAccessChanged(userID)
+		if auditErr := s.RecordAccountAudit(ctx, userID, "", domain.AuditLogEntry{Action: "password_reset", ResourceType: "account"}); auditErr != nil {
+			slog.Error("password reset not audited", "error", auditErr)
+		}
 	}
 	return err
 }

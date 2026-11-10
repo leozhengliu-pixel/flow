@@ -487,13 +487,67 @@ configuration guide).
 
 `GET /api/workspace/audit-log` (workspace admins or the `admin` scope) accepts
 `type` (`resourceType.action`, e.g. `customer.created`, or just the action),
-`actorId`, `actorEmail`, `resourceType`, `resourceId`, `ip`, `since` and
-`until` (RFC 3339, `YYYY-MM-DD` or durations such as `-P7D`), plus a `filter`
-object over `id`, `type`, `action`, `resourceType`, `resourceId`, `actor`, `ip`
-and `createdAt`. With `first`/`after` it returns a connection.
-`GET /api/workspace/audit-log/types` lists the entry types present with their
-counts. The log keeps the latest 1,000 entries; stream it to your SIEM with the
-audit log stream (Settings › Security) for longer retention.
+`actorId` (the user, or the API key, OAuth client or SCIM token that acted),
+`actorEmail`, `resourceType`, `resourceId`, `ip`, `since` and `until`
+(RFC 3339, `YYYY-MM-DD` or durations such as `-P7D`), plus a `filter` object
+over `id`, `type`, `action`, `resourceType`, `resourceId`, `actor`,
+`actorType`, `ip`, `result` and `createdAt`. Without pagination arguments it
+returns the newest 1,000 matching entries; with `first`/`after` it returns a
+connection, and `format=csv` downloads the matching entries as CSV. Paging,
+CSV and the `type`/`actorEmail`/`filter` parameters read at most the newest
+50,000 entries that match the other parameters; use `since`/`until` to reach
+older ones. `GET /api/workspace/audit-log/types` lists the entry types present
+with their counts.
+
+Every entry has `id`, `actor`, `botActor` (when made through an application or
+the agent), `action`, `resourceType`, `resourceId`, `metadata` and `createdAt`,
+and now also:
+
+| Field | Meaning |
+| --- | --- |
+| `actorType` | `user` (a browser session), `api_key`, `oauth_app`, `scim`, `agent` (a write by the Flow Agent for `actor`) or `system` |
+| `actorId` | The credential that acted: the user, API key, OAuth client, SCIM token or agent session/run id |
+| `ip` | Client address. By default the last IPv4 octet is zeroed and IPv6 keeps its /48 (`FLOW_AUDIT_LOG_IP`) |
+| `userAgent` | The browser and operating system it reported ("Chrome on macOS"), not the raw header |
+| `result` | `success`, or `failure` for a refused attempt (sign-in, second factor, password change) |
+| `seq`, `hash` | The entry's number in the workspace's log and its chain hash |
+
+The log is an append-only table: entries are never edited, and only retention
+removes the oldest ones (`FLOW_AUDIT_LOG_RETENTION_DAYS`, 180 days by default;
+see the configuration guide). Each entry's `hash` covers the previous entry's
+hash and every stored field, so `GET /api/workspace/audit-log/verify` (admins)
+can tell whether any retained entry was changed, removed or inserted:
+
+```json
+{"valid": true, "entries": 1824, "firstSeq": 1, "lastSeq": 1824, "prunedThrough": 0, "headHash": "9f2c…"}
+```
+
+`valid: false` comes with `brokenAt` (the first entry number that does not
+verify) and `problem`. Stream entries to your SIEM with the audit log stream
+(Settings › Security) to keep a copy outside Flow; each delivery carries the
+entry's `seq` and `hash`.
+
+Besides workspace changes the log records account and credential events:
+
+| Entry (`resourceType.action`) | When |
+| --- | --- |
+| `account.signed_in`, `account.sign_in_failed` | A sign-in (`metadata.method`: `password`, `email_code`, `google`, `oidc`, `saml`, `enterprise_sso`) and a refused one (`metadata.reason`) |
+| `account.signed_out`, `account.session_revoked`, `account.sessions_revoked` | Sign-out and revoking one or all other sessions |
+| `account.password_changed`, `account.password_reset` | A password change (a wrong current password is a `failure`) or reset |
+| `account.passkey_added`, `account.passkey_removed`, `account.mfa_verification` | Second-factor enrolment, removal and each verification |
+| `api_key.created`, `api_key.secret_rotated`, `api_key.revoked` | Personal API keys (name and display prefix, never the secret) |
+| `workspace_member.role_changed` | An admin changing a member's role (`roleBefore`, `roleAfter`) |
+| `oauth_authorization.authorized`, `oauth_authorization.revoked` | A member granting or revoking a third-party OAuth application |
+| `export.downloaded`, `migration_bundle.downloaded` | Downloading a workspace export or migration bundle |
+| `agent_session.tool_write`, `agent_task.tool_write`, `agent_run.tool_write` | Each write the Flow Agent makes with Flow's tools or a connector tool that may write (`metadata.tool`, `target`, `status`) |
+
+Account events are written to every workspace the account is an active member
+of, so each workspace's admins see their members' sign-ins. A sign-in attempt
+for an email no account has, or for an account that belongs to no workspace,
+goes to the instance-level log, which operators read with
+`server audit-verify` and the database (see the operations guide). Entries
+never keep passwords, tokens, secrets or message bodies: such keys are dropped
+from `metadata` before an entry is stored.
 
 ## OAuth applications
 

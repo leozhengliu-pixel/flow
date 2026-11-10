@@ -105,7 +105,7 @@ func testMetadataMigrationHandlers(t *testing.T) {
 	}) {
 		t.Fatal("separate invitation was lost")
 	}
-	if !slices.ContainsFunc(fresh.AuditLog, func(entry domain.AuditLogEntry) bool {
+	if !slices.ContainsFunc(auditLogOf(t, repo, fresh.Workspace.URLKey), func(entry domain.AuditLogEntry) bool {
 		return entry.ResourceID == job.ID && entry.Action == "previewed"
 	}) {
 		t.Fatal("preview audit was lost")

@@ -42,6 +42,10 @@ type Config struct {
 	WebSearch            WebSearchConfig
 	Telemetry            TelemetryConfig
 	Retention            RetentionConfig
+	// AuditLogIP is how the audit log keeps client addresses
+	// (FLOW_AUDIT_LOG_IP): truncated (default; IPv4 /24, IPv6 /48), full or
+	// off.
+	AuditLogIP string
 	// SecurityHeaders is the response security header policy (security_headers.go).
 	SecurityHeaders SecurityHeadersConfig
 	// Coding configures coding sessions (coding.go).
@@ -104,7 +108,15 @@ type RetentionConfig struct {
 	// ChangeLogMinRows is how many of each workspace's newest changes pruning
 	// always keeps, whatever their age (FLOW_CHANGE_LOG_MIN_ROWS, default 10000).
 	ChangeLogMinRows int
+	// AuditLog is how long the audit log keeps an entry
+	// (FLOW_AUDIT_LOG_RETENTION_DAYS, default 180); 0 keeps every entry.
+	AuditLog time.Duration
 }
+
+// DefaultAuditLogRetentionDays is the audit log retention when
+// FLOW_AUDIT_LOG_RETENTION_DAYS is not set: at least the six months audit
+// records must be kept for under China's Cybersecurity Law (Art. 21).
+const DefaultAuditLogRetentionDays = 180
 
 type AgentConfig struct {
 	Enabled          bool
@@ -282,7 +294,9 @@ func Load() (Config, error) {
 			Trash:                  time.Duration(integer("FLOW_TRASH_RETENTION_DAYS", 30)) * 24 * time.Hour,
 			ChangeLogMinRows:       integer("FLOW_CHANGE_LOG_MIN_ROWS", store.DefaultChangeLogMinRows),
 			WorkspaceDeletionGrace: time.Duration(integer("FLOW_WORKSPACE_DELETION_GRACE_DAYS", 30)) * 24 * time.Hour,
+			AuditLog:               time.Duration(integer("FLOW_AUDIT_LOG_RETENTION_DAYS", DefaultAuditLogRetentionDays)) * 24 * time.Hour,
 		},
+		AuditLogIP: strings.ToLower(value("FLOW_AUDIT_LOG_IP", "truncated")),
 		Redis: coordination.Config{
 			Mode: value("FLOW_REDIS_MODE", "disabled"), URL: secret("FLOW_REDIS_URL"), Addrs: csvRaw(value("FLOW_REDIS_ADDRS", "")),
 			Username: secret("FLOW_REDIS_USERNAME"), Password: secret("FLOW_REDIS_PASSWORD"), DB: integer("FLOW_REDIS_DB", 0), TLS: boolean("FLOW_REDIS_TLS", false),
@@ -424,6 +438,14 @@ func (c Config) Validate() error {
 	}
 	if c.Retention.ChangeLogMinRows < 0 {
 		return fmt.Errorf("FLOW_CHANGE_LOG_MIN_ROWS must be 0 or more")
+	}
+	if c.Retention.AuditLog < 0 {
+		return fmt.Errorf("FLOW_AUDIT_LOG_RETENTION_DAYS must be 0 (keep all) or more")
+	}
+	switch c.AuditLogIP {
+	case "truncated", "full", "off":
+	default:
+		return fmt.Errorf("FLOW_AUDIT_LOG_IP must be truncated, full or off")
 	}
 	if c.Retention.Trash < 24*time.Hour {
 		return fmt.Errorf("FLOW_TRASH_RETENTION_DAYS must be at least 1")

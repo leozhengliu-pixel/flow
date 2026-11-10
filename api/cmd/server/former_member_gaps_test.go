@@ -61,9 +61,9 @@ func TestDevelopmentMemberStatusPayloadAndWebhookDelivery(t *testing.T) {
 			t.Fatalf("development member payload = %s", notices[index].Payload)
 		}
 	}
-	audit, _ := s.store.WorkspaceMetadataFields("test-workspace", "auditLog")
+	audit := auditLogOf(t, s.store, "test-workspace")
 	for _, action := range []string{"suspended", "resumed", "removed"} {
-		if !slices.ContainsFunc(audit.AuditLog, func(entry domain.AuditLogEntry) bool {
+		if !slices.ContainsFunc(audit, func(entry domain.AuditLogEntry) bool {
 			return entry.ResourceType == "workspace_member" && entry.ResourceID == member.ID && entry.Action == action
 		}) {
 			t.Fatalf("missing %s member audit", action)

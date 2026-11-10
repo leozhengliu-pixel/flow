@@ -200,12 +200,8 @@ func archiveEvents(lines <-chan string, taskID string, wait time.Duration) int {
 
 func (f *archiveFixture) auditEntries(taskID string) int {
 	f.t.Helper()
-	data, ok := f.s.store.WorkspaceMetadataFields(archiveWorkspace, "auditLog")
-	if !ok {
-		f.t.Fatal("no workspace")
-	}
 	count := 0
-	for _, entry := range data.AuditLog {
+	for _, entry := range auditLogOf(f.t, f.s.store, archiveWorkspace) {
 		if entry.Action == "agent_session.archived" && entry.ResourceID == taskID {
 			count++
 		}

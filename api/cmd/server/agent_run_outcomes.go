@@ -52,6 +52,8 @@ func (s *server) recordAgentRunWrite(ctx context.Context, run store.AgentRun, ou
 	if err != nil {
 		log.Printf("agent run %s: write outcome not recorded: %v", run.ID, err)
 	}
+	actor, _ := ctx.Value(authUserContextKey{}).(domain.User)
+	s.agentWriteAudit(ctx, run.WorkspaceKey, actor, "agent_run", run.ID)(outcome)
 }
 
 // recordAgentRunFlowWrite records a Flow tool call of a run when the tool writes.

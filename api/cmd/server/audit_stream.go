@@ -203,7 +203,7 @@ func (s *server) streamAuditLog(ctx context.Context, workspace string, now time.
 	if hooks, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks"); !ok || auditStreamWebhook(&hooks) < 0 {
 		return
 	}
-	data, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks", "auditLog")
+	data, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks")
 	if !ok {
 		return
 	}
@@ -215,7 +215,11 @@ func (s *server) streamAuditLog(ctx context.Context, workspace string, now time.
 	if !webhook.Enabled || webhook.NextAttemptAt != nil && now.Before(*webhook.NextAttemptAt) {
 		return
 	}
-	pending := pendingAuditEntries(data.AuditLog, webhook)
+	pending, err := s.pendingAuditEntries(ctx, data.Workspace.ID, webhook)
+	if err != nil {
+		log.Printf("Audit stream workspace=%s: %v", workspace, err)
+		return
+	}
 	if len(pending) == 0 {
 		return
 	}
@@ -245,25 +249,22 @@ func (s *server) streamAuditLog(ctx context.Context, workspace string, now time.
 	}
 }
 
-func pendingAuditEntries(entries []domain.AuditLogEntry, webhook domain.Webhook) []domain.AuditLogEntry {
-	var pending []domain.AuditLogEntry
-	for _, entry := range entries {
-		if entry.ResourceType == "audit_log_stream" && entry.ResourceID == webhook.ID && entry.Action == "created" {
-			continue
-		}
-		if webhook.AuditCursorAt != nil && (entry.CreatedAt.Before(*webhook.AuditCursorAt) || entry.CreatedAt.Equal(*webhook.AuditCursorAt) && entry.ID <= webhook.AuditCursorID) {
-			continue
-		}
-		pending = append(pending, entry)
+// pendingAuditEntries is the next batch of entries the stream has not
+// delivered, in commit order (seq). A stream created before entries were
+// numbered resumes after the time/id cursor it kept.
+func (s *server) pendingAuditEntries(ctx context.Context, workspaceID string, webhook domain.Webhook) ([]domain.AuditLogEntry, error) {
+	var legacyAt time.Time
+	if webhook.AuditCursorSeq == 0 && webhook.AuditCursorAt != nil {
+		legacyAt = *webhook.AuditCursorAt
 	}
-	// The audit log is stored newest first.
-	slices.SortFunc(pending, func(a, b domain.AuditLogEntry) int {
-		if c := a.CreatedAt.Compare(b.CreatedAt); c != 0 {
-			return c
-		}
-		return strings.Compare(a.ID, b.ID)
-	})
-	return pending
+	entries, err := s.store.AuditEntriesAfter(ctx, workspaceID, webhook.AuditCursorSeq, legacyAt, webhook.AuditCursorID, auditStreamBatch)
+	if err != nil {
+		return nil, err
+	}
+	// The entry that records the stream's creation stays out of it.
+	return slices.DeleteFunc(entries, func(entry domain.AuditLogEntry) bool {
+		return entry.ResourceType == "audit_log_stream" && entry.ResourceID == webhook.ID && entry.Action == "created"
+	}), nil
 }
 
 func (s *server) sendAuditEntry(ctx context.Context, target, secret, deliveryID string, envelope map[string]any) (int, string, error) {
@@ -309,7 +310,7 @@ func (s *server) sendAuditEntry(ctx context.Context, target, secret, deliveryID 
 func (s *server) recordAuditStreamProgress(workspace, webhookID string, entry domain.AuditLogEntry, delivered bool, now time.Time) {
 	s.mutateAuditStream(workspace, webhookID, func(item *domain.Webhook) {
 		at := entry.CreatedAt
-		item.AuditCursorAt, item.AuditCursorID, item.DeliveryAttempts, item.NextAttemptAt = &at, entry.ID, 0, nil
+		item.AuditCursorAt, item.AuditCursorID, item.AuditCursorSeq, item.DeliveryAttempts, item.NextAttemptAt = &at, entry.ID, entry.Seq, 0, nil
 		if delivered {
 			item.FailingSince = nil
 			return

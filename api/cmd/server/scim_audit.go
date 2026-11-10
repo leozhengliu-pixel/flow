@@ -57,11 +57,7 @@ func (s *server) recordSCIMAudit(r *http.Request, workspaceKey string, entries [
 			}
 			built = append(built, domain.AuditLogEntry{ID: idgen.New("audit_"), Actor: actor.actor, BotActor: actor.bot, Action: entry.action, ResourceType: entry.resourceType, ResourceID: entry.resourceID, Metadata: metadata, CreatedAt: now})
 		}
-		slices.Reverse(built)
-		data.AuditLog = append(built, data.AuditLog...)
-		if len(data.AuditLog) > 1000 {
-			data.AuditLog = data.AuditLog[:1000]
-		}
+		appendAuditEntries(data, built...)
 		return nil
 	})
 	if err != nil {

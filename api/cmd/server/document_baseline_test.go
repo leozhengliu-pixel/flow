@@ -169,7 +169,7 @@ func TestImportDocumentRevision(t *testing.T) {
 		t.Fatalf("history after import: %#v", history)
 	}
 	audits := 0
-	for _, entry := range repository.Bootstrap().AuditLog {
+	for _, entry := range auditLogOf(t, repository, repository.Bootstrap().Workspace.URLKey) {
 		if entry.Action == "revision_imported" && entry.ResourceID == created.ID {
 			audits++
 		}

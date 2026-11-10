@@ -33,9 +33,8 @@ func (f scimFixture) raw(t *testing.T, method, path, body string, headers map[st
 
 func scimAuditEntries(t *testing.T, repository *store.SQLiteStore, resourceType string) []domain.AuditLogEntry {
 	t.Helper()
-	data, _ := repository.BootstrapFor("test-workspace")
 	entries := []domain.AuditLogEntry{}
-	for _, entry := range data.AuditLog {
+	for _, entry := range auditLogOf(t, repository, "test-workspace") {
 		if entry.ResourceType == resourceType && entry.Metadata["source"] == "scim" {
 			entries = append(entries, entry)
 		}
@@ -298,7 +297,8 @@ func TestSCIMEnterpriseExtensionAndProfile(t *testing.T) {
 			updated = &entries[index]
 		}
 	}
-	if updated == nil || !slices.Contains(updated.Metadata["changedFields"].([]string), "title") {
+	// Details come back from the audit table as JSON values.
+	if updated == nil || !slices.Contains(updated.Metadata["changedFields"].([]any), any("title")) {
 		t.Fatalf("profile update audit = %+v", entries)
 	}
 	raw, _ := json.Marshal(updated.Metadata)
@@ -369,13 +369,13 @@ func TestSCIMDeprovisionRemovesFromWorkspace(t *testing.T) {
 	if actions[len(actions)-1] != "restored" {
 		t.Fatalf("re-provision audit = %v", actions)
 	}
-	data, _ := f.repository.BootstrapFor("test-workspace")
-	if !slices.ContainsFunc(data.AuditLog, func(entry domain.AuditLogEntry) bool {
+	audit := auditLogOf(t, f.repository, "test-workspace")
+	if !slices.ContainsFunc(audit, func(entry domain.AuditLogEntry) bool {
 		return entry.ResourceType == "scim_settings" && entry.Action == "deprovision_action_changed" && entry.Metadata["after"] == "remove"
 	}) {
 		t.Fatal("deprovisioning setting change not audited")
 	}
-	if !slices.ContainsFunc(data.AuditLog, func(entry domain.AuditLogEntry) bool {
+	if !slices.ContainsFunc(audit, func(entry domain.AuditLogEntry) bool {
 		return entry.ResourceType == teamMemberAuditResource && entry.Action == domain.TeamMemberRemoved && entry.Metadata["source"] == "scim" && entry.Metadata["reason"] == teamMemberReasonWorkspaceMemberRemoved
 	}) {
 		t.Fatal("team membership removal on deprovisioning not audited")

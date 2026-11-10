@@ -221,9 +221,8 @@ func (f *memberAccountsFixture) accounts() codeHostAccountsResponse {
 }
 
 func (f *memberAccountsFixture) auditActions() []string {
-	data, _ := f.repo.WorkspaceMetadataFields("test-workspace", "auditLog")
 	actions := []string{}
-	for _, entry := range data.AuditLog {
+	for _, entry := range auditLogOf(f.t, f.repo, "test-workspace") {
 		if entry.ResourceType == "code_host_account" {
 			actions = append(actions, entry.Action)
 		}

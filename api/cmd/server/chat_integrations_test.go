@@ -176,9 +176,9 @@ func TestChatApplicationSetupIdentityOAuthAndInternalGroupBindings(t *testing.T)
 			if !saved.RequestsEnabled() || !saved.Requests.EveryMention || saved.Requests.Emoji != "OK" || saved.Requests.Priority == nil || *saved.Requests.Priority != 2 {
 				t.Fatalf("request settings not saved: %+v", saved.Requests)
 			}
-			audit, _ := s.store.WorkspaceMetadataFields("test-workspace", "auditLog")
-			if len(audit.AuditLog) == 0 || audit.AuditLog[0].Action != "chat_binding.updated" || fmt.Sprint(audit.AuditLog[0].Metadata["requests"]) != fmt.Sprint(map[string]any{"enabled": true, "everyMention": true, "emoji": "OK", "templateId": "", "priority": 2}) {
-				t.Fatalf("request settings not audited: %+v", audit.AuditLog[:min(len(audit.AuditLog), 1)])
+			audit := auditLogOf(t, s.store, "test-workspace")
+			if len(audit) == 0 || audit[0].Action != "chat_binding.updated" || fmt.Sprint(audit[0].Metadata["requests"]) != fmt.Sprint(map[string]any{"enabled": true, "everyMention": true, "emoji": "OK", "templateId": "", "priority": 2}) {
+				t.Fatalf("request settings not audited: %+v", audit[:min(len(audit), 1)])
 			}
 			binding.ID, binding.Requests = "", nil
 			binding.ChatID = "oc_external"

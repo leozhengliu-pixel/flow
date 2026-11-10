@@ -41,7 +41,8 @@ func trashRetentionDays() int {
 }
 
 // runStorageMaintenance keeps the database from growing without bound. Each
-// pass prunes domain events older than eventRetention (0 keeps them), purges
+// pass prunes domain events older than eventRetention (0 keeps them) and
+// audit entries older than the audit retention, purges
 // expired trash in every workspace, moves offloadable bodies out of metadata
 // rows written by earlier versions and, less often, deletes offloaded bodies
 // nothing refers to any more. All of it runs in small batches.
@@ -85,6 +86,12 @@ func (s *server) maintainStorage(ctx context.Context, now time.Time, eventRetent
 		} else if deleted > 0 {
 			log.Printf("Pruned %d domain events older than %s", deleted, now.Add(-eventRetention).Format(time.DateOnly))
 		}
+	}
+	// Audit entries past FLOW_AUDIT_LOG_RETENTION_DAYS, and any an older
+	// server left in a workspace document during an upgrade.
+	s.pruneAuditLog(ctx, now)
+	if err := s.store.MigrateLegacyAuditLog(ctx); err != nil && ctx.Err() == nil {
+		log.Printf("Audit log migration: %v", err)
 	}
 	for _, key := range s.store.WorkspaceKeys() {
 		if _, err := s.purgeExpiredTrash(ctx, key, now); err != nil && ctx.Err() == nil {

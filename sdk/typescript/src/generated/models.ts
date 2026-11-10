@@ -296,21 +296,47 @@ export interface AttachmentWebhookEvent {
   webhookTimestamp: number
 }
 
+/** AuditChainReport is the result of checking a workspace's audit log hash chain (GET /api/workspace/audit-log/verify). */
+export interface AuditChainReport {
+  /** BrokenAt is the number of the first entry that does not verify and Problem says why. */
+  brokenAt?: number
+  /** Entries is how many entries were checked, FirstSeq..LastSeq their numbers; PrunedThrough is the last number retention removed. */
+  entries: number
+  firstSeq: number
+  headHash: string
+  lastSeq: number
+  problem?: string
+  prunedThrough: number
+  valid: boolean
+}
+
 /** AuditEntryTypeCount is one audit entry type present in the log. */
 export interface AuditEntryTypeCount {
   count: number
   type: string
 }
 
+/** AuditLogEntry is one audit log record. Entries live in the append-only audit_events table (store/audit_events.go); Bootstrap.AuditLog only stages the entries a workspace mutation adds until its transaction commits. */
 export interface AuditLogEntry {
   action: string
   actor: User
+  actorId?: string
+  /** ActorType is who acted: user, api_key, oauth_app, scim, agent or system; ActorID names that credential (the user, API key, OAuth client or SCIM token id; empty for system). */
+  actorType?: string
   botActor?: ActorBot | null
   createdAt: string
+  hash?: string
   id: string
+  /** IP is the client address (truncated unless FLOW_AUDIT_LOG_IP=full) and UserAgent the browser and operating system it reported. */
+  ip?: string
   metadata?: Record<string, unknown>
   resourceId: string
   resourceType: string
+  /** Result is success (the default) or failure (for example a refused sign-in). */
+  result?: string
+  /** Seq numbers the workspace's entries in commit order; Hash chains each entry to the one before it (GET /api/workspace/audit-log/verify). */
+  seq?: number
+  userAgent?: string
 }
 
 export interface AuditLogEntryConnection {
@@ -3140,6 +3166,8 @@ export interface Webhook {
   /** Stream progress: the last delivered audit entry and retry state. */
   auditCursorAt?: string | null
   auditCursorId?: string
+  /** AuditCursorSeq is the audit log sequence number of the last entry delivered (the cursor since the log moved to its own table; the time/id cursor above is read once for streams created before). */
+  auditCursorSeq?: number
   /** AuditLog marks the workspace's audit log stream. It receives audit entries only, signed with a secret kept outside the workspace document. */
   auditLog?: boolean
   createdAt: string
@@ -3315,6 +3343,8 @@ export interface WebhookWithSecret {
   /** Stream progress: the last delivered audit entry and retry state. */
   auditCursorAt?: string | null
   auditCursorId?: string
+  /** AuditCursorSeq is the audit log sequence number of the last entry delivered (the cursor since the log moved to its own table; the time/id cursor above is read once for streams created before). */
+  auditCursorSeq?: number
   /** AuditLog marks the workspace's audit log stream. It receives audit entries only, signed with a secret kept outside the workspace document. */
   auditLog?: boolean
   createdAt: string

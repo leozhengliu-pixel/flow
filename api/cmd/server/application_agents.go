@@ -649,7 +649,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	// The run's write calls and their outcomes, checked against its final answer like a chat reply's
 	// (agent_action_outcomes.go); outcomeNudged is set once an answer reporting outcomes no tool produced was sent
 	// back.
-	ledger := &agentWriteLedger{}
+	ledger := &agentWriteLedger{audit: s.agentWriteAudit(r.Context(), task.WorkspaceKey, domain.User{ID: task.AppUserID, Name: app.Name, DisplayName: app.Name, App: true}, "agent_task", task.ID)}
 	outcomeNudged := false
 	outcomeRequest := builtinOutcomeRequest(task, data)
 	issueTitle := ""

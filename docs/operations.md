@@ -188,6 +188,43 @@ or when its trash retention ends) also deletes the attachment files of the
 purged issue, document, project or customer request that no remaining issue
 or trash entry attaches. Deleting a customer does the same for its requests.
 
+## Audit log
+
+The audit log lives in its own append-only tables: `audit_events` (one row per
+entry, per workspace, numbered by `seq`) and `audit_chain_heads` (each
+workspace's last `seq` and hash, and the last entry retention removed). Rows
+are written in the same transaction as the change they describe and are never
+updated. Include both tables in backups and keep backups at least as long as
+`FLOW_AUDIT_LOG_RETENTION_DAYS`.
+
+- **Retention.** Entries older than `FLOW_AUDIT_LOG_RETENTION_DAYS` (default
+  180 days, the six months China's Cybersecurity Law Art. 21 asks for; `0`
+  keeps everything) are deleted by the hourly maintenance pass in batches of
+  1,000, oldest first. With Redis coordination one replica runs the pass;
+  without it, replicas that prune at the same time take turns on each
+  workspace's chain head row, so nothing is deleted twice or out of order.
+- **Tamper evidence.** Each row's `hash` is SHA-256 over the previous row's
+  hash and every stored column. `GET /api/workspace/audit-log/verify` checks
+  one workspace (admins); `server audit-verify` (same configuration as the
+  server, `--config` accepted) checks every workspace and the instance-level
+  log and prints one JSON line per chain, exiting `1` when any chain does not
+  verify. Someone with write access to the database can still rewrite a whole
+  chain, so for evidence that survives a database compromise stream the log to
+  a SIEM (Settings › Security › Audit log stream) or export
+  `GET /api/workspace/audit-log?format=csv` regularly, and keep the reported
+  `headHash` values outside Flow.
+- **Instance-level entries.** Sign-in attempts for an email no account has,
+  and account events of accounts in no workspace, are stored with an empty
+  `workspace_id`; read them with
+  `SELECT * FROM audit_events WHERE workspace_id='' ORDER BY seq`.
+- **Client addresses** follow `FLOW_TRUSTED_PROXIES` and are truncated unless
+  `FLOW_AUDIT_LOG_IP=full`.
+- **Upgrading.** Earlier versions kept the latest 1,000 entries inside each
+  workspace document. Data migration 1030 moves them into `audit_events`
+  (oldest first, once) and removes them from the document; the maintenance
+  pass repeats the move for entries an older server writes during a rolling
+  upgrade. Audit log streams resume where they stopped.
+
 ## Database size
 
 `scripts/db-size-report/` has read-only reports for MySQL, PostgreSQL and

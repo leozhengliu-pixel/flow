@@ -129,6 +129,10 @@ type server struct {
 	// Bound on Flow tool calls in flight (tool_call_limiter.go).
 	toolCallLimiter     *toolCallLimiter
 	toolCallLimiterOnce sync.Once
+	// Audit log retention (FLOW_AUDIT_LOG_RETENTION_DAYS; 0 keeps every
+	// entry) and how it keeps client addresses (FLOW_AUDIT_LOG_IP).
+	auditRetention time.Duration
+	auditLogIP     string
 }
 
 func main() {
@@ -138,6 +142,11 @@ func main() {
 	// coding sessions (track H): Squid helper for the sandbox egress proxy.
 	if len(os.Args) >= 2 && os.Args[1] == "egress-acl" {
 		os.Exit(runEgressACLCommand(os.Args[2:]))
+	}
+	// Operators check every audit log hash chain (exit status 1 when one
+	// does not verify) with `server audit-verify`.
+	if len(os.Args) >= 2 && os.Args[1] == "audit-verify" {
+		os.Exit(runAuditVerifyCommand(os.Args[2:]))
 	}
 	// The YAML configuration file (--config or FLOW_CONFIG_FILE) is read
 	// first: its server settings become environment values the environment
@@ -240,6 +249,8 @@ func main() {
 		workspaceDefaultRegion:         applicationConfig.WorkspaceDefaultRegion,
 		workspaceTutorial:              applicationConfig.WorkspaceTutorial,
 		defaultLanguage:                configFile.DefaultLanguage,
+		auditRetention:                 applicationConfig.Retention.AuditLog,
+		auditLogIP:                     applicationConfig.AuditLogIP,
 	}
 
 	httpServer := &http.Server{Addr: applicationConfig.HTTPAddr, Handler: telemetryHandler(newHandler(s), applicationConfig.Telemetry.Enabled), ReadHeaderTimeout: 5 * time.Second}
@@ -469,6 +480,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/workspaces/{workspaceKey}/deleted-teams", s.listDeletedTeams)
 	mux.HandleFunc("GET /api/workspace/audit-log", s.listAuditLog)
 	mux.HandleFunc("GET /api/workspace/audit-log/types", s.listAuditEntryTypes)
+	mux.HandleFunc("GET /api/workspace/audit-log/verify", s.verifyAuditLog)
 	mux.HandleFunc("GET /api/workspace/audit-log-stream", s.getAuditStream)
 	mux.HandleFunc("POST /api/workspace/audit-log-stream", s.createAuditStream)
 	mux.HandleFunc("PATCH /api/workspace/audit-log-stream", s.updateAuditStream)

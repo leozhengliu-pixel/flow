@@ -133,8 +133,7 @@ func (s *server) deleteProjectRelation(w http.ResponseWriter, r *http.Request) {
 func (s *server) projectHistory(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
 	id := r.PathValue("id")
-	items := slices.DeleteFunc(slices.Clone(data.AuditLog), func(item domain.AuditLogEntry) bool { return item.ResourceType != "project" || item.ResourceID != id })
-	writePage(w, r, items)
+	writePage(w, r, s.resourceAuditHistory(r, data, "project", id))
 }
 
 func (s *server) listInitiativeRelations(w http.ResponseWriter, r *http.Request) {
@@ -254,10 +253,7 @@ func (s *server) deleteInitiativeRelation(w http.ResponseWriter, r *http.Request
 func (s *server) initiativeHistory(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
 	id := r.PathValue("id")
-	items := slices.DeleteFunc(slices.Clone(data.AuditLog), func(item domain.AuditLogEntry) bool {
-		return item.ResourceType != "initiative" || item.ResourceID != id
-	})
-	writePage(w, r, items)
+	writePage(w, r, s.resourceAuditHistory(r, data, "initiative", id))
 }
 
 func (s *server) listDocumentDrafts(w http.ResponseWriter, r *http.Request) {

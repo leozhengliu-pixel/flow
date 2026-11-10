@@ -1424,7 +1424,33 @@ func (s *SQLiteStore) MutateWithAggregate(ctx context.Context, eventType string,
 func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) (err error) {
 	ctx, trace := startMutationTrace(ctx)
 	defer func() { trace.report(workspaceKey, eventType, err) }()
-	return s.dispatchMutation(ctx, workspaceKey, eventType, payload, mutate)
+	// Audit entries the callback stages are committed by the mutation's own
+	// transaction (audit_events.go). A path that succeeded without one (it
+	// found nothing to write) still records them.
+	auditKey := workspaceKey
+	if auditKey == "" {
+		s.mu.RLock()
+		auditKey = s.lastWorkspaceKey
+		s.mu.RUnlock()
+	}
+	ctx, collector, mutate := collectMutationAudit(ctx, auditKey, mutate)
+	if err = s.dispatchMutation(ctx, workspaceKey, eventType, payload, mutate); err != nil || len(collector.pending) == 0 {
+		return err
+	}
+	pending := collector.pending
+	collector.pending = nil
+	workspaceID := collector.workspaceID
+	if workspaceID == "" {
+		workspaceID, err = s.WorkspaceIDForKey(ctx, auditKey)
+	}
+	if err != nil {
+		slog.Error("audit entries not recorded", "workspace", auditKey, "event", eventType, "error", err)
+		return nil
+	}
+	if auditErr := s.AppendAuditEntries(context.WithValue(ctx, auditCollectorKey{}, (*auditCollector)(nil)), workspaceID, pending...); auditErr != nil {
+		slog.Error("audit entries not recorded", "workspace", workspaceKey, "event", eventType, "error", auditErr)
+	}
+	return nil
 }
 
 func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {

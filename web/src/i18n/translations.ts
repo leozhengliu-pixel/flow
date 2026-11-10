@@ -1295,8 +1295,8 @@ export const zhCN: Record<string, string> = {
   December: "十二月",
   "Loading settings": "正在加载设置",
   "migration warnings": "条迁移警告",
-  "Workspace events are retained for 90 days and available to workspace owners.":
-    "工作区事件会保留 90 天，工作区所有者可以查看。",
+  "Workspace events are retained for 180 days unless your instance keeps them longer, and are available to workspace admins.":
+    "工作区事件会保留 180 天（实例配置了更长保留期时以其为准），工作区管理员可以查看。",
   "Review account access, subscriptions, integrations, and workspace setting changes. Use the API for advanced actor, email, IP, and date-range queries.":
     "查看账户访问、订阅、集成和工作区设置变更。可使用 API 按操作者、邮箱、IP 和日期范围进行高级查询。",
   "Search audit log": "搜索审计日志",

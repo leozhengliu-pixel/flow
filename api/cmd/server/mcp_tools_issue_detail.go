@@ -356,9 +356,13 @@ func (s *server) listMCPProjectActivity(ctx context.Context, data domain.Bootstr
 		creator = project.Lead
 	}
 	events = append(events, mcpProjectEvent{ID: project.ID + ":created", Type: "project.created", Summary: "created the project", Actor: mcpUserRef(creator), CreatedAt: project.CreatedAt})
-	// Property history lives in the workspace audit log, which the metadata
-	// projection only keeps for admins (the same rule as GET /projects/{id}/history).
-	for _, entry := range data.AuditLog {
+	// Property history lives in the workspace audit log, which only admins
+	// read (the same rule as GET /projects/{id}/history).
+	history := []domain.AuditLogEntry{}
+	if s.authDisabled || workspaceAdminRole(data.ViewerRole) {
+		history, _ = s.store.ListAuditEntries(ctx, data.Workspace.ID, store.AuditQuery{ResourceTypes: []string{"project"}, ResourceID: project.ID, Limit: auditListLimit})
+	}
+	for _, entry := range history {
 		if entry.ResourceType != "project" || entry.ResourceID != project.ID {
 			continue
 		}

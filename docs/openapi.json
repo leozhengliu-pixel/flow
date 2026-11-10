@@ -32321,7 +32321,7 @@
     },
     "/api/workspace/audit-log": {
       "get": {
-        "description": "Admins. Filters: type (resourceType.action or action), actorId, actorEmail, resourceType, resourceId, ip, since, until, or a filter object. Connection with pagination arguments; otherwise an array.",
+        "description": "Admins. Filters: type (resourceType.action or action), actorId (the user, or the API key, OAuth client or SCIM token that acted), actorEmail, resourceType, resourceId, ip, since, until, or a filter object. Connection with pagination arguments; format=csv downloads the matching entries as CSV; otherwise an array of the newest 1,000 matching entries.",
         "operationId": "get_workspace_audit_log",
         "parameters": [
           {
@@ -32363,7 +32363,7 @@
                 }
               }
             },
-            "description": "Filter object (JSON). Filterable fields: id, type, action, resourceType, resourceId, actor, ip, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
+            "description": "Filter object (JSON). Filterable fields: id, type, action, resourceType, resourceId, actor, actorType, ip, result, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.",
             "in": "query",
             "name": "filter"
           },
@@ -32420,6 +32420,14 @@
           {
             "in": "query",
             "name": "until",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "csv downloads the entries as a CSV file.",
+            "in": "query",
+            "name": "format",
             "schema": {
               "type": "string"
             }
@@ -32689,6 +32697,84 @@
           }
         ],
         "summary": "Audit entry types present in the log",
+        "tags": [
+          "audit"
+        ],
+        "x-flow-typed": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/workspace/audit-log/verify": {
+      "get": {
+        "description": "Admins. Recomputes the chain that links every retained entry to the one before it; valid is false, with brokenAt and problem, when an entry was changed, removed or inserted.",
+        "operationId": "get_workspace_audit_log_verify",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditChainReport"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "summary": "Verify the audit log hash chain",
         "tags": [
           "audit"
         ],
@@ -39106,6 +39192,50 @@
         ],
         "type": "object"
       },
+      "AuditChainReport": {
+        "description": "AuditChainReport is the result of checking a workspace's audit log hash chain (GET /api/workspace/audit-log/verify).",
+        "properties": {
+          "brokenAt": {
+            "description": "BrokenAt is the number of the first entry that does not verify and Problem says why.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "entries": {
+            "description": "Entries is how many entries were checked, FirstSeq..LastSeq their numbers; PrunedThrough is the last number retention removed.",
+            "type": "integer"
+          },
+          "firstSeq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "headHash": {
+            "type": "string"
+          },
+          "lastSeq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "prunedThrough": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "entries",
+          "firstSeq",
+          "headHash",
+          "lastSeq",
+          "prunedThrough",
+          "valid"
+        ],
+        "type": "object"
+      },
       "AuditEntryTypeCount": {
         "description": "AuditEntryTypeCount is one audit entry type present in the log.",
         "properties": {
@@ -39123,12 +39253,20 @@
         "type": "object"
       },
       "AuditLogEntry": {
+        "description": "AuditLogEntry is one audit log record. Entries live in the append-only audit_events table (store/audit_events.go); Bootstrap.AuditLog only stages the entries a workspace mutation adds until its transaction commits.",
         "properties": {
           "action": {
             "type": "string"
           },
           "actor": {
             "$ref": "#/components/schemas/User"
+          },
+          "actorId": {
+            "type": "string"
+          },
+          "actorType": {
+            "description": "ActorType is who acted: user, api_key, oauth_app, scim, agent or system; ActorID names that credential (the user, API key, OAuth client or SCIM token id; empty for system).",
+            "type": "string"
           },
           "botActor": {
             "anyOf": [
@@ -39144,7 +39282,14 @@
             "format": "date-time",
             "type": "string"
           },
+          "hash": {
+            "type": "string"
+          },
           "id": {
+            "type": "string"
+          },
+          "ip": {
+            "description": "IP is the client address (truncated unless FLOW_AUDIT_LOG_IP=full) and UserAgent the browser and operating system it reported.",
             "type": "string"
           },
           "metadata": {
@@ -39155,6 +39300,18 @@
             "type": "string"
           },
           "resourceType": {
+            "type": "string"
+          },
+          "result": {
+            "description": "Result is success (the default) or failure (for example a refused sign-in).",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Seq numbers the workspace's entries in commit order; Hash chains each entry to the one before it (GET /api/workspace/audit-log/verify).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "userAgent": {
             "type": "string"
           }
         },
@@ -49658,6 +49815,11 @@
           "auditCursorId": {
             "type": "string"
           },
+          "auditCursorSeq": {
+            "description": "AuditCursorSeq is the audit log sequence number of the last entry delivered (the cursor since the log moved to its own table; the time/id cursor above is read once for streams created before).",
+            "format": "int64",
+            "type": "integer"
+          },
           "auditLog": {
             "description": "AuditLog marks the workspace's audit log stream. It receives audit entries only, signed with a secret kept outside the workspace document.",
             "type": "boolean"
@@ -50312,6 +50474,11 @@
           },
           "auditCursorId": {
             "type": "string"
+          },
+          "auditCursorSeq": {
+            "description": "AuditCursorSeq is the audit log sequence number of the last entry delivered (the cursor since the log moved to its own table; the time/id cursor above is read once for streams created before).",
+            "format": "int64",
+            "type": "integer"
           },
           "auditLog": {
             "description": "AuditLog marks the workspace's audit log stream. It receives audit entries only, signed with a secret kept outside the workspace document.",

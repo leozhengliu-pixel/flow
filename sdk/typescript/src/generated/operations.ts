@@ -9,6 +9,7 @@ import type {
   ApplicationWebhookSettings,
   Attachment,
   AttachmentConnection,
+  AuditChainReport,
   AuditEntryTypeCount,
   AuditLogEntry,
   AuditLogEntryConnection,
@@ -1141,7 +1142,7 @@ export interface GetWorkspaceAuditLogQuery {
   orderBy?: "createdAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** Filter object (JSON). Filterable fields: id, type, action, resourceType, resourceId, actor, ip, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, type, action, resourceType, resourceId, actor, actorType, ip, result, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   type?: string
   actorId?: string
@@ -1152,6 +1153,8 @@ export interface GetWorkspaceAuditLogQuery {
   /** RFC 3339, YYYY-MM-DD or ISO 8601 duration (-P7D). */
   since?: string
   until?: string
+  /** csv downloads the entries as a CSV file. */
+  format?: string
 }
 
 /** Arguments of `getWorkspaceAuditLog`. */
@@ -1163,7 +1166,7 @@ export interface GetWorkspaceAuditLogRequest {
 export interface GetWorkspaceAuditLogLegacyQuery {
   /** Include archived resources. */
   includeArchived?: boolean
-  /** Filter object (JSON). Filterable fields: id, type, action, resourceType, resourceId, actor, ip, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  /** Filter object (JSON). Filterable fields: id, type, action, resourceType, resourceId, actor, actorType, ip, result, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
   filter?: Record<string, unknown>
   type?: string
   actorId?: string
@@ -1174,6 +1177,8 @@ export interface GetWorkspaceAuditLogLegacyQuery {
   /** RFC 3339, YYYY-MM-DD or ISO 8601 duration (-P7D). */
   since?: string
   until?: string
+  /** csv downloads the entries as a CSV file. */
+  format?: string
 }
 
 /** Arguments of `getWorkspaceAuditLogLegacy`. */
@@ -1301,6 +1306,7 @@ export const operations = {
   getWorkspaceAuditLog: { method: "GET", path: "/api/workspace/audit-log", operationId: "get_workspace_audit_log", successStatuses: [200] },
   getWorkspaceAuditLogLegacy: { method: "GET", path: "/api/workspace/audit-log", operationId: "get_workspace_audit_log_legacy", successStatuses: [200] },
   getWorkspaceAuditLogTypes: { method: "GET", path: "/api/workspace/audit-log/types", operationId: "get_workspace_audit_log_types", successStatuses: [200] },
+  getWorkspaceAuditLogVerify: { method: "GET", path: "/api/workspace/audit-log/verify", operationId: "get_workspace_audit_log_verify", successStatuses: [200] },
   getUploadsName: { method: "GET", path: "/uploads/{name}", operationId: "get_uploads_name", successStatuses: [200] },
 } as const
 
@@ -2288,7 +2294,7 @@ export class FlowApi {
   /**
    * `GET /api/workspace/audit-log`
    * List audit log entries
-   * Admins. Filters: type (resourceType.action or action), actorId, actorEmail, resourceType, resourceId, ip, since, until, or a filter object. Connection with pagination arguments; otherwise an array.
+   * Admins. Filters: type (resourceType.action or action), actorId (the user, or the API key, OAuth client or SCIM token that acted), actorEmail, resourceType, resourceId, ip, since, until, or a filter object. Connection with pagination arguments; format=csv downloads the matching entries as CSV; otherwise an array of the newest 1,000 matching entries.
    * Returns the connection form; `getWorkspaceAuditLogLegacy` returns the original response.
    */
   getWorkspaceAuditLog(request?: GetWorkspaceAuditLogRequest, options?: RequestOptions): Promise<AuditLogEntryConnection> {
@@ -2298,7 +2304,7 @@ export class FlowApi {
   /**
    * `GET /api/workspace/audit-log`
    * List audit log entries
-   * Admins. Filters: type (resourceType.action or action), actorId, actorEmail, resourceType, resourceId, ip, since, until, or a filter object. Connection with pagination arguments; otherwise an array.
+   * Admins. Filters: type (resourceType.action or action), actorId (the user, or the API key, OAuth client or SCIM token that acted), actorEmail, resourceType, resourceId, ip, since, until, or a filter object. Connection with pagination arguments; format=csv downloads the matching entries as CSV; otherwise an array of the newest 1,000 matching entries.
    * Returns the original response (no pagination arguments); `getWorkspaceAuditLog` returns the connection form.
    */
   getWorkspaceAuditLogLegacy(request?: GetWorkspaceAuditLogLegacyRequest, options?: RequestOptions): Promise<AuditLogEntry[]> {
@@ -2311,6 +2317,15 @@ export class FlowApi {
    */
   getWorkspaceAuditLogTypes(options?: RequestOptions): Promise<AuditEntryTypeCount[]> {
     return this.transport.request({ method: "GET", path: "/api/workspace/audit-log/types", ...options })
+  }
+
+  /**
+   * `GET /api/workspace/audit-log/verify`
+   * Verify the audit log hash chain
+   * Admins. Recomputes the chain that links every retained entry to the one before it; valid is false, with brokenAt and problem, when an entry was changed, removed or inserted.
+   */
+  getWorkspaceAuditLogVerify(options?: RequestOptions): Promise<AuditChainReport> {
+    return this.transport.request({ method: "GET", path: "/api/workspace/audit-log/verify", ...options })
   }
 
   /**

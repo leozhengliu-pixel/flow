@@ -2152,8 +2152,12 @@ type Webhook struct {
 	// entries only, signed with a secret kept outside the workspace document.
 	AuditLog bool `json:"auditLog,omitempty"`
 	// Stream progress: the last delivered audit entry and retry state.
-	AuditCursorAt    *time.Time `json:"auditCursorAt,omitempty"`
-	AuditCursorID    string     `json:"auditCursorId,omitempty"`
+	AuditCursorAt *time.Time `json:"auditCursorAt,omitempty"`
+	AuditCursorID string     `json:"auditCursorId,omitempty"`
+	// AuditCursorSeq is the audit log sequence number of the last entry
+	// delivered (the cursor since the log moved to its own table; the
+	// time/id cursor above is read once for streams created before).
+	AuditCursorSeq   int64      `json:"auditCursorSeq,omitempty"`
 	DeliveryAttempts int        `json:"deliveryAttempts,omitempty"`
 	NextAttemptAt    *time.Time `json:"nextAttemptAt,omitempty"`
 	FailingSince     *time.Time `json:"failingSince,omitempty"`
@@ -2555,6 +2559,9 @@ type SubscriptionMutationInput struct {
 	Events *[]string `json:"events,omitempty"`
 }
 
+// AuditLogEntry is one audit log record. Entries live in the append-only
+// audit_events table (store/audit_events.go); Bootstrap.AuditLog only stages
+// the entries a workspace mutation adds until its transaction commits.
 type AuditLogEntry struct {
 	ID           string         `json:"id"`
 	Actor        User           `json:"actor"`
@@ -2564,6 +2571,39 @@ type AuditLogEntry struct {
 	ResourceID   string         `json:"resourceId"`
 	Metadata     map[string]any `json:"metadata,omitempty"`
 	CreatedAt    time.Time      `json:"createdAt"`
+	// ActorType is who acted: user, api_key, oauth_app, scim, agent or
+	// system; ActorID names that credential (the user, API key, OAuth
+	// client or SCIM token id; empty for system).
+	ActorType string `json:"actorType,omitempty"`
+	ActorID   string `json:"actorId,omitempty"`
+	// IP is the client address (truncated unless FLOW_AUDIT_LOG_IP=full) and
+	// UserAgent the browser and operating system it reported.
+	IP        string `json:"ip,omitempty"`
+	UserAgent string `json:"userAgent,omitempty"`
+	// Result is success (the default) or failure (for example a refused
+	// sign-in).
+	Result string `json:"result,omitempty"`
+	// Seq numbers the workspace's entries in commit order; Hash chains each
+	// entry to the one before it (GET /api/workspace/audit-log/verify).
+	Seq  int64  `json:"seq,omitempty"`
+	Hash string `json:"hash,omitempty"`
+}
+
+// AuditChainReport is the result of checking a workspace's audit log hash
+// chain (GET /api/workspace/audit-log/verify).
+type AuditChainReport struct {
+	Valid bool `json:"valid"`
+	// Entries is how many entries were checked, FirstSeq..LastSeq their
+	// numbers; PrunedThrough is the last number retention removed.
+	Entries       int    `json:"entries"`
+	FirstSeq      int64  `json:"firstSeq"`
+	LastSeq       int64  `json:"lastSeq"`
+	PrunedThrough int64  `json:"prunedThrough"`
+	HeadHash      string `json:"headHash"`
+	// BrokenAt is the number of the first entry that does not verify and
+	// Problem says why.
+	BrokenAt int64  `json:"brokenAt,omitempty"`
+	Problem  string `json:"problem,omitempty"`
 }
 
 type TrashEntry struct {

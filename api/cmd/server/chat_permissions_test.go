@@ -294,8 +294,7 @@ func chatTenantPermissions(settings map[string]any) map[string]any {
 }
 
 func (f *chatPermissionFixture) audited(action string, match func(domain.AuditLogEntry) bool) bool {
-	entries, _ := f.s.store.WorkspaceMetadataFields("test-workspace", "auditLog")
-	return slices.ContainsFunc(entries.AuditLog, func(entry domain.AuditLogEntry) bool {
+	return slices.ContainsFunc(auditLogEntries(f.s.store, "test-workspace"), func(entry domain.AuditLogEntry) bool {
 		return entry.Action == action && (match == nil || match(entry))
 	})
 }
@@ -786,9 +785,9 @@ func testChatPrivateTeamBindingNeedsTeamOwnerAuthorization(t *testing.T, provide
 	f.expect(f.lead, "DELETE", base+"/bindings/"+renewed["id"].(string), nil, 204)
 	renewed = f.expect(f.lead, "POST", base+"/bindings", chatAuthorizedBinding(binding), 200)
 
-	entries, _ := f.s.store.WorkspaceMetadataFields("test-workspace", "auditLog")
+	entries := auditLogOf(t, f.s.store, "test-workspace")
 	for _, action := range []string{"chat_binding.authorized", "chat_binding.updated", "chat_binding.revoked"} {
-		if !slices.ContainsFunc(entries.AuditLog, func(entry domain.AuditLogEntry) bool {
+		if !slices.ContainsFunc(entries, func(entry domain.AuditLogEntry) bool {
 			return entry.Action == action && entry.ResourceID == created.ID && entry.Metadata["authorizedBy"] == f.lead.user.ID && entry.Metadata["teamId"] == f.privateTeam && entry.Metadata["chatId"] == "oc_internal" && entry.Metadata["privateTeam"] == true
 		}) {
 			t.Fatalf("audit entry %s missing", action)

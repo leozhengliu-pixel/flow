@@ -173,9 +173,8 @@ func (names teamMemberNames) decorate(changes []domain.TeamMemberChange) {
 	}
 }
 
-// appendTeamMemberAudit prepends one audit entry per change (newest first,
-// capped like appendAudit). Entry ids stay unique within the batch so the
-// audit stream cursor orders them.
+// appendTeamMemberAudit records one audit entry per change, in the order of
+// the changes.
 func appendTeamMemberAudit(data *domain.Bootstrap, actor teamMemberAuditActor, names teamMemberNames, reason string, changes []domain.TeamMemberChange, extra map[string]any) {
 	if len(changes) == 0 {
 		return
@@ -231,12 +230,7 @@ func appendTeamMemberAudit(data *domain.Bootstrap, actor teamMemberAuditActor, n
 		}
 		entries = append(entries, domain.AuditLogEntry{ID: idgen.New("audit_"), Actor: who, BotActor: actor.bot, Action: change.Action, ResourceType: teamMemberAuditResource, ResourceID: change.UserID, Metadata: metadata, CreatedAt: now})
 	}
-	// Newest first: the last change of the batch leads.
-	slices.Reverse(entries)
-	data.AuditLog = append(entries, data.AuditLog...)
-	if len(data.AuditLog) > 1000 {
-		data.AuditLog = data.AuditLog[:1000]
-	}
+	appendAuditEntries(data, entries...)
 }
 
 // recordTeamMemberAudit writes the audit entries of changes already applied

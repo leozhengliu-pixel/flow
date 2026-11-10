@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -181,9 +180,10 @@ func TestArchiveAuditKeepsAnIssueCreatedOnAnotherServer(t *testing.T) {
 			if err := first.ReloadWorkspace(t.Context(), workspace); err != nil {
 				t.Fatal(err)
 			}
-			audit, _ := first.WorkspaceMetadataFields(workspace, "auditLog")
-			if !slices.ContainsFunc(audit.AuditLog, func(entry domain.AuditLogEntry) bool { return entry.ResourceID == taskID }) {
-				t.Fatal("audit entry was not written")
+			stored, _ := first.storedWorkspace(workspace)
+			audit, err := first.ListAuditEntries(t.Context(), stored.Workspace.ID, AuditQuery{ResourceID: taskID})
+			if err != nil || len(audit) != 1 {
+				t.Fatalf("audit entry was not written: %+v %v", audit, err)
 			}
 		})
 	}
@@ -232,7 +232,14 @@ func TestArchiveAuditWriteVolumeDoesNotGrowWithWorkspace(t *testing.T) {
 			t.Errorf("archive audit wrote %s: %d then %d rows", table, small[table], large[table])
 		}
 	}
-	if fmt.Sprint(small) != fmt.Sprint(large) || small["workspace_metadata_records"] == 0 || small["workspace_metadata_records"] > 2 {
-		t.Fatalf("archive audit writes grew with the workspace or are not one entry: %v then %v", small, large)
+	// The entry goes to the audit_events table, not the workspace document.
+	if fmt.Sprint(small) != fmt.Sprint(large) || small["workspace_metadata_records"] != 0 {
+		t.Fatalf("archive audit writes grew with the workspace or touched the document: %v then %v", small, large)
+	}
+	for _, id := range []string{"mention_small", "mention_large"} {
+		entries, err := repo.ListAuditEntries(ctx, data.Workspace.ID, AuditQuery{ResourceID: id})
+		if err != nil || len(entries) != 1 {
+			t.Fatalf("audit entries for %s = %+v, %v", id, entries, err)
+		}
 	}
 }

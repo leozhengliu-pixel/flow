@@ -262,6 +262,7 @@ func (s *server) revokeMCPAuthorizations(w http.ResponseWriter, r *http.Request)
 			respondMutation(w, err, http.StatusOK, nil)
 			return
 		}
+		s.recordAudit(r.Context(), key, newAuditEntry(actor, "revoked", "oauth_authorization", authorization.ID, map[string]any{"clientId": authorization.ClientID, "clientName": authorization.ClientName, "userId": authorization.UserID}))
 		revoked++
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"revoked": revoked})
