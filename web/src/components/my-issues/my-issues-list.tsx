@@ -28,6 +28,8 @@ import { useIdentifierColumnWidth } from './identifier-column'
 import { teamWorkflowStates } from '@/lib/team-workflow'
 import { AvatarImage, UserAvatar } from '@/components/ui/user-avatar'
 import { avatarColor } from '@/components/issue/avatar-color'
+import { usePeopleDirectory } from '@/components/property/people-context'
+import { directoryPerson } from '@/lib/people'
 import { AgentHover } from '@/components/agent/agent-hover-card'
 import { IssueAssigneeSlot } from './issue-assignee-slot'
 import { agentHoverProps } from '@/components/agent/agent-hover-props'
@@ -387,6 +389,8 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
   const sessionLabel = phone && issue.delegate && issue.agentSessionState
     ? t(CODING_STATE_LABELS[issue.agentSessionState as keyof typeof CODING_STATE_LABELS] ?? issue.agentSessionState)
     : undefined
+  const { users: directoryUsers } = usePeopleDirectory()
+  const creator = displayProperties.has('creator') && issue.creatorId ? directoryPerson(directoryUsers, issue.creatorId) : undefined
   const estimateSettingsFor = useTeamEstimateSettings()
   const hasEstimateContext = Boolean(useIssueRowActions())
   const estimateSettings = estimateSettingsFor(issue.teamId)
@@ -462,6 +466,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
             /> : null}
             {displayProperties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
             {showEstimate && <EstimateChip className={styles.estimateChip} value={issue.estimate!} settings={estimateSettings} label={`Estimate ${issue.estimate}`}/>}
+            {displayProperties.has('creator') && issue.creatorId ? <span className={styles.creatorAvatar} data-row-creator aria-label={`Creator ${issue.creatorName ?? creator?.displayName ?? ''}`.trim()}><UserAvatar avatarUrl={creator?.avatarUrl} className={styles.avatar} color={avatarColor(issue.creatorId)} name={issue.creatorName ?? creator?.displayName ?? ''}/></span> : null}
             {displayProperties.has('assignee') ? <IssueAssigneeSlot issue={issue} options={propertyOptions.assignee} onChange={value => change('assignee', value)} avatarClassName={styles.avatar} emptyClassName={styles.noAssignee} sessionLabel={sessionLabel}/> : null}
             {mutationError && <button type="button" className={styles.rowError} title={mutationError} onClick={() => onRetryMutation?.(issue)}>Retry</button>}
           </span>

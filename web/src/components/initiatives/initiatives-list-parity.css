@@ -203,3 +203,20 @@
 .li-roadmap-bar {position:absolute;z-index:1;min-width:90px;border:.5px solid var(--theme-border-strong);border-radius:3px;background:var(--theme-surface-1);left:315px;top:7px;height:26px; cursor: grab; outline: 0; transition: box-shadow 120ms ease, opacity 120ms ease; }
 .li-roadmap-bar[data-dragging=true] { z-index: 8; cursor: grabbing; box-shadow: 0 5px 14px lch(0 0 0/.28); opacity: .82; transition: none; }
 .li-roadmap-bar:focus-visible { box-shadow: 0 0 0 1px var(--focus-ring); }
+
+/* Empty state (measured against the reference's introduction): 28px pills, 11px key caps, 15px/600 title. */
+@media (min-width: 901px) {
+  .li-empty--planned { max-width: 340px; }
+  .li-empty--planned strong { font-size: 15px; font-weight: 600; line-height: 23px; }
+  .li-empty--planned p { font-weight: 450; line-height: 18.2px; }
+  .li-empty--planned > div { gap: 8px; }
+  .li-empty--planned > div a, .li-empty--planned > div button { height: 28px; font-weight: 500; line-height: normal; }
+  .li-empty--planned > div a { border-color: transparent; }
+  .li-empty--planned > div button { gap: 6px; border-color: transparent; }
+  .li-empty--planned .li-empty-shortcut { display: inline-flex; align-items: center; gap: 3px; opacity: 1; }
+  .li-empty--planned .li-empty-shortcut kbd { min-width: 18px; height: auto; display: inline-flex; align-items: center; justify-content: center; padding: 2px; border: .5px solid rgb(255 255 255 / .4); border-radius: 4px; font: 500 11px/12.1px var(--font); }
+  .li-empty--planned .li-empty-shortcut span { font-size: 10px; font-weight: 450; line-height: 11px; opacity: 1; }
+}
+@media (min-width: 901px) {
+  :root[data-theme="light"] .li-empty--planned > div button { background: #6d78d5; }
+}

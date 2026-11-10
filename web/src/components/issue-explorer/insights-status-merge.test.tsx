@@ -32,7 +32,7 @@ const allRows = issues.map(item => issueToExplorerRow(item, 'workspace', issues,
 const rows = allRows.filter((_, index) => !issues[index].archivedAt)
 
 function setup(insights: Record<string, unknown>, onDrillChange?: (rows: MyIssuesRowData[] | undefined) => void) {
-  const view = { id: 'status-merge', name: 'Parent issues', insights } as unknown as SavedView
+  const view = { id: 'status-merge', name: 'Parent issues', insights: { segment: 'none', ...insights } } as unknown as SavedView
   return render(<MemoryRouter><I18nProvider><SavedViewInsightsPanel data={data} allRows={allRows} rows={rows} view={view} onSave={vi.fn(async () => undefined)} onClose={vi.fn()} onDrillChange={onDrillChange}/></I18nProvider></MemoryRouter>)
 }
 const tableLines = () => within(screen.getByRole('table', { name: 'Insights table' })).getAllByRole('row').map(row => within(row).queryAllByRole('cell').map(cell => cell.textContent)).filter(line => line.length)

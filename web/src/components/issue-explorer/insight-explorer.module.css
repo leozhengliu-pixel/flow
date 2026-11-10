@@ -46,23 +46,24 @@
 .axisLabels { position: absolute; bottom: 0; height: 30px; pointer-events: none; }
 .axisLabel {
   position: absolute;
-  top: 7px;
+  top: 3px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  height: 16px;
+  height: 24px;
   padding: 0;
   border: 0;
   background: var(--ix-chart-bg);
   color: var(--ix-muted);
-  font: 450 var(--ix-axis-font)/16px var(--font);
+  font: 450 var(--ix-axis-font)/24px var(--font);
   white-space: nowrap;
   transform: translateX(-50%);
   pointer-events: auto;
   cursor: pointer;
 }
-.axisLabel > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.axisIcon { width: 20px; height: 14px; display: flex; flex: 0 0 20px; align-items: center; justify-content: center; }
+.axisLabel > span:not(.axisIcon) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .axisLabel > svg, .axisLabel > i { flex: 0 0 auto; }
 .axisLabel[data-active] {
   z-index: 1;
@@ -122,6 +123,7 @@
 .header { position: sticky; top: 0; z-index: 3; }
 .header > [role="columnheader"], .header .columnCell > [role="columnheader"] { border-top: .5px solid var(--ix-header-border); border-bottom-color: var(--ix-header-border); border-right-color: var(--ix-header-border); background: var(--ix-header-bg); }
 .header button { color: var(--ix-muted); font-weight: 500; white-space: nowrap; }
+.header [data-column-kind="base"] button { font-weight: 450; }
 .row [data-highlight="weak"] { background: var(--ix-hover); }
 .row [data-highlight="strong"] { background: var(--ix-hover-strong); }
 .row [data-selected="true"]::after { position: absolute; inset: 0; border: .5px solid var(--accent-primary); border-radius: 6px; pointer-events: none; content: ""; }

@@ -69,7 +69,7 @@ describe('Insights menus', () => {
   })
 
   it('offers "No Value" in the Segment menu while the select reads "No value", and hides label groups the workspace lacks', async () => {
-    setup()
+    setup({ segment: 'none' })
     expect(screen.getByRole('button', { name: 'Segment' })).toHaveTextContent('No value')
     const { menu } = await openSelect('Segment')
     expect(within(menu).getAllByRole('menuitem')[0]).toHaveTextContent('No Value')
@@ -116,7 +116,7 @@ describe('Insights menus', () => {
 
   it('keeps "Set default for everyone" available while the view has no shared default', () => {
     setup()
-    expect(screen.getByRole('button', { name: 'Save current insight' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Set default for everyone' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'Reset' })).toBeNull()
   })
 

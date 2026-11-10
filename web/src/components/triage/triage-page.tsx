@@ -163,8 +163,8 @@ export function TriagePage({ data, team, onReload, onCreateIssue, onNavigate, se
     <div className="flow-triage-list__title">
       <span className="flow-triage-list__team" aria-hidden="true"><TeamIcon team={team}/></span>
       <h2>{t('Triage')}</h2>
-      <FlowTooltip label={t(favorited ? 'Remove from favorites' : 'Favorite page')} shortcut="⌥ F">
-        <ContentViewHeaderFavoriteActionButton className="flow-triage-list__favorite" favorited={favorited} favoriteLabel={t('Favorite page')} unfavoriteLabel={t('Remove from favorites')} icon={<><span className="flow-triage-list__phone-star">{favorited ? <FlowFavoriteFilledIcon/> : <FlowFavoriteIcon/>}</span><Star className="flow-triage-list__desktop-star" size={14} fill={favorited ? 'currentColor' : 'none'}/></>} onClick={() => void toggleFavoriteFor(data, 'triage', team.id, undefined, favorited)}/>
+      <FlowTooltip label={t(favorited ? 'Remove from favorites' : 'Add to favorites')} shortcut="⌥ F">
+        <ContentViewHeaderFavoriteActionButton className="flow-triage-list__favorite" favorited={favorited} favoriteLabel={t('Add to favorites')} unfavoriteLabel={t('Remove from favorites')} icon={<><span className="flow-triage-list__phone-star">{favorited ? <FlowFavoriteFilledIcon/> : <FlowFavoriteIcon/>}</span><Star className="flow-triage-list__desktop-star" size={14} fill={favorited ? 'currentColor' : 'none'}/></>} onClick={() => void toggleFavoriteFor(data, 'triage', team.id, undefined, favorited)}/>
       </FlowTooltip>
     </div>
     <div className="flow-triage-list__actions">

@@ -76,8 +76,8 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'milestone', label: 'Milestone' },
   { value: 'cycle', label: 'Cycle' },
   { value: 'sla', label: 'SLA' },
-  { value: 'estimate', label: 'Estimate' },
   { value: 'release', label: 'Release' },
+  { value: 'estimate', label: 'Estimate' },
   { value: 'labels', label: 'Labels' },
   { value: 'links', label: 'Links' },
   { value: 'customers', label: 'Customers' },
@@ -133,7 +133,8 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
               <button
                 type="button"
                 className={styles.orderButton}
-                aria-label={`Group ordering: ${options.groupOrder === 'desc' ? 'descending' : 'ascending'}`}
+                aria-label="Group ordering"
+                aria-description={options.groupOrder === 'desc' ? 'descending' : 'ascending'}
                 title="Group ordering"
                 data-order={options.groupOrder ?? 'asc'}
                 onClick={() => change({ groupOrder: options.groupOrder === 'desc' ? 'asc' : 'desc' })}
@@ -150,7 +151,8 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
                 type="button"
                 className={styles.orderButton}
                 disabled={options.grouping === 'focus'}
-                aria-label={`Ordering direction: ${direction === 'asc' ? 'ascending' : 'descending'}`}
+                aria-label="View ordering"
+                aria-description={direction === 'asc' ? 'ascending' : 'descending'}
                 title={t('Direction')}
                 data-order={direction}
                 onClick={() => change({ orderDirection: direction === 'asc' ? 'desc' : 'asc' })}

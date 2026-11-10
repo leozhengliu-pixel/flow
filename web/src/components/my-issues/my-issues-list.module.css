@@ -245,3 +245,4 @@
 @media(--desktop-layout){
   .group[data-collapsed=true]{padding-bottom:4px}
 }
+.creatorAvatar{display:inline-flex;flex:none;align-items:center}

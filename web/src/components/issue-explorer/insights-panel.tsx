@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { BarChart3, ChevronDown, Palette, X } from 'lucide-react'
+import { BarChart3, BookOpen, ChevronDown, Palette, X } from 'lucide-react'
 import { toast } from '@/lib/toast'
 import { FlowOptionsIcon, FlowUrlIcon } from '@/components/issue/flow-header-icons'
 import { MyIssuesList, type MyIssuesRowData } from '@/components/my-issues/my-issues-list'
@@ -183,7 +183,7 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
   const showReset = personal && hasSharedDefault
   const setDefault = (showSetDefault || showReset) && <footer className={styles.footer}>
     {showReset && <button type="button" className={styles.resetDefault} onClick={reset}>{t('Reset')}</button>}
-    {showSetDefault && <button type="button" className={styles.setDefault} aria-label={t('Save current insight')} disabled={saving} onClick={() => void save()}>{t(saving ? 'Saving…' : 'Set default for everyone')}</button>}
+    {showSetDefault && <button type="button" className={styles.setDefault} disabled={saving} onClick={() => void save()}>{t(saving ? 'Saving…' : 'Set default for everyone')}</button>}
   </footer>
   const icon = viewIcon ?? <ViewGlyph color={view.color} icon={view.icon}/>
   const controls = (layout: 'row' | 'column') => <InsightControls config={config} data={data} layout={layout} onMeasure={selectMeasure} onToggleStatuses={toggleStatuses} onChange={patchConfig}/>
@@ -232,10 +232,11 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
   </aside></TooltipProvider>
 
   return <aside aria-label={t('View insights')} className={styles.panel}>
+    <div className={styles.sheet}>
     {showIntro && <section className={styles.intro}>
       <p>{t('Insights makes it easy to analyze issue data. Create reports to reveal trends and find outlier issues that need attention.')}</p>
-      <button aria-label={t('Dismiss insights introduction')} className={styles.iconButton} onClick={dismissIntro} type="button"><X size={14}/></button>
-      <a href={DOCS_URL} rel="noreferrer" target="_blank">{t('Documentation')}</a>
+      <button aria-label={t('Close')} className={styles.iconButton} onClick={dismissIntro} type="button"><X size={14}/></button>
+      <button type="button" className={styles.docsLink} onClick={() => window.open(DOCS_URL, '_blank', 'noopener,noreferrer')}><BookOpen size={14} aria-hidden="true"/>{t('Documentation')}</button>
     </section>}
     <section className={styles.card}>
       <header className={styles.cardHeader}>
@@ -251,6 +252,7 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
       <div className={styles.cardBody}>{content}</div>
       {setDefault}
     </section>
+    </div>
   </aside>
 }
 

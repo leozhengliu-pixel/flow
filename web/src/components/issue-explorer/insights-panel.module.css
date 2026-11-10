@@ -19,7 +19,7 @@
   display: grid;
   flex: 0 0 24px;
   place-items: center;
-  padding: 0;
+  padding: 0 2px;
   border: .5px solid transparent;
   border-radius: 9999px;
   background: transparent;
@@ -31,17 +31,27 @@
 .fullscreen .iconButton > svg { color: var(--insight-muted-text); }
 .iconButton:hover, .iconButton[data-state="open"], .iconButton[aria-expanded="true"] { background: var(--theme-surface-hover); }
 .iconButton:focus-visible, .filterButton:focus-visible, .select:focus-visible, .setDefault:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
-.intro, .card {
+.sheet {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border: .5px solid var(--insight-card-border);
   border-radius: 10px;
   background: var(--insight-row-bg);
   box-shadow: var(--shadow);
 }
-.intro { position: relative; flex: 0 0 auto; padding: 16px 44px 14px 20px; }
-.intro p { margin: 0; color: var(--text); font-size: 13px; line-height: 18px; }
-.intro > .iconButton { position: absolute; top: 14px; right: 12px; }
-.intro a { display: inline-flex; margin-top: 14px; color: var(--text); font-size: 13px; text-decoration: none; }
+/* The reference app keeps the introduction and the report in one card, split by a hairline. */
+.intro { position: relative; flex: 0 0 auto; padding: 16px 57px 16px 20px; border-bottom: .5px solid var(--insight-card-border); }
+.intro p { margin: 0; color: var(--insight-header-text); font-size: 12px; font-weight: 450; line-height: normal; }
+.intro > .iconButton { position: absolute; top: 16px; right: 20px; }
+.docsLink { height: 24px; background: transparent; font-family: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; padding: 0 8px 0 6px; border: .5px solid transparent; border-radius: 9999px; color: var(--insight-text); font-size: 12px; font-weight: 500; text-decoration: none; }
+.docsLink > svg { width: 14px; height: 14px; color: var(--accent-primary); }
+.docsLink:hover { background: var(--theme-surface-hover); }
+.docsLink:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: var(--control-focus-offset); }
 .card { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.intro + .card .cardHeader { margin-top: 13px; }
 .cardHeader { height: 42px; flex: 0 0 42px; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding: 9px 16px; }
 .cardHeader > strong, .summary > strong { min-width: 0; display: flex; align-items: baseline; gap: 4px; overflow: hidden; font-size: 13px; font-weight: 500; white-space: pre; }
 .cardHeader > strong > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -62,12 +72,12 @@
   align-items: center;
   margin: 1px 0;
   padding: 0 28px 0 10px;
-  border: 0;
+  border: .5px solid transparent;
   border-radius: 8px;
   background: var(--theme-surface-1);
   box-shadow: var(--insight-control-shadow);
   color: var(--insight-text);
-  font: 450 12px/15px var(--font);
+  font: 450 12px/normal var(--font);
   text-align: left;
   cursor: pointer;
 }

@@ -1,5 +1,6 @@
 import { Plus } from 'lucide-react'
 import { useI18n } from '@/i18n/i18n'
+import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import './triage.css'
 
 export type TriageNotSelectedPageProps = {
@@ -15,11 +16,12 @@ export type TriageNotSelectedPageProps = {
  */
 export function TriageNotSelectedPage({ issueCount, onCreate }: TriageNotSelectedPageProps) {
   const { t } = useI18n()
-  const label = issueCount <= 0 ? t('No issues to triage') : issueCount === 1 ? t('1 issue to triage') : t('{count} issues to triage').replace('{count}', () => String(issueCount))
+  const desktop = useDesktopLayout()
+  const label = issueCount <= 0 ? t(desktop ? 'Nothing to triage' : 'No issues to triage') : issueCount === 1 ? t('1 issue to triage') : t('{count} issues to triage').replace('{count}', () => String(issueCount))
   return (
     <div className="flow-triage-not-selected" data-triage-empty={issueCount <= 0 ? '' : undefined} data-triage-not-selected={issueCount > 0 ? '' : undefined}>
       <div className="flow-triage-not-selected__body">
-        <TriageIllustration />
+        {desktop ? <TriageRingsIllustration /> : <TriageIllustration />}
         <h2>{label}</h2>
         {onCreate ? (
           <button className="flow-triage-not-selected__cta" type="button" onClick={onCreate}>
@@ -44,3 +46,13 @@ export function TriageIllustration() {
   </svg>
 }
 
+
+/** Dashed concentric rings around two crossing arrows: the desktop triage illustration (105×66). */
+export function TriageRingsIllustration() {
+  return <svg className="flow-triage-illustration flow-triage-illustration--rings" viewBox="0 0 105 66" fill="none" aria-hidden="true">
+    <ellipse cx="52.5" cy="33" rx="51.7" ry="32.1" stroke="var(--triage-illustration-outer)" strokeWidth="1" strokeDasharray="2 2"/>
+    <ellipse cx="52.5" cy="33" rx="48.4" ry="29.4" stroke="var(--triage-illustration-outer)" strokeWidth="1" strokeDasharray="3 2"/>
+    <ellipse cx="52.5" cy="33" rx="43.5" ry="25.7" stroke="var(--triage-illustration-inner)" strokeWidth="1" strokeDasharray="3 2"/>
+    <path d="M28 41h14M42 41l9-5.5M51 35.5l8-4M66 25h-6.5M66 25v7M59.5 25l-8 3" stroke="var(--triage-illustration-inner)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+}

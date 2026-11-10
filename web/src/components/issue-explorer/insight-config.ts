@@ -23,9 +23,9 @@ export interface SavedViewInsightsConfig {
   latencyScale?: 'linear' | 'log'
 }
 
-/** The reference app's default for a view nobody has configured: Issue count by Status, no segment. */
+/** The reference app's default for a view nobody has configured: Issue count by Status, segmented by Priority. */
 export const DEFAULT_INSIGHTS: SavedViewInsightsConfig = {
-  measure: 'issueCount', timeInStatusIds: [], slice: 'status', segment: 'none', showArchived: false, colors: 'status',
+  measure: 'issueCount', timeInStatusIds: [], slice: 'status', segment: 'priority', showArchived: false, colors: 'status',
 }
 
 const MEASURES: SavedViewInsightMeasure[] = ['issueCount', 'cycleTime', 'leadTime', 'issueAge', 'timeInStatus']

@@ -101,7 +101,6 @@
   [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb] :global([class*="_breadcrumbChevron_"])::before{content:'\203a';font:500 13px/normal var(--font)}
   [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) [data-content-view-breadcrumb] :global([class*="_breadcrumbChevron_"]) :global(svg){display:none}
   .tab,.savedTab{line-height:normal}
-  .insightsButton{order:-1}
 }
 @media(--desktop-layout){
   [data-issue-explorer] [data-content-view-header]:has(.phoneTeamFavorite) .headerNewIssue{padding-right:10px}

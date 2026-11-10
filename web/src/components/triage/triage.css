@@ -163,6 +163,7 @@
   .flow-triage-list__team { width: 16px; height: 16px; margin-left: 10px; display: grid; place-items: center; }
   .flow-triage-list__team svg { width: 16px; height: 16px; }
   .flow-triage-list__title h2 { padding-left: 4px; color: var(--text); line-height: normal; }
+  .flow-triage-list__title .flow-triage-list__favorite { margin-left: 2px; padding: 0 2px; }
   .flow-triage-list__actions { gap: 4px; }
   /* The desktop list keeps the reference's 0.5px divider column, so its content is 399.5px wide. */
   .flow-triage-page [data-split-view='triage'] [data-split-view-list] { border-right: .5px solid transparent; }
@@ -361,7 +362,9 @@
 .flow-triage-not-selected__cta:hover { background: var(--triage-cta-hover-bg); }
 .flow-triage-not-selected__cta:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset:var(--control-focus-offset); }
 @media (--desktop-layout) {
-  .flow-triage-not-selected__body h2 { color: var(--text); }
+  .flow-triage-not-selected__body h2 { color: var(--theme-text-secondary); line-height: normal; }
+  .flow-triage-illustration--rings { width: 105px; height: 65.93px; margin-bottom: 16px; }
+  .flow-triage-not-selected__cta { margin-top: 20px; }
   .flow-triage-not-selected__cta { gap: 0; padding: 0 8px 0 6px; border: .5px solid transparent; background: var(--toolbar-icon-pill-bg); color: var(--text); }
   .flow-triage-not-selected__cta svg { margin-right: 6px; }
   .flow-triage-not-selected__cta:hover { background: var(--ui-pill-hover-bg); }

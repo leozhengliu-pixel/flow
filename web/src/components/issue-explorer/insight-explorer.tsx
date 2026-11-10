@@ -22,10 +22,10 @@ export function InsightValueIcon({ dimension, id, color, data, size = 14 }: { di
 }
 
 let measureContext: CanvasRenderingContext2D | null | undefined
-function textWidth(text: string) {
+function textWidth(text: string, weight = 500) {
   if (measureContext === undefined) measureContext = typeof navigator === 'undefined' || /jsdom/i.test(navigator.userAgent) ? null : document.createElement('canvas').getContext('2d')
   if (!measureContext) return text.length * 6.5
-  measureContext.font = '500 12px "Inter Variable", "SF Pro Display", -apple-system, system-ui, sans-serif'
+  measureContext.font = `${weight} 12px "Inter Variable", "SF Pro Display", -apple-system, system-ui, sans-serif`
   return measureContext.measureText(text).width
 }
 
@@ -90,9 +90,10 @@ export function InsightExplorer({ config, data, insight, expanded, target, onSel
   const uniform = columns.length > 30
   const widths = useMemo(() => {
     const numberWidth = (values: number[]) => values.reduce((max, value) => Math.max(max, textWidth(latency ? formatMetric(value, config.measure) : String(value))), 0)
-    const total = Math.ceil(41 + Math.max(textWidth(t('Issue count')), numberWidth(insight.rows.map(row => row.total))))
+    // 20px padding each side plus the .5px divider every column but the last one draws (the reference's unrounded widths).
+    const total = 40 + (columns.length ? .5 : 0) + Math.max(textWidth(t('Issue count'), 450), numberWidth(insight.rows.map(row => row.total)))
     if (uniform) return { total, columns: columns.map(() => 106) }
-    return { total, columns: columns.map(column => Math.ceil(41 + Math.max(textWidth(t(column.label)) + (latency ? 0 : 22), numberWidth(insight.rows.map(row => latency ? row.aggregations[column.id as InsightAggregation] ?? 0 : row.segments[column.id] ?? 0))))) }
+    return { total, columns: columns.map((column, index) => 40 + (index < columns.length - 1 ? .5 : 0) + Math.max(textWidth(t(column.label)) + (latency ? 0 : 22), numberWidth(insight.rows.map(row => latency ? row.aggregations[column.id as InsightAggregation] ?? 0 : row.segments[column.id] ?? 0)))) }
   }, [columns, insight.rows, latency, config.measure, t, uniform])
   const firstMin = latency ? 110 : 96
   const lead = firstMin + (latency ? 0 : widths.total)
@@ -138,7 +139,7 @@ export function InsightExplorer({ config, data, insight, expanded, target, onSel
     const inColumn = target.segment !== undefined && target.segment === cell.segment || target.aggregation !== undefined && target.aggregation === cell.aggregation
     return inRow || inColumn ? undefined : true
   }
-  const headerCell = (id: string, label: string, icon?: ReactNode) => <div role="columnheader" aria-sort={sort?.column === id ? sort.descending ? 'descending' : 'ascending' : 'none'} key={id} onMouseEnter={() => id !== 'slice' && id !== 'total' ? setHover(latency ? { aggregation: id, operator, threshold: aggregateInsightValues(insight.samples.map(sample => sample.value), id as InsightAggregation) } : { segment: id }) : setHover(undefined)} data-highlight={hover ? insightHighlight(hover, latency ? { aggregation: id } : { segment: id }) : undefined}>
+  const headerCell = (id: string, label: string, icon?: ReactNode) => <div role="columnheader" data-column-kind={id === 'slice' || id === 'total' ? 'base' : 'segment'} aria-sort={sort?.column === id ? sort.descending ? 'descending' : 'ascending' : 'none'} key={id} onMouseEnter={() => id !== 'slice' && id !== 'total' ? setHover(latency ? { aggregation: id, operator, threshold: aggregateInsightValues(insight.samples.map(sample => sample.value), id as InsightAggregation) } : { segment: id }) : setHover(undefined)} data-highlight={hover ? insightHighlight(hover, latency ? { aggregation: id } : { segment: id }) : undefined}>
     <button type="button" onClick={() => chooseSort(id)}>{icon}<span>{t(label)}</span>{sort?.column === id && (sort.descending ? <ArrowDown size={12}/> : <ArrowUp size={12}/>)}</button>
   </div>
   const renderCell = (value: string, cellTarget: InsightTarget, prefix?: ReactNode, label?: boolean) => <div role="cell" data-highlight={hover ? insightHighlight(hover, cellTarget) : undefined} data-dim={dimmed(cellTarget)} data-label={label || undefined} data-selected={target && sameInsightTarget(target, cellTarget) || undefined}>
@@ -234,7 +235,7 @@ function InsightBarChart({ rows, insight, config, data, expanded, hover, target,
         const active = highlight?.slice === row.id
         if (!active && !showAllLabels) return null
         return <button type="button" key={row.id} className={styles.axisLabel} data-active={active || undefined} style={{ left: `${(index + .5) / rows.length * 100}%`, maxWidth: active ? undefined : Math.max(24, band - 4) }} aria-label={t(row.label)} onMouseEnter={() => onHover({ slice: row.id })} onFocus={() => onHover({ slice: row.id })} onBlur={() => onHover(undefined)} onClick={() => onSelect({ slice: row.id })}>
-          {active && <InsightValueIcon dimension={config.slice} id={row.id} color={row.color} data={data}/>}<span>{t(row.label)}</span>
+          {(active || band >= 90) && <span className={styles.axisIcon}><InsightValueIcon dimension={config.slice} id={row.id} color={row.color} data={data}/></span>}<span>{t(row.label)}</span>
         </button>
       })}
     </div>

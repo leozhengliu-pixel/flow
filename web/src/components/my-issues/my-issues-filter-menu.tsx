@@ -103,7 +103,8 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
   const [activeField, setActiveField] = useState<MyIssuesFilterKey>()
   const [query, setQuery] = useState('')
   const [rootElement, setRootElement] = useState<HTMLDivElement | null>(null)
-  const menuMaxHeight = useFilterMenuHeight(rootElement, desktop && open, query)
+  const [menuOffset, setMenuOffset] = useState(3.5)
+  const menuMaxHeight = useFilterMenuHeight(rootElement, desktop && open, query, menuOffset, variant === 'root' && layout === 'issues' ? setMenuOffset : undefined)
   const [aiPending, setAiPending] = useState(false)
   const [textCondition, setTextCondition] = useState<{ field: MyIssuesFilterKey; option: MyIssuesFilterOption }>()
   // The advanced editor opens as the menu closes; handing focus back to the trigger would dismiss it.
@@ -123,6 +124,13 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
     if (field === 'advanced' && (variant === 'advanced' || !onAdvanced)) return false
     if (field === 'ai' && (variant === 'advanced' || !aiAllowed)) return false
     if (desktop && layout === 'issues' && variant === 'root' && ['triageIntelligence', 'releases'].includes(field)) return false
+    // Fields with nothing to pick from (no cycles, no customers, no external sources) are not offered in the compact desktop root.
+    if (desktop && layout === 'issues' && variant === 'root' && options) {
+      // "No cycle" / "No external source" are not values to pick: without a real cycle or source the field is not offered.
+      const probe = field === 'addedToCycle' ? 'cycle' : field
+      if (['cycle', 'externalSource'].includes(probe) && !options(probe)?.some(option => option.id)) return false
+      if (field === 'customers' && !options(field)?.length) return false
+    }
     return (!availableFields || availableFields.includes(field)) && !hiddenFields.includes(field)
   })).filter(group => group.length)
   // The reference app's deep search: "Priority › Urgent", "Labels › Bug  1 issue", "Project properties › Project priority › Urgent".
@@ -171,11 +179,11 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
   // The root menu hangs off the window's right edge (11px in) wherever the toolbar button is; shifting a far-right
   // 'end' placement back inside the collision padding gives exactly that.
   const flushEnd = variant === 'root' && align === 'center'
-  const collisionPadding = phone || desktop && layout === 'issues' && variant === 'root' ? 11 : 14
+  const collisionPadding = phone ? 11 : desktop && layout === 'issues' && variant === 'root' ? (menuOffset < 3.5 ? { top: 11, right: 11, bottom: 9.5, left: 11 } : 11) : 14
   return <><Popover.Root open={open} onOpenChange={close}>
-    <Popover.Trigger asChild>{isValidElement(trigger) ? cloneElement(trigger, { 'aria-expanded': open } as object) : trigger}</Popover.Trigger>
+    <Popover.Trigger asChild>{isValidElement(trigger) ? cloneElement(trigger, { 'aria-expanded': open, 'data-filter-menu-trigger': variant === 'root' ? '' : undefined } as object) : trigger}</Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content ref={setRootElement} aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-layout={layout} data-surface={surface} data-variant={variant} data-submenu-open={activeField ? true : undefined} style={{ zIndex: rootLayer, maxHeight: menuMaxHeight }} side="bottom" align={flushEnd ? 'end' : align} alignOffset={flushEnd ? -4000 : align === 'center' ? -15 : 0} sideOffset={desktop ? 3.5 : 3} collisionPadding={collisionPadding} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (keepFocus.current) { keepFocus.current = false; event.preventDefault() } }} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
+      <Popover.Content ref={setRootElement} aria-label={t(variant === 'advanced' ? 'Filter' : desktop ? 'Menu' : 'Add Filter…')} data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-layout={layout} data-surface={surface} data-variant={variant} data-submenu-open={activeField ? true : undefined} style={{ zIndex: rootLayer, maxHeight: menuMaxHeight }} side="bottom" align={flushEnd ? 'end' : align} alignOffset={flushEnd ? -4000 : align === 'center' ? -15 : 0} sideOffset={desktop ? menuOffset : 3} collisionPadding={collisionPadding} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => { if (keepFocus.current) { keepFocus.current = false; event.preventDefault() } }} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
         <Command label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} className={styles.rootCommand} defaultValue={variant === 'root' ? '__none__' : undefined} loop filter={(value, search, keywords) => value.startsWith('__ai__') ? 0.0001 : defaultFilter(value, search, keywords)}>
           <div className={styles.rootSearch}>
             <Command.Input aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} placeholder={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} autoFocus value={query} onValueChange={setQuery}/>
@@ -237,7 +245,7 @@ import { resolveAIFilter } from './natural-language-filter'
 import { isPeopleProperty } from '@/lib/people'
 import { agentSessionStateOption } from '@/lib/agent-members'
 
-function useFilterMenuHeight(element: HTMLDivElement | null, enabled: boolean, query: string) {
+function useFilterMenuHeight(element: HTMLDivElement | null, enabled: boolean, query: string, offset: number, onOffset?: (offset: number) => void) {
   const [height, setHeight] = useState<number>()
   useLayoutEffect(() => {
     if (!element || !enabled) return
@@ -253,7 +261,15 @@ function useFilterMenuHeight(element: HTMLDivElement | null, enabled: boolean, q
       const rows = [...list.querySelectorAll<HTMLElement>('[cmdk-item],[cmdk-separator]')]
         .filter(row => row.getClientRects().length)
         .map(row => parseFloat(getComputedStyle(row).height))
-      setHeight(partialMenuHeight(rows, leading, parseFloat(listStyle.paddingBottom), available))
+      const trailing = parseFloat(listStyle.paddingBottom)
+      // A menu that fits the window once it sits flush under its trigger is shown whole instead of ending at a partial row.
+      const natural = rows.reduce((sum, row) => sum + row, leading) + trailing
+      const triggerElement = document.querySelector<HTMLElement>('[data-filter-menu-trigger][aria-expanded="true"]')
+      const anchorBottom = triggerElement ? triggerElement.getBoundingClientRect().bottom : element.getBoundingClientRect().top - offset
+      // Only a pure function of the trigger and the content, so the decision cannot flip-flop with the offset it sets.
+      const snug = Boolean(onOffset) && natural + anchorBottom <= innerHeight - 9.5 + .01 && natural + anchorBottom + 3.5 > innerHeight - 11
+      onOffset?.(snug ? .25 : 3.5)
+      setHeight(snug ? undefined : partialMenuHeight(rows, leading, trailing, available))
     }
     const observer = new ResizeObserver(measure)
     observer.observe(element)
@@ -263,7 +279,7 @@ function useFilterMenuHeight(element: HTMLDivElement | null, enabled: boolean, q
     placement.observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'style'] })
     measure()
     return () => { observer.disconnect(); placement.disconnect() }
-  }, [element, enabled, query])
+  }, [element, enabled, query, offset, onOffset])
   return enabled ? height : undefined
 }
 
