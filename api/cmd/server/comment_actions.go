@@ -63,6 +63,11 @@ func (s *server) startCommentActions(r *http.Request, issueID string, comment do
 }
 
 func (s *server) generateCommentActions(ctx context.Context, workspace, issueID, commentID string, actor domain.User) {
+	// Checked again here: the run may wait for a slot after the comment was
+	// posted, and the workspace may have turned AI off meanwhile.
+	if s.workspaceAIPolicy(ctx, workspace, actor.ID) != nil {
+		return
+	}
 	data, ok := s.store.WorkspaceMetadata(workspace)
 	query := store.IssueRecordQuery{Workspace: workspace}
 	if !s.authDisabled {

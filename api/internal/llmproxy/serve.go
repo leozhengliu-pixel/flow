@@ -185,6 +185,8 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrUnauthenticated) {
 			fail(http.StatusUnauthorized, "authentication_error", "The sandbox token is invalid, expired or revoked", "")
+		} else if errors.Is(err, ErrPolicy) {
+			fail(http.StatusForbidden, "permission_error", "AI is disabled by this workspace's policy", "")
 		} else {
 			fail(http.StatusServiceUnavailable, "api_error", "Flow could not verify the sandbox token; retry shortly", "")
 		}

@@ -416,7 +416,7 @@ defaults:
 
 | Key | Built-in default | Values |
 | --- | --- | --- |
-| `defaults.workspace.region` | `us` (`FLOW_WORKSPACE_DEFAULT_REGION`) | `us`, `eu`, `uk`, `ca`, `cn`, `asia`, `jp`, `sg`, `in`, `au`, `br` |
+| `defaults.workspace.region` | `us` (`FLOW_WORKSPACE_DEFAULT_REGION`) | `us`, `eu`, `uk`, `ca`, `cn`, `asia`, `jp`, `sg`, `in`, `au`, `br`: the region label new workspaces declare; it does not move data ([Workspace region and data residency](#workspace-region-and-data-residency)) |
 | `defaults.workspace.tutorial` | `true` (`FLOW_WORKSPACE_TUTORIAL`) | create the "Getting started" issues |
 | `defaults.workspace.fiscalMonth` | `January` | `January` … `December` |
 | `defaults.workspace.guestsAllowed` | `true` | boolean |
@@ -835,6 +835,47 @@ self-hosted deployments. Existing and imported workspaces never get it.
 Other settings of new workspaces, their first team and their members (feature
 switches, invite permission, estimates, cycles, language, ...) are set in the
 `defaults:` section of the [configuration file](#configuration-file).
+
+## Workspace region and data residency
+
+Every workspace carries a region: `us`, `eu`, `uk`, `ca`, `cn`, `asia`, `jp`, `sg`, `in`, `au` or `br`. It is a
+label declared when the workspace is created, from the creation form (when `FLOW_WORKSPACE_REGION_SELECTOR_ENABLED`
+is on) or `FLOW_WORKSPACE_DEFAULT_REGION`. Flow stores it with the workspace, shows it in Settings › Workspace and
+returns it from the API, so admins and auditors can see where the deployment is meant to keep the workspace's data.
+
+The region does not move data and does not choose where anything is stored or processed. All workspaces of one
+Flow deployment share its database, object storage, Redis, agent worker, model providers and other integrations,
+wherever those run.
+
+- `POST /api/workspaces` accepts only the listed values (in any case; stored in lower case) and answers `400`
+  otherwise.
+- The region cannot be changed afterwards: `PATCH /api/workspaces/{key}` accepts the current value (so clients may
+  send the whole workspace back) and answers `400` for any other. There is no operator path to relabel a workspace;
+  a deployment that moves to another region keeps the label its workspaces were created with.
+- Workspaces created before this check may carry a value outside the list; it is shown as stored and kept.
+
+### Keeping data in a region
+
+Residency comes from where you deploy, not from the label. To keep a workspace's data in one region, run a Flow
+deployment for that region and create the workspace there:
+
+1. Run the API server (and, with `FLOW_AGENT_RUNTIME=worker`, the agent worker) in the region.
+2. Put the database (`FLOW_DATABASE_*`), Redis (`FLOW_REDIS_URL`) and object storage (`FLOW_STORAGE_DRIVER`,
+   `FLOW_S3_*`, with a bucket in the region) in the region, together with their backups and replicas.
+3. Point the Flow Agent (`FLOW_AGENT_BASE_URL`), media transcription (`FLOW_AGENT_MEDIA_BASE_URL`), speech
+   (`FLOW_TTS_*`), web search (`FLOW_WEB_SEARCH_PROVIDER`), the coding LLM proxy (`FLOW_CODING_LLM_*`) and the agent
+   worker's model (`FLOW_WORKER_*`) at endpoints that process data in the region, or at self-hosted models there.
+   Leave an endpoint unset, or turn the feature off per workspace (see [Workspace AI policy](#workspace-ai-policy)),
+   where no in-region provider exists.
+4. Run coding sandboxes in the region (`FLOW_CODING_REGIONS`, `FLOW_CODING_DEFAULT_REGION` pin them to labelled
+   nodes).
+5. Review every outbound integration a workspace enables (chat apps, GitHub/GitLab, webhooks, audit streams, SMTP,
+   MCP connectors, OTLP telemetry): each sends data to its own endpoint, wherever that is.
+6. Set `FLOW_WORKSPACE_DEFAULT_REGION` to the region and `FLOW_WORKSPACE_REGION_SELECTOR_ENABLED=false`, so every
+   workspace created on the deployment carries the region it actually runs in.
+
+Flow does not route one deployment's workspaces to different regions; deployments in several regions are separate
+instances.
 
 ## Redis coordination and cluster mode
 
@@ -1643,6 +1684,33 @@ FLOW_AGENT_MODEL=your-claude-model
 For a legacy OpenAI-compatible endpoint, use
 `FLOW_AGENT_PROTOCOL=openai-chat-completions`. Responses and Messages streams
 are normalized into text, reasoning, tool-call, error, and completion events.
+
+### Workspace AI policy
+
+The endpoints above are configured per deployment; each workspace then decides whether its content may reach them.
+One policy covers every path that sends workspace content to a model or another AI service:
+
+- HIPAA mode on refuses AI for everyone in the workspace.
+- The Flow Agent switch (Settings › AI & agents, the `ai-agent` feature flag; the older `ai` flag when `ai-agent` was
+  never set) off refuses AI for everyone in the workspace.
+- "Prevent guests from interacting with agents in the workspace" refuses it for guests.
+
+| Entry point | What the model would receive | When the policy refuses |
+| --- | --- | --- |
+| Flow Agent chat, Lark/Feishu/Slack direct messages and group mentions (`/api/agent/*`) | Messages, workspace content the person can read, tool results, attachments | `403` `Agent access is disabled by workspace policy` |
+| AI filter (`POST /api/ai/issue-filter`) | The sentence and the filter vocabulary: member names, labels, projects, cycles | Same `403`; the web app hides the AI filter in HIPAA mode and when the switch is off, and falls back to its rule-based parser on any refusal |
+| Agent tool calls: `transcribe_media` (`FLOW_AGENT_MEDIA_*`), `read_file`, `web_search`, `fetch_url` | Audio and video files, file text, search terms and URLs | Each call is checked again when it runs, in chat, agent threads, loops and on the agent worker |
+| Delegating an issue to the built-in agent or an installed agent application | The session's context | The session is cancelled with "Agent execution is disabled by workspace policy." |
+| Agent worker runs (`FLOW_AGENT_RUNTIME=worker`) | The run's prompt | A run queued before the policy changed is failed when a worker claims it, before the worker's model sees it |
+| Loop runs, loop descriptions, loop output contracts | Loop instructions and the workspace content the run reads | Runs fail as unavailable; no description is written; the output contract is not read (and is read once AI is allowed again) |
+| Comment actions | The comment and its issue | No actions are suggested (checked when the comment is posted and again when the run starts) |
+| Pulse summaries and audio (`FLOW_TTS_*`) | Update text | Extractive summaries; no audio |
+| Triage Intelligence | The triage issue and candidate issues | Suggestions come from the built-in heuristic only |
+| Coding sessions and the coding LLM proxy (`FLOW_CODING_LLM_*`) | Prompts and repository code | Starting, prompting, restarting and approving a session answer `403` with code `aiDisabledByPolicy`; each model request of a running sandbox is refused by the LLM proxy with `403` `permission_error` |
+
+Turning AI off or HIPAA mode on takes effect at once: work that was already queued checks the policy again when it
+runs. Every model call in the API server is listed with the check that covers it in
+`api/cmd/server/ai_policy_test.go`; a new call without an entry fails that test.
 
 ### AI credits, usage feedback and MCP connectors
 

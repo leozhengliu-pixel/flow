@@ -52,6 +52,9 @@ var (
 	// ErrUnauthenticated makes the proxy answer 401: the token is unknown,
 	// expired or revoked, its sandbox is not running, or its session is terminal.
 	ErrUnauthenticated = errors.New("llmproxy: invalid sandbox token")
+	// ErrPolicy makes the proxy answer 403: the workspace AI policy (HIPAA
+	// mode, the AI switch, guest rules) does not let the session reach a model.
+	ErrPolicy = errors.New("llmproxy: AI is disabled by workspace policy")
 )
 
 // Caller is an authenticated sandbox.

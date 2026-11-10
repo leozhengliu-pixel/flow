@@ -514,6 +514,12 @@ func TestAuthFailures(t *testing.T) {
 	if readAll(t, response); response.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("store error status %d", response.StatusCode)
 	}
+	// The workspace AI policy refuses with 403; the upstream is never called.
+	h.proxy.Auth = fakeAuth{err: ErrPolicy}
+	response = h.do(t, http.MethodPost, "/internal/llm-proxy/anthropic/v1/messages", body, bearer())
+	if text := readAll(t, response); response.StatusCode != http.StatusForbidden || !strings.Contains(text, "permission_error") {
+		t.Fatalf("policy refusal status %d: %s", response.StatusCode, text)
+	}
 	assertLogsClean(t, h.logs.String())
 }
 

@@ -687,9 +687,16 @@ func fallbackLoopDescription(instructions string) string {
 const loopDescriptionPrompt = `Write a one-line description for an automation loop from its name and instructions, like "Reviews incoming issues, adds context, and routes each one to the right owner."
 Rules: one sentence, at most 16 words, present tense starting with a verb, no quotes or markdown, same language as the instructions. Reply with the description only.`
 
+// loopDescriptionAllowed reports whether a loop's instructions may go to the
+// model for a description: the instructions are workspace content, so HIPAA
+// mode and the workspace's AI switch keep them from it.
+func (s *server) loopDescriptionAllowed(workspace string, loop domain.Loop) bool {
+	return s.agent.Enabled && s.agentAutoTitle && strings.TrimSpace(loop.Instructions) != "" && s.workspaceAIPolicy(context.Background(), workspace, "") == nil
+}
+
 // describeLoopAsync generates the loop's one-line description with the model.
 func (s *server) describeLoopAsync(workspace string, loop domain.Loop) {
-	if !s.agent.Enabled || !s.agentAutoTitle || strings.TrimSpace(loop.Instructions) == "" {
+	if !s.loopDescriptionAllowed(workspace, loop) {
 		return
 	}
 	go func() {

@@ -659,6 +659,9 @@ func (s *Service) AuthenticateLLMCaller(ctx context.Context, token string) (llmp
 	default:
 		return llmproxy.Caller{}, ErrTokenInvalid
 	}
+	if s.aiAllowed(ctx, session.WorkspaceKey, session.CreatorID) != nil {
+		return llmproxy.Caller{}, llmproxy.ErrPolicy
+	}
 	return llmproxy.Caller{WorkspaceKey: session.WorkspaceKey, SessionID: session.ID, SandboxID: grant.SandboxID, UserID: session.CreatorID, LoopID: session.LoopID, Harness: session.Harness, Model: session.Model}, nil
 }
 

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -603,12 +604,18 @@ func (c WebSearchConfig) Validate() error {
 }
 
 func validWorkspaceRegion(region string) bool {
-	switch strings.ToLower(strings.TrimSpace(region)) {
-	case "us", "eu", "uk", "ca", "cn", "asia", "jp", "sg", "in", "au", "br":
-		return true
-	default:
-		return false
-	}
+	_, ok := NormalizeWorkspaceRegion(region)
+	return ok
+}
+
+// NormalizeWorkspaceRegion returns the stored form (lower case) of a
+// workspace region and whether it is one of the declared regions a
+// workspace may carry. The region is a label recorded when the workspace is
+// created; it does not choose where data is stored (see docs/configuration.md,
+// "Workspace region and data residency").
+func NormalizeWorkspaceRegion(region string) (string, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(region))
+	return normalized, slices.Contains(workspaceRegions, normalized)
 }
 
 func value(name, fallback string) string {

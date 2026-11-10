@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { IssueExplorerSurface } from './issue-explorer-surface'
+import { setWorkspaceRuntimePreferences } from '@/lib/runtime-preferences'
 import styles from './issue-explorer.module.css'
 
 class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }
@@ -83,4 +84,29 @@ it('visibly fills a selected team favorite and restores the outline when deselec
   expect(screen.getByRole('switch').querySelector('path')?.getAttribute('d')).not.toBe(outline)
   rerender(page(false))
   expect(screen.getByRole('switch').querySelector('path')?.getAttribute('d')).toBe(outline)
+})
+
+it.each([
+  ['HIPAA mode', { hipaaCompliance: true, featureFlags: {} }],
+  ['the AI switch off', { featureFlags: { 'ai-agent': false } }],
+])('hides the AI filter under %s', async (_, settings) => {
+  const user = userEvent.setup()
+  setWorkspaceRuntimePreferences(settings)
+  try {
+    render(<I18nProvider><IssueExplorerSurface creatingView scopeName="Workspace" activeView="all" viewHref={() => '#'} filters={[]} displayOptions={display} detailsOpen={false} onFilterToggle={vi.fn()} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()} filterOptions={field => field === 'priority' ? [{ id: '2', label: 'High' }] : undefined} viewEditor={controls => <div>Editor{controls.filterButton}</div>}>Content</IssueExplorerSurface></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Add filter' }))
+    expect(screen.getByRole('option', { name: 'Priority' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'AI filter' })).toBeNull()
+    await user.type(screen.getByRole('combobox', { name: 'Add Filter…' }), 'urgent bugs')
+    expect(screen.queryByRole('option', { name: /AI filter/ })).toBeNull()
+  } finally {
+    setWorkspaceRuntimePreferences({})
+  }
+})
+
+it('offers the AI filter when the workspace allows AI', async () => {
+  const user = userEvent.setup()
+  render(<I18nProvider><IssueExplorerSurface creatingView scopeName="Workspace" activeView="all" viewHref={() => '#'} filters={[]} displayOptions={display} detailsOpen={false} onFilterToggle={vi.fn()} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()} filterOptions={() => undefined} viewEditor={controls => <div>Editor{controls.filterButton}</div>}>Content</IssueExplorerSurface></I18nProvider>)
+  await user.click(screen.getByRole('button', { name: 'Add filter' }))
+  expect(screen.getByRole('option', { name: 'AI filter' })).toBeInTheDocument()
 })

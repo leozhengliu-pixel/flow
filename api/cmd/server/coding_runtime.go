@@ -114,6 +114,9 @@ func (s *server) initCodingCore(services *codingServices) {
 	if s.turnScopeModelConfigured() {
 		services.service.TurnScopeModel = coding.TurnScopeModelFunc(s.classifyCodingTurnScope)
 	}
+	// Sessions send repository code and prompts to the coding model: the
+	// workspace AI policy decides first (ai_policy.go).
+	services.service.AIPolicy = s.workspaceAIPolicy
 	services.service.DecoratePullRequestBody = func(ctx context.Context, session domain.CodingSession, body string) string {
 		section, err := s.CodingArtifactMarkdown(ctx, session.WorkspaceKey, session.ID, "")
 		if err != nil {

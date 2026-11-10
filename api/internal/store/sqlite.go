@@ -2111,6 +2111,8 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	}
 	workspace.ID = data.Workspace.ID
 	workspace.CreatedAt = data.Workspace.CreatedAt
+	// The region is declared at creation and never changes.
+	workspace.Region = data.Workspace.Region
 	if current := data.Workspace; workspace.Name == current.Name && workspace.URLKey == current.URLKey && workspace.Icon == current.Icon && workspace.LogoURL == current.LogoURL && workspace.Color == current.Color && workspace.Region == current.Region {
 		// The current values again: nothing is written or published.
 		return data, ErrNoMutation

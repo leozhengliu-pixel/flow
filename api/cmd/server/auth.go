@@ -562,8 +562,8 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusForbidden, "You don't have access to this workspace")
 		return false
 	}
-	if strings.HasPrefix(r.URL.Path, "/api/agent") && agentWorkspacePolicy(data.WorkspaceSettings, role) != nil {
-		writeError(w, http.StatusForbidden, "Agent access is disabled by workspace policy")
+	if aiPolicyPath(r.URL.Path) && agentWorkspacePolicy(data.WorkspaceSettings, role) != nil {
+		writeAIPolicyRefusal(w)
 		return false
 	}
 	if !s.authorizeAuthenticationPolicy(w, r, data, role) {

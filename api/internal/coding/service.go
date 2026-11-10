@@ -122,6 +122,23 @@ type Service struct {
 	// with one the session pushes, commits and opens its PR/MR as the member;
 	// without one (or nil) it uses the workspace credential.
 	Members MemberCodeHost
+	// AIPolicy is the workspace AI policy for the person acting (HIPAA mode,
+	// the AI switch, guest rules). Every action that leads to a model call
+	// (Start, Prompt, Restart, StartOver, approving) asks it first and fails
+	// with ErrAIPolicy when it refuses; nil allows. The LLM proxy asks it
+	// again on each model request.
+	AIPolicy func(ctx context.Context, workspaceKey, userID string) error
+}
+
+// aiAllowed applies AIPolicy.
+func (s *Service) aiAllowed(ctx context.Context, workspaceKey, userID string) error {
+	if s.AIPolicy == nil {
+		return nil
+	}
+	if err := s.AIPolicy(ctx, workspaceKey, userID); err != nil {
+		return ErrAIPolicy
+	}
+	return nil
 }
 
 // codedError extracts an explicit session error code from an error.
@@ -239,6 +256,9 @@ func (s *Service) Start(ctx context.Context, in StartInput) (domain.CodingSessio
 	}
 	if !s.enabledFor(info) {
 		return domain.CodingSession{}, false, ErrDisabled
+	}
+	if err := s.aiAllowed(ctx, in.WorkspaceKey, in.CreatorID); err != nil {
+		return domain.CodingSession{}, false, err
 	}
 	policy := NormalizeAgentSettings(info.Settings.CodingAgentSettings)
 	harness := in.Harness
@@ -726,6 +746,9 @@ func (s *Service) Prompt(ctx context.Context, workspaceKey, id string, in Prompt
 	case domain.CodingPhaseAwaitingApproval, domain.CodingPhaseStopping:
 		return session, ErrConflict
 	}
+	if err := s.aiAllowed(ctx, workspaceKey, firstNonEmpty(in.AuthorID, session.CreatorID)); err != nil {
+		return session, err
+	}
 	if s.guard != nil {
 		if err := s.guard.Check(ctx, workspaceKey, session.CreatorID, session.LoopID); errors.Is(err, ErrQuotaExceeded) {
 			if session.Phase == domain.CodingPhaseDone {
@@ -922,6 +945,9 @@ func (s *Service) Restart(ctx context.Context, workspaceKey, id, userID string, 
 	if session.Phase != domain.CodingPhaseDone || session.ApprovalState == "rejected" {
 		return session, ErrConflict
 	}
+	if err := s.aiAllowed(ctx, workspaceKey, firstNonEmpty(userID, session.CreatorID)); err != nil {
+		return session, err
+	}
 	if s.guard != nil {
 		if err := s.guard.Check(ctx, workspaceKey, session.CreatorID, session.LoopID); err != nil {
 			return session, err
@@ -988,6 +1014,9 @@ func (s *Service) StartOver(ctx context.Context, workspaceKey, id, userID, model
 	}
 	if session.ApprovalState == "rejected" || session.Phase != domain.CodingPhaseDone && session.Phase != domain.CodingPhaseIdle {
 		return session, ErrConflict
+	}
+	if err := s.aiAllowed(ctx, workspaceKey, firstNonEmpty(userID, session.CreatorID)); err != nil {
+		return session, err
 	}
 	if s.guard != nil {
 		if err := s.guard.Check(ctx, workspaceKey, session.CreatorID, session.LoopID); err != nil {
@@ -1060,6 +1089,11 @@ func restartBody(defaultModel bool) string {
 
 // Approve approves (or rejects) a session from an untrusted external source.
 func (s *Service) Approve(ctx context.Context, workspaceKey, id, userID string, reject bool) (domain.CodingSession, error) {
+	if !reject {
+		if err := s.aiAllowed(ctx, workspaceKey, userID); err != nil {
+			return domain.CodingSession{}, err
+		}
+	}
 	return s.update(ctx, workspaceKey, id, func(current *domain.CodingSession) error {
 		if current.Phase != domain.CodingPhaseAwaitingApproval {
 			return ErrConflict

@@ -157,6 +157,38 @@ func TestWorkspaceRegionSelectorCanBeDisabled(t *testing.T) {
 	}
 }
 
+// The workspace region is a label declared at creation: only listed values,
+// stored in lower case, and never changed afterwards.
+func TestWorkspaceRegionIsValidatedAndImmutable(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	requestJSON[map[string]string](t, handler, http.MethodPost, "/api/workspaces", map[string]string{"name": "Mars", "urlKey": "mars", "region": "mars"}, http.StatusBadRequest)
+	created := requestJSON[domain.Bootstrap](t, handler, http.MethodPost, "/api/workspaces", map[string]string{"name": "Europe", "urlKey": "europe", "region": " EU "}, http.StatusCreated)
+	if created.Workspace.Region != "eu" {
+		t.Fatalf("region = %q, want eu", created.Workspace.Region)
+	}
+	path := "/api/workspaces/" + created.Workspace.URLKey
+	for _, region := range []string{"us", "anything", ""} {
+		requestJSON[map[string]string](t, handler, http.MethodPatch, path, map[string]any{"name": "Europe", "region": region}, http.StatusBadRequest)
+	}
+	// The current value (any case) is accepted, so clients may send the whole workspace back.
+	updated := requestJSON[domain.Bootstrap](t, handler, http.MethodPatch, path, map[string]any{"name": "Europe team", "region": "EU"}, http.StatusOK)
+	if updated.Workspace.Region != "eu" || updated.Workspace.Name != "Europe team" {
+		t.Fatalf("workspace = %#v", updated.Workspace)
+	}
+	// The store keeps the declared region whatever a caller passes.
+	workspace := updated.Workspace
+	workspace.Region, workspace.Name = "us", "Europe again"
+	stored, err := repository.UpdateWorkspace(t.Context(), workspace.URLKey, workspace)
+	if err != nil || stored.Workspace.Region != "eu" {
+		t.Fatalf("stored region = %q (%v)", stored.Workspace.Region, err)
+	}
+}
+
 func TestWorkspaceCreationSupportsUnicodeNamesAndKeys(t *testing.T) {
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {

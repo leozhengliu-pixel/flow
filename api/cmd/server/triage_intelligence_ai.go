@@ -175,7 +175,8 @@ func (s *server) refreshTriageIntelligence(ctx context.Context, actor mcpActor, 
 	switch {
 	case triageRunPending.wanted(issue):
 		s.startTriageIntelligenceRun(ctx, actor, issue.ID, triageRunPending)
-	case scope.upgrade && triageRunUpgrade.wanted(issue):
+	case scope.upgrade && triageRunUpgrade.wanted(issue) && s.workspaceAIPolicy(ctx, actor.WorkspaceKey, "") == nil:
+		// No upgrade while the workspace AI policy keeps issues from the model.
 		if last, ok := s.triageUpgrades.Load(key); ok && time.Since(last.(time.Time)) < triageAIUpgradeRetry {
 			return s.triageRunActive(actor.WorkspaceKey, issue.ID)
 		}
@@ -259,11 +260,14 @@ func (s *server) runTriageIntelligence(ctx context.Context, actor mcpActor, issu
 	settings := metadata.WorkspaceSettings.FeatureSettings.TriageIntelligence
 	source, thinking := triageSourceHeuristic, ""
 	var generated []domain.IssueSuggestion
-	if options.useAI && s.agent.Enabled && !triageIssueHasSubstance(&issue) {
+	// HIPAA mode and the workspace's AI switch keep the issue away from the
+	// model: suggestions then come from the heuristic only.
+	useAI := options.useAI && s.agent.Enabled && agentWorkspacePolicy(metadata.WorkspaceSettings, "") == nil
+	if useAI && !triageIssueHasSubstance(&issue) {
 		// Nothing to compare against other work: don't spend a model call on
 		// noise, and record the run as final so it is not retried.
 		source, thinking = triageSourceAI, "The issue has too little content to compare against other work, so nothing was suggested."
-	} else if options.useAI && s.agent.Enabled {
+	} else if useAI {
 		plan, aiErr := s.requestTriageAIPlan(ctx, actor, query, &issue, candidates)
 		if aiErr != nil {
 			log.Printf("triage intelligence model issue=%s: %v (using heuristic)", issueID, aiErr)

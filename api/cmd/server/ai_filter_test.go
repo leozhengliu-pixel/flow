@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	appconfig "flow/api/internal/config"
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func TestAIIssueFilterValidatesModelChoices(t *testing.T) {
@@ -27,7 +29,13 @@ func TestAIIssueFilterValidatesModelChoices(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": reply}, "finish_reason": "stop"}}})
 	}))
 	defer provider.Close()
-	s := &server{agent: appconfig.AgentConfig{Enabled: true, BaseURL: provider.URL, Model: "model", MaxOutputTokens: 200}, agentClient: provider.Client()}
+	repo, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { repo.Close() })
+	// The workspace AI policy allows AI in the fixture (ai_policy_test.go covers the refusals).
+	s := &server{store: repo, authDisabled: true, agent: appconfig.AgentConfig{Enabled: true, BaseURL: provider.URL, Model: "model", MaxOutputTokens: 200}, agentClient: provider.Client()}
 	input := `{"query":"urgent checkout bugs","viewerName":"Ada","fields":{"priority":[{"id":"1","label":"Urgent"}],"labels":[{"id":"bug","label":"Bug"}]}}`
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/ai/issue-filter", strings.NewReader(input))
@@ -66,7 +74,7 @@ func TestAIIssueFilterValidatesModelChoices(t *testing.T) {
 		t.Fatalf("status %d, prompt: %s", recorder.Code, prompt)
 	}
 
-	disabled := &server{}
+	disabled := &server{store: repo, authDisabled: true}
 	recorder = httptest.NewRecorder()
 	request = httptest.NewRequest(http.MethodPost, "/api/ai/issue-filter", strings.NewReader(input))
 	request.Header.Set("Content-Type", "application/json")

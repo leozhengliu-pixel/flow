@@ -536,6 +536,12 @@ func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTa
 	}
 	data.Viewer = app.User()
 	data.ViewerRole = "app"
+	// Checked before the requester's context too, whose own policy check would
+	// otherwise report a workspace that turned AI off as lost access.
+	if agentWorkspacePolicy(data.WorkspaceSettings, "app") != nil {
+		_, _ = s.store.AppendAgentActivity(ctx, task.WorkspaceKey, task.ID, task.Version, domain.AgentActivity{Type: "canceled", Body: "Agent execution is disabled by workspace policy."})
+		return
+	}
 	if app.Builtin {
 		var err error
 		r, data, err = s.builtinApplicationContext(r, app, task)

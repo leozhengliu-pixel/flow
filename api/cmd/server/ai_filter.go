@@ -13,8 +13,9 @@ import (
 // AI filter (the reference app "Filter with AI"): the Flow Agent model turns a sentence
 // into filter-bar filters. The client sends the vocabulary it can filter by
 // (field -> options) so the model can only pick ids that exist; anything else
-// in the reply is dropped. Without a configured Agent the endpoint answers 503
-// and the client uses its rule-based parser.
+// in the reply is dropped. Without a configured Agent the endpoint answers 503,
+// and where the workspace AI policy (HIPAA mode, the AI switch, guests) does
+// not allow AI it answers 403; the client then uses its rule-based parser.
 
 type aiFilterOption struct {
 	ID    string `json:"id"`
@@ -50,6 +51,13 @@ func (s *server) aiIssueFilter(w http.ResponseWriter, r *http.Request) {
 	input.Query = strings.TrimSpace(input.Query)
 	if input.Query == "" || len([]rune(input.Query)) > 500 {
 		writeError(w, http.StatusBadRequest, "query must be 1-500 characters")
+		return
+	}
+	// The vocabulary carries member names, labels, projects and cycles: the
+	// workspace AI policy decides before anything reaches the model (the
+	// workspace middleware refuses the route too, as it refuses /api/agent).
+	if err := s.requestAIPolicy(r); err != nil {
+		writeAIPolicyRefusal(w)
 		return
 	}
 	if !s.agent.Enabled {

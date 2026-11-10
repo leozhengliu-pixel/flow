@@ -1668,10 +1668,12 @@ func (s *server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 	if input.Region == "" {
 		input.Region = s.defaultWorkspaceRegion()
 	}
-	if !workspaceRegionAllowed(input.Region) {
+	region, ok := appconfig.NormalizeWorkspaceRegion(input.Region)
+	if !ok {
 		writeError(w, http.StatusBadRequest, "unsupported workspace region")
 		return
 	}
+	input.Region = region
 	var seed store.WorkspaceSeed
 	if s.workspaceTutorial && (input.Tutorial == nil || *input.Tutorial) {
 		locale := tutorialLocale(input.Locale, r.Header.Get("Accept-Language"))
@@ -1682,15 +1684,6 @@ func (s *server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 		s.ensureBuiltinApplication(r.Context(), data.Workspace.URLKey)
 	}
 	respondMutation(w, err, http.StatusCreated, data)
-}
-
-func workspaceRegionAllowed(region string) bool {
-	switch strings.ToLower(strings.TrimSpace(region)) {
-	case "us", "eu", "uk", "ca", "cn", "asia", "jp", "sg", "in", "au", "br":
-		return true
-	default:
-		return false
-	}
 }
 
 func (s *server) updateWorkspace(w http.ResponseWriter, r *http.Request) {
@@ -1732,7 +1725,19 @@ func (s *server) updateWorkspace(w http.ResponseWriter, r *http.Request) {
 		workspace.Color = *input.Color
 	}
 	if input.Region != nil {
-		workspace.Region = *input.Region
+		// The region is declared when the workspace is created and is a label
+		// only (docs/configuration.md, "Workspace region and data residency"):
+		// sending the current value is accepted, any other value is refused.
+		region, ok := appconfig.NormalizeWorkspaceRegion(*input.Region)
+		switch {
+		case region == strings.ToLower(strings.TrimSpace(data.Workspace.Region)):
+		case !ok:
+			writeError(w, http.StatusBadRequest, "unsupported workspace region")
+			return
+		default:
+			writeError(w, http.StatusBadRequest, "The workspace region is set when the workspace is created and cannot be changed")
+			return
+		}
 	}
 	if workspace.Name == "" || workspace.URLKey == "" {
 		writeError(w, http.StatusBadRequest, "name and URL are required")

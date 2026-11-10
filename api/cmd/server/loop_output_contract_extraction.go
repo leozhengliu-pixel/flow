@@ -384,6 +384,11 @@ func (s *server) loopContractFor(ctx context.Context, workspace string, loop dom
 	if current := loop.OutputContract; current != nil && current.Source == loopContractFallback && current.InstructionsHash == hash && current.ExtractedAt != nil && time.Since(*current.ExtractedAt) < loopFallbackRetry {
 		return current
 	}
+	if s.workspaceAIPolicy(ctx, workspace, "") != nil {
+		// HIPAA mode or the AI switch keep the loop's text from the model; the
+		// fallback is not stored, so the contract is read once AI is allowed again.
+		return loopFallbackContract(hash, aiPolicyRefusalMessage)
+	}
 	key := workspace + "|" + loop.ID + "|" + hash
 	loopContractFlights.mu.Lock()
 	flight, ok := loopContractFlights.running[key]
@@ -618,6 +623,11 @@ func (s *server) analyzeLoopOutputs(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.checkLoopEditor(&data, *loop); err != nil {
 		respondLoopMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	// Reading the outputs sends the loop's text to the model.
+	if err := s.requestAIPolicy(r); err != nil {
+		writeAIPolicyRefusal(w)
 		return
 	}
 	current := loopContractReviewCopy(*loop)

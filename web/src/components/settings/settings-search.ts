@@ -724,7 +724,7 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
           { title: 'Workspace name', keywords: ['organization'] },
           { title: 'Workspace URL', keywords: ['slug', 'url key'] },
           { title: 'Workspace logo', keywords: ['avatar', 'icon', 'image'] },
-          { title: 'Region', keywords: ['data residency'] },
+          { title: 'Region', keywords: ['location', 'declared region'] },
           { title: 'Upload policy', keywords: ['files', 'attachments'] },
           { title: 'Data privacy', keywords: ['privacy', 'retention'] },
         ],

@@ -149,7 +149,20 @@ func (a codingLLMAuthenticator) AuthenticateLLMCaller(ctx context.Context, token
 	if err != nil {
 		return llmproxy.Caller{}, err
 	}
+	if err := a.s.codingLLMPolicy(ctx, caller); err != nil {
+		return llmproxy.Caller{}, err
+	}
 	return llmCallerFor(caller), nil
+}
+
+// codingLLMPolicy applies the workspace AI policy to each model request of a
+// sandbox, for the session's creator, so turning AI off (or HIPAA on) stops a
+// session that is already running. A refusal is llmproxy.ErrPolicy (403).
+func (s *server) codingLLMPolicy(ctx context.Context, caller codingSandboxCaller) error {
+	if s.workspaceAIPolicy(ctx, caller.grant.WorkspaceKey, caller.session.CreatorID) != nil {
+		return llmproxy.ErrPolicy
+	}
+	return nil
 }
 
 // llmCallerFor maps an authenticated sandbox to the proxy's caller: usage is

@@ -28,6 +28,9 @@ var (
 	ErrForbidden     = errors.New("coding: not allowed for this sandbox")
 	ErrQuotaExceeded = errors.New("coding: spend limit reached")
 	ErrAlreadyUsed   = errors.New("coding: setup secrets were already served to this sandbox")
+	// ErrAIPolicy: the workspace AI policy (HIPAA mode, the AI switch, guest
+	// rules) does not let this session reach a model (Service.AIPolicy).
+	ErrAIPolicy = errors.New("coding: AI is disabled by workspace policy")
 )
 
 // CoreStore is the session store plus track B's additional methods.

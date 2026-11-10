@@ -13,6 +13,8 @@ import { partialMenuHeight } from '@/lib/menu-height'
 import { useI18n } from '@/i18n/i18n'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { useDesktopLayout } from '@/hooks/use-desktop-layout'
+import { useWorkspacePreferences } from '@/lib/runtime-preferences'
+import { workspaceAIAllowed } from '@/lib/workspace-ai'
 import { AgentBadge } from '@/components/agent/agent-badge'
 import styles from './my-issues-filter-menu.module.css'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
@@ -95,6 +97,8 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
   const { t } = useI18n()
   const phone = usePhoneLayout()
   const desktop = useDesktopLayout()
+  // HIPAA mode or the workspace's AI switch hide the AI filter: it would send the workspace's names to the model.
+  const aiAllowed = workspaceAIAllowed(useWorkspacePreferences())
   const phoneRoot = phone && surface === 'my-issues' && variant === 'root'
   const [activeField, setActiveField] = useState<MyIssuesFilterKey>()
   const [query, setQuery] = useState('')
@@ -117,7 +121,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
   const visibleGroups = (layout === 'documents' ? DOCUMENT_FILTER_GROUPS : MY_ISSUES_FILTER_GROUPS).map(group => group.filter(item => {
     const field = item.id as MyIssuesFilterKey
     if (field === 'advanced' && (variant === 'advanced' || !onAdvanced)) return false
-    if (field === 'ai' && variant === 'advanced') return false
+    if (field === 'ai' && (variant === 'advanced' || !aiAllowed)) return false
     if (desktop && layout === 'issues' && variant === 'root' && ['triageIntelligence', 'releases'].includes(field)) return false
     return (!availableFields || availableFields.includes(field)) && !hiddenFields.includes(field)
   })).filter(group => group.length)

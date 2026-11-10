@@ -59,6 +59,8 @@ func codingErrorStatus(err error) (int, string) {
 		return http.StatusNotFound, string(domain.CodingErrSandboxDisabled)
 	case errors.Is(err, coding.ErrNoAgent):
 		return http.StatusConflict, "agentUnavailable"
+	case errors.Is(err, coding.ErrAIPolicy):
+		return http.StatusForbidden, "aiDisabledByPolicy"
 	case errors.Is(err, coding.ErrTokenInvalid):
 		return http.StatusUnauthorized, "tokenInvalid"
 	case errors.Is(err, coding.ErrGone):

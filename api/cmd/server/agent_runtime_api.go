@@ -190,6 +190,7 @@ func (s *server) claimAgentRuns(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "agent runs could not be claimed")
 			return
 		}
+		runs = s.aiPolicyClaimedRuns(r.Context(), caller.worker, runs)
 		if len(runs) > 0 || wait == 0 {
 			if runs == nil {
 				runs = []store.AgentRun{}
