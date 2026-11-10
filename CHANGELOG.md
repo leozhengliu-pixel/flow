@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Sub-teams in the sidebar now nest inside their parent team: a sub-team's heading and links sit below the parent's own links (indented 19px, its links 16px further), a thin connector hangs from the parent's heading beside every sub-team and turns into an elbow at each sub-team heading, and the sub-team keeps its own collapse state, so collapsing the parent hides only the parent's links and leaves its sub-teams visible. The team chevron is centred in its box (it sat 4px too far right), the team actions glyph box is 12x14, the phone drawer's team title ends where the always-visible actions button starts, collapsed team rows keep their rounded corners on the phone, and the light theme's team headings, section labels and hover colours follow the reference.
+
 - Changing your password with a wrong current password now answers 400 "The current password is incorrect" (and a too-short new password a 400 with its reason) instead of a 500; the wrong password is still audited as a failure.
 - The welcome video player's elapsed and duration labels have a fixed width, so the seek bar sits at exactly the same place on every platform instead of shifting by a hundredth of a pixel with the font's text measurement.
 

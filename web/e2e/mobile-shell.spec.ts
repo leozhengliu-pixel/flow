@@ -462,7 +462,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
           return range.getBoundingClientRect().x
         })).toBe(57)
       }
-      const heading = await secondTeam.locator('.team-heading').boundingBox()
+      // The third team is the second one's sub-team and renders inside it: measure the second team's own heading.
+      const heading = await secondTeam.locator(':scope > .team-heading').boundingBox()
       const home = await secondTeam.getByRole('link', { name: 'Home', exact: true }).boundingBox()
       expect(home!.y + home!.height / 2 - heading!.y - heading!.height / 2).toBe(33)
       await geometry(drawer.locator('.sidebar-footer'), { y: viewport.height - 52, height: 52 })

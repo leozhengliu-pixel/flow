@@ -6,7 +6,7 @@ import { SidebarIssuesTooltip } from './sidebar-issues-tooltip';
 import { PhoneInboxIcon, PhoneViewsIcon, PhoneTriageIcon, PhoneTeamBranchIcon } from './sidebar-phone-glyphs';
 import { SettingsNavGlyph } from '@/components/settings/settings-nav-glyphs';
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
-import { teamHierarchy } from '@/lib/team-hierarchy';
+import { teamHierarchy, teamRowTree, type TeamRowNode } from '@/lib/team-hierarchy';
 import { roleAllowed } from '@/lib/settings-access';
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Select from "@radix-ui/react-select";
@@ -251,6 +251,7 @@ export function Sidebar({
     const viewerTeamIds = new Set(data.teamMembers.filter(member => member.userId === data.viewer.id).map(member => member.teamId));
     return teamHierarchy(data.teams, data.teamSettings, data.teamParents).rows(data.teams.filter(team => !team.retiredAt && viewerTeamIds.has(team.id)));
   }, [data.teamMembers, data.teamParents, data.teams, data.teamSettings, data.viewer.id]);
+  const sidebarTeamTree = useMemo(() => teamRowTree(sidebarTeams), [sidebarTeams]);
   const canCreateTeam = roleAllowed(data.viewerRole, data.workspaceSettings?.teamCreatePermission);
   const canJoinTeam = data.viewerRole !== 'guest' && data.teams.some(team => !team.retiredAt && !team.private && !data.teamMembers.some(member => member.teamId === team.id && member.userId === data.viewer.id) && data.teamSettings[team.id]?.access !== 'private' && (!data.teamSettings[team.id]?.membershipRestriction || data.teamSettings[team.id]?.membershipRestriction === 'open'));
   const emptyTeamsLabel = canCreateTeam && canJoinTeam ? 'Join or create a team' : canCreateTeam ? 'Create a team' : canJoinTeam ? 'Join a team' : undefined;
@@ -801,12 +802,15 @@ export function Sidebar({
           >
             <div className="sidebar-team-list">
               {!sidebarTeams.length && emptyTeamsLabel && <Nav icon={<Plus/>} label={translate(emptyTeamsLabel)} to={teamsPath(workspaceSlug)} onClick={close}/>}
-              {sidebarTeams.map(({team, depth}) => {
+              {sidebarTeamTree.map(root => { const renderTeam = (node: TeamRowNode, depth: number): ReactNode => {
+                const {team} = node;
                 return (
-                  <div key={team.id} className="sidebar-team-node" data-team-depth={depth} style={{paddingInlineStart: Math.min(depth, 4) * 12, minWidth: 0, '--team-depth': Math.min(depth, 4)} as CSSProperties}><TeamNavigation
+                  <TeamNavigation
                     data={data}
                     onReload={onReload}
                     key={team.id}
+                    depth={depth}
+                    subTeams={node.children.map(child => <li className="sidebar-subteam" key={child.team.id} data-team-depth={depth + 1}><i className="team-connector" aria-hidden="true"/><span className="team-elbow" aria-hidden="true"><PhoneTeamBranchIcon /></span>{renderTeam(child, depth + 1)}</li>)}
                     cyclesEnabled={Boolean(
                       data.cycleSettings[team.id]?.enabled,
                     )}
@@ -821,9 +825,9 @@ export function Sidebar({
                     workspaceSlug={workspaceSlug}
                     page={page}
                     onNavigate={close}
-                  /></div>
+                  />
                 );
-              })}
+              }; return <div key={root.team.id} className="sidebar-team-node">{renderTeam(root, 0)}</div>; })}
             </div>
           </Section>}
 
@@ -1603,9 +1607,15 @@ function TeamNavigation({
   upcoming,
   initiativesEnabled,
   onNavigate,
+  depth = 0,
+  subTeams,
 }: {
   data: BootstrapData;
   onReload?: (teamId?: string) => Promise<void>;
+  /** Nesting level: 0 for a top-level team, 1 for its sub-teams. */
+  depth?: number;
+  /** Sub-team rows rendered below the team's own links, in the connector column. */
+  subTeams?: ReactNode[];
   team: Team;
   workspaceSlug: string;
   page: PageId | "not-found";
@@ -1634,9 +1644,8 @@ function TeamNavigation({
   const homeTab = useTeamHomeTab(data.viewer.id, team.id);
   const homePath = teamHomeTabPath(workspaceSlug, team.key, homeTab, workspaceFeatureEnabled(data.workspaceSettings?.featureFlags, "loops"));
   return (
-    <div className="sidebar-team" data-expanded={expanded}>
+    <div className="sidebar-team" data-expanded={expanded} data-team-depth={depth} style={{ "--team-indent": `${depth * 19}px` } as CSSProperties}>
       <div className="team-heading">
-        {phone && data.teamSettings[team.id]?.parentTeamId && <span className="team-branch"><PhoneTeamBranchIcon /></span>}
         <button
           type="button"
           className="team-title"
@@ -1653,6 +1662,7 @@ function TeamNavigation({
           <button className="team-menu-trigger" type="button" aria-label="Team menu"><TeamMenuIcon/></button>
         </SidebarTeamMenu>
       </div>
+      <div className="team-body" data-has-subteams={subTeams?.length ? "true" : undefined}>
       <AnimatedCollapse open={expanded} className="team-links">
           <Nav
             active={onOverview}
@@ -1731,6 +1741,8 @@ function TeamNavigation({
             onClick={onNavigate}
           />
       </AnimatedCollapse>
+      {subTeams && subTeams.length > 0 && <ul className="team-subteams">{subTeams}</ul>}
+      </div>
     </div>
   );
 }

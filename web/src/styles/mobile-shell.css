@@ -330,20 +330,10 @@
   html:root .sidebar .sidebar-more-trigger { margin-top: 1px; }
   html:root .sidebar .sidebar-team-list { gap: 2px; }
   html:root .sidebar .sidebar-section-try { margin-top: 17px; }
-  html:root .sidebar .sidebar-team-node { position: relative; padding-inline-start: 0 !important; }
-  html:root .sidebar .sidebar-team-node .team-title { padding-left: calc(9px + var(--team-depth) * 16px); }
-  html:root .sidebar .team-branch { position: absolute; left: 15px; top: 13px; width: 10px; height: 9px; color: var(--set-drawer-connector); }
-  html:root .sidebar .team-branch svg { display: block; width: 10px; height: 9px; fill: currentColor; }
-  html:root .sidebar .sidebar-team-node:has(+ [data-team-depth="1"])::after {
-    content: "";
-    position: absolute;
-    top: 36px;
-    bottom: -14px;
-    left: 15.5px;
-    width: 4px;
-    border-left: 1px solid var(--set-drawer-connector);
-    pointer-events: none;
-  }
+  /* Sub-teams nest inside their parent: the connector hangs from the parent's heading and the elbow lands 13px below the sub-team's top. */
+  html:root .sidebar .sidebar-subteam .team-title { width: calc(100% - var(--team-indent) - 27px); }
+  html:root .sidebar .team-connector { top: -9985px; }
+  html:root .sidebar .team-elbow { top: 13px; }
   html:root .sidebar .team-cycle-links > i { background: var(--set-drawer-connector); }
   html:root .sidebar .team-links .nav-item {
     padding: 0;
@@ -361,7 +351,6 @@
   html:root .sidebar .team-sub-link .nav-label { padding-left: 6px; }
   html:root .sidebar .team-links .nav-item > .nav-icon:first-child { margin-left: 6px; }
   html:root .sidebar .team-heading { border-radius: 8px; }
-  html:root .sidebar .sidebar-team[data-expanded="false"] .team-heading { border-radius: 0; }
   html:root .sidebar .sidebar-section-try > .section-heading {
     color: var(--bright);
     font-size: 16px;
@@ -378,6 +367,8 @@
   html:root .sidebar .try-dismiss { right: 2px; }
   html:root .sidebar .try-dismiss svg { width: 10px; height: 10px; }
   html:root .sidebar .team-title {
+    /* The title ends where the always-visible actions button starts (27px short of the row). */
+    width: calc(100% - 27px);
     height: 36px;
     color: var(--issue-muted);
     line-height: normal;

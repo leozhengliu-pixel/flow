@@ -272,6 +272,7 @@
 
 .sidebar-team-list { display: grid; gap: 1px; }
 .sidebar-team { min-width: 0; }
+.sidebar-team-node { min-width: 0; }
 .team-heading { position: relative; display: flex; align-items: center; }
 .team-title {
   width: calc(100% - 2px);
@@ -288,7 +289,7 @@
   text-align: left;
   line-height: normal;
 }
-.team-menu-trigger{position:absolute;z-index:2;right:2px;width:24px;height:24px;display:grid;place-items:center;padding:0;opacity:0;border:0;border-radius:9999px;background:transparent;color:var(--issue-muted);transition:opacity .15s,background-color .15s,color .15s}.team-heading:hover .team-menu-trigger,.team-menu-trigger:focus-visible,.team-menu-trigger[data-state=open]{opacity:1}.team-menu-trigger:hover,.team-menu-trigger[data-state=open]{background:lch(13.845% 1.3 272);color:var(--bright)}.team-menu-trigger svg{width:12px;height:16px;fill:currentColor}.sidebar-team-menu{width:220px}.sidebar-team-menu-search{height:34px;display:flex;align-items:center;gap:7px;margin:-1px -1px 4px;padding:0 8px;border-bottom:.5px solid var(--theme-border-strong)}.sidebar-team-menu-search svg{width:14px;color:var(--theme-text-secondary)}.sidebar-team-menu-search input{min-width:0;flex:1;border:0;outline:0;background:transparent;color:var(--theme-text-primary);font:12px inherit}
+.team-menu-trigger{position:absolute;z-index:2;right:2px;width:24px;height:24px;display:grid;place-items:center;padding:0;opacity:0;border:0;border-radius:9999px;background:transparent;color:var(--issue-muted);transition:opacity .15s,background-color .15s,color .15s}.team-heading:hover .team-menu-trigger,.team-menu-trigger:focus-visible,.team-menu-trigger[data-state=open]{opacity:1}.team-menu-trigger:hover,.team-menu-trigger[data-state=open]{background:lch(13.845% 1.3 272);color:var(--bright)}.team-menu-trigger svg{width:12px;height:14px;fill:currentColor}.sidebar-team-menu{width:220px}.sidebar-team-menu-search{height:34px;display:flex;align-items:center;gap:7px;margin:-1px -1px 4px;padding:0 8px;border-bottom:.5px solid var(--theme-border-strong)}.sidebar-team-menu-search svg{width:14px;color:var(--theme-text-secondary)}.sidebar-team-menu-search input{min-width:0;flex:1;border:0;outline:0;background:transparent;color:var(--theme-text-primary);font:12px inherit}
 .team-title:hover { color: var(--bright); background: lch(8.445% 1.3 272); }
 .team-title > svg:first-child { width: 14px; height: 14px; flex: 0 0 14px; margin-right: 7px; fill: currentColor; opacity: .9; }
 .team-title strong { min-width: 0; max-width: calc(100% - 54px); overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
@@ -308,7 +309,19 @@
 .team-disclosure { width: 24px; height: 24px; display: grid; flex: 0 0 24px; place-items: center; margin-left: 2px; color: lch(35.024% 1.2 272); }
 .team-disclosure svg { width: 16px; height: 16px; fill: currentColor; transition: transform 120ms ease; }
 .team-disclosure.expanded svg { transform: rotate(90deg); }
+/* The chevron sits centred in its 24px box (an earlier rule pushed every last-child svg of the heading to the right). */
+.team-title .team-disclosure svg:last-child { margin-left: 0; }
 .team-links { display: grid; gap: 1px; margin-top: 1px; padding-left: 19px; }
+/* Sub-teams: a nested list below the parent's own links. Their connector hangs from the parent heading (the body clips it there) and an elbow turns into each sub-team heading. */
+.team-body { position: relative; overflow-y: clip; }
+.team-body[data-has-subteams] > .team-links { padding-bottom: 1px; }
+.team-subteams { margin: 1px 0 0; padding: 0; list-style: none; }
+.sidebar-subteam { position: relative; }
+.team-connector { position: absolute; top: -9993px; left: 15px; width: 1px; height: 9999px; background: var(--team-connector); pointer-events: none; }
+.team-elbow { position: absolute; top: 5px; left: 15px; width: 10px; height: 9px; color: var(--team-connector); pointer-events: none; }
+.team-elbow svg { display: block; width: 10px; height: 9px; fill: currentColor; }
+.sidebar-subteam .team-title { width: calc(100% - var(--team-indent) - 2px); margin-left: var(--team-indent); padding-left: 6px; }
+.sidebar-subteam > .sidebar-team > .team-body > .team-links { padding-left: calc(var(--team-indent) + 16px); }
 .team-links .nav-item { gap: 6px; padding-left: 6px; }
 .team-links .nav-icon,
 .team-links .nav-icon svg { width: 14px; height: 14px; flex-basis: 14px; }
@@ -636,14 +649,15 @@
 :root[data-theme="light"] .sidebar-compose svg{color:var(--flow-light-icon)}
 :root[data-theme="light"] .sidebar .workspace-row>button.sidebar-compose{width:28px;height:28px;border-radius:9999px;background:var(--bg-panel);box-shadow:none}
 :root[data-theme="light"] .sidebar .workspace-row>button.sidebar-compose:hover{background:var(--theme-control-hover);color:var(--flow-light-icon)}
-:root[data-theme="light"] .section-label{color:var(--muted)}
+:root[data-theme="light"] .section-label{color:var(--team-title-light-fg)}
 :root[data-theme="light"] .section-label:hover{color:var(--text);background:var(--sidebar-row-hover-light-bg)}
 :root[data-theme="light"] .nav-item:hover,:root[data-theme="light"] .try-item:hover .nav-item{color:lch(9.444% 0 282);background:var(--sidebar-row-hover-light-bg)}
 :root[data-theme="light"] .team-title:hover{color:var(--text);background:lch(91.64% .5 282)}
 :root[data-theme="light"] .sidebar .nav-item.active{height:28px;border-radius:8px;color:lch(9.444% 0 282);background:lch(89.54% .5 282)}
 :root[data-theme="light"] .sidebar-favorite-link:hover,:root[data-theme="light"] .sidebar-favorite-link:focus-visible,:root[data-theme="light"] .sidebar-favorite-folder-heading>button:first-child:hover{color:var(--text);background:lch(91.64% .5 282)}
 :root[data-theme="light"] .sidebar-favorite-link.active{color:lch(9.444% 0 282);background:lch(89.54% .5 282)}
-:root[data-theme="light"] .team-title{color:var(--flow-light-icon)}
+:root[data-theme="light"] .team-title{color:var(--team-title-light-fg)}
+:root[data-theme="light"] .team-title:hover,:root[data-theme="light"] .team-heading:has(.team-menu-trigger:hover) .team-title{color:var(--flow-light-icon)}
 :root[data-theme="light"] .team-disclosure,:root[data-theme="light"] .section-label svg{color:lch(62.33% 1.25 282)}
 :root[data-theme="light"] .section-heading:hover,:root[data-theme="light"] .section-heading:focus-within{background:lch(91.64% .5 282)}
 :root[data-theme="light"] .team-cycle-links>i{background:lch(80.94% 0 282)}

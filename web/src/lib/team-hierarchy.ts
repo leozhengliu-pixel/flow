@@ -72,3 +72,17 @@ export function teamHierarchy(teams: Team[], settings: TeamHierarchySettings = {
   }
   return { byId, ancestors, children, heights, path, parentError, subtree, rows }
 }
+
+export type TeamRowNode = { team: Team; children: TeamRowNode[] }
+/** Folds the depth-first rows of `teamHierarchy().rows()` back into a tree, so a sub-team can render inside its parent. */
+export function teamRowTree(rows: { team: Team; depth: number }[]): TeamRowNode[] {
+  const roots: TeamRowNode[] = [], path: TeamRowNode[] = []
+  for (const row of rows) {
+    const node: TeamRowNode = { team: row.team, children: [] }
+    path.length = Math.min(row.depth, path.length)
+    const parent = path[path.length - 1]
+    if (parent) parent.children.push(node); else roots.push(node)
+    path.push(node)
+  }
+  return roots
+}

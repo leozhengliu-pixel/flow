@@ -283,3 +283,30 @@ describe('sidebar feature flags', () => {
     expect(moreLink(menu, loopsPath('workspace'))).toBeNull()
   })
 })
+
+describe('sidebar team hierarchy', () => {
+  it('nests a sub-team below its parent links, keeps it visible when the parent collapses, and collapses independently', async () => {
+    const user = userEvent.setup()
+    const data = sidebarData({})
+    const parent = data.teams[0]
+    const sub = { ...parent, id: 'team-sub', key: 'SUB', name: 'Sub team' }
+    render(sidebarTree({
+      ...data,
+      teams: [...data.teams, sub],
+      teamMembers: [...data.teamMembers, { teamId: sub.id, userId: data.viewer.id, role: 'member', joinedAt: '2026-08-01T00:00:00Z' }],
+      teamSettings: { [sub.id]: { teamId: sub.id, parentTeamId: parent.id } as unknown as BootstrapData['teamSettings'][string] },
+    }))
+    const list = document.querySelector('.sidebar-team-list')!
+    const subItem = list.querySelector('li.sidebar-subteam')!
+    expect(subItem).toHaveTextContent('Sub team')
+    expect(subItem.closest('.team-body')).toBe(list.querySelector('.sidebar-team > .team-body'))
+    expect(subItem.querySelector('.team-connector')).not.toBeNull()
+    expect(subItem.querySelector('.team-elbow svg')).not.toBeNull()
+    expect(list.querySelector('.sidebar-team > .team-body > .team-links')!.compareDocumentPosition(subItem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: parent.name }))
+    expect(list.querySelector('li.sidebar-subteam')).toHaveTextContent('Sub team')
+    expect(within(list.querySelector('li.sidebar-subteam')!).getByRole('button', { name: 'Sub team' })).toHaveAttribute('aria-expanded', 'true')
+    await user.click(within(list.querySelector('li.sidebar-subteam')!).getByRole('button', { name: 'Sub team' }))
+    expect(within(list.querySelector('li.sidebar-subteam')!).getByRole('button', { name: 'Sub team' })).toHaveAttribute('aria-expanded', 'false')
+  })
+})

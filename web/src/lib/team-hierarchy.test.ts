@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolvedTeamSettings, teamHierarchy } from './team-hierarchy'
+import { resolvedTeamSettings, teamHierarchy, teamRowTree } from './team-hierarchy'
 import type { Team } from '@/types/flow'
 
 const teams: Team[] = Array.from({length:6},(_,i)=>({id:`t${i}`,name:`Level ${i+1}`,key:`T${i}`,color:'#888888'}))
@@ -37,5 +37,13 @@ describe('team hierarchy',()=>{
     expect(resolvedTeamSettings(settings,'child')?.estimateType).toBe('fibonacci')
     expect(settings.child.estimateType).toBe('notUsed')
     expect(teams).toHaveLength(2)
+  })
+})
+
+describe('team row tree',()=>{
+  it('nests each sub-team under its parent in row order',()=>{
+    const tree=teamRowTree(teamHierarchy(teams,{t1:{parentTeamId:'t0'},t2:{parentTeamId:'t0'},t3:{parentTeamId:'t2'}}).rows())
+    const ids=(nodes:ReturnType<typeof teamRowTree>):unknown=>nodes.map(node=>node.children.length?[node.team.id,ids(node.children)]:node.team.id)
+    expect(ids(tree)).toEqual([['t0',['t1',['t2',['t3']]]],'t4','t5'])
   })
 })

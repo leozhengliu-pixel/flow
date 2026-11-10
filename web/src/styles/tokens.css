@@ -1152,3 +1152,5 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 
 /* The welcome notification video player: a dark media surface that reads the same in both themes. */
 :root{--video-surface:#1a1a1b;--video-shadow:rgb(0 0 0 / .3);--video-fg:#fff;--video-fg-muted:rgb(255 255 255 / .75);--video-fg-subtle:rgb(255 255 255 / .55);--video-track:rgb(255 255 255 / .2);--video-hover:rgb(255 255 255 / .12);--video-bar:rgb(46 46 47 / .94);--video-caption-shadow:rgb(0 0 0 / .85);--video-caption-glow:rgb(0 0 0 / .6);--video-option-fg:#111}
+:root{--team-indent:0px;--team-connector:lch(16.32% 1.48 272)}
+:root[data-theme="light"]{--team-connector:lch(80.94% 0 282);--team-title-light-fg:lch(37.776% 1.25 282)}
