@@ -370,3 +370,7 @@ html:root .settings-app .settings-main .personal-connection-links .settings-row-
 .personal-mcp-anchor{scroll-margin-top:10px;border-radius:10px;outline:1px solid transparent;outline-offset:0;transition:outline-color .6s ease-out}
 .personal-mcp-anchor.is-targeted{outline-color:var(--accent-primary);transition:none}
 .settings-row .personal-avatar .user-avatar-initials{color:inherit;font:inherit}
+/* Profile › Your data and Danger zone: the download link is an action, and the delete dialog asks for the email. */
+a.personal-action{text-decoration:none}
+.personal-dialog>.personal-dialog-field{display:grid;gap:6px;margin:0 0 20px;color:var(--personal-muted);font-size:12px}
+.personal-dialog-field .personal-input{width:100%}

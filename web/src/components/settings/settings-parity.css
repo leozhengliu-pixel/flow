@@ -1200,6 +1200,9 @@ html:root .settings-app .settings-main .settings-workspace-members .settings-mem
 }
 html:root .settings-app .settings-main .settings-workspace-members .settings-members-clear-filter:hover { background: var(--bg-hover); }
 html:root body .settings-member-dialog .settings-member-dialog-note { margin: 8px 0 0; color: var(--theme-text-secondary); font-size: 12px; }
+html:root body .settings-member-erase-dialog .settings-member-dialog-note { line-height: 18px; }
+html:root body .settings-member-erase-field { display: grid; gap: 6px; margin: 14px 0 4px; color: var(--theme-text-secondary); font-size: 12px; }
+html:root body .settings-member-erase-field .settings-input { width: 100%; box-sizing: border-box; }
 
 /*
  * Settings › phone drawer. The reference app shows the settings navigation as a

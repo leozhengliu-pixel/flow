@@ -25,6 +25,11 @@ type User struct {
 	AvatarURL     string `json:"avatarUrl,omitempty"`
 	Active        bool   `json:"active"`
 	EmailVerified bool   `json:"emailVerified"`
+	// Deleted marks the pseudonymous "Deleted user" that stands in for a
+	// person whose account was deleted or whose personal data a workspace
+	// admin erased: the id stays (so attribution holds), the name, email and
+	// avatar are gone.
+	Deleted bool `json:"deleted,omitempty"`
 	// Via is request-scoped OAuth attribution ("<User> via <App>"). It is never
 	// serialized on the user; records copy it into their BotActor field.
 	Via *ActorBot `json:"-"`

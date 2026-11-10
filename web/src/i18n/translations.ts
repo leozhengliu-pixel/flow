@@ -64,6 +64,7 @@ import { codingArtifactsZhCN } from './translations-coding-artifacts'; // coding
 import { agentChangesZhCN } from './translations-agent-changes';
 import { agentRuntimeZhCN } from './translations-agent-runtime';
 import { workspaceMembersZhCN } from './translations-workspace-members';
+import { personalDataZhCN } from './translations-personal-data';
 import { pdfViewerZhCN } from './translations-pdf-viewer';
 import { createIssueZhCN } from './translations-create-issue';
 import { chatIntegrationsZhCN } from './translations-chat-integrations';
@@ -6201,6 +6202,8 @@ for (const [source, translation] of Object.entries(agentRuntimeZhCN)) zhCN[sourc
 for (const [source, translation] of Object.entries(recentlyDeletedZhCN)) zhCN[source] ??= translation;
 // Settings › Members (groups, statuses, row and bulk actions, empty states) fills gaps only.
 for (const [source, translation] of Object.entries(workspaceMembersZhCN)) zhCN[source] ??= translation;
+// Personal data rights (download your data, delete account, erase a member, "Deleted user") fill gaps only.
+for (const [source, translation] of Object.entries(personalDataZhCN)) zhCN[source] ??= translation;
 // coding sessions (track G): session view, start entry points and review actions fill gaps only.
 for (const [source, translation] of Object.entries(codingSessionUiZhCN)) zhCN[source] ??= translation;
 for (const [source, translation] of Object.entries(codingSessionStatesZhCN)) zhCN[source] ??= translation;

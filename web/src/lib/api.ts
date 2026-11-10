@@ -653,6 +653,38 @@ export function revokeAccountSession(id: string): Promise<void> {
     method: "DELETE",
   });
 }
+/** A "Download your data" request: a zip of the account's own data, downloadable by its owner until it expires. */
+export interface PersonalDataExport {
+  id: string;
+  status: "queued" | "running" | "completed" | "failed" | "expired";
+  size?: number;
+  error?: string;
+  createdAt: string;
+  completedAt?: string;
+  expiresAt?: string;
+  downloadUrl?: string;
+}
+export function fetchPersonalDataExports(): Promise<PersonalDataExport[]> {
+  return request("/api/account/data-exports");
+}
+export function requestPersonalDataExport(): Promise<PersonalDataExport> {
+  return request("/api/account/data-exports", { method: "POST" });
+}
+/** Deletes the signed-in account; confirmation is the account's email address. */
+export function deleteAccount(confirmation: string): Promise<void> {
+  return request("/api/account", jsonRequest("DELETE", { confirmation }));
+}
+/** A workspace admin erases a member's personal data; confirmation is the member's email address. */
+export function eraseMemberPersonalData(
+  workspaceKey: string,
+  userId: string,
+  confirmation: string,
+): Promise<{ userId: string; scope: "workspace" | "account" }> {
+  return request(
+    `/api/workspaces/${encodeURIComponent(workspaceKey)}/members/${encodeURIComponent(userId)}/erase`,
+    jsonRequest("POST", { confirmation }),
+  );
+}
 export function fetchAccountIdentities(): Promise<AuthIdentity[]> {
   return request("/api/account/identities");
 }

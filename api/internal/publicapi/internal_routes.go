@@ -17,6 +17,10 @@ var InternalRoutes = []string{
 	"GET /.well-known/oauth-protected-resource/mcp",
 	"GET /.well-known/oauth-protected-resource/mcp/readonly",
 	// /api/account
+	"DELETE /api/account",
+	"GET /api/account/data-exports",
+	"POST /api/account/data-exports",
+	"GET /api/account/data-exports/{id}/download",
 	"DELETE /api/account/code-host-accounts/{id}",
 	"GET /api/account/code-host-accounts",
 	"GET /api/account/code-host-accounts/oauth/callback",
@@ -739,6 +743,7 @@ var InternalRoutes = []string{
 	"POST /api/workspaces/{workspaceKey}/invitations/{invitationId}/resend",
 	"POST /api/workspaces/{workspaceKey}/invite-link",
 	"POST /api/workspaces/{workspaceKey}/logo",
+	"POST /api/workspaces/{workspaceKey}/members/{userId}/erase",
 	"POST /api/workspaces/{workspaceKey}/members/{userId}/resume",
 	"POST /api/workspaces/{workspaceKey}/members/{userId}/suspend",
 	"POST /api/workspaces/{workspaceKey}/teams",

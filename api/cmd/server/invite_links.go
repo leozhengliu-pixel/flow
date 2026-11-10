@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 type inviteLinkPreview struct {
@@ -150,6 +151,16 @@ func (s *server) joinOrganization(w http.ResponseWriter, r *http.Request) {
 		log.Printf("load workspaces created on other servers: %v", err)
 	}
 	for _, key := range s.store.WorkspaceKeys() {
+		// An account whose personal data was erased from the workspace cannot
+		// join it again (its old content would be attributed to it again).
+		if !s.authDisabled {
+			if link, ok := s.store.WorkspaceMetadataFields(key, "workspace", "workspaceInviteLink"); ok && link.WorkspaceInviteLink != nil && link.WorkspaceInviteLink.Token == input.Token {
+				if erased, err := s.store.ErasedFromWorkspace(r.Context(), link.Workspace.ID, user.ID); err == nil && erased {
+					writeError(w, http.StatusConflict, store.ErrErasedFromWorkspace.Error())
+					return
+				}
+			}
+		}
 		var membership domain.WorkspaceMembership
 		found := false
 		joined := false

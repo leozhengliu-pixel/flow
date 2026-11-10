@@ -51,11 +51,15 @@ import {
   addCommitSigningKey,
   beginPasskeyRegistration,
   createAPIKey,
+  deleteAccount,
   deletePasskey,
   fetchAccountIdentities,
   fetchAccountSessions,
   fetchCommitSigningKey,
   fetchPasskeys,
+  fetchPersonalDataExports,
+  requestPersonalDataExport,
+  type PersonalDataExport,
   finishPasskeyRegistration,
   listPushSubscriptions,
   logoutAccount,
@@ -71,6 +75,7 @@ import {
   unlinkAccountIdentity,
   updatePasskey,
 } from "@/lib/api";
+import { ApiError } from "@/lib/api-client";
 import type { NotificationSettingsView, SettingsPageId } from "@/lib/app-routes";
 import { settingsPath } from "@/lib/app-routes";
 import type {
@@ -1176,6 +1181,8 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
           </Action>
         </PersonalRow>
       </PersonalSection>
+      <YourData p={p} />
+      <DeleteAccount data={data} p={p} />
       <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
         <DialogContent className="personal-dialog">
           <DialogTitle>
@@ -1192,6 +1199,155 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
             <Action onClick={() => setLeaveOpen(false)}>{p("Cancel")}</Action>
             <Action danger disabled={busy} onClick={() => void leave()}>
               {p("Leave workspace")}
+            </Action>
+          </footer>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+const EXPORT_PENDING: ReadonlyArray<PersonalDataExport["status"]> = ["queued", "running"];
+
+/** Account › Profile › "Download your data": request a zip of your own data, then download it until it expires. */
+function YourData({ p }: { p: PersonalTranslate }) {
+  const { locale } = useI18n();
+  const [exports, setExports] = useState<PersonalDataExport[]>([]);
+  const [busy, setBusy] = useState(false);
+  const refresh = useCallback(async () => {
+    try {
+      setExports(await fetchPersonalDataExports());
+    } catch {
+      setExports([]);
+    }
+  }, []);
+  useEffect(() => {
+    queueMicrotask(() => void refresh());
+  }, [refresh]);
+  const latest = exports[0];
+  const pending = Boolean(latest && EXPORT_PENDING.includes(latest.status));
+  useEffect(() => {
+    if (!pending) return;
+    const timer = window.setInterval(() => void refresh(), 3000);
+    return () => window.clearInterval(timer);
+  }, [pending, refresh]);
+  const request = async () => {
+    setBusy(true);
+    try {
+      const item = await requestPersonalDataExport();
+      setExports((current) => [item, ...current.filter((existing) => existing.id !== item.id)]);
+      toast.success(p("We're preparing your data. It's ready in a few minutes."));
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError && error.status === 429
+          ? p("You can request up to 3 exports a day. Try again later.")
+          : error instanceof Error
+            ? error.message
+            : p("Could not request your data"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const ready = latest?.status === "completed" && latest.downloadUrl ? latest : undefined;
+  const expires = ready?.expiresAt
+    ? new Intl.DateTimeFormat(locale === "zh-CN" ? "zh-CN" : "en-US", { dateStyle: "medium" }).format(new Date(ready.expiresAt))
+    : "";
+  const status = pending
+    ? p("Preparing your data…")
+    : ready
+      ? `${p("Ready to download until")} ${expires}`
+      : latest?.status === "failed"
+        ? p("The last export failed. Request a new one.")
+        : latest?.status === "expired"
+          ? p("The last export expired. Request a new one.")
+          : "";
+  return (
+    <PersonalSection title={p("Your data")}>
+      <PersonalRow
+        title={p("Download your data")}
+        description={status || p("A zip of JSON files with your profile, sign-in methods, sessions, agent chats, settings and the content you created. The download link expires after 7 days.")}
+      >
+        {ready ? (
+          <a className="personal-action primary" href={ready.downloadUrl} download>
+            {p("Download")}
+          </a>
+        ) : null}
+        <Action disabled={busy || pending} onClick={() => void request()}>
+          {pending ? p("Preparing…") : p("Request export")}
+        </Action>
+      </PersonalRow>
+    </PersonalSection>
+  );
+}
+
+/** Account › Profile › "Delete account": deletes the account after the person types their email. */
+function DeleteAccount({ data, p }: { data: PersonalProps["data"]; p: PersonalTranslate }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const expected = data.viewer.email || data.viewer.displayName;
+  const confirmed = typed.trim().toLowerCase() === expected.toLowerCase() && expected !== "";
+  const remove = async () => {
+    if (!confirmed) return;
+    setBusy(true);
+    try {
+      await deleteAccount(typed.trim());
+      window.location.assign("/");
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError && error.code === "LAST_ADMIN"
+          ? p("You're the only owner or admin of a workspace. Make someone else an admin, or delete the workspace, before deleting your account.")
+          : error instanceof Error
+            ? error.message
+            : p("Could not delete your account"),
+      );
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <PersonalSection title={p("Danger zone")}>
+        <PersonalRow
+          title={p("Delete account")}
+          description={p("Permanently delete your account and personal data in every workspace")}
+          danger
+        >
+          <Action
+            danger
+            onClick={() => {
+              setTyped("");
+              setOpen(true);
+            }}
+          >
+            {p("Delete account…")}
+          </Action>
+        </PersonalRow>
+      </PersonalSection>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="personal-dialog personal-delete-account-dialog">
+          <DialogTitle>{p("Delete your account?")}</DialogTitle>
+          <p>
+            {p(
+              "Your profile, sign-in methods, sessions, passkeys, API keys, connected apps, agent chats, search history and notification settings are deleted in every workspace. Issues, comments and documents you created stay, shown as “Deleted user”. This can’t be undone.",
+            )}
+          </p>
+          <label className="personal-dialog-field">
+            <span>{p(data.viewer.email ? "Type your email to confirm" : "Type your name to confirm")}</span>
+            <input
+              autoFocus
+              data-i18n-ignore
+              className="personal-input"
+              aria-label={p(data.viewer.email ? "Type your email to confirm" : "Type your name to confirm")}
+              placeholder={expected}
+              value={typed}
+              onChange={(event) => setTyped(event.target.value)}
+            />
+          </label>
+          <footer>
+            <Action onClick={() => setOpen(false)}>{p("Cancel")}</Action>
+            <Action danger disabled={busy || !confirmed} onClick={() => void remove()}>
+              {busy ? p("Deleting…") : p("Delete account")}
             </Action>
           </footer>
         </DialogContent>

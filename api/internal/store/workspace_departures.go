@@ -72,6 +72,12 @@ func (s *SQLiteStore) ListDepartedMembers(ctx context.Context, workspaceID, work
 		// installation is listed as a plain former member (the reference app drops the app
 		// flag together with the OAuth client).
 		user.Email, user.Active = email.String, false
+		if role == DepartureRoleErased {
+			// Erased here: the account may live on elsewhere under its name,
+			// but this workspace only knows the pseudonymous identity.
+			user = domain.DeletedUserIdentity(user.ID)
+			role = "member"
+		}
 		joined, _ := time.Parse(time.RFC3339Nano, joinedRaw)
 		left, _ := time.Parse(time.RFC3339Nano, leftRaw)
 		result = append(result, domain.WorkspaceMember{User: user, Role: role, Status: MemberStatusDeparted, JoinedAt: joined, LastSeenAt: &left})

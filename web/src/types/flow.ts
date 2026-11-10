@@ -18,6 +18,8 @@ export interface User {
   avatarUrl?: string;
   active: boolean;
   emailVerified: boolean;
+  /** The pseudonymous "Deleted user" of a deleted account or of a member whose personal data was erased. */
+  deleted?: boolean;
 }
 export interface Workspace {
   id: UUID;

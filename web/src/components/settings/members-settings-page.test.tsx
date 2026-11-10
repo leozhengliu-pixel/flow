@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({
   setTeamMembership: vi.fn().mockResolvedValue(undefined),
   resendInvitation: vi.fn().mockResolvedValue(undefined),
   revokeInvitation: vi.fn().mockResolvedValue(undefined),
+  eraseMemberPersonalData: vi.fn().mockResolvedValue({ userId: "user-2", scope: "workspace" }),
 }));
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
@@ -303,12 +304,14 @@ it("gives each row the actions the reference app offers for its state", async ()
     "Suspend user…",
     "Manage teams…",
     "Remove from workspace…",
+    "Erase personal data…",
   ]);
   expect(await menuItems(user, "Guest person")).toEqual([
     "Activate user…",
     "Update name…",
     "Update username…",
     "Remove from workspace…",
+    "Erase personal data…",
   ]);
   expect(await menuItems(user, "Helper bot")).toEqual(["Manage team access…", "Revoke access…"]);
   expect(await menuItems(user, "pending@example.test")).toEqual(["Resend invite", "Revoke invite"]);
@@ -367,7 +370,7 @@ it("locks the role, profile and status of members managed by SCIM", async () => 
   await user.click(screen.getByRole("button", { name: "Open menu Teammate" }));
   const menu = await screen.findByRole("menu");
   expect(within(menu).getByRole("note")).toHaveTextContent("Change their role, name, email or status in your identity provider.");
-  for (const name of ["Change role…", "Update name…", "Update email…", "Suspend user…", "Remove from workspace…"]) {
+  for (const name of ["Change role…", "Update name…", "Update email…", "Suspend user…", "Remove from workspace…", "Erase personal data…"]) {
     expect(within(menu).getByRole("menuitem", { name })).toHaveAttribute("aria-disabled", "true");
   }
   expect(within(menu).getByRole("menuitem", { name: "Update username…" })).not.toHaveAttribute("aria-disabled");
@@ -386,4 +389,24 @@ it("removes a member from the workspace", async () => {
   const dialog = await screen.findByRole("dialog");
   await user.click(within(dialog).getByRole("button", { name: "Remove" }));
   await waitFor(() => expect(api.removeMember).toHaveBeenCalledWith("workspace", teammate.id));
+});
+
+it("erases a member's personal data once the admin types their email", async () => {
+  const user = userEvent.setup();
+  renderMembers();
+
+  await user.click(screen.getByRole("button", { name: "Open menu Teammate" }));
+  await user.click(screen.getByRole("menuitem", { name: "Erase personal data…" }));
+  const dialog = await screen.findByRole("dialog");
+  expect(dialog).toHaveTextContent("Erase personal data of Teammate?");
+  const confirm = within(dialog).getByRole("button", { name: "Erase personal data" });
+  expect(confirm).toBeDisabled();
+  const field = within(dialog).getByRole("textbox");
+  await user.type(field, "someone@example.test");
+  expect(confirm).toBeDisabled();
+  await user.clear(field);
+  await user.type(field, "TEAMMATE@example.test");
+  expect(confirm).toBeEnabled();
+  await user.click(confirm);
+  await waitFor(() => expect(api.eraseMemberPersonalData).toHaveBeenCalledWith("workspace", teammate.id, "TEAMMATE@example.test"));
 });

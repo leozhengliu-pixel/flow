@@ -218,7 +218,7 @@ func (s *SQLiteStore) LoginExternal(ctx context.Context, email, name, avatarURL 
 		}
 		workspace := s.workspaces[workspaceKey]
 		s.mu.RUnlock()
-		if workspace.Workspace.ID != "" {
+		if workspace.Workspace.ID != "" && !errors.Is(s.refuseErasedMember(ctx, s.db, workspace.Workspace.ID, user.ID), ErrErasedFromWorkspace) {
 			_, err = s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, user.ID, "member", "active", now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 			if err == nil && len(workspace.Teams) > 0 {
 				_, err = s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, workspace.Teams[0].ID, user.ID, "member", now.Format(time.RFC3339Nano))
@@ -380,6 +380,10 @@ func (s *SQLiteStore) provisionExternalMemberships(ctx context.Context, userID s
 	workspace := s.workspaces[workspaceKey]
 	s.mu.RUnlock()
 	if workspace.Workspace.ID == "" {
+		return nil
+	}
+	// An account erased from the workspace is not provisioned into it again.
+	if errors.Is(s.refuseErasedMember(ctx, s.db, workspace.Workspace.ID, userID), ErrErasedFromWorkspace) {
 		return nil
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, workspace.Workspace.ID, userID, "member", "active", now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
@@ -624,6 +628,9 @@ func (s *SQLiteStore) UnlinkAuthIdentity(ctx context.Context, userID, identityID
 }
 
 func (s *SQLiteStore) EnsureWorkspaceMembership(ctx context.Context, workspaceID, userID string) error {
+	if err := s.refuseErasedMember(ctx, s.db, workspaceID, userID); err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET status='active',last_seen_at=excluded.last_seen_at`, workspaceID, userID, "member", "active", now, now)
 	if err == nil {
@@ -965,7 +972,7 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 }
 
 func (s *SQLiteStore) ListMembers(ctx context.Context, workspaceID string) ([]domain.WorkspaceMember, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT u.id,u.email,u.name,u.display_name,u.avatar_url,u.email_verified_at,u.active,m.role,m.status,m.joined_at,m.last_seen_at,
+	rows, err := s.db.QueryContext(ctx, `SELECT u.id,u.email,u.name,u.display_name,u.avatar_url,u.email_verified_at,u.active,u.deleted_at,m.role,m.status,m.joined_at,m.last_seen_at,
 		COALESCE((SELECT i.subject FROM auth_identities i WHERE i.user_id=u.id AND (i.provider IN ('oidc','saml') OR (i.provider='scim' AND i.issuer=m.workspace_id)) ORDER BY CASE WHEN i.provider='scim' THEN 0 ELSE 1 END,i.created_at,i.id LIMIT 1),''),
 		CASE WHEN `+scimManagedMemberSQL+` THEN 1 ELSE 0 END
 		FROM workspace_memberships m JOIN auth_users u ON u.id=m.user_id WHERE m.workspace_id=? ORDER BY lower(u.display_name)`, workspaceID)
@@ -976,14 +983,14 @@ func (s *SQLiteStore) ListMembers(ctx context.Context, workspaceID string) ([]do
 	result := []domain.WorkspaceMember{}
 	for rows.Next() {
 		var user domain.User
-		var nullableEmail, verified, lastSeen sql.NullString
+		var nullableEmail, verified, deleted, lastSeen sql.NullString
 		var active, managed int
 		var role, status, joinedRaw string
-		if err := rows.Scan(&user.ID, &nullableEmail, &user.Name, &user.DisplayName, &user.AvatarURL, &verified, &active, &role, &status, &joinedRaw, &lastSeen, &user.UserID, &managed); err != nil {
+		if err := rows.Scan(&user.ID, &nullableEmail, &user.Name, &user.DisplayName, &user.AvatarURL, &verified, &active, &deleted, &role, &status, &joinedRaw, &lastSeen, &user.UserID, &managed); err != nil {
 			return nil, err
 		}
 		user.Email = nullableEmail.String
-		user.Active, user.EmailVerified = active == 1, verified.Valid
+		user.Active, user.EmailVerified, user.Deleted = active == 1, verified.Valid, deleted.Valid
 		joined, _ := time.Parse(time.RFC3339Nano, joinedRaw)
 		var last *time.Time
 		if lastSeen.Valid {
@@ -1164,6 +1171,9 @@ func (s *SQLiteStore) AcceptInvitationWithChanges(ctx context.Context, token, us
 	user, err := s.authUserByID(ctx, userID)
 	if err != nil || !strings.EqualFold(user.Email, email) {
 		return InvitationAcceptance{}, ErrAuthForbidden
+	}
+	if err := s.refuseErasedMember(ctx, s.db, workspaceID, userID); err != nil {
+		return InvitationAcceptance{}, err
 	}
 	// Read immutable workspace metadata before opening the SQL transaction.
 	// Mutations take the store lock before acquiring a database connection, so
@@ -1504,11 +1514,11 @@ func (s *SQLiteStore) authUserByEmail(ctx context.Context, email string) (domain
 func (s *SQLiteStore) authUserByID(ctx context.Context, id string) (domain.User, error) {
 	var user domain.User
 	var nullableEmail sql.NullString
-	var verified sql.NullString
+	var verified, deleted sql.NullString
 	var active int
-	err := s.db.QueryRowContext(ctx, `SELECT id,email,name,display_name,avatar_url,email_verified_at,active FROM auth_users WHERE id=?`, id).Scan(&user.ID, &nullableEmail, &user.Name, &user.DisplayName, &user.AvatarURL, &verified, &active)
+	err := s.db.QueryRowContext(ctx, `SELECT id,email,name,display_name,avatar_url,email_verified_at,active,deleted_at FROM auth_users WHERE id=?`, id).Scan(&user.ID, &nullableEmail, &user.Name, &user.DisplayName, &user.AvatarURL, &verified, &active, &deleted)
 	user.Email = nullableEmail.String
-	user.Active, user.EmailVerified = active == 1, verified.Valid
+	user.Active, user.EmailVerified, user.Deleted = active == 1, verified.Valid, deleted.Valid
 	if err == nil {
 		err = s.decorateAppUser(ctx, &user)
 	}

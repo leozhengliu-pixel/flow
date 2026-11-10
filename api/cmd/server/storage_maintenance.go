@@ -103,6 +103,11 @@ func (s *server) maintainStorage(ctx context.Context, now time.Time, eventRetent
 			log.Printf("Agent chat purge workspace=%s: %v", key, err)
 		}
 	}
+	if purged, err := s.purgeExpiredPersonalDataExports(ctx, now); err != nil && ctx.Err() == nil {
+		log.Printf("Personal data export purge: %v", err)
+	} else if purged > 0 {
+		log.Printf("Deleted %d expired personal data exports", purged)
+	}
 	// Workspaces whose deletion grace period ended (workspace_deletion.go).
 	s.purgeDeletedWorkspaces(ctx, now)
 	if err := s.migrateOffloadedContent(ctx); err != nil && ctx.Err() == nil {

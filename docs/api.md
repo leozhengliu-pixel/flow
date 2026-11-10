@@ -279,6 +279,38 @@ pickers without a reload. These are also persisted domain events exposed by
 the change log and `users` webhooks, and member actions have audit entries.
 Development mode sends the same realtime status payload as authenticated mode.
 
+### Deleted users
+
+A person whose account was deleted, or whose personal data a workspace admin
+erased, stays on what they authored as the pseudonymous **Deleted user**: the
+same `id`, `displayName` `"Deleted user"`, a `deleted-user-…` `name`, an empty
+`email`, no `avatarUrl` and `"deleted": true`. They count as former members
+(the rules above apply). See [Privacy and data subject rights](privacy.md).
+
+## Personal data
+
+These routes need a signed-in session (`/api/account` refuses API keys and
+OAuth tokens); see [Privacy and data subject rights](privacy.md) for what they
+export and erase.
+
+- `POST /api/account/data-exports` queues a "Download your data" export
+  (`202`, a `PersonalDataExport` with `id` and `status`). At most 3 per 24 hours
+  and one at a time; over the limit `429` with `Retry-After`.
+- `GET /api/account/data-exports` lists your exports, newest first; a
+  `completed` one carries `downloadUrl` and `expiresAt` (7 days).
+- `GET /api/account/data-exports/{id}/download` streams the zip of JSON files
+  to its owner only (`404` for anyone else, `409` while preparing, `410` once
+  expired).
+- `DELETE /api/account` with `{"confirmation": "<your email>"}` deletes your
+  account (`204`). `409` with `code` `LAST_ADMIN` and the `workspaces` lists
+  the workspaces you are the only owner or admin of.
+- `POST /api/workspaces/{workspaceKey}/members/{userId}/erase` with
+  `{"confirmation": "<member's email>"}` (workspace admins, or an `admin`-scoped
+  key) erases a current or former member: `{"userId", "scope"}` where `scope`
+  is `account` when the account belonged to this workspace only (it is
+  deleted) and `workspace` otherwise (only this workspace's data). An account
+  erased from a workspace cannot join it again (`409`).
+
 ## Rate limits
 
 Flow uses a leaky-bucket model: each budget refills continuously at

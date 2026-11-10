@@ -185,6 +185,31 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/account": {
+      "delete": {
+        "operationId": "delete_account",
+        "tags": [
+          "account"
+        ],
+        "summary": "DELETE /api/account",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/account/bootstrap": {
       "get": {
         "operationId": "get_account_bootstrap",
@@ -543,6 +568,89 @@
         },
         "x-flow-internal": true,
         "x-flow-source": "personal_connections.go"
+      }
+    },
+    "/api/account/data-exports": {
+      "get": {
+        "operationId": "get_account_data_exports",
+        "tags": [
+          "account"
+        ],
+        "summary": "GET /api/account/data-exports",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      },
+      "post": {
+        "operationId": "post_account_data_exports",
+        "tags": [
+          "account"
+        ],
+        "summary": "POST /api/account/data-exports",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/account/data-exports/{id}/download": {
+      "get": {
+        "operationId": "get_account_data_exports_id_download",
+        "tags": [
+          "account"
+        ],
+        "summary": "GET /api/account/data-exports/{id}/download",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
       }
     },
     "/api/account/identities": {
@@ -33603,6 +33711,49 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/workspaces/{workspaceKey}/members/{userId}/erase": {
+      "post": {
+        "operationId": "post_workspaces_workspaceKey_members_userId_erase",
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "POST /api/workspaces/{workspaceKey}/members/{userId}/erase",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "workspaceKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/workspaces/{workspaceKey}/members/{userId}/resume": {
       "post": {
         "operationId": "post_workspaces_workspaceKey_members_userId_resume",
@@ -49421,6 +49572,10 @@
           "builtinAgent": {
             "type": "boolean"
           },
+          "deleted": {
+            "description": "Deleted marks the pseudonymous \"Deleted user\" that stands in for a person whose account was deleted or whose personal data a workspace admin erased: the id stays (so attribution holds), the name, email and avatar are gone.",
+            "type": "boolean"
+          },
           "displayName": {
             "type": "string"
           },
@@ -49520,6 +49675,10 @@
           "builtinAgent": {
             "type": "boolean"
           },
+          "deleted": {
+            "description": "Deleted marks the pseudonymous \"Deleted user\" that stands in for a person whose account was deleted or whose personal data a workspace admin erased: the id stays (so attribution holds), the name, email and avatar are gone.",
+            "type": "boolean"
+          },
           "displayName": {
             "type": "string"
           },
@@ -49588,6 +49747,10 @@
             "type": "string"
           },
           "builtinAgent": {
+            "type": "boolean"
+          },
+          "deleted": {
+            "description": "Deleted marks the pseudonymous \"Deleted user\" that stands in for a person whose account was deleted or whose personal data a workspace admin erased: the id stays (so attribution holds), the name, email and avatar are gone.",
             "type": "boolean"
           },
           "displayName": {

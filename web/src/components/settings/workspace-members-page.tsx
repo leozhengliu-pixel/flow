@@ -11,6 +11,7 @@ import { personUsername } from "@/lib/people";
 import { installedApplicationPath, memberProfilePath, settingsPath } from "@/lib/app-routes";
 import { uninstallApplication } from "@/lib/application-agents";
 import {
+  eraseMemberPersonalData,
   removeMember,
   resendInvitation,
   resumeMember,
@@ -140,6 +141,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
   const [teamsTarget, setTeamsTarget] = useState<{ mode: "add" | "manage"; members: WorkspaceMember[] }>();
   const [teamDraft, setTeamDraft] = useState<string[]>([]);
   const [confirmTarget, setConfirmTarget] = useState<{ members: WorkspaceMember[]; action: ConfirmKind }>();
+  const [eraseTarget, setEraseTarget] = useState<{ member: WorkspaceMember; value: string }>();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const now = useCurrentTimeMs();
@@ -281,6 +283,13 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
         [<DropdownMenuItem key="revoke" onSelect={() => setConfirmTarget({ members: [member], action: "revoke" })}>{t("Revoke access…")}</DropdownMenuItem>],
       ];
     }
+    // Erasing a former member's personal data is the one action left on their row.
+    const erase = (props: object = {}) => (
+      <DropdownMenuItem key="erase" className="danger-item" {...props} onSelect={() => setEraseTarget({ member, value: "" })}>
+        {t("Erase personal data…")}
+      </DropdownMenuItem>
+    );
+    if (member.status === "departed") return !member.user.deleted && !member.user.app && member.role !== "app" ? [[erase()]] : [];
     if (!manageable(member)) return [];
     const suspended = member.status === "suspended";
     // SCIM-managed members: role, name, email and status change in the identity provider.
@@ -303,7 +312,10 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
       ],
       suspended ? [] : [<DropdownMenuItem key="suspend" {...lockedProps} onSelect={() => setConfirmTarget({ members: [member], action: "suspend" })}>{t("Suspend user…")}</DropdownMenuItem>],
       suspended ? [] : [<DropdownMenuItem key="teams" onSelect={() => openTeams("manage", [member])}>{t("Manage teams…")}</DropdownMenuItem>],
-      [<DropdownMenuItem key="remove" className="danger-item" {...lockedProps} onSelect={() => setConfirmTarget({ members: [member], action: "remove" })}>{t("Remove from workspace…")}</DropdownMenuItem>],
+      [
+        <DropdownMenuItem key="remove" className="danger-item" {...lockedProps} onSelect={() => setConfirmTarget({ members: [member], action: "remove" })}>{t("Remove from workspace…")}</DropdownMenuItem>,
+        erase(lockedProps),
+      ],
     ].filter((group) => group.length > 0);
   };
 
@@ -505,6 +517,19 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
       if (!ok) return;
       setConfirmTarget(undefined);
       setSelectedIds((current) => current.filter((id) => !members.some((member) => member.user.id === id)));
+    });
+  };
+
+  // The admin confirms with the member's email (their name when they have none).
+  const eraseConfirmation = eraseTarget ? eraseTarget.member.user.email || eraseTarget.member.user.displayName : "";
+  const eraseConfirmed = Boolean(eraseTarget && eraseTarget.value.trim().toLowerCase() === eraseConfirmation.toLowerCase());
+  const runErase = () => {
+    const target = eraseTarget;
+    if (!target || !eraseConfirmed) return;
+    void change(() => eraseMemberPersonalData(workspace, target.member.user.id, target.value.trim()), "Personal data erased").then((ok) => {
+      if (!ok) return;
+      setEraseTarget(undefined);
+      setSelectedIds((current) => current.filter((id) => id !== target.member.user.id));
     });
   };
 
@@ -724,6 +749,35 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
             </button>
             <button type="button" className="settings-action primary" disabled={busy || (teamsTarget?.mode === "add" && !teamDraft.length)} onClick={saveTeams}>
               {t(teamsTarget?.mode === "manage" ? "Save" : "Add")}
+            </button>
+          </footer>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(eraseTarget)} onOpenChange={(open) => !open && setEraseTarget(undefined)}>
+        <DialogContent className="settings-member-dialog settings-member-erase-dialog">
+          <DialogTitle>{t("Erase personal data of {name}?").replace("{name}", () => eraseTarget?.member.user.displayName ?? "")}</DialogTitle>
+          <p className="settings-member-dialog-note">
+            {t(
+              "Their profile, settings, agent chats, API keys, connected apps, notifications and search history in this workspace are deleted, and they lose access. Issues, comments and documents they created stay, shown as “Deleted user”. If this workspace is their only one, their whole account is deleted. This can’t be undone.",
+            )}
+          </p>
+          <label className="settings-member-erase-field">
+            <span>{t(eraseTarget?.member.user.email ? "Type their email to confirm" : "Type their name to confirm")}</span>
+            <input
+              autoFocus
+              className="settings-input"
+              data-i18n-ignore
+              placeholder={eraseConfirmation}
+              value={eraseTarget?.value ?? ""}
+              onChange={(event) => setEraseTarget((current) => (current ? { ...current, value: event.target.value } : current))}
+            />
+          </label>
+          <footer>
+            <button type="button" className="settings-action" onClick={() => setEraseTarget(undefined)}>
+              {t("Cancel")}
+            </button>
+            <button type="button" className="settings-action danger" disabled={busy || !eraseConfirmed} onClick={runErase}>
+              {t("Erase personal data")}
             </button>
           </footer>
         </DialogContent>

@@ -431,6 +431,10 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/account/identities", s.listAccountIdentities)
 	mux.HandleFunc("DELETE /api/account/identities/{id}", s.unlinkAccountIdentity)
 	mux.HandleFunc("POST /api/account/change-password", s.changeAccountPassword)
+	mux.HandleFunc("DELETE /api/account", s.deleteAccount)
+	mux.HandleFunc("GET /api/account/data-exports", s.listPersonalDataExports)
+	mux.HandleFunc("POST /api/account/data-exports", s.createPersonalDataExport)
+	mux.HandleFunc("GET /api/account/data-exports/{id}/download", s.downloadPersonalDataExport)
 	s.registerCodeHostAccountRoutes(mux)
 	s.registerPersonalConnectionRoutes(mux)
 	mux.HandleFunc("GET /api/realtime/events", s.realtimeEvents)
@@ -496,6 +500,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/members/{userId}/suspend", s.suspendMember)
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/members/{userId}/resume", s.resumeMember)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/members/{userId}", s.removeMember)
+	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/members/{userId}/erase", s.eraseMember)
 	mux.HandleFunc("PUT /api/workspaces/{workspaceKey}/teams/{teamId}/members/{userId}", s.updateTeamMember)
 	mux.HandleFunc("GET /api/teams/{id}/default-favorites", s.listTeamDefaultFavorites)
 	mux.HandleFunc("PUT /api/teams/{id}/default-favorites", s.replaceTeamDefaultFavorites)
@@ -7209,6 +7214,10 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 		return
 	}
 	if errors.Is(err, store.ErrLastTeamOwner) {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	if errors.Is(err, store.ErrErasedFromWorkspace) {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}

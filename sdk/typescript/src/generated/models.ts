@@ -3048,6 +3048,8 @@ export interface User {
   appTeamIds?: string[]
   avatarUrl?: string
   builtinAgent?: boolean
+  /** Deleted marks the pseudonymous "Deleted user" that stands in for a person whose account was deleted or whose personal data a workspace admin erased: the id stays (so attribution holds), the name, email and avatar are gone. */
+  deleted?: boolean
   displayName: string
   email: string
   emailVerified: boolean
@@ -3077,6 +3079,8 @@ export interface UserPartial {
   appTeamIds?: string[]
   avatarUrl?: string
   builtinAgent?: boolean
+  /** Deleted marks the pseudonymous "Deleted user" that stands in for a person whose account was deleted or whose personal data a workspace admin erased: the id stays (so attribution holds), the name, email and avatar are gone. */
+  deleted?: boolean
   displayName?: string
   email?: string
   emailVerified?: boolean
@@ -3098,6 +3102,8 @@ export interface UserWebhookDataPartial {
   appTeamIds?: string[]
   avatarUrl?: string
   builtinAgent?: boolean
+  /** Deleted marks the pseudonymous "Deleted user" that stands in for a person whose account was deleted or whose personal data a workspace admin erased: the id stays (so attribution holds), the name, email and avatar are gone. */
+  deleted?: boolean
   displayName?: string
   email?: string
   emailVerified?: boolean
