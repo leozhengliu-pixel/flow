@@ -78,11 +78,10 @@ describe('sidebar row layout', () => {
         expect(row.querySelector(':scope > .try-dismiss')).toHaveAccessibleName(`Dismiss ${item.textContent}`)
         expect(item.querySelector('.try-dismiss')).toBeNull()
       }
-      for (const item of [invite, cycles]) {
+      for (const item of [invite, cycles, github]) {
         expect(item.parentElement).toHaveClass('sidebar-item-menu-trigger')
         expect(item.parentElement?.parentElement).toHaveClass('try-item')
       }
-      expect(github.parentElement).toHaveClass('try-item')
     } finally {
       delete document.documentElement.dataset.theme
     }

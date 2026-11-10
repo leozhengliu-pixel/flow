@@ -298,7 +298,7 @@ describe('team overview', () => {
     expect(screen.getByText('Add documents and links. Organize by creating sections.')).toBeVisible()
     expect(screen.getByText('Go to')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Team settings' })).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Cycles' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'Cycles' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Views' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Loops' })).toHaveAttribute('href', '/workspace/team/TST/loops')
   })

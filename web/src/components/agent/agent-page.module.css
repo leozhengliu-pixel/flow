@@ -177,14 +177,13 @@
   padding: 6px 10px;
   color: var(--theme-text-primary);
   background: var(--agent-composer-bg);
-  border: .5px solid rgb(0 0 0 / 9%);
+  border: .5px solid color-mix(in srgb, var(--theme-text-primary) 9%, transparent);
   border-radius: 9999px;
   font-weight: 500;
   cursor: default;
 }
 .connectGitHub svg { width: 14px; height: 14px; flex: 0 0 14px; }
 .connectGitHub span { font-size: 13px; font-weight: 450; }
-:global(:root[data-theme="dark"]) .connectGitHub { border-color: rgb(255 255 255 / 9%); }
 .examples {
   position: relative;
   grid-row: 3;

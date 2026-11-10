@@ -448,7 +448,7 @@
   border-radius: 50%;
   background: lch(60.621% 1.2 272);
 }
-:root[data-theme="light"] body .sidebar-help-menu { border-color: var(--border-card); }
+:root[data-theme="light"] body .sidebar-help-menu { border-color: var(--pk-border); }
 :root[data-theme="light"] .sidebar-help-label,
 :root[data-theme="light"] .sidebar-help-menu .news-dot { color: var(--text-label); }
 :root[data-theme="light"] .sidebar-help-menu .news-dot { background: var(--text-label); }
