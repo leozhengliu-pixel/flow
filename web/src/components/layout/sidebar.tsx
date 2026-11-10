@@ -48,6 +48,7 @@ import { parseAppRoute } from '@/lib/app-routes';
 import { sidebarRoutePath } from '@/lib/sidebar-route';
 import { teamHomeTabPath, useTeamHomeTab } from '@/lib/team-home-tab';
 import { toast } from "@/lib/toast";
+import { supportReportUrl } from "@/lib/support-report";
 import { favoriteResourceKey, patchFavorite, toggleFavoriteFor, toggleTabFavoriteFor } from "@/lib/favorites";
 import { FavoriteTabIcon } from "./favorite-tab-badge";
 import { SidebarItemMenu } from "./sidebar-item-menu";
@@ -2407,12 +2408,7 @@ export function HelpMenu({
     window.addEventListener('flow:open-help-menu', openHelp);
     return () => window.removeEventListener('flow:open-help-menu', openHelp);
   }, []);
-  const sendFlare = () => {
-    const url = new URL('https://github.com/leozhengliu-pixel/flow/issues/new');
-    url.searchParams.set('title', t('Support diagnostics'));
-    url.searchParams.set('body', `${t('Browser:')} ${navigator.userAgent}\n${t('Page:')} ${location.pathname}\n\n${t('Describe the problem:')}\n`);
-    openExternal(url.toString());
-  };
+  const sendFlare = () => openExternal(supportReportUrl({ title: t('Support diagnostics'), browser: t('Browser:'), page: t('Page:'), describe: t('Describe the problem:') }));
   if (phone) {
     return <><button className="sidebar-help" type="button" aria-label={t('Open Help menu')} onClick={() => { onPhoneOpen?.(); setOpen(true) }}><ViewGlyph icon="QuestionMark" color="currentColor"/></button>
       <PhoneHelpMenu open={open} onOpenChange={setOpen} onSettings={onSettings} onShortcuts={onShortcuts}/>

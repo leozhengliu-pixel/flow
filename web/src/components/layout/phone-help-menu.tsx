@@ -6,6 +6,7 @@ import { SettingsGearIcon } from '@/components/releases/release-icons'
 import { ConnectorBrandIcon } from '@/components/settings/connector-brand-icons'
 import { useI18n } from '@/i18n/i18n'
 import { toast } from '@/lib/toast'
+import { supportReportUrl } from '@/lib/support-report'
 import { PhoneHelpGlyph } from './phone-help-glyphs'
 import './phone-help-menu.css'
 
@@ -22,12 +23,7 @@ export function PhoneHelpMenu({ open, onOpenChange, onSettings, onShortcuts }: {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const repository = 'https://github.com/leozhengliu-pixel/flow'
-  const sendFlare = () => {
-    const url = new URL(`${repository}/issues/new`)
-    url.searchParams.set('title', t('Support diagnostics'))
-    url.searchParams.set('body', `${t('Browser:')} ${navigator.userAgent}\n${t('Page:')} ${location.pathname}\n\n${t('Describe the problem:')}\n`)
-    openExternal(url.toString())
-  }
+  const sendFlare = () => openExternal(supportReportUrl({ title: t('Support diagnostics'), browser: t('Browser:'), page: t('Page:'), describe: t('Describe the problem:') }))
   const entries = [
     { id: 'docs', label: 'Docs', icon: <ViewGlyph icon="Book" color="var(--help-icon-color)"/>, run: () => openExternal(`${repository}/tree/main/docs`) },
     { id: 'contact', label: 'Contact us', icon: <ViewGlyph icon="ChatLine" color="var(--help-icon-color)"/>, run: () => openExternal(`${repository}/issues/new/choose`) },
