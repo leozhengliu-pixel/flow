@@ -52,6 +52,9 @@ export function chatTeamNotificationsCopy(platform: ChatPlatform) {
     label: "Slack notifications",
     description: "Broadcast notifications to Slack",
     page: "Connect a Slack channel to receive notifications when issues are created or updated in this team.",
+    title: "Slack",
+    lead: "Manage project channels and notifications for this team",
+    leadWithSubTeams: "Manage project channels and notifications for this team and its active, public sub-teams",
     menu: "Configure Slack notifications…",
     connect: "Connect channel",
   };
@@ -59,6 +62,9 @@ export function chatTeamNotificationsCopy(platform: ChatPlatform) {
     label: "{name} notifications",
     description: "Broadcast notifications to {name} groups",
     page: "Connect a {name} group to receive notifications when issues are created or updated in this team.",
+    title: "{name}",
+    lead: "Manage project groups and notifications for this team",
+    leadWithSubTeams: "Manage project groups and notifications for this team and its active, public sub-teams",
     menu: "Configure {name} notifications…",
     connect: "Connect {name} group",
   };

@@ -1,4 +1,5 @@
-import { ExternalLink, GitBranch, MoreHorizontal, Pencil, Plus, Repeat2, SquareArrowOutUpRight, X } from "lucide-react";
+import { TeamDocsLink } from "./team-page-copy";
+import { GitBranch, MoreHorizontal, Pencil, Plus, Repeat2, SquareArrowOutUpRight, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCurrentTime } from "@/hooks/use-current-time";
 import { useNavigate } from "react-router-dom";
@@ -153,7 +154,7 @@ function RecurringIssuesList({ data, team, onBack, onNavigateSubPath }: Props) {
   const dateLabel = (date: Date) => formatDate(date.toISOString(), { month: "short", day: "numeric", year: date.getFullYear() === currentYear ? undefined : "numeric" });
   const newButton = (
     <button type="button" className="settings-action recurring-issues-new" disabled={!canManage} onClick={() => onNavigateSubPath("new")}>
-      <Plus size={13} />
+      <Plus size={14} />
       {t("New recurring issue")}
     </button>
   );
@@ -165,10 +166,7 @@ function RecurringIssuesList({ data, team, onBack, onNavigateSubPath }: Props) {
           <h1>{t("Recurring issues")}</h1>
           <p>
             {t("Automatically create issues that need to be completed on a regular schedule. Each issue is created with a due date set by the schedule. A new instance is created after each due date passes.")}{" "}
-            <a className="recurring-issues-docs" href={DOCS_URL} target="_blank" rel="noreferrer">
-              {t("Docs")}
-              <ExternalLink size={11} aria-hidden="true" />
-            </a>
+            <TeamDocsLink href={DOCS_URL} label={t("Docs")} />
           </p>
         </div>
       </header>
@@ -390,10 +388,7 @@ function NewRecurringIssuePage({ data, team, sourceId, onNavigateSubPath, onRelo
         <h1>{heading}</h1>
         <p className="recurring-issue-editor__intro">
           {t("Create the first instance of your recurring issue below, including the schedule and initial due date. New instances will be created after each due date passes.")}{" "}
-          <a className="recurring-issues-docs" href={DOCS_URL} target="_blank" rel="noreferrer">
-            {t("Docs")}
-            <ExternalLink size={11} aria-hidden="true" />
-          </a>
+          <TeamDocsLink href={DOCS_URL} label={t("Docs")} />
         </p>
         {sourceError && <p className="recurring-issues-error" role="alert">{sourceError}</p>}
         <div className="recurring-issue-editor__icon">

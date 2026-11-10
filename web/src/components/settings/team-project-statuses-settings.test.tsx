@@ -63,14 +63,14 @@ describe('TeamProjectStatusesSettingsPage (LS-0595)', () => {
     expect(screen.getByText(/Inherit project statuses from workspace/)).toBeInTheDocument()
   })
 
-  it('shows inherited banner when inherit is on', () => {
+  it('dims the statuses when inherit is on', () => {
     const { data, team } = fixture(true, 'team-0')
     render(
       <I18nProvider>
         <TeamProjectStatusesSettingsPage data={data} team={team} onBack={vi.fn()} onReload={vi.fn(async () => {})} />
       </I18nProvider>,
     )
-    expect(screen.getByText('Project statuses are inherited')).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Project statuses' }).closest('[data-disabled]')).not.toBeNull()
     expect(screen.getByText('Inherit statuses from parent team')).toBeInTheDocument()
   })
 })

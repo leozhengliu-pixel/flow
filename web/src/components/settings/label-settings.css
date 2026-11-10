@@ -314,7 +314,7 @@ html:root .label-settings-filter-bar .workspace-filter-bar__add[data-state="open
   .settings-content:has(.domain-labels-page) > .settings-crumb {
     width: max-content;
     max-width: calc(100% - 32px);
-    margin: 0 16px 6px;
+    margin: 0 16px 8px;
   }
   html:root .settings-app .settings-main .domain-labels-header {
     box-sizing: border-box;

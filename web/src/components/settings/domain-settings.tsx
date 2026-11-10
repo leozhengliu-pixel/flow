@@ -54,6 +54,8 @@ interface RowContext {
   columns: LabelColumn[]
   usage: (label: IssueLabel) => number
   rules: (label: IssueLabel) => LabelRuleUsage
+  /** The team whose labels are listed: its own labels have no sub-team. */
+  contextTeamId?: string
 }
 
 const NOUNS: Record<LabelResourceType, { one: string; many: string; zh: string }> = {
@@ -93,8 +95,10 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
   const includeTeamLabels = canScopeTeams && (display.showTeamLabels || filters.teams.length > 0)
   const grouping = canScopeTeams ? display.grouping : 'none'
   const filtering = isFilteringLabels(filters, query)
+  // A team that has sub-teams lists the sub-team of each label in its own column (the reference calls it "Sub-team").
+  const hasSubTeams = Boolean(team) && data.teams.some(item => !item.retiredAt && data.teamSettings?.[item.id]?.parentTeamId === team?.id)
   const rulesVisible = labelRulesVisible(data, resourceType)
-  const columns = visibleLabelColumns({ resourceType, rulesVisible, showTeamColumn: includeTeamLabels && grouping === 'none', showArchived: display.showArchived, width })
+  const columns = visibleLabelColumns({ resourceType, rulesVisible, showTeamColumn: (includeTeamLabels && grouping === 'none') || hasSubTeams, showArchived: display.showArchived, width })
   const ordering = columns.includes(display.ordering) ? display.ordering : 'title'
   const setDisplay = (next: LabelDisplayState) => setStoredDisplay(next)
 
@@ -195,7 +199,7 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
     const ids = [group.id, ...childIds]
     return current.includes(group.id) ? current.filter(id => !ids.includes(id)) : [...new Set([...current, ...ids])]
   })
-  const context: RowContext = { data, resourceType, columns, usage, rules }
+  const context: RowContext = { data, resourceType, columns, usage, rules, contextTeamId: team?.id }
   const renderEntry = (entry: Entry) => entry.kind === 'group'
     ? <GroupSectionRows
       key={entry.group.id}
@@ -269,7 +273,7 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
     return true
   }
   const startCreating = (kind: 'label'|'group') => { setCreating({ kind }); setSelected([]) }
-  const columnLabel = (column: LabelColumn) => t(({ title: 'Name', description: 'Description', team: 'Team', rules: width >= 1024 ? 'Used in' : 'Rules', usage: resourceType === 'issue' ? 'Issues' : resourceType === 'project' ? 'Projects' : 'Initiatives', lastAppliedAt: 'Last applied', createdAt: 'Created', archivedAt: 'Archived' } as Record<LabelColumn, string>)[column])
+  const columnLabel = (column: LabelColumn) => t(({ title: 'Name', description: 'Description', team: team ? 'Sub-team' : 'Team', rules: width >= 1024 ? 'Used in' : 'Rules', usage: resourceType === 'issue' ? 'Issues' : resourceType === 'project' ? 'Projects' : 'Initiatives', lastAppliedAt: 'Last applied', createdAt: 'Created', archivedAt: 'Archived' } as Record<LabelColumn, string>)[column])
   const sort = (column: LabelColumn) => setDisplay({ ...display, ordering: column, descending: column === ordering ? !display.descending : column === 'rules' || column === 'usage' || column === 'archivedAt' })
 
   return <TooltipProvider delayDuration={450} skipDelayDuration={400}><div className="domain-labels-page" data-i18n-ignore>
@@ -311,7 +315,7 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
         </div>
         : <div className="domain-label-scope-block" key={section.id}>{section.entries.map(renderEntry)}</div>)}
       {!hasRows && !creating && (team && !filtering
-        ? <div className="domain-labels-empty is-team">{t(`This team doesn’t have any ${noun.one} labels yet`)}</div>
+        ? <div className="domain-labels-empty is-team"><span>{t(`This team doesn’t have any ${noun.one} labels yet`)}</span></div>
         : <LabelsEmptyState filtering={filtering}/>)}
       {team && !filtering && inheritedCount > 0 && <p className="domain-labels-inherited"><strong>{inheritedCount} {t(inheritedCount === 1 ? 'label' : 'labels')}</strong> {t('inherited from workspace')}</p>}
     </div></section>
@@ -395,7 +399,7 @@ function ValueCells({ context, label, usage, rules, teamUsage, lastAppliedAt, gr
   for (const column of columns) {
     if (column === 'title' || column === 'description') continue
     let content: ReactNode = null
-    if (column === 'team') content = team ? <span data-i18n-ignore>{team.name}</span> : null
+    if (column === 'team') content = team && team.id !== context.contextTeamId ? <span data-i18n-ignore>{team.name}</span> : null
     else if (column === 'rules') content = rules && rules.total > 0 ? <RulesCount rules={rules} data={data}/> : null
     else if (column === 'usage') content = usage > 0 ? group ? <span className="label-settings-usage is-static">{usage}</span> : <UsageCount count={usage} label={label as IssueLabel} resourceType={resourceType} data={data} teamUsage={teamUsage}/> : null
     else if (column === 'lastAppliedAt') content = lastAppliedAt ? <DateCell value={lastAppliedAt} relative title={t('Last applied on {date}').replace('{date}', () => longDate(lastAppliedAt, locale))}/> : null

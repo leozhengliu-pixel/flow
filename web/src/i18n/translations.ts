@@ -61,6 +61,7 @@ import { agentAttributionZhCN } from './translations-agent-attribution';
 import { issueHeaderZhCN } from './translations-issue-header';
 import { issueOptionsZhCN } from './translations-issue-options';
 import { teamAgentGuidanceZhCN } from './translations-team-agent-guidance';
+import { teamSubpagesZhCN } from './translations-team-subpages';
 import { codingArtifactsZhCN } from './translations-coding-artifacts'; // coding sessions (track I)
 import { agentChangesZhCN } from './translations-agent-changes';
 import { agentRuntimeZhCN } from './translations-agent-runtime';
@@ -6204,6 +6205,7 @@ for (const [source, translation] of Object.entries(issueDelegateZhCN)) zhCN[sour
 for (const [source, translation] of Object.entries(agentAttributionZhCN)) zhCN[source] ??= translation;
 // Team-level agent guidance (Team settings › Team agents) fills gaps only.
 for (const [source, translation] of Object.entries(teamAgentGuidanceZhCN)) zhCN[source] ??= translation;
+for (const [source, translation] of Object.entries(teamSubpagesZhCN)) zhCN[source] ??= translation;
 for (const [source, translation] of Object.entries(codingArtifactsZhCN)) zhCN[source] ??= translation; // coding sessions (track I)
 for (const [source, translation] of Object.entries(agentChangesZhCN)) zhCN[source] ??= translation;
 // Agent approvals (bulk deletes, agent-written updates), interrupted steps and web access fill gaps only.

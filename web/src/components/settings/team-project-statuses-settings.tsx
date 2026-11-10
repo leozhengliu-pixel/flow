@@ -4,12 +4,13 @@
  */
 import { useMemo, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { CircleDot } from 'lucide-react'
 import { toast } from '@/lib/toast'
 import { updateStructuredTeamSettings } from '@/lib/api'
 import type { BootstrapData, Team } from '@/types/flow'
 import { useI18n } from '@/i18n/i18n'
-import { SettingsRow, SettingsToggle, TeamSettingsCrumb } from './settings-primitives'
+import { SettingsRow, SettingsSection, SettingsToggle, TeamSettingsCrumb } from './settings-primitives'
+import { InheritBanner, InheritIcon } from './team-page-copy'
+import { settingsPath } from '@/lib/app-routes'
 import { ProjectStatusesSection } from './project-statuses-settings'
 import './issues-projects-settings.css'
 import './feature-settings.css'
@@ -33,8 +34,6 @@ export function TeamProjectStatusesSettingsPage({
   const inherit = Boolean(settings?.inheritProjectStatuses)
   const source = projectStatusInheritanceSource(settings)
   const sourceLabel = source === 'parent' ? t('parent team') : t('workspace')
-  const parentName =
-    data.teams.find(item => item.id === settings?.parentTeamId)?.name ?? t('parent team')
   const inheritingChildren = useMemo(
     () =>
       data.teams.filter(item => {
@@ -89,7 +88,7 @@ export function TeamProjectStatusesSettingsPage({
       data-testid="team-project-statuses-settings"
     >
       <TeamSettingsCrumb team={team} onClick={onBack} />
-      <header className="settings-page-header ip-page-header team-statuses-header">
+      <header className="settings-page-header team-settings-header">
         <div>
           <h1>{t('Team project statuses')}</h1>
           <p>
@@ -100,29 +99,17 @@ export function TeamProjectStatusesSettingsPage({
         </div>
       </header>
 
-      {inheritingChildren.length > 0 && (
-        <div className="team-inherited-setting" role="status">
-          <CircleDot size={16} />
-          <div>
-            <strong>
-              {inheritingChildren.length === 1
-                ? t('1 sub-team opted to inherit this team\'s project statuses')
-                : t('{count} sub-teams opted to inherit this team\'s project statuses').replace(
-                    '{count}',
-                    () => String(inheritingChildren.length),
-                  )}
-            </strong>
-            <p>{t('Any changes will be automatically applied to all inheriting sub-teams')}</p>
-          </div>
-        </div>
-      )}
+      <InheritBanner
+        count={inheritingChildren.length}
+        one="opted to inherit this team’s project statuses"
+        many="opted to inherit this team’s project statuses"
+        description="Any changes will be automatically applied to all inheriting sub-teams"
+        href={settingsPath(data.workspace.urlKey, 'teams')}
+        t={t}
+      />
 
-      <section
-        className="ip-settings-section"
-        aria-label={t('Inherit project statuses')}
-        id="team-inherit-project-statuses"
-      >
-        <SettingsRow title={inheritTitle} description={inheritDescription}>
+      <SettingsSection id="team-inherit-project-statuses" className="team-project-inherit">
+        <SettingsRow icon={<InheritIcon />} title={inheritTitle} description={inheritDescription}>
           <SettingsToggle
             checked={inherit}
             disabled={saving}
@@ -130,24 +117,7 @@ export function TeamProjectStatusesSettingsPage({
             onChange={onToggleInherit}
           />
         </SettingsRow>
-      </section>
-
-      {inherit && (
-        <div className="team-inherited-setting" role="status">
-          <CircleDot size={16} />
-          <div>
-            <strong>{t('Project statuses are inherited')}</strong>
-            <p>
-              {source === 'parent'
-                ? t('Manage statuses from the parent team ({name}). Changes are synced automatically.').replace(
-                    '{name}',
-                    () => parentName,
-                  )
-                : t('Manage statuses from the workspace. Changes are synced automatically.')}
-            </p>
-          </div>
-        </div>
-      )}
+      </SettingsSection>
 
       <ProjectStatusesSection data={data} disabled={inherit} onReload={onReload} />
 

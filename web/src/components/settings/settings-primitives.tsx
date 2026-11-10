@@ -181,6 +181,8 @@ export type SettingsSelectOption =
   | string
   | { value: string; label: string; disabled?: boolean; entityName?: boolean; /** Extra words the searchable menu matches. */ keywords?: string; icon?: ReactNode; /** Draws a separator above the option. */ divider?: boolean; /** Muted text after the label, shown in the menu only. */ hint?: string; /** Dimmed text after the label, e.g. "(default)". */ suffix?: string };
 
+/** A parenthesised suffix (a scale's points) is a quiet detail, smaller than the label. */
+const suffixClass = (suffix: string) => (/^[(（]/.test(suffix) ? "settings-select-suffix is-detail" : "settings-select-suffix");
 const suffixGap = (suffix: string) => (suffix.startsWith("（") ? "" : " ");
 const withSuffix = (option: { label: string; suffix?: string }) =>
   option.suffix ? `${option.label}${suffixGap(option.suffix)}${option.suffix}` : option.label;
@@ -238,14 +240,15 @@ export function SettingsSelect({
       <SelectPrimitive.Trigger
         aria-label={label}
         data-select-size={normalized.reduce((widest, option) => withSuffix(option).length > widest.length ? withSuffix(option) : widest, "")}
-        className={`${className || "settings-select"} settings-select-radix`}
+        data-select-label-size={normalized.reduce((widest, option) => option.label.length > widest.length ? option.label : widest, "")}
+        className={`${className || "settings-select"} settings-select-radix${normalized.some((option) => (option.suffix && /^[(（]/.test(option.suffix) ? option.label : withSuffix(option)).length > 12) ? " is-wide" : ""}`}
       >
         <SelectPrimitive.Value>
           <span className="settings-select-value">
             {selected?.icon}
             <span data-i18n-ignore={selected?.entityName || undefined}>
               {selected?.label ?? (placeholder || value)}
-              {selected?.suffix && <>{suffixGap(selected.suffix)}<span className="settings-select-suffix">{selected.suffix}</span></>}
+              {selected?.suffix && <>{suffixGap(selected.suffix)}<span className={suffixClass(selected.suffix)}>{selected.suffix}</span></>}
             </span>
           </span>
         </SelectPrimitive.Value>
@@ -276,7 +279,7 @@ export function SettingsSelect({
                     {option.icon}
                     <span data-i18n-ignore={option.entityName || undefined}>
                       {option.label}
-                      {option.suffix && <>{suffixGap(option.suffix)}<span className="settings-select-suffix">{option.suffix}</span></>}
+                      {option.suffix && <>{suffixGap(option.suffix)}<span className={suffixClass(option.suffix)}>{option.suffix}</span></>}
                     </span>
                     {"hint" in option && option.hint && <span className="settings-select-option-hint" data-i18n-ignore>{option.hint}</span>}
                   </span>

@@ -666,9 +666,8 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
 }
 
 /* Team page header: title with an optional description underneath */
-html:root .settings-app .settings-main .team-settings-header > div { display: flex; flex-direction: column; align-items: flex-start; }
+html:root .settings-app .settings-main .team-settings-header > div { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
 html:root .settings-app .settings-main .team-settings-header > div > p { margin: 4px 0 0; color: var(--set-desc); font-size: 13px; line-height: 22px; }
-html:root .settings-app .settings-main .team-access-note { margin: -16px 16px 28px; padding: 0; color: var(--set-desc); }
 
 /* Agent personalization: groups spaced like sections */
 .personal-agent-groups { --settings-group-description-gap: 4px; }

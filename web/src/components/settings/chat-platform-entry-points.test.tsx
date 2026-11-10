@@ -93,7 +93,7 @@ describe('chat platform entry points', () => {
 
   it('keeps the Slack channel settings on Slack deployments', async () => {
     teamNotifications(workspace('slack'))
-    expect(await screen.findByRole('heading', { level: 1, name: 'Slack notifications' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Slack' })).toBeInTheDocument()
     expect(screen.getAllByText('Connect a Slack channel').length).toBeGreaterThan(0)
     expect(chatApi.fetchChatIntegration).not.toHaveBeenCalled()
   })
@@ -107,7 +107,7 @@ describe('chat platform entry points', () => {
 
   it('lets the team owner connect a Lark group for their team with explicit authorization', async () => {
     teamNotifications(workspace('lark'))
-    expect(await screen.findByRole('heading', { level: 1, name: 'Lark notifications' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Lark' })).toBeInTheDocument()
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Connect Lark group' }))
     const form = await screen.findByRole('form', { name: 'Add group binding' })

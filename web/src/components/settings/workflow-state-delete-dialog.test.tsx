@@ -92,7 +92,7 @@ describe('workflow status deletion',()=>{
     const row=screen.getByText('Done').closest('.issue-state-row') as HTMLElement
     fireEvent.click(within(row).getByRole('button',{name:'Open menu'}))
     expect(await screen.findByRole('option',{name:'Delete'})).toBeDisabled()
-    expect(row.querySelector('.issue-status-mark > svg')).toHaveAttribute('width','16')
+    expect(row.querySelector('.issue-status-mark > svg')).toHaveAttribute('width','14')
     expect(row.querySelector('.ip-status-copy')).not.toBeNull()
     expect(row.querySelector('.ip-status-drag-handle')).toBeNull()
     const duplicates=screen.getAllByText('Duplicate')

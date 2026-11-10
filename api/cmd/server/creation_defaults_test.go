@@ -265,6 +265,10 @@ func TestConfigFileWorkflowStatesAndLabels(t *testing.T) {
 	if workspace.TeamSettings[team.ID].DefaultStateID != ready.ID {
 		t.Fatalf("new team default status = %q, want %q", workspace.TeamSettings[team.ID].DefaultStateID, ready.ID)
 	}
+	// A new team starts with triage on, as in the reference.
+	if !workspace.TeamSettings[team.ID].TriageEnabled {
+		t.Fatalf("new team triage disabled: %+v", workspace.TeamSettings[team.ID])
+	}
 	issue := requestJSON[domain.Issue](t, handler, "POST", "/api/issues?workspace="+key, map[string]any{"title": "Configured workflow", "teamId": team.ID}, http.StatusCreated)
 	if issue.State.ID != ready.ID {
 		t.Fatalf("new issue status = %+v, want Ready", issue.State)

@@ -2,9 +2,9 @@
 .recurring-issues-docs { display: inline-flex; align-items: center; gap: 2px; color: var(--theme-text-primary); font-weight: 500; text-decoration: none; white-space: nowrap; }
 .recurring-issues-docs:hover { text-decoration: underline; }
 .settings-page-header p:has(.recurring-issues-docs) { max-width: 600px; }
-.recurring-issues-section .settings-row--action { min-height: 64px; }
+.recurring-issues-section .settings-row--action { min-height: 60px; }
 .recurring-issues-section .settings-row--action .settings-row-copy strong { color: var(--theme-text-secondary); font-weight: 450; }
-.recurring-issues-new { gap: 6px; }
+.recurring-issues-new { gap: 6px; font: 500 12px/normal var(--font); }
 .recurring-issue-row { gap: 12px; cursor: pointer; }
 .recurring-issue-row:hover { background: var(--theme-surface-hover); }
 .recurring-issue-row .settings-row-icon { width: 20px; height: 20px; flex: none; display: grid; place-items: center; color: var(--theme-text-secondary); }
