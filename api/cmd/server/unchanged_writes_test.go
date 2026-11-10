@@ -67,6 +67,7 @@ type repeatCase struct {
 // and updatedAt, no domain event, no realtime push. A real change still
 // writes, and a stale expectedVersion is a 409 even when the values match.
 func TestRepeatedPatchWritesNothing(t *testing.T) {
+	enableConnectorSecrets(t)
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)

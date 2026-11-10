@@ -327,6 +327,7 @@ func TestAgentSessionExternalURLsPlanEphemeralAndProactiveSessions(t *testing.T)
 // thread and the resource itself are in the event, so the agent sees what the
 // person is replying to.
 func TestAgentSessionEventsCarryDocumentAndProjectThreads(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	app, _ := installableApplication(t, handler, receiver.server.URL, []string{"AgentSessionEvent"})

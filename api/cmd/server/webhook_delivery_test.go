@@ -517,6 +517,7 @@ func TestWebhookTestEventAndRedeliver(t *testing.T) {
 }
 
 func TestLegacyHashedSecretRequiresRotationToSign(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	created := requestJSON[map[string]any](t, handler, http.MethodPost, "/api/webhooks?workspace=test-workspace", map[string]any{

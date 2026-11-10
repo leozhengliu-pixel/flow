@@ -50,7 +50,7 @@ func insertExternalRow(t *testing.T, repo *SQLiteStore, table string, columns []
 				continue
 			}
 			switch {
-			case strings.Contains(column.kind, "int") || column.kind == "numeric" || column.kind == "decimal":
+			case strings.Contains(column.kind, "int") || column.kind == "numeric" || column.kind == "decimal" || column.kind == "double precision" || column.kind == "double" || column.kind == "real":
 				value = serial
 			case column.kind == "boolean":
 				value = false

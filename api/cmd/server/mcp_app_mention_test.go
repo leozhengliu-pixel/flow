@@ -90,6 +90,7 @@ func notesOf(result map[string]any) string {
 }
 
 func TestMCPSaveCommentAppMentions(t *testing.T) {
+	enableConnectorSecrets(t)
 	f := newMCPMentionFixture(t)
 	full := []string{"read", "write", "app:assignable", "app:mentionable"}
 	team := []string{f.seed.Teams[0].ID}
