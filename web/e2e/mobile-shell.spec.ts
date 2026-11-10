@@ -368,7 +368,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       const popup = await popupPromise
       expect(new URL(popup.url()).pathname).toContain('issues/new')
       expect(new URL(popup.url()).searchParams.get('title')).toBe('Support diagnostics')
-      expect(new URL(popup.url()).searchParams.get('body')).toContain(`Page: /${workspaceKey}/my-issues/assigned`)
+      expect(new URL(popup.url()).searchParams.get('body')).toContain('Page: My issues')
+      expect(new URL(popup.url()).searchParams.get('body')).not.toContain(workspaceKey)
       await popup.close()
       await expect(menu).toHaveCount(0)
       await page.locator('[data-sidebar-trigger]').tap()

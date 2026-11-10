@@ -112,8 +112,11 @@ test('uses declared desktop settings padding without inflating the emoticon row'
   await expect(teamHeaders.first()).toHaveCSS('margin-left', '-6.5px')
   await expectDeclaredCss(teamHeaders.first(), 'html:root .settings-app .settings-main .settings-teams-page .settings-members-columns button', 'border', /^0?\.5px solid transparent$/)
   await page.goto(`/${workspaceKey}/settings/integrations`)
-  await expect(page.locator('.desktop-enabled')).toHaveCSS('margin-top', '48px')
-  await expect(page.locator('.desktop-enabled h2')).toHaveCSS('font-size', '11px')
+  // The Enabled group only exists once an integration is installed; a fresh workspace starts at the discovery block.
+  await expect(page.locator('.desktop-enabled')).toHaveCount(0)
+  await expect(page.locator('.desktop-integration-discovery')).toHaveCSS('margin-top', '48px')
+  await expect(page.locator('.desktop-integration-catalog')).toHaveCSS('margin-top', '48px')
+  await expect(page.locator('.desktop-integration-group h3').first()).toHaveCSS('font-size', '11px')
 })
 
 test('preserves desktop hairlines, project insets, comment padding and clipboard toast padding', async ({ page, request, workspaceKey }) => {
