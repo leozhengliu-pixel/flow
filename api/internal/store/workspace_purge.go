@@ -179,7 +179,7 @@ var workspacePurgeTables = []workspacePurgeTable{
 // hold workspace rows, and how PurgeWorkspaceRows finds them.
 var workspacePurgeIndirect = map[string]string{
 	"application_agent_activities": "session_id of the workspace's application_agent_tasks",
-	"connector_secrets":            "chat credentials (deleteChatWorkspace), code host account tokens; per-connector credentials are deleted by the server from the workspace's connections",
+	"connector_secrets":            "chat credentials (deleteChatWorkspace), code host account tokens; per-connector credentials and integration OAuth tokens (IntegrationOAuthSecretID) are deleted by the server from the workspace's connections",
 	"chat_request_limits":          "scope keys of the workspace's chat integrations (deleteChatWorkspace)",
 	"oauth_authorization_codes":    "data.workspaceKey",
 	"oauth_refresh_tokens":         "data.workspaceKey",

@@ -61,6 +61,10 @@ func TestScheduledWorkspaceDeletionPurgesAfterTheGracePeriod(t *testing.T) {
 	if err := f.repository.PutConnectorSecret(ctx, credential, []byte(`{"token":"secret"}`), time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
+	// The integration's OAuth tokens, in the encrypted credential store.
+	if err := f.repository.PutIntegrationOAuthTokens(ctx, key, "integration_gl", store.IntegrationOAuthTokens{AccessToken: "glpat-access", RefreshToken: "gl-refresh"}); err != nil {
+		t.Fatal(err)
+	}
 	// Another workspace and a file it is not involved with stay.
 	other, err := f.repository.CreateWorkspace(ctx, "Other", "other-space", "us")
 	if err != nil {
@@ -95,6 +99,12 @@ func TestScheduledWorkspaceDeletionPurgesAfterTheGracePeriod(t *testing.T) {
 	}
 	if _, err := f.repository.ReadConnectorSecret(ctx, credential, false); err == nil {
 		t.Fatal("integration credential left behind")
+	}
+	if _, found, err := f.repository.IntegrationOAuthTokens(ctx, key, "integration_gl"); err != nil || found {
+		t.Fatalf("integration OAuth tokens left behind: found=%v err=%v", found, err)
+	}
+	if _, err := f.repository.ReadConnectorSecret(ctx, store.IntegrationOAuthSecretID(key, "integration_gl"), false); err == nil {
+		t.Fatal("integration OAuth token row left behind")
 	}
 	if _, ok := f.repository.BootstrapFor(other.Workspace.URLKey); !ok {
 		t.Fatal("other workspace was deleted")

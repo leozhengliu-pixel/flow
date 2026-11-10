@@ -188,8 +188,8 @@ func (s *server) deleteWorkspaceObjects(ctx context.Context, target store.Worksp
 }
 
 // deleteWorkspaceCredentials deletes the sealed credentials of the
-// workspace's integrations and connectors: provider credentials, GitLab
-// member sign-ins and each member's MCP connector tokens.
+// workspace's integrations and connectors: provider credentials, integration
+// OAuth tokens, GitLab member sign-ins and each member's MCP connector tokens.
 func (s *server) deleteWorkspaceCredentials(ctx context.Context, target store.WorkspacePurgeTarget) (int64, error) {
 	data, ok := s.store.WorkspaceMetadata(target.Key)
 	if !ok {
@@ -221,6 +221,10 @@ func (s *server) deleteWorkspaceCredentials(ctx context.Context, target store.Wo
 		for owner := range owners {
 			ids = append(ids, connectorSecretID(target.Key, owner, connector))
 		}
+	}
+	// The OAuth access and refresh tokens of each integration connection.
+	for _, connection := range data.IntegrationConnections {
+		ids = append(ids, store.IntegrationOAuthSecretID(target.Key, connection.ID))
 	}
 	return s.store.DeleteConnectorSecrets(ctx, ids)
 }
