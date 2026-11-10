@@ -42,6 +42,7 @@ func (s *SQLiteStore) dataMigrations() []struct {
 		{version: workspaceInitialsColorMigrationVersion, name: "workspace initials colour from the workspace id", apply: s.migrateWorkspaceInitialsColor},
 		{version: integrationOAuthTokensMigrationVersion, name: "integration OAuth tokens in encrypted storage", apply: s.migrateIntegrationOAuthTokens},
 		{version: auditLegacyMigrationVersion, name: "audit log entries into the audit_events table", apply: s.MigrateLegacyAuditLog},
+		{version: workspaceKeyRepairMigrationVersion, name: "rows left under previous workspace keys", apply: s.migrateRenamedWorkspaceKeys},
 		// coding sessions (track K)
 		{version: codingEnvironmentsMigrationVersion, name: "coding environments table", apply: s.migrateLegacyCodingEnvironments},
 	}

@@ -20,6 +20,9 @@ const (
 	storageMaintenanceInterval = time.Hour
 	offloadSweepInterval       = 6 * time.Hour
 	offloadSweepGrace          = 24 * time.Hour
+	// workspaceKeyAdoptWindow is how long after a rename rows written under
+	// the previous key are moved to the current one.
+	workspaceKeyAdoptWindow = 7 * 24 * time.Hour
 	// maintenancePause spaces out batches so they do not crowd out requests.
 	maintenancePause = 100 * time.Millisecond
 )
@@ -107,6 +110,23 @@ func (s *server) maintainStorage(ctx context.Context, now time.Time, eventRetent
 		log.Printf("Personal data export purge: %v", err)
 	} else if purged > 0 {
 		log.Printf("Deleted %d expired personal data exports", purged)
+	}
+	// Rows written under a renamed workspace's previous key by work that was
+	// running during the rename (every recorded rename once per process, so
+	// objects of renames repaired at startup move too; then recent ones).
+	since := now.Add(-workspaceKeyAdoptWindow)
+	if !s.renamedKeysAdopted.Load() {
+		since = time.Time{}
+	}
+	if report, err := s.store.AdoptRenamedWorkspaceRows(ctx, since); err != nil {
+		if ctx.Err() == nil {
+			log.Printf("Previous workspace keys: %v", err)
+		}
+	} else {
+		s.renamedKeysAdopted.Store(true)
+		if report.Moved > 0 {
+			log.Printf("Moved %d rows written under previous workspace keys", report.Moved)
+		}
 	}
 	// Workspaces whose deletion grace period ended (workspace_deletion.go).
 	s.purgeDeletedWorkspaces(ctx, now)

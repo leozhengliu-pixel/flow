@@ -210,40 +210,10 @@ func (s *server) deleteWorkspaceObjects(ctx context.Context, target store.Worksp
 // workspace's integrations and connectors: provider credentials, integration
 // OAuth tokens, GitLab member sign-ins and each member's MCP connector tokens.
 func (s *server) deleteWorkspaceCredentials(ctx context.Context, target store.WorkspacePurgeTarget) (int64, error) {
-	data, ok := s.store.WorkspaceMetadata(target.Key)
-	if !ok {
-		return 0, nil
-	}
-	members, err := s.store.WorkspaceUserIDs(ctx, target.ID)
-	if err != nil {
+	// The same enumeration a rename moves credentials with.
+	ids, err := s.store.WorkspaceCredentialSecretIDs(ctx, target.Key)
+	if err != nil || len(ids) == 0 {
 		return 0, err
-	}
-	owners := map[string]bool{"provider": true, "gitlab-member-oauth": true}
-	for _, id := range members {
-		owners[id] = true
-	}
-	for _, user := range data.Users {
-		owners[user.ID] = true
-	}
-	connectors := map[string]bool{}
-	for _, connection := range data.IntegrationConnections {
-		connectors[connection.ID] = true
-	}
-	for _, item := range applicationPolicies(&data) {
-		connectors[item.ID] = true
-		if item.OwnerID != "" {
-			owners[item.OwnerID] = true
-		}
-	}
-	ids := []string{}
-	for connector := range connectors {
-		for owner := range owners {
-			ids = append(ids, connectorSecretID(target.Key, owner, connector))
-		}
-	}
-	// The OAuth access and refresh tokens of each integration connection.
-	for _, connection := range data.IntegrationConnections {
-		ids = append(ids, store.IntegrationOAuthSecretID(target.Key, connection.ID))
 	}
 	return s.store.DeleteConnectorSecrets(ctx, ids)
 }

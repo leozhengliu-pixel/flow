@@ -173,6 +173,7 @@ var workspacePurgeTables = []workspacePurgeTable{
 	{"domain_event_sequencing", "workspace_id", true},
 	{"domain_events", "workspace_id", true},
 	{"workspace_event_seq", "workspace_id", true},
+	{"workspace_key_renames", "workspace_id", true},
 }
 
 // workspacePurgeIndirect lists tables without a workspace column that still

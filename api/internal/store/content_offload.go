@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1173,6 +1174,26 @@ func (s *SQLiteStore) SweepOffloadedContent(ctx context.Context, now time.Time, 
 	if err != nil {
 		return 0, err
 	}
+	// Live workspaces first, and renamed ones even without stored bodies: one
+	// whose bodies are only under a previous key gets them back
+	// (recoverWorkspaceContent) before that key's bodies are swept.
+	renamed, err := s.workspaceStrings(ctx, `SELECT DISTINCT workspace_id FROM workspace_key_renames`)
+	if err != nil {
+		return 0, err
+	}
+	ordered := []string{}
+	for _, key := range s.WorkspaceKeys() {
+		data, _ := s.storedWorkspace(key)
+		if slices.Contains(workspaces, key) || slices.Contains(renamed, data.Workspace.ID) {
+			ordered = append(ordered, key)
+		}
+	}
+	for _, key := range workspaces {
+		if !slices.Contains(ordered, key) {
+			ordered = append(ordered, key)
+		}
+	}
+	workspaces = ordered
 	// Retained events' previous values name bodies too; they are kept until
 	// the events are pruned.
 	eventReferences, err := s.offloadedEventReferences(ctx)
@@ -1223,34 +1244,16 @@ func (s *SQLiteStore) offloadedEventReferences(ctx context.Context) (map[string]
 
 func (s *SQLiteStore) sweepWorkspaceContent(ctx context.Context, workspace string, now time.Time, grace time.Duration, eventReferences map[string]bool) (int, error) {
 	started := now.UnixMilli()
+	records, err := s.offloadedRecordReferences(ctx, workspace)
+	if err != nil {
+		return 0, err
+	}
 	referenced := map[string]bool{}
 	for key := range eventReferences {
 		referenced[key] = true
 	}
-	last := ""
-	for {
-		rows, err := s.db.QueryContext(ctx, `SELECT record_key,data FROM workspace_metadata_records WHERE workspace_key=? AND field IN ('documents','trash','agentSessions') AND record_key>? ORDER BY record_key LIMIT 64`, workspace, last)
-		if err != nil {
-			return 0, err
-		}
-		count := 0
-		for rows.Next() {
-			var data []byte
-			if err := rows.Scan(&last, &data); err != nil {
-				rows.Close()
-				return 0, err
-			}
-			offloadedKeys(data, referenced)
-			count++
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return 0, err
-		}
-		if count < 64 {
-			break
-		}
+	for key := range records {
+		referenced[key] = true
 	}
 	type stored struct {
 		key      string
@@ -1274,6 +1277,15 @@ func (s *SQLiteStore) sweepWorkspaceContent(ctx context.Context, workspace strin
 	rows.Close()
 	if err != nil {
 		return 0, err
+	}
+	if s.HasWorkspace(workspace) {
+		present := make(map[string]bool, len(blobs))
+		for _, blob := range blobs {
+			present[blob.key] = true
+		}
+		if _, err := s.recoverWorkspaceContent(ctx, workspace, records, present); err != nil {
+			return 0, err
+		}
 	}
 	deleted := 0
 	for _, blob := range blobs {

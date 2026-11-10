@@ -63,6 +63,7 @@ type server struct {
 	realtime                       *realtimeHub
 	coordinator                    *coordination.Redis
 	coordinationStarted            atomic.Bool
+	renamedKeysAdopted             atomic.Bool       // the maintenance pass checked every recorded rename once (storage_maintenance.go)
 	healthDegraded                 atomic.Bool       // the last health probe found the coordinator unreachable (health.go)
 	remoteEvents                   remoteEventQueue  // peer events waiting to be applied (redis_coordination.go)
 	coordinationContext            context.Context   // ends the peer event subscription (nil: never; tests)
@@ -252,6 +253,8 @@ func main() {
 		auditRetention:                 applicationConfig.Retention.AuditLog,
 		auditLogIP:                     applicationConfig.AuditLogIP,
 	}
+	// A workspace rename moves the coding harness state saved under its key.
+	repository.SetWorkspaceKeyObjects(codingHarnessKeyObjects{objects: objects})
 
 	httpServer := &http.Server{Addr: applicationConfig.HTTPAddr, Handler: telemetryHandler(newHandler(s), applicationConfig.Telemetry.Enabled), ReadHeaderTimeout: 5 * time.Second}
 	defer func() {
@@ -7229,7 +7232,7 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
-	if errors.Is(err, store.ErrWorkspaceKeyTaken) {
+	if errors.Is(err, store.ErrWorkspaceKeyTaken) || errors.Is(err, store.ErrWorkspacePurging) {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}

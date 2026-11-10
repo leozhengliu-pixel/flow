@@ -191,9 +191,9 @@ Not covered by the purge:
 - The agent worker's local session files (`.runtime/sessions`) are keyed by
   session, not by workspace; they stay until the worker's state directory is
   cleared.
-- Rows written under an earlier URL key of a renamed workspace in tables that
-  are not renamed with it, and domain events written before events carried a
-  workspace ID.
+- Rows left under an earlier URL key of a renamed workspace that could not be
+  attributed to it (see [Renaming a workspace URL](#renaming-a-workspace-url)),
+  and domain events written before events carried a workspace ID.
 
 Deleting a trashed item permanently (Recently deleted → Delete permanently,
 or when its trash retention ends) also deletes the attachment files of the
@@ -254,6 +254,84 @@ below). Include both tables in backups and keep backups at least as long as
   (oldest first, once) and removes them from the document; the maintenance
   pass repeats the move for entries an older server writes during a rolling
   upgrade. Audit log streams resume where they stopped.
+
+## Renaming a workspace URL
+
+Changing a workspace's URL (Settings → Workspace → URL, or
+`PATCH /api/workspaces/{key}` with `urlKey`) moves everything addressed by the
+URL key in one database transaction: rows in every table with a
+`workspace_key` column (issues, documents and their content-store index,
+search documents, agent runs and sessions, coding sessions and environments,
+loops, reviews, chat, webhooks and their secrets, API keys, uploads, caches
+and migration checkpoints), JSON values that name the workspace (OAuth grants,
+agent tasks, chat payloads), app developer token references, and the sealed
+connector credentials of its members, integrations and connectors (sealed
+again for their new IDs, so `FLOW_CONNECTOR_SECRET_KEY` must be set; a
+credential that cannot be opened stays where it was and is counted in the
+log). Rows keyed by the workspace ID (memberships, SCIM, invitations, domain
+events) do not change. Objects whose names contain the key, the document
+versions and agent transcript parts in the content store and the saved
+harness state of coding sessions, are copied to the new name before the
+transaction commits and the old copies deleted after it, so a crash in
+between leaves an extra copy, never a missing one. A rename is refused (409)
+while the workspace's purge is running, and a URL key that still holds rows
+(for example of a workspace deleted before deletion purged everything) can be
+neither taken by a rename nor by a new workspace. The old URL is not kept as
+a redirect: like before, it answers "workspace not found", and links already
+sent elsewhere (chat cards, e-mails) keep the old URL. Text people wrote into
+issues and documents is not changed.
+
+Each rename is recorded in `workspace_key_renames`. Work that was running
+during a rename (an agent run, a coding session) can still write under the
+previous key; the storage maintenance pass moves such rows to the current key
+for seven days after a rename (and checks every recorded rename once after a
+restart). A row the current key already has wins over a late copy of it.
+
+### Repairing earlier renames
+
+Before this, a rename moved only some tables: rows of agent and coding
+sessions, loops, search, uploads indexes, API keys and others, and the
+offloaded document versions and agent replies, stayed under the old key, so
+they were missing from the workspace (offloaded versions and replies showed
+as empty) and a purge did not find them. On upgrade, data migration 1040
+repairs this:
+
+1. It recovers previous keys from the domain events that named them
+   (`workspace.created`, `workspace.updated`, deletion requests) and records
+   them in `workspace_key_renames`.
+2. It moves the rows under each previous key to the workspace's current key,
+   unless another workspace (live or deleted) had that key too: those rows
+   cannot be told apart and are left.
+3. It copies back every offloaded body a workspace's documents and
+   conversations refer to that is stored only under a key no workspace has.
+   Bodies are named by document or conversation and a hash of their content,
+   so this needs no rename history. For workspaces with a recorded rename,
+   the offloaded content sweep (every six hours) does the same before it
+   deletes unreferenced bodies.
+
+The migration logs what it did (`repaired data left under previous workspace
+keys`). What it cannot repair:
+
+- Renames whose events were pruned (`FLOW_DOMAIN_EVENT_RETENTION_DAYS`, default 90) are unknown.
+  Offloaded bodies are still recovered (step 3). For the other rows, list the
+  keys that hold rows but belong to no workspace, and if you know which
+  workspace had one, record it; the next maintenance pass (within an hour)
+  moves its rows:
+
+  ```sql
+  SELECT DISTINCT workspace_key FROM coding_sessions
+  WHERE workspace_key NOT IN (SELECT workspace_key FROM workspace_states);
+  -- repeat for agent_runs, loop_run_records, metadata_blobs, ...
+  INSERT INTO workspace_key_renames(workspace_id, old_key, new_key, renamed_at)
+  VALUES ('<workspace id>', '<previous key>', '<current key>', '<now, RFC 3339>');
+  ```
+
+- Offloaded bodies the content sweep already deleted (it deleted bodies under
+  a previous key about a day after the rename) are gone; restore them from a
+  backup (see [Re-adding a lost document version](#re-adding-a-lost-document-version)).
+- Connector credentials sealed under a recovered previous key are moved too
+  (step 2 needs `FLOW_CONNECTOR_SECRET_KEY`, as at any other time); for a key
+  that could not be recovered, members reconnect the connector.
 
 ## Database size
 

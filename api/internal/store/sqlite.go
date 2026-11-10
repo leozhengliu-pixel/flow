@@ -49,7 +49,10 @@ type SQLiteStore struct {
 	coordinator       WorkspaceCoordinator
 	// deletionMu serializes starting a workspace purge with canceling the
 	// deletion (workspace_purge.go).
-	deletionMu       sync.Mutex
+	deletionMu sync.Mutex
+	// keyObjects moves objects named after a workspace's URL key on a
+	// rename (workspace_rename.go).
+	keyObjects       atomic.Pointer[WorkspaceKeyObjects]
 	fixtureProfile   string
 	fixturePassword  string
 	maxStateBytes    int
@@ -2056,6 +2059,14 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 	if _, exists := s.workspaces[urlKey]; exists {
 		return domain.Bootstrap{}, ErrWorkspaceKeyTaken
 	}
+	// Rows still under the key (a deleted workspace's that were never
+	// purged, or written under a renamed workspace's previous key) would
+	// appear in the new workspace.
+	if table, err := s.workspaceKeyInUse(ctx, urlKey); err != nil {
+		return domain.Bootstrap{}, err
+	} else if table != "" {
+		return domain.Bootstrap{}, ErrWorkspaceKeyTaken
+	}
 	viewer := s.viewer
 	if actor, ok := actorFromContext(ctx); ok {
 		viewer = actor
@@ -2108,9 +2119,17 @@ func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, 
 		if err := s.ReloadAllWorkspaces(ctx); err != nil {
 			return err
 		}
-		var err error
-		updated, err = s.updateWorkspace(ctx, workspaceKey, workspace)
-		return err
+		update := func() error {
+			var err error
+			updated, err = s.updateWorkspace(ctx, workspaceKey, workspace)
+			return err
+		}
+		if workspace.URLKey == "" || workspace.URLKey == workspaceKey {
+			return update()
+		}
+		// A rename also waits for writers of the workspace on other
+		// servers, so none writes under the old key while its rows move.
+		return s.coordinator.WithWorkspaceLock(ctx, workspaceKey, update)
 	})
 	if errors.Is(err, ErrNoMutation) {
 		return updated, nil
@@ -2121,18 +2140,22 @@ func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, 
 	return updated, err
 }
 
-func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, workspace domain.Workspace) (domain.Bootstrap, error) {
-	s.lockWorkspaceWrites()
-	defer s.unlockWorkspaceWrites()
-	data, ok := s.workspaces[workspaceKey]
+func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, workspace domain.Workspace) (updated domain.Bootstrap, err error) {
+	// Writers are held off for the whole update; readers only while the
+	// transaction runs and the result is installed, not while a rename
+	// copies objects (workspace_rename.go).
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	data, ok := s.storedWorkspace(workspaceKey)
 	if !ok {
 		return domain.Bootstrap{}, fmt.Errorf("workspace not found")
 	}
 	if workspace.URLKey == "" {
 		workspace.URLKey = workspaceKey
 	}
-	if workspace.URLKey != workspaceKey {
-		if _, exists := s.workspaces[workspace.URLKey]; exists {
+	renaming := workspace.URLKey != workspaceKey
+	if renaming {
+		if _, exists := s.storedWorkspace(workspace.URLKey); exists {
 			return domain.Bootstrap{}, ErrWorkspaceKeyTaken
 		}
 	}
@@ -2144,6 +2167,30 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 		// The current values again: nothing is written or published.
 		return data, ErrNoMutation
 	}
+	var move *workspaceKeyMove
+	if renaming {
+		// A workspace whose purge started keeps the key its receipt names.
+		if started, err := s.workspacePurgeStarted(ctx, data.Workspace.ID); err != nil {
+			return domain.Bootstrap{}, err
+		} else if started {
+			return domain.Bootstrap{}, ErrWorkspacePurging
+		}
+		// Rows still under the new key (a deleted workspace's, or written
+		// under another workspace's previous key) would join this one.
+		if table, err := s.workspaceKeyInUse(ctx, workspace.URLKey); err != nil {
+			return domain.Bootstrap{}, err
+		} else if table != "" {
+			return domain.Bootstrap{}, ErrWorkspaceKeyTaken
+		}
+		if move, err = s.prepareWorkspaceKeyMove(ctx, data, workspaceKey, workspace.URLKey, false, nil); err != nil {
+			return domain.Bootstrap{}, fmt.Errorf("prepare workspace rename: %w", err)
+		}
+		committed := false
+		defer func() { s.finishWorkspaceKeyMove(ctx, move, committed) }()
+		defer func() { committed = err == nil }()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	data.Workspace = workspace
 	for index := range data.Teams {
 		if len(data.Teams) == 1 && strings.EqualFold(data.Teams[index].Name, s.workspaces[workspaceKey].Workspace.Name) {
@@ -2160,21 +2207,23 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	defer tx.Rollback()
 	raw, _ := json.Marshal(data)
 	now := time.Now().UTC()
-	if workspace.URLKey != workspaceKey {
+	if renaming {
 		if err := renameChatWorkspace(ctx, tx, workspaceKey, workspace.URLKey); err != nil {
 			return domain.Bootstrap{}, err
 		}
-		for _, table := range workspaceRecordTables {
-			if _, err := tx.ExecContext(ctx, "UPDATE "+table+" SET workspace_key=? WHERE workspace_key=?", workspace.URLKey, workspaceKey); err != nil {
-				return domain.Bootstrap{}, err
-			}
-		}
-		// Uploads (assets, owned icons and logos) keep their workspace.
-		if _, err := tx.ExecContext(ctx, `UPDATE file_uploads SET workspace_key=? WHERE workspace_key=?`, workspace.URLKey, workspaceKey); err != nil {
+		// Every other workspace_key table, JSON naming the workspace,
+		// credential IDs and token references derived from the key. The
+		// search documents move before the records: on PostgreSQL and MySQL
+		// a trigger writes the moved records' documents under the new key.
+		if _, err := s.applyWorkspaceKeyMove(ctx, tx, move); err != nil {
 			return domain.Bootstrap{}, err
 		}
-	}
-	if workspace.URLKey != workspaceKey {
+		if _, err := tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET workspace_key=? WHERE workspace_key=?`, workspace.URLKey, workspaceKey); err != nil {
+			return domain.Bootstrap{}, err
+		}
+		if err := recordWorkspaceRename(ctx, tx, workspace.ID, workspaceKey, workspace.URLKey, now); err != nil {
+			return domain.Bootstrap{}, err
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_states WHERE workspace_key = ?`, workspaceKey); err != nil {
 			return domain.Bootstrap{}, err
 		}
@@ -2193,8 +2242,9 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	if err := tx.Commit(); err != nil {
 		return domain.Bootstrap{}, err
 	}
-	if workspace.URLKey != workspaceKey {
-		_, _ = s.db.ExecContext(ctx, `UPDATE auth_account_state SET last_workspace_key=?,updated_at=? WHERE last_workspace_key=?`, workspace.URLKey, time.Now().UTC().Format(time.RFC3339Nano), workspaceKey)
+	if renaming {
+		// Accounts moved to the new key in the transaction; caches are
+		// dropped once the old objects are gone (finishWorkspaceKeyMove).
 		s.forgetChatSnapshotFlag(workspaceKey, workspace.URLKey)
 		s.issueGroupCounts.drop(workspaceKey)
 		s.issueGroupCounts.drop(workspace.URLKey)

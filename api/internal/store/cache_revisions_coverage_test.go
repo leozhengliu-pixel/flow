@@ -53,9 +53,7 @@ func metadataSQLStatements(t *testing.T) []metadataSQLStatement {
 		ast.Inspect(file, func(node ast.Node) bool {
 			if loop, ok := node.(*ast.RangeStmt); ok {
 				tables := []string{}
-				if source, ok := loop.X.(*ast.Ident); ok && source.Name == "workspaceRecordTables" {
-					tables = workspaceRecordTables
-				} else if source, ok := loop.X.(*ast.CompositeLit); ok {
+				if source, ok := loop.X.(*ast.CompositeLit); ok {
 					for _, item := range source.Elts {
 						if value, ok := item.(*ast.BasicLit); ok && value.Kind == token.STRING {
 							table, err := strconv.Unquote(value.Value)
@@ -177,6 +175,12 @@ var nonMetadataTableBuilders = map[string]bool{
 	"deleteWorkspaceRows": true,
 	// webhook_signing_secrets and audit_stream_secrets only.
 	"resealTextSecrets": true,
+	// A rename moves workspaceRenameTables, which leaves out the metadata
+	// tables (TestWorkspaceRenameLeavesMetadataTablesToLiteralStatements);
+	// updateWorkspace moves workspace_metadata_records with its own statement.
+	"moveWorkspaceKeyRows":        true,
+	"conflictingKeyRowsStatement": true,
+	"rewriteWorkspaceKeyJSON":     true,
 }
 
 // expectedWorkspaceArg is the index of the bound value naming the workspace a
