@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test'
 
+const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
+
 test('renders the first project page and requests more only at the viewport end', async ({ page, request }, testInfo) => {
   const workspaceKey = `project-pages-${testInfo.project.name}-${Date.now()}`
-  const created = await request.post('http://127.0.0.1:4180/api/workspaces', {
+  const created = await request.post(`${API}/api/workspaces`, {
     data: { name: 'Project pagination', urlKey: workspaceKey, region: 'us' },
   })
   expect(created.status()).toBe(201)

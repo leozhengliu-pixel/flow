@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test'
 
+const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
+
 test('loads the workspace shell and core planning route without console errors', async ({ page, request }, testInfo) => {
   // A retry reuses the server and its database, so the key carries the retry number.
   const workspaceKey = `e2e-${testInfo.project.name}-r${testInfo.retry}`
-  const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+  const response = await request.post(`${API}/api/workspaces`, {
     data: { name: 'E2E Workspace', urlKey: workspaceKey, region: 'us' },
   })
   expect(response.status()).toBe(201)
@@ -31,7 +33,7 @@ test('renders core workspace workflows without runtime or viewport failures', as
   test.setTimeout(120_000)
   const device = testInfo.project.name === 'chromium' ? 'desktop' : 'mobile'
   const workspaceKey = `e2e-core-${device}-r${testInfo.retry}`
-  const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+  const response = await request.post(`${API}/api/workspaces`, {
     data: { name: 'Core workflow workspace', urlKey: workspaceKey, region: 'us' },
   })
   expect(response.status()).toBe(201)
@@ -66,7 +68,7 @@ test('renders core workspace workflows without runtime or viewport failures', as
 test('streams Agent reasoning, tools, and text into the conversation', async ({ page, request }, testInfo) => {
   const device = testInfo.project.name === 'chromium' ? 'desktop' : 'mobile'
   const workspaceKey = `e2e-agent-${device}-${Date.now()}`
-  const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+  const response = await request.post(`${API}/api/workspaces`, {
     data: { name: 'Agent composer workspace', urlKey: workspaceKey, region: 'us' },
   })
   expect(response.status()).toBe(201)
@@ -90,7 +92,7 @@ test('streams Agent reasoning, tools, and text into the conversation', async ({ 
 test('opens the project creation assistant and dispatches a suggestion', async ({ page, request }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'The project assistant is desktop-only')
   const workspaceKey = `e2e-project-agent-${testInfo.project.name}-${Date.now()}`
-  const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
+  const response = await request.post(`${API}/api/workspaces`, {
     data: { name: 'Project assistant workspace', urlKey: workspaceKey, region: 'us' },
   })
   expect(response.status()).toBe(201)

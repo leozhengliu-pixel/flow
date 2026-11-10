@@ -1,13 +1,15 @@
 import { expect, test } from '@playwright/test'
 
+const API = process.env.FLOW_E2E_API_URL ?? 'http://127.0.0.1:4180'
+
 test('keeps the unchosen document control readable at narrow and wide editor widths', async ({ page, request }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'The geometry assertion uses the desktop editor layout')
   const workspaceKey = `loops-contract-${Date.now()}`
-  const workspaceResponse = await request.post('http://127.0.0.1:4180/api/workspaces', {
+  const workspaceResponse = await request.post(`${API}/api/workspaces`, {
     data: { name: 'Loops contract geometry', urlKey: workspaceKey, region: 'us' },
   })
   expect(workspaceResponse.status()).toBe(201)
-  const loopResponse = await request.post('http://127.0.0.1:4180/api/loops', {
+  const loopResponse = await request.post(`${API}/api/loops`, {
     headers: { 'X-Workspace-Key': workspaceKey },
     data: { name: 'Daily team summary', instructions: '', level: 'workspace', status: 'draft' },
   })
