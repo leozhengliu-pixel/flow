@@ -1081,8 +1081,11 @@
   background: var(--theme-surface-0);
   color: var(--theme-text-primary);
 }
+:root[data-theme="light"] .team-home-intro h2 {
+  color: var(--bright);
+}
 :root[data-theme="light"] .team-home-topbar h2 {
-  color: var(--theme-text-primary);
+  color: var(--bright);
   font-size: 13px;
   font-weight: 500;
 }
@@ -1093,7 +1096,7 @@
   font-weight: 500;
 }
 :root[data-theme="light"] .team-home-rail > section > span {
-  color: var(--theme-text-primary);
+  color: var(--theme-text-secondary);
 }
 :root[data-theme="light"] .team-home-topbar,
 :root[data-theme="light"] .team-home-tabs,
@@ -1109,7 +1112,7 @@
 }
 :root[data-theme="light"] .team-home-tabs a[aria-current="page"] {
   background: var(--theme-surface-active);
-  color: var(--theme-text-primary);
+  color: var(--bright);
 }
 :root[data-theme="light"] .team-members-add,
 :root[data-theme="light"] .team-members-display,

@@ -15,7 +15,7 @@
 @keyframes popoverIn{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:none}}@keyframes menuIn{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:none}}
 @media(max-width:800px){.popover{max-width:calc(100vw - 16px);max-height:calc(100vh - 92px)}}
 :global(:root[data-theme="light"]) .trigger{background:var(--theme-surface-1);color:var(--theme-text-primary)}
-:global(:root[data-theme="light"]) .trigger:hover,:global(:root[data-theme="light"]) .trigger[aria-pressed=true],:global(:root[data-theme="light"]) .trigger[data-state=open]{background:var(--ui-pill-hover-bg);color:var(--theme-text-primary)}
+:global(:root[data-theme="light"]) .trigger:hover,:global(:root[data-theme="light"]) .trigger[aria-pressed=true],:global(:root[data-theme="light"]) .trigger[data-state=open]{background:var(--ui-pill-hover-bg);color:var(--ui-pill-active-fg)}
 .popover,.selectMenu{z-index:600}
 .layoutTabs button:disabled{opacity:.45;cursor:not-allowed}
 

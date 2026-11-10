@@ -30,7 +30,9 @@
 .labelPropertyPopover .propertyOption[aria-selected=true]{background:transparent}
 .labelPropertyPopover .propertyOption{padding-left:39.5px}
 .labelPropertyPopover .optionCheckbox{left:15px}
-:global(:root[data-theme="light"]) .row,:global(:root[data-theme="light"]) .title,:global(:root[data-theme="light"]) .state strong{color:var(--issue-fg)}
+:global(:root[data-theme="light"]) .row,:global(:root[data-theme="light"]) .state strong{color:var(--issue-fg)}
+:global(:root[data-theme="light"]) .title{color:var(--bright)}
+:global(:root[data-theme="light"]) .groupName,:global(:root[data-theme="light"]) .groupText{color:var(--issue-group-name-fg)}
 :global(:root[data-theme="light"]) .identifier,:global(:root[data-theme="light"]) .groupCount,:global(:root[data-theme="light"]) .dueDate,:global(:root[data-theme="light"]) .rowDate{color:var(--muted)}
 :global(:root[data-theme="light"]) .checkbox{border-color:var(--sub-checkbox-border)}:global(:root[data-theme="light"]) .optionCheckbox{border-color:var(--checkbox-border)}
 :global(:root[data-theme="light"]) .badge{border-color:var(--theme-border-strong);background:var(--theme-surface-1)}

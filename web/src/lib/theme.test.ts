@@ -116,4 +116,32 @@ describe('theme generation wiring', () => {
     expect(document.documentElement.dataset.themeVariant).toBe('light-high-contrast')
     expect(document.documentElement.style.getPropertyValue('--bg-panel')).toMatch(/lch\(98/)
   })
+
+  it('the standard light theme keeps the static primary text colour while dark and high contrast use the palette', async () => {
+    const { initializeTheme, applyTheme } = await import('./theme')
+    initializeTheme()
+    const root = document.documentElement
+    applyTheme({ interfaceTheme: 'Light', lightTheme: 'Light', darkTheme: 'Dark' })
+    expect(root.style.getPropertyValue('--theme-text-primary')).toBe('')
+    // The title colour stays available as --bright for list titles.
+    expect(root.style.getPropertyValue('--bright')).toMatch(/lch\(9\.794/)
+    applyTheme({ interfaceTheme: 'Light', lightTheme: 'Light high contrast', darkTheme: 'Dark' })
+    expect(root.style.getPropertyValue('--theme-text-primary')).not.toBe('')
+    applyTheme({ interfaceTheme: 'Dark', lightTheme: 'Light', darkTheme: 'Dark' })
+    expect(root.style.getPropertyValue('--theme-text-primary')).not.toBe('')
+  })
+
+  it('the sidebar label colours in sidebar.css are the palette sidebar-theme labels', async () => {
+    const { lightThemeRefresh } = await import('./theme/theme-generate')
+    const { readFileSync } = await import('node:fs')
+    const css = readFileSync(`${process.cwd()}/src/styles/tokens.css`, 'utf8')
+    const scope = css
+    const sidebar = (lightThemeRefresh() as any).sidebarTheme().color
+    const numbers = (value: string) => (value.match(/-?[\d.]+/g) ?? []).slice(0, 3).map(Number)
+    for (const [property, key] of [['--sidebar-label-title', 'labelTitle'], ['--sidebar-label-muted', 'labelMuted'], ['--sidebar-label-faint', 'labelFaint']] as const) {
+      const declared = scope.match(new RegExp(`${property}:(lch\\([^)]*\\))`))?.[1]
+      expect(declared, property).toBeDefined()
+      expect(numbers(declared!), property).toEqual(numbers(sidebar[key]))
+    }
+  })
 })

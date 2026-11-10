@@ -89,7 +89,7 @@
 :root[data-theme="light"] .settings-sidebar nav button{color:var(--theme-text-primary)}
 :root[data-theme="light"] .settings-sidebar nav button:hover{background:var(--bg-hover);color:lch(9.444% 0 282)}
 :root[data-theme="light"] .settings-sidebar nav button.active{background:lch(89.54% .5 282);color:lch(9.444% 0 282)}
-:root[data-theme="light"] .settings-main{border-color:var(--border);background:var(--bg-panel);box-shadow:var(--shadow);scrollbar-color:#0000001d transparent}
+:root[data-theme="light"] .settings-main{border-color:var(--release-frame-border);background:var(--bg-panel);box-shadow:var(--shadow);scrollbar-color:#0000001d transparent}
 :root[data-theme="light"] .settings-page-header h1,:root[data-theme="light"] .settings-section>h3{color:var(--theme-text-primary)}
 :root[data-theme="light"] .settings-page-header p{color:var(--muted)}
 :root[data-theme="light"] .settings-card{border-color:var(--theme-border);background:var(--theme-surface-2);box-shadow:0 1px 2px #00000008}

@@ -76,7 +76,7 @@ function resolveVariant(settings: ThemeSettings, theme: ResolvedTheme) {
   return resolveThemeVariant(theme, settings.lightTheme, settings.darkTheme).variant;
 }
 
-const LIGHT_STATIC_TOKENS = ["--theme-surface-1", "--theme-surface-2", "--theme-border", "--theme-border-strong"];
+const LIGHT_STATIC_TOKENS = ["--theme-surface-1", "--theme-surface-2", "--theme-border", "--theme-border-strong", "--theme-text-primary"];
 
 function syncRoot(settings: ThemeSettings) {
   const theme = resolveTheme(settings);
@@ -91,6 +91,8 @@ function syncRoot(settings: ThemeSettings) {
     // The standard light theme keeps the surface and border tokens from
     // tokens.css: Flow uses these names for popovers, controls and fields,
     // where the generated palette's shade and hover values render too dark.
+    // Primary text stays the base label colour (lch 19.588): the palette's title colour is
+    // reserved for list titles, which read it from --bright.
     if (root.dataset.themeVariant === "light") {
       for (const cssVar of LIGHT_STATIC_TOKENS) root.style.removeProperty(cssVar);
     }

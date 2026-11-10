@@ -1415,7 +1415,8 @@
 .fileInput {
   display: none;
 }
-:global(:root[data-theme="light"]) .page { border-color: var(--border); background: var(--bg-panel); box-shadow: var(--shadow); color: var(--theme-text-primary); }
+:global(:root[data-theme="light"]) .exampleCard strong { color: var(--bright); }
+:global(:root[data-theme="light"]) .page { border-color: var(--release-frame-border); background: var(--bg-panel); box-shadow: var(--shadow); color: var(--theme-text-primary); }
 :global(:root[data-theme="light"]) .page > header { border-color: var(--theme-border); }
 :global(:root[data-theme="light"]) .switcher { color: var(--theme-text-primary); }
 :global(:root[data-theme="light"]) .switcher h2 { color: var(--theme-text-primary); font-size: 13px; font-weight: 500; }
