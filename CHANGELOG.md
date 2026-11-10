@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- The command menu panel now clips its overflow instead of hiding it, so opening it and hovering a row can no longer scroll the panel by half a pixel and shift every row 1px left (it landed at the reference position only on some opens).
 - On a phone, the SLAs settings page now scrolls 32px past its last rule card, matching the reference, instead of the 96px the other settings pages leave.
 - The "Show all notifications" button under an empty unread inbox list is 1px wider (it has the 0.5px transparent border the other pill buttons have), matching the reference.
 - The inbox welcome notification now plays Flow's own 38-second product walkthrough (create an issue, move it on the board, ask the Flow Agent) in a player with play, volume, seek, speed, download, picture-in-picture and full-window controls, English captions and keyboard shortcuts. It never autoplays and shows its poster until played. The video (`web/public/media/`, H.264 and VP9, under 1 MB each) is rendered from Flow's own UI by `web/scripts/render-intro-video.mjs`; the welcome text now uses the reference sizes.
