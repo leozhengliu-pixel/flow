@@ -854,7 +854,7 @@ export function Sidebar({
                   onDismiss={() => dismissTry("invite")}
                 />
               )}
-            {!dismissedTry.includes("cycles") && data.teams[0] && data.cycleSettings[data.teams[0].id]?.enabled ? (
+            {!dismissedTry.includes("cycles") && data.teams[0] && (phone || data.cycleSettings[data.teams[0].id]?.enabled) ? (
               <TryItem
                 icon={<FlowCycleIcon />}
                 label="Cycles"
