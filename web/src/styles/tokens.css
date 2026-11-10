@@ -1149,3 +1149,6 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :root{--cs-agent-panel-override:initial}
 
 :root{--issue-reply-tool-fg:lch(90.826 1.425 272);--issue-reply-send-bg:lch(13.861 1.139 272);--triage-row-selected-meta-fg:lch(65.078 1.425 272)}
+
+/* The welcome notification video player: a dark media surface that reads the same in both themes. */
+:root{--video-surface:#1a1a1b;--video-shadow:rgb(0 0 0 / .3);--video-fg:#fff;--video-fg-muted:rgb(255 255 255 / .75);--video-fg-subtle:rgb(255 255 255 / .55);--video-track:rgb(255 255 255 / .2);--video-hover:rgb(255 255 255 / .12);--video-bar:rgb(46 46 47 / .94);--video-caption-shadow:rgb(0 0 0 / .85);--video-caption-glow:rgb(0 0 0 / .6);--video-option-fg:#111}
