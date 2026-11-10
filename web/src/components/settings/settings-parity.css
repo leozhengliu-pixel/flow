@@ -1279,27 +1279,35 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
   /* The pinned footer floats over the list; keep the last section clear of it
      so the final rows are never hidden behind the help button. */
   html:root .settings-app .settings-sidebar nav section:last-child { margin-bottom: 74px; }
-  /* Nested teams: a short stub under a parent's glyph and an elbow into each
-     child row, like the reference drawer's team tree. */
-  html:root .settings-app .settings-sidebar nav button[data-depth]:not([data-depth="0"]),
+  /* Nested teams: the row is inset 22px per level; a short stub under the parent's glyph and an elbow into each child row,
+     like the reference drawer's team tree. */
+  html:root .settings-app .settings-sidebar nav button[data-depth]:not([data-depth="0"]) {
+    position: relative;
+    box-sizing: border-box;
+    width: calc(100% - var(--team-depth, 1) * 22px);
+    margin-left: calc(var(--team-depth, 1) * 22px);
+    padding-left: 6px;
+  }
   html:root .settings-app .settings-sidebar nav button[data-has-children] { position: relative; }
   html:root .settings-app .settings-sidebar nav button[data-depth]:not([data-depth="0"])::before {
     content: "";
     position: absolute;
     top: 0;
-    left: calc(var(--team-depth, 1) * 18px - 2px);
-    width: 9px;
-    height: 16px;
+    left: -6px;
+    width: 5px;
+    height: 14.5px;
     border-left: 1px solid var(--set-drawer-connector);
     border-bottom: 1px solid var(--set-drawer-connector);
-    border-bottom-left-radius: 6px;
+    border-bottom-left-radius: 4.5px;
     pointer-events: none;
   }
+  html:root .settings-app .settings-sidebar nav button[data-depth]:not([data-depth="0"],[data-depth="1"])::before { left: -10px; }
+  html:root .settings-app .settings-sidebar nav button[data-depth]:not([data-depth="0"])[data-has-children]::after { left: 12px; }
   html:root .settings-app .settings-sidebar nav button[data-has-children]::after {
     content: "";
     position: absolute;
-    bottom: 0;
-    left: calc((var(--team-depth, 0) + 1) * 18px - 2px);
+    bottom: -1px;
+    left: 16px;
     width: 1px;
     height: 6px;
     background: var(--set-drawer-connector);

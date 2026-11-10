@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { MoreHorizontal, Search } from "lucide-react";
+import { usePhoneLayout } from "@/hooks/use-phone-layout";
+import { ArrowDown, ArrowUp, MoreHorizontal, Search } from "lucide-react";
 import { toast } from "@/lib/toast";
 
 import {
@@ -13,12 +14,16 @@ import { useI18n } from "@/i18n/i18n";
 import { setTeamMembership } from "@/lib/api";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { personUsername } from "@/lib/people";
+import { memberProfilePath, settingsPath } from "@/lib/app-routes";
+import { AppLink } from "@/components/ui/app-link";
+import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { canManageTeamSettings } from "@/lib/settings-permissions";
 import { ScopedFlowTooltip } from "@/components/ui/tooltip";
 import type { BootstrapData, Team, TeamMember, TeamMemberOrigin, WorkspaceMember } from "@/types/flow";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
 
 type MemberFilter = "All" | "Team owners" | "Members" | "Guests";
+type MemberSort = "name" | "email" | "role";
 const FILTERS: MemberFilter[] = ["All", "Team owners", "Members", "Guests"];
 
 type Row = { member: WorkspaceMember; owner: boolean; origin: TeamMemberOrigin };
@@ -63,8 +68,11 @@ export function TeamMembersSettings({
   onReload: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  const phone = usePhoneLayout();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<MemberFilter>("All");
+  const [sort, setSort] = useState<MemberSort>("name");
+  const [descending, setDescending] = useState(false);
   const [busy, setBusy] = useState(false);
   const scimGroup = data.workspaceSettings.scimTeamGroupMapping?.[team.id];
   const memberships = useMemo(
@@ -92,17 +100,49 @@ export function TeamMembersSettings({
     (member) => member.status === "active" && !memberships.has(member.user.id),
   );
   const normalized = query.trim().toLowerCase();
-  const visible = rows.filter(({ member, owner }) => {
-    if (
-      normalized &&
-      !`${member.user.displayName} ${member.user.name} ${member.user.email}`.toLowerCase().includes(normalized)
-    )
-      return false;
-    if (filter === "Team owners") return owner;
-    if (filter === "Guests") return member.role === "guest";
-    if (filter === "Members") return !owner && member.role !== "guest";
-    return true;
-  });
+  const sortValue = ({ member, owner }: Row) =>
+    sort === "email" ? member.user.email : sort === "role" ? roleLabel(member, owner) : member.user.displayName;
+  const visible = rows
+    .filter(({ member, owner }) => {
+      if (
+        normalized &&
+        !`${member.user.displayName} ${member.user.name} ${member.user.email}`.toLowerCase().includes(normalized)
+      )
+        return false;
+      if (filter === "Team owners") return owner;
+      if (filter === "Guests") return member.role === "guest";
+      if (filter === "Members") return !owner && member.role !== "guest";
+      return true;
+    })
+    .sort((left, right) => sortValue(left).localeCompare(sortValue(right)) * (descending ? -1 : 1));
+  const order = (key: MemberSort) => {
+    if (key === sort) setDescending((current) => !current);
+    else {
+      setSort(key);
+      setDescending(false);
+    }
+  };
+  const sortButton = (key: MemberSort, label: string) => (
+    <button
+      type="button"
+      data-sort={key}
+      data-sorted={sort === key}
+      aria-label={`${t("Order by")} ${t(label)}${sort === key ? `, ${t(descending ? "sorted descending" : "sorted ascending")}` : ""}`}
+      onClick={() => order(key)}
+    >
+      <span className="settings-members-column-label">{t(label)}</span>
+      <span className="settings-members-desktop-sort">{sort === key && descending ? <ArrowUp aria-hidden size={12} /> : <ArrowDown aria-hidden size={12} />}</span>
+    </button>
+  );
+  const workspace = data.workspace.urlKey;
+  // The sub-teams of this team a member also belongs to.
+  const subTeamsOf = (userId: string) =>
+    data.teams.filter(
+      (item) =>
+        !item.retiredAt &&
+        data.teamSettings?.[item.id]?.parentTeamId === team.id &&
+        data.teamMembers.some((membership) => membership.teamId === item.id && membership.userId === userId),
+    );
   // Explain the removal rules wherever a sync is involved.
   const syncedTeam =
     Boolean(scimGroup) || rows.some(({ origin }) => origin === "scim" || origin === "sync" || origin === "api");
@@ -144,7 +184,7 @@ export function TeamMembersSettings({
     URL.revokeObjectURL(url);
   };
   return (
-    <div className="settings-members-page settings-team-members-page" data-i18n-ignore>
+    <div className={`settings-members-page${phone ? "" : " settings-workspace-members"} settings-team-members-page`} data-i18n-ignore>
       <SettingsPageTitle>{t("Team members")}</SettingsPageTitle>
       {scimGroup && (
         <div className="settings-team-members-scim" role="note">
@@ -157,7 +197,7 @@ export function TeamMembersSettings({
       )}
       <div className="settings-members-toolbar">
         <label>
-          <Search size={14} />
+          <Search size={16} />
           <input
             aria-label={t("Search by name or email")}
             placeholder={t("Search by name or email")}
@@ -180,7 +220,7 @@ export function TeamMembersSettings({
         {canAddMembers ? (
           <PropertyMenu
             label={t("Add a member")}
-            ariaLabel={t("Add a member")}
+            ariaLabel={t("Add team members")}
             triggerRole="button"
             triggerClassName="settings-action primary"
             trigger={<span>{t("Add a member")}</span>}
@@ -195,7 +235,7 @@ export function TeamMembersSettings({
             onChange={(userId) => change(userId, true, "member", "Member added")}
           />
         ) : (
-          <button className="settings-action primary" type="button" disabled>
+          <button className="settings-action primary" type="button" aria-label={t("Add team members")} disabled>
             {t("Add a member")}
           </button>
         )}
@@ -211,16 +251,17 @@ export function TeamMembersSettings({
       )}
       <div className="settings-members-directory">
         <div className="settings-members-columns">
-          <span>{t("Name")}</span>
-          <span>{t("Email")}</span>
-          <span>{t("Role")}</span>
+          {sortButton("name", "Name")}
+          {sortButton("email", "Email")}
+          {sortButton("role", "Role")}
+          {!phone && <span>{t("Sub-teams")}</span>}
           <span />
         </div>
         {visible.map(({ member, owner, origin }) => {
           const self = member.user.id === data.viewer.id;
           const originNote = ORIGIN_NOTES[origin];
           return (
-            <div className="settings-member-directory-row" key={member.user.id}>
+            <div className="settings-member-directory-row" role="row" key={member.user.id}>
               <span>
                 <UserAvatar className="settings-member-avatar" name={member.user.displayName} avatarUrl={member.user.avatarUrl} userId={member.user.id} />
                 <i>
@@ -237,12 +278,23 @@ export function TeamMembersSettings({
                   </small>
                 </i>
               </span>
-              <span>{member.user.email}</span>
               <span>
-                <em className={`settings-member-role is-${owner ? "owner" : member.role}`}>
-                  {t(roleLabel(member, owner))}
+                <span className="settings-member-email">{member.user.email}</span>
+              </span>
+              <span>
+                <em className={`settings-member-role is-${owner ? "owner" : member.role}${owner || member.role === "admin" || member.role === "owner" ? " is-admin" : ""}`}>
+                  <span>{t(roleLabel(member, owner))}</span>
                 </em>
               </span>
+              {!phone && (
+                <span className="settings-member-subteams">
+                  {subTeamsOf(member.user.id).map((sub) => (
+                    <AppLink key={sub.id} className="settings-member-subteam" href={settingsPath(workspace, "team", sub.key, "members")} aria-label={`${t("Open")} ${sub.name}`}>
+                      <span><ViewGlyph color={sub.color} icon={sub.icon || "Team"} /></span>
+                    </AppLink>
+                  ))}
+                </span>
+              )}
               <span>
                 {(canManage || self || (canAddMembers && !owner)) && (
                   <DropdownMenu>
@@ -252,7 +304,7 @@ export function TeamMembersSettings({
                         aria-label={`${t("Open menu")} ${member.user.displayName}`}
                         disabled={busy}
                       >
-                        <MoreHorizontal size={15} />
+                        <MoreHorizontal size={16} />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="settings-member-action-menu">
@@ -277,6 +329,7 @@ export function TeamMembersSettings({
                   </DropdownMenu>
                 )}
               </span>
+              <AppLink className="settings-member-row-link" href={memberProfilePath(workspace, personUsername(member.user) || member.user.id)} aria-label={member.user.displayName} tabIndex={-1} />
             </div>
           );
         })}

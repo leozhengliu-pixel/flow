@@ -67,7 +67,7 @@ it('keeps the new destinations routable and translated', () => {
   }
 })
 
-it('shows the current value of triage and cycles, nothing for a team without loops, and keeps access management after the danger zone', () => {
+it('shows the current value of triage and cycles, nothing for a team without loops, and lists access management with the first group', () => {
   const base = data({ viewerRole: 'admin' })
   const team = base.teams[0]
   const value = data({
@@ -78,10 +78,9 @@ it('shows the current value of triage and cycles, nothing for a team without loo
   const { container } = mount(value)
   expect(container.querySelector('[data-team-overview-row=triage] .team-overview-summary')).toHaveTextContent('Enabled')
   expect(container.querySelector('[data-team-overview-row=cycles] .team-overview-summary')).toHaveTextContent('Every 2 weeks, 2 week cooldown')
-  expect(container.querySelector('[data-team-overview-row=loops] .team-overview-summary')).toBeNull()
-  const first = container.querySelector('[data-team-overview-group=general-members-hierarchy]')
-  expect(first?.querySelector('[data-team-overview-row=security]')).toBeNull()
-  const access = container.querySelector('[data-team-overview-row=security]') as HTMLElement
-  const danger = [...container.querySelectorAll('h3')].find(node => node.textContent === 'Danger zone') as HTMLElement
-  expect(danger.compareDocumentPosition(access) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(container.querySelector('[data-team-overview-row=loops] .team-overview-summary')).toBeEmptyDOMElement()
+  const first = container.querySelector('[data-team-overview-group=general-members-security-hierarchy]')
+  expect(first?.querySelector('[data-team-overview-row=security]')).not.toBeNull()
+  const rows = [...(first?.querySelectorAll('[data-team-overview-row]') ?? [])].map(node => node.getAttribute('data-team-overview-row'))
+  expect(rows).toEqual(['general', 'members', 'security', 'hierarchy'])
 })

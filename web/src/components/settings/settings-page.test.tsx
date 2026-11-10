@@ -208,6 +208,20 @@ it('limits Your teams to memberships and searches joined team identifiers', asyn
   expect(input.onNavigate).toHaveBeenCalledWith('team', 'T8', undefined);
 });
 
+it('marks a team and its sub-team in the drawer, and leaves the entry plain on the team sub-pages', () => {
+  const input = props();
+  const viewerId = input.data.viewer.id;
+  input.data = { ...input.data, teams: [{ id: 'team-p', key: 'PAR', name: 'Parent', color: '#777777' }, { id: 'team-c', key: 'CHD', name: 'Child', color: '#777777' }], teamMembers: [{ teamId: 'team-p', userId: viewerId, role: 'member', joinedAt: '' }, { teamId: 'team-c', userId: viewerId, role: 'member', joinedAt: '' }], teamSettings: { 'team-c': { teamId: 'team-c', parentTeamId: 'team-p' } } } as unknown as typeof input.data;
+  const overview = render(<I18nProvider><SettingsPage {...input} page="team" teamKey="PAR" teamSection="overview"/></I18nProvider>);
+  const child = screen.getByRole('button', { name: 'Child' });
+  expect(child).toHaveAttribute('data-depth', '1');
+  expect(screen.getByRole('button', { name: 'Parent' })).toHaveAttribute('data-has-children');
+  expect(screen.getByRole('button', { name: 'Parent' })).toHaveAttribute('aria-current', 'page');
+  overview.unmount();
+  render(<I18nProvider><SettingsPage {...input} page="team" teamKey="PAR" teamSection="general"/></I18nProvider>);
+  expect(screen.getByRole('button', { name: 'Parent' })).not.toHaveAttribute('aria-current');
+});
+
 it('searches team settings and opens the matching section', async () => {
   localStorage.setItem('flow:locale', 'en');
   const user = userEvent.setup();

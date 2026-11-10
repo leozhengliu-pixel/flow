@@ -542,6 +542,8 @@ export function SettingsPage(props: SettingsPageProps) {
     && props.data.teamSettings?.[team.id]?.access !== "private"
     && (!props.data.teamSettings?.[team.id]?.membershipRestriction || props.data.teamSettings?.[team.id]?.membershipRestriction === "open"));
   const joinOrCreateNavigator = useContext(UNSAFE_NavigationContext)?.navigator;
+  // Like the reference drawer, a team's entry is current only on its overview; its sub-pages leave the entry plain.
+  const teamNavActive = (teamKey: string) => props.page === "team" && (props.teamSection ?? "overview") === "overview" && props.teamKey?.toLowerCase() === teamKey.toLowerCase();
   const allSidebarTeams = useMemo(() => settingsSidebarTeams(props.data, ""), [props.data]);
   const sidebarTeams = allSidebarTeams;
   const visible = useMemo(
@@ -780,17 +782,9 @@ export function SettingsPage(props: SettingsPageProps) {
                       key={team.id}
                       data-depth={depth}
                       data-has-children={sidebarTeams[index + 1]?.depth > depth ? "" : undefined}
-                      style={{
-                        ...(depth ? { paddingInlineStart: 10 + Math.min(depth, 6) * 18 } : {}),
-                        "--team-depth": Math.min(depth, 6),
-                      } as CSSProperties}
-                      aria-current={props.page === 'team' && props.teamKey?.toLowerCase() === team.key.toLowerCase() ? 'page' : undefined}
-                      className={
-                        props.page === "team" &&
-                        props.teamKey?.toLowerCase() === team.key.toLowerCase()
-                          ? "active"
-                          : ""
-                      }
+                      style={{ "--team-depth": Math.min(depth, 6) } as CSSProperties}
+                      aria-current={teamNavActive(team.key) ? 'page' : undefined}
+                      className={teamNavActive(team.key) ? "active" : ""}
                       onClick={() => { props.onNavigate("team", team.key); setMobileNav(false); }}
                       onPointerEnter={() => { void TeamWorkflowSettings.preload().catch(() => undefined); }}
                       onFocus={() => { void TeamWorkflowSettings.preload().catch(() => undefined); }}

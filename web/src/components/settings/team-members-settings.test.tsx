@@ -100,12 +100,12 @@ describe("team member origins", () => {
       return render(<I18nProvider><TeamMembersSettings data={data} team={data.teams[0]} onReload={vi.fn().mockResolvedValue(undefined)} /></I18nProvider>);
     };
     const allowed = render_("allMembers");
-    expect(screen.getByRole("button", { name: "Add a member" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add team members" })).toBeEnabled();
     // Owner roles stay with team owners: a team member gets no menu on the owner's row.
     expect(within(row(teammate.displayName)).queryByRole("button", { name: /Open menu/ })).toBeNull();
     allowed.unmount();
     render_("owners");
-    expect(screen.getByRole("button", { name: "Add a member" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add team members" })).toBeDisabled();
   });
 
   it("is localized in zh-CN", async () => {
@@ -185,5 +185,36 @@ describe("team member avatars", () => {
     expect(avatar).toHaveTextContent(/^张$/);
     expect(avatar).toHaveAttribute("data-script", "cjk");
     expect(avatar.style.getPropertyValue("--avatar")).toBe(avatarColor("user-cjk"));
+  });
+});
+
+describe("team members table", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("sorts by a column header and lists the sub-teams a member also belongs to", async () => {
+    const users = [viewer, teammate];
+    const data = makeBootstrap({
+      viewerRole: "admin",
+      users,
+      members: users.map(member),
+      teams: [
+        { id: "team-1", key: "TM1", name: "Team one", color: "#777777" },
+        { id: "team-sub", key: "SUB", name: "Sub team", color: "#aa8800", icon: "Team" },
+      ] as never,
+      teamSettings: { "team-sub": { teamId: "team-sub", parentTeamId: "team-1" } } as never,
+      teamMembers: [membership(viewer.id), membership(teammate.id), { ...membership(teammate.id), teamId: "team-sub" }],
+    });
+    render(
+      <I18nProvider>
+        <TeamMembersSettings data={data} team={data.teams[0]} onReload={vi.fn().mockResolvedValue(undefined)} />
+      </I18nProvider>,
+    );
+    const names = () => Array.from(document.querySelectorAll(".settings-member-directory-row strong")).map((node) => node.textContent);
+    const ascending = names();
+    expect(ascending).toEqual([...ascending].sort((left, right) => (left ?? "").localeCompare(right ?? "")));
+    await userEvent.setup().click(screen.getByRole("button", { name: /Order by Name/ }));
+    expect(names()).toEqual([...ascending].reverse());
+    expect(within(row(teammate.displayName)).getByRole("link", { name: "Open Sub team" })).toHaveAttribute("href", expect.stringContaining("/settings/teams/SUB/members"));
+    expect(within(row(viewer.displayName)).queryByRole("link", { name: /Open/ })).toBeNull();
   });
 });

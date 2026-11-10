@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ComponentType,
+  type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
@@ -15,8 +16,6 @@ import { ScopedFlowTooltip } from '@/components/ui/tooltip';
 import * as Popover from "@radix-ui/react-popover";
 import {
   ArrowUpRight,
-  LockKeyhole,
-  MessageSquare,
   Settings,
   ChevronRight,
   Copy,
@@ -25,16 +24,8 @@ import {
   Plus,
   RefreshCw,
   Trash2,
-  ArrowLeftRight,
   CircleCheck,
-  CirclePlay,
-  Contact,
-  Contrast,
   Globe,
-  Hexagon,
-  Sparkles,
-  Triangle,
-  Zap,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { markdownPlainText } from "@/lib/markdown-plain-text";
@@ -86,7 +77,7 @@ import type {
   WorkflowState,
   WorkflowStateType,
 } from "@/types/flow";
-import { settingsPath, teamHomePath, teamLoopsPath, type SettingsPageId, type TeamSettingsSection } from "@/lib/app-routes";
+import { newTeamPath, settingsPath, teamHomePath, teamLoopsPath, type SettingsPageId, type TeamSettingsSection } from "@/lib/app-routes";
 import './desktop-settings.css';
 import './team-hub.css';
 import { useNavigate } from "react-router-dom";
@@ -107,6 +98,7 @@ import {
   SettingsRow,
   SettingsSection,
   SettingsSelect as BaseSettingsSelect,
+  SettingsCrumb,
   SettingsToggle,
   TeamSettingsCrumb,
   type SettingsSelectOption,
@@ -115,6 +107,7 @@ import { DomainLabelsSettings } from "./domain-settings";
 import { ESTIMATE_TYPE_NAMES, estimateScaleDetails } from "@/lib/estimates";
 
 const ESTIMATES_DOCS_URL = "https://flow.app/docs/estimates";
+const HIERARCHY_DOCS_URL = "https://flow.app/docs/teams#team-hierarchy";
 import { TeamMembersSettings } from "./team-members-settings";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { StatusIcon } from "@/components/issue/issue-icons";
@@ -124,6 +117,7 @@ import { PropertyMenu } from '@/components/property/property-menu';
 import { TriageResponsibilityMembers } from '@/components/triage/triage-responsibility-dialog';
 import { WorkflowStateDeleteDialog } from './workflow-state-delete-dialog';
 import {
+  ViewGlyph,
   ViewIconPicker,
   type ViewVisual,
 } from "@/components/views/view-icon-picker";
@@ -137,8 +131,10 @@ import {
 import "./issues-projects-settings.css";
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { AgentSkillsIcon } from '@/components/agent/agent-icons'
-import { LabelIcon, MembersIcon, SlackIcon } from '@/components/issue/issue-icons'
+import { LabelIcon, MembersIcon } from '@/components/issue/issue-icons'
 import { TeamSettingsIcon } from '@/components/layout/team-menu-icons'
+import { SettingsNavGlyph } from './settings-nav-glyphs'
+import { TeamAccessGlyph, TeamAgentsGlyph, TeamChatGlyph, TeamCyclesGlyph, TeamEstimatesGlyph, TeamStatusesGlyph, TeamSummariesGlyph, TeamTriageGlyph } from './team-overview-glyphs'
 import { TeamAgentGuidanceSettings } from './team-agent-guidance'
 import { chatTeamNotificationsCopy, useChatPlatform } from '@/lib/chat-platform'
 import { ChatTeamNotifications } from './chat-team-notifications'
@@ -261,6 +257,31 @@ const TEAM_SECTION_TITLES: Partial<Record<TeamSettingsSection, string>> = {
   "project-labels": "Team project labels",
   templates: "Team templates",
 };
+
+/** Time zones offered in a team's General settings (the saved zone is always offered too). */
+const TEAM_TIMEZONES = [
+  "Etc/UTC", "Pacific/Honolulu", "America/Anchorage", "America/Los_Angeles", "America/Denver", "America/Chicago", "America/New_York",
+  "America/Sao_Paulo", "Atlantic/Azores", "Europe/London", "Europe/Paris", "Europe/Berlin", "Europe/Athens", "Europe/Moscow",
+  "Asia/Dubai", "Asia/Kolkata", "Asia/Dhaka", "Asia/Bangkok", "Asia/Shanghai", "Asia/Tokyo", "Australia/Sydney", "Pacific/Auckland",
+];
+function timezoneOptions(current: string) {
+  return current && !TEAM_TIMEZONES.includes(current) ? [current, ...TEAM_TIMEZONES] : TEAM_TIMEZONES;
+}
+/** "GMT-8:00 – Pacific Time - Los Angeles": UTC offset now, the zone's generic name and its city. */
+function timezoneLabel(zone: string) {
+  try {
+    const now = new Date();
+    const part = (timeZoneName: Intl.DateTimeFormatOptions["timeZoneName"]) =>
+      new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName }).formatToParts(now).find((item) => item.type === "timeZoneName")?.value ?? "";
+    const offset = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(part("longOffset"));
+    const gmt = offset ? `GMT${offset[1]}${Number(offset[2])}:${offset[3] ?? "00"}` : "GMT+0:00";
+    const city = zone === "Etc/UTC" ? "UTC" : (zone.split("/").pop() ?? zone).replaceAll("_", " ");
+    const name = zone === "Etc/UTC" ? "Coordinated Universal Time" : part("longGeneric") || part("long");
+    return `${gmt} – ${name} - ${city}`;
+  } catch {
+    return zone;
+  }
+}
 const STATUS_GROUPS: {
   type: WorkflowStateType;
   label: string;
@@ -354,8 +375,10 @@ export function TeamWorkflowSettings({
   const Content = TEAM_SECTION_COMPONENTS[section];
   return (
     <>
-      {section !== "overview" && (
+      {section !== "overview" ? (
         <TeamSettingsCrumb team={team} onClick={() => onNavigate("overview")} />
+      ) : onOpenTeams && (
+        <SettingsCrumb onClick={onOpenTeams}>{t("Teams")}</SettingsCrumb>
       )}
       <header className="settings-page-header team-settings-header">
         <div>
@@ -368,7 +391,7 @@ export function TeamWorkflowSettings({
               t(TEAM_SECTION_TITLES[section] ?? SECTIONS.find((item) => item.id === section)?.label ?? "")
             )}
           </h1>
-          {section === "overview" ? <p>{t(team.private || data.teamSettings?.[team.id]?.access === 'private' ? 'Only accessible to team members' : 'Accessible to all workspace members')}</p> : section === "templates" ? <TeamTemplatesDescription workspaceSlug={data.workspace.urlKey} /> : section === "notifications" ? <p>{chat.format(t(chatCopy.page))}</p> : TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
+          {section === "overview" ? <p>{t(team.private || data.teamSettings?.[team.id]?.access === 'private' ? 'Only accessible to team members' : 'Accessible to all workspace members')}</p> : section === "hierarchy" ? <p>{t("Teams can be nested to reflect your team structure and to share workflows and settings.")}<a className="feature-docs-link" href={HIERARCHY_DOCS_URL} target="_blank" rel="noreferrer">{t("Docs")}<ArrowUpRight size={11} aria-hidden="true" /></a></p> : section === "templates" ? <TeamTemplatesDescription workspaceSlug={data.workspace.urlKey} /> : section === "notifications" ? <p>{chat.format(t(chatCopy.page))}</p> : TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
         </div>
         {section === 'overview' && <TeamOverviewShortcut path={teamHomePath(data.workspace.urlKey, team.key)}/>}
       </header>
@@ -608,7 +631,28 @@ function TeamOverview({
       default: return undefined;
     }
   };
-  const icons: Partial<Record<TeamSettingsSection, ComponentType<{ size?: number }>>> = { general: () => <TeamSettingsIcon />, security: LockKeyhole, members: MembersIcon, hierarchy: Contact, estimates: Triangle, notifications: SlackIcon, 'issue-labels': LabelIcon, 'project-labels': LabelIcon, templates: MobileTemplatesIcon, 'recurring-issues': MobileRecurringIcon, statuses: Contrast, 'project-statuses': Hexagon, workflow: CircleCheck, triage: ArrowLeftRight, cycles: CirclePlay, agents: AgentCursorGlyph, 'agent-skills': AgentSkillsIcon, 'agent-connectors': Globe, 'ai-updates': Sparkles, 'ai-summaries': MessageSquare };
+  const icons: Partial<Record<TeamSettingsSection, ComponentType<{ size?: number }>>> = {
+    general: () => <TeamSettingsIcon />,
+    security: TeamAccessGlyph,
+    members: MembersIcon,
+    hierarchy: ({ size }) => <SettingsNavGlyph name="teams" size={size}/>,
+    estimates: TeamEstimatesGlyph,
+    notifications: TeamChatGlyph,
+    'issue-labels': LabelIcon,
+    'project-labels': LabelIcon,
+    templates: MobileTemplatesIcon,
+    'recurring-issues': MobileRecurringIcon,
+    statuses: TeamStatusesGlyph,
+    'project-statuses': ({ size }) => <SettingsNavGlyph name="projectStatuses" size={size}/>,
+    workflow: CircleCheck,
+    triage: TeamTriageGlyph,
+    cycles: TeamCyclesGlyph,
+    agents: TeamAgentsGlyph,
+    'agent-skills': AgentSkillsIcon,
+    'agent-connectors': Globe,
+    'ai-updates': ({ size }) => <SettingsNavGlyph name="projectUpdates" size={size}/>,
+    'ai-summaries': TeamSummariesGlyph,
+  };
   const hubCopy: Partial<Record<TeamSettingsSection, { label: string; description?: string }>> = {
     'issue-labels': { label: 'Labels' },
     'project-labels': { label: 'Labels' },
@@ -626,7 +670,7 @@ function TeamOverview({
         {ids.map((id) => {
           if (id === 'loops') {
             const size = (data.loops ?? []).filter(item => item.teamId === team.id && item.status !== 'draft').length;
-            return <div key={id} className="team-overview-row-shell"><a data-team-overview-row={id} href={teamLoopsPath(data.workspace.urlKey, team.key)}><span className="team-overview-icon"><Zap size={16}/></span><span className="team-overview-copy"><strong>Loops</strong><small>{t('Automated agent workflows that run on a schedule or when an issue is updated')}</small></span>{size > 0 && <span className="team-overview-summary">{t(size === 1 ? '{count} loop' : '{count} loops').replace('{count}', () => String(size))}</span>}<ChevronRight size={15}/></a></div>;
+            return <div key={id} className="team-overview-row-shell"><a data-team-overview-row={id} href={teamLoopsPath(data.workspace.urlKey, team.key)}><span className="team-overview-icon"><SettingsNavGlyph name="loops" size={16}/></span><span className="team-overview-copy"><strong>Loops</strong><small>{t('Automated agent workflows that run on a schedule or when an issue is updated')}</small></span><span className="team-overview-summary">{size > 0 ? t(size === 1 ? '{count} loop' : '{count} loops').replace('{count}', () => String(size)) : ''}</span><ChevronRight size={15}/></a></div>;
           }
           const item = SECTIONS.find((value) => value.id === id)!;
           const Icon = icons[id] ?? Settings;
@@ -646,7 +690,7 @@ function TeamOverview({
   );
   return (
     <div className="team-overview-page">
-      {group(undefined, ["general", "members", "hierarchy"])}
+      {group(undefined, owner ? ["general", "members", "security", "hierarchy"] : ["general", "members", "hierarchy"])}
       {group(t("Issues"), ["issue-labels", "statuses", "estimates", "recurring-issues"])}
       {group(t("Projects"), ["project-labels", "project-statuses"])}
       {group(t("Workflows"), ["templates", "triage", "cycles", "workflow", "notifications"])}
@@ -715,7 +759,6 @@ function TeamOverview({
           </ScopedFlowTooltip>
         </TeamRow>
       </TeamSection>
-      {owner && group(undefined, ["security"])}
       <RetireTeamForm
         open={retireOpen}
         onOpenChange={(open) => {
@@ -866,23 +909,42 @@ function GeneralSettings({
         title="Description"
         description="A short summary shown on the team page"
       >
-        <InputRow
-          title="Description"
+        <textarea
+          className="team-description-input"
+          aria-label={t("Team description")}
+          placeholder={t("e.g. Builds and maintains core platform infrastructure")}
           value={settings.description ?? ""}
-          onChange={(value) =>
-            setSettings((current) => ({ ...current, description: value }))
+          onChange={(event) =>
+            setSettings((current) => ({ ...current, description: event.target.value }))
           }
-          onCommit={(value) => save({ description: value })}
+          onBlur={(event) => void save({ description: event.target.value })}
         />
       </TeamSection>
       <TeamSection
-        title="Team initiatives"
-        description="Choose whether initiatives led by this team appear in the team sidebar"
+        title="Timezone"
+        description="Used for team schedules, dates, and cycle start times"
       >
+        <SelectRow
+          title="Timezone"
+          value={settings.timezone}
+          options={timezoneOptions(settings.timezone)}
+          labels={Object.fromEntries(timezoneOptions(settings.timezone).map((zone) => [zone, timezoneLabel(zone)]))}
+          onChange={(value) => save({ timezone: value })}
+        />
+      </TeamSection>
+      <TeamSection title="Team initiatives">
         <ToggleRow
           title="Hide initiatives in the team sidebar"
           checked={settings.showInitiatives === false}
           onChange={(value) => save({ showInitiatives: !value })}
+        />
+      </TeamSection>
+      <TeamSection title="Other">
+        <ToggleRow
+          title="Enable detailed issue history"
+          description="Each change to an issue receives and persists a distinct history entry, creating a more detailed history for auditing purposes."
+          checked={settings.detailedHistory}
+          onChange={(value) => save({ detailedHistory: value })}
         />
       </TeamSection>
       </>}
@@ -934,39 +996,6 @@ function GeneralSettings({
           </div>
         )}
       </TeamSection>}
-      {!estimatesOnly && <>
-      <EmailIntakeSettings
-        data={data}
-        team={team}
-        settings={settings}
-        save={save}
-        onReload={onReload}
-      />
-      <TeamSection
-        title="Timezone"
-        description="Used for team schedules, dates, and cycle start times"
-      >
-        <SelectRow
-          title="Timezone"
-          value={settings.timezone}
-          options={[
-            "Etc/UTC",
-            "Asia/Shanghai",
-            "America/Los_Angeles",
-            "Europe/London",
-          ]}
-          onChange={(value) => save({ timezone: value })}
-        />
-      </TeamSection>
-      <TeamSection title="Other">
-        <ToggleRow
-          title="Enable detailed issue history"
-          description="Each change to an issue receives and persists a distinct history entry, creating a more detailed history for auditing purposes."
-          checked={settings.detailedHistory}
-          onChange={(value) => save({ detailedHistory: value })}
-        />
-      </TeamSection>
-      </>}
     </>
   );
 }
@@ -976,8 +1005,48 @@ function TeamEstimatesSettings(props: { data: BootstrapData; team: Team; onReloa
 }
 
 function TeamHierarchySettings({ data, team, onReload }: { data: BootstrapData; team: Team; onReload: () => Promise<void> }) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
   const { settings, save } = useTeamSettings(data, team, onReload);
-  return <TeamSection description="Organize teams into a hierarchy of up to five levels."><fieldset className="settings-read-only-fields" disabled={!viewerOwnsTeam(data, team.id)}><ParentTeamPicker data={data} teams={data.teams} settings={data.teamSettings} teamId={team.id} value={settings.parentTeamId} onChange={value => { void save({ parentTeamId: value }); }}/></fieldset></TeamSection>;
+  const owner = viewerOwnsTeam(data, team.id);
+  const subTeams = data.teams.filter((item) => !item.retiredAt && data.teamSettings?.[item.id]?.parentTeamId === team.id);
+  return (
+    <>
+      <SettingsSection className="team-hierarchy-card">
+        <TeamRow title="Parent team" description="Settings and workflows will be inherited from the parent team">
+          <fieldset className="settings-read-only-fields" disabled={!owner}>
+            <ParentTeamPicker selectStyle data={data} teams={data.teams} settings={data.teamSettings} teamId={team.id} value={settings.parentTeamId} onChange={(value) => { void save({ parentTeamId: value }); }} />
+          </fieldset>
+        </TeamRow>
+      </SettingsSection>
+      <section className="settings-section team-hierarchy-card team-subteams-card">
+        <header>
+          <div>
+            <h3>{t("Subteams")}</h3>
+            <span>{t("Members, issues, and projects from sub-teams are included in parent team views")}</span>
+          </div>
+          <button type="button" aria-label={t("Create sub-team…")} disabled={!owner} onClick={() => navigate(`${newTeamPath(data.workspace.urlKey)}?parentTeamId=${encodeURIComponent(team.id)}`)}>
+            <Plus size={14} aria-hidden="true" />
+          </button>
+        </header>
+        {subTeams.length > 0 && (
+          <ul>
+            {subTeams.map((sub) => (
+              <li key={sub.id}>
+                <a href={settingsPath(data.workspace.urlKey, "team", sub.key, "overview")} aria-label={`${sub.name} ${t("settings")}`} onClick={(event) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); navigate(settingsPath(data.workspace.urlKey, "team", sub.key)); } }}>
+                  <div>
+                    <figure style={{ "--team-color": sub.color } as CSSProperties}><span><ViewGlyph color={sub.color} icon={sub.icon || "Team"} /></span></figure>
+                    <span data-i18n-ignore>{sub.name}</span>
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </div>
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </>
+  );
 }
 
 function EmailIntakeSettings({
@@ -1456,6 +1525,7 @@ function WorkflowSettings({
   };
   return (
     <>
+      <EmailIntakeSettings data={data} team={team} settings={settings} save={save} onReload={onReload} />
       {gitConnected ? (
         <>
       <TeamSection title="Pull request automations">

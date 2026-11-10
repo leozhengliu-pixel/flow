@@ -311,7 +311,7 @@ export function SettingsSelect({
   );
 }
 
-function SettingsChevron() {
+export function SettingsChevron() {
   return (
     <svg aria-hidden="true" width="9" height="5" viewBox="0 0 9 5">
       <path d="M1.915.557a.667.667 0 0 0-.943.943l2.862 2.862a.942.942 0 0 0 1.333 0L8.028 1.5a.667.667 0 0 0-.943-.943L4.5 3.14 1.915.557Z" />

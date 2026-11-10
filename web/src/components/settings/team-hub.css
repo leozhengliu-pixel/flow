@@ -60,3 +60,145 @@
   .team-overview-row-shell > a { gap: 8px; padding-inline: 10.6667px; }
   .team-overview-row-shell:not(:last-child)::after { right: 10.6667px; left: 10.6667px; }
 }
+
+/* Desktop team settings pages (the phone layouts keep their own rules). */
+@media (min-width: 761px) {
+  /* The reference page header pulls its title and description 1.44px left of the column edge (text-indent), so a team page's
+     heading text starts at the same x as the section headings below it. */
+  html:root .settings-app .settings-main .team-settings-header h1,
+  html:root .settings-app .settings-main .team-settings-header > div > p { text-indent: -1.44px; }
+  /* The overview keeps its 32px gap below the header when the "Teams" crumb sits above it. */
+  html:root .settings-app .settings-main .settings-crumb ~ .team-settings-header:has(.team-overview-shortcut) { margin-bottom: 32px; }
+  /* Danger zone: the reference's text buttons hang 6px past the row's content edge. */
+  html:root .settings-app .settings-main .team-overview-page .settings-action-hint > .settings-action { margin-right: -6px; }
+
+  /* General: the reference keeps the header's 32px gap under its crumb and sizes every field to 200px. */
+  html:root .settings-app .settings-main[data-team-section="general"] .settings-crumb ~ .team-settings-header { margin-bottom: 32px; }
+  html:root .settings-app .settings-main[data-team-section="general"] .settings-card .settings-input {
+    box-sizing: border-box; width: 200px; height: 32px; padding: 6px 12px; border: .5px solid var(--form-control-border);
+    border-radius: 8px; background: var(--form-control-bg); box-shadow: none; font: 400 13px/normal var(--font);
+  }
+  html:root .settings-app .settings-main[data-team-section="general"] .team-icon-name-control {
+    display: flex; align-items: stretch; gap: 0; width: 200px; height: 32px; box-sizing: border-box;
+    border: .5px solid var(--form-control-border); border-radius: 8px; background: var(--form-control-bg);
+  }
+  html:root .settings-app .settings-main[data-team-section="general"] .team-icon-name-control .team-icon-trigger {
+    flex: none; width: 32px; height: 31px; padding: 0; border: 0; border-radius: 8px 0 0 8px; box-shadow: none;
+    background: color-mix(in srgb, var(--view-color, currentColor) 12.5%, transparent);
+  }
+  html:root .settings-app .settings-main[data-team-section="general"] .team-icon-name-control .team-icon-trigger > svg { width: 16px; height: 16px; }
+  html:root .settings-app .settings-main[data-team-section="general"] .team-icon-name-control > .settings-input {
+    flex: 1; min-width: 0; width: auto; height: 31px; border: .5px solid transparent; border-radius: 0 8px 8px 0; background: transparent; box-shadow: none;
+  }
+  /* Description: the whole card is one text area. */
+  html:root .settings-app .settings-main .team-description-input {
+    display: block; box-sizing: border-box; width: 100%; height: 120px; margin: 0; padding: 16px; border: 0; border-radius: 10px;
+    outline: 0; resize: none; background: transparent; color: var(--set-text); font: 400 13px/normal var(--font);
+  }
+  html:root .settings-app .settings-main .team-description-input::placeholder { color: var(--form-control-placeholder, var(--set-desc)); }
+
+  /* Team members: the workspace members table's look, with Name / Email / Role / Sub-teams / menu columns. */
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members .settings-members-columns,
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members .settings-member-directory-row {
+    grid-template-columns: minmax(0, 507fr) minmax(0, 338fr) 140px 82px 28px;
+  }
+  html:root .settings-app .settings-main .settings-member-subteams { display: flex; align-items: center; gap: 4px; }
+  html:root .settings-app .settings-main .settings-member-subteam {
+    position: relative; z-index: 1; width: 22px; height: 22px; display: grid; place-items: center; margin-left: -2px; border-radius: 9999px; color: inherit;
+  }
+  html:root .settings-app .settings-main .settings-member-subteam svg { width: 14px; height: 14px; }
+  html:root .settings-app .settings-main .settings-member-subteam:hover { background: var(--bg-hover); }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-member-directory-row { position: relative; }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-member-row-link { position: absolute; inset: 0; border-radius: 8px; outline: 0; }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-member-row-link:focus-visible { box-shadow: inset 0 0 0 1px var(--focus-ring); }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-member-more { position: relative; z-index: 1; }
+  html:root .settings-app .settings-main .settings-member-subteam { padding: 2px; box-sizing: border-box; }
+  html:root .settings-app .settings-main .settings-member-subteam > span { width: 18px; height: 18px; display: grid; place-items: center; }
+  /* Column headers: unsorted columns keep their arrow's room (shown on hover) like the reference. */
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members .settings-members-columns button,
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members .settings-members-columns button[data-sort] { gap: 2px; margin-left: -6.5px; padding: 0 6px; border: .5px solid transparent; }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-members-columns button[data-sorted="false"] .settings-members-desktop-sort { opacity: 0; }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-members-columns button[data-sorted="false"]:hover .settings-members-desktop-sort { opacity: 1; }
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members .settings-members-columns,
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members .settings-member-directory-row {
+    grid-template-columns: 507px 338px 140px 82px 28px;
+    padding-left: 60px;
+  }
+  html:root .settings-app .settings-main .settings-team-members-page > .settings-members-toolbar > .settings-select { margin-left: 6px; min-width: 0; width: auto; }
+  /* Team description: the card draws the surface. */
+  html:root .settings-app .settings-main .settings-card:has(> textarea.team-description-input) { background: transparent; border-radius: 0; box-shadow: none; }
+  html:root .settings-app .settings-main .settings-card > textarea.team-description-input { background: var(--set-card); border-radius: 10px; box-shadow: var(--set-card-shadow); }
+  /* The table runs the panel's full width; the header and toolbar stay on the 56px inset. */
+  html:root .settings-app .settings-main > .settings-content:has(.settings-team-members-page) { padding-left: 0; padding-right: 0; }
+  html:root .settings-app .settings-main .settings-team-members-page > .settings-page-header,
+  html:root .settings-app .settings-main .settings-team-members-page > .settings-members-toolbar { margin-inline: 56px; }
+  html:root .settings-app .settings-main .settings-team-members-page > .settings-members-toolbar > label > svg { left: 10px; width: 16px; height: 16px; color: var(--text); }
+  html:root .settings-app .settings-main .settings-team-members-page > .settings-members-toolbar > label input { color: var(--text); }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-member-directory-row > span { position: relative; z-index: 1; }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-member-row-link { z-index: 0; }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-member-role { margin-left: -6px; line-height: normal; }
+  :root[data-theme="light"] .settings-app .settings-main .settings-team-members-page .settings-member-role.is-admin { background: lch(48% 59.31 288.43 / .08); color: lch(50% 80 288.43); }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-member-more { width: 32px; height: 32px; padding: 0; }
+  html:root .settings-app .settings-main .settings-crumb-icon { width: 18px; height: 18px; }
+  html:root .settings-app .settings-main .settings-crumb-icon svg { width: 14px; height: 14px; }
+}
+
+/* Phone: the crumb sits in the flow, 10px under the top bar's gap, like the reference's "‹ Teams" / "‹ [glyph] Team" row. */
+@media (max-width: 760px) {
+  html:root .settings-app .settings-main > .settings-content:has(.team-settings-header) {
+    --settings-crumb-position: static;
+    --settings-crumb-display: flex;
+    --settings-crumb-height: 32px;
+  }
+  html:root .settings-app .settings-main > .settings-content:has(.team-settings-header) > .settings-crumb { width: max-content; margin: -6px 0 10px -14px; }
+}
+
+/* Team hierarchy page: the header's docs link and the parent team picker drawn as a settings select. */
+html:root .settings-app .settings-main .team-settings-header .feature-docs-link {
+  display: inline-flex; align-items: center; gap: 2.1px; margin-left: .51px; padding: 1px 4px; border-radius: 8px; color: var(--set-text); font-weight: 450; text-decoration: none; text-indent: 0;
+}
+html:root .settings-app .settings-main .team-settings-header .feature-docs-link svg { width: 12px; height: 12px; }
+html:root .settings-app .settings-main .team-hierarchy-card .settings-select.parent-team-picker {
+  box-sizing: border-box; height: 30px; display: inline-flex; align-items: center; padding: 0 28px 0 10px; border: .5px solid transparent; border-radius: 8px;
+  background: var(--theme-control); box-shadow: none; font: 500 13px/normal var(--font);
+}
+html:root .settings-app .settings-main .team-hierarchy-card .parent-team-picker .settings-select-value { display: inline-flex; align-items: center; gap: 6px; font-weight: 450; }
+html:root .settings-app .settings-main .team-hierarchy-card .parent-team-select-icon { width: 18px; height: 18px; display: grid; place-items: center; }
+html:root .settings-app .settings-main .team-hierarchy-card .parent-team-picker > span:last-child { position: absolute; right: 10.5px; top: 0; width: 10px; height: 29px; display: flex; align-items: center; }
+
+/* Team hierarchy: a parent team card and a sub-teams card, 12px apart. */
+html:root .settings-app .settings-main .settings-section.team-hierarchy-card { margin: 0 0 12px; }
+html:root .settings-app .settings-main .team-subteams-card {
+  border-radius: 10px; background: var(--set-card); box-shadow: var(--set-card-shadow);
+}
+html:root .settings-app .settings-main .team-subteams-card > header {
+  position: relative; box-sizing: border-box; min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px;
+}
+html:root .settings-app .settings-main .team-subteams-card > header > div { min-width: 0; display: flex; flex-direction: column; }
+html:root .settings-app .settings-main .team-subteams-card > header h3 { margin: 0; color: var(--set-label); font: 500 13px/normal var(--font); }
+html:root .settings-app .settings-main .team-subteams-card > header span { margin: 2px 0 0; color: var(--set-desc); font: 450 12px/18px var(--font); }
+html:root .settings-app .settings-main .team-subteams-card > header > button {
+  flex: none; width: 24px; height: 24px; display: grid; place-items: center; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px;
+  background: transparent; color: var(--set-label); cursor: pointer;
+}
+html:root .settings-app .settings-main .team-subteams-card > header > button:hover:not(:disabled) { background: var(--bg-hover); }
+html:root .settings-app .settings-main .team-subteams-card > header > button:disabled { cursor: default; opacity: .6; }
+html:root .settings-app .settings-main .team-subteams-card > ul { margin: 0; padding: 0; list-style: none; }
+html:root .settings-app .settings-main .team-subteams-card > ul > li { position: relative; }
+html:root .settings-app .settings-main .team-subteams-card > ul > li::before {
+  content: ""; position: absolute; top: 0; right: 16px; left: 16px; border-top: .5px solid var(--set-sep);
+}
+html:root .settings-app .settings-main .team-subteams-card > ul > li > a {
+  box-sizing: border-box; height: 64px; display: block; padding: 0; border-radius: inherit;
+  color: var(--set-label); font: 500 13px/normal var(--font); text-decoration: none;
+}
+html:root .settings-app .settings-main .team-subteams-card > ul > li > a > div { height: 100%; display: flex; align-items: center; gap: 12px; padding: 0 16px; }
+html:root .settings-app .settings-main .team-subteams-card > ul > li > a:hover { background: var(--bg-hover); }
+html:root .settings-app .settings-main .team-subteams-card > ul > li > a > div > span { flex: 1; min-width: 0; }
+html:root .settings-app .settings-main .team-subteams-card > ul > li > a > div > svg { flex: none; color: var(--set-desc); }
+html:root .settings-app .settings-main .team-subteams-card figure {
+  flex: none; width: 32px; height: 32px; margin: 0; display: grid; place-items: center; border-radius: 6px;
+  background: color-mix(in srgb, var(--team-color, currentColor) 12%, transparent);
+}
+html:root .settings-app .settings-main .team-subteams-card figure > span { width: 18px; height: 18px; display: grid; place-items: center; }
+html:root .settings-app .settings-main .team-subteams-card figure svg { width: 14px; height: 14px; }
