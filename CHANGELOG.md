@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Changing your password with a wrong current password now answers 400 "The current password is incorrect" (and a too-short new password a 400 with its reason) instead of a 500; the wrong password is still audited as a failure.
+- The welcome video player's elapsed and duration labels have a fixed width, so the seek bar sits at exactly the same place on every platform instead of shifting by a hundredth of a pixel with the font's text measurement.
+
 - The command menu panel now clips its overflow instead of hiding it, so opening it and hovering a row can no longer scroll the panel by half a pixel and shift every row 1px left (it landed at the reference position only on some opens).
 - Every member who can see a project now sees its connected Lark or Feishu groups in the project sidebar (the group's name, or "N groups"), not only the team's owners and workspace administrators, who were the only ones the binding list was returned to; the others saw "Connect group". A new read-only endpoint, `GET /api/integrations/{provider}/chat/projects/{projectId}/groups`, lists the names of the active groups bound to a project for anyone who can see it (404 otherwise; a private team's group stays hidden from those outside the team) and says whether the viewer may change them. Members who can't open the group dialog read-only, with the groups listed and a note that only the project's team owners change them; with no group connected they see "No Lark group" instead of a connect action. An initiative's group dialog likewise lists its active groups by name for everyone who can see the initiative (not for one a private team leads). Binding configuration stays with those who manage it.
 - On a phone, the SLAs settings page now scrolls 32px past its last rule card, matching the reference, instead of the 96px the other settings pages leave.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -86,15 +87,27 @@ func TestAuditLogRecordsAccountAndCredentialEvents(t *testing.T) {
 	}
 	authRequest[any](t, f.admin, http.MethodPatch, f.host.URL+"/api/workspaces/test-workspace/members/"+member.ID, map[string]any{"role": nextRole}, "test-workspace", http.StatusOK)
 
-	// A wrong current password is refused (the status it answers with is not
-	// what this test checks).
-	wrong, _ := http.NewRequest(http.MethodPost, f.host.URL+"/api/account/change-password", strings.NewReader(`{"currentPassword":"not-it","newPassword":"another-pass"}`))
-	wrong.Header.Set("Content-Type", "application/json")
-	wrong.Header.Set("X-Workspace-Key", "test-workspace")
-	if refused, err := f.admin.Do(wrong); err != nil || refused.StatusCode < 400 {
-		t.Fatalf("wrong current password accepted: %v", err)
-	} else {
+	// A wrong current password is a 400 with a message the form can show (never a 500), and a too-short new
+	// password is refused the same way; only the wrong password is audited as a failure.
+	for body, message := range map[string]string{
+		`{"currentPassword":"not-it","newPassword":"another-pass"}`: "The current password is incorrect",
+		`{"currentPassword":"test-password","newPassword":"short"}`: "password must be at least 8 characters",
+	} {
+		refusal, _ := http.NewRequest(http.MethodPost, f.host.URL+"/api/account/change-password", strings.NewReader(body))
+		refusal.Header.Set("Content-Type", "application/json")
+		refusal.Header.Set("X-Workspace-Key", "test-workspace")
+		refused, err := f.admin.Do(refusal)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var payload struct {
+			Error string `json:"error"`
+		}
+		_ = json.NewDecoder(refused.Body).Decode(&payload)
 		refused.Body.Close()
+		if refused.StatusCode != http.StatusBadRequest || payload.Error != message {
+			t.Fatalf("change-password %s = %d %q, want 400 %q", body, refused.StatusCode, payload.Error, message)
+		}
 	}
 	authRequest[any](t, f.admin, http.MethodPost, f.host.URL+"/api/account/change-password", map[string]string{"currentPassword": "test-password", "newPassword": "another-pass"}, "test-workspace", http.StatusOK)
 	authRequest[any](t, f.admin, http.MethodDelete, f.host.URL+"/api/account/sessions/others", nil, "test-workspace", http.StatusNoContent)

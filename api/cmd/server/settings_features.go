@@ -240,6 +240,11 @@ func (s *server) changeAccountPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.store.ChangePassword(r.Context(), authUser(r).ID, input.CurrentPassword, input.NewPassword)
 	s.recordAccountResult(r, authUser(r), "password_changed", err)
+	// A wrong current password is a validation error of the request (not a 401, which would sign the viewer out).
+	if errors.Is(err, store.ErrAuthInvalid) {
+		writeError(w, http.StatusBadRequest, "The current password is incorrect")
+		return
+	}
 	respondMutation(w, err, http.StatusOK, map[string]bool{"changed": err == nil})
 }
 

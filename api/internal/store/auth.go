@@ -519,7 +519,7 @@ func (s *SQLiteStore) UpdateMemberIdentity(ctx context.Context, userID, displayN
 
 func (s *SQLiteStore) ChangePassword(ctx context.Context, userID, currentPassword, nextPassword string) error {
 	if len(nextPassword) < 8 {
-		return errors.New("password must be at least 8 characters")
+		return invalidValue("password must be at least 8 characters")
 	}
 	var hash string
 	if err := s.db.QueryRowContext(ctx, `SELECT password_hash FROM auth_users WHERE id=?`, userID).Scan(&hash); err != nil {

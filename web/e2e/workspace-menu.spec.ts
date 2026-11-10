@@ -189,7 +189,12 @@ test('switches real workspaces by click and keyboard, and bounds a long submenu'
   await submenu.getByRole('menuitem', { name: '中文团队', exact: true }).click()
   await expect(page).toHaveURL(new RegExp(`/${secondKey}/`))
   await expect(trigger.locator('strong')).toHaveText('中文团队')
+  // The switch lands on the new workspace's home (the Agent page), whose composer takes focus once it has mounted; typing O then W
+  // before that moves the focus into the composer between the two keys. Wait for the landing to settle, then leave the composer.
+  await expect(page).toHaveURL(new RegExp(`/${secondKey}/agent`))
+  await expect(page.getByRole('textbox', { name: 'Send a message to Flow AI' })).toBeFocused()
   await page.locator('.sidebar').click({ position: { x: 2, y: 50 } })
+  await expect(page.getByRole('textbox', { name: 'Send a message to Flow AI' })).not.toBeFocused()
   await page.keyboard.press('o')
   await page.keyboard.press('w')
   await expect(submenu).toBeVisible()

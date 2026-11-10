@@ -13,7 +13,7 @@
 .flow-welcome-player__volume-track{position:relative;display:flex;width:4px;height:56px;align-items:flex-end;overflow:hidden;border-radius:9999px;background:var(--video-track);cursor:pointer;touch-action:none}
 .flow-welcome-player__volume-track span{display:block;width:100%;background:var(--video-fg)}
 .flow-welcome-player__timeline{display:flex;min-width:0;flex:1;align-items:center;gap:8px;padding:0 4px}
-.flow-welcome-player__time{flex:none;min-width:34.32px;color:var(--video-fg-subtle);font-size:12px;font-weight:500;font-variant-numeric:tabular-nums}
+.flow-welcome-player__time{flex:none;box-sizing:content-box;width:34.3203125px;overflow:hidden;white-space:nowrap;color:var(--video-fg-subtle);font-size:12px;font-weight:500;font-variant-numeric:tabular-nums}
 .flow-welcome-player__time:last-child{text-align:right}
 .flow-welcome-player__seek{position:relative;height:4px;min-width:0;flex:1;border-radius:9999px;background:var(--video-track);cursor:pointer;touch-action:none;transition:opacity .25s cubic-bezier(.25,.46,.45,.94)}
 .flow-welcome-player__seek:before{content:"";position:absolute;inset:-12px 0}
