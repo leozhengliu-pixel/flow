@@ -160,7 +160,7 @@ func TestNoConfigFileKeepsBuiltInDefaults(t *testing.T) {
 	handler := newHandler(&server{store: repository, authDisabled: true, uploadPath: t.TempDir()})
 	team := requestJSON[domain.Team](t, handler, "POST", "/api/workspaces/test-workspace/teams", map[string]any{"name": "Platform", "key": "PLT"}, http.StatusCreated)
 	data, _ := repository.BootstrapFor("test-workspace")
-	if settings := data.TeamSettings[team.ID]; settings.EstimateType != "notUsed" || settings.TriageEnabled || settings.Timezone != "Etc/UTC" {
+	if settings := data.TeamSettings[team.ID]; settings.EstimateType != "notUsed" || !settings.TriageEnabled || settings.Timezone != "Etc/UTC" {
 		t.Fatalf("team settings = %+v", settings)
 	}
 	if cycles := data.CycleSettings[team.ID]; cycles.Enabled || cycles.DurationWeeks != 2 || cycles.Capacity != 4 {

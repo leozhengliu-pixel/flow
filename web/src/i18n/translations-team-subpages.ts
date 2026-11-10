@@ -71,4 +71,6 @@ export const teamSubpagesZhCN: Record<string, string> = {
   "Optional guidance...": "可选的指导…",
   "Enable thread summaries": "启用讨论串摘要",
   "Generate summaries for resolved threads that don't have a resolving reply comment": "为没有解决性回复评论的已解决讨论串生成摘要",
+  "e.g. Builds and maintains core platform infrastructure": "例如：构建并维护核心平台基础设施",
+  "settings": "设置",
 };

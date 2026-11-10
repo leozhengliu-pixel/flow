@@ -26,6 +26,7 @@ import {
   Trash2,
   CircleCheck,
   Globe,
+  Zap,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { markdownPlainText } from "@/lib/markdown-plain-text";
@@ -132,9 +133,8 @@ import {
 } from "./issues-projects-settings";
 
 import "./issues-projects-settings.css";
-import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { AgentSkillsIcon } from '@/components/agent/agent-icons'
-import { LabelIcon, MembersIcon, SlackIcon } from '@/components/issue/issue-icons'
+import { LabelIcon, MembersIcon } from '@/components/issue/issue-icons'
 import { TeamSettingsIcon } from '@/components/layout/team-menu-icons'
 import { SettingsNavGlyph } from './settings-nav-glyphs'
 import { TeamAccessGlyph, TeamAgentsGlyph, TeamChatGlyph, TeamCyclesGlyph, TeamEstimatesGlyph, TeamStatusesGlyph, TeamSummariesGlyph, TeamTriageGlyph } from './team-overview-glyphs'

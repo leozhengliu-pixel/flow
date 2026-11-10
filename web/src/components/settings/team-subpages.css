@@ -146,65 +146,8 @@ html:root .settings-app .settings-main .recurring-issues-section .settings-row--
 html:root .settings-app .settings-main .recurring-issues-section .recurring-issues-new { gap: 6px; height: 24px; margin: 0; padding: 0 8px 0 6px; font: 500 12px/normal var(--font); }
 html:root .settings-app .settings-main .recurring-issues-section .settings-row button.recurring-issues-new.settings-action { margin: 0; padding: 0 8px 0 6px; }
 html:root .settings-app .settings-main .team-statuses-page .team-status-dot { margin: 0 4px; font-weight: 400; }
-html:root .settings-app .settings-main .team-subteams-head ~ .team-overview-row-shell > a { min-height: 64px; }
 html:root .settings-app .settings-main .recurring-issues-section .recurring-issues-new svg { width: 14px; height: 14px; }
 
-/* Team hierarchy: the parent picker looks like a settings select; the sub-teams card has a header row with a "+" button. */
-html:root .settings-app .settings-main .team-hierarchy-picker { min-width: 0; margin: 0; padding: 0; border: 0; }
-html:root .settings-app .settings-main .team-hierarchy-picker:disabled { opacity: .5; }
-html:root .settings-app .settings-main .team-hierarchy-picker .parent-team-picker {
-  position: relative;
-  box-sizing: border-box;
-  height: 30px;
-  margin: 1px 0;
-  padding: 0 28px 0 10px;
-  border: .5px solid transparent;
-  border-radius: 8px;
-  background: var(--theme-surface-1);
-  color: var(--set-control-text);
-  font: 400 13px/normal var(--font);
-  box-shadow: var(--ui-pill-shadow, none);
-}
-html:root .settings-app .settings-main .team-hierarchy-picker .parent-team-picker > svg { display: none; }
-html:root .settings-app .settings-main .team-hierarchy-picker .parent-team-picker span { color: var(--set-control-text); font: 450 13px/normal var(--font); }
-html:root .settings-app .settings-main .settings-section:has(.team-hierarchy-picker) { margin-bottom: 12px; }
-html:root .settings-app .settings-main .team-hierarchy-picker .parent-team-picker::after {
-  content: "";
-  position: absolute;
-  top: 10px;
-  right: 11px;
-  width: 5px;
-  height: 5px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
-}
-html:root .settings-app .settings-main .team-subteams-head {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 65px;
-  padding: 16px;
-  border-bottom: .5px solid var(--set-sep);
-}
-html:root .settings-app .settings-main .team-subteams-head > span { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-html:root .settings-app .settings-main .team-subteams-head strong { color: var(--set-text); font: 500 13px/normal var(--font); }
-html:root .settings-app .settings-main .team-subteams-head small { color: var(--set-desc); font: 450 12px/normal var(--font); }
-html:root .settings-app .settings-main .team-subteams-add {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  padding: 0 2px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--set-text);
-  cursor: pointer;
-}
-html:root .settings-app .settings-main .team-subteams-add:hover { background: var(--set-control); }
 
 /* Options hanging under a row (estimates, stale issues): a faint line on the left with a small hook per option. */
 html:root .settings-app .settings-main .settings-row:has(+ .team-estimate-options) { min-height: 64px; }
@@ -268,10 +211,7 @@ html:root .settings-app .settings-main .team-inherit-banner small { color: var(-
 html:root .settings-app .settings-main .team-statuses-page .ip-status-section > header > button { padding: 0 2px; }
 html:root .settings-app .settings-main .team-empty-row.is-strong > span { font-weight: 500; }
 html:root .settings-app .settings-main .team-overview-list > .team-overview-row-shell > a[data-team-triage-loops] { padding: 0; border-radius: 10px; }
-html:root .settings-app .settings-main .team-overview-row-shell > a[data-team-link-card] { padding: 0; }
-html:root .settings-app .settings-main .team-subteams-head ~ .team-overview-row-shell .team-link-row-inner { min-height: 64px; }
 html:root .settings-app .settings-main .team-link-row-inner { box-sizing: border-box; display: flex; align-items: center; flex: 1; gap: 12px; min-height: 65px; padding: 16px; }
-html:root .settings-app .settings-main .team-subteams-head small { line-height: 18px; }
 /* A select with a muted suffix ("Public" + "to workspace"): both words are 450, the label in the primary colour. */
 html:root .settings-app .settings-main .settings-select:has(.settings-select-suffix:not(.is-detail)) .settings-select-value > span { color: var(--set-label); font-weight: 450; }
 html:root .settings-app .settings-main .settings-select .settings-select-suffix:not(.is-detail) { color: var(--set-desc); font-weight: 450; }
@@ -309,30 +249,29 @@ html:root .settings-app .settings-main .team-description-block + .team-descripti
   html:root .settings-app .settings-mobile-content-gap:has(+ .settings-content .settings-crumb ~ .team-settings-header) { display: none; }
   html:root .settings-app .settings-main .settings-crumb ~ .team-settings-header { margin-bottom: 24px; }
   html:root .settings-app .settings-main .settings-crumb ~ .team-settings-header > div > p { font: 450 13px/18px var(--font); color: var(--set-group-desc); }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-section { margin-bottom: 24px; }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-section-description { font: 450 13px/18px var(--font); }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .settings-row { padding-inline: 10.6667px; }
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-section { margin-bottom: 24px; }
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-section-description { font: 450 13px/18px var(--font); }
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .settings-row { padding-inline: 10.6667px; }
   html:root .settings-app .settings-main .team-empty-row,
-  html:root .settings-app .settings-main .team-inherit-banner,
-  html:root .settings-app .settings-main .team-subteams-head { padding-inline: 10.6667px; }
+  html:root .settings-app .settings-main .team-inherit-banner { padding-inline: 10.6667px; }
   html:root .settings-app .settings-main .team-estimate-options > .settings-row.team-estimate-option { padding-left: 32px; }
   /* A row with a select stacks: the copy, then a full-width 36px select. */
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .settings-row:has(.settings-select.is-wide) {
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .settings-row:has(.settings-select.is-wide) {
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
   }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .settings-row:has(.settings-select.is-wide) > :last-child { width: 100%; max-width: none; }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .settings-row .settings-select.is-wide {
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .settings-row:has(.settings-select.is-wide) > :last-child { width: 100%; max-width: none; }
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .settings-row .settings-select.is-wide {
     box-sizing: border-box;
     width: 100%;
     height: 36px;
     justify-content: space-between;
   }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-select-suffix:not(.is-detail) { display: none; }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-row-icon,
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-select-suffix:not(.is-detail) { display: none; }
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-row-icon,
   html:root .settings-app .settings-main .team-inherit-banner .settings-row-icon { box-sizing: border-box; flex: none; width: 32px; min-width: 32px; height: 32px; }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .settings-row,
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .settings-row,
   html:root .settings-app .settings-main .team-inherit-banner { gap: 8px; }
   html:root .settings-app .settings-main .team-empty-row { min-height: 50px; }
   html:root .settings-app .settings-main .recurring-issues-section .settings-row--action { min-height: 50px; }
@@ -363,28 +302,22 @@ html:root .settings-app .settings-main .team-description-block + .team-descripti
   html:root .settings-app .settings-main .team-triage-settings-link { width: 100%; justify-content: center; }
   html:root .settings-app .settings-main .settings-select .settings-select-suffix.is-detail { display: none; }
   html:root .settings-app .settings-main .team-inherit-banner .settings-row-icon,
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-row-icon { display: grid; place-items: center; }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .team-estimate-options > .settings-row.team-estimate-option { padding-left: 38.6667px; }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-select[data-select-size]::before { content: attr(data-select-label-size); }
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-row-icon { display: grid; place-items: center; }
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .team-estimate-options > .settings-row.team-estimate-option { padding-left: 38.6667px; }
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-select[data-select-size]::before { content: attr(data-select-label-size); }
   html:root .settings-app .settings-main .team-estimate-options { padding-bottom: 8px; }
   html:root .settings-app .settings-main .settings-row button.team-connect-link.settings-action { height: 36px; margin-right: -6px; padding: 0 12px; gap: 4px; border: .5px solid transparent; background: transparent; box-shadow: none; line-height: normal; }
   html:root .settings-app .settings-main .settings-row:has(.team-connect-link):not(:has(.settings-row-icon)) { min-height: 80.5px; }
   html:root .settings-app .settings-main .settings-row:has(.team-connect-link) .settings-row-copy > span { margin-top: 1px; }
   html:root .settings-app .settings-main .team-select-200 .settings-select-native-wrap,
   html:root .settings-app .settings-main .team-select-200 .settings-select-native { width: 200px; }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .team-estimate-options > .settings-row.team-estimate-option.team-select-200 { min-height: 0; padding-block: 5px; }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-section:has(.team-hierarchy-picker) { margin-bottom: 12px; }
-  html:root .settings-app .settings-main .team-hierarchy-picker .parent-team-picker { max-width: 125px; overflow: hidden; }
-  html:root .settings-app .settings-main .team-subteams-head { min-height: 0; padding: 10.6667px; }
-  html:root .settings-app .settings-main .team-subteams-head > span { gap: 2px; }
-  html:root .settings-app .settings-main .team-subteams-head ~ .team-overview-row-shell .team-link-row-inner { min-height: 64px; }
-  html:root .settings-app .settings-main .team-subteams-add { flex: none; width: 28px; height: 28px; border-radius: 9999px; border: .5px solid transparent; font: 500 12px/normal var(--font); color: var(--set-control-text); }
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .team-estimate-options > .settings-row.team-estimate-option.team-select-200 { min-height: 0; padding-block: 5px; }
   html:root .settings-app .settings-main .team-statuses-page > .settings-section { margin-top: 24px; }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .settings-row.team-select-stack { flex-direction: column; align-items: stretch; gap: 8px; }
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-card .settings-row.team-select-stack { flex-direction: column; align-items: stretch; gap: 8px; }
   html:root .settings-app .settings-main .settings-card .settings-row.team-select-stack > :last-child { width: 100%; }
   html:root .settings-app .settings-main .settings-card .settings-row.team-select-stack .settings-select-native-wrap,
   html:root .settings-app .settings-main .settings-card .settings-row.team-select-stack .settings-select-native { width: 100%; }
-  html:root .settings-app .settings-main .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-section.team-project-inherit { margin-bottom: 12px; }
+  html:root .settings-app .settings-main:not([data-team-section="general"], [data-team-section="members"], [data-team-section="hierarchy"]) .settings-content:has(.settings-crumb ~ .team-settings-header) .settings-section.team-project-inherit { margin-bottom: 12px; }
   html:root .settings-app .settings-main .team-project-statuses-page .pst-group-header { width: calc(100% - 24px); margin: 0 12px; }
   html:root .settings-app .settings-main .team-project-statuses-page .pst-row { padding: 0 16px; }
   /* Team templates: the lists use the settings tokens and span the column. */
