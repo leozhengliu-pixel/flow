@@ -80,6 +80,7 @@ import type {
 import { newTeamPath, settingsPath, teamHomePath, teamLoopsPath, type SettingsPageId, type TeamSettingsSection } from "@/lib/app-routes";
 import './desktop-settings.css';
 import './team-hub.css';
+import './mobile-team-settings.css';
 import { useNavigate } from "react-router-dom";
 import {
   confirmAllowSubTeamsMembership,
@@ -391,7 +392,7 @@ export function TeamWorkflowSettings({
               t(TEAM_SECTION_TITLES[section] ?? SECTIONS.find((item) => item.id === section)?.label ?? "")
             )}
           </h1>
-          {section === "overview" ? <p>{t(team.private || data.teamSettings?.[team.id]?.access === 'private' ? 'Only accessible to team members' : 'Accessible to all workspace members')}</p> : section === "hierarchy" ? <p>{t("Teams can be nested to reflect your team structure and to share workflows and settings.")}<a className="feature-docs-link" href={HIERARCHY_DOCS_URL} target="_blank" rel="noreferrer">{t("Docs")}<ArrowUpRight size={11} aria-hidden="true" /></a></p> : section === "templates" ? <TeamTemplatesDescription workspaceSlug={data.workspace.urlKey} /> : section === "notifications" ? <p>{chat.format(t(chatCopy.page))}</p> : TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
+          {section === "overview" ? <p>{t(team.private || data.teamSettings?.[team.id]?.access === 'private' ? 'Only accessible to team members' : 'Accessible to all workspace members')}</p> : section === "hierarchy" ? <p>{t("Teams can be nested to reflect your team structure and to share workflows and settings.")} <a className="feature-docs-link" href={HIERARCHY_DOCS_URL} target="_blank" rel="noreferrer">{t("Docs")}<ArrowUpRight size={11} aria-hidden="true" /></a></p> : section === "templates" ? <TeamTemplatesDescription workspaceSlug={data.workspace.urlKey} /> : section === "notifications" ? <p>{chat.format(t(chatCopy.page))}</p> : TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
         </div>
         {section === 'overview' && <TeamOverviewShortcut path={teamHomePath(data.workspace.urlKey, team.key)}/>}
       </header>

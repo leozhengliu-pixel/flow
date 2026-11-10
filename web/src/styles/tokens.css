@@ -1154,3 +1154,6 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :root{--video-surface:#1a1a1b;--video-shadow:rgb(0 0 0 / .3);--video-fg:#fff;--video-fg-muted:rgb(255 255 255 / .75);--video-fg-subtle:rgb(255 255 255 / .55);--video-track:rgb(255 255 255 / .2);--video-hover:rgb(255 255 255 / .12);--video-bar:rgb(46 46 47 / .94);--video-caption-shadow:rgb(0 0 0 / .85);--video-caption-glow:rgb(0 0 0 / .6);--video-option-fg:#111}
 :root{--team-indent:0px;--team-connector:lch(16.32% 1.48 272)}
 :root[data-theme="light"]{--team-connector:lch(80.94% 0 282);--team-title-light-fg:lch(37.776% 1.25 282)}
+/* Team settings pages (measured on the reference): the switch and glyph-button ink, the default text area border, the light role chip, the sub-team tile tint. */
+:root{--team-set-ink:rgb(255,255,255);--team-set-textarea-border:rgb(133,133,133);--team-color:currentColor}
+:root[data-theme="light"]{--team-role-chip-bg:lch(48% 59.31 288.43 / .08);--team-role-chip-fg:lch(50% 80 288.43)}

@@ -10,6 +10,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PropertyMenu } from "@/components/property/property-menu";
+import { PhoneNativeSelect } from "@/components/ui/phone-native-select";
+import { SettingsSearchGlyph } from "./settings-nav-glyphs";
 import { useI18n } from "@/i18n/i18n";
 import { setTeamMembership } from "@/lib/api";
 import { UserAvatar } from "@/components/ui/user-avatar";
@@ -132,6 +134,10 @@ export function TeamMembersSettings({
     >
       <span className="settings-members-column-label">{t(label)}</span>
       <span className="settings-members-desktop-sort">{sort === key && descending ? <ArrowUp aria-hidden size={12} /> : <ArrowDown aria-hidden size={12} />}</span>
+      <svg className={`settings-members-phone-sort${sort === key && descending ? " is-descending" : ""}`} aria-hidden viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
+        <path d="M11.5361 10.2745C11.8024 10.0029 11.8249 9.56807 11.5762 9.26961C11.3275 8.97139 10.8961 8.91526 10.5811 9.12801L10.5195 9.17391L8.00001 11.2735L5.48048 9.17391L5.41895 9.12801C5.10388 8.91526 4.67252 8.97139 4.42384 9.26961C4.17512 9.56807 4.19758 10.0029 4.46387 10.2745L4.51954 10.3263L7.51954 12.8263C7.79767 13.058 8.20234 13.058 8.48048 12.8263L11.4805 10.3263L11.5361 10.2745Z" />
+        <path d="M8.75 12.25C8.75 12.6642 8.41421 13 8 13C7.58579 13 7.25 12.6642 7.25 12.25L7.25 3.75C7.25 3.33579 7.58579 3 8 3C8.41421 3 8.75 3.33579 8.75 3.75V12.25Z" />
+      </svg>
     </button>
   );
   const workspace = data.workspace.urlKey;
@@ -183,8 +189,34 @@ export function TeamMembersSettings({
     link.click();
     URL.revokeObjectURL(url);
   };
+  const filterControls = (
+    <>
+      <label>
+        <Search size={16} className="settings-members-desktop-search" />
+        <SettingsSearchGlyph size={16} className="settings-members-phone-search" />
+        <input
+          aria-label={t("Search by name or email")}
+          placeholder={t("Search by name or email")}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </label>
+      {phone ? (
+        <PhoneNativeSelect className="settings-members-phone-filter" aria-label={t("Member filter")} value={filter} onChange={(event) => setFilter(event.target.value as MemberFilter)}>
+          {FILTERS.map((item) => <option key={item} value={item}>{t(item)}</option>)}
+        </PhoneNativeSelect>
+      ) : (
+        <SettingsSelect
+          label={t("Member filter")}
+          value={t(filter)}
+          options={FILTERS.map((item) => t(item))}
+          onChange={(value) => setFilter(FILTERS.find((item) => t(item) === value) ?? "All")}
+        />
+      )}
+    </>
+  );
   return (
-    <div className={`settings-members-page${phone ? "" : " settings-workspace-members"} settings-team-members-page`} data-i18n-ignore>
+    <div className="settings-members-page settings-workspace-members settings-team-members-page" data-i18n-ignore>
       <SettingsPageTitle>{t("Team members")}</SettingsPageTitle>
       {scimGroup && (
         <div className="settings-team-members-scim" role="note">
@@ -196,21 +228,7 @@ export function TeamMembersSettings({
         </div>
       )}
       <div className="settings-members-toolbar">
-        <label>
-          <Search size={16} />
-          <input
-            aria-label={t("Search by name or email")}
-            placeholder={t("Search by name or email")}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <SettingsSelect
-          label={t("Member filter")}
-          value={t(filter)}
-          options={FILTERS.map((item) => t(item))}
-          onChange={(value) => setFilter(FILTERS.find((item) => t(item) === value) ?? "All")}
-        />
+        {phone ? <div className="settings-members-filters">{filterControls}</div> : filterControls}
         <span />
         {rows.length > 0 && (
           <button className="settings-action" type="button" onClick={exportCsv}>
@@ -223,7 +241,7 @@ export function TeamMembersSettings({
             ariaLabel={t("Add team members")}
             triggerRole="button"
             triggerClassName="settings-action primary"
-            trigger={<span>{t("Add a member")}</span>}
+            trigger={<span>{phone ? t("Add") : t("Add a member")}</span>}
             align="end"
             searchPlaceholder={t("Search by name or email")}
             emptyLabel={t("Everyone in the workspace is already on this team")}
@@ -236,7 +254,7 @@ export function TeamMembersSettings({
           />
         ) : (
           <button className="settings-action primary" type="button" aria-label={t("Add team members")} disabled>
-            {t("Add a member")}
+            {phone ? t("Add") : t("Add a member")}
           </button>
         )}
       </div>
@@ -339,6 +357,11 @@ export function TeamMembersSettings({
           </div>
         )}
       </div>
+      {rows.length > 0 && (
+        <button type="button" className="settings-export-mobile" onClick={exportCsv}>
+          {t("Export CSV")}
+        </button>
+      )}
     </div>
   );
 }

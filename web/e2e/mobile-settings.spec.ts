@@ -164,7 +164,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await expect(page.locator('.team-overview-page [data-team-overview-row=general]')).toBeVisible()
       await expect(page.locator('.team-overview-page [data-team-overview-row=project-labels]')).toBeVisible()
       await expect(page.locator('.team-overview-page .settings-section').first().locator('.settings-card')).toHaveCSS('border-radius', '10px')
-      expect((await page.locator('.team-overview-page .settings-section').first().locator('.settings-card').boundingBox())?.y).toBeCloseTo(155.5, 1)
+      expect((await page.locator('.team-overview-page .settings-section').first().locator('.settings-card').boundingBox())?.y).toBeCloseTo(191.5, 1) // below the "Teams" crumb row
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     })
   })

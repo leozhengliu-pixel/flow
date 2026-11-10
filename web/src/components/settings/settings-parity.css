@@ -348,7 +348,9 @@ html:root .settings-app .settings-main .settings-member-origin:focus-visible { o
   html:root .settings-app .settings-main .settings-team-members-sync { margin-inline: 20px; }
 }
 html:root .settings-app .settings-main .settings-team-members-empty { padding: 14px 48px; color: var(--set-desc); font-size: 13px; }
-html:root .settings-app .settings-main > .settings-content:has(.settings-team-members-page) { padding-left: 8px; padding-right: 8px; }
+@media (min-width: 761px) {
+  html:root .settings-app .settings-main > .settings-content:has(.settings-team-members-page) { padding-left: 8px; padding-right: 8px; }
+}
 html:root .settings-app .settings-main .settings-team-members-page > .settings-page-header { margin-bottom: 24px; }
 
 /* Workspace teams table */

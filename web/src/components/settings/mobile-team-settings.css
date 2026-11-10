@@ -1,0 +1,95 @@
+/* Phone layouts of the team settings pages (General, Members, Hierarchy), measured on the reference at 390 and 375. */
+html:root .settings-app .settings-main .settings-crumb-icon { width: 18px; height: 18px; }
+html:root .settings-app .settings-main .settings-crumb-icon svg { width: 14px; height: 14px; }
+
+@media (max-width: 760px) {
+  /* General: stacked rows, 12px between cards, a text area card and a full-width select. */
+  html:root .settings-app .settings-main[data-team-section="general"] {
+    .settings-section { margin-bottom: 12px; }
+    .settings-section:has(> h3) { padding-top: 12px; }
+    .settings-section > h3 { margin: 0 16px 16px; }
+    .settings-section > h3:has(+ p) { margin-bottom: 2px; }
+    .settings-section > p.settings-section-description { margin: 0 16px 16px; font: 450 13px/18px var(--font); }
+    .settings-card > .settings-row { min-height: 60px; align-items: center; gap: 8px; padding: 16px 10.666667px; }
+    .settings-card > .settings-row::after { left: 16px; right: 16px; }
+    .settings-row:has(.settings-input, .team-icon-name-control, .settings-select-native) { flex-direction: column; align-items: stretch; gap: 8px; }
+    .settings-row:has(.settings-input, .team-icon-name-control, .settings-select-native) .settings-row-copy { flex: none; }
+    .settings-row:has(.settings-input, .team-icon-name-control, .settings-select-native) .settings-control { width: 100%; justify-content: flex-start; }
+    .settings-row-copy { display: block; font: 450 13px/15.5px var(--font); }
+    .settings-row-copy > strong { display: inline; font: 500 13px/normal var(--font); }
+    .settings-row-copy > span { display: block; margin-top: 3px; font: 450 12px/normal var(--font); }
+    .settings-row input[type="checkbox"] { font: 400 13.3333px/normal var(--font); color: var(--team-set-ink); }
+    .settings-card .settings-input {
+      box-sizing: border-box; width: 200px; height: 36px; padding: 6px 12px; border: .5px solid var(--set-input-border);
+      border-radius: 8px; background: var(--set-card); box-shadow: none; color: var(--set-text); font: 400 13px/normal var(--font);
+    }
+    .team-icon-name-control {
+      display: flex; align-items: stretch; gap: 0; width: 200px; height: 32px; box-sizing: border-box; font: 400 16px/24px var(--font);
+      border: .5px solid var(--set-input-border); border-radius: 8px; background: var(--set-card);
+    }
+    .team-icon-name-control .team-icon-trigger {
+      flex: none; width: 32px; height: 31px; padding: 0; border: 0; border-radius: 8px 0 0 8px; box-shadow: none; color: var(--team-set-ink);
+      font: 400 13.3333px/normal var(--font); background: color-mix(in lch, var(--view-color, currentColor) 17.5%, transparent);
+    }
+    :root[data-theme="light"] .team-icon-name-control .team-icon-trigger { background: color-mix(in lch, var(--view-color, currentColor) 12.5%, transparent); }
+    .team-icon-name-control .team-icon-trigger > svg { width: 16px; height: 16px; }
+    .team-icon-name-control > .settings-input { flex: 1; min-width: 0; width: auto; height: 31px; border: .5px solid transparent; border-radius: 0 8px 8px 0; }
+    .settings-card:has(> textarea.team-description-input) { background: var(--set-card); border-radius: 10px; box-shadow: var(--set-card-shadow); }
+    .settings-card > textarea.team-description-input {
+      display: block; box-sizing: border-box; width: 100%; height: 120px; margin: 0; padding: 16px; border-width: 0; border-style: none; border-color: var(--team-set-textarea-border); border-radius: 0; outline: 0; resize: none;
+      background: transparent; box-shadow: none; color: var(--set-text); font: 400 13px/normal var(--font);
+    }
+    .settings-card > textarea.team-description-input::placeholder { color: var(--form-control-placeholder, var(--set-desc)); }
+    .settings-select-native-wrap { display: block; width: 100%; height: 32px; }
+    .settings-select-native-wrap > .settings-select-native {
+      box-sizing: border-box; width: 100%; height: 30px; margin: 1px 0 0; padding: 0 28px 0 10px; border: .5px solid transparent; border-radius: 8px;
+      box-shadow: none; color: var(--set-control-text); font: 500 13px/normal var(--font);
+    }
+  }
+}
+
+@media (max-width: 760px) {
+  /* Members: the workspace members phone table, with the row menu kept and the whole row a link. */
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members .settings-member-directory-row > span:nth-child(4) { display: block !important; grid-column: 4; }
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members .settings-member-directory-row > .settings-member-row-link { display: block !important; position: absolute; inset: 0; grid-column: auto; z-index: 0; }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-member-directory-row > span { position: relative; z-index: 1; }
+  html:root .settings-app .settings-main > .settings-content:has(.settings-team-members-page) { width: auto; max-width: none; padding-left: 0; padding-right: 0; }
+  /* The add button sits in the phone property trigger wrapper. */
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members > .settings-members-toolbar > .phone-property-trigger { display: block; height: 36px; }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-members-toolbar .settings-action.primary { height: 36px; margin: 0; padding: 0 12px; width: auto; font: 500 13px/normal var(--font); }
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members .settings-members-columns { height: 32px; width: calc(100% + 32px); background: var(--bg-panel); }
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members .settings-members-columns > button[data-sort=role] { grid-column: 3; margin-left: -6.5px; }
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members .settings-member-directory-row,
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members .settings-members-columns { grid-template-columns: 44px minmax(0, calc(max(100vw, 376px) - 244px)) 144.1px 28px; }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-member-more { font: 500 13px/normal var(--font); color: var(--set-button-text); }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-member-more svg { color: var(--set-button-text); }
+  html:root .settings-app .settings-main > .settings-content:has(.settings-team-members-page) { padding-top: 0; }
+  html:root .settings-app .settings-main .settings-team-members-page .settings-member-role { margin-left: 0; }
+  /* Unsorted columns keep their arrow's room (the arrow is drawn on demand), like the reference. */
+  html:root .settings-app .settings-main .settings-team-members-page .settings-members-columns button[data-sorted="false"] .settings-members-phone-sort { opacity: 0; }
+  html:root .settings-app .settings-main .settings-team-members-page.settings-workspace-members > .settings-members-toolbar { margin-bottom: 20px; }
+  /* Hierarchy: 10.67px card insets, a 28px add button and 8px gaps in the sub-team rows. */
+  html:root .settings-app .settings-main .team-hierarchy-card > .settings-card > .settings-row { min-height: 0; gap: 8px; padding: 16px 10.666667px; }
+  html:root .settings-app .settings-main .team-hierarchy-card .settings-row-copy { flex: 1; min-width: 0; display: block; font: 450 13px/15.5px var(--font); }
+  html:root .settings-app .settings-main .team-hierarchy-card .settings-row-copy > strong { display: inline; font: 500 13px/normal var(--font); }
+  html:root .settings-app .settings-main .team-hierarchy-card .settings-row-copy > span { display: block; margin-top: 3px; font: 450 12px/normal var(--font); }
+  html:root .settings-app .settings-main[data-team-section="hierarchy"] .team-settings-header > div > p { color: var(--set-group-desc); }
+  html:root .settings-app .settings-main .team-subteams-card > header { padding: 10.666667px 10.666667px 11.166667px; }
+  html:root .settings-app .settings-main .team-subteams-card > header span { margin-top: 1.5px; }
+  html:root .settings-app .settings-main .team-subteams-card > header > button { width: 28px; height: 28px; color: var(--set-control-text); font: 500 12px/normal var(--font); }
+  html:root .settings-app .settings-main .team-subteams-card > ul > li > a > div { gap: 8px; padding: 0 10.666667px; }
+  html:root .settings-app .settings-main .team-subteams-card figure { background: color-mix(in lch, var(--team-color, currentColor) 17.5%, transparent); }
+  :root[data-theme="light"] .settings-app .settings-main .team-subteams-card figure { background: color-mix(in lch, var(--team-color, currentColor) 12%, transparent); }
+  html:root .settings-app .settings-main[data-team-section="hierarchy"] .team-settings-header > div { gap: 4px; }
+  html:root .settings-app .settings-main[data-team-section="hierarchy"] .team-settings-header > div > p { margin: 0; line-height: 18px; }
+  html:root .settings-app .settings-main .team-subteams-card > header > div { display: block; font: 450 12px/15.5px var(--font); }
+  html:root .settings-app .settings-main .team-subteams-card > header h3 { display: inline; line-height: normal; }
+  html:root .settings-app .settings-main .team-subteams-card > header span { display: block; }
+  html:root .settings-app .settings-main .team-hierarchy-card .phone-property-trigger > button.settings-select.parent-team-picker { background: var(--set-control); font: 500 13px/normal var(--font); }
+  html:root .settings-app .settings-main .team-hierarchy-card .phone-property-trigger > button.settings-select.parent-team-picker { color: var(--set-desc); }
+  html:root .settings-app .settings-main .team-hierarchy-card button.settings-select.parent-team-picker .settings-select-value,
+  html:root .settings-app .settings-main .team-hierarchy-card button.settings-select.parent-team-picker .settings-select-value > span { font: 450 13px/normal var(--font); color: var(--set-control-text, inherit); }
+  html:root .settings-app .settings-main .team-hierarchy-card .settings-control { flex: none; width: 125px; }
+  html:root .settings-app .settings-main .team-hierarchy-card .settings-control > fieldset { width: 100%; min-width: 0; margin: 0; padding: 0; border: 0; }
+  html:root .settings-app .settings-main .team-hierarchy-card button.settings-select.parent-team-picker { width: 100%; }
+}
