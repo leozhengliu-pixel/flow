@@ -74,8 +74,11 @@ test('keeps the Insights command styled beside the desktop My issues tools', asy
   await expect(insights).toHaveCSS('width', '28px')
   await expect(insights).toHaveCSS('height', '28px')
   const filter = page.getByRole('button', { name: 'Add filter', exact: true })
-  const boxes = await Promise.all([insights.boundingBox(), filter.boundingBox()])
+  // The tools run Filter, Display options, Insights, Details, 6px apart.
+  const display = page.getByRole('button', { name: 'Display options', exact: true })
+  const boxes = await Promise.all([filter.boundingBox(), display.boundingBox(), insights.boundingBox()])
   expect(boxes[1]!.x - boxes[0]!.x - boxes[0]!.width).toBe(6)
+  expect(boxes[2]!.x - boxes[1]!.x - boxes[1]!.width).toBe(6)
   if (process.env.FLOW_LIST_SHOTS) await page.screenshot({ path: `${process.env.FLOW_LIST_SHOTS}/desktop-my-issues.png`, animations: 'disabled' })
   await insights.click()
   await expect(page.getByRole('button', { name: 'Close insights', exact: true })).toBeVisible()

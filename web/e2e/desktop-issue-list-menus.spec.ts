@@ -74,8 +74,16 @@ test('shows every display property and footer, persists defaults, and filters su
   expect(geometry.scroll).toBeLessThanOrEqual(1)
   expect(geometry.bottom).toBeLessThan(900)
   expect(geometry.lastChip).toBeLessThan(geometry.footer)
-  // The menu lists only properties the issues can have: this workspace has no SLAs, release pipelines or activity tab.
-  for (const property of ['SLA', 'Release', 'My activity date']) await expect(panel.getByRole('button', { name: property, exact: true })).toHaveCount(0)
+  // The menu lists only properties the issues can have: this workspace has no SLAs, customers or activity tab; releases are on.
+  for (const property of ['SLA', 'Customers', 'Customer revenue', 'My activity date']) await expect(panel.getByRole('button', { name: property, exact: true })).toHaveCount(0)
+  const order = await panel.locator('[data-property]').evaluateAll(chips => chips.map(chip => chip.getAttribute('data-property')))
+  expect(order.indexOf('creator')).toBeGreaterThan(order.indexOf('assignee'))
+  // Release sits before Estimate (hidden here: no team uses estimates) and Labels.
+  expect(order).not.toContain('estimate')
+  expect(order.indexOf('release')).toBeGreaterThan(order.indexOf('milestone'))
+  expect(order.indexOf('release')).toBeLessThan(order.indexOf('labels'))
+  await expect(panel.getByRole('button', { name: 'Group ordering', exact: true })).toBeVisible()
+  await expect(panel.getByRole('button', { name: 'View ordering', exact: true })).toBeVisible()
   await panel.getByRole('button', { name: 'Reset', exact: true }).click()
   await expect(panel.getByRole('checkbox', { name: 'Show sub-team issues', exact: true })).toBeChecked()
   await panel.getByRole('tab', { name: 'Board', exact: true }).click()
