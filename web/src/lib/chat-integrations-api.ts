@@ -8,6 +8,7 @@ import type {
   ChatIntegrationCredentials,
   ChatIntegrationProvider,
   ChatIntegrationSettings,
+  ChatProjectGroups,
 } from "@/types/chat-integrations";
 
 const chatPath = (provider: ChatIntegrationProvider) => `/api/integrations/${provider}/chat`;
@@ -39,6 +40,11 @@ export function fetchChatIntegrationChats(provider: ChatIntegrationProvider, cur
 
 export function fetchChatInitiativeBindings(provider: ChatIntegrationProvider, initiativeId: string): Promise<ChatInitiativeBindings> {
   return request(`${chatPath(provider)}/initiatives/${encodeURIComponent(initiativeId)}/bindings`);
+}
+
+/** The groups a project is connected to, for anyone who can see the project. */
+export function fetchChatProjectGroups(provider: ChatIntegrationProvider, projectId: string): Promise<ChatProjectGroups> {
+  return request(`${chatPath(provider)}/projects/${encodeURIComponent(projectId)}/groups`);
 }
 
 export function saveChatInitiativeBinding(provider: ChatIntegrationProvider, input: ChatInitiativeBindingInput): Promise<ChatInitiativeBinding> {

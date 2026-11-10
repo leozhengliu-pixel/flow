@@ -134,6 +134,20 @@ export interface ChatIntegrationSettings {
   canManage: boolean;
 }
 
+/** A group a project is connected to, as anyone who can see the project sees it: the group's name only. */
+export interface ChatProjectGroup {
+  id: string;
+  chatName: string;
+  provider: ChatIntegrationProvider;
+}
+
+export interface ChatProjectGroups {
+  /** The active group bindings that name the project, of the project's teams the viewer can see. */
+  groups: ChatProjectGroup[];
+  /** The viewer owns one of the project's teams (or administers the workspace) and may connect or change its groups. */
+  canManage: boolean;
+}
+
 export interface ChatIntegrationCredentials {
   name?: string;
   appId: string;

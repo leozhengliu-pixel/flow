@@ -160,7 +160,23 @@ next to the stable error `code`.
 - **Team bindings** (`team`). A team's owners (inherited from parent teams)
   bind its groups; workspace administrators administer every team and so may
   too. Other members cannot create, change, revoke or remove a team's
-  bindings, and see none of them.
+  bindings, and don't see their configuration (events, authorizer, request
+  settings) or the team's binding list.
+
+Which groups a project or initiative is connected to is part of what its
+viewers see, like a Slack property's channel. Anyone who can open a project
+sees, in its sidebar and group dialog, the names of the active groups bound to
+that project (`GET /api/integrations/{provider}/chat/projects/{projectId}/groups`
+returns `groups` with `id`, `chatName` and `provider`, and `canManage`);
+someone who cannot see the project gets `404 chat_project_not_found`. Only
+bindings that name the project in their scope count (a team-wide binding is
+not listed); revoked and paused bindings are left out, and so is the group of
+a project team the viewer cannot see, so a project shared with a private team
+never discloses that team's group. Likewise, anyone who can see an initiative
+gets the names of its active groups from the initiative's binding list, unless
+a private team leads it. Members who can't change the groups get a read-only
+dialog (or, with no group connected, a plain "No Lark group" value instead of
+a connect action).
 
 ### Private teams
 

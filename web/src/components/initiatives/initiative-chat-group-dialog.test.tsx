@@ -88,6 +88,14 @@ it.each([
   expect(screen.queryByRole('button', { name: 'Connect Lark group' })).not.toBeInTheDocument()
 })
 
+it("lists the initiative's groups by name for a member who can't change them", async () => {
+  vi.mocked(api.fetchChatInitiativeBindings).mockResolvedValue(listing({ canManage: false, bindings: [{ id: 'b', connectionId: 'c', chatId: '', chatName: 'Launch room', initiativeId: 'initiative-1', enabled: true }] }))
+  dialog()
+  expect(await screen.findByText('Launch room')).toBeInTheDocument()
+  expect(screen.getByText("Only the initiative's owner and workspace administrators can connect it to groups.")).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Revoke group binding|Remove group binding/ })).not.toBeInTheDocument()
+})
+
 it('points to the integration while the application is not set up', async () => {
   vi.mocked(api.fetchChatInitiativeBindings).mockRejectedValue(new ApiError('Chat application not configured', 404, 'chat_not_configured'))
   dialog()

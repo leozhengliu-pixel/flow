@@ -118,9 +118,14 @@ func TestChatInitiativeBindingsConnectInitiativesWithoutALeadTeam(t *testing.T) 
 	if items, _ := list["bindings"].([]any); len(items) != 1 || list["canManage"] != true || list["shareable"] != true {
 		t.Fatalf("owner list: %v", list)
 	}
+	// Anyone else who sees the initiative learns the group's name only.
 	list = f.expect(f.outsider, "GET", base+"/initiatives/initiative_direct/bindings", nil, 200)
-	if items, _ := list["bindings"].([]any); len(items) != 0 || list["canManage"] != false {
+	items, _ := list["bindings"].([]any)
+	if len(items) != 1 || list["canManage"] != false {
 		t.Fatalf("outsider list: %v", list)
+	}
+	if item := items[0].(map[string]any); item["chatName"] != "Vault room" || item["chatId"] != "" || item["authorization"] != nil {
+		t.Fatalf("outsider sees more than the group's name: %v", item)
 	}
 
 	// Delivery: the update card names the initiative only, never the private

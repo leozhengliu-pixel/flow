@@ -145,15 +145,26 @@ func (s *server) listChatInitiativeBindings(w http.ResponseWriter, r *http.Reque
 	}
 	canManage := s.chatInitiativeManager(r, data, initiative)
 	bindings := []domain.ChatInitiativeBinding{}
-	// Who shares the initiative with which group is visible to the people who
-	// may change it.
-	if canManage {
+	// Who shares the initiative with which group (the authorization, paused
+	// and revoked records) is visible to the people who may change it. Anyone
+	// else who can see the initiative learns only the names of the groups that
+	// receive its updates.
+	_, visible := chatFindInitiative(data, initiative.ID)
+	if canManage || visible {
 		items, err := s.store.ChatInitiativeBindings(r.Context(), record.WorkspaceKey, record.ConnectionID, initiative.ID)
 		if err != nil {
 			writeChatError(w, 500, "Could not read group bindings")
 			return
 		}
-		bindings = items
+		if canManage {
+			bindings = items
+		} else if chatInitiativeShareable(metadata, initiative) {
+			for _, item := range items {
+				if chatInitiativeBindingActive(item) {
+					bindings = append(bindings, domain.ChatInitiativeBinding{ID: item.ID, ConnectionID: item.ConnectionID, ChatName: item.ChatName, InitiativeID: item.InitiativeID, Enabled: true, CreatedAt: item.CreatedAt})
+				}
+			}
+		}
 	}
 	writeJSON(w, 200, map[string]any{
 		"bindings":         bindings,

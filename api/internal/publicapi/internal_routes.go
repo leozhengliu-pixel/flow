@@ -312,6 +312,7 @@ var InternalRoutes = []string{
 	"POST /api/integrations/{provider}/chat/initiative-bindings",
 	"POST /api/integrations/{provider}/chat/initiative-bindings/{id}/revoke",
 	"DELETE /api/integrations/{provider}/chat/initiative-bindings/{id}",
+	"GET /api/integrations/{provider}/chat/projects/{projectId}/groups",
 	"POST /api/integrations/{provider}/{id}/chat/webhook",
 	"GET /api/integrations/{provider}/{id}/chat/message-action",
 	"POST /api/integrations/{provider}/{id}/chat/message-action",

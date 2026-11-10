@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { useI18n } from "@/i18n/i18n";
-import { chatErrorMessage, fetchChatIntegration, fetchChatIntegrationChats } from "@/lib/chat-integrations-api";
-import type { BotChat, ChatBinding, ChatIntegrationEvent, ChatIntegrationProvider, ChatIntegrationSettings } from "@/types/chat-integrations";
+import { chatErrorMessage, fetchChatIntegration, fetchChatIntegrationChats, fetchChatProjectGroups } from "@/lib/chat-integrations-api";
+import type { BotChat, ChatBinding, ChatIntegrationEvent, ChatIntegrationProvider, ChatIntegrationSettings, ChatProjectGroups } from "@/types/chat-integrations";
 
 /** The projects a binding covers (bindings saved before project sets name one projectId); undefined when it covers all. */
 export function bindingProjectIds(binding?: Pick<ChatBinding, "projectId" | "projectIds">): string[] | undefined {
@@ -100,4 +100,32 @@ export function useChatIntegrationSettings(provider: ChatIntegrationProvider | u
     return () => { mounted.current = false; };
   }, [load]);
   return { settings, loading, error, setError, reload: load };
+}
+
+/**
+ * The groups a project is connected to, as anyone who can see the project sees them, and whether the viewer may change
+ * them. The project's chat property and its group dialog read this for every viewer, managers included.
+ */
+export function useChatProjectGroups(provider: ChatIntegrationProvider | undefined, projectId: string) {
+  const [state, setState] = useState<ChatProjectGroups | null>(null);
+  const [loading, setLoading] = useState(Boolean(provider));
+  const mounted = useRef(true);
+  const load = useCallback(async () => {
+    if (!provider) return;
+    try {
+      const next = await fetchChatProjectGroups(provider, projectId);
+      if (mounted.current) setState(next);
+    } catch {
+      // The property falls back to its connect label; the dialog's settings request reports the error.
+      if (mounted.current) setState(null);
+    } finally {
+      if (mounted.current) setLoading(false);
+    }
+  }, [provider, projectId]);
+  useEffect(() => {
+    mounted.current = true;
+    queueMicrotask(() => { if (mounted.current) void load(); });
+    return () => { mounted.current = false; };
+  }, [load]);
+  return { groups: state?.groups, canManage: state?.canManage, loading, reload: load };
 }

@@ -13332,6 +13332,49 @@
         "x-flow-source": "chat_initiative_bindings.go"
       }
     },
+    "/api/integrations/{provider}/chat/projects/{projectId}/groups": {
+      "get": {
+        "operationId": "get_integrations_provider_chat_projects_projectId_groups",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "GET /api/integrations/{provider}/chat/projects/{projectId}/groups",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "chat_project_groups.go"
+      }
+    },
     "/api/integrations/{provider}/chat/test": {
       "post": {
         "operationId": "post_integrations_provider_chat_test",

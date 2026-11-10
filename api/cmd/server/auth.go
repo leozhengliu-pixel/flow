@@ -819,7 +819,8 @@ func chatMemberRoute(method string, path []string) bool {
 		return len(path) == 0 ||
 			len(path) == 1 && path[0] == "chats" ||
 			len(path) == 3 && path[0] == "identity" && path[1] == "oauth" && path[2] == "callback" ||
-			len(path) == 3 && path[0] == "initiatives" && path[1] != "" && path[2] == "bindings"
+			len(path) == 3 && path[0] == "initiatives" && path[1] != "" && path[2] == "bindings" ||
+			len(path) == 3 && path[0] == "projects" && path[1] != "" && path[2] == "groups"
 	}
 	switch {
 	case len(path) == 1 && path[0] == "identity":

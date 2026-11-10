@@ -15,6 +15,7 @@ vi.mock('@/lib/chat-integrations-api', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/lib/chat-integrations-api')>(),
   fetchChatIntegration: vi.fn(),
   fetchChatIntegrationChats: vi.fn(),
+  fetchChatProjectGroups: vi.fn(),
 }))
 
 const settings = (): ChatIntegrationSettings => ({
@@ -28,6 +29,7 @@ beforeEach(() => {
   localStorage.setItem('flow:locale', 'en-US')
   vi.mocked(api.fetchChatIntegration).mockResolvedValue(settings())
   vi.mocked(api.fetchChatIntegrationChats).mockResolvedValue({ items: [{ id: 'oc_room', name: 'Room', external: false }], hasMore: false })
+  vi.mocked(api.fetchChatProjectGroups).mockResolvedValue({ groups: [], canManage: true })
 })
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
 
@@ -101,6 +103,27 @@ it('shows the placeholder on the phone select while no option is chosen', () => 
     expect(native.value).toBe('__none__')
     expect(native.selectedOptions[0]).toHaveTextContent('Select group')
   } finally { window.matchMedia = original }
+})
+
+it("lists a member's view of the connected groups read-only, without the binding configuration", async () => {
+  vi.mocked(api.fetchChatProjectGroups).mockResolvedValue({ groups: [{ id: 'binding-1', chatName: 'Release room', provider: 'feishu' }], canManage: false })
+  render(<MemoryRouter><I18nProvider><ProjectChatGroupDialog open onOpenChange={vi.fn()} provider="feishu" project={{ ...project, teamIds: ['team-1'] }} data={makeBootstrap()} canManage={false}/></I18nProvider></MemoryRouter>)
+  const dialog = await screen.findByRole('dialog')
+  expect(await within(dialog).findByText('Release room')).toBeInTheDocument()
+  expect(dialog).toHaveTextContent("Only owners of this project's teams can change its groups.")
+  expect(dialog).toHaveTextContent('The Feishu groups connected to this project receive its notifications.')
+  expect(within(dialog).queryByRole('form')).not.toBeInTheDocument()
+  expect(within(dialog).getAllByRole('button').map(button => button.getAttribute('aria-label') ?? button.textContent)).toEqual(['Close'])
+  expect(api.fetchChatIntegration).not.toHaveBeenCalled()
+})
+
+it("shows a manager the project's other groups by name next to the ones they manage", async () => {
+  vi.mocked(api.fetchChatIntegration).mockResolvedValue({ ...settings(), bindings: [{ id: 'binding-own', connectionId: 'connection-1', chatId: 'oc_own', chatName: 'Own room', teamId: 'team-1', projectIds: [project.id], events: ['issue.created'], enabled: true, allowCreate: false, allowUpdate: false }] })
+  vi.mocked(api.fetchChatProjectGroups).mockResolvedValue({ groups: [{ id: 'binding-own', chatName: 'Own room', provider: 'feishu' }, { id: 'binding-other', chatName: 'Other team room', provider: 'feishu' }], canManage: true })
+  render(<MemoryRouter><I18nProvider><ProjectChatGroupDialog open onOpenChange={vi.fn()} provider="feishu" project={{ ...project, teamIds: ['team-1'] }} data={makeBootstrap()}/></I18nProvider></MemoryRouter>)
+  const dialog = await screen.findByRole('dialog')
+  expect(await within(dialog).findByText('Other team room')).toBeInTheDocument()
+  expect(within(dialog).getAllByText('Own room')).toHaveLength(1)
 })
 
 it("starts on the project's only shareable team", async () => {
