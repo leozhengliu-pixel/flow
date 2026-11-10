@@ -179,7 +179,7 @@ export function SettingsToggle({
 
 export type SettingsSelectOption =
   | string
-  | { value: string; label: string; disabled?: boolean; entityName?: boolean; icon?: ReactNode; /** Draws a separator above the option. */ divider?: boolean; /** Muted text after the label, shown in the menu only. */ hint?: string; /** Dimmed text after the label, e.g. "(default)". */ suffix?: string };
+  | { value: string; label: string; disabled?: boolean; entityName?: boolean; /** Extra words the searchable menu matches. */ keywords?: string; icon?: ReactNode; /** Draws a separator above the option. */ divider?: boolean; /** Muted text after the label, shown in the menu only. */ hint?: string; /** Dimmed text after the label, e.g. "(default)". */ suffix?: string };
 
 const suffixGap = (suffix: string) => (suffix.startsWith("（") ? "" : " ");
 const withSuffix = (option: { label: string; suffix?: string }) =>
@@ -195,6 +195,7 @@ export function SettingsSelect({
   onChange,
   options,
   placeholder,
+  searchPlaceholder,
   value,
 }: {
   align?: "start" | "center" | "end";
@@ -207,6 +208,8 @@ export function SettingsSelect({
   options: SettingsSelectOption[];
   /** Shown when the value matches no option. */
   placeholder?: string;
+  /** Opens a searchable menu (long lists) instead of the plain select. */
+  searchPlaceholder?: string;
   value: string;
 }) {
   const phone = usePhoneLayout();
@@ -216,7 +219,9 @@ export function SettingsSelect({
       : option,
   );
   const selected = normalized.find((option) => option.value === value);
-  if (!disabled && isPeopleProperty(label)) return <PropertyMenu label={label} ariaLabel={label} value={selected?.label} selectedId={value} options={normalized.map(option => ({ id: option.value, label: option.label, icon: option.icon, disabled: option.disabled, i18nIgnore: option.entityName }))} onChange={onChange} triggerClassName={className || 'settings-select'} surfaceClassName={menuClassName} searchPlaceholder="Search people…" trigger={<span className="settings-select-value">{selected?.icon}{selected?.label ?? value}</span>}/>
+  if (!disabled && (searchPlaceholder || isPeopleProperty(label))) return <PropertyMenu label={label} ariaLabel={label} value={selected?.label} selectedId={value} options={normalized.map(option => ({ id: option.value, label: option.label, icon: option.icon, disabled: option.disabled, i18nIgnore: option.entityName, keywords: 'keywords' in option ? option.keywords : undefined }))} onChange={onChange} triggerClassName={className || 'settings-select'} surfaceClassName={menuClassName} searchPlaceholder={searchPlaceholder ?? "Search people…"} trigger={searchPlaceholder
+    ? <><span className="settings-select-value">{selected?.icon}<span data-i18n-ignore={selected?.entityName || undefined}>{selected?.label ?? (placeholder || value)}</span></span><span aria-hidden="true"><SettingsChevron /></span></>
+    : <span className="settings-select-value">{selected?.icon}{selected?.label ?? value}</span>}/>
   return (
     <>
       <SelectPrimitive.Root

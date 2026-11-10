@@ -15,10 +15,6 @@ export const MemberProfilePage = lazyPage(
   () => import("@/components/workspace-directory/member-profile-page"),
   "MemberProfilePage",
 );
-export const TeamCreatePage = lazyPage(
-  () => import("@/components/workspace-directory/team-create-page"),
-  "TeamCreatePage",
-);
 export const TeamOverviewPage = lazyPage(
   () => import("@/components/team-overview/team-overview-page"),
   "TeamOverviewPage",

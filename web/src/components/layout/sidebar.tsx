@@ -164,7 +164,6 @@ export type PageId =
   | "members"
   | "customers"
   | "teams"
-  | "new-team"
   | "drafts"
   | "agent"
   | "coding-session"

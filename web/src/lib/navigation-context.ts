@@ -36,6 +36,8 @@ export function detailIdentity(route: AppRoute): string | undefined {
     case 'automation-detail': case 'automation-runs': return `automation:${route.automationId}`
     case 'workspace-saved-view': case 'team-saved-view': case 'projects-saved-view': case 'team-projects-saved-view': return `view:${route.viewId}`
     case 'settings': return 'settings'
+    // Creating a team opens from wherever the user was (settings, the teams directory, a team home): Back returns there.
+    case 'new-team': return 'create-team'
     default: return
   }
 }

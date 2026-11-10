@@ -109,7 +109,7 @@ import type {
   WorkspaceSettings,
 } from "@/types/flow";
 import { lazyPage } from "@/lib/lazy-page";
-import { TeamCreatePage } from '@/lib/route-pages';
+import { TeamCreateSettings, type TeamCreateInput } from './team-create-settings';
 import {
   SettingsPageTitle as PageTitle,
   SettingsRow as Row,
@@ -376,6 +376,14 @@ type SettingsPageProps = {
   onOpenProjectTemplate: (template: ProjectTemplate) => void;
   onDuplicateProjectTemplate: (template: ProjectTemplate) => void;
   onCreateTeam: () => void;
+  /** Settings › Teams › Create a new team: the form replaces the page body (the sidebar keeps Teams highlighted). */
+  teamCreate?: {
+    parentTeamId?: string;
+    initialName?: string;
+    onBack: () => void;
+    onCreate: (input: TeamCreateInput) => Promise<void>;
+    onCreated: (key: string) => void;
+  };
   onWorkspaceUpdate: (input: WorkspaceMutationInput) => Promise<void>;
   onWorkspaceDelete: () => Promise<void>;
   onSettingsUpdate: (
@@ -799,7 +807,7 @@ export function SettingsPage(props: SettingsPageProps) {
                     </button>
                   ))}
                 {canCreateTeam && !query.trim() && (
-                  <button onPointerEnter={() => { void TeamCreatePage.preload().catch(() => undefined); }} onFocus={() => { void TeamCreatePage.preload().catch(() => undefined); }} onClick={canJoinTeam ? () => { joinOrCreateNavigator?.push(teamsPath(props.data.workspace.urlKey)); setMobileNav(false); } : props.onCreateTeam}>
+                  <button onClick={canJoinTeam ? () => { joinOrCreateNavigator?.push(teamsPath(props.data.workspace.urlKey)); setMobileNav(false); } : props.onCreateTeam}>
                     <FlowGlyph name="plus" size={14} className="settings-nav-create-glyph" />
                       <span>{t(canJoinTeam ? "Join or create a team" : "Create a team")}</span>
                   </button>
@@ -961,6 +969,7 @@ function SettingsBody(
 ) {
   const { t } = useI18n();
   const chat = useChatPlatform(props.data);
+  if (props.teamCreate) return <TeamCreateSettings data={props.data} {...props.teamCreate} />;
   const access = settingsBodyAccess(props);
   if (access.kind === "hidden" && access.team && props.teamSection === "security" && props.teamKey)
     return <TeamOverviewRedirect teamKey={props.teamKey} onNavigate={props.onNavigate} />;

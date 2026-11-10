@@ -195,7 +195,7 @@ import type {
 } from "@/components/projects-page/projects-page";
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
 import { LabelActions } from "@/components/workspace/label-page-toolbar";
-import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, CodingSessionPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
+import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, CodingSessionPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
 import { AgentChatHistoryPopover } from "@/components/agent/agent-chat-history-popover";
 import { FlowTooltip } from "@/components/ui/tooltip";
 import { OPEN_FLOATING_AGENT_EVENT, type FloatingAgentRequest } from "@/components/agent/agent-floating-request";
@@ -4936,7 +4936,11 @@ function App() {
         ) : <LoadingContainer loading label="Loading issue"/>}
       </WorkspaceBootShell>
     );
-  if (route.kind === "settings")
+  if (route.kind === "settings" || route.kind === "new-team") {
+    // Create a new team is a settings page: it renders inside the settings layout with Teams highlighted.
+    const settingsRoute: Extract<AppRoute, { kind: "settings" }> = route.kind === "new-team" ? { kind: "settings", workspaceSlug: route.workspaceSlug, page: "teams" } : route;
+    const teamsReturn = navigationReturnPath(location.state, data.workspace.urlKey, settingsPath(data.workspace.urlKey, "teams"));
+    const teamCreateSearch = new URLSearchParams(location.search);
     return withStore(
       <PeopleProvider users={data.users} viewerId={data.viewer.id} workspaceName={data.workspace.name} workspaceKey={data.workspace.urlKey} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects} documents={data.documents} teamSettings={data.teamSettings}>
       <Suspense
@@ -4948,30 +4952,30 @@ function App() {
       >
         <SettingsPage
           data={data}
-          page={route.page}
-          notificationChannel={route.notificationChannel}
+          page={settingsRoute.page}
+          notificationChannel={settingsRoute.notificationChannel}
           onNavigateNotification={channel => navigateTo(`${settingsPath(data.workspace.urlKey,'notifications')}${channel ? `/${channel}` : ''}`)}
-          apiKeyMode={route.apiKeyMode}
-          apiKeyId={route.apiKeyId}
-          signingKeyMode={route.signingKeyMode}
-          teamKey={route.teamKey}
-          teamSection={route.teamSection}
-          teamSubPath={route.teamSubPath}
-          releasePipelineMode={route.releasePipelineMode}
-          apiView={route.apiView}
-          usageView={route.usageView}
+          apiKeyMode={settingsRoute.apiKeyMode}
+          apiKeyId={settingsRoute.apiKeyId}
+          signingKeyMode={settingsRoute.signingKeyMode}
+          teamKey={settingsRoute.teamKey}
+          teamSection={settingsRoute.teamSection}
+          teamSubPath={settingsRoute.teamSubPath}
+          releasePipelineMode={settingsRoute.releasePipelineMode}
+          apiView={settingsRoute.apiView}
+          usageView={settingsRoute.usageView}
           onOpenUsageView={(view) => navigateTo(usageSettingsPath(data.workspace.urlKey, view))}
-          workspaceView={route.workspaceView}
-          accountView={route.accountView}
-          webhookId={route.webhookId}
-          releasePipelineSlug={route.releasePipelineSlug}
-          integrationProvider={route.integrationProvider}
-          integrationSlug={route.integrationSlug}
-          jiraSyncMode={route.jiraSyncMode}
-          jiraProjectId={route.jiraProjectId}
-          asksIntegrationId={route.asksIntegrationId}
-          asksEmailIntakeMode={route.asksEmailIntakeMode}
-          asksEmailIntakeId={route.asksEmailIntakeId}
+          workspaceView={settingsRoute.workspaceView}
+          accountView={settingsRoute.accountView}
+          webhookId={settingsRoute.webhookId}
+          releasePipelineSlug={settingsRoute.releasePipelineSlug}
+          integrationProvider={settingsRoute.integrationProvider}
+          integrationSlug={settingsRoute.integrationSlug}
+          jiraSyncMode={settingsRoute.jiraSyncMode}
+          jiraProjectId={settingsRoute.jiraProjectId}
+          asksIntegrationId={settingsRoute.asksIntegrationId}
+          asksEmailIntakeMode={settingsRoute.asksEmailIntakeMode}
+          asksEmailIntakeId={settingsRoute.asksEmailIntakeId}
           onOpenAsksSlack={(integrationId) =>
             navigateTo(asksSlackSettingsPath(data.workspace.urlKey, integrationId))
           }
@@ -4984,20 +4988,20 @@ function App() {
           onOpenWelcomeMessage={() =>
             navigateTo(`${settingsPath(data.workspace.urlKey, 'workspace')}/welcome-message`)
           }
-          identityProviderId={route.identityProviderId}
-          applicationId={route.applicationId}
-          applicationMode={route.applicationMode}
-          issueTemplateMode={route.issueTemplateMode}
-          issueTemplateId={route.issueTemplateId}
-          projectTemplateMode={route.projectTemplateMode}
-          projectTemplateId={route.projectTemplateId}
-          agentSkillMode={route.agentSkillMode}
-          agentSkillId={route.agentSkillId}
+          identityProviderId={settingsRoute.identityProviderId}
+          applicationId={settingsRoute.applicationId}
+          applicationMode={settingsRoute.applicationMode}
+          issueTemplateMode={settingsRoute.issueTemplateMode}
+          issueTemplateId={settingsRoute.issueTemplateId}
+          projectTemplateMode={settingsRoute.projectTemplateMode}
+          projectTemplateId={settingsRoute.projectTemplateId}
+          agentSkillMode={settingsRoute.agentSkillMode}
+          agentSkillId={settingsRoute.agentSkillId}
           onBack={() =>
             navigateTo(
-              navigationReturnPath(location.state, data.workspace.urlKey, route.releasePipelineMode
+              navigationReturnPath(location.state, data.workspace.urlKey, settingsRoute.releasePipelineMode
                 ? releasePipelinesPath(data.workspace.urlKey)
-                : route.agentSkillMode
+                : settingsRoute.agentSkillMode
                   ? agentPath(data.workspace.urlKey)
                   : myIssuesPath(data.workspace.urlKey)),
             )
@@ -5078,6 +5082,13 @@ function App() {
             )
           }
           onCreateTeam={() => navigateTo(newTeamPath(data.workspace.urlKey))}
+          teamCreate={route.kind === "new-team" ? {
+            parentTeamId: teamCreateSearch.get("parentTeamId") ?? undefined,
+            initialName: typeof (location.state as { initialTeamName?: unknown } | null)?.initialTeamName === "string" ? (location.state as { initialTeamName: string }).initialTeamName : undefined,
+            onBack: () => navigateTo(teamsReturn),
+            onCreate: addTeam,
+            onCreated: (key) => navigateTo(teamsReturn.includes("/settings") ? settingsPath(data.workspace.urlKey, "team", key) : teamHomePath(data.workspace.urlKey, key)),
+          } : undefined}
           onWorkspaceUpdate={changeWorkspace}
           onWorkspaceDelete={removeWorkspace}
           onSettingsUpdate={updateWorkspaceSettings}
@@ -5085,12 +5096,13 @@ function App() {
             // Settings edit metadata; label, state and team copies on loaded
             // issues are re-synced from it. Team settings (workflow states,
             // key, members) can rewrite or reveal that team's issues too.
-            const team = route.teamKey ? data.teams.find((item) => item.key.toLowerCase() === route.teamKey!.toLowerCase()) : undefined;
+            const team = settingsRoute.teamKey ? data.teams.find((item) => item.key.toLowerCase() === settingsRoute.teamKey!.toLowerCase()) : undefined;
             await refreshWorkspace(data.workspace.urlKey, team ? teamIssueScope(team.id) : undefined);
           }}
         />
       </Suspense></PeopleProvider>
     );
+  }
   const workspaceValid = routeBelongsToWorkspace(route, data.workspace.urlKey);
   const routeTeamKey = "teamKey" in route ? route.teamKey : undefined;
   // The reference app opens a triage issue at /issue/KEY-n and keeps the triage list beside it: an issue entered
@@ -5927,22 +5939,6 @@ function App() {
               />
             );
           })()}
-        {page === "new-team" && (
-          <TeamCreatePage
-            data={data}
-            teams={data.teams}
-            teamSettings={data.teamSettings}
-            initialParentTeamId={new URLSearchParams(location.search).get('parentTeamId') ?? ''}
-            canCreateSubTeam
-            onBack={() => navigateTo(teamsPath(data.workspace.urlKey))}
-            onNavigateSettings={(settingsPage, teamKey) =>
-              navigateTo(
-                settingsPath(data.workspace.urlKey, settingsPage, teamKey),
-              )
-            }
-            onCreate={addTeam}
-          />
-        )}
         {page === "pulse" && route.kind === "pulse" && (
           <PulsePage
             data={data}
@@ -7566,7 +7562,6 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "asks") return "asks";
   if (route.kind === "team-archive") return "team-archive";
   if (route.kind === "workspace-teams") return "teams";
-  if (route.kind === "new-team") return "new-team";
   if (route.kind === "team-saved-view") return "team-issues";
   if (route.kind === "workspace-saved-view") return "workspace-issues";
   if (
