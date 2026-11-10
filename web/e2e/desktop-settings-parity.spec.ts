@@ -67,7 +67,7 @@ test('desktop integrations separate installed services, discover, search, and re
   await expect(tabs.getByRole('tab', { name: 'Feishu' })).toHaveAttribute('aria-selected', 'true')
   await search.fill('lark')
   await expect(page.locator('.desktop-enabled').getByRole('button', { name: /GitHub/ })).toBeVisible()
-  await expect(page.locator('.desktop-integration-catalog .desktop-enabled-card')).toHaveCount(1)
+  await expect(page.locator('.desktop-integration-catalog .desktop-integration-card')).toHaveCount(1)
   await page.getByRole('button', { name: 'Lark Essentials' }).click()
   await expect(page).toHaveURL(new RegExp(`/settings/integrations/lark$`))
   await page.goto(`/${workspaceKey}/settings/integrations`)
