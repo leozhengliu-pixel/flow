@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -183,6 +184,46 @@ func TestAuditPruneKeepsTheChainVerifiable(t *testing.T) {
 	appendTestAudit(t, repo, workspaceID, time.Now().UTC(), "after")
 	if report, _ := repo.VerifyAuditChain(ctx, workspaceID); !report.Valid || report.LastSeq != 5 {
 		t.Fatalf("verify after append = %+v", report)
+	}
+}
+
+// Deleting a workspace keeps its audit log (workspacePurgeKept); retention
+// still removes the entries once they age out, and the chain verifies until
+// then.
+func TestDeletedWorkspaceAuditLogIsPrunedByRetention(t *testing.T) {
+	ctx := context.Background()
+	repo, _ := openAuditTestStore(t)
+	workspaceID := auditTestWorkspaceID(t, repo)
+	old := time.Now().UTC().AddDate(0, 0, -200)
+	appendTestAudit(t, repo, workspaceID, old, "old1", "old2")
+	appendTestAudit(t, repo, workspaceID, time.Now().UTC(), "recent")
+	if err := repo.DeleteWorkspace(ctx, accessWorkspace); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := repo.BootstrapFor(accessWorkspace); ok {
+		t.Fatal("workspace still in the catalog")
+	}
+	if got := countWhere(t, repo, "audit_events", "workspace_id", workspaceID); got != 3 {
+		t.Fatalf("audit entries after the purge = %d, want 3", got)
+	}
+	if report, err := repo.VerifyAuditChain(ctx, workspaceID); err != nil || !report.Valid || report.Entries != 3 {
+		t.Fatalf("verify after the purge = %+v, %v", report, err)
+	}
+	workspaces, err := repo.AuditWorkspaces(ctx)
+	if err != nil || !slices.Contains(workspaces, workspaceID) {
+		t.Fatalf("retention does not visit the purged workspace: %v, %v", workspaces, err)
+	}
+	if deleted, err := repo.PruneAuditEvents(ctx, workspaceID, time.Now().UTC().AddDate(0, 0, -180)); err != nil || deleted != 2 {
+		t.Fatalf("pruned %d, %v", deleted, err)
+	}
+	if deleted, err := repo.PruneAuditEvents(ctx, workspaceID, time.Now().UTC().Add(time.Hour)); err != nil || deleted != 1 {
+		t.Fatalf("pruned %d, %v", deleted, err)
+	}
+	if got := countWhere(t, repo, "audit_events", "workspace_id", workspaceID); got != 0 {
+		t.Fatalf("audit entries after retention = %d, want 0", got)
+	}
+	if report, err := repo.VerifyAuditChain(ctx, workspaceID); err != nil || !report.Valid || report.Entries != 0 || report.PrunedThrough != 3 {
+		t.Fatalf("verify after retention = %+v, %v", report, err)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // Metadata-only writes persist as deltas; after a reopen the external
@@ -34,6 +35,9 @@ func TestExternalMetadataDeltaRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC().Truncate(time.Second)
+	// Audit entries outlive a deleted workspace (workspacePurgeKept), so the
+	// entry id is unique per run on a reused database.
+	auditID := idgen.New("audit_delta_")
 	steps := []struct {
 		event  string
 		mutate func(*domain.Bootstrap)
@@ -47,7 +51,7 @@ func TestExternalMetadataDeltaRoundTrip(t *testing.T) {
 		{"workspace.settings_updated", func(data *domain.Bootstrap) { data.Workspace.Name = "Delta Renamed" }},
 		{"team.archived", func(data *domain.Bootstrap) {
 			data.Teams[0].ArchivedAt = &now
-			data.AuditLog = append([]domain.AuditLogEntry{{ID: "audit_delta", Action: "deleted", ResourceType: "team", ResourceID: data.Teams[0].ID, CreatedAt: now}}, data.AuditLog...)
+			data.AuditLog = append([]domain.AuditLogEntry{{ID: auditID, Action: "deleted", ResourceType: "team", ResourceID: data.Teams[0].ID, CreatedAt: now}}, data.AuditLog...)
 		}},
 	}
 	for _, step := range steps {
@@ -71,7 +75,7 @@ func TestExternalMetadataDeltaRoundTrip(t *testing.T) {
 		t.Fatalf("delta writes were not persisted: name=%q views=%v display=%s", loaded.Workspace.Name, loaded.SavedViews, loaded.ProjectDisplayDefault)
 	}
 	audit, err := reopened.ListAuditEntries(ctx, created.Workspace.ID, AuditQuery{})
-	if err != nil || len(audit) == 0 || audit[0].ID != "audit_delta" || loaded.Teams[0].ArchivedAt == nil || loaded.Teams[0].ID != created.Teams[0].ID {
+	if err != nil || len(audit) == 0 || audit[0].ID != auditID || loaded.Teams[0].ArchivedAt == nil || loaded.Teams[0].ID != created.Teams[0].ID {
 		t.Fatalf("team archive delta lost order or data: audit=%v team=%+v err=%v", audit, loaded.Teams[0], err)
 	}
 	_ = reopened.DeleteWorkspace(ctx, workspaceKey)

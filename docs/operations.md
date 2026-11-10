@@ -174,6 +174,15 @@ Not covered by the purge:
 - Backups, database dumps, S3 object versions and volume snapshots taken
   earlier keep the data until they expire (see [Backup boundary](#backup-boundary)).
 - Accounts: people keep their Flow account (and their other workspaces).
+- The audit log. Its entries (`audit_events`) and chain head
+  (`audit_chain_heads`) are the record of what happened in the workspace,
+  its deletion included, so the purge keeps them: audit retention
+  (`FLOW_AUDIT_LOG_RETENTION_DAYS`, see [Audit log](#audit-log)) deletes a
+  purged workspace's entries like any other workspace's once they are older
+  than the retention, and `server audit-verify` still checks its chain until
+  then. With `FLOW_AUDIT_LOG_RETENTION_DAYS=0` they are kept for good; delete
+  them by hand (`DELETE FROM audit_events WHERE workspace_id='ws_…'`, then the
+  same for `audit_chain_heads`) if your policy requires it.
 - Volume snapshots of coding environments (`volumesnapshot` strategy) live in
   the cluster; snapshot archives in object storage are deleted.
 - The agent worker's local session files (`.runtime/sessions`) are keyed by

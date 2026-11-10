@@ -192,6 +192,12 @@ var workspacePurgeIndirect = map[string]string{
 // purge on purpose.
 var workspacePurgeKept = map[string]string{
 	"workspace_deletion_receipts": "the receipt records the purge (identifiers and counts, no personal data)",
+	// The audit log is evidence of what happened in the workspace, its
+	// deletion included, so it is not deleted with the workspace: audit
+	// retention (FLOW_AUDIT_LOG_RETENTION_DAYS, PruneAuditEvents) removes a
+	// purged workspace's entries like any other workspace's once they age out.
+	"audit_events":      "audit entries stay until audit retention prunes them",
+	"audit_chain_heads": "the audit chain head (seq and hash bookkeeping) stays with the entries it verifies",
 }
 
 // workspacePurgeExempt lists tables that hold no workspace rows.
