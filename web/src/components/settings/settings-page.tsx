@@ -1553,7 +1553,7 @@ function WorkspacePage(
         </Row>
         <Row
           title="Region"
-          description={<>{t('A label declared when the workspace was created; it cannot be changed. It records where your deployment keeps data and does not move data.')} {phone ? <a className="workspace-region-docs" href="https://github.com/leozhengliu-pixel/flow/blob/main/docs/configuration.md#workspace-region-and-data-residency" target="_blank" rel="noreferrer">{t('Read more')} ↗</a> : <SettingsDocsLink file="configuration.md#workspace-region-and-data-residency" label="Read more"/>}</>}
+          description={<>{t('Set when a workspace is created and cannot be changed.')} {phone ? <a className="workspace-region-docs" href="https://github.com/leozhengliu-pixel/flow/blob/main/docs/configuration.md#workspace-region-and-data-residency" target="_blank" rel="noreferrer">{t('Read more')} ↗</a> : <SettingsDocsLink file="configuration.md#workspace-region-and-data-residency" label="Read more"/>}</>}
         >
           <span className="settings-static">
             {workspaceRegionLabel(props.data.workspace.region)}

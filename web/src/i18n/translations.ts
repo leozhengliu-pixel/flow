@@ -1950,8 +1950,8 @@ export const zhCN: Record<string, string> = {
   "Enable Flow Agent MCP connectors": "启用 Flow Agent MCP 连接器",
   "Allow Flow Agent to use MCP connectors": "允许 Flow Agent 使用 MCP 连接器",
   Region: "地区",
-  "A label declared when the workspace was created; it cannot be changed. It records where your deployment keeps data and does not move data.":
-    "创建工作区时声明的标签，之后无法更改。它用于记录你的部署存放数据的地区，不会迁移数据。",
+  "Set when a workspace is created and cannot be changed.":
+    "工作区创建时设定，之后无法更改。",
   "United States": "美国",
   "United Kingdom": "英国",
   Canada: "加拿大",
