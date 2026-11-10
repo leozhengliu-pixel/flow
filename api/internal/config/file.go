@@ -335,7 +335,7 @@ func secretKeyName(key string) bool {
 
 // secretEnvNames are variables that carry credentials although their name
 // does not end like a secret.
-var secretEnvNames = []string{"FLOW_DATABASE_URL", "FLOW_REDIS_URL", "FLOW_REDIS_USERNAME", "FLOW_MCP_CREDENTIALS", "FLOW_SAML_METADATA_XML"}
+var secretEnvNames = []string{"FLOW_DATABASE_URL", "FLOW_REDIS_URL", "FLOW_REDIS_USERNAME", "FLOW_MCP_CREDENTIALS", "FLOW_SAML_METADATA_XML", "FLOW_CONNECTOR_SECRET_PREVIOUS_KEYS"}
 
 // SecretEnvName reports whether an environment variable carries a secret, so
 // it must come from a Secret, not from the configuration file. The *_FILE

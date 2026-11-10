@@ -388,7 +388,7 @@ type filePreviewCredential struct {
 	base  string // GitLab: the instance URL the token belongs to
 }
 
-func (s *server) githubFilePreviewCredential(data domain.Bootstrap, target filePreviewTarget) (filePreviewCredential, bool) {
+func (s *server) githubFilePreviewCredential(ctx context.Context, data domain.Bootstrap, target filePreviewTarget) (filePreviewCredential, bool) {
 	connected := false
 	for _, connection := range data.IntegrationConnections {
 		if connection.Provider != "github" || connection.Status == "disconnected" {
@@ -398,7 +398,7 @@ func (s *server) githubFilePreviewCredential(data domain.Bootstrap, target fileP
 		if org := strings.TrimSpace(connection.Config["organization"]); org != "" && !strings.EqualFold(org, target.Owner) {
 			continue
 		}
-		token := strings.TrimSpace(connection.OAuthAccessToken)
+		token := strings.TrimSpace(s.integrationAccessToken(ctx, integrationWorkspace(data, ""), connection))
 		if token == "" {
 			token = strings.TrimSpace(os.Getenv("FLOW_INTEGRATION_GITHUB_ACCESS_TOKEN"))
 		}
@@ -415,7 +415,7 @@ func (s *server) gitlabFilePreviewCredential(ctx context.Context, data domain.Bo
 		if connection.Provider != "gitlab" || connection.Status == "disconnected" {
 			continue
 		}
-		token := strings.TrimSpace(connection.OAuthAccessToken)
+		token := strings.TrimSpace(s.integrationAccessToken(ctx, integrationWorkspace(data, ""), connection))
 		base, err := normalizeGitLabURL(connection.Config["host"], s.loopbackCodeHosts())
 		if token == "" {
 			if credential, credentialErr := s.gitlabCredential(ctx, data.Workspace.URLKey, connection.ID); credentialErr == nil {
@@ -624,7 +624,7 @@ func (s *server) filePreview(w http.ResponseWriter, r *http.Request) {
 	)
 	switch target.Provider {
 	case "github":
-		credential, connected = s.githubFilePreviewCredential(data, target)
+		credential, connected = s.githubFilePreviewCredential(r.Context(), data, target)
 	case "gitlab":
 		credential, project, connected = s.gitlabFilePreviewCredential(r.Context(), data, target)
 		if credential.base == "" {

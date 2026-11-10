@@ -175,6 +175,8 @@ var nonMetadataTableBuilders = map[string]bool{
 	// The workspace purge deletes the rows of a workspace that already left
 	// the catalog, its cache revisions included, and drops its metadata cache.
 	"deleteWorkspaceRows": true,
+	// webhook_signing_secrets and audit_stream_secrets only.
+	"resealTextSecrets": true,
 }
 
 // expectedWorkspaceArg is the index of the bound value naming the workspace a

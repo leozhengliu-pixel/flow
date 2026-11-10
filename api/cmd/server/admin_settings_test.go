@@ -12,6 +12,7 @@ import (
 )
 
 func TestWebhookCRUDAndValidation(t *testing.T) {
+	enableConnectorSecrets(t)
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -35,6 +36,7 @@ func TestWebhookCRUDAndValidation(t *testing.T) {
 }
 
 func TestWebhookFailureEventsPersistedAndListed(t *testing.T) {
+	enableConnectorSecrets(t)
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "webhook-failures.db"))
 	if err != nil {
 		t.Fatal(err)

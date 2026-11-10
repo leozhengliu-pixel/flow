@@ -89,6 +89,9 @@ func (s *server) createAuditStream(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "URL must be http or https")
 		return
 	}
+	if !requireSigningSecretStorage(w) {
+		return
+	}
 	secret := ""
 	if input.Secret != nil {
 		secret = strings.TrimSpace(*input.Secret)

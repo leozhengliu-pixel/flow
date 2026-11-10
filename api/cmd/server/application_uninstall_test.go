@@ -14,6 +14,7 @@ import (
 // sessions, removes its managed webhook and takes its app user out of the
 // workspace; installing it again works and reuses the app user.
 func TestApplicationUninstallRevokesAndRemoves(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	app, _ := installableApplication(t, handler, receiver.server.URL, []string{"Issue", "OAuthApp"})
@@ -94,6 +95,7 @@ func TestApplicationUninstallRevokesAndRemoves(t *testing.T) {
 // Deleting an OAuth application uninstalls it from the workspaces it was
 // installed in, so its app user leaves them like a revoked installation.
 func TestDeletedApplicationLeavesItsWorkspaces(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	app, _ := installableApplication(t, handler, receiver.server.URL, []string{"Issue"})

@@ -19,6 +19,7 @@ import (
 )
 
 func TestDevelopmentMemberStatusPayloadAndWebhookDelivery(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	hook := requestJSON[map[string]any](t, handler, http.MethodPost, "/api/webhooks?workspace=test-workspace", map[string]any{

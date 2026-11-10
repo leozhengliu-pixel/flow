@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -23,8 +22,6 @@ import (
 // conditional UPDATE (status and lease checked in the WHERE clause), so any
 // number of instances can run the worker; a crashed instance's claim expires
 // with its lease and the row becomes due again.
-
-const webhookSecretCipherPrefix = "v1:"
 
 func (s *SQLiteStore) ensureWebhookDeliveries(ctx context.Context) error {
 	blob, text := "BLOB", "TEXT"
@@ -73,44 +70,14 @@ func WebhookSecretRef(webhookID string) string { return "webhook:" + webhookID }
 // uses for every workspace that installed it.
 func ApplicationWebhookSecretRef(clientID string) string { return "app:" + clientID }
 
-// sealWebhookSecret encrypts a signing secret when FLOW_CONNECTOR_SECRET_KEY is
-// configured; otherwise it is stored as is, like the audit stream secret.
-func sealWebhookSecret(ref, secret string) (string, error) {
-	aead, err := connectorCipher()
-	if err != nil {
-		return secret, nil
-	}
-	nonce := make([]byte, aead.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return "", err
-	}
-	return webhookSecretCipherPrefix + base64.StdEncoding.EncodeToString(aead.Seal(nonce, nonce, []byte(secret), []byte(ref))), nil
-}
-
-func openWebhookSecret(ref, stored string) (string, error) {
-	if !strings.HasPrefix(stored, webhookSecretCipherPrefix) {
-		return stored, nil
-	}
-	aead, err := connectorCipher()
-	if err != nil {
-		return "", err
-	}
-	raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(stored, webhookSecretCipherPrefix))
-	if err != nil || len(raw) < aead.NonceSize() {
-		return "", errors.New("invalid webhook secret ciphertext")
-	}
-	plain, err := aead.Open(nil, raw[:aead.NonceSize()], raw[aead.NonceSize():], []byte(ref))
-	if err != nil {
-		return "", err
-	}
-	return string(plain), nil
-}
-
+// SetWebhookSigningSecret seals the secret under FLOW_CONNECTOR_SECRET_KEY
+// (bound to ref). Without a key it returns ErrSecretKeyMissing and stores
+// nothing: signing secrets are never written in plain text.
 func (s *SQLiteStore) SetWebhookSigningSecret(ctx context.Context, ref, workspace, secret string) error {
 	if ref == "" || len(ref) > 191 || secret == "" {
 		return ErrIssueQuery
 	}
-	sealed, err := sealWebhookSecret(ref, secret)
+	sealed, err := sealSecretText(secret, ref)
 	if err != nil {
 		return err
 	}
@@ -128,7 +95,9 @@ func (s *SQLiteStore) WebhookSigningSecret(ctx context.Context, ref string) (str
 	if err != nil {
 		return "", false, err
 	}
-	secret, err := openWebhookSecret(ref, stored)
+	// A secret an older release stored in plain text keeps signing until
+	// ResealSecrets seals it (at the first start with a key).
+	secret, _, err := openSecretText(stored, ref)
 	if err != nil {
 		return "", false, err
 	}

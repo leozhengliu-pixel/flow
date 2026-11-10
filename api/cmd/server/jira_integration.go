@@ -41,7 +41,7 @@ func jiraConnected(connection *domain.IntegrationConnection) bool {
 	if connection.Status == "connected" {
 		return true
 	}
-	return connection.Status == "configured" && strings.TrimSpace(connection.OAuthAccessToken) != "" && connection.OAuthCompletedAt != nil && connection.LastError == ""
+	return connection.Status == "configured" && connection.OAuthAuthorized && connection.OAuthCompletedAt != nil && connection.LastError == ""
 }
 
 func (s *server) listJiraLinks(w http.ResponseWriter, r *http.Request) {
@@ -177,7 +177,7 @@ func (s *server) listJiraRemoteProjects(w http.ResponseWriter, r *http.Request) 
 		})
 		return
 	}
-	if strings.TrimSpace(connection.OAuthAccessToken) == "" {
+	if !connection.OAuthAuthorized {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"projects": []jiraRemoteProject{},
 			"error":    "Jira OAuth token is not available on the server. Configure FLOW_INTEGRATION_JIRA_* secrets and reconnect.",
@@ -202,7 +202,7 @@ func (s *server) listJiraRemoteStatuses(w http.ResponseWriter, r *http.Request) 
 	}
 	data := s.workspaceData(r)
 	connection := jiraConnection(&data)
-	if !jiraConnected(connection) || strings.TrimSpace(connection.OAuthAccessToken) == "" {
+	if !jiraConnected(connection) || !connection.OAuthAuthorized {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"statuses":  []jiraRemoteStatus{},
 			"error":     "Failed to load Jira statuses. Connect Jira OAuth first.",

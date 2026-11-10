@@ -135,8 +135,10 @@ func (s *server) issueApplicationToken(w http.ResponseWriter, r *http.Request, w
 	}
 	if grantType == "developer_token" && key.Actor == "app" {
 		// Remembered so "Create & copy token › App" copies this token again
-		// instead of minting another one (one app token at a time).
-		if err := s.store.SetApplicationDeveloperToken(r.Context(), workspace, clientID, key.ID, secret); err != nil {
+		// instead of minting another one (one app token at a time). It is
+		// only remembered encrypted: without FLOW_CONNECTOR_SECRET_KEY the
+		// token is returned once and a later copy mints a new one.
+		if err := s.store.SetApplicationDeveloperToken(r.Context(), workspace, clientID, key.ID, secret); err != nil && !errors.Is(err, store.ErrSecretKeyMissing) {
 			writeOAuthError(w, 500, "server_error", "Could not store developer token")
 			return
 		}

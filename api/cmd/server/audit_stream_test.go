@@ -19,6 +19,7 @@ import (
 )
 
 func TestAuditLogStreamDeliversSignedEntriesAndDisablesOnFailure(t *testing.T) {
+	enableConnectorSecrets(t)
 	var mu sync.Mutex
 	var received []map[string]any
 	fail := false

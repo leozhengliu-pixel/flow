@@ -139,12 +139,13 @@ func TestGitLabCodingOAuthTokenRefresh(t *testing.T) {
 	t.Setenv("FLOW_INTEGRATION_GITLAB_HOST", "https://gitlab.example.com")
 	expired := time.Now().UTC().Add(time.Minute)
 	err := repository.MutateWorkspace(context.Background(), "test-workspace", "integration.connected", "gl", nil, func(data *domain.Bootstrap) error {
-		data.IntegrationConnections = append(data.IntegrationConnections, domain.IntegrationConnection{ID: "integration_gitlab_oauth", Provider: "gitlab", Status: "connected", Config: map[string]string{"mode": "oauth"}, OAuthAccessToken: "access-1", OAuthRefreshToken: "refresh-1", OAuthExpiresAt: &expired, Scopes: []string{"api"}, Channels: []string{}})
+		data.IntegrationConnections = append(data.IntegrationConnections, domain.IntegrationConnection{ID: "integration_gitlab_oauth", Provider: "gitlab", Status: "connected", Config: map[string]string{"mode": "oauth"}, OAuthAuthorized: true, OAuthExpiresAt: &expired, Scopes: []string{"api"}, Channels: []string{}})
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	seedIntegrationOAuthTokens(t, repository, "test-workspace", "integration_gitlab_oauth", "access-1", "refresh-1")
 	source := gitlabCodingSource{s: s}
 	ctx := context.Background()
 	connections, _ := source.GitLabConnections(ctx, "test-workspace")
@@ -163,11 +164,8 @@ func TestGitLabCodingOAuthTokenRefresh(t *testing.T) {
 	if api, err := source.GitLabAPIToken(ctx, "test-workspace", "integration_gitlab_oauth"); err != nil || api != "access-2" {
 		t.Fatalf("API token of an OAuth connection: %q %v", api, err)
 	}
-	stored := repository.Bootstrap().IntegrationConnections
-	for _, connection := range stored {
-		if connection.ID == "integration_gitlab_oauth" && (connection.OAuthRefreshToken != "refresh-2" || connection.OAuthAccessToken != "access-2") {
-			t.Fatalf("refresh not persisted: %#v", connection)
-		}
+	if tokens := storedIntegrationOAuthTokens(t, repository, "test-workspace", "integration_gitlab_oauth"); tokens.RefreshToken != "refresh-2" || tokens.AccessToken != "access-2" {
+		t.Fatalf("refresh not persisted: %#v", tokens)
 	}
 }
 

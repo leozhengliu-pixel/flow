@@ -6,19 +6,24 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func TestPublicOAuthCallbackFindsWorkspaceWithoutSessionOrWorkspaceQuery(t *testing.T) {
+	enableConnectorSecrets(t)
 	handler, repository := enterpriseTestServer(t)
 	connection := requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/slack?workspace=test-workspace", map[string]any{"name": "Callback test", "config": map[string]string{"authorizationURL": "https://example.test/oauth", "clientID": "client", "redirectURI": "https://flow.example.test/api/integrations/slack/oauth/callback"}}, http.StatusOK)
 	started := requestJSON[map[string]string](t, handler, http.MethodPost, "/api/integrations/slack/oauth/start?workspace=test-workspace", nil, http.StatusOK)
@@ -37,6 +42,7 @@ func TestPublicOAuthCallbackFindsWorkspaceWithoutSessionOrWorkspaceQuery(t *test
 }
 
 func TestIntegrationOAuthRefreshAndRevokeUseConfiguredProvider(t *testing.T) {
+	enableConnectorSecrets(t)
 	handler, repository := enterpriseTestServer(t)
 	var tokenCalls, revokeCalls atomic.Int32
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,9 +83,25 @@ func TestIntegrationOAuthRefreshAndRevokeUseConfiguredProvider(t *testing.T) {
 	if completed["status"] != "connected" {
 		t.Fatalf("oauth callback status=%#v", completed)
 	}
-	refreshed := requestJSON[domain.IntegrationConnection](t, handler, http.MethodPost, "/api/integrations/slack/"+connection.ID+"/oauth/refresh?workspace=test-workspace", nil, http.StatusOK)
-	if refreshed.Status != "connected" || refreshed.OAuthAccessToken != "" {
-		t.Fatalf("refresh leaked token or status: %#v", refreshed)
+	// The tokens are in encrypted storage; the connection only records that.
+	if tokens := storedIntegrationOAuthTokens(t, repository, "test-workspace", connection.ID); tokens.AccessToken != "access" || tokens.RefreshToken != "refresh" {
+		t.Fatalf("stored tokens after callback: %#v", tokens)
+	}
+	if data, _ := repository.WorkspaceMetadata("test-workspace"); !slices.ContainsFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
+		return item.ID == connection.ID && item.OAuthAuthorized && item.Status == "connected"
+	}) {
+		t.Fatalf("connection not marked authorized: %#v", data.IntegrationConnections)
+	}
+	refreshed := requestJSON[map[string]any](t, handler, http.MethodPost, "/api/integrations/slack/"+connection.ID+"/oauth/refresh?workspace=test-workspace", nil, http.StatusOK)
+	if raw := string(mustJSON(t, refreshed)); refreshed["status"] != "connected" || strings.Contains(raw, "refreshed") || strings.Contains(raw, "rotated") {
+		t.Fatalf("refresh leaked token or status: %s", raw)
+	}
+	if tokens := storedIntegrationOAuthTokens(t, repository, "test-workspace", connection.ID); tokens.AccessToken != "refreshed" || tokens.RefreshToken != "rotated" {
+		t.Fatalf("stored tokens after refresh: %#v", tokens)
+	}
+	listed := requestJSON[any](t, handler, http.MethodGet, "/api/integrations?workspace=test-workspace", nil, http.StatusOK)
+	if raw := string(mustJSON(t, listed)); strings.Contains(raw, "refreshed") || strings.Contains(raw, "rotated") {
+		t.Fatalf("integration list leaked a token: %s", raw)
 	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/integrations/slack/"+connection.ID+"/oauth/token?workspace=test-workspace", nil, http.StatusNoContent)
 	if tokenCalls.Load() != 2 || revokeCalls.Load() != 1 {
@@ -92,8 +114,33 @@ func TestIntegrationOAuthRefreshAndRevokeUseConfiguredProvider(t *testing.T) {
 			index = i
 		}
 	}
-	if data.IntegrationConnections[index].Status != "disconnected" || data.IntegrationConnections[index].OAuthAccessToken != "" || data.IntegrationConnections[index].OAuthRefreshToken != "" {
-		t.Fatalf("revoked credentials persisted: %#v", data.IntegrationConnections[index])
+	if data.IntegrationConnections[index].Status != "disconnected" || data.IntegrationConnections[index].OAuthAuthorized {
+		t.Fatalf("revoked connection still authorized: %#v", data.IntegrationConnections[index])
+	}
+	if tokens := storedIntegrationOAuthTokens(t, repository, "test-workspace", connection.ID); tokens != (store.IntegrationOAuthTokens{}) {
+		t.Fatalf("revoked credentials persisted: %#v", tokens)
+	}
+	// No event (payload or previous values) holds a token.
+	events, err := repository.Events(t.Context(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range events {
+		for _, token := range []string{`"access"`, `"refresh"`, `"refreshed"`, `"rotated"`} {
+			if bytes.Contains(event.Payload, []byte(token)) || bytes.Contains(event.PreviousValues, []byte(token)) {
+				t.Fatalf("event %s holds a token: %s %s", event.Type, event.Payload, event.PreviousValues)
+			}
+		}
+	}
+}
+
+func TestIntegrationOAuthNeedsSecretKey(t *testing.T) {
+	t.Setenv("FLOW_CONNECTOR_SECRET_KEY", "")
+	handler, _ := enterpriseTestServer(t)
+	requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/slack?workspace=test-workspace", map[string]any{"name": "Slack", "config": map[string]string{"authorizationURL": "https://example.test/oauth", "clientID": "client", "redirectURI": "https://flow.example.test/api/integrations/slack/oauth/callback"}}, http.StatusOK)
+	failure := requestJSON[map[string]any](t, handler, http.MethodPost, "/api/integrations/slack/oauth/start?workspace=test-workspace", nil, http.StatusServiceUnavailable)
+	if !strings.Contains(fmt.Sprint(failure), "FLOW_CONNECTOR_SECRET_KEY") {
+		t.Fatalf("missing key error: %#v", failure)
 	}
 }
 

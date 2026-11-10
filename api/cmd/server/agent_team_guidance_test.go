@@ -187,6 +187,7 @@ func TestTeamAgentGuidanceFollowsTeamSettingsPermission(t *testing.T) {
 }
 
 func TestAgentSessionWebhookCarriesTeamGuidanceChain(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	parent := requestJSON[domain.Team](t, handler, http.MethodPost, "/api/workspaces/test-workspace/teams?workspace=test-workspace", map[string]any{"name": "Platform", "key": "PLA"}, http.StatusCreated)

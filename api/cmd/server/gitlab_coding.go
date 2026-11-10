@@ -96,7 +96,7 @@ func (src gitlabCodingSource) connection(workspaceKey, id string) (string, domai
 }
 
 func gitlabConnectionIsOAuth(connection domain.IntegrationConnection) bool {
-	return connection.OAuthAccessToken != "" || connection.Config["mode"] == "oauth"
+	return connection.OAuthAuthorized || connection.Config["mode"] == "oauth"
 }
 
 // gitlabConnectionBaseURL is the connection's GitLab URL: the validated host
@@ -127,7 +127,7 @@ func (src gitlabCodingSource) GitLabConnections(_ context.Context, workspaceKey 
 	for _, connection := range connections {
 		kind := gitlab.ConnectionToken
 		if gitlabConnectionIsOAuth(connection) {
-			if connection.OAuthAccessToken == "" {
+			if !connection.OAuthAuthorized {
 				continue // OAuth not completed yet
 			}
 			kind = gitlab.ConnectionOAuth
@@ -175,8 +175,8 @@ var gitlabOAuthRefreshMu sync.Mutex
 const gitlabOAuthRefreshMargin = 5 * time.Minute
 
 func (src gitlabCodingSource) GitLabOAuthToken(ctx context.Context, workspaceKey, connectionID string) (string, time.Time, error) {
-	_, connection, ok := src.connection(workspaceKey, connectionID)
-	if !ok || connection.OAuthAccessToken == "" {
+	workspace, connection, ok := src.connection(workspaceKey, connectionID)
+	if !ok || !connection.OAuthAuthorized {
 		return "", time.Time{}, errNotFound
 	}
 	expiry := func(connection domain.IntegrationConnection) time.Time {
@@ -188,20 +188,27 @@ func (src gitlabCodingSource) GitLabOAuthToken(ctx context.Context, workspaceKey
 	fresh := func(connection domain.IntegrationConnection) bool {
 		return connection.OAuthExpiresAt == nil || time.Until(*connection.OAuthExpiresAt) > gitlabOAuthRefreshMargin
 	}
+	stored := func(connection domain.IntegrationConnection) (string, time.Time, error) {
+		tokens, ok := src.s.integrationOAuthTokens(ctx, workspace, connection)
+		if !ok || tokens.AccessToken == "" {
+			return "", time.Time{}, errNotFound
+		}
+		return tokens.AccessToken, expiry(connection), nil
+	}
 	if fresh(connection) {
-		return connection.OAuthAccessToken, expiry(connection), nil
+		return stored(connection)
 	}
 	gitlabOAuthRefreshMu.Lock()
 	defer gitlabOAuthRefreshMu.Unlock()
 	// Another caller may have refreshed while we waited.
 	if _, current, ok := src.connection(workspaceKey, connectionID); ok && fresh(current) {
-		return current.OAuthAccessToken, expiry(current), nil
+		return stored(current)
 	}
-	refreshed, err := src.s.refreshGitLabOAuthConnection(ctx, workspaceKey, connection)
+	token, refreshed, err := src.s.refreshGitLabOAuthConnection(ctx, workspaceKey, workspace, connection)
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	return refreshed.OAuthAccessToken, expiry(refreshed), nil
+	return token, expiry(refreshed), nil
 }
 
 func (src gitlabCodingSource) GitLabHTTPClient(ctx context.Context, baseURL string) (*http.Client, error) {
@@ -224,22 +231,24 @@ func (src gitlabCodingSource) GitLabDeploymentHosts() []string {
 
 // refreshGitLabOAuthConnection exchanges the connection's refresh token (the
 // same exchange as POST /api/integrations/gitlab/{id}/oauth/refresh) and
-// stores the new tokens with a compare-and-swap on the old refresh token.
-func (s *server) refreshGitLabOAuthConnection(ctx context.Context, workspaceKey string, snapshot domain.IntegrationConnection) (domain.IntegrationConnection, error) {
-	if snapshot.OAuthRefreshToken == "" {
-		return domain.IntegrationConnection{}, errors.New("GitLab OAuth refresh token is not available")
+// stores the new tokens with a compare-and-swap on the old refresh token. It
+// returns the new access token and the updated connection.
+func (s *server) refreshGitLabOAuthConnection(ctx context.Context, workspaceKey, workspace string, snapshot domain.IntegrationConnection) (string, domain.IntegrationConnection, error) {
+	tokens, _ := s.integrationOAuthTokens(ctx, workspace, snapshot)
+	if tokens.RefreshToken == "" {
+		return "", domain.IntegrationConnection{}, errors.New("GitLab OAuth refresh token is not available")
 	}
 	oauthConfig := integrationOAuthConfigFor("gitlab", snapshot.Config)
 	if oauthConfig.TokenURL == "" || !integrationEndpointSafe(ctx, oauthConfig.TokenURL, s.authDisabled, outboundTrustedPrivate) {
-		return domain.IntegrationConnection{}, errors.New("GitLab OAuth token endpoint is not configured")
+		return "", domain.IntegrationConnection{}, errors.New("GitLab OAuth token endpoint is not configured")
 	}
-	values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {snapshot.OAuthRefreshToken}, "client_id": {oauthConfig.ClientID}}
+	values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tokens.RefreshToken}, "client_id": {oauthConfig.ClientID}}
 	if oauthConfig.ClientSecret != "" {
 		values.Set("client_secret", oauthConfig.ClientSecret)
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, oauthConfig.TokenURL, strings.NewReader(values.Encode()))
 	if err != nil {
-		return domain.IntegrationConnection{}, err
+		return "", domain.IntegrationConnection{}, err
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	client := secureOutboundClient(15*time.Second, outboundTrustedPrivate)
@@ -248,12 +257,12 @@ func (s *server) refreshGitLabOAuthConnection(ctx context.Context, workspaceKey 
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return domain.IntegrationConnection{}, fmt.Errorf("GitLab OAuth refresh failed: %w", err)
+		return "", domain.IntegrationConnection{}, fmt.Errorf("GitLab OAuth refresh failed: %w", err)
 	}
 	defer response.Body.Close()
 	body, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if readErr != nil || response.StatusCode < 200 || response.StatusCode >= 300 {
-		return domain.IntegrationConnection{}, fmt.Errorf("GitLab OAuth refresh returned HTTP %d", response.StatusCode)
+		return "", domain.IntegrationConnection{}, fmt.Errorf("GitLab OAuth refresh returned HTTP %d", response.StatusCode)
 	}
 	var payload struct {
 		AccessToken  string `json:"access_token"`
@@ -261,21 +270,26 @@ func (s *server) refreshGitLabOAuthConnection(ctx context.Context, workspaceKey 
 		ExpiresIn    int64  `json:"expires_in"`
 	}
 	if json.Unmarshal(body, &payload) != nil || payload.AccessToken == "" {
-		return domain.IntegrationConnection{}, errors.New("GitLab OAuth refresh response did not include access_token")
+		return "", domain.IntegrationConnection{}, errors.New("GitLab OAuth refresh response did not include access_token")
+	}
+	// GitLab rotates the refresh token on use: store the new pair only while
+	// the stored refresh token is still the one exchanged.
+	if err := s.store.RotateIntegrationOAuthTokens(ctx, workspace, snapshot.ID, tokens.RefreshToken, store.IntegrationOAuthTokens{AccessToken: payload.AccessToken, RefreshToken: payload.RefreshToken}); err != nil {
+		if errors.Is(err, store.ErrIntegrationOAuthTokensChanged) {
+			return "", domain.IntegrationConnection{}, errNotFound
+		}
+		return "", domain.IntegrationConnection{}, err
 	}
 	var result domain.IntegrationConnection
 	err = s.store.MutateWorkspace(ctx, workspaceKey, "integration.oauth_refreshed", snapshot.ID, map[string]string{"provider": "gitlab", "source": "coding"}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
-			return item.ID == snapshot.ID && item.Provider == "gitlab" && item.OAuthRefreshToken == snapshot.OAuthRefreshToken
+			return item.ID == snapshot.ID && item.Provider == "gitlab"
 		})
 		if index < 0 {
 			return errNotFound
 		}
 		connection := &data.IntegrationConnections[index]
-		connection.OAuthAccessToken = payload.AccessToken
-		if payload.RefreshToken != "" {
-			connection.OAuthRefreshToken = payload.RefreshToken
-		}
+		connection.OAuthAuthorized = true
 		if payload.ExpiresIn > 0 {
 			expiry := time.Now().UTC().Add(time.Duration(payload.ExpiresIn) * time.Second)
 			connection.OAuthExpiresAt = &expiry
@@ -284,7 +298,11 @@ func (s *server) refreshGitLabOAuthConnection(ctx context.Context, workspaceKey 
 		result = *connection
 		return nil
 	})
-	return result, err
+	if errors.Is(err, errNotFound) {
+		// Disconnected while the exchange ran: drop the new tokens too.
+		_ = s.store.DeleteIntegrationOAuthTokens(ctx, workspace, snapshot.ID)
+	}
+	return payload.AccessToken, result, err
 }
 
 // gitlabCodingHooks are the GitLab hooks that can become session follow-ups.

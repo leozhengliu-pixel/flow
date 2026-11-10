@@ -258,12 +258,15 @@ func newReviewImportServer(t *testing.T, fake *fakeImportHost, config map[string
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { repository.Close() })
-	connection := domain.IntegrationConnection{ID: "github-import", Provider: "github", Name: "GitHub", Status: "connected", OAuthAccessToken: "local-test-token",
+	connection := domain.IntegrationConnection{ID: "github-import", Provider: "github", Name: "GitHub", Status: "connected", OAuthAuthorized: true,
 		Config: map[string]string{"apiUrl": fake.server.URL, "organization": "acme"}, Scopes: []string{}, Channels: []string{}}
+	token := "local-test-token"
 	if fake.gitlab {
-		connection = domain.IntegrationConnection{ID: "gitlab-import", Provider: "gitlab", Name: "GitLab", Status: "connected", OAuthAccessToken: "glpat-test",
+		connection = domain.IntegrationConnection{ID: "gitlab-import", Provider: "gitlab", Name: "GitLab", Status: "connected", OAuthAuthorized: true,
 			Config: map[string]string{"apiUrl": fake.server.URL + "/api/v4"}, Scopes: []string{}, Channels: []string{}}
+		token = "glpat-test"
 	}
+	seedIntegrationOAuthTokens(t, repository, "test-workspace", connection.ID, token, "")
 	for key, value := range config {
 		connection.Config[key] = value
 	}

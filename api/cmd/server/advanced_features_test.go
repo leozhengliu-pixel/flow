@@ -569,6 +569,7 @@ func TestCSVExportUsesIssueSchema(t *testing.T) {
 }
 
 func TestImportRetryAndIntegrationOAuthLifecycle(t *testing.T) {
+	enableConnectorSecrets(t)
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)

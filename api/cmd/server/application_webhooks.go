@@ -71,6 +71,10 @@ func (s *server) updateApplicationWebhook(w http.ResponseWriter, r *http.Request
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	// Enabling the webhook creates its signing secret, stored only encrypted.
+	if input.Enabled != nil && *input.Enabled && !requireSigningSecretStorage(w) {
+		return
+	}
 	if input.URL != nil && strings.TrimSpace(*input.URL) != "" {
 		target, err := s.validWebhookURL(*input.URL)
 		if err != nil {
@@ -143,6 +147,9 @@ func (s *server) updateApplicationWebhook(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) rotateApplicationWebhookSecret(w http.ResponseWriter, r *http.Request) {
+	if !requireSigningSecretStorage(w) {
+		return
+	}
 	data := s.workspaceData(r)
 	index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == r.PathValue("id") })
 	if index < 0 {

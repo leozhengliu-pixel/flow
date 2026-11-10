@@ -160,8 +160,8 @@ curl --fail-with-body "$FLOW_BASE_URL/oauth/token" \
 因为一个应用用户同时只有一个开发者 token。要换权限范围，先撤销它
 （设置 › 应用 › 该应用 › **撤销访问权限**，或 `POST /oauth/revoke`）。
 
-开发者 token 有效期一小时。应用用户的开发者 token 与 Webhook 签名密钥存放方式相同（配置 `FLOW_CONNECTOR_SECRET_KEY` 时加密），
-以便再次复制；个人 token 只保存哈希。
+开发者 token 有效期一小时。应用用户的开发者 token 与 Webhook 签名密钥存放方式相同（用 `FLOW_CONNECTOR_SECRET_KEY` 加密），
+以便再次复制；未配置该密钥时 token 只显示一次，再次复制会签发新的 token。个人 token 只保存哈希。
 签发开发者 token 和轮换 Client secret 都要求交互式管理员会话，
 不能拿已有的 API token 来继续签发新凭据。
 

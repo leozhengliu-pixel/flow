@@ -199,6 +199,10 @@ func (s *server) createWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input.URL = &target
+	// Every webhook gets a signing secret, which is only stored encrypted.
+	if !requireSigningSecretStorage(w) {
+		return
+	}
 	actor := requestActor(s, r)
 	secret, secretErr := randomWebhookSecret()
 	if secretErr != nil {
@@ -468,6 +472,9 @@ func publicWebhookMap(item domain.Webhook) map[string]any {
 // rotateWebhookSecret issues a new signing secret, shown once. Webhooks
 // created before signing start signing their deliveries from now on.
 func (s *server) rotateWebhookSecret(w http.ResponseWriter, r *http.Request) {
+	if !requireSigningSecretStorage(w) {
+		return
+	}
 	secret, err := randomWebhookSecret()
 	if err != nil {
 		respondMutation(w, err, http.StatusInternalServerError, nil)

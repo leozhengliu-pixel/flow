@@ -51,6 +51,7 @@ func managedWebhook(s *server, clientID string) (domain.Webhook, bool) {
 }
 
 func TestApplicationWebhookLifecycle(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	app, secret := installableApplication(t, handler, receiver.server.URL, []string{"Issue", "OAuthApp", "PermissionChange", "AppUserNotification"})
@@ -143,6 +144,7 @@ func toStrings(value any) []string {
 }
 
 func TestApplicationWebhookReceivesAgentSessionEventsWithPromptContext(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	app, secret := installableApplication(t, handler, receiver.server.URL, []string{"AgentSessionEvent"})

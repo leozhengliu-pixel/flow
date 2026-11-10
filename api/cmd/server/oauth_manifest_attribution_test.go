@@ -96,6 +96,7 @@ func TestOAuthAppManifestValidation(t *testing.T) {
 }
 
 func TestOAuthAppManifestImportExport(t *testing.T) {
+	enableConnectorSecrets(t)
 	_, host, admin, data := applicationHTTPFixture(t)
 	workspace := data.Workspace.URLKey
 	authRequest[map[string]any](t, admin, "POST", host.URL+"/api/oauth-applications/manifest", map[string]any{"schemaVersion": "1.0.0"}, workspace, 400)
@@ -203,6 +204,7 @@ func TestOAuthViaApplicationAttribution(t *testing.T) {
 // Manifest saves reconcile the managed per-workspace application webhook the
 // same way the webhook settings endpoint does.
 func TestOAuthAppManifestReconcilesApplicationWebhooks(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, host, admin, data := applicationHTTPFixture(t)
 	workspace := data.Workspace.URLKey
 	created := authRequest[manifestApplicationResponse](t, admin, "POST", host.URL+"/api/oauth-applications/manifest", validOAuthManifest(), workspace, 201)

@@ -49,6 +49,7 @@ func createAPIKey(t *testing.T, host *httptest.Server, client *http.Client, work
 // team-restricted keys are refused; every API-key use is audited without the
 // secret; signed-in admins keep using the routes.
 func TestOAuthApplicationCredentialsWithAPIKeys(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, host, admin, data := applicationHTTPFixture(t)
 	workspace := data.Workspace.URLKey
 	if err := s.store.UpdateMemberRole(t.Context(), data.Workspace.ID, "usr_member", "member"); err != nil {

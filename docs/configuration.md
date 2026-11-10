@@ -1281,6 +1281,71 @@ The standard `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`,
 `AWS_REGION`, `AWS_S3_BUCKET_NAME`, and `AWS_S3_ENDPOINT_URL` names are also
 accepted. Flow-specific names take precedence.
 
+## Secrets at rest
+
+Credentials Flow must use in plain form are encrypted in the database with
+AES-256-GCM under `FLOW_CONNECTOR_SECRET_KEY`. Each value is bound to its row,
+so a ciphertext copied to another row does not decrypt. Encrypted:
+
+| Secret | Table |
+|---|---|
+| Workspace integration OAuth access and refresh tokens (GitHub, GitLab, Jira, Slack, Figma and the other `/api/integrations/{provider}/oauth` providers) | `connector_secrets` |
+| GitLab access tokens, members' GitHub/GitLab accounts, Google Calendar and Notion connections, MCP connector OAuth, Lark/Feishu app credentials | `connector_secrets` |
+| Webhook, application webhook and audit log stream signing secrets, apps' developer tokens | `webhook_signing_secrets`, `audit_stream_secrets` |
+| Coding session environment secrets and commit signing keys | own tables, under `FLOW_CODING_SECRET_KEY` (falls back to `FLOW_CONNECTOR_SECRET_KEY`) |
+
+API keys, OAuth client secrets, SCIM tokens and sessions are stored as hashes
+only. None of the values above is written to the workspace document, domain
+events, exports, logs or API responses: an integration connection only
+records `oauthAuthorized` and the token expiry.
+
+| Variable | Default | Description |
+|---|---|---|
+| `FLOW_CONNECTOR_SECRET_KEY` | unset | 32 random bytes, base64 (`openssl rand -base64 32`). `_FILE` works. Keep it outside Git, back it up, and use the same value on every replica. A malformed value stops the server at startup. |
+| `FLOW_CONNECTOR_SECRET_PREVIOUS_KEYS` | unset | Keys that were current before a rotation, comma-separated, base64 (`_FILE` works). They only decrypt; everything new is encrypted under the current key. Not accepted in the configuration file. |
+
+**Without a key**, Flow does not store these secrets in plain text instead:
+connecting an integration with OAuth, GitLab or a chat app, creating a
+webhook, rotating its secret, enabling an application webhook (or saving a
+manifest that enables one) and creating the audit log stream fail with `503`
+and a message naming `FLOW_CONNECTOR_SECRET_KEY`. Apps' developer tokens are
+then shown once and not kept for copying again. The server logs a warning at
+startup.
+
+**Upgrading.** Older releases kept integration OAuth tokens in the workspace
+document and, without a key, webhook and audit stream signing secrets in plain
+text. Set `FLOW_CONNECTOR_SECRET_KEY` before upgrading:
+
+- Data migration 1025 moves integration OAuth tokens into `connector_secrets`,
+  removes them from the workspace document and removes token copies from the
+  domain event history (`domain_events.previous_values`). Without a key the
+  tokens cannot be encrypted, so the migration drops them: the affected
+  connections show "Reconnect this integration…" and need to be connected
+  again. It runs once and is safe to rerun.
+- At every start Flow encrypts signing secrets that are still in plain text
+  (and logs how many). Without a key they keep signing until one is set, and
+  each start logs how many remain.
+
+**Rotating the key.** No stored connection has to be reauthorized:
+
+1. Generate a new key. Set `FLOW_CONNECTOR_SECRET_KEY` to the new key and add
+   the old one to `FLOW_CONNECTOR_SECRET_PREVIOUS_KEYS` (newest first when
+   there are several). If `FLOW_CODING_SECRET_KEY` is unset, first set it to
+   the old key: coding secrets are not re-encrypted by the rotation.
+2. Restart every replica. Reads try the current key, then the previous ones,
+   so all replicas keep working during a rolling restart.
+3. At startup each replica re-encrypts everything an old key encrypted, in the
+   background, with a compare-and-swap per row (replicas running it at once,
+   or a concurrent token refresh, never lose a write). The log reports
+   "sealed N stored secrets under the current FLOW_CONNECTOR_SECRET_KEY".
+4. After every replica has started once with the new key, remove the old key
+   from `FLOW_CONNECTOR_SECRET_PREVIOUS_KEYS` and restart. A secret that no
+   configured key decrypts is reported at startup ("N stored secrets cannot be
+   decrypted") and is never overwritten; add its key back to decrypt it.
+
+Losing every key that encrypted a value makes it unreadable: integrations and
+accounts must be connected again and signing secrets rotated.
+
 ## API rate limits
 
 Public API requests are rate limited per credential subject with leaky
@@ -2591,7 +2656,7 @@ For servers requiring bearer authentication, set `FLOW_MCP_CREDENTIALS` to a JSO
 
 Remote OAuth discovers protected-resource and authorization-server metadata, binds PKCE S256 and resource audience, and supports client metadata documents, dynamic registration and pre-registered clients. `FLOW_MCP_OAUTH_CLIENTS` is a JSON object keyed by issuer URL, with `clientId` and optional `clientSecret` values for pre-registration. Callbacks are bound to the initiating browser session and current workspace policy. Refresh credentials are rotated under a connector-scoped lock, without blocking unrelated workspace mutations.
 
-Set `FLOW_CONNECTOR_SECRET_KEY` to 32 random bytes encoded as base64 before using stored provider credentials or connector OAuth. Keep this key outside Git, stable across restarts, and identical across replicas. Database migration 5 stores authenticated encrypted credentials separately from workspace data, bootstrap, events and exports. Rotating this encryption key requires reauthorizing stored connectors; losing it makes existing encrypted credentials unreadable.
+Set `FLOW_CONNECTOR_SECRET_KEY` to 32 random bytes encoded as base64 before using stored provider credentials or connector OAuth. Keep this key outside Git, stable across restarts, and identical across replicas. Database migration 5 stores authenticated encrypted credentials separately from workspace data, bootstrap, events and exports. To rotate the key, list the old one in `FLOW_CONNECTOR_SECRET_PREVIOUS_KEYS` (see [Secrets at rest](#secrets-at-rest)); losing every key makes existing encrypted credentials unreadable.
 
 The official Go MCP SDK handles protocol negotiation and bidirectional messages. Both form and URL elicitation render in full-page and toolbar Agent conversations. Form responses validate against the requested schema; declining or canceling sends no form content. Submitted field values are not copied into conversation history by Flow. URL confirmations open separately, and the user explicitly continues or declines. Legacy HTTP+SSE transport is not supported; use Streamable HTTP.
 

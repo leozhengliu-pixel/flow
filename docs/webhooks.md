@@ -28,6 +28,13 @@ label and the endpoint URL, choose the data change events and the teams, and
 save. The signing secret is shown **once**; copy it into your receiver's
 configuration.
 
+Flow needs the secret in plain form to sign deliveries, so it stores it
+encrypted with the server's `FLOW_CONNECTOR_SECRET_KEY` (see
+[Secrets at rest](configuration.md#secrets-at-rest)). On a server without that
+key, creating a webhook, rotating its secret, enabling an application webhook
+or creating the audit log stream fails with `503` and
+"Configure FLOW_CONNECTOR_SECRET_KEY before creating signing secrets".
+
 Your endpoint must:
 
 - use a publicly reachable `https://` URL (loopback, private-network and

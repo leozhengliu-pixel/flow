@@ -45,7 +45,9 @@ func (s *server) dispatchTeamSlackEvent(workspace string, event domain.DomainEve
 	if !strings.HasPrefix(event.Type, "issue.") && event.Type != "comment.created" && event.Type != "project.update_created" && event.Type != "initiative.update_created" {
 		return
 	}
-	if connections, ok := s.store.WorkspaceMetadataFields(workspace, "integrationConnections"); !ok || slackBotToken(connections) == "" {
+	if connections, ok := s.store.WorkspaceMetadataFields(workspace, "integrationConnections"); !ok {
+		return
+	} else if _, connected := slackConnection(connections); !connected {
 		return
 	}
 	// Only the collections the messages read; never the whole workspace.
@@ -53,12 +55,9 @@ func (s *server) dispatchTeamSlackEvent(workspace string, event domain.DomainEve
 	if !ok {
 		return
 	}
-	token := slackBotToken(data)
-	if token == "" {
-		return
-	}
-	messages := s.teamSlackMessages(workspace, data, event)
-	for _, message := range messages {
+	type delivery struct{ channel, text string }
+	deliveries := []delivery{}
+	for _, message := range s.teamSlackMessages(workspace, data, event) {
 		settings, exists := data.TeamSettings[message.teamID]
 		// chat.postMessage accepts a channel ID or a channel name.
 		channel := settings.SlackChannelID
@@ -68,7 +67,19 @@ func (s *server) dispatchTeamSlackEvent(workspace string, event domain.DomainEve
 		if !exists || channel == "" || !settings.SlackNotifications[message.key] {
 			continue
 		}
-		text := message.text
+		deliveries = append(deliveries, delivery{channel, message.text})
+	}
+	if len(deliveries) == 0 {
+		return
+	}
+	// The token is read from encrypted storage only when there is something
+	// to post.
+	token := s.slackBotToken(context.Background(), workspace, data)
+	if token == "" {
+		return
+	}
+	for _, item := range deliveries {
+		channel, text := item.channel, item.text
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
@@ -177,13 +188,24 @@ func slackStateChanged(previous json.RawMessage) bool {
 	return changed
 }
 
-func slackBotToken(data domain.Bootstrap) string {
+// slackConnection is the workspace's connected Slack integration that holds a
+// bot token.
+func slackConnection(data domain.Bootstrap) (domain.IntegrationConnection, bool) {
 	for _, connection := range data.IntegrationConnections {
-		if connection.Provider == "slack" && connection.Status == "connected" && connection.OAuthAccessToken != "" {
-			return connection.OAuthAccessToken
+		if connection.Provider == "slack" && connection.Status == "connected" && connection.OAuthAuthorized {
+			return connection, true
 		}
 	}
-	return ""
+	return domain.IntegrationConnection{}, false
+}
+
+// slackBotToken reads the Slack bot token from encrypted storage.
+func (s *server) slackBotToken(ctx context.Context, workspace string, data domain.Bootstrap) string {
+	connection, ok := slackConnection(data)
+	if !ok {
+		return ""
+	}
+	return s.integrationAccessToken(ctx, integrationWorkspace(data, workspace), connection)
 }
 
 func slackAppURL() string {

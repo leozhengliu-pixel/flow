@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func TestReviewMergeUsesConfiguredMethodAndChecksProviderResult(t *testing.T) {
@@ -24,9 +26,16 @@ func TestReviewMergeUsesConfiguredMethodAndChecksProviderResult(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]bool{"merged": success.Load()})
 	}))
 	defer upstream.Close()
-	data := domain.Bootstrap{IntegrationConnections: []domain.IntegrationConnection{{Provider: "github", OAuthAccessToken: "local-test-token", Status: "connected", Config: map[string]string{"apiUrl": upstream.URL, "organization": "owner"}}}}
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { repository.Close() })
+	seedIntegrationOAuthTokens(t, repository, "test-workspace", "github", "local-test-token", "")
+	data, _ := repository.WorkspaceMetadata("test-workspace")
+	data.IntegrationConnections = []domain.IntegrationConnection{{ID: "github", Provider: "github", OAuthAuthorized: true, Status: "connected", Config: map[string]string{"apiUrl": upstream.URL, "organization": "owner"}}}
 	review := domain.CodeReview{Provider: "github", RepositoryOwner: "owner", RepositoryName: "repo", Number: 9}
-	s := server{authDisabled: true}
+	s := server{authDisabled: true, store: repository}
 	if err := s.syncReviewStatus(t.Context(), data, review, "merged", mergeMethod("Rebase and merge")); err != nil {
 		t.Fatal(err)
 	}

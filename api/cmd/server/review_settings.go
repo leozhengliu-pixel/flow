@@ -133,7 +133,7 @@ func (s *server) workspaceReviewProvider(ctx context.Context, data domain.Bootst
 		if org := connection.Config["organization"]; org != "" && !strings.EqualFold(org, review.RepositoryOwner) {
 			continue
 		}
-		token := connection.OAuthAccessToken
+		token := s.integrationAccessToken(ctx, integrationWorkspace(data, ""), connection)
 		if token == "" && review.Provider == "gitlab" {
 			// Token connections: the validated access token and its GitLab URL
 			// live in encrypted connector storage.

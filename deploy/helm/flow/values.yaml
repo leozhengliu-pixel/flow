@@ -301,7 +301,10 @@ secrets:
   env: {}
   # base64 32-byte AES key for connector and coding secrets
   # (openssl rand -base64 32). Required when coding sessions are enabled
-  # unless coding.secretKey or an existing secret provides it.
+  # unless coding.secretKey or an existing secret provides it, and to save
+  # integration OAuth tokens and webhook / audit stream signing secrets. To
+  # rotate it, put the old key in env.FLOW_CONNECTOR_SECRET_PREVIOUS_KEYS
+  # (see docs/configuration.md, "Secrets at rest").
   connectorSecretKey: ""
 
 database:

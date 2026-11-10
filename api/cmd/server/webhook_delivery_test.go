@@ -173,6 +173,7 @@ func TestWebhookURLMustBeHTTPS(t *testing.T) {
 }
 
 func TestWebhookDeliveryIsSignedWithFlowShapedEnvelope(t *testing.T) {
+	enableConnectorSecrets(t)
 	_, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	created := requestJSON[map[string]any](t, handler, http.MethodPost, "/api/webhooks?workspace=test-workspace", map[string]any{
@@ -310,6 +311,7 @@ func TestWebhookPayloadClassification(t *testing.T) {
 }
 
 func TestLegacyWebhookKeepsVersionOneEnvelope(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	created := requestJSON[map[string]any](t, handler, http.MethodPost, "/api/webhooks?workspace=test-workspace", map[string]any{
@@ -327,6 +329,7 @@ func TestLegacyWebhookKeepsVersionOneEnvelope(t *testing.T) {
 }
 
 func TestWebhookRetriesAfterOneMinuteOneHourAndSixHours(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusInternalServerError)
 	created := requestJSON[map[string]any](t, handler, http.MethodPost, "/api/webhooks?workspace=test-workspace", map[string]any{
@@ -389,6 +392,7 @@ func TestWebhookRetriesAfterOneMinuteOneHourAndSixHours(t *testing.T) {
 }
 
 func TestWebhookAutoDisablesAfterSustainedFailuresAndNotifies(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusBadGateway)
 	created := requestJSON[map[string]any](t, handler, http.MethodPost, "/api/webhooks?workspace=test-workspace", map[string]any{
@@ -441,6 +445,7 @@ func TestWebhookAutoDisablesAfterSustainedFailuresAndNotifies(t *testing.T) {
 }
 
 func TestWebhookQueueSurvivesRestartAndClaimsOnce(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, path := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusServiceUnavailable)
 	created := requestJSON[map[string]any](t, handler, http.MethodPost, "/api/webhooks?workspace=test-workspace", map[string]any{
@@ -483,6 +488,7 @@ func TestWebhookQueueSurvivesRestartAndClaimsOnce(t *testing.T) {
 }
 
 func TestWebhookTestEventAndRedeliver(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	created := requestJSON[map[string]any](t, handler, http.MethodPost, "/api/webhooks?workspace=test-workspace", map[string]any{

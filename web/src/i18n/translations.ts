@@ -5549,6 +5549,11 @@ Object.assign(zhCN, {
   "Personal Jira account connected": "已连接个人 Jira 账户",
   "Personal Jira account not connected": "未连接个人 Jira 账户",
   "OAuth integration is unavailable; configure provider endpoints and credentials": "OAuth 集成不可用；请配置提供方端点和凭据",
+  // Secrets that are only stored encrypted (server errors).
+  "Configure FLOW_CONNECTOR_SECRET_KEY before connecting integrations with OAuth": "通过 OAuth 连接集成前请先配置 FLOW_CONNECTOR_SECRET_KEY",
+  "Configure FLOW_CONNECTOR_SECRET_KEY before creating signing secrets": "创建签名密钥前请先配置 FLOW_CONNECTOR_SECRET_KEY",
+  "OAuth tokens could not be stored": "无法保存 OAuth 令牌",
+  "Reconnect this integration: its OAuth tokens were removed from plain-text storage because FLOW_CONNECTOR_SECRET_KEY was not set": "请重新连接此集成：由于未配置 FLOW_CONNECTOR_SECRET_KEY，其以明文保存的 OAuth 令牌已被移除",
   "Jira connection configuration saved": "已保存 Jira 连接配置",
   "Could not save Jira configuration": "无法保存 Jira 配置",
   "Jira disconnected": "已断开 Jira",

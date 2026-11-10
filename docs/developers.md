@@ -192,8 +192,9 @@ access**, or `POST /oauth/revoke`) to create one with other scopes. See
 [Developer tokens](oauth.md#developer-tokens).
 
 Developer tokens last one hour. Flow keeps the app user's developer token the
-way it keeps webhook signing secrets (encrypted when
-`FLOW_CONNECTOR_SECRET_KEY` is set) so it can be copied again; user tokens are
+way it keeps webhook signing secrets (encrypted with
+`FLOW_CONNECTOR_SECRET_KEY`) so it can be copied again; without that key the
+token is shown once and a later copy creates a new one. User tokens are
 stored as a hash only. Issuance and client-secret rotation require an
 interactive administrator session; an API token cannot use those endpoints to
 mint another credential.

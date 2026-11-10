@@ -43,6 +43,7 @@ func strictWebhookDecode(t *testing.T, body []byte) (string, bool) {
 // server and checks every delivered body against the published payload types
 // (the same types that become the webhooks section of docs/openapi.json).
 func TestWebhookDeliveriesMatchTheContract(t *testing.T) {
+	enableConnectorSecrets(t)
 	s, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/webhooks?workspace=test-workspace", publicapi.WebhookCreateInput{
@@ -124,6 +125,7 @@ func ptr[T any](value T) *T { return &value }
 
 // TestWebhookTestEventMatchesTheContract covers the WebhookTest payload.
 func TestWebhookTestEventMatchesTheContract(t *testing.T) {
+	enableConnectorSecrets(t)
 	_, handler, _, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	created := requestJSON[publicapi.WebhookWithSecret](t, handler, http.MethodPost, "/api/webhooks?workspace=test-workspace", publicapi.WebhookCreateInput{URL: receiver.server.URL, ResourceTypes: []string{"issues"}}, http.StatusCreated)
@@ -199,6 +201,7 @@ func TestContractInputsAreSubsetsOfHandlerInputs(t *testing.T) {
 // project milestones and initiative updates: data is the update or milestone
 // (with its parent id), for every change including deletes, and url points at it.
 func TestNestedEntityWebhooksDeliverTheEntityItself(t *testing.T) {
+	enableConnectorSecrets(t)
 	_, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	t.Setenv("FLOW_APP_URL", "https://flow.example")
@@ -292,6 +295,7 @@ func TestNestedEntityWebhooksDeliverTheEntityItself(t *testing.T) {
 // (and still get the milestone reordering); the internal child marker is not
 // part of it.
 func TestLegacyWebhookKeepsMutationInputForNestedEntities(t *testing.T) {
+	enableConnectorSecrets(t)
 	_, handler, seed, _ := webhookTestServer(t)
 	receiver := newWebhookReceiver(t, http.StatusOK)
 	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/webhooks?workspace=test-workspace", map[string]any{

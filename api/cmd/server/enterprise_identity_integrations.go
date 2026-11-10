@@ -506,10 +506,12 @@ func uniqueTrimmed(values []string) []string {
 }
 
 func redactIntegrationConnection(item domain.IntegrationConnection) domain.IntegrationConnection {
-	if item.Status == "configured" && item.OAuthAccessToken != "" && item.OAuthCompletedAt != nil && item.LastError == "" {
+	if item.Status == "configured" && item.OAuthAuthorized && item.OAuthCompletedAt != nil && item.LastError == "" {
 		item.Status = "connected"
 	}
-	item.OAuthState, item.OAuthAccessToken, item.OAuthRefreshToken = "", "", ""
+	// The tokens are not on the connection (they are in encrypted storage);
+	// the single-use OAuth state is.
+	item.OAuthState = ""
 	config := map[string]string{}
 	for key, value := range item.Config {
 		lower := strings.ToLower(key)

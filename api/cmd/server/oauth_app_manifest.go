@@ -376,6 +376,11 @@ func (s *server) createOAuthApplicationFromManifest(w http.ResponseWriter, r *ht
 	if !ok || !s.checkManifestIcon(w, r, manifest, "") {
 		return
 	}
+	// Checked before saving, so the one-time client secret is never lost to
+	// a failed webhook secret.
+	if manifestWebhookEnabled(manifest) && !requireSigningSecretStorage(w) {
+		return
+	}
 	clientID, idErr := randomSecret("flow_client_")
 	secret, secretErr := randomSecret("flow_secret_")
 	if idErr != nil || secretErr != nil {
@@ -428,6 +433,12 @@ func manifestWebhookSecret(m oauthAppManifest) string {
 // the settings form generated and showed, when given), and every
 // workspace's managed application webhooks are reconciled (created, updated
 // or removed) against the new configuration.
+// manifestWebhookEnabled reports whether saving the manifest enables the
+// application webhook (which then needs a signing secret).
+func manifestWebhookEnabled(m oauthAppManifest) bool {
+	return m.Webhook != nil && (m.Webhook.Enabled == nil || *m.Webhook.Enabled)
+}
+
 func (s *server) respondManifestApplication(w http.ResponseWriter, r *http.Request, status int, app domain.OAuthApplication, formSecret string) {
 	response := manifestApplicationResponse{OAuthApplication: app}
 	if app.WebhookEnabled {
@@ -454,6 +465,9 @@ func (s *server) respondManifestApplication(w http.ResponseWriter, r *http.Reque
 func (s *server) updateOAuthApplicationFromManifest(w http.ResponseWriter, r *http.Request) {
 	manifest, scopes, resourceTypes, ok := s.readOAuthAppManifest(w, r)
 	if !ok || !s.checkManifestIcon(w, r, manifest, r.PathValue("id")) {
+		return
+	}
+	if manifestWebhookEnabled(manifest) && !requireSigningSecretStorage(w) {
 		return
 	}
 	id := r.PathValue("id")

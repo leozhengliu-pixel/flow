@@ -2200,30 +2200,33 @@ type JiraLink struct {
 }
 
 type IntegrationConnection struct {
-	ID                string            `json:"id"`
-	Provider          string            `json:"provider"`
-	Name              string            `json:"name"`
-	Status            string            `json:"status"`
-	Config            map[string]string `json:"config,omitempty"`
-	SecretHash        string            `json:"-"`
-	ConnectedBy       string            `json:"connectedBy"`
-	CreatedAt         time.Time         `json:"createdAt"`
-	UpdatedAt         time.Time         `json:"updatedAt"`
-	LastWebhookAt     *time.Time        `json:"lastWebhookAt,omitempty"`
-	LastTestAt        *time.Time        `json:"lastTestAt,omitempty"`
-	LastTestStatus    string            `json:"lastTestStatus,omitempty"`
-	LastError         string            `json:"lastError,omitempty"`
-	OAuthState        string            `json:"oauthState,omitempty"`
-	OAuthStartedAt    *time.Time        `json:"oauthStartedAt,omitempty"`
-	OAuthCompletedAt  *time.Time        `json:"oauthCompletedAt,omitempty"`
-	OAuthAccessToken  string            `json:"oauthAccessToken,omitempty"`
-	OAuthRefreshToken string            `json:"oauthRefreshToken,omitempty"`
-	OAuthExpiresAt    *time.Time        `json:"oauthExpiresAt,omitempty"`
-	Scopes            []string          `json:"scopes"`
-	Channels          []string          `json:"channels"`
-	LinkbackEnabled   bool              `json:"linkbackEnabled"`
-	DeliveryAttempts  int               `json:"deliveryAttempts"`
-	LastDeliveryAt    *time.Time        `json:"lastDeliveryAt,omitempty"`
+	ID               string            `json:"id"`
+	Provider         string            `json:"provider"`
+	Name             string            `json:"name"`
+	Status           string            `json:"status"`
+	Config           map[string]string `json:"config,omitempty"`
+	SecretHash       string            `json:"-"`
+	ConnectedBy      string            `json:"connectedBy"`
+	CreatedAt        time.Time         `json:"createdAt"`
+	UpdatedAt        time.Time         `json:"updatedAt"`
+	LastWebhookAt    *time.Time        `json:"lastWebhookAt,omitempty"`
+	LastTestAt       *time.Time        `json:"lastTestAt,omitempty"`
+	LastTestStatus   string            `json:"lastTestStatus,omitempty"`
+	LastError        string            `json:"lastError,omitempty"`
+	OAuthState       string            `json:"oauthState,omitempty"`
+	OAuthStartedAt   *time.Time        `json:"oauthStartedAt,omitempty"`
+	OAuthCompletedAt *time.Time        `json:"oauthCompletedAt,omitempty"`
+	// OAuthAuthorized records that the connection's OAuth access and refresh
+	// tokens are stored. The tokens themselves live only in the encrypted
+	// connector secret store (store.IntegrationOAuthTokens), never in the
+	// workspace document, events or API responses.
+	OAuthAuthorized  bool       `json:"oauthAuthorized,omitempty"`
+	OAuthExpiresAt   *time.Time `json:"oauthExpiresAt,omitempty"`
+	Scopes           []string   `json:"scopes"`
+	Channels         []string   `json:"channels"`
+	LinkbackEnabled  bool       `json:"linkbackEnabled"`
+	DeliveryAttempts int        `json:"deliveryAttempts"`
+	LastDeliveryAt   *time.Time `json:"lastDeliveryAt,omitempty"`
 }
 
 type IntegrationDelivery struct {

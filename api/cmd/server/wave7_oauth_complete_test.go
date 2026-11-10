@@ -34,6 +34,7 @@ func TestIntegrationOAuthCompletePath(t *testing.T) {
 }
 
 func TestFigmaOAuthFinishJSONAndHTMLRedirect(t *testing.T) {
+	enableConnectorSecrets(t)
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
 	if err != nil {
 		t.Fatal(err)

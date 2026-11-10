@@ -62,11 +62,12 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 		d.UserSettings[d.Viewer.ID] = settings
 		d.Reviews[0].Events = append(d.Reviews[0].Events, domain.ReviewEvent{ID: "contract-thread", Type: "commented", Body: "Check this line", Actor: d.Viewer})
 		d.Notifications = append(d.Notifications, domain.Notification{ID: "contract-notification", RecipientID: d.Viewer.ID, Type: "issueComment", SourceType: "issue", SourceID: d.Issues[0].ID, IssueID: d.Issues[0].ID, Actor: d.Viewer, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()})
-		d.IntegrationConnections = append(d.IntegrationConnections, domain.IntegrationConnection{ID: "contract-github", Provider: "github", Status: "connected", OAuthAccessToken: "local-test-token", Config: map[string]string{"apiUrl": upstream.URL, "organization": d.Reviews[0].RepositoryOwner}})
+		d.IntegrationConnections = append(d.IntegrationConnections, domain.IntegrationConnection{ID: "contract-github", Provider: "github", Status: "connected", OAuthAuthorized: true, Config: map[string]string{"apiUrl": upstream.URL, "organization": d.Reviews[0].RepositoryOwner}})
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
+	seedIntegrationOAuthTokens(t, f.repository, f.data.Workspace.URLKey, "contract-github", "local-test-token", "")
 	client := mcp.NewClient(&mcp.Implementation{Name: "All tools integration", Version: "1"}, nil)
 	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: f.host.URL + "/mcp", HTTPClient: &http.Client{Transport: mcpAuthTransport{f.secret}, Timeout: 10 * time.Second}, MaxRetries: -1}, nil)
 	if err != nil {

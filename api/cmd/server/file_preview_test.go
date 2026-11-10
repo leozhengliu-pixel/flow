@@ -227,11 +227,14 @@ func filePreviewRequest(t *testing.T, handler http.Handler, link string) (*httpt
 func connectFakeGitHub(t *testing.T, s *server, token string) {
 	t.Helper()
 	err := s.store.MutateWorkspace(context.Background(), "test-workspace", "integration.connected", "github-test", map[string]string{"provider": "github"}, func(data *domain.Bootstrap) error {
-		data.IntegrationConnections = append(data.IntegrationConnections, domain.IntegrationConnection{ID: "github-test", Provider: "github", Name: "GitHub", Status: "connected", OAuthAccessToken: token, Config: map[string]string{}, Scopes: []string{}, Channels: []string{}})
+		data.IntegrationConnections = append(data.IntegrationConnections, domain.IntegrationConnection{ID: "github-test", Provider: "github", Name: "GitHub", Status: "connected", OAuthAuthorized: token != "", Config: map[string]string{}, Scopes: []string{}, Channels: []string{}})
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if token != "" {
+		seedIntegrationOAuthTokens(t, s.store, "test-workspace", "github-test", token, "")
 	}
 }
 

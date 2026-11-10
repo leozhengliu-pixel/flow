@@ -83,6 +83,7 @@ func TestOAuthUserAuthorizationRejectsAppOnlyResourceScopes(t *testing.T) {
 // admin; App creates an app user token with the chosen scopes once, then
 // copies that token again until it is revoked.
 func TestApplicationDeveloperTokenUserAndExistingAppToken(t *testing.T) {
+	enableConnectorSecrets(t)
 	_, host, admin, data := applicationHTTPFixture(t)
 	workspace := data.Workspace.URLKey
 	app := authRequest[domain.OAuthApplication](t, admin, "POST", host.URL+"/api/oauth-applications", map[string]any{"name": "Dev tokens", "scopes": domain.ApplicationScopes()}, workspace, 201)
@@ -162,6 +163,7 @@ func TestOAuthApplicationGitHubUsername(t *testing.T) {
 // The settings form generates the webhook signing secret and shows it before
 // the first save; the server keeps that secret and returns it to admins.
 func TestApplicationWebhookSecretFromForm(t *testing.T) {
+	enableConnectorSecrets(t)
 	_, host, admin, data := applicationHTTPFixture(t)
 	workspace := data.Workspace.URLKey
 	secret := "flow_wh_" + strings.Repeat("Ab3_", 8)

@@ -135,6 +135,7 @@ func TestAPIKeyFullAccessAndMetadataUpdate(t *testing.T) {
 }
 
 func TestWebhookSecretLifecycleAndResourceTypes(t *testing.T) {
+	enableConnectorSecrets(t)
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "webhook-acl.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -161,6 +162,7 @@ func TestWebhookSecretLifecycleAndResourceTypes(t *testing.T) {
 }
 
 func TestWebhookDeliveryIncludesPreviousValues(t *testing.T) {
+	enableConnectorSecrets(t)
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "webhook-delivery.db"))
 	if err != nil {
 		t.Fatal(err)

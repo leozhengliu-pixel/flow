@@ -1924,6 +1924,11 @@ func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "unsupported integration")
 		return
 	}
+	// The tokens the callback obtains are only kept in encrypted storage.
+	if !store.ConnectorSecretsConfigured() {
+		writeError(w, http.StatusServiceUnavailable, integrationOAuthKeyMissing)
+		return
+	}
 	var result map[string]string
 	var providerConfig integrationOAuthConfig
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_started", provider, nil, func(data *domain.Bootstrap) error {
@@ -2080,6 +2085,17 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 	} else if providerError == "" {
 		providerError = "OAuth provider did not return a code"
 	}
+	if providerError == "" {
+		// The tokens go to encrypted storage only; the connection records
+		// that they exist.
+		tokens := store.IntegrationOAuthTokens{AccessToken: access, RefreshToken: refresh}
+		if err := s.store.PutIntegrationOAuthTokens(r.Context(), integrationWorkspace(data, workspaceKey(r)), snapshot.ID, tokens); err != nil {
+			providerError = "OAuth tokens could not be stored"
+			if errors.Is(err, store.ErrSecretKeyMissing) {
+				providerError = integrationOAuthKeyMissing
+			}
+		}
+	}
 	var result map[string]string
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_completed", provider, nil, func(next *domain.Bootstrap) error {
 		currentIndex := slices.IndexFunc(next.IntegrationConnections, func(item domain.IntegrationConnection) bool {
@@ -2093,7 +2109,8 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 		if providerError != "" {
 			connection.Status, connection.LastError = "error", providerError
 		} else {
-			connection.OAuthAccessToken, connection.OAuthRefreshToken = access, refresh
+			connection.OAuthAuthorized = true
+			connection.OAuthExpiresAt = nil
 			if expiresIn > 0 {
 				expiry := now.Add(time.Duration(expiresIn) * time.Second)
 				connection.OAuthExpiresAt = &expiry
@@ -2203,7 +2220,9 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 	}
 	snapshot := data.IntegrationConnections[index]
 	oauthConfig := integrationOAuthConfigFor(provider, snapshot.Config)
-	if snapshot.OAuthRefreshToken == "" {
+	workspace := integrationWorkspace(data, workspaceKey(r))
+	tokens, _ := s.integrationOAuthTokens(r.Context(), workspace, snapshot)
+	if tokens.RefreshToken == "" {
 		writeError(w, http.StatusBadRequest, "OAuth refresh token is not available")
 		return
 	}
@@ -2215,7 +2234,7 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusUnprocessableEntity, "unsafe OAuth token endpoint")
 		return
 	}
-	values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {snapshot.OAuthRefreshToken}, "client_id": {oauthConfig.ClientID}}
+	values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {tokens.RefreshToken}, "client_id": {oauthConfig.ClientID}}
 	if oauthConfig.ClientSecret != "" {
 		values.Set("client_secret", oauthConfig.ClientSecret)
 	}
@@ -2252,19 +2271,25 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadGateway, "OAuth refresh response did not include access_token")
 		return
 	}
+	// Compare-and-swap on the refresh token that was exchanged: a concurrent
+	// refresh or reconnect wins and this one is reported as not found.
+	if err := s.store.RotateIntegrationOAuthTokens(r.Context(), workspace, id, tokens.RefreshToken, store.IntegrationOAuthTokens{AccessToken: payload.AccessToken, RefreshToken: payload.RefreshToken}); err != nil {
+		if errors.Is(err, store.ErrIntegrationOAuthTokensChanged) {
+			err = errNotFound
+		}
+		respondMutation(w, err, http.StatusBadRequest, nil)
+		return
+	}
 	var result domain.IntegrationConnection
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_refreshed", id, nil, func(data *domain.Bootstrap) error {
 		currentIndex := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
-			return item.ID == id && item.Provider == provider && item.OAuthRefreshToken == snapshot.OAuthRefreshToken
+			return item.ID == id && item.Provider == provider
 		})
 		if currentIndex < 0 {
 			return errNotFound
 		}
 		connection := &data.IntegrationConnections[currentIndex]
-		connection.OAuthAccessToken = payload.AccessToken
-		if payload.RefreshToken != "" {
-			connection.OAuthRefreshToken = payload.RefreshToken
-		}
+		connection.OAuthAuthorized = true
 		if payload.ExpiresIn > 0 {
 			expiry := time.Now().UTC().Add(time.Duration(payload.ExpiresIn) * time.Second)
 			connection.OAuthExpiresAt = &expiry
@@ -2273,12 +2298,15 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 		result = *connection
 		return nil
 	})
+	if errors.Is(err, errNotFound) {
+		// Disconnected while the exchange ran: drop the new tokens too.
+		_ = s.store.DeleteIntegrationOAuthTokens(r.Context(), workspace, id)
+	}
 	if err != nil {
 		respondMutation(w, err, http.StatusBadRequest, nil)
 		return
 	}
-	result.OAuthAccessToken, result.OAuthRefreshToken = "", ""
-	writeJSON(w, http.StatusOK, result)
+	writeJSON(w, http.StatusOK, redactIntegrationConnection(result))
 }
 
 func (s *server) revokeIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
@@ -2291,9 +2319,11 @@ func (s *server) revokeIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 	}
 	snapshot := data.IntegrationConnections[index]
 	oauthConfig := integrationOAuthConfigFor(provider, snapshot.Config)
-	revocationToken := snapshot.OAuthAccessToken
+	workspace := integrationWorkspace(data, workspaceKey(r))
+	tokens, _ := s.integrationOAuthTokens(r.Context(), workspace, snapshot)
+	revocationToken := tokens.AccessToken
 	if revocationToken == "" {
-		revocationToken = snapshot.OAuthRefreshToken
+		revocationToken = tokens.RefreshToken
 	}
 	if revocationToken != "" {
 		if oauthConfig.RevokeURL == "" {
@@ -2324,15 +2354,23 @@ func (s *server) revokeIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 		}
 		response.Body.Close()
 	}
+	// Remove the revoked tokens unless a reconnect replaced them meanwhile.
+	if removed, err := s.store.RemoveIntegrationOAuthTokens(r.Context(), workspace, id, tokens.AccessToken); err != nil {
+		respondMutation(w, err, http.StatusBadRequest, nil)
+		return
+	} else if !removed {
+		respondMutation(w, errNotFound, http.StatusBadRequest, nil)
+		return
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_revoked", id, nil, func(data *domain.Bootstrap) error {
 		currentIndex := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
-			return item.ID == id && item.Provider == provider && item.OAuthAccessToken == snapshot.OAuthAccessToken
+			return item.ID == id && item.Provider == provider
 		})
 		if currentIndex < 0 {
 			return errNotFound
 		}
 		connection := &data.IntegrationConnections[currentIndex]
-		connection.OAuthAccessToken, connection.OAuthRefreshToken, connection.OAuthState, connection.OAuthExpiresAt = "", "", "", nil
+		connection.OAuthAuthorized, connection.OAuthState, connection.OAuthExpiresAt = false, "", nil
 		connection.Status, connection.LastError, connection.UpdatedAt = "disconnected", "", time.Now().UTC()
 		return nil
 	})
@@ -2419,6 +2457,9 @@ func (s *server) disconnectIntegrationConnection(w http.ResponseWriter, r *http.
 	if err == nil {
 		err = s.store.DeleteConnectorSecret(r.Context(), connectorSecretID(metadata.Workspace.URLKey, "provider", id))
 	}
+	if err == nil {
+		err = s.store.DeleteIntegrationOAuthTokens(r.Context(), integrationWorkspace(metadata, workspaceKey(r)), id)
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
@@ -2441,6 +2482,10 @@ func (s *server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	for _, connection := range metadata.IntegrationConnections {
 		if connection.Provider == provider {
 			if err := s.store.DeleteConnectorSecret(r.Context(), connectorSecretID(metadata.Workspace.URLKey, "provider", connection.ID)); err != nil {
+				writeError(w, 500, "Could not remove integration credentials")
+				return
+			}
+			if err := s.store.DeleteIntegrationOAuthTokens(r.Context(), integrationWorkspace(metadata, workspaceKey(r)), connection.ID); err != nil {
 				writeError(w, 500, "Could not remove integration credentials")
 				return
 			}

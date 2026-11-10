@@ -178,6 +178,12 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	// A malformed key must stop the start before the data migrations run:
+	// without a usable key they cannot seal secrets (see
+	// store.migrateIntegrationOAuthTokens).
+	if err := store.ValidateSecretKeys(); err != nil {
+		log.Fatal(err)
+	}
 	repository, err := store.OpenDatabase(applicationConfig.Database)
 	if err != nil {
 		log.Fatal(err)
@@ -276,6 +282,7 @@ func main() {
 	go s.runReviewImportScheduler(shutdownSignal)
 	go s.runPersonalConnectionScheduler(shutdownSignal)
 	go s.runStorageMaintenance(shutdownSignal, applicationConfig.Retention.DomainEvents)
+	go s.resealStoredSecrets(shutdownSignal)
 	go func() {
 		<-shutdownSignal.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -7214,6 +7221,10 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 	}
 	if errors.Is(err, errInvalid) || errors.Is(err, store.ErrInvalidValue) {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if errors.Is(err, store.ErrSecretKeyMissing) {
+		writeError(w, http.StatusServiceUnavailable, signingSecretKeyMissing)
 		return
 	}
 	if err != nil {

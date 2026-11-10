@@ -470,8 +470,7 @@ func (s *server) syncChatConnection(ctx context.Context, record domain.ChatInteg
 		item.Status = status
 		item.UpdatedAt = now
 		item.Config = map[string]string{"appId": record.AppID, "tenantKey": record.TenantKey, "botOpenId": record.BotOpenID}
-		item.OAuthAccessToken = ""
-		item.OAuthRefreshToken = ""
+		item.OAuthAuthorized = false
 		item.OAuthState = ""
 		item.LastError = lastError
 		if testStatus != "" {

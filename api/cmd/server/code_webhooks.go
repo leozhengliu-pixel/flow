@@ -406,7 +406,7 @@ func (s *server) testIntegrationConnection(w http.ResponseWriter, r *http.Reques
 	if provider == "gitlab" {
 		token, host := strings.TrimSpace(input.Token), strings.TrimSpace(input.Host)
 		if token == "" && connection != nil {
-			token = strings.TrimSpace(connection.OAuthAccessToken)
+			token = strings.TrimSpace(s.integrationAccessToken(r.Context(), integrationWorkspace(data, workspaceKey(r)), *connection))
 		}
 		if host == "" && connection != nil {
 			host = strings.TrimSpace(connection.Config["host"])

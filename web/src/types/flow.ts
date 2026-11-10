@@ -1814,6 +1814,8 @@ export interface IntegrationConnection {
   lastError?: string;
   oauthStartedAt?: string;
   oauthCompletedAt?: string;
+  /** OAuth tokens are stored (encrypted, server-side only). */
+  oauthAuthorized?: boolean;
 }
 export interface JiraLink {
   id: UUID;

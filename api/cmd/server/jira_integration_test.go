@@ -10,6 +10,7 @@ import (
 )
 
 func TestJiraOAuthConfigAndSyncLinkLifecycle(t *testing.T) {
+	enableConnectorSecrets(t)
 	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "jira.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +64,7 @@ func TestJiraOAuthConfigAndSyncLinkLifecycle(t *testing.T) {
 			if data.IntegrationConnections[i].ID == connection.ID {
 				now := data.IntegrationConnections[i].UpdatedAt
 				data.IntegrationConnections[i].Status = "connected"
-				data.IntegrationConnections[i].OAuthAccessToken = "atlassian-token"
+				data.IntegrationConnections[i].OAuthAuthorized = true
 				data.IntegrationConnections[i].OAuthCompletedAt = &now
 				data.IntegrationConnections[i].LastError = ""
 			}
@@ -73,6 +74,7 @@ func TestJiraOAuthConfigAndSyncLinkLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	seedIntegrationOAuthTokens(t, repository, "test-workspace", connection.ID, "atlassian-token", "")
 
 	remote := requestJSON[map[string]any](t, handler, http.MethodGet, "/api/jira/remote/projects?workspace=test-workspace", nil, http.StatusOK)
 	if remote["status"] != "unavailable" {
