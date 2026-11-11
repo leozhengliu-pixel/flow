@@ -26,9 +26,9 @@ export const ON_BEHALF_OF_TEMPLATE = "{actor} {action} on behalf of {user}";
  * A history sentence with its actor in bold: "Dev User via Zendesk set priority to Urgent", or for Flow's agent
  * "Flow set priority to Urgent on behalf of Dev User" (zh-CN "Flow 代表 Dev User 将优先级设为 紧急").
  */
-export function AttributedAction({ actor, children }: { actor: ActivityActor; children: ReactNode }) {
+export function AttributedAction({ actor, children, actorName }: { actor: ActivityActor; children: ReactNode; actorName?: ReactNode }) {
   const t = useOptionalTranslate();
-  const name = <strong data-i18n-ignore>{actor.name}</strong>;
+  const name = <strong data-i18n-ignore>{actorName ?? actor.name}</strong>;
   if (!actor.onBehalfOf) {
     return (
       <>

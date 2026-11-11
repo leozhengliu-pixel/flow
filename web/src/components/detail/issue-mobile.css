@@ -125,7 +125,6 @@
   .issue-view .activity-blocking-icon { color: var(--relation-ink); }
   .issue-view .activity-blocking-icon > svg { width: 14px; height: 14px; background: var(--bg-panel); box-shadow: 0 0 0 3px var(--bg-panel); }
   .issue-view .issue-activity-timeline::before { display: none; }
-  .issue-view .issue-activity-timeline > .timeline-item:not(:last-child)::before { content: ""; position: absolute; left: 17px; top: 14px; bottom: -10px; width: .5px; background: var(--issue-activity-connector); pointer-events: none; }
   .issue-view .issue-comment-form { width: calc(100% + 16px); margin: 0 -8px; padding: 0; }
   .issue-view .issue-comment-form > .composer { width: 100%; margin: 0; border-width: .5px; }
   .issue-view .issue-comment-form .comment-prosemirror { padding-right: 32px; }

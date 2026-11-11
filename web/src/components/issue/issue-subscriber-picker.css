@@ -6,4 +6,5 @@
 :root[data-theme=light] .subscriber-avatars:hover,:root[data-theme=light] .subscriber-avatars[aria-expanded=true]{background:var(--theme-control-hover)}
 :root[data-theme=light] .activity-heading .issue-subscribe-toggle{color:var(--muted)}
 :root[data-theme=light] .activity-heading .issue-subscribe-toggle:hover:not(:disabled){background:var(--theme-surface-hover);color:var(--theme-text-primary)}
-.activity-heading .issue-subscribe-toggle{height:32px;padding:0 12px;border-radius:9999px;color:var(--issue-muted);font-size:12px;font-weight:500}.activity-heading .issue-subscribe-toggle:hover:not(:disabled){background:var(--bg-active);color:var(--issue-text)}
+.activity-heading .issue-subscribe-toggle{height:32px;padding:0 12px;border:1px solid transparent;border-radius:9999px;color:var(--activity-ink);font-size:12px;font-weight:500;opacity:.6}.activity-heading .issue-subscribe-toggle:hover:not(:disabled){background:var(--bg-active);color:var(--issue-text);opacity:1}.activity-heading .issue-subscribe-toggle:focus-visible{opacity:1}
+@media (resolution >= 2dppx){.activity-heading .issue-subscribe-toggle{border-width:.5px}}

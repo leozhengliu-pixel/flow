@@ -3,7 +3,33 @@ import { test } from './workspace-fixture'
 import type { BootstrapData, Issue } from '../src/types/flow'
 
 test.skip(({ isMobile }) => isMobile, 'Desktop issue activity and menus')
-test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark', launchOptions: { args: ['--force-device-scale-factor=2'] } })
+test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, colorScheme: 'dark', launchOptions: { args: ['--force-device-scale-factor=2'] } })
+
+test('copies previous titles from the hover surface and copies timestamp links', async ({ page, context, request, workspaceKey: key }) => {
+  const headers = { 'X-Workspace-Key': key }
+  const data = await (await request.get('/api/bootstrap', { headers })).json() as BootstrapData
+  const response = await request.post('/api/issues', { headers, data: { title: '[audit] Activity title copy', teamId: data.teams[0].id } })
+  expect(response.status()).toBe(201)
+  const issue = await response.json() as Issue
+  await page.route(`**/api/issue-records/${issue.id}/history*`, route => route.fulfill({ json: { comments: [], activities: [{ id: 'title-change', type: 'issue.updated', actor: data.viewer, createdAt: issue.createdAt, metadata: { title: issue.title, titleBefore: 'Previous issue title' } }] } }))
+  await page.goto(`/${key}/issue/${issue.identifier}`)
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.locator('#activity-title-change b[tabindex]').hover()
+  await page.getByRole('button', { name: 'Copy previous title', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('Previous issue title')
+  await expect(page.getByText('Previous title copied to clipboard', { exact: true })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.locator('#activity-title-change b[tabindex]').focus()
+  await page.keyboard.press('ArrowDown')
+  await expect(page.getByRole('button', { name: 'Copy previous title', exact: true })).toBeFocused()
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Escape')
+  const timestamp = page.locator('#activity-title-change .activity-time a')
+  await expect(timestamp).toHaveAttribute('aria-label', /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) /)
+  await timestamp.click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${page.url().split('#')[0]}#activity-title-change`)
+  await expect(page.getByText('Link to activity item copied to clipboard', { exact: true })).toBeVisible()
+})
 
 test('fits compact project labels, hides redundant child history, and uses plain issue links', async ({ page, request, workspaceKey: key }) => {
   const headers = { 'X-Workspace-Key': key }
@@ -70,17 +96,27 @@ test('expands event groups without losing comments and posts a reply with deskto
   for (const change of [{ priority: 1 }, { assigneeId: data.viewer.id }, { title: '[audit] Updated comment specimen' }]) {
     expect((await request.patch(`/api/issues/${issue.id}`, { headers, data: change })).ok()).toBeTruthy()
   }
+  const created = Date.parse(issue.createdAt)
+  await page.route(`**/api/issue-records/${issue.id}/history*`, async route => {
+    const response = await route.fetch()
+    const history = await response.json()
+    history.activities = [
+      { id: 'created', type: 'issue.created', actor: data.viewer, createdAt: issue.createdAt, metadata: {} },
+      { id: 'status-one', type: 'issue.updated', actor: data.viewer, createdAt: new Date(created + 60_000).toISOString(), metadata: { stateBefore: 'Todo', state: 'In Progress', stateType: 'started' } },
+      { id: 'status-two', type: 'issue.updated', actor: data.viewer, createdAt: new Date(created + 120_000).toISOString(), metadata: { stateBefore: 'In Progress', state: 'Done', stateType: 'completed' } },
+    ]
+    await route.fulfill({ response, json: history })
+  })
   await page.goto(`/${key}/issue/${issue.identifier}`)
-  const toggle = page.locator('.activity-event-group')
-  await expect(toggle).toHaveText(/^Show 3 events/)
+  const toggle = page.locator('.activity-family-header')
+  await expect(toggle).toContainText('moved to In Progress, then to Done')
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
-  await expect(page.locator('.timeline-item.event')).toHaveCount(1)
-  await toggle.click()
+  await expect(page.locator('.timeline-item.event')).toHaveCount(2)
+  await toggle.click({ position: { x: 10, y: 10 } })
   await expect(toggle).toHaveAttribute('aria-expanded', 'true')
-  await expect(toggle).toHaveText('Show less')
   await expect(page.locator('.timeline-item.event')).toHaveCount(4)
-  await toggle.click()
-  await expect(page.locator('.timeline-item.event')).toHaveCount(1)
+  await toggle.click({ position: { x: 10, y: 10 } })
+  await expect(page.locator('.timeline-item.event')).toHaveCount(2)
   const card = page.locator('.comment-card').first()
   await expect(page.locator('.activity-event-icon .avatar').first()).toHaveCSS('font-weight', '400')
   await expect(card.locator(':scope > header > .avatar')).toHaveCSS('font-weight', '400')
@@ -95,6 +131,11 @@ test('expands event groups without losing comments and posts a reply with deskto
   const reply = page.locator('.comment-thread__reply')
   await expect(reply).toHaveCSS('font-size', '15px')
   await expect(reply).toHaveCSS('font-weight', '450')
+  await expect(reply.locator('.comment-thread__reply-send')).toHaveCSS('background-color', 'lch(13.861 1.139 272)')
+  expect((await page.locator('.comment-thread').boundingBox())!.height).toBe(127.5)
+  expect((await page.locator('.timeline-item.event').first().boundingBox())!.height).toBe(28.796875)
+  await expect(page.locator('.timeline-item.event').first().locator('.activity-row')).toHaveCSS('margin', '-3px -4px')
+  await expect(page.locator('.issue-subscribe-toggle')).toHaveCSS('opacity', '0.6')
   await expect(reply.locator('span').last()).toHaveCSS('letter-spacing', '-0.1px')
   await reply.click()
   await page.getByRole('textbox', { name: 'Leave a reply…' }).fill('[audit] Posted reply')

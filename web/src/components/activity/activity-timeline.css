@@ -1,5 +1,5 @@
 .issue-activity-timeline::before {
-  display: block;
+  display: none;
   left: 18px;
   top: 12px;
   bottom: 12px;
@@ -20,9 +20,31 @@
   background: var(--bg-panel);
   border-radius: 2px;
 }
-.issue-activity-timeline .timeline-item.event { min-height: 0; padding: 5px 0; }
-.issue-activity-timeline .timeline-item.event > div:last-child { min-width: 0; padding: 1px 0; }
-.issue-activity-timeline .activity-event-icon { width: 36px; min-height: 18.8px; display: flex; justify-content: center; align-items: flex-start; padding-top: 2px; color: var(--ui-pill-fg); }
+.issue-activity-timeline .timeline-item.event { display: flex; align-items: flex-start; min-height: 0; padding: 5px 0; margin: -4px 0 4px -.5px; }
+.issue-activity-timeline .timeline-item.event > :last-child { flex: 1; min-width: 0; }
+.issue-activity-timeline .activity-event-icon { position: relative; width: 36px; height: 18px; flex: 0 0 36px; display: flex; justify-content: center; align-items: center; padding: 2px 11px; color: var(--activity-ink); }
+.activity-history-block { position: relative; display: flex; flex-direction: column; }
+.issue-activity-timeline > .activity-history-block { padding: 0 10px 8px 0; }
+.activity-history-block[data-connected]::before { content: ''; position: absolute; left: 17px; top: 14px; bottom: 20px; width: 1px; background: var(--issue-activity-connector); pointer-events: none; }
+.activity-history-entry { display: contents; }
+.activity-history-block > .activity-history-entry:last-child > .timeline-item .activity-event-icon::after { content: ''; position: absolute; width: 36px; height: 16px; top: 18px; left: 0; background: var(--bg-panel); pointer-events: none; }
+.activity-family-entries { margin-left: 25px; }
+.activity-family-header { cursor: pointer; border-radius: 4px; }
+.activity-family-header:hover { background: var(--theme-soft-overlay); }
+.activity-family-header:focus-visible, .activity-event-group:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.activity-family-header[aria-expanded=true] { color: var(--text); }
+.issue-activity-timeline .activity-event-group { width: 100%; border: 0; background: transparent; text-align: left; color: var(--activity-ink); font: inherit; }
+.issue-activity-timeline .activity-event-group:hover { background: var(--theme-soft-overlay); }
+.activity-info { display: inline-flex; vertical-align: middle; margin-left: 4px; }
+.activity-copy-title { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-left: 8px; padding: 0; border: 0; border-radius: 4px; color: inherit; background: transparent; }
+.activity-copy-title:hover { background: var(--theme-surface-hover); }
+.issue-activity-timeline .activity-row a { color: inherit; text-decoration: none; }
+.issue-activity-timeline .activity-row a:hover { color: var(--issue-fg); }
+.activity-label { display: inline; white-space: nowrap; color: inherit; text-decoration: none; }
+.activity-label[data-archived] { text-decoration: line-through; }
+.activity-link-source { display: inline-flex; margin: 0 4px; vertical-align: middle; }
+.activity-label i { display: inline-block; width: 4px; height: 4px; margin: 0 4px 0 2px; border-radius: 50%; vertical-align: middle; }
+@media (resolution >= 2dppx) { .activity-history-block[data-connected]::before { width: .5px; } }
 .issue-activity-timeline .activity-event-icon .avatar { width: 14px; height: 14px; flex: 0 0 14px; font-size: 8px; }
 .issue-activity-timeline .activity-event-icon > svg { width: 14px; height: 14px; flex: 0 0 14px; }
 .issue-activity-timeline .timeline-item.comment > .avatar,
@@ -30,8 +52,10 @@
 .issue-activity-timeline .timeline-item.comment > .avatar { justify-self: center; align-self: start; margin-top: 3px; }
 .issue-activity-timeline .comment-reply { grid-template-columns: 18px minmax(0, 1fr); gap: 9px; }
 .issue-activity-timeline .comment-reply > .avatar { align-self: start; margin-top: 1px; }
-.issue-activity-timeline .activity-row { display: block; height: auto; min-height: 16.8px; margin: 0; color: var(--ui-pill-fg); font-size: 12px; font-weight: 450; line-height: 1.4; overflow-wrap: anywhere; }
-.issue-activity-timeline .activity-row strong { font-weight: 500; color: inherit; }
+.issue-activity-timeline .activity-row { display: flow-root; height: auto; min-height: 16.8px; margin: -3px -4px; padding: 4px; color: var(--activity-ink); font-size: 12px; font-weight: 450; line-height: 16.8px; overflow-wrap: anywhere; }
+.issue-activity-timeline .activity-row strong, .issue-activity-timeline .activity-row b { font-weight: 500; color: inherit; }
+.issue-activity-timeline .activity-row [data-agent-entity] { display: inline; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; font-weight: 500; }
+.issue-activity-timeline .activity-row [data-agent-entity] svg { display: none; }
 .issue-activity-timeline .activity-relation-link { color: inherit; text-decoration: none; }
 .issue-activity-timeline .activity-relation-link:hover { text-decoration: underline; }
 .issue-activity-timeline .activity-relation-link b { font-weight: 500; color: inherit; }
@@ -70,10 +94,8 @@
 .issue-activity-timeline .comment-card > header > strong { min-width: 0; overflow-wrap: anywhere; }
 .issue-activity-timeline .comment-card > header > a { flex-shrink: 0; white-space: nowrap; }
 :root[data-theme="light"] .issue-activity-timeline .activity-event-icon,
-:root[data-theme="light"] .issue-activity-timeline .activity-row { color: var(--theme-text-secondary); }
-:root[data-theme="light"] .issue-activity-timeline .activity-row strong { color: var(--theme-text-primary); }
-:root[data-theme="light"] .issue-activity-timeline .activity-time,
-:root[data-theme="light"] .issue-activity-timeline .activity-dot,
+:root[data-theme="light"] .issue-activity-timeline .activity-row { color: var(--activity-ink); }
+:root[data-theme="light"] .issue-activity-timeline .activity-row strong { color: inherit; }
 :root[data-theme="light"] .issue-activity-timeline .comment-card > header > a,
 :root[data-theme="light"] .issue-activity-timeline .comment-card > header > span,
 :root[data-theme="light"] .issue-activity-timeline .comment-reply time { color: var(--theme-text-tertiary); }
@@ -167,20 +189,27 @@
 
 /* The reference app comment thread (IssueCommentsAndHistory / Comment): one card per thread that spans 8px past the
    timeline column, covers the connecting line, and holds the root comment, replies and a reply input. */
-.issue-activity-timeline .timeline-item.comment { display: block; padding: 8px 0; }
+.issue-activity-timeline .timeline-item.comment { display: block; padding: 0 0 18px; }
 .issue-activity-timeline .comment-thread {
   position: relative;
   z-index: 1;
   margin: 0 -8px;
-  border: .5px solid var(--theme-border);
+  border: 1px solid var(--activity-card-border);
   border-radius: 8px;
-  background: var(--theme-surface-1);
+  background: var(--activity-card-bg);
+  box-shadow: var(--activity-card-shadow);
   overflow: clip;
 }
 .issue-activity-timeline .comment-thread .comment-card { position: relative; padding: 14px 16px; border-radius: 0; }
 .issue-activity-timeline .comment-thread .comment-card + .comment-card,
 .issue-activity-timeline .comment-thread .comment-card + .comment-thread__reply,
-.issue-activity-timeline .comment-thread .comment-card + .comment-thread__composer { border-top: .5px solid var(--theme-border); }
+.issue-activity-timeline .comment-thread .comment-card + .comment-thread__composer { border-top: 1px solid var(--activity-card-separator); }
+@media (resolution >= 2dppx) {
+  .issue-activity-timeline .comment-thread { border-width: .5px; }
+  .issue-activity-timeline .comment-thread .comment-card + .comment-card,
+  .issue-activity-timeline .comment-thread .comment-card + .comment-thread__reply,
+  .issue-activity-timeline .comment-thread .comment-card + .comment-thread__composer { border-top-width: .5px; }
+}
 .issue-activity-timeline .comment-thread .comment-card > header {
   height: 20px;
   min-height: 20px;
@@ -205,7 +234,7 @@
 .issue-activity-timeline .comment-thread .comment-card > header > strong {
   min-width: 0;
   overflow: hidden;
-  color: var(--theme-text-primary);
+  color: var(--agent-thread-name);
   font-size: 13px;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -218,7 +247,7 @@
   font-size: 13px;
   white-space: nowrap;
 }
-.issue-activity-timeline .comment-thread .comment-card > header > a { margin-left: 8px; color: lch(63.304 1.425 272); font-weight: 450; line-height: normal; }
+.issue-activity-timeline .comment-thread .comment-card > header > a { margin-left: 8px; color: var(--agent-thread-muted); font-weight: 450; line-height: normal; }
 /* "via <app>" continues the name like the reference's inline run: same weight and ink as the time, the separating space kept. */
 .issue-activity-timeline .comment-thread .comment-card > header > span.via-app { margin-left: 0; color: lch(63.304 1.425 272); font-weight: 500; white-space: pre; }
 .issue-activity-timeline .comment-card__actions {
@@ -254,7 +283,7 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--theme-text-primary);
+  color: var(--agent-thread-text);
   font-size: 15px;
   line-height: 24px;
 }
@@ -278,13 +307,27 @@
 }
 .issue-activity-timeline .comment-thread__reply:hover { color: var(--theme-text-secondary); }
 .issue-activity-timeline .comment-thread__composer { padding: 8px 12px 12px; }
+.issue-activity-timeline .comment-thread__reply[data-reply-idle] { gap: 12px; color: var(--activity-reply-placeholder); }
+.comment-thread__reply[data-reply-idle] > .avatar { width: 18px; height: 18px; flex: 0 0 18px; font-size: 9px; }
+.comment-thread__reply[data-reply-idle] button { width: 24px; height: 24px; display: grid; place-items: center; flex: none; padding: 0; border: 0; background: transparent; color: var(--activity-reply-tool); border-radius: 9999px; }
+.comment-thread__reply[data-reply-idle] .comment-thread__reply-open { flex: 1; width: auto; text-align: left; justify-items: start; color: inherit; font: 450 15px/24px var(--font); }
+.comment-thread__reply[data-reply-idle] .comment-thread__reply-send { background: var(--issue-reply-send-bg); }
+.comment-thread__reply[data-reply-idle] button:hover:not(:disabled) { background: var(--theme-soft-overlay); }
+.comment-thread__reply[data-reply-idle] button:focus-visible { outline: 2px solid var(--focus-ring); }
+@media (max-width: 767px) {
+  .issue-activity-timeline .comment-thread__reply[data-reply-idle] { display: grid; grid-template-columns: 18px minmax(0, 1fr) 24px 24px; padding: 11px 16px; }
+  .comment-thread__reply[data-reply-idle] > .avatar { grid-row: 1; }
+  .comment-thread__reply[data-reply-idle] .comment-thread__reply-open { grid-column: 2 / 5; }
+  .comment-thread__reply[data-reply-idle] .comment-thread__reply-tool { grid-column: 3; }
+  .comment-thread__reply[data-reply-idle] .comment-thread__reply-send { grid-column: 4; }
+}
 .issue-activity-timeline .comment-thread__composer .composer { margin: 0; }
 .issue-activity-timeline .resolved-comment { gap: 0; }
 .issue-activity-timeline .resolved-comment__bar { margin-bottom: 6px; }
 :root[data-theme="light"] .issue-activity-timeline .comment-thread {
-  border-color: var(--theme-border);
-  background: var(--theme-surface-1);
-  box-shadow: var(--shadow-control);
+  border-color: var(--activity-card-border);
+  background: var(--activity-card-bg);
+  box-shadow: var(--activity-card-shadow);
 }
 :root[data-theme="light"] .issue-activity-timeline .comment-thread .comment-body { border: 0; background: transparent; }
 .issue-activity-timeline .comment-thread .reaction-pills:empty { display: none; }

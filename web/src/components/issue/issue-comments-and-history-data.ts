@@ -4,6 +4,7 @@
  */
 import { fetchIssueHistory, type IssueHistoryPage } from '@/lib/api'
 import type { BootstrapData, Issue } from '@/types/flow'
+import { activityIds } from '@/components/activity/issue-activity-model'
 
 export type IssueHistoryRelation =
   | 'sourceComment'
@@ -51,12 +52,17 @@ export async function hydrateIssueCommentsAndHistory(
   const page = await fetchIssueHistory(args.issue.id, args.signal, args.cursors)
 
   const labelIds = new Set((args.issue.labels ?? []).map(label => label.id))
+  const projectIds = new Set([args.issue.project?.id].filter(Boolean))
+  for (const activity of page.activities) {
+    const metadata = activity.metadata ?? {}
+    for (const key of ['labels', 'addedLabelIds', 'removedLabelIds']) for (const id of activityIds(metadata[key])) labelIds.add(id)
+    for (const key of ['project', 'projectBefore']) if (metadata[key]) projectIds.add(metadata[key])
+  }
   const labels = wanted.has('labels')
     ? args.data.labels.filter(label => labelIds.has(label.id))
     : []
-  const projectId = args.issue.project?.id
-  const projects = wanted.has('projects') && projectId
-    ? args.data.projects.filter(project => project.id === projectId)
+  const projects = wanted.has('projects')
+    ? args.data.projects.filter(project => projectIds.has(project.id))
     : []
 
   const agentSessionIds =

@@ -1,4 +1,5 @@
 import { reviewsZhCN } from './translations-reviews';
+import { issueActivityZhCN } from './translations-issue-activity';
 import { pulseZhCN } from './translations-pulse';
 // coding sessions (track G)
 import { codingSessionUiZhCN } from './translations-coding-session-ui';
@@ -6157,6 +6158,7 @@ Object.assign(zhCN, templatesZhCN);
 Object.assign(zhCN, teamCreateZhCN);
 Object.assign(zhCN, settingsAccessZhCN);
 Object.assign(zhCN, agentHistoryZhCN);
+Object.assign(zhCN, issueActivityZhCN);
 Object.assign(zhCN, gitlabSettingsZhCN);
 for (const [key, value] of Object.entries(githubAppZhCN)) if (!(key in zhCN)) zhCN[key] = value;
 for (const [key, value] of Object.entries(codeHostAccountsZhCN)) if (!(key in zhCN)) zhCN[key] = value;
