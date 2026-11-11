@@ -127,7 +127,7 @@ func TestLoadWriteDecodes(t *testing.T) {
 			authRequest[domain.Issue](t, adminB, http.MethodPatch, second+"/api/issues/"+issue.ID, map[string]any{"title": fmt.Sprintf("Write load issue %d", index)}, "test-workspace", http.StatusOK)
 		}},
 		{"comment on B", func(index int) {
-			authRequest[domain.Comment](t, adminB, http.MethodPost, second+"/api/issues/"+issue.ID+"/comments", map[string]any{"body": fmt.Sprintf("Comment %d", index)}, "test-workspace", http.StatusCreated)
+			authRequest[domain.Comment](t, adminB, http.MethodPost, second+"/api/issue-records/"+issue.ID+"/comments", map[string]any{"body": fmt.Sprintf("Comment %d", index)}, "test-workspace", http.StatusCreated)
 		}},
 		{"team name on B", func(index int) {
 			authRequest[domain.Team](t, adminB, http.MethodPatch, second+teamsURL+"/"+team.ID, map[string]any{"name": fmt.Sprintf("Write Load %d", index)}, "", http.StatusOK)

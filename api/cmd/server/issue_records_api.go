@@ -267,7 +267,12 @@ func (s *server) createIssueRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.authDisabled {
-		metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+		// The authorization built this projection a moment ago, before any
+		// write (request_metadata.go); otherwise build it.
+		var handedOff bool
+		if metadata, handedOff = takeIssueWriteMetadata(r, query.Workspace, authUser(r).ID); !handedOff {
+			metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+		}
 		if err != nil {
 			issueRecordsError(w, err)
 			return
@@ -461,7 +466,12 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.authDisabled {
-		metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+		// The authorization built this projection a moment ago, before any
+		// write (request_metadata.go); otherwise build it.
+		var handedOff bool
+		if metadata, handedOff = takeIssueWriteMetadata(r, query.Workspace, authUser(r).ID); !handedOff {
+			metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
+		}
 		if err != nil {
 			issueRecordsError(w, err)
 			return

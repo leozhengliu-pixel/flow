@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -28,7 +29,34 @@ func issueRecordQueryOnly(r *http.Request) bool {
 	return r.URL.Path == "/api/issue-records" || r.URL.Path == "/api/issue-records/groups" || r.URL.Path == "/api/issue-records/bootstrap"
 }
 
+// issueRecordAuthorizationKey carries the authorization data resourceAllowed
+// built for this request to the issue-record alias wrapper, which runs right
+// after it and before the handler, so both read the same state. Building it
+// twice copied the viewer's whole workspace projection twice per comment,
+// attachment or relation write.
+type issueRecordAuthorizationKey struct{}
+
+type issueRecordAuthorization struct {
+	path, workspace, userID string
+	data                    domain.Bootstrap
+	taken                   atomic.Bool
+}
+
 func (s *server) issueRecordAuthorizationData(r *http.Request) (domain.Bootstrap, error) {
+	userID := authUser(r).ID
+	if cached, ok := r.Context().Value(issueRecordAuthorizationKey{}).(*issueRecordAuthorization); ok && cached.path == r.URL.Path && cached.workspace == workspaceKey(r) && cached.userID == userID && cached.taken.CompareAndSwap(false, true) {
+		data := cached.data
+		cached.data = domain.Bootstrap{}
+		return data, nil
+	}
+	data, err := s.buildIssueRecordAuthorizationData(r)
+	if err == nil {
+		*r = *r.WithContext(context.WithValue(r.Context(), issueRecordAuthorizationKey{}, &issueRecordAuthorization{path: r.URL.Path, workspace: workspaceKey(r), userID: userID, data: data}))
+	}
+	return data, err
+}
+
+func (s *server) buildIssueRecordAuthorizationData(r *http.Request) (domain.Bootstrap, error) {
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
 		return metadata, err
@@ -37,6 +65,12 @@ func (s *server) issueRecordAuthorizationData(r *http.Request) (domain.Bootstrap
 		metadata, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
 		if err != nil {
 			return metadata, err
+		}
+		// An issue create or update reads this same projection again before it
+		// writes: hand it over (request_metadata.go). Not for API keys, whose
+		// filter below edits the projection's collections in place.
+		if _, apiKey := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); !apiKey && issueWriteReadsMetadata(r) {
+			handOffIssueWriteMetadata(r, query.Workspace, authUser(r).ID, metadata)
 		}
 		filterBootstrapForAPIKey(&metadata, r)
 	}
