@@ -193,3 +193,174 @@ the peer request after team rename is 376.416 MiB and one metadata decode. The
 alternating team write is 388.512 MiB and 0.5 decodes/op. Raw original reports:
 `before-300-1.json`, `before-800-1.json` under the task directory and
 `write-cost-before.json` under the lead baseline directory.
+
+Final implementation: `faf954e0` on `c2798acd` (the added main commit changes CI
+only; API code is identical to the original baseline's parent). The final
+matrix uses the corrected handler drain. Earlier `pre-drain-*.json` files are
+retained only for diagnosis and are superseded by the lead-directory reports.
+
+| Corrected run | 300 / count 1x | 800 / count 1x | 300 / count 10x |
+| --- | ---: | ---: | ---: |
+| Distinct principals | 300 | 800 | 300 |
+| Peak Go heap in use MiB | 1429 | 1425 | 12996 |
+| Peak process RSS MiB | 1824 | 1910 | 4618 |
+| Process allocation GiB | 129.187 | 81.401 | 34.330 |
+| Observed SQL driver statements | 115396 | 283259 | 87841 |
+| Eligible event-recipient deliveries | 2258 | 5006 | 300 |
+| Applied within deadline | 1602 | 2597 | 0 |
+| Missing receipt | 165 | 1465 | 0 |
+| Unapplied or late (includes missing) | 656 | 2409 | 300 |
+| Commit/apply SLO p95 and p99 | censored | censored | censored |
+| Bootstrap 503s | 1273 | 6535 | 2678 |
+| Writer failures / attempts | 2 / 11 | 4 / 11 | 11 / 11 |
+| Outstanding API writes at final observation | 0 | 0 | 1 |
+| Metrics complete | yes | yes | **no** |
+
+The count-10x test completed on this 16 GB machine, but its observation drain
+expired with one handler still active. Its commit denominator is therefore
+incomplete, explicitly flagged in JSON. It is not a zero-loss result and cannot
+support a capacity claim. The other reports also fail the delivery/admission
+targets. These runs include the existing morning ramp during the first 20% of
+the load window; not-yet-subscribed eligible clients remain in the denominator.
+They do not isolate the programme's separate steady-state and cold-start SLOs.
+Go's memory limit is soft; the large heap peak is reported rather than hidden.
+
+No performance gain is claimed. The corrected matrix has more principals, richer
+metadata, JSON application in the generator and complete failure accounting,
+so it is not comparable to the original five-principal success-only run as an
+optimization result. The legacy rerun and write-cost comparison use the original
+fixture/method to check compatibility.
+
+| 50-write allocation comparison, MiB/op | Before | After |
+| --- | ---: | ---: |
+| Issue writer | 51.178 | 55.541 |
+| Comment writer | 84.394 | 84.420 |
+| Team writer | 47.179 | 47.095 |
+| Peer request after team write | 376.416 | 376.448 |
+| Alternating team writer | 388.512 | 391.827 |
+
+The after report also records SQL/CPU per phase. Issue/comment/team writer SQL
+averages are 55.14/42/36.22 statements per operation; the peer request after a team
+write averages 16.14. These include background work. The issue phase included
+0.02 metadata decodes/op, versus zero before; alternating writes included 0.56,
+versus 0.50 before. Such shared-process/background variation is visible, not
+attributed to a P01 optimization. CPU and SQL before P01 were not instrumented,
+so no before/after CPU or SQL reduction is asserted.
+
+The exact legacy 300-user/5-principal rerun reports 1344 MiB peak heap in use,
+1503 MiB RSS, 73.895 GiB allocated, 867 bootstrap 503s and a success-only freshness
+p95 of 4.430s. The corresponding before values are 1118/1262 MiB, 74.365 GiB,
+852 and 6.164s. Both use the same original method and neither establishes the SLO.
+
+The real two-API-process smoke test passed with distinct API/generator PIDs and
+separate replica SQL/CPU/memory samples. The race run enables that subprocess
+scenario, in addition to all P01 unit/differential tests. The 2,000-user smoke
+also passed its execution check with 2,000 principals, unique permission scopes,
+602 MiB sampled peak heap, four writes and zero writer failures. Only 162 of 5004
+eligible event-recipient applies met the deadline. Its deliberately small
+`0.002` count scale and short cold ramp are not 2,000-user production capacity
+evidence. Real browser apply remains unavailable in these runs.
+
+## Files and tests
+
+Existing files: `api/cmd/server/memory_load_test.go`,
+`api/cmd/server/memory_write_load_test.go`, `api/internal/store/loadtest_seed.go`,
+and the required `CHANGELOG.md` entry. New files are all named for P01:
+
+- `api/cmd/server/scale_external_load_test.go`
+- `api/cmd/server/scale_permission_matrix_test.go`
+- `api/cmd/server/scale_p01_browser_acks_test.go`
+- `api/cmd/server/scale_p01_fixture_test.go`
+- `api/cmd/server/scale_p01_histogram_test.go`
+- `api/cmd/server/scale_p01_late_commit_test.go`
+- `api/cmd/server/scale_p01_measurement_test.go`
+- `api/cmd/server/scale_p01_runner_test.go`
+- `api/cmd/server/scale_p01_write_test.go`
+- `api/internal/store/scale_p01_load_test.go`
+- `api/internal/store/scale_p01_permission_test.go`
+- `api/internal/store/scale_p01_probe.go`
+- `api/internal/store/scale_p01_seed.go`
+- `scale-p01-report.md`
+
+New tests: `TestScaleP01PrincipalCounts`, `TestScaleP01MetadataScales`,
+`TestScaleP01SQLProbeCommitAndRollback`, `TestScaleP01ReadProjectionBaseline`,
+`TestScaleP01FailureDenominators`, `TestScaleP01HistogramAndCompaction`,
+`TestScaleP01BrowserAcknowledgements`,
+`TestScaleP01TimedOutWriteStillContributesItsCommit`,
+`TestScaleP01PermissionMatrix`, `TestScaleP01DifferentialPreservesEmptyAndNull`,
+`TestScaleP01ExternalUsers`, `TestScaleP01TwoProcessLoad`,
+`TestScaleP01ReplicaProcess` and `TestScaleP01PrepareExternalFixture`.
+`TestLoadExternalUsers` is the explicit alias required by the plan's command.
+Expensive external/child/preparation tests skip unless enabled; the ordinary
+prefix still runs real tests in both store and server, without zero matches.
+
+## Verification commands and exits
+
+All Go test/vet and load commands ran through `~/.flow-local/heavy.sh`, with
+`GOMAXPROCS=4 GOMEMLIMIT=1536MiB`. Final verification is serialized inside
+`/tmp/codex-scale-p01/verify-pipeline.sh` under that lock; it additionally sets
+`TMPDIR=/tmp/codex-scale-p01`. The exact arguments and exit status for every final
+stage are recorded in `/tmp/codex-scale-p01/commands.tsv`. Each stage's full output
+is in the same directory as `<stage>.log`.
+
+| Stage / command (from `api/`) | Exit |
+| --- | ---: |
+| Original `FLOW_LOAD_USERS=300 FLOW_LOAD_DURATION=2m ... go test -tags=loadtest ./cmd/server -run '^TestLoadUsers$' -count=1 -timeout=10m -v` | 0 |
+| Original `FLOW_LOAD_USERS=800 FLOW_LOAD_LEGACY=1 FLOW_LOAD_DURATION=2m ... go test -tags=loadtest ./cmd/server -run '^TestLoadUsers$' -count=1 -timeout=10m -v` | 0 |
+| Original `FLOW_LOAD_WRITES=50 ... go test -tags=loadtest ./cmd/server -run '^TestLoadWriteDecodes$' -count=1 -timeout=10m -v` | 0 |
+| `final-p01`: `go test -p 1 -tags=loadtest ./internal/store ./cmd/server -run '^TestScaleP01' -count=1 -timeout=5m -v` | 0 |
+| `final-vet`: `go vet ./...` | 0 |
+| `final-vet-loadtest`: `go vet -tags=loadtest ./internal/store ./cmd/server` | 0 |
+| `final-race`: `FLOW_LOAD_TWO_PROCESS=1 FLOW_LOAD_USERS=5 FLOW_LOAD_UNIQUE_USERS=5 FLOW_LOAD_METADATA_COUNT_SCALE=0.002 FLOW_LOAD_DURATION=5s FLOW_LOAD_CHANGE_EVERY=1s FLOW_LOAD_DELIVERY_TIMEOUT=2s FLOW_LOAD_REQUEST_TIMEOUT=10s ... go test -race -p 1 -tags=loadtest ./internal/store ./cmd/server -run '^TestScaleP01' -count=1 -timeout=10m -v` | 0 |
+| `final-300-1`: 300 users/principals, scale 1, 2m, `go test -p 1 -tags=loadtest ./cmd/server -run '^TestLoadUsers$' -count=1 -timeout=15m -v` | 0 |
+| `final-800-1`: 800 users/principals, scale 1, same command | 0 |
+| `final-300-10`: 300 users/principals, scale 10 count mode, 2m, same test with `-timeout=20m` | 0 (incomplete metrics explicitly flagged) |
+| `final-write`: 50 writes, `go test -p 1 -tags=loadtest ./cmd/server -run '^TestLoadWriteDecodes$' -count=1 -timeout=15m -v` | 0 |
+| `final-legacy-300`: 300 users, legacy mode, 2m, `go test -p 1 -tags=loadtest ./cmd/server -run '^TestLoadUsers$' -count=1 -timeout=10m -v` | 0 |
+| `final-2000-smoke`: 2000 users/principals, unique scopes, count 0.002, 10s, same test with `-timeout=5m` | 0 |
+| `final-strict`: `FLOW_LOAD_STRICT_PERMISSIONS=1 go test -p 1 ./cmd/server -run '^TestScaleP01PermissionMatrix$' -count=1 -timeout=3m -v` | 1, expected pre-existing dependency/bootstrap-count defects |
+| `docker-version`: `docker version --format '{{.Server.Version}}'` | 1, daemon unavailable |
+| `final-prefix`: `go test -p 1 ./internal/store ./cmd/server -run '^TestScaleP01' -count=1 -timeout=5m -v` | 0 |
+| `final-g0`: `go test -p 1 ./internal/store ./internal/coordination ./cmd/server -count=1 -timeout=20m` | 1, static SQL classifier false positive; server/coordination passed |
+| `checked-p01`: tagged P01 prefix plus `TestEveryMetadataWriteStatementMovesTheMetadataRevision` | 0 |
+| `checked-vet`: `go vet ./...` | 0 |
+| `checked-vet-loadtest`: `go vet -tags=loadtest ./internal/store ./cmd/server` | 0 |
+| `checked-race`: same two-process/P01 race command as above | 0 |
+| `checked-g0`: same full G0 command as above | 0: store 81.886s, coordination 1.442s, server 316.770s |
+
+Earlier development commands are retained in task logs rather than presented as
+passing verification. `p01-tests-1/2/3`, `permission-4/5`, `p01-tests-6` and
+`smoke-local` exited 1 while fixture expectations, imports and existing route
+shape differences were being resolved; the first store prefix had zero matches
+and was not counted as a pass. `permission-7`, `p01-tests-8`, `smoke-local-2`,
+`smoke-local-final`, `external-smoke`, `p01-after-rebase`, the earlier write-after
+run and all three pre-drain matrix runs exited 0. `p01-late-fix` and the first
+pipeline attempt exited 1 while the meaningful linked-issue count fixture was
+being added; the corrected final commands above supersede them. The separate
+strict diagnostic exited 1 as expected. A queued G0 wrapper was stopped before
+it acquired a lock or ran a test (137), then rescheduled at the pipeline's end.
+
+`gofmt -w` was run on owned Go files after edits (final exit 0); an intermediate
+unterminated string was corrected after exit 2. `git diff --check` exits 0.
+Read-only `pwd`, `git status/log/diff/show/rev-parse`, `rg`, `sed`, `cat`, `jq`,
+`ls`, `wc`, `ps`, `pgrep`, `date` and `memory_pressure` inspections were used.
+Exploratory missing-file/glob/no-match probes returned 1 or 2 and were corrected;
+none was treated as test evidence. No web, SDK, OpenAPI or browser command was
+needed because their sources and production wire shapes did not change.
+
+The first G0 failure was `TestEveryMetadataWriteStatementMovesTheMetadataRevision`:
+its source scanner included build-tagged files and interpreted the probe's string
+classifiers as incomplete executable writes. Commit `e76eeb56` uses SQL-token
+comparisons instead, preserving instrumentation behavior without SQL-shaped
+builder literals. The guard, all P01 tests, vet and race checks pass after that
+correction. Corrected final command arguments/exits are additionally recorded in
+`/tmp/codex-scale-p01/commands-final.tsv`. The raw baselines were collected on
+`faf954e0`; the later classifier correction changes no business path or load mix.
+
+## Delivery
+
+Code commits: `578b6928`, `faf954e0`, `e76eeb56`. The verification report is a
+separate documentation commit. Review ref: `refs/heads/review/scale-p01`.
+The branch is rebased onto `origin/main`; the lead owns merging it. Production
+data, deployed services, web/SDK sources and tracked `api/server` were not changed.
+No browser screenshots were taken and no browser verification is claimed.
