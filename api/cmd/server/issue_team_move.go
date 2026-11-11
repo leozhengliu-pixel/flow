@@ -128,7 +128,7 @@ func moveIssueToTeam(data *domain.Bootstrap, issue *domain.Issue, team domain.Te
 	}
 
 	if settings, ok := data.TeamSettings[team.ID]; ok && settings.EstimateType == "notUsed" && issue.Estimate != nil {
-		changes["estimateBefore"], changes["estimate"] = strconv.FormatFloat(*issue.Estimate, 'f', -1, 64), "0"
+		changes["estimateBefore"], changes["estimate"] = strconv.FormatFloat(*issue.Estimate, 'f', -1, 64), ""
 		issue.Estimate = nil
 	}
 

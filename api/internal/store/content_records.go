@@ -519,6 +519,12 @@ func syncContentRecordsFrom[T any](ctx context.Context, tx *sqlTx, workspace, ki
 				return fmt.Errorf("%s %s: %w", kind, k.id, ErrConcurrentWrite)
 			}
 		}
+		if kind == "activity" {
+			if err := deleteIssueActivity(ctx, tx, workspace, k.resource, k.id); err != nil {
+				return err
+			}
+			continue
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_content_records WHERE workspace_key=? AND kind=? AND resource_id=? AND id=?`, workspace, kind, k.resource, k.id); err != nil {
 			return err
 		}

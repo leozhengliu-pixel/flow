@@ -58,6 +58,7 @@ func main() {
 	}
 	g.ref(reflect.TypeOf(publicapi.Error{}), false)
 	g.ref(reflect.TypeOf(publicapi.PageInfo{}), false)
+	g.ref(reflect.TypeOf(domain.ActivityEvent{}), false)
 	webhooks := g.webhooks()
 	scopes := map[string]string{
 		"read":   "Read workspace data",
@@ -202,6 +203,11 @@ func (g *generator) ref(t reflect.Type, partial bool) schema {
 // webhooks and nested objects carry a subset of it.
 func (g *generator) schemaFor(t reflect.Type, partial bool) schema {
 	switch {
+	case t == reflect.TypeOf(domain.ActivityMetadata{}):
+		return schema{"type": "object", "properties": schema{
+			"addedLabelIds":   schema{"type": "array", "items": schema{"type": "string"}},
+			"removedLabelIds": schema{"type": "array", "items": schema{"type": "string"}},
+		}, "additionalProperties": schema{"oneOf": []any{schema{"type": "string"}, schema{"type": "array", "items": schema{"type": "string"}}}}}
 	case t == timeType:
 		return schema{"type": "string", "format": "date-time"}
 	case t == rawJSONType:

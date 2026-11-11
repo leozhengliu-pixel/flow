@@ -5,9 +5,70 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"slices"
+	"strings"
 
 	"flow/api/internal/domain"
 )
+
+// Only the timeline heads are needed to merge a PATCH. Each lookup uses the
+// content resource/order index and is bounded independently of history length.
+func loadIssueHistoryHeads(ctx context.Context, tx *sqlTx, workspace string, issues []domain.Issue, data *domain.Bootstrap) (map[string]domain.ActivityEvent, error) {
+	heads := map[string]domain.ActivityEvent{}
+	data.Activities = map[string][]domain.ActivityEvent{}
+	data.Comments = map[string][]domain.Comment{}
+	for start := 0; start < len(issues); start += 100 {
+		batch := issues[start:min(start+100, len(issues))]
+		for _, kind := range []string{"activity", "comment"} {
+			queries, args := make([]string, 0, len(batch)), make([]any, 0, 3*len(batch))
+			for _, issue := range batch {
+				queries = append(queries, `SELECT resource_id,data FROM (SELECT resource_id,data FROM workspace_content_records WHERE workspace_key=? AND kind=? AND resource_id=? ORDER BY created_at DESC,id DESC LIMIT 1) head`)
+				args = append(args, workspace, kind, issue.ID)
+			}
+			rows, err := tx.QueryContext(ctx, strings.Join(queries, " UNION ALL "), args...)
+			if err != nil {
+				return nil, err
+			}
+			for rows.Next() {
+				var resource string
+				var raw []byte
+				if err := rows.Scan(&resource, &raw); err != nil {
+					rows.Close()
+					return nil, err
+				}
+				if kind == "activity" {
+					var event domain.ActivityEvent
+					if err := json.Unmarshal(raw, &event); err != nil {
+						rows.Close()
+						return nil, err
+					}
+					heads[resource] = event
+					data.Activities[resource] = []domain.ActivityEvent{event}
+				} else {
+					var comment domain.Comment
+					if err := json.Unmarshal(raw, &comment); err != nil {
+						rows.Close()
+						return nil, err
+					}
+					data.Comments[resource] = []domain.Comment{comment}
+				}
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return heads, nil
+}
+
+func deleteIssueActivity(ctx context.Context, tx *sqlTx, workspace, resource, id string) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM issue_activity_cycles WHERE workspace_key=? AND activity_id=?`, workspace, id); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `DELETE FROM workspace_content_records WHERE workspace_key=? AND kind='activity' AND resource_id=? AND id=?`, workspace, resource, id)
+	return err
+}
 
 type IssueHistory struct {
 	Comments         []domain.Comment       `json:"comments"`

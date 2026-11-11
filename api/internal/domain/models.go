@@ -2857,12 +2857,13 @@ type Comment struct {
 }
 
 type ActivityEvent struct {
-	ID        string            `json:"id"`
-	Type      string            `json:"type"`
-	CreatedAt time.Time         `json:"createdAt"`
-	Actor     User              `json:"actor"`
-	BotActor  *ActorBot         `json:"botActor,omitempty"`
-	Metadata  map[string]string `json:"metadata"`
+	ID        string           `json:"id"`
+	Type      string           `json:"type"`
+	CreatedAt time.Time        `json:"createdAt"`
+	UpdatedAt *time.Time       `json:"updatedAt,omitempty"`
+	Actor     User             `json:"actor"`
+	BotActor  *ActorBot        `json:"botActor,omitempty"`
+	Metadata  ActivityMetadata `json:"metadata"`
 }
 
 // Notification is an Inbox aggregate. Source IDs retain a stable link to the

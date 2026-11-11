@@ -246,8 +246,10 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if target == nil {
 			return sql.ErrNoRows
 		}
-		metadata.Activities = map[string][]domain.ActivityEvent{}
-		metadata.Comments = map[string][]domain.Comment{}
+		activityHeads, err := loadIssueHistoryHeads(ctx, tx, workspace, metadata.Issues, &metadata)
+		if err != nil {
+			return err
+		}
 		rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='notification' AND resource_id=? ORDER BY created_at DESC LIMIT 1000`, workspace, id)
 		if err != nil {
 			return err
@@ -339,9 +341,23 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		for resource, items := range metadata.Activities {
 			for _, item := range items {
+				if head, exists := activityHeads[resource]; exists && item.ID == head.ID {
+					delete(activityHeads, resource)
+					if reflect.DeepEqual(head, item) {
+						continue
+					}
+				}
 				if err := writeContentRecord(ctx, tx, workspace, "activity", resource, item); err != nil {
 					return err
 				}
+			}
+		}
+		for resource, head := range activityHeads {
+			if head.Type != "issue.updated" || !hasIssueActivityChanges(head.Metadata) {
+				continue
+			}
+			if err := deleteIssueActivity(ctx, tx, workspace, resource, head.ID); err != nil {
+				return err
 			}
 		}
 		for resource, items := range notificationRecords(metadata.Notifications) {

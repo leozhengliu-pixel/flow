@@ -202,7 +202,12 @@ func mcpActivityView(data domain.Bootstrap, event domain.ActivityEvent) map[stri
 	changes := map[string]any{}
 	for key, value := range event.Metadata {
 		switch key {
-		case "descriptionBefore", "descriptionStateBefore", "documentContent", "sortOrder", "stateBeforeId", "stateId":
+		case "addedLabelIds", "removedLabelIds":
+			ids := []string{}
+			_ = json.Unmarshal([]byte(value), &ids)
+			changes[key] = ids
+			continue
+		case "descriptionBefore", "descriptionStateBefore", "descriptionHash", "documentContent", "sortOrder", "stateBeforeId", "stateId":
 			continue
 		case "description":
 			changes["descriptionEdited"] = true
@@ -248,7 +253,11 @@ func mcpActivityView(data domain.Bootstrap, event domain.ActivityEvent) map[stri
 			changes[key+"Name"] = name
 		}
 	}
-	return map[string]any{"id": event.ID, "type": event.Type, "createdAt": event.CreatedAt, "actor": mcpUserRef(&event.Actor), "changes": changes, "summary": mcpActivitySummary(event.Type, changes)}
+	result := map[string]any{"id": event.ID, "type": event.Type, "createdAt": event.CreatedAt, "actor": mcpUserRef(&event.Actor), "changes": changes, "summary": mcpActivitySummary(event.Type, changes)}
+	if event.UpdatedAt != nil {
+		result["updatedAt"] = event.UpdatedAt
+	}
+	return result
 }
 
 func mcpActivitySummary(kind string, changes map[string]any) string {

@@ -165,7 +165,7 @@ func (s *server) saveLinkAttachment(ctx context.Context, r *http.Request, worksp
 			attachment.Title = parsed.Host
 		}
 		target.Attachments = append(target.Attachments, attachment)
-		appendActivity(data, target.ID, "issue.link_created", data.Viewer, map[string]string{"attachmentId": attachment.ID, "title": attachment.Title, "url": attachment.URL})
+		appendActivity(data, target.ID, "issue.link_created", data.Viewer, issueLinkActivityMetadata(attachment))
 		saved, created = attachment, true
 		return nil
 	})

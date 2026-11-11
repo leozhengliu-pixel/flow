@@ -408,6 +408,6 @@ func appendIssueLink(data *domain.Bootstrap, issue *domain.Issue, input domain.I
 	}
 	attachment := domain.Attachment{ID: idgen.New("link_"), IssueID: issue.ID, Title: title, URL: parsed.String(), ContentType: "text/uri-list", CreatedAt: time.Now().UTC(), Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 	issue.Attachments = append(issue.Attachments, attachment)
-	appendActivity(data, issue.ID, "issue.link_created", data.Viewer, map[string]string{"attachmentId": attachment.ID, "title": attachment.Title, "url": attachment.URL})
+	appendActivity(data, issue.ID, "issue.link_created", data.Viewer, issueLinkActivityMetadata(attachment))
 	return attachment
 }

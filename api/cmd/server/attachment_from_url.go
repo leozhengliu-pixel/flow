@@ -108,7 +108,7 @@ func (s *server) createAttachmentFromURL(w http.ResponseWriter, r *http.Request)
 		}
 		attachment = domain.Attachment{ID: attachmentID, IssueID: issueID, Title: filename, URL: "/uploads/" + safeName, ContentType: contentType, Size: size, CreatedAt: time.Now().UTC(), Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ProviderURL: raw}
 		issue.Attachments = append(issue.Attachments, attachment)
-		appendActivity(data, issueID, "attachment.created", data.Viewer, map[string]string{"attachmentId": attachment.ID, "title": attachment.Title})
+		appendActivity(data, issueID, "attachment.created", data.Viewer, issueLinkActivityMetadata(attachment))
 		if embed {
 			return applyIssueAttachmentEmbed(data, issue, attachment)
 		}

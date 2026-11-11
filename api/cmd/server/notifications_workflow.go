@@ -1986,6 +1986,9 @@ func advanceCycleSchedule(data *domain.Bootstrap, teamID string, now time.Time) 
 }
 
 func appendIssueNotifications(data *domain.Bootstrap, issue domain.Issue, activity domain.ActivityEvent, comment *domain.Comment) {
+	if activity.ID == "" {
+		return
+	}
 	recipients := map[string]string{}
 	if newAssignee := activity.Metadata["assignee"]; newAssignee != "" && newAssignee != activity.Metadata["previousAssignee"] {
 		recipients[newAssignee] = "assignments"

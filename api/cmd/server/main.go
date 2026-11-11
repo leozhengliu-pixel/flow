@@ -5404,7 +5404,7 @@ func (s *server) createRelation(w http.ResponseWriter, r *http.Request) {
 		} else if input.Type == "sub_issue_of" {
 			setParent(data, issue, input.RelatedIssueID)
 		}
-		appendActivity(data, id, "issue.relation_added", data.Viewer, map[string]string{"type": input.Type, "relatedIssueId": input.RelatedIssueID})
+		appendRelationActivities(data, relation, "issue.relation_added")
 		return nil
 	})
 	respondMutation(w, err, http.StatusCreated, relation)
@@ -5437,7 +5437,7 @@ func (s *server) deleteRelation(w http.ResponseWriter, r *http.Request) {
 				setParent(data, issue, "")
 			}
 		}
-		appendActivity(data, id, "issue.relation_removed", data.Viewer, map[string]string{"relationId": relationID})
+		appendRelationActivities(data, removed, "issue.relation_removed")
 		return nil
 	})
 	if err != nil {
@@ -5494,7 +5494,7 @@ func (s *server) createAttachment(w http.ResponseWriter, r *http.Request) {
 		}
 		attachment = domain.Attachment{ID: attachmentID, IssueID: id, Title: header.Filename, URL: "/uploads/" + safeName, ContentType: header.Header.Get("Content-Type"), Size: size, CreatedAt: time.Now().UTC(), Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		issue.Attachments = append(issue.Attachments, attachment)
-		appendActivity(data, id, "attachment.created", data.Viewer, map[string]string{"attachmentId": attachment.ID, "title": attachment.Title})
+		appendActivity(data, id, "attachment.created", data.Viewer, issueLinkActivityMetadata(attachment))
 		if formEmbedEnabled(r) {
 			return applyIssueAttachmentEmbed(data, issue, attachment)
 		}
@@ -5636,8 +5636,9 @@ func (s *server) deleteAttachment(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		path = issue.Attachments[index].URL
+		metadata := issueLinkActivityMetadata(issue.Attachments[index])
 		issue.Attachments = slices.Delete(issue.Attachments, index, index+1)
-		appendActivity(data, id, "attachment.deleted", data.Viewer, map[string]string{"attachmentId": attachmentID})
+		appendActivity(data, id, "attachment.deleted", data.Viewer, metadata)
 		return nil
 	})
 	if err != nil {
@@ -5898,6 +5899,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 	if err := checkArchivedIssueUpdate(*issue, input); err != nil {
 		return nil, err
 	}
+	before := *issue
 	// Cycle graphs replay membership history, so every cycle change records its previous cycle.
 	cycleBeforeUpdate := optionalID(issue.CycleID)
 	triageSettings := teamSettings(data, issue.Team.ID)
@@ -6042,7 +6044,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if issue.Estimate != nil {
 			changes["estimateBefore"] = strconv.FormatFloat(*issue.Estimate, 'f', -1, 64)
 		} else {
-			changes["estimateBefore"] = "0"
+			changes["estimateBefore"] = ""
 		}
 		if *input.Estimate < 0 || (*input.Estimate == 0 && !teamSettings(data, issue.Team.ID).EstimateAllowZero) {
 			issue.Estimate = nil
@@ -6050,7 +6052,10 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			estimate := *input.Estimate
 			issue.Estimate = &estimate
 		}
-		changes["estimate"] = strconv.FormatFloat(*input.Estimate, 'f', -1, 64)
+		changes["estimate"] = ""
+		if issue.Estimate != nil {
+			changes["estimate"] = strconv.FormatFloat(*issue.Estimate, 'f', -1, 64)
+		}
 	}
 	if input.AssigneeID != nil {
 		if candidate := userByID(data, *input.AssigneeID); candidate != nil && candidate.App {
@@ -6274,6 +6279,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		changes["cycle"] = cycle
 		changes["cycleBefore"] = cycleBeforeUpdate
 	}
+	addIssueActivityBeforeValues(before, *issue, changes)
 	return changes, nil
 }
 
@@ -7135,8 +7141,7 @@ func validLabelGroupSelection(labels []domain.IssueLabel) bool {
 }
 func appendActivity(data *domain.Bootstrap, issueID, eventType string, actor domain.User, metadata map[string]string) domain.ActivityEvent {
 	activity := domain.ActivityEvent{ID: idgen.New("activity_"), Type: eventType, CreatedAt: time.Now().UTC(), Actor: actor, BotActor: viewerBotActor(data, actor), Metadata: metadata}
-	data.Activities[issueID] = append(data.Activities[issueID], activity)
-	return activity
+	return store.RecordIssueActivity(data, issueID, activity)
 }
 func validRelation(value string) bool {
 	return slices.Contains([]string{"related", "blocks", "blocked_by", "duplicate", "parent_of", "sub_issue_of"}, value)
