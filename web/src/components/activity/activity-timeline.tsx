@@ -502,7 +502,7 @@ function ActivityEventIcon({ event, context }: { event: ActivityEvent & Partial<
           }
         />
       )
-    if (event.entryType === 'priority') return <PriorityIcon size={14} priority={Math.max(0, ['No priority', 'Urgent', 'High', 'Medium', 'Low'].indexOf(m.priority))} />
+    if (event.entryType === 'priority') return <PriorityIcon size={14} priority={/^[0-4]$/.test(m.priority) ? Number(m.priority) : Math.max(0, ['No priority', 'Urgent', 'High', 'Medium', 'Low'].indexOf(m.priority))} />
     if (event.entryType?.startsWith('label')) return <LabelIcon size={14} />
     if (event.entryType === 'project' || event.entryType === 'milestone') return <ProjectIcon size={14} />
     if (event.entryType === 'cycle') return <CycleIcon size={14} />

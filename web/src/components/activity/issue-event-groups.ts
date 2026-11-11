@@ -1,9 +1,9 @@
 import { sameActivityActor } from '@/lib/actor-attribution'
-import { activityPhrase, changeSeparator, joinActivityParts, type ActivityRef, type IssueActivityEntry } from './issue-activity-model'
+import { activityIds, activityPhrase, changeSeparator, joinActivityParts, type ActivityRef, type IssueActivityEntry } from './issue-activity-model'
 
-const families = new Set(['state-change', 'priority', 'label-added', 'label-removed', 'title-change', 'cycle', 'related-issue', 'duplicate-issue', 'attachment'])
+const families = new Set(['state-change', 'priority', 'labels', 'label-added', 'label-removed', 'title-change', 'cycle', 'related-issue', 'duplicate-issue', 'attachment'])
 const aggressive = new Set(['title-change', 'cycle', 'related-issue', 'duplicate-issue', 'attachment'])
-const family = (row: IssueActivityEntry) => row.entryType.startsWith('label-') ? 'labels' : row.entryType
+const family = (row: IssueActivityEntry) => row.entryType.startsWith('label') ? 'labels' : row.entryType
 const sameActorOnly = new Set(['state-change', 'priority', 'labels'])
 
 export function orderIssueActivityEntries(entries: IssueActivityEntry[]) {
@@ -51,12 +51,14 @@ export function summarizeIssueActivity(rows: IssueActivityEntry[], t: (text: str
   const number = (n: number) => t(['zero', 'one', 'two', 'three', 'four', 'five'][n] ?? String(n))
   if (last.entryType === 'attachment') return phrase('added {links}', { links: bold(t('{count} links').replace('{count}', String(rows.length))) })
   if (last.entryType === 'title-change') return phrase(rows.length === 2 ? 'changed title twice' : 'changed title {count} times', { count: number(rows.length) })
-  if (last.entryType.startsWith('label-')) {
+  if (last.entryType.startsWith('label')) {
+    if (rows.some(row => !row.description.some(part => typeof part !== 'string' && part.type === 'label'))) return joinActivityParts(rows.map(row => row.description), t)
     const labels = new Map<string, { part: ActivityRef; first: string; last: string }>()
     for (const row of rows) for (const part of row.description) {
       if (typeof part === 'string' || part.type !== 'label') continue
       const previous = labels.get(part.id)
-      labels.set(part.id, { part, first: previous?.first ?? row.entryType, last: row.entryType })
+      const type = row.entryType === 'labels' ? activityIds(row.metadata.removedLabelIds).includes(part.id) ? 'label-removed' : 'label-added' : row.entryType
+      labels.set(part.id, { part, first: previous?.first ?? type, last: type })
     }
     return joinActivityParts([...labels.values()].map(label => phrase(label.first !== label.last ? label.first === 'label-added' ? 'added and then removed {label}' : 'removed and then added {label}' : label.last === 'label-added' ? 'added {label}' : 'removed {label}', { label: label.part })), t)
   }

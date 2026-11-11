@@ -172,6 +172,16 @@ describe('families and age collapse', () => {
     expect(activityBlockExpanded('block', now + 15 * 60_000)).toBe(true)
     expect(activityBlockExpanded('block', now + 15 * 60_000 + 1)).toBe(false)
   })
+  it('keeps counted label text in groups and groups paired add/remove clauses', () => {
+    const many = issueActivityEntries(event({ addedLabelIds: JSON.stringify(['a', 'b', 'c', 'd', 'e', 'f']) }, 'issue.updated', 'many'), context)[0]
+    const one = issueActivityEntries(event({ removedLabelIds: JSON.stringify([label.id]) }, 'issue.updated', 'one'), context)[0]
+    expect(activityPartsText(summarizeIssueActivity([many, one]))).toBe(`added 6 labels and removed label ${label.name}`)
+    const paired = issueActivityEntries(event({ addedLabelIds: JSON.stringify([label.id]), removedLabelIds: JSON.stringify(['other']) }, 'issue.updated', 'paired'), context)[0]
+    const grouped = groupIssueActivityEntries([paired, one], { now, last: true })
+    expect(grouped).toHaveLength(1)
+    expect(grouped[0].members).toHaveLength(2)
+    expect(activityPartsText(grouped[0].description)).toBe(`added and then removed ${label.name} and removed another label`)
+  })
   it('preserves context at the five-minute/four-day comment boundary', () => {
     const comment = now - 4 * 86400_000
     const rows = entries(3).map((row, i) => ({ ...row, createdAt: new Date(comment - 5 * 60_000 + i).toISOString() }))

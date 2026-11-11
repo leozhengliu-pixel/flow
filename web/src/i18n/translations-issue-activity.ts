@@ -42,6 +42,8 @@ export const issueActivityZhCN: Record<string, string> = {
   '{count} point': '{count} 点',
   '{count} points': '{count} 点',
   'added label {labels}': '添加了标签 {labels}',
+  'added {labels}': '添加了 {labels}',
+  'removed {labels}': '移除了 {labels}',
   'added labels {labels}': '添加了标签 {labels}',
   'removed label {labels}': '移除了标签 {labels}',
   'removed labels {labels}': '移除了标签 {labels}',

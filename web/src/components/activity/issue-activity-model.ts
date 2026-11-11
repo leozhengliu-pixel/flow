@@ -83,7 +83,7 @@ export function issueActivityEntries(event: ActivityEvent, context?: ActivityCon
       if (!ids.length) continue
       const labels = ids.map(id => ref('label', id))
       const names = labels.length <= limit ? joinActivityParts(labels.map(label => [label]), t) : phrase('{count} labels', { count: String(labels.length) })
-      add(type, phrase(type === 'label-added' ? ids.length === 1 ? 'added label {labels}' : 'added labels {labels}' : ids.length === 1 ? 'removed label {labels}' : 'removed labels {labels}', { labels: names }))
+      add(type, phrase(type === 'label-added' ? ids.length > limit ? 'added {labels}' : ids.length === 1 ? 'added label {labels}' : 'added labels {labels}' : ids.length > limit ? 'removed {labels}' : ids.length === 1 ? 'removed label {labels}' : 'removed labels {labels}', { labels: names }))
     }
     if ('labels' in m && !('addedLabelIds' in m) && !('removedLabelIds' in m)) {
       const labels = activityIds(m.labels).map(id => ref('label', id))
