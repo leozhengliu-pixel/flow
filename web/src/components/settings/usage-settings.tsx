@@ -3,6 +3,7 @@ import { CodingUsageBlock } from "./coding-sessions/coding-usage-block";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { FlowProductName } from "@/components/ui/flow-product-name";
 import { useI18n } from "@/i18n/i18n";
 import { updateWorkspacePreferences } from "@/lib/api";
 import { formatCredits, useAICredits } from "@/lib/ai-credits";
@@ -75,6 +76,7 @@ function UsageOverview({ data, onOpenView }: UsageProps) {
   const credits = useAICredits();
   const limits = data.workspaceSettings?.spendLimits;
   const limitSummary = [limits?.workspaceLimit, limits?.userLimit, limits?.loopLimit].some((value) => (value ?? 0) > 0) ? t("Limits set") : t("No limits set");
+  const loopRuns = (data.loops ?? []).reduce((total, loop) => total + (loop.runCount30d ?? 0), 0);
   return (
     <div className="usage-page">
       <SettingsPageTitle description={t("Track usage, manage credits, and set spend limits across your workspace")}>
@@ -97,13 +99,20 @@ function UsageOverview({ data, onOpenView }: UsageProps) {
           <div>
             <h3>{t("AI credits")}</h3>
             <p>
-              {t("Credits apply to usage of")} <Link className="usage-feature-link" to={settingsPath(data.workspace.urlKey, "coding-sessions")}>{t("Coding sessions")}</Link> {t("and")} <Link className="usage-feature-link" to={settingsPath(data.workspace.urlKey, "loops")}>{t("Loops")}</Link>. <DocsLink>{t("Docs")}</DocsLink>
+              {t("Credits apply to usage of")} <Link className="usage-feature-link" aria-label={t("Flow Code")} to={settingsPath(data.workspace.urlKey, "coding-sessions")}><FlowProductName/> {t("Code")}</Link> {t("and")} <Link className="usage-feature-link" to={settingsPath(data.workspace.urlKey, "loops")}>{t("Loops")}</Link>. <DocsLink>{t("Docs")}</DocsLink>
             </p>
           </div>
         </header>
         <div className="usage-card usage-row usage-row-short">
           <strong>{t("Workspace credits")}</strong>
           <strong data-testid="workspace-credits">{credits ? t("{amount} remaining").replace("{amount}", () => formatCredits(credits.remainingMicros)) : "…"}</strong>
+        </div>
+        <div className="usage-card usage-row">
+          <span className="usage-row-copy">
+            <strong>{t("Loops")}</strong>
+            <span>{t("{count} runs in the last 30 days").replace("{count}", () => String(loopRuns))}</span>
+          </span>
+          <Link className="usage-pill-button" to={settingsPath(data.workspace.urlKey, "loops")}>{t("Manage")}</Link>
         </div>
         <button type="button" className="usage-card usage-link-row" onClick={() => onOpenView("spend-limits")}>
           <span className="usage-row-copy">

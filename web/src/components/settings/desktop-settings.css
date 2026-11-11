@@ -161,6 +161,7 @@
   .desktop-integration-strip > div { box-sizing: border-box; height: 29px; display: flex; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; gap: 8px; padding: 1px 0; }
   .desktop-integration-strip button { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 8px; height: 27px; padding: 2px 16px; border: 0; background: transparent; color: var(--set-desc); font: 600 15px/23px var(--font); white-space: nowrap; }
   .desktop-integration-strip button[aria-selected=true], .desktop-integration-strip button:hover { color: var(--set-text); }
+  .desktop-integration-strip button:focus-visible { outline: var(--control-focus-width) solid var(--focus-ring); outline-offset: calc(-1 * var(--control-focus-width)); }
   .desktop-integration-strip > button { flex: 0 0 28px; width: 28px; height: 28px; padding: 0 2px; font: 500 12px/normal var(--font); }
   .desktop-integration-catalog { margin-top: 48px; }
   .desktop-integration-group + .desktop-integration-group { margin-top: 48px; }

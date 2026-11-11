@@ -13,6 +13,8 @@ export const usageSettingsZhCN: Record<string, string> = {
   "Credits apply to usage of": "额度适用于",
   "Coding sessions": "编码会话",
   "Loops": "循环",
+  "Flow Code": "Flow 代码",
+  "{count} runs in the last 30 days": "过去 30 天运行 {count} 次",
   "and": "和",
   "Docs": "文档",
   "Workspace credits": "工作区额度",

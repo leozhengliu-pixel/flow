@@ -1,4 +1,6 @@
 export const chatIntegrationsZhCN: Record<string, string> = {
+  "Flow Asks for Slack": "Flow Slack 需求",
+  "Asks for Slack": "Slack 需求",
   "Group notifications": "群通知",
   "Send notifications to a group.": "向群发送通知。",
   "Send notifications to a {name} group.": "向{name}群发送通知。",
