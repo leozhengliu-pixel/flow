@@ -960,6 +960,18 @@ func guestRestrictedPath(path string) bool {
 }
 
 func (s *server) resourceAllowed(r *http.Request, workspace string, userID string) bool {
+	if _, _, ok := recordAccessRoute(r); ok && recordAccessMode() != "off" {
+		if recordAccessMode() == "on" {
+			result := s.requestResourceRead(r, workspace, userID)
+			return result.err == nil && result.allowed
+		}
+		allowed := s.resourceAllowedLegacy(r, workspace, userID)
+		return s.shadowResourceAuthorization(r, workspace, userID, allowed)
+	}
+	return s.resourceAllowedLegacy(r, workspace, userID)
+}
+
+func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID string) bool {
 	if strings.HasSuffix(r.URL.Path, "/default-favorites") {
 		teamID := s.store.ResolveTeamID(workspace, teamIDFromWorkspacePath(r.URL.Path))
 		data, access, err := s.requestIssueQueryAccess(r)

@@ -7,7 +7,22 @@ import (
 	"sync/atomic"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
+
+type resourceReadHandoffKey struct{}
+
+type resourceReadHandoff struct {
+	workspace, userID, kind, ref string
+	access                       store.AccessContext
+	data                         domain.Bootstrap
+	allowed                      bool
+	err                          error
+}
+
+func handOffResourceRead(r *http.Request, result *resourceReadHandoff) {
+	*r = *r.WithContext(context.WithValue(r.Context(), resourceReadHandoffKey{}, result))
+}
 
 // A viewer's workspace projection (PagedWorkspaceMetadata) is a deep copy of
 // the workspace metadata filtered for one user: tens of MiB in a large

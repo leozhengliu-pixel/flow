@@ -129,6 +129,9 @@ func (s *server) getCycleRecord(w http.ResponseWriter, r *http.Request) {
 // GET /api/projects/{id}: the id or the slugId (a stale-prefix or legacy
 // name-only slug resolves too).
 func (s *server) getProjectRecord(w http.ResponseWriter, r *http.Request) {
+	if s.serveResourceRead(w, r, "projects") {
+		return
+	}
 	data, ok := s.publicMetadata(w, r)
 	if !ok {
 		return
@@ -136,14 +139,19 @@ func (s *server) getProjectRecord(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	index := domain.ProjectIndexBySlugRef(data.Projects, id)
 	if index < 0 {
+		s.shadowResourceRecord(r, "projects", nil)
 		writePublicRecordNotFound(w, "project")
 		return
 	}
+	s.shadowResourceRecord(r, "projects", data.Projects[index])
 	writeJSON(w, http.StatusOK, data.Projects[index])
 }
 
 // GET /api/initiatives/{id}: the id or the slugId.
 func (s *server) getInitiativeRecord(w http.ResponseWriter, r *http.Request) {
+	if s.serveResourceRead(w, r, "initiatives") {
+		return
+	}
 	data, ok := s.publicMetadata(w, r)
 	if !ok {
 		return
@@ -151,9 +159,11 @@ func (s *server) getInitiativeRecord(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	index := domain.InitiativeIndexBySlugRef(data.Initiatives, id)
 	if index < 0 {
+		s.shadowResourceRecord(r, "initiatives", nil)
 		writePublicRecordNotFound(w, "initiative")
 		return
 	}
+	s.shadowResourceRecord(r, "initiatives", data.Initiatives[index])
 	writeJSON(w, http.StatusOK, data.Initiatives[index])
 }
 

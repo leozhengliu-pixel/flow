@@ -523,6 +523,7 @@ func (d *sqlDatabase) ExecContext(ctx context.Context, query string, args ...any
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return nil, errors.New("cannot write inside a workspace read snapshot")
 	}
+	observeSQLStatement(ctx, query)
 	return d.DB.ExecContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
 
@@ -530,6 +531,7 @@ func (d *sqlDatabase) QueryContext(ctx context.Context, query string, args ...an
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return snapshot.reader.QueryContext(ctx, query, args...)
 	}
+	observeSQLStatement(ctx, query)
 	return d.DB.QueryContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
 
@@ -537,6 +539,7 @@ func (d *sqlDatabase) QueryRowContext(ctx context.Context, query string, args ..
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == d {
 		return snapshot.reader.QueryRowContext(ctx, query, args...)
 	}
+	observeSQLStatement(ctx, query)
 	return d.DB.QueryRowContext(ctx, rewriteSQL(query, d.dialect), textArgs(d.dialect, args)...)
 }
 
@@ -584,6 +587,7 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 	if workspace, ok := metadataWriteWorkspace(query, args); ok {
 		tx.queueCacheRevision(workspace, cacheKindMetadata)
 	}
+	observeSQLStatement(ctx, query)
 	result, err := tx.Tx.ExecContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
 	if first && tx.dialect == "sqlite" && sqliteBusy(err) {
 		// The transaction read first, and another connection to the file
@@ -596,10 +600,12 @@ func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 }
 
 func (tx *sqlTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	observeSQLStatement(ctx, query)
 	return tx.Tx.QueryContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
 }
 
 func (tx *sqlTx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	observeSQLStatement(ctx, query)
 	return tx.Tx.QueryRowContext(ctx, rewriteSQL(query, tx.dialect), textArgs(tx.dialect, args)...)
 }
 
