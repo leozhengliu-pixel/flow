@@ -75,6 +75,11 @@ describe('entity realtime classification', () => {
     expect(entityRealtimePlan(event('team.updated', 'team-1', { key: 'NEW', name: 'x', entity: { id: 'team-1', name: 'x' } }))).toBeUndefined()
     expect(entityRealtimePlan(event('team.updated', 'team-1', { description: 'x', entity: { id: 'team-1', name: 'x' } }))).toBeUndefined()
     expect(entityRealtimePlan(event('team.updated', 'team-1', { name: 'x' }))).toBeUndefined()
+    // What the server records: the edit input with Go field names, untouched fields null.
+    const recorded = { Name: 'Platform', Key: null, Color: null, Icon: null, private: null, retired: null, entity: { id: 'team-1', name: 'Platform', key: 'TST', color: '#111' } }
+    expect(entityRealtimePlan(event('team.updated', 'team-1', recorded))?.op).toBe('team-cosmetic')
+    expect(entityRealtimePlan(event('team.updated', 'team-1', { ...recorded, Key: 'NEW' }))).toBeUndefined()
+    expect(entityRealtimePlan(event('team.updated', 'team-1', { ...recorded, private: true }))).toBeUndefined()
   })
 
   it('patches the viewer\'s own drafts, ignores records the snapshot lacks, coalesces reviews instead of a resync', () => {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -20,7 +21,7 @@ const presenceTTL = 45 * time.Second
 type realtimeHub struct {
 	mu          sync.Mutex
 	nextID      uint64
-	subscribers map[string]map[uint64]chan domain.RealtimeEvent
+	subscribers map[string]map[uint64]*realtimeSubscriber
 	// history keeps a short per-workspace replay window for reconnecting SSE
 	// clients. It is intentionally bounded: clients that fall outside the
 	// window receive workspace.resync_required and fetch a fresh snapshot.
@@ -44,6 +45,38 @@ type realtimeHub struct {
 	order   map[string]*realtimeSeqOrder
 	// payloads shares per-viewer entity projections between streams (realtime_entity_payloads.go).
 	payloads realtimePayloadCache
+	// rules shares the project/initiative visibility index between streams (realtime_rules_cache.go).
+	rules pulseRulesCache
+	// rosters shares the latest presence event's decoded roster between streams.
+	rosters presenceRosterCache
+	// presenceSignatures is the roster each workspace's streams last got (presenceSignature).
+	presenceSignatures map[string]string
+}
+
+// presenceSignature identifies a roster by who is where, not when they last
+// checked in: a heartbeat that changes nothing else must not go to every
+// stream (with N open clients, N heartbeats per interval each fanned out to N
+// streams).
+func presenceSignature(presence []domain.Presence) string {
+	entries := make([]string, 0, len(presence))
+	for _, item := range presence {
+		entries = append(entries, strings.Join([]string{item.ClientID, item.User.ID, item.User.Name, item.User.DisplayName, item.User.AvatarURL, item.IssueID, item.DocumentID, item.Route}, "\x1f"))
+	}
+	slices.Sort(entries)
+	return strings.Join(entries, "\x1e")
+}
+
+// presenceUnchanged reports whether the roster is the one this workspace's
+// streams already have.
+func (h *realtimeHub) presenceUnchanged(workspace string, presence []domain.Presence) bool {
+	if h == nil {
+		return false
+	}
+	signature := presenceSignature(presence)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	last, ok := h.presenceSignatures[workspace]
+	return ok && last == signature
 }
 
 // realtimeSeqOrder is one workspace's delivery position in the change log.
@@ -60,7 +93,45 @@ type realtimeSeqOrder struct {
 const realtimeReorderWait = 200 * time.Millisecond
 
 func newRealtimeHub() *realtimeHub {
-	return &realtimeHub{subscribers: map[string]map[uint64]chan domain.RealtimeEvent{}, history: map[string][]domain.RealtimeEvent{}, presence: map[string]map[string]domain.Presence{}, sockets: map[string]map[uint64]*realtimeSocketClient{}}
+	return &realtimeHub{subscribers: map[string]map[uint64]*realtimeSubscriber{}, history: map[string][]domain.RealtimeEvent{}, presence: map[string]map[string]domain.Presence{}, sockets: map[string]map[uint64]*realtimeSocketClient{}}
+}
+
+// realtimeSubscriberQueueBytes bounds what one stream may have waiting: a
+// subscriber that reads too slowly to keep under it (a stalled connection, a
+// client on a slow link while large documents are edited) gets a resync
+// instead of the backlog, so open streams never pin an unbounded set of
+// payloads.
+const realtimeSubscriberQueueBytes = 1 << 20
+
+// realtimeSubscriber is one stream's queue. sizes are the accounted sizes of
+// the events pushed, oldest first; the channel is FIFO, so the ones still
+// waiting are its last len(channel) entries.
+type realtimeSubscriber struct {
+	channel chan domain.RealtimeEvent
+	sizes   []int
+}
+
+func realtimeEventBytes(event domain.RealtimeEvent) int { return len(event.Payload) + 256 }
+
+// queued is the accounted size of the events the stream has not taken yet.
+func (s *realtimeSubscriber) queued() int {
+	waiting := min(len(s.channel), len(s.sizes))
+	s.sizes = s.sizes[len(s.sizes)-waiting:]
+	total := 0
+	for _, size := range s.sizes {
+		total += size
+	}
+	return total
+}
+
+func (s *realtimeSubscriber) push(event domain.RealtimeEvent) bool {
+	select {
+	case s.channel <- event:
+		s.sizes = append(s.sizes, realtimeEventBytes(event))
+		return true
+	default:
+		return false
+	}
 }
 
 func (h *realtimeHub) subscribe(workspace string) (<-chan domain.RealtimeEvent, func()) {
@@ -69,10 +140,10 @@ func (h *realtimeHub) subscribe(workspace string) (<-chan domain.RealtimeEvent, 
 	h.nextID++
 	id := h.nextID
 	if h.subscribers[workspace] == nil {
-		h.subscribers[workspace] = map[uint64]chan domain.RealtimeEvent{}
+		h.subscribers[workspace] = map[uint64]*realtimeSubscriber{}
 	}
 	channel := make(chan domain.RealtimeEvent, 64)
-	h.subscribers[workspace][id] = channel
+	h.subscribers[workspace][id] = &realtimeSubscriber{channel: channel}
 	return channel, func() {
 		h.mu.Lock()
 		if subscribers := h.subscribers[workspace]; subscribers != nil {
@@ -96,7 +167,7 @@ func (h *realtimeHub) subscribeSince(workspace, sinceID string) (<-chan domain.R
 	h.nextID++
 	id := h.nextID
 	if h.subscribers[workspace] == nil {
-		h.subscribers[workspace] = map[uint64]chan domain.RealtimeEvent{}
+		h.subscribers[workspace] = map[uint64]*realtimeSubscriber{}
 	}
 	history := h.history[workspace]
 	index := -1
@@ -119,13 +190,15 @@ func (h *realtimeHub) subscribeSince(workspace, sinceID string) (<-chan domain.R
 	// channel only after this returns, so a buffer smaller than the replay
 	// window would turn every longer replay into a resync.
 	channel := make(chan domain.RealtimeEvent, 64+len(replay))
-	h.subscribers[workspace][id] = channel
+	subscriber := &realtimeSubscriber{channel: channel}
+	h.subscribers[workspace][id] = subscriber
 	if sinceID != "" && index < 0 {
-		channel <- domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}
+		subscriber.push(domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()})
 	}
+	// The replay comes from the bounded history; it is not held against the queue's byte limit.
 	for _, event := range replay {
 		if !domain.RoutineCredentialEvent(event.Type) {
-			channel <- event
+			subscriber.push(event)
 		}
 	}
 	return channel, func() {
@@ -144,8 +217,22 @@ func (h *realtimeHub) publish(workspace string, event domain.RealtimeEvent) {
 	if domain.RoutineCredentialEvent(event.Type) {
 		return
 	}
+	signature := ""
+	if event.Type == "presence.updated" {
+		var payload struct {
+			Presence []domain.Presence `json:"presence"`
+		}
+		_ = json.Unmarshal(event.Payload, &payload)
+		signature = presenceSignature(payload.Presence)
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if event.Type == "presence.updated" {
+		if h.presenceSignatures == nil {
+			h.presenceSignatures = map[string]string{}
+		}
+		h.presenceSignatures[workspace] = signature
+	}
 	if h.ordered && event.Seq > 0 {
 		h.publishInOrderLocked(workspace, event)
 		return
@@ -298,18 +385,23 @@ func (h *realtimeHub) deliverLocked(workspace string, event domain.RealtimeEvent
 		delete(h.history, oldest)
 		delete(h.historyBytes, oldest)
 	}
-	for _, channel := range h.subscribers[workspace] {
-		select {
-		case channel <- event:
-		default:
-			for len(channel) > 0 {
-				<-channel
-			}
+	size := realtimeEventBytes(event)
+	for _, subscriber := range h.subscribers[workspace] {
+		// A stream behind by more than its byte budget (or by a full queue) skips the backlog and resyncs.
+		if (len(subscriber.channel) == 0 || subscriber.queued()+size <= realtimeSubscriberQueueBytes) && subscriber.push(event) {
+			continue
+		}
+	drain:
+		for {
+			// Never blocks: the stream may take the last one first.
 			select {
-			case channel <- domain.RealtimeEvent{ID: event.ID, Type: "workspace.resync_required", CreatedAt: event.CreatedAt}:
+			case <-subscriber.channel:
 			default:
+				break drain
 			}
 		}
+		subscriber.sizes = subscriber.sizes[:0]
+		subscriber.push(domain.RealtimeEvent{ID: event.ID, Type: "workspace.resync_required", CreatedAt: event.CreatedAt})
 	}
 }
 
@@ -449,17 +541,38 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case event := <-channel:
-			if durable && event.Seq > 0 && event.Seq <= replaySeq {
-				continue
+			// Take what else is waiting: a presence roster superseded by a later one in the batch is skipped
+			// (each carries the whole roster), and the batch is flushed once.
+			batch := append(make([]domain.RealtimeEvent, 0, 8), event)
+		take:
+			for len(batch) < 64 {
+				select {
+				case next := <-channel:
+					batch = append(batch, next)
+				default:
+					break take
+				}
 			}
-			projected, visible, err := s.pagedRealtimeEvent(r, event)
-			if err != nil {
-				return
-			}
-			if visible {
-				if !writeSSE(w, projected, s.realtime.node) {
+			wrote := false
+			for index, event := range batch {
+				if durable && event.Seq > 0 && event.Seq <= replaySeq {
+					continue
+				}
+				if event.Type == "presence.updated" && slices.ContainsFunc(batch[index+1:], func(later domain.RealtimeEvent) bool { return later.Type == "presence.updated" }) {
+					continue
+				}
+				projected, visible, err := s.pagedRealtimeEvent(r, event)
+				if err != nil {
 					return
 				}
+				if visible {
+					if !writeSSE(w, projected, s.realtime.node) {
+						return
+					}
+					wrote = true
+				}
+			}
+			if wrote {
 				flusher.Flush()
 			}
 		case <-ticker.C:
@@ -603,16 +716,33 @@ func realtimeEntityVisible(data domain.Bootstrap, event domain.RealtimeEvent) bo
 // id is "<event id>~<node>": clients resume with it, and only this instance
 // can resume it (see realtimeHub.node).
 func writeSSE(w http.ResponseWriter, event domain.RealtimeEvent, node string) bool {
-	raw, err := json.Marshal(event)
-	if err != nil {
-		return false
-	}
 	id := event.ID
 	if node != "" && !strings.HasPrefix(id, "connected_") {
 		id += "~" + node
 	}
-	_, err = fmt.Fprintf(w, "id: %s\ndata: %s\n\n", id, raw)
-	return err == nil
+	// The payload (shared between streams, often a whole document) is written as it is instead of being
+	// re-encoded into a copy per stream; only the small envelope is encoded here. A payload that is not one
+	// line of valid JSON goes the encoding way.
+	payload := event.Payload
+	if len(payload) == 0 || bytes.ContainsAny(payload, "\r\n") || !json.Valid(payload) {
+		raw, err := json.Marshal(event)
+		if err != nil {
+			return false
+		}
+		_, err = fmt.Fprintf(w, "id: %s\ndata: %s\n\n", id, raw)
+		return err == nil
+	}
+	event.Payload = nil
+	head, err := json.Marshal(event)
+	if err != nil {
+		return false
+	}
+	for _, part := range [][]byte{[]byte("id: " + id + "\ndata: "), head[:len(head)-1], []byte(`,"payload":`), payload, []byte("}\n\n")} {
+		if _, err := w.Write(part); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // localCursor returns the event id of a stream cursor this instance wrote. A
@@ -737,6 +867,10 @@ func (s *server) snapshotPresence(ctx context.Context, workspace string) ([]doma
 }
 
 func (s *server) publishPresence(workspace string, presence []domain.Presence) {
+	if s.realtime.presenceUnchanged(workspace, presence) {
+		// A heartbeat: the roster is what every stream here (and, through the shared roster, on the peers) has.
+		return
+	}
 	payload, _ := json.Marshal(map[string]any{"presence": presence})
 	s.publishRealtime(workspace, domain.RealtimeEvent{ID: idgen.New("presence_"), Type: "presence.updated", Payload: payload, CreatedAt: time.Now().UTC()})
 }

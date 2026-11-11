@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"runtime/pprof"
 	"slices"
 	"strconv"
 	"strings"
@@ -543,7 +544,10 @@ func TestLoadUsers(t *testing.T) {
 		t.Fatal(err)
 	}
 	visibilityBody, _ := json.Marshal(map[string]any{"ids": issueIDs})
-	presenceBody := []byte(`{"clientId":"load","route":"/test-workspace/team/x/active","active":true}`)
+	// Each user is its own tab (its own presence entry), like the web client.
+	presenceBody := func(index int) []byte {
+		return []byte(fmt.Sprintf(`{"clientId":"load-%d","route":"/test-workspace/team/x/active","active":true}`, index))
+	}
 
 	runtime.GC()
 	var before runtime.MemStats
@@ -553,14 +557,29 @@ func TestLoadUsers(t *testing.T) {
 	defer cancel()
 	peak := &loadMemPeak{}
 	samplerDone := make(chan struct{})
+	// FLOW_LOAD_PEAK_PROFILE: a heap profile written each time the peak grows by 10%, so the last one is near it.
+	peakProfile := os.Getenv("FLOW_LOAD_PEAK_PROFILE")
 	go func() {
 		defer close(samplerDone)
 		ticker := time.NewTicker(25 * time.Millisecond)
 		defer ticker.Stop()
-		for {
+		profiled := uint64(0)
+		for tick := 0; ; tick++ {
 			select {
 			case <-ticker.C:
 				peak.sample(start)
+				if peakProfile != "" && tick%40 == 0 {
+					peak.mu.Lock()
+					current := peak.heapInuse
+					peak.mu.Unlock()
+					if current > profiled+profiled/10 {
+						profiled = current
+						if file, err := os.Create(peakProfile); err == nil {
+							_ = pprof.Lookup("heap").WriteTo(file, 0)
+							file.Close()
+						}
+					}
+				}
 			case <-ctx.Done():
 				return
 			}
@@ -643,14 +662,21 @@ func TestLoadUsers(t *testing.T) {
 			do(client, "notifications", http.MethodGet, "/api/notifications?limit=50", nil)
 			do(client, "issues", http.MethodGet, "/api/issue-records?limit=50", nil)
 			// The coalesced metadata reload: one at a time, one queued behind it, spread over 0-1s.
+			// It sends results too, so it is part of the wait group: the collector closes results after it.
 			reloads := make(chan string, 1)
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				for {
 					select {
 					case <-ctx.Done():
 						return
 					case kind := <-reloads:
-						time.Sleep(time.Duration(int64(time.Second) * int64(index%1000) / 1000))
+						select {
+						case <-time.After(time.Duration(int64(time.Second) * int64(index%1000) / 1000)):
+						case <-ctx.Done():
+							return
+						}
 						ok := bootstrap(client)
 						do(client, "visibility", http.MethodPost, "/api/issue-records/visibility", visibilityBody)
 						if ok {
@@ -659,8 +685,24 @@ func TestLoadUsers(t *testing.T) {
 					}
 				}
 			}()
-			events := make(chan loadRealtimeEvent, 256)
-			go loadRealtimeStream(ctx, &http.Client{Jar: jar, Transport: transport}, base, events)
+			// Events are answered as they arrive, like the browser's realtime queue: an applied change costs no
+			// request, an access change queues the coalesced reload. Nothing of the payload is kept.
+			go loadRealtimeStream(ctx, &http.Client{Jar: jar, Transport: transport}, base, func(event loadRealtimeEvent) {
+				kind, action := loadClientAction(event)
+				eventsMu.Lock()
+				eventCounts[event.Type]++
+				actionCounts[action]++
+				eventsMu.Unlock()
+				switch action {
+				case "apply":
+					fresh(kind, event.received)
+				case "reload":
+					select {
+					case reloads <- kind:
+					default: // a reload is already queued: it sees this change too
+					}
+				}
+			})
 			heartbeat := time.NewTicker(20 * time.Second)
 			defer heartbeat.Stop()
 			navigate := time.NewTicker(time.Duration(30+index%30) * time.Second)
@@ -670,25 +712,10 @@ func TestLoadUsers(t *testing.T) {
 				case <-ctx.Done():
 					return
 				case <-heartbeat.C:
-					do(client, "presence", http.MethodPost, "/api/realtime/presence", presenceBody)
+					do(client, "presence", http.MethodPost, "/api/realtime/presence", presenceBody(index))
 				case <-navigate.C:
 					do(client, "project", http.MethodGet, fmt.Sprintf("/api/projects/lt-project-%05d", index%2321), nil)
 					do(client, "issues", http.MethodGet, "/api/issue-records?limit=50", nil)
-				case event := <-events:
-					kind, action := loadClientAction(event)
-					eventsMu.Lock()
-					eventCounts[event.Type]++
-					actionCounts[action]++
-					eventsMu.Unlock()
-					switch action {
-					case "apply":
-						fresh(kind, event.received)
-					case "reload":
-						select {
-						case reloads <- kind:
-						default: // a reload is already queued: it sees this change too
-						}
-					}
 				}
 			}
 		}()
@@ -814,28 +841,26 @@ type loadRealtimeEvent struct {
 
 // loadRealtimeStream reads the user's realtime stream until ctx ends,
 // reconnecting after a drop like the browser's EventSource.
-func loadRealtimeStream(ctx context.Context, client *http.Client, base string, events chan<- loadRealtimeEvent) {
+func loadRealtimeStream(ctx context.Context, client *http.Client, base string, handle func(loadRealtimeEvent)) {
 	for ctx.Err() == nil {
 		request, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/realtime/events?workspace=test-workspace", nil)
 		request.Header.Set("X-Workspace-Key", "test-workspace")
 		response, err := client.Do(request)
 		if err == nil {
 			scanner := bufio.NewScanner(response.Body)
-			scanner.Buffer(make([]byte, 1<<20), 16<<20)
+			// Grows to the largest event; most are small.
+			scanner.Buffer(make([]byte, 16<<10), 16<<20)
 			for scanner.Scan() {
-				line := scanner.Text()
-				if !strings.HasPrefix(line, "data: ") {
+				line := scanner.Bytes()
+				if !bytes.HasPrefix(line, []byte("data: ")) {
 					continue
 				}
 				var event loadRealtimeEvent
-				if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event) != nil || event.Type == "connected" || event.Type == "presence.updated" {
+				if json.Unmarshal(line[len("data: "):], &event) != nil || event.Type == "" || event.Type == "connected" || event.Type == "presence.updated" {
 					continue
 				}
 				event.received = time.Now()
-				select {
-				case events <- event:
-				case <-ctx.Done():
-				}
+				handle(event)
 			}
 			response.Body.Close()
 		}
@@ -869,8 +894,13 @@ func loadClientAction(event loadRealtimeEvent) (kind, action string) {
 		}
 		return "comment", "apply"
 	case event.Type == "team.updated":
-		for key := range payload {
-			if key != "name" && key != "icon" && key != "color" && key != "entity" && key != "deleted" {
+		// The input is recorded with Go field names (Name, Key, …) and null for untouched fields.
+		for key, value := range payload {
+			key = strings.ToLower(key)
+			if string(value) == "null" || string(value) == `""` || key == "entity" || key == "deleted" {
+				continue
+			}
+			if key != "name" && key != "icon" && key != "color" {
 				return "access", "reload"
 			}
 		}

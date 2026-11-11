@@ -126,7 +126,8 @@ function initiativePlan(event: RealtimeEvent, payload: Payload): EntityRealtimeP
 
 function teamPlan(event: RealtimeEvent, payload: Payload): EntityRealtimePlan | undefined {
   if (event.type !== 'team.updated' || !event.aggregateId) return undefined
-  const keys = Object.keys(payload)
+  // The team edit input is recorded with its Go field names (Name, Key, Color, Icon) and null for fields left alone.
+  const keys = Object.entries(payload).filter(([, value]) => value !== null && value !== undefined && value !== '').map(([key]) => key.toLowerCase())
   if (!keys.some(key => key === 'name' || key === 'icon' || key === 'color') || keys.some(key => !COSMETIC_TEAM_KEYS.has(key))) return undefined
   const entity = entityOf(event)
   if (!entity || entity.id !== event.aggregateId) return undefined

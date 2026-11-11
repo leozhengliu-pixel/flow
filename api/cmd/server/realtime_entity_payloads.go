@@ -143,13 +143,14 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 	if !ok {
 		return event, false, true
 	}
-	rules := newPulseRules(snapshot)
+	// One index of the projects and initiatives per installed workspace copy, shared by every stream.
+	rules := s.realtime.pulseRulesFor(workspaceKey(r), snapshot)
 	role := data.ViewerRole
 	if s.authDisabled && role == "" {
 		role = "admin"
 	}
 	viewer := newPulseViewer(snapshot, data.Viewer.ID, role, data.TeamMembers, pulseRestrictTeams(r))
-	scopeChanged := realtimeScopeChanged(event)
+	scopeChanged := s.realtime.scopeChanged(event)
 	extra := map[string]any{}
 	if scopeChanged {
 		extra["scopeChanged"] = true
@@ -172,16 +173,18 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 			return event, false, true
 		}
 		view := realtimeProjectView(rules, viewer, *project)
-		if strings.HasPrefix(event.Type, "project.update_") {
-			// The project's updates as GET /api/projects/{id}/updates lists them.
-			updates := append([]domain.ProjectUpdate{}, snapshot.ProjectUpdates[project.ID]...)
-			for index := range updates {
-				updates[index].Snapshot = nil
-			}
-			extra["updates"] = updates
-		}
 		key := event.ID + "|" + strings.Join(view.TeamIDs, ",") + "|" + strings.Join(view.DependencyIDs, ",")
-		event.Payload = s.realtime.cachedPayload(key, func() json.RawMessage { return realtimeEntityPayload(event, view, extra) })
+		event.Payload = s.realtime.cachedPayload(key, func() json.RawMessage {
+			if strings.HasPrefix(event.Type, "project.update_") {
+				// The project's updates as GET /api/projects/{id}/updates lists them.
+				updates := append([]domain.ProjectUpdate{}, snapshot.ProjectUpdates[project.ID]...)
+				for index := range updates {
+					updates[index].Snapshot = nil
+				}
+				extra["updates"] = updates
+			}
+			return realtimeEntityPayload(event, view, extra)
+		})
 		return event, true, true
 	}
 	initiative := rules.initiatives[event.AggregateID]
@@ -198,15 +201,17 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 		return event, false, true
 	}
 	view := realtimeInitiativeView(rules, viewer, *initiative)
-	if strings.HasPrefix(event.Type, "initiative.update_") {
-		updates := append([]domain.InitiativeUpdate{}, snapshot.InitiativeUpdates[initiative.ID]...)
-		for index := range updates {
-			updates[index].Snapshot = nil
-		}
-		extra["updates"] = updates
-	}
 	key := event.ID + "|" + view.LeadTeamID + "|" + strings.Join(view.ContributingTeamIDs, ",") + "|" + strings.Join(view.ProjectIDs, ",") + "|" + strings.Join(view.ParentInitiativeIDs, ",")
-	event.Payload = s.realtime.cachedPayload(key, func() json.RawMessage { return realtimeEntityPayload(event, view, extra) })
+	event.Payload = s.realtime.cachedPayload(key, func() json.RawMessage {
+		if strings.HasPrefix(event.Type, "initiative.update_") {
+			updates := append([]domain.InitiativeUpdate{}, snapshot.InitiativeUpdates[initiative.ID]...)
+			for index := range updates {
+				updates[index].Snapshot = nil
+			}
+			extra["updates"] = updates
+		}
+		return realtimeEntityPayload(event, view, extra)
+	})
 	return event, true, true
 }
 
@@ -218,12 +223,16 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 func (s *server) pagedDocumentEvent(r *http.Request, data domain.Bootstrap, event domain.RealtimeEvent) (domain.RealtimeEvent, bool) {
 	documentID := event.AggregateID
 	if strings.HasPrefix(event.Type, "document.draft_") {
+		author := s.authDisabled || event.ActorID != "" && event.ActorID == data.Viewer.ID
+		if event.Type != "document.draft_published" {
+			return event, author
+		}
 		var input struct {
 			DocumentID string `json:"documentId"`
 		}
 		_ = json.Unmarshal(event.Payload, &input)
-		if event.Type != "document.draft_published" || input.DocumentID == "" {
-			return event, s.authDisabled || event.ActorID != "" && event.ActorID == data.Viewer.ID
+		if input.DocumentID == "" {
+			return event, author
 		}
 		documentID = input.DocumentID
 	}
@@ -231,7 +240,7 @@ func (s *server) pagedDocumentEvent(r *http.Request, data domain.Bootstrap, even
 	if !ok {
 		return bareRealtimeEvent(event, nil), true
 	}
-	scopeChanged := realtimeScopeChanged(event)
+	scopeChanged := s.realtime.scopeChanged(event)
 	if documentRole(s, data, document) == "none" {
 		if scopeChanged {
 			return bareRealtimeEvent(event, map[string]any{"documentId": document.ID, "removed": true}), true
@@ -262,12 +271,19 @@ func (s *server) pagedDocumentEvent(r *http.Request, data domain.Bootstrap, even
 // realtimePayloadCache shares a projected payload between the streams of
 // viewers who get the same projection of one event: a document edit sent to
 // every member builds and encodes the document once instead of once per
-// stream. It is small and bounded; an evicted entry is just built again.
+// stream. Every stream handles an event at about the same moment, so the
+// first one builds and the others wait for its result instead of all building
+// at once. It is small and bounded; an evicted entry is just built again.
 type realtimePayloadCache struct {
 	mu      sync.Mutex
-	entries map[string]json.RawMessage
+	entries map[string]*realtimePayloadEntry
 	order   []string
 	bytes   int
+}
+
+type realtimePayloadEntry struct {
+	ready   chan struct{}
+	payload json.RawMessage
 }
 
 const (
@@ -285,31 +301,40 @@ func (h *realtimeHub) cachedPayload(key string, build func() json.RawMessage) js
 
 func (c *realtimePayloadCache) load(key string, build func() json.RawMessage) json.RawMessage {
 	c.mu.Lock()
-	if payload, ok := c.entries[key]; ok {
+	if entry, ok := c.entries[key]; ok {
 		c.mu.Unlock()
-		return payload
-	}
-	c.mu.Unlock()
-	payload := build()
-	if len(payload) > realtimePayloadCacheBytes/4 {
-		return payload
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if existing, ok := c.entries[key]; ok {
-		return existing
+		<-entry.ready
+		return entry.payload
 	}
 	if c.entries == nil {
-		c.entries = map[string]json.RawMessage{}
+		c.entries = map[string]*realtimePayloadEntry{}
 	}
-	c.entries[key] = payload
+	entry := &realtimePayloadEntry{ready: make(chan struct{})}
+	c.entries[key] = entry
 	c.order = append(c.order, key)
-	c.bytes += len(payload)
-	for len(c.order) > realtimePayloadCacheEntries || c.bytes > realtimePayloadCacheBytes {
-		oldest := c.order[0]
-		c.order = c.order[1:]
-		c.bytes -= len(c.entries[oldest])
-		delete(c.entries, oldest)
-	}
+	c.mu.Unlock()
+	var payload json.RawMessage
+	defer func() {
+		// Also on a panic in build: the waiters get nil and build for themselves next time.
+		c.mu.Lock()
+		entry.payload = payload
+		if c.entries[key] == entry {
+			if payload == nil {
+				delete(c.entries, key)
+			}
+			c.bytes += len(payload)
+		}
+		for len(c.order) > realtimePayloadCacheEntries || c.bytes > realtimePayloadCacheBytes {
+			oldest := c.order[0]
+			c.order = c.order[1:]
+			if evicted, ok := c.entries[oldest]; ok {
+				c.bytes -= len(evicted.payload)
+				delete(c.entries, oldest)
+			}
+		}
+		c.mu.Unlock()
+		close(entry.ready)
+	}()
+	payload = build()
 	return payload
 }

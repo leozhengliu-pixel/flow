@@ -27,21 +27,40 @@ func (s *server) pagedPresence(r *http.Request, values []domain.Presence) ([]dom
 	if err != nil {
 		return nil, err
 	}
+	return s.pagedPresenceFor(r, data, query, values)
+}
+
+// pagedPresenceFor filters a roster with the viewer's metadata already read.
+// It never changes values (a roster decoded once is shared by every stream).
+func (s *server) pagedPresenceFor(r *http.Request, data domain.Bootstrap, query store.IssueRecordQuery, values []domain.Presence) ([]domain.Presence, error) {
 	ids := []string{}
+	documents := false
 	for _, presence := range values {
 		if presence.IssueID != "" {
 			ids = append(ids, presence.IssueID)
 		}
+		documents = documents || presence.DocumentID != ""
 	}
-	visible, err := s.store.VisibleIssueRecordIDs(r.Context(), query, ids)
-	if err != nil {
-		return nil, err
+	if len(ids) == 0 && !documents {
+		// Nobody is on an issue or a document: everyone may see the whole roster (shared, unchanged).
+		return values, nil
 	}
-	for id := range visible {
-		data.Issues = append(data.Issues, domain.Issue{ID: id})
+	if len(ids) > 0 {
+		visible, err := s.store.VisibleIssueRecordIDs(r.Context(), query, ids)
+		if err != nil {
+			return nil, err
+		}
+		data.Issues = slices.Clip(data.Issues)
+		for id := range visible {
+			data.Issues = append(data.Issues, domain.Issue{ID: id})
+		}
 	}
-	values = slices.DeleteFunc(values, func(item domain.Presence) bool {
-		return item.DocumentID != "" && !s.documentPresenceAllowed(r, item.DocumentID)
+	values = slices.DeleteFunc(slices.Clone(values), func(item domain.Presence) bool {
+		if item.DocumentID == "" {
+			return false
+		}
+		document, ok := s.store.DocumentByID(workspaceKey(r), item.DocumentID)
+		return !ok || documentRole(s, data, document) == "none"
 	})
 	return filterPresenceForViewer(data, values), nil
 }
@@ -124,17 +143,26 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		return event, true, nil
 	}
 	if event.Type == "presence.updated" {
-		var payload struct {
-			Presence []domain.Presence `json:"presence"`
-		}
-		if err := json.Unmarshal(event.Payload, &payload); err != nil {
-			return event, false, err
-		}
-		payload.Presence, err = s.pagedPresence(r, payload.Presence)
+		// The roster is decoded once per event, and each distinct filtered roster encoded once.
+		roster, err := s.realtime.presenceRoster(event)
 		if err != nil {
 			return event, false, err
 		}
-		event.Payload, _ = json.Marshal(payload)
+		filtered, err := s.pagedPresenceFor(r, data, query, roster)
+		if err != nil {
+			return event, false, err
+		}
+		// Keyed by exactly the entries kept: viewers who see the same ones share the encoding.
+		var key strings.Builder
+		key.WriteString(event.ID + "|presence")
+		for _, item := range filtered {
+			key.WriteByte('|')
+			key.WriteString(item.ClientID)
+		}
+		event.Payload = s.realtime.cachedPayload(key.String(), func() json.RawMessage {
+			encoded, _ := json.Marshal(map[string]any{"presence": filtered})
+			return encoded
+		})
 		return event, true, nil
 	}
 	if event.Type == "issue.deleted" {
