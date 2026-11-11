@@ -620,12 +620,14 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
       await page.keyboard.press('Escape')
       await expect(drawer).toHaveAttribute('aria-hidden', 'true')
       await page.locator('[data-sidebar-trigger]').first().click()
-      const github = drawer.getByRole('button', { name: 'Connect GitHub', exact: true })
+      // The Try row opens the GitHub integration settings (the reference links it); it is a link, not a toast button.
+      const github = drawer.getByRole('link', { name: 'Connect GitHub', exact: true })
       await github.focus()
       await page.keyboard.press('Enter')
-      await expect(page.locator('.flow-toast')).toBeVisible()
+      await expect(page).toHaveURL(new RegExp(`/${workspaceKey}/settings/integrations/github$`))
+      await expect(drawer).not.toBeVisible()
       await noOverflow(page)
-      if (shots) await page.screenshot({ path: `${shots}/flow-toast-${viewport.width}.png` })
+      if (shots) await page.screenshot({ path: `${shots}/flow-github-settings-${viewport.width}.png` })
     })
   })
 }

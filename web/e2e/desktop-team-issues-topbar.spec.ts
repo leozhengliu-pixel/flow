@@ -144,7 +144,7 @@ test('keeps the team Issues top bar controls, view pills and tool group at the d
     expect(geometry.pills[index].x - (previous.x + previous.width)).toBeCloseTo(4, 1)
   }
 
-  expect(geometry.tools.map(tool => tool.label)).toEqual(['Open insights', 'Add filter', 'Display options', 'Open details'])
+  expect(geometry.tools.map(tool => tool.label)).toEqual(['Add filter', 'Display options', 'Open insights', 'Open details'])
   for (const tool of geometry.tools) expect(tool.rect.width).toBe(28)
   for (let index = 1; index < geometry.tools.length; index += 1) {
     const previous = geometry.tools[index - 1].rect
