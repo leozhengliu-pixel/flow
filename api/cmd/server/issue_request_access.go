@@ -32,6 +32,7 @@ func (s *server) requestIssueQueryAccess(r *http.Request) (domain.Bootstrap, sto
 	if s.authDisabled {
 		var ok bool
 		cached.metadata, ok = s.store.IssueAccessMetadata(r.Context(), workspace)
+		cached.metadata.Viewer = authUser(r)
 		cached.metadata.ViewerRole = "admin"
 		if !ok {
 			cached.err = store.ErrAuthForbidden
