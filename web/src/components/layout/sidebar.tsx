@@ -252,7 +252,7 @@ export function Sidebar({
     workspaceFeatureEnabled(featureFlags, feature);
   const sidebarTeams = useMemo(() => {
     const viewerTeamIds = new Set(data.teamMembers.filter(member => member.userId === data.viewer.id).map(member => member.teamId));
-    return teamHierarchy(data.teams, data.teamSettings, data.teamParents).rows(data.teams.filter(team => !team.retiredAt && viewerTeamIds.has(team.id)));
+    return teamHierarchy(data.teams, data.teamSettings, data.teamParents).rows(data.teams.filter(team => !team.retiredAt && viewerTeamIds.has(team.id)), undefined, 'sidebar');
   }, [data.teamMembers, data.teamParents, data.teams, data.teamSettings, data.viewer.id]);
   const sidebarTeamTree = useMemo(() => teamRowTree(sidebarTeams), [sidebarTeams]);
   const canCreateTeam = roleAllowed(data.viewerRole, data.workspaceSettings?.teamCreatePermission);
@@ -821,7 +821,7 @@ export function Sidebar({
                     upcoming={upcomingCycleTeamIds.has(team.id)}
                     initiativesEnabled={
                       data.viewerRole !== "guest" &&
-                      featureEnabled("initiatives") && data.teamSettings[team.id]?.showInitiatives !== false
+                      featureEnabled("initiatives") && data.teamSettings[team.id]?.showInitiatives === true
                     }
                     team={team}
                     activeIssues={navigationRoute.kind === 'team-issues' && navigationRoute.teamKey.toLowerCase() === team.key.toLowerCase()}

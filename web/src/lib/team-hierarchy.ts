@@ -20,6 +20,30 @@ export function resolvedTeamSettings(settings: Record<string, TeamSettings>, tea
     : current
 }
 
+/**
+ * How sibling teams are ordered at every nesting level. Menus, pickers, filters and Settings > Teams list siblings
+ * alphabetically; the sidebars list the sub-teams of a team newest first (a new membership goes to the top of the list)
+ * while top-level teams keep the given order ('sidebar'); 'newest' orders every level newest first; 'given' keeps the
+ * caller's order (Settings > Teams, which sorts by the chosen column).
+ */
+export type TeamSiblingOrder = 'alphabetical' | 'newest' | 'sidebar' | 'given'
+
+/** Sorts teams for the given sibling order without touching the input; ties keep the input order. */
+export function sortTeamSiblings<T extends Pick<Team, 'name' | 'createdAt'>>(items: readonly T[], order: TeamSiblingOrder = 'alphabetical'): T[] {
+  if (order === 'given') return [...items]
+  const indexed = items.map((team, index) => ({ team, index }))
+  if (order === 'newest' || order === 'sidebar') {
+    indexed.sort((a, b) => {
+      const left = a.team.createdAt ? Date.parse(a.team.createdAt) : Number.NaN, right = b.team.createdAt ? Date.parse(b.team.createdAt) : Number.NaN
+      if (!Number.isNaN(left) && !Number.isNaN(right) && left !== right) return right - left
+      return b.index - a.index
+    })
+  } else {
+    indexed.sort((a, b) => a.team.name.localeCompare(b.team.name, undefined, { sensitivity: 'base' }) || a.index - b.index)
+  }
+  return indexed.map(item => item.team)
+}
+
 export function teamHierarchy(teams: Team[], settings: TeamHierarchySettings = {}, projectedParents: Record<string, string> = {}) {
   const byId = new Map(teams.map(team => [team.id, team]))
   const ancestors = new Map<string, Team[]>()
@@ -46,7 +70,9 @@ export function teamHierarchy(teams: Team[], settings: TeamHierarchySettings = {
     if ((ancestors.get(parentId)?.length ?? 0) + 1 + (heights.get(teamId) ?? 0) > MAX_TEAM_DEPTH) return 'Teams can only be nested five levels deep'
   }
   const subtree = (id: string) => new Set([id, ...teams.filter(team => !team.retiredAt && ancestors.get(team.id)?.some(parent => parent.id === id)).map(team => team.id)])
-  const rows = (items = teams, collapsed = new Set<string>()) => {
+  const rows = (unsorted = teams, collapsed = new Set<string>(), order: TeamSiblingOrder = 'alphabetical') => {
+    const items = sortTeamSiblings(unsorted, order)
+    const givenIndex = new Map(unsorted.map((team, index) => [team.id, index]))
     const ids = new Set(items.map(team => team.id)), nested = new Map<string, Team[]>()
     const roots: Team[] = []
     for (const team of items) {
@@ -54,6 +80,7 @@ export function teamHierarchy(teams: Team[], settings: TeamHierarchySettings = {
       if (parent) { const siblings = nested.get(parent.id) ?? []; siblings.push(team); nested.set(parent.id, siblings) }
       else roots.push(team)
     }
+    if (order === 'sidebar') roots.sort((a, b) => givenIndex.get(a.id)! - givenIndex.get(b.id)!)
     const result: { team: Team; depth: number; hasChildren: boolean }[] = [], seen = new Set<string>()
     const visit = (root: Team) => {
       const stack = [{team: root, depth: 0}]

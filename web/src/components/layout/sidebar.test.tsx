@@ -314,13 +314,14 @@ describe('sidebar team hierarchy', () => {
   it('hangs sibling sub-teams from one guide: each connector rises past its earlier siblings to the parent, the last ends in its elbow', () => {
     const data = sidebarData({})
     const parent = data.teams[0]
-    const subs = ['First', 'Middle', 'Last'].map((name, i) => ({ ...parent, id: `team-s${i}`, key: `S${i}`, name }))
+    // Created oldest to newest: the sidebar lists a team's sub-teams newest first.
+    const subs = ['Last', 'Middle', 'First'].map((name, i) => ({ ...parent, id: `team-s${i}`, key: `S${i}`, name, createdAt: `2026-08-0${i + 1}T00:00:00Z` }))
     const nested = { ...parent, id: 'team-n', key: 'N', name: 'Nested' }
     render(sidebarTree({
       ...data,
       teams: [...data.teams, ...subs, nested],
       teamMembers: [...data.teamMembers, ...[...subs, nested].map(team => ({ teamId: team.id, userId: data.viewer.id, role: 'member', joinedAt: '2026-08-01T00:00:00Z' }))] as BootstrapData['teamMembers'],
-      teamSettings: Object.fromEntries([...subs.map(team => [team.id, { teamId: team.id, parentTeamId: parent.id }]), [nested.id, { teamId: nested.id, parentTeamId: subs[0].id }]]) as unknown as BootstrapData['teamSettings'],
+      teamSettings: Object.fromEntries([...subs.map(team => [team.id, { teamId: team.id, parentTeamId: parent.id }]), [nested.id, { teamId: nested.id, parentTeamId: subs[2].id }]]) as unknown as BootstrapData['teamSettings'],
     }))
     const parentBody = document.querySelector('.sidebar-team-list .sidebar-team > .team-body')!
     const siblings = [...parentBody.querySelectorAll<HTMLElement>(':scope > .team-subteams > li.sidebar-subteam')]

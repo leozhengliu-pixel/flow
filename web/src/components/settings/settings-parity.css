@@ -1426,7 +1426,7 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
 /* Desktop settings sidebar, "Your teams": a sub-team row is inset 22px (18px more per deeper level) and hangs from a
    1px line under its parent's icon. The parent drops a 6px stub from y23 to its row's bottom; a sub-team's line runs
    from y0 to the 10x9 curve at y7, or from y-1 for 30px into the next row while a later sibling follows (ancestor
-   levels with a later sibling run the same 30px through every row of the subtree). The phone drawer draws its own. */
+   levels with a later sibling run the same line through every row of the subtree). The phone drawer draws its own. */
 @media (min-width: 761px) {
   html:root .settings-app .settings-sidebar nav button[data-depth] { position: relative; }
   html:root .settings-app .settings-sidebar nav button[data-depth]:not([data-depth="0"]) {
@@ -1438,13 +1438,29 @@ html:root .settings-app .settings-sidebar-footer { display: none; }
   html:root .settings-app .settings-sidebar nav .settings-nav-team-tree > * {
     position: absolute;
     top: 0;
+    left: var(--x);
     pointer-events: none;
   }
   html:root .settings-app .settings-sidebar nav .settings-nav-team-tree > i { width: 1px; height: 8px; background: var(--team-connector); }
-  html:root .settings-app .settings-sidebar nav .settings-nav-team-tree > i[data-continues] { top: -1px; height: 30px; }
+  html:root .settings-app .settings-sidebar nav .settings-nav-team-tree > i[data-continues] { top: -1px; bottom: -1px; height: auto; }
   html:root .settings-app .settings-sidebar nav .settings-nav-team-tree > i[data-stub] { top: 23px; height: 6px; }
   html:root .settings-app .settings-sidebar nav .settings-nav-team-tree > svg { top: 7px; width: 10px; height: 9px; flex: none; fill: var(--team-connector); }
 }
+/* Phone drawer: the same tree with 28px rows 1px apart. A sub-team's line runs from the row's top (8px) into the 10x9 curve at y7, or from the gap above to the gap below (30px for a 28px row, longer when the name wraps) up to the next row's line while a later sibling follows (ancestor
+   levels run the same line through every row of the subtree); the parent drops a 6px stub from y23 to the next row. */
 @media (max-width: 760px) {
-  html:root .settings-app .settings-sidebar nav .settings-nav-team-tree { display: none; }
+  html:root .settings-app .settings-sidebar nav button[data-depth]:not([data-depth="0"])::before,
+  html:root .settings-app .settings-sidebar nav button[data-has-children]::after { content: none; }
+  html:root .settings-app .settings-sidebar nav button[data-depth] { position: relative; }
+  html:root .settings-app .settings-sidebar nav .settings-nav-team-tree { display: contents; }
+  html:root .settings-app .settings-sidebar nav .settings-nav-team-tree > * {
+    position: absolute;
+    top: 0;
+    left: var(--x-phone);
+    pointer-events: none;
+  }
+  html:root .settings-app .settings-sidebar nav .settings-nav-team-tree > i { width: 1px; height: 8px; background: var(--set-drawer-connector); }
+  html:root .settings-app .settings-sidebar nav .settings-nav-team-tree > i[data-continues] { top: -1px; bottom: -1px; height: auto; }
+  html:root .settings-app .settings-sidebar nav .settings-nav-team-tree > i[data-stub] { top: 23px; height: 6px; }
+  html:root .settings-app .settings-sidebar nav .settings-nav-team-tree > svg { top: 7px; width: 10px; height: 9px; flex: none; fill: var(--set-drawer-connector); }
 }

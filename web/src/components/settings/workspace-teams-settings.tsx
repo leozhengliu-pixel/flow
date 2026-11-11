@@ -96,7 +96,7 @@ export function WorkspaceTeamsSettings({
       return (descending ? -compared : compared) || left.name.localeCompare(right.name);
     });
   const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(() => new Set());
-  const teamRows = teamHierarchy(data.teams, data.teamSettings).rows(teams, collapsedTeams);
+  const teamRows = teamHierarchy(data.teams, data.teamSettings).rows(teams, collapsedTeams, 'given');
   // Levels whose branch line runs on to a later sibling: those lines reach into the next row instead of ending in the elbow.
   const teamGuides = treeGuideLevels(teamRows.map(row => row.depth));
   function visibilityLabel(team: Team) {

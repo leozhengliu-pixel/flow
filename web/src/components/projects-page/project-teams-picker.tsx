@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { TeamIcon } from '@/components/issue/issue-icons'
+import { sortTeamSiblings } from '@/lib/team-hierarchy'
 import { useI18n } from '@/i18n/i18n'
 import { orderTeamTree, projectTeamsLabel, teamGlyph, setProjectLeadTeam, toggleProjectTeam, type ProjectTeamChoice } from './project-teams'
 import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
@@ -12,7 +13,7 @@ import { TEAM_HOVER_CLASS, TeamHoverCard } from './team-hover-card'
  */
 function orderedTeams(teams: ProjectTeamChoice[], teamIds: string[], parentOf: (id: string) => string | undefined) {
   const selected = teamIds.map(id => teams.find(team => team.id === id)).filter((team): team is ProjectTeamChoice => Boolean(team))
-  return { selected: orderTeamTree(selected, parentOf), others: orderTeamTree(teams.filter(team => !teamIds.includes(team.id)), parentOf), lead: selected[0] }
+  return { selected: orderTeamTree(selected, parentOf), others: orderTeamTree(sortTeamSiblings(teams.filter(team => !teamIds.includes(team.id))), parentOf), lead: selected[0] }
 }
 
 function teamRowLabel(team: ProjectTeamChoice, leadText?: string): ReactNode {

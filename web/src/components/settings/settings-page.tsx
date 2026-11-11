@@ -17,7 +17,7 @@ import { persistUserSettings } from '@/lib/settings-persistence';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { WorkspaceInitials } from '@/components/workspace/workspace-initials';
 import { workspaceAvatarColor } from '@/lib/avatar-color';
-import { settingsSidebarTeams, settingsTeamGuideX, settingsTeamIndent } from './settings-sidebar-teams';
+import { settingsSidebarTeams, settingsTeamGuideOffsets, settingsTeamIndent } from './settings-sidebar-teams';
 import { treeGuideLevels } from '@/lib/team-hierarchy';
 import { TreeCurve } from '@/components/property/property-menu';
 import { UploadPolicyDialog } from './upload-policy-dialog';
@@ -793,12 +793,6 @@ export function SettingsPage(props: SettingsPageProps) {
                       onPointerEnter={() => { void TeamWorkflowSettings.preload().catch(() => undefined); }}
                       onFocus={() => { void TeamWorkflowSettings.preload().catch(() => undefined); }}
                     >
-                      {(depth > 0 || sidebarTeams[index + 1]?.depth > depth) && <span className="settings-nav-team-tree" aria-hidden="true">
-                        {sidebarTeamGuides[index].filter(level => level < depth).map(level => <i key={level} data-continues="" style={{ left: settingsTeamGuideX(level) - settingsTeamIndent(depth) }}/>)}
-                        {depth > 0 && <i data-continues={sidebarTeamGuides[index].includes(depth) ? "" : undefined} style={{ left: settingsTeamGuideX(depth) - settingsTeamIndent(depth) }}/>}
-                        {depth > 0 && <TreeCurve style={{ left: settingsTeamGuideX(depth) - settingsTeamIndent(depth) }}/>}
-                        {sidebarTeams[index + 1]?.depth > depth && <i data-stub="" style={{ left: settingsTeamGuideX(depth + 1) - settingsTeamIndent(depth) }}/>}
-                      </span>}
                       <span
                         className="settings-team-icon"
                         style={{ color: team.color }}
@@ -809,6 +803,13 @@ export function SettingsPage(props: SettingsPageProps) {
                         />
                       </span>
                       <span data-i18n-ignore>{team.name}</span>
+                      {/* after the name: the drawer locators count the icon and name spans */}
+                      {(depth > 0 || sidebarTeams[index + 1]?.depth > depth) && <span className="settings-nav-team-tree" aria-hidden="true">
+                        {sidebarTeamGuides[index].filter(level => level < depth).map(level => <i key={level} data-continues="" style={settingsTeamGuideOffsets(level, depth) as CSSProperties}/>)}
+                        {depth > 0 && <i data-continues={sidebarTeamGuides[index].includes(depth) ? "" : undefined} style={settingsTeamGuideOffsets(depth, depth) as CSSProperties}/>}
+                        {depth > 0 && <TreeCurve style={settingsTeamGuideOffsets(depth, depth) as CSSProperties}/>}
+                        {sidebarTeams[index + 1]?.depth > depth && <i data-stub="" style={settingsTeamGuideOffsets(depth + 1, depth) as CSSProperties}/>}
+                      </span>}
                     </button>
                   ))}
                 {canCreateTeam && !query.trim() && (

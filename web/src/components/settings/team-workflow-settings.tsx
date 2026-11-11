@@ -3698,7 +3698,7 @@ function defaultTeamSettings(
     agentSkills: [],
     projectUpdatePrompt: "",
     resolvedThreadSummaries: true,
-    showInitiatives: true,
+    showInitiatives: false,
     inheritIssueEstimation: false,
     inheritWorkflowStatuses: false,
     inheritProjectStatuses: false,

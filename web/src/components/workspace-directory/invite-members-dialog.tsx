@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import { PropertyMenu, type PropertyOption } from "@/components/property/property-menu";
 import { orderTeamTree, teamGlyph } from "@/components/projects-page/project-teams";
+import { sortTeamSiblings } from "@/lib/team-hierarchy";
 import { WorkspaceAvatar } from "@/components/workspace/workspace-menu";
 import { useI18n } from "@/i18n/i18n";
 import { inviteMembers } from "@/lib/api";
@@ -195,7 +196,7 @@ function InviteTeamSelect({ teams, teamSettings, value, onChange }: {
   });
   const options: PropertyOption[] = [
     ...orderTeamTree(chosen, parentOf).map(({ team, depth }) => toOption(team, depth)),
-    ...orderTeamTree(teams.filter((team) => !value.includes(team.id)), parentOf).map(({ team, depth }) => toOption(team, depth, { groupId: "other-teams" })),
+    ...orderTeamTree(sortTeamSiblings(teams.filter((team) => !value.includes(team.id))), parentOf).map(({ team, depth }) => toOption(team, depth, { groupId: "other-teams" })),
   ];
   const keys = chosen.map((team) => team.key).join(", ");
   return (

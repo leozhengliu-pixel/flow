@@ -19,7 +19,7 @@ export function IssueTeamPicker({ issue, data, onUpdate }: { issue: Issue; data:
   return <div className="issue-team-property core-property-picker" title={data.viewerRole === 'guest' ? t('Guests cannot move issues to another team') : undefined}><PropertyMenu label="Team" value={issue.team.name} valueIsEntityName selectedId={issue.team.id}
     disabled={Boolean(issue.archivedAt) || data.viewerRole === 'guest'}
     options={teamTreeOptions(data, teams.map(item => item.team), { phone, extra: team => ({ groupId: joined.has(team.id) ? 'joined' : 'other' }) })}
-    tree hideSearch groupHeading="Showing all items" ariaLabel={t('Change team')} searchPlaceholder={t('Move to team…')} searchShortcut="Command Shift M" tooltip="Team" tooltipShortcut="⌘ ⇧ M"
+    tree="check" hideSearch groupHeading="Showing all items" ariaLabel={t('Change team')} searchPlaceholder={t('Move to team…')} searchShortcut="Command Shift M" tooltip="Team" tooltipShortcut="⌘ ⇧ M"
     triggerClassName="core-property-trigger" trigger={<><TeamIcon team={issue.team}/><span data-i18n-ignore>{issue.team.name}</span></>}
     onChange={async teamId => {
       if (teamId === issue.team.id) return

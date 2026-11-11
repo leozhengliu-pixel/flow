@@ -1291,6 +1291,19 @@ html:root body .property-command-options [role=option] > .property-command-tree-
   pointer-events: none;
 }
 html:root body .property-command-surface.is-tree:not(#_):not(:has(.property-command-checkbox)) { min-width: 175px; }
+/* The menu hugs its widest row up to 400px (401px with the border; the shared single-select menus stop at 360px). `fitTreeMenu` rounds the hugged
+   width up to a whole pixel. */
+html:root body .property-command-surface.is-tree:not(#_) { max-width: min(401px, calc(100vw - 20px)); }
+/* A menu whose selected team ends in a tick reserves that column on every row: the 17px column (16px tick, 1px margin) after
+   the 8px gap, and 14px of padding, so every row's content ends 39px before the menu's edge. */
+html:root body .property-command-surface.is-tree.is-tree-check:not(#_) .property-command-options [role=option]:not(:has(.property-command-checkbox)) {
+  grid-template-columns: calc(18px + var(--option-indent, 0) * 24px) minmax(0, 1fr) 17px;
+  padding-right: 14px;
+}
+html:root body .property-command-surface.is-tree.is-tree-check:not(#_) .property-command-options [role=option]:not(:has(.property-command-checkbox)):not(:has(.property-command-check))::after {
+  content: "";
+  grid-column: 3;
+}
 html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option]:not(:has(.property-command-checkbox)) {
   grid-template-columns: calc(18px + var(--option-indent, 0) * 24px) minmax(0, 1fr);
   gap: 8px;

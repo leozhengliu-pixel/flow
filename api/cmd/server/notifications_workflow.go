@@ -1390,7 +1390,7 @@ func teamSettings(data *domain.Bootstrap, teamID string) domain.TeamSettings {
 			MemberPermission: "allMembers", SlackNotifications: map[string]bool{}, PRAutomations: map[string]string{},
 			StaleMonths: 6, AutoArchiveMonths: 6, ProgressOrder: "first", TriageAction: "none",
 			ReleaseAutomations: []domain.TeamAutomationRule{}, TriageRules: []domain.TeamAutomationRule{},
-			AgentSkills: []domain.TeamAgentSkill{}, AgentConnectors: []domain.TeamAgentConnector{}, ResolvedSummaries: true, ShowInitiatives: true,
+			AgentSkills: []domain.TeamAgentSkill{}, AgentConnectors: []domain.TeamAgentConnector{}, ResolvedSummaries: true,
 		}
 		states := statesForTeam(data, teamID)
 		if len(states) > 0 {

@@ -10,6 +10,7 @@ import { LabelHoverPreview } from './label-hover-preview'
 import { usePropertyCommand } from './use-property-command'
 import { groupOptionSections } from '@/lib/group-options'
 import { treeGuideLevels } from '@/lib/team-hierarchy'
+import { fitTreeMenu } from '@/lib/tree-menu-width'
 import { readLabelUsage, recordLabelUsage } from '@/lib/label-usage'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import type { LabelResourceType } from '@/types/flow'
@@ -103,8 +104,10 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   triggerClassName?: string
   triggerRole?: 'button' | 'combobox'
   surfaceClassName?: string
-  /** Team menus: rows are teams, sub-teams (options with `indent`) hang under their parent with the shared tree elbow. */
-  tree?: boolean
+  /** Team menus: rows are teams, sub-teams (options with `indent`) hang under their parent with the shared tree elbow.
+   *  The menu hugs its widest row (integer width, 175px to 401px). `'check'`: every row reserves the trailing tick column
+   *  of the selected team (Team property, create-issue team). */
+  tree?: boolean | 'check'
   phoneSurfaceClassName?: string
   side?: 'top' | 'right' | 'bottom' | 'left'
   align?: 'start' | 'center' | 'end'
@@ -141,6 +144,10 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   const [openLabelGroupId, setOpenLabelGroupId] = useState<string>()
   const [openSubmenuId, setOpenSubmenuId] = useState<string>()
   const listboxId = useId()
+  // A team tree hugs its widest row at a whole-pixel width; refit when the rows change.
+  const [treeSurface, setTreeSurface] = useState<HTMLDivElement | null>(null)
+  const treeRowsKey = tree ? menuOptions.map(option => `${option.id}:${option.label}`).join('|') : ''
+  useLayoutEffect(() => { if (tree && treeSurface) fitTreeMenu(treeSurface) }, [tree, treeSurface, treeRowsKey])
   const selected = multiple || selectedIds.length ? selectedIds : [selectedId ?? options.find(option => option.label === value)?.id ?? '']
   const selectionKey = JSON.stringify(selected)
   const selectedSet = useMemo(() => new Set<string>(JSON.parse(selectionKey)), [selectionKey])
@@ -240,7 +247,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}><Tooltip.Root open={Boolean(tooltipContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false); else { setActiveTrigger(undefined); setOpenLabelGroupId(undefined); setOpenSubmenuId(undefined) } }}>
     {menuTrigger}
     <Popover.Portal>
-      <Popover.Content data-flow-motion="floating" className={`property-command-surface property-command-${kind}${labelGroupId ? ' is-label-group' : ''}${tree ? ' is-tree' : ''}${surfaceClassName ? ` ${surfaceClassName}` : ''}`} role="dialog" aria-label={`Change ${label}`} align={align} alignOffset={alignOffset} side={side} sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}>
+      <Popover.Content ref={setTreeSurface} data-flow-motion="floating" className={`property-command-surface property-command-${kind}${labelGroupId ? ' is-label-group' : ''}${tree ? ' is-tree' : ''}${tree === 'check' ? ' is-tree-check' : ''}${surfaceClassName ? ` ${surfaceClassName}` : ''}`} role="dialog" aria-label={`Change ${label}`} align={align} alignOffset={alignOffset} side={side} sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}>
         {content}
       </Popover.Content>
     </Popover.Portal>

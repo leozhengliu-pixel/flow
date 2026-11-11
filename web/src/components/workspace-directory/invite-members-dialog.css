@@ -285,11 +285,17 @@ div:has(> .invite-members-role-menu) {
   opacity: 0.5;
   cursor: default;
 }
-/* The team picker's popover: the shared project-teams rows (checkbox, icon, name, key) at the reference app's 200px. */
+/* The team picker's popover: the shared project-teams rows (checkbox, icon, name, key); like every team tree it hugs its
+   widest row (`fitTreeMenu` rounds the width up to a whole pixel), from 175px to 401px. */
 html:root body .property-command-surface.project-teams-menu.invite-members-team-menu:not(#_) {
   z-index: 1100;
-  width: 200px;
-  min-width: 200px;
+  width: max-content;
+  min-width: 175px;
+  max-width: min(401px, calc(100vw - 20px));
+}
+/* Its rows have no trailing item: three columns, so the hugged width ends 18px after the key. */
+html:root body .property-command-surface.project-teams-menu.invite-members-team-menu:not(#_) .property-command-options [role=option] {
+  grid-template-columns: 16px calc(16px + var(--option-indent, 0) * 24px) minmax(0, 1fr);
 }
 .invite-members-team-menu__name {
   min-width: 0;

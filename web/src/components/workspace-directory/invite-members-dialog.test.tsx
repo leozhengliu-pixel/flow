@@ -101,16 +101,16 @@ describe('InviteMembersDialog', () => {
     await user.click(picker)
     expect(await screen.findByPlaceholderText('Search teams…')).toBeInTheDocument()
     let rows = screen.getAllByRole('option')
-    // Sub-teams follow their parent.
-    expect(rows.map(row => row.textContent)).toEqual(['EngineeringENG', 'DesignDES', 'BrandBRD'])
-    await user.click(rows[1])
+    // Alphabetical; sub-teams follow their parent.
+    expect(rows.map(row => row.textContent)).toEqual(['DesignDES', 'BrandBRD', 'EngineeringENG'])
+    await user.click(rows[0])
     await waitFor(() => expect(screen.queryByPlaceholderText('Search teams…')).not.toBeInTheDocument())
     expect(picker).toHaveTextContent('DES')
 
     await user.click(picker)
     rows = screen.getAllByRole('option')
     // The chosen team moves to the top, checked.
-    expect(rows.map(row => row.textContent)).toEqual(['DesignDES', 'EngineeringENG', 'BrandBRD'])
+    expect(rows.map(row => row.textContent)).toEqual(['DesignDES', 'BrandBRD', 'EngineeringENG'])
     expect(rows.map(row => row.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false'])
     await user.type(screen.getByPlaceholderText('Search teams…'), 'BRD')
     await user.click(screen.getAllByRole('option')[0])
@@ -147,7 +147,7 @@ describe('InviteMembersDialog', () => {
     await user.click(screen.getAllByRole('option')[0])
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Send invites' }))
-    await waitFor(() => expect(inviteMembers).toHaveBeenCalledWith('workspace', { emails: ['guest@example.com'], role: 'guest', teamIds: ['team-1'] }))
+    await waitFor(() => expect(inviteMembers).toHaveBeenCalledWith('workspace', { emails: ['guest@example.com'], role: 'guest', teamIds: ['team-3'] }))
   })
 
   it('reports invalid entries instead of silently dropping them', async () => {

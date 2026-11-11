@@ -222,6 +222,25 @@ it('marks a team and its sub-team in the drawer, and leaves the entry plain on t
   expect(screen.getByRole('button', { name: 'Parent' })).not.toHaveAttribute('aria-current');
 });
 
+it('joins sibling sub-teams in the drawer: one continuing line per earlier sibling, the last ends in its curve; newest sub-team first', () => {
+  const input = props();
+  const viewerId = input.data.viewer.id;
+  const team = (id: string, name: string, createdAt: string) => ({ id, key: id.toUpperCase(), name, color: '#777777', createdAt });
+  input.data = { ...input.data, teams: [team('p', 'Parent', '2026-11-01T00:00:00Z'), team('old', 'Old', '2026-11-02T00:00:00Z'), team('mid', 'Mid', '2026-11-03T00:00:00Z'), team('new', 'New', '2026-11-04T00:00:00Z')], teamMembers: ['p', 'old', 'mid', 'new'].map(teamId => ({ teamId, userId: viewerId, role: 'member', joinedAt: '' })), teamSettings: Object.fromEntries(['old', 'mid', 'new'].map(id => [id, { teamId: id, parentTeamId: 'p' }])) } as unknown as typeof input.data;
+  render(<I18nProvider><SettingsPage {...input} page="team" teamKey="P" teamSection="overview"/></I18nProvider>);
+  const rows = [...document.querySelectorAll<HTMLElement>('.settings-sidebar nav button[data-depth]')];
+  expect(rows.map(row => row.textContent)).toEqual(['Parent', 'New', 'Mid', 'Old']);
+  const tree = (row: HTMLElement) => [...row.querySelectorAll<HTMLElement>('.settings-nav-team-tree > i')].map(line => line.hasAttribute('data-stub') ? 'stub' : line.hasAttribute('data-continues') ? 'continues' : 'ends');
+  expect(tree(rows[0])).toEqual(['stub']);
+  expect(tree(rows[1])).toEqual(['continues']);
+  expect(tree(rows[2])).toEqual(['continues']);
+  expect(tree(rows[3])).toEqual(['ends']);
+  // The name and icon stay the row's first two spans: the drawer's locators count them.
+  expect([...rows[1].children].map(node => node.tagName)).toEqual(['SPAN', 'SPAN', 'SPAN']);
+  expect(rows[1].children[2]).toHaveClass('settings-nav-team-tree');
+  expect(rows[1].querySelector('.settings-nav-team-tree > i')).toHaveStyle({ '--x-phone': '-6px' });
+});
+
 it('searches team settings and opens the matching section', async () => {
   localStorage.setItem('flow:locale', 'en');
   const user = userEvent.setup();

@@ -79,9 +79,9 @@ html:root body:has(.team-create-settings) .settings-select-menu .settings-select
 /* The reference's access menu starts 1.5px left of its trigger, at a fractional position; the menu snaps to whole pixels, the remaining 0.22px is item padding. */
 body .team-create-access-menu .settings-select-option { padding-left: 12.22px; }
 
-/* An open picker keeps the raised control fill; the parent picker panel is 175px wide and sits 1px lower than the default. */
+/* An open picker keeps the raised control fill; the parent picker panel hugs its rows like every team tree (the shared tree rule sizes it) and sits 1px lower than the default. */
 html:root .settings-app .settings-main .team-create-settings .settings-select[data-state="open"] { background: var(--lx-control-hover, var(--dropdown-hover)); }
-html:root body:has(.team-create-settings button[aria-label="Set parent team"][aria-expanded="true"]) .property-command-surface { width: 175px !important; min-width: 175px !important; margin-top: 1px; }
+html:root body:has(.team-create-settings button[aria-label="Set parent team"][aria-expanded="true"]) .property-command-surface { margin-top: 1px; }
 
 .team-create-footer { display: flex; justify-content: flex-end; margin: 0 0 40px; }
 .team-create-footer .settings-action { height: 32px; padding: 0 12px; border: .5px solid transparent; border-radius: 9999px; font: 500 13px/normal var(--font); }
