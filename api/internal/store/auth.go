@@ -424,8 +424,9 @@ func (s *SQLiteStore) createSession(ctx context.Context, user domain.User) (doma
 }
 
 func (s *SQLiteStore) AuthenticateSession(ctx context.Context, token string) (domain.User, error) {
-	var userID, expiresRaw string
-	err := s.db.QueryRowContext(ctx, `SELECT user_id,expires_at FROM auth_sessions WHERE token_hash=?`, tokenHash(token)).Scan(&userID, &expiresRaw)
+	hash := tokenHash(token)
+	var userID, expiresRaw, lastSeenRaw string
+	err := s.db.QueryRowContext(ctx, `SELECT user_id,expires_at,last_seen_at FROM auth_sessions WHERE token_hash=?`, hash).Scan(&userID, &expiresRaw, &lastSeenRaw)
 	if err != nil {
 		return domain.User{}, ErrAuthInvalid
 	}
@@ -438,7 +439,7 @@ func (s *SQLiteStore) AuthenticateSession(ctx context.Context, token string) (do
 	if err != nil || !user.Active {
 		return domain.User{}, ErrAuthInvalid
 	}
-	_, _ = s.db.ExecContext(ctx, `UPDATE auth_sessions SET last_seen_at=? WHERE token_hash=?`, time.Now().UTC().Format(time.RFC3339Nano), tokenHash(token))
+	s.touchSession(ctx, hash, lastSeenRaw, time.Now().UTC())
 	return user, nil
 }
 
