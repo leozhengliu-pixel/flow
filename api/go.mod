@@ -1,6 +1,6 @@
 module flow/api
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/Deln0r/ygo v1.29.0
