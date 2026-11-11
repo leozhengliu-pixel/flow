@@ -1126,7 +1126,7 @@ func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data doma
 	if operation != "create" {
 		payload.CommentID = targetID
 	}
-	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, eventType, aggregateID, payload, func(next *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.ContextWithMutationResults(ctx, &result), actor.WorkspaceKey, eventType, aggregateID, payload, func(next *domain.Bootstrap) error {
 		defer func() {
 			if operation == "create" || operation == "reply" {
 				payload.CommentID, payload.ParentID = result.ID, result.ParentID

@@ -260,7 +260,13 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		traceMark(ctx, "load")
 		data.FormerMembers = s.formerMemberLookup(ctx, tx, &data)
 		data.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
-		aggregate, err := mutate(&data)
+		var aggregate string
+		if len(fields) > 0 && verifyNarrowMutationInputs() {
+			aggregate, err = s.verifyMutationCallback(ctx, tx, "discussion", current, &data, fields, payload, mutate)
+			fields = nil
+		} else {
+			aggregate, err = mutate(&data)
+		}
 		data.CollaborationUpdates = nil
 		data.FormerMembers = nil
 		traceMark(ctx, "mutate")

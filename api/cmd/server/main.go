@@ -5161,7 +5161,7 @@ func (s *server) createComment(w http.ResponseWriter, r *http.Request) {
 	var comment domain.Comment
 	// The event names the created comment beside the input (comment_events.go).
 	payload := &commentCreatedPayload{CommentCreateInput: &input}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "comment.created", id, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.ContextWithMutationResults(r.Context(), &comment), workspaceKey(r), "comment.created", id, payload, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
@@ -5223,7 +5223,7 @@ func (s *server) updateComment(w http.ResponseWriter, r *http.Request) {
 			eventType = "comment.unresolved"
 		}
 	}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), eventType, issueID, commentUpdatedPayload{CommentUpdateInput: input, CommentID: commentID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.ContextWithMutationResults(r.Context(), &updated, &current), workspaceKey(r), eventType, issueID, commentUpdatedPayload{CommentUpdateInput: input, CommentID: commentID}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Comments[issueID], func(comment domain.Comment) bool { return comment.ID == commentID })
 		if index < 0 {
 			return errNotFound
@@ -5292,7 +5292,7 @@ func (s *server) toggleCommentReaction(w http.ResponseWriter, r *http.Request) {
 	// The event payload records the comment and whether the reaction was
 	// added (webhooks send it as a Reaction create or remove).
 	input.CommentID, input.Added = commentID, nil
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "comment.reaction_toggled", issueID, &input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.ContextWithMutationResults(r.Context(), &updated), workspaceKey(r), "comment.reaction_toggled", issueID, &input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Comments[issueID], func(comment domain.Comment) bool { return comment.ID == commentID })
 		if index < 0 {
 			return errNotFound

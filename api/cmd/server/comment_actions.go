@@ -107,6 +107,7 @@ func (s *server) generateCommentActions(ctx context.Context, workspace, issueID,
 	}
 	claimed := false
 	claimCtx := store.WithIssueDiscussionMutation(ctx, issueID, commentID)
+	claimCtx = store.ContextWithMutationResults(claimCtx, &claimed)
 	err = s.store.MutateWorkspace(claimCtx, workspace, "comment.actions_started", issueID, nil, func(next *domain.Bootstrap) error {
 		claimed = false
 		current, e := issueByID(next, issueID)

@@ -1,8 +1,6 @@
 package store
 
 import (
-	"encoding/json"
-	"maps"
 	"os"
 	"reflect"
 	"slices"
@@ -16,7 +14,7 @@ func narrowMutationInputs() bool {
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_NARROW_MUTATION_INPUTS"))) {
-	case "1", "true", "on":
+	case "", "1", "true", "on":
 		return true
 	}
 	return false
@@ -36,15 +34,6 @@ var discussionCallbackFields = []string{
 	"members", "teamMembers", "states", "labels", "cycles", "cycleSettings",
 	"userSettings", "workspaceSettings", "settings", "notificationPreferences", "pushSubscriptions",
 	"threadSubscriptions", "commentActions",
-}
-
-var teamEditCallbackFields = []string{
-	"viewer", "viewerRole", "users", "teams", "teamSettings", "members", "teamMembers",
-}
-
-var teamCreateCallbackFields = []string{
-	"viewer", "viewerRole", "users", "teams", "states", "labels", "cycles",
-	"members", "teamMembers",
 }
 
 func issueRecordCallbackFields(payload any) []string {
@@ -67,59 +56,10 @@ func issueRecordCallbackFields(payload any) []string {
 	return fields
 }
 
-func teamCallbackInput(current domain.Bootstrap, eventType string, payload any) (domain.Bootstrap, []string) {
-	if !narrowMutationInputs() {
-		return current, nil
-	}
-	if eventType == "team.updated" && metadataFieldsOnly(payload, "name", "color", "icon") {
-		owned := metadataFieldSnapshot(current, teamEditCallbackFields)
-		copyMutationTeamDirectory(&owned, current)
-		return owned, teamEditCallbackFields
-	}
-	if eventType == "team.created" && (payload == nil || metadataFieldsOnly(payload, "name", "key", "color", "icon", "private", "parentTeamId", "copyFromTeamId", "timezone")) {
-		var input struct{ ParentTeamID, CopyFromTeamID string }
-		raw, err := json.Marshal(payload)
-		if err == nil && json.Unmarshal(raw, &input) == nil {
-			owned := metadataFieldSnapshot(current, teamCreateCallbackFields)
-			// Membership inheritance needs the hierarchy for all teams. Only
-			// the copied/parent teams and their ancestors need full settings.
-			owned.TeamSettings = map[string]domain.TeamSettings{}
-			owned.TeamParents = make(map[string]string)
-			for id, settings := range current.TeamSettings {
-				if settings.ParentTeamID != "" {
-					owned.TeamParents[id] = settings.ParentTeamID
-				}
-			}
-			for _, source := range []string{input.ParentTeamID, input.CopyFromTeamID} {
-				seen := map[string]bool{}
-				for source != "" && !seen[source] {
-					seen[source] = true
-					settings, ok := current.TeamSettings[source]
-					if !ok {
-						break
-					}
-					owned.TeamSettings[source] = cloneMutationTeamSettings(settings)
-					source = settings.ParentTeamID
-				}
-			}
-			owned.CycleSettings = maps.Clone(current.CycleSettings)
-			if owned.CycleSettings == nil {
-				owned.CycleSettings = map[string]domain.CycleSettings{}
-			}
-			copyMutationTeamDirectory(&owned, current)
-			return owned, teamCreateCallbackFields
-		}
-	}
-	owned := cloneBootstrap(collectionMetadata(current))
-	owned.NextIssueNumber = current.NextIssueNumber
-	return owned, nil
-}
-
-func copyMutationTeamDirectory(data *domain.Bootstrap, current domain.Bootstrap) {
-	data.TeamByID = maps.Clone(current.TeamByID)
-	data.TeamByKey = maps.Clone(current.TeamByKey)
-	data.TeamChildren = cloneSnapshotValue(reflect.ValueOf(current.TeamChildren)).Interface().(map[string][]string)
-	data.LabelIndex = cloneSnapshotValue(reflect.ValueOf(current.LabelIndex)).Interface().(map[string][]int)
+// Team inputs retain the legacy path: allocating an owned input would regress
+// a callback that already has a small, constant allocation cost.
+func teamCallbackInput(current domain.Bootstrap, _ string, _ any) (domain.Bootstrap, []string) {
+	return current, nil
 }
 
 func issueScopeCallbackInput(current domain.Bootstrap, discussionOnly bool) (domain.Bootstrap, []string) {

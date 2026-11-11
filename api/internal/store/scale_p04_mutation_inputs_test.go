@@ -45,7 +45,7 @@ func TestScaleP04MetadataFieldsDifferential(t *testing.T) {
 	data := repo.Bootstrap()
 	data.NextIssueNumber = 567
 	data.Settings = map[string]any{"nested": map[string]any{"list": []any{"value"}}}
-	for _, fields := range [][]string{nil, {"settings"}, issueCallbackFields, discussionCallbackFields, teamEditCallbackFields} {
+	for _, fields := range [][]string{nil, {"settings"}, issueCallbackFields, discussionCallbackFields} {
 		t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "off")
 		legacy := metadataFieldSnapshot(data, fields)
 		t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
@@ -75,26 +75,15 @@ func TestScaleP04ActorAttributionIsOwned(t *testing.T) {
 	}
 }
 
-func TestScaleP04TeamCreationInput(t *testing.T) {
-	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
+func TestScaleP04TeamsRetainLegacyInputs(t *testing.T) {
 	data := bulkBootstrap(3)
-	child, parent := "bulk-team-00001", "bulk-team-00000"
-	settings := data.TeamSettings[child]
-	settings.ParentTeamID, settings.InheritWorkflowStatuses = parent, true
-	data.TeamSettings[child] = settings
-	owned, fields := teamCallbackInput(data, "team.created", map[string]string{"name": "New team", "parentTeamId": child})
-	if len(fields) == 0 || !reflect.DeepEqual(owned.TeamSettings[child], data.TeamSettings[child]) || !reflect.DeepEqual(owned.TeamSettings[parent], data.TeamSettings[parent]) {
-		t.Fatal("parent/copy input lost its full settings or ancestry")
-	}
-	for _, id := range []string{child, parent} {
-		assertNoSharedReferences(t, id, reflect.ValueOf(data.TeamSettings[id]), reflect.ValueOf(owned.TeamSettings[id]))
-	}
-	if reflect.ValueOf(owned.TeamSettings).Pointer() == reflect.ValueOf(data.TeamSettings).Pointer() || reflect.ValueOf(owned.CycleSettings).Pointer() == reflect.ValueOf(data.CycleSettings).Pointer() {
-		t.Fatal("team creation input shares settings maps")
-	}
-	for _, field := range persistedMetadataFields() {
-		if slices.Contains(fields, field.name) {
-			assertNoSharedReferences(t, field.name, reflect.ValueOf(data).Field(field.index), reflect.ValueOf(owned).Field(field.index))
+	for _, mode := range []string{"off", "on"} {
+		t.Setenv("FLOW_NARROW_MUTATION_INPUTS", mode)
+		for _, event := range []string{"team.updated", "team.created", "team.settings_updated"} {
+			input, fields := teamCallbackInput(data, event, nil)
+			if len(fields) != 0 || &input.Teams[0] != &data.Teams[0] || reflect.ValueOf(input.TeamSettings).Pointer() != reflect.ValueOf(data.TeamSettings).Pointer() {
+				t.Fatalf("%s %s did not retain legacy inputs", mode, event)
+			}
 		}
 	}
 }
@@ -105,7 +94,7 @@ func TestScaleP04CallbacksOwnSnapshots(t *testing.T) {
 	fixture := repo.Bootstrap()
 	key, issue := fixture.Workspace.URLKey, fixture.Issues[0]
 	abort := errors.New("callback abort")
-	for _, kind := range []string{"issue", "issueFallback", "comment", "scoped", "team", "teamFallback"} {
+	for _, kind := range []string{"issue", "issueFallback", "comment", "scoped"} {
 		t.Run(kind, func(t *testing.T) {
 			stored, _ := repo.storedWorkspace(key)
 			hash := scaleP04Hash(t, stored)
@@ -150,12 +139,6 @@ func TestScaleP04CallbacksOwnSnapshots(t *testing.T) {
 				err = repo.mutateIssueScope(WithIssueDiscussionMutation(t.Context(), issue.ID, ""), key, "comment.created", nil, func(data *domain.Bootstrap) (string, error) { return issue.ID, check(data) })
 			case "scoped":
 				err = repo.mutateScoped(WithIssueDiscussionMutation(t.Context(), issue.ID, ""), key, "comment.created", nil, MutationScope{IssueIDs: []string{issue.ID}}, func(data *domain.Bootstrap) (string, error) { return issue.ID, check(data) })
-			case "team", "teamFallback":
-				event := "team.updated"
-				if kind == "teamFallback" {
-					event = "team.settings_updated"
-				}
-				err = repo.MutateWorkspace(t.Context(), key, event, fixture.Teams[0].ID, map[string]string{"name": "Renamed"}, check)
 			}
 			if !errors.Is(err, abort) {
 				t.Fatalf("error = %v, want callback abort", err)
@@ -192,9 +175,9 @@ func TestScaleP04MixedReplicaWrites(t *testing.T) {
 	}
 }
 
-func TestScaleP04FlagDefaultsToLegacy(t *testing.T) {
+func TestScaleP04FlagDefaultsOnWithLegacyRollback(t *testing.T) {
 	data := domain.Bootstrap{Projects: []domain.Project{{ID: "project"}}, Trash: []domain.TrashEntry{{ID: "trash"}}}
-	for _, mode := range []string{"", "off", "false", "0", "shadow", "invalid"} {
+	for _, mode := range []string{"off", "false", "0", "shadow", "invalid"} {
 		t.Setenv("FLOW_NARROW_MUTATION_INPUTS", mode)
 		if narrowMutationInputs() {
 			t.Fatalf("mode %q enabled narrow inputs", mode)
@@ -204,7 +187,13 @@ func TestScaleP04FlagDefaultsToLegacy(t *testing.T) {
 			t.Fatalf("mode %q changed legacy issue inputs", mode)
 		}
 	}
-	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
+	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "")
+	if !narrowMutationInputs() {
+		t.Fatal("narrow inputs are not on by default")
+	}
+	if !verifyNarrowMutationInputs() {
+		t.Fatal("test callbacks must always be verified")
+	}
 	input := issueUpdateMetadata(data)
 	assertNoSharedReferences(t, "enabled", reflect.ValueOf(data), reflect.ValueOf(input))
 	restore := ForceFullMutationsForTesting(true)
@@ -214,34 +203,12 @@ func TestScaleP04FlagDefaultsToLegacy(t *testing.T) {
 	}
 }
 
-func TestScaleP04TeamPersistenceFailurePreservesSnapshot(t *testing.T) {
-	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
-	repo := scaleP04Store(t)
-	fixture := repo.Bootstrap()
-	key, teamID := fixture.Workspace.URLKey, fixture.Teams[0].ID
-	stored, _ := repo.storedWorkspace(key)
-	hash := scaleP04Hash(t, stored)
-	payload := map[string]any{"name": "Renamed"}
-	err := repo.MutateWorkspace(t.Context(), key, "team.updated", teamID, payload, func(data *domain.Bootstrap) error {
-		data.Teams[0].Name = "uncommitted"
-		payload["name"] = func() {}
-		return nil
-	})
-	if err == nil {
-		t.Fatal("unencodable event payload was accepted")
-	}
-	current, _ := repo.storedWorkspace(key)
-	if scaleP04Hash(t, stored) != hash || scaleP04Hash(t, current) != hash {
-		t.Fatal("failed persistence changed the installed snapshot")
-	}
-}
-
 func TestScaleP04CommittedWritesKeepSnapshots(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
 	repo := scaleP04Store(t)
 	fixture := repo.Bootstrap()
-	key, issueID, teamID := fixture.Workspace.URLKey, fixture.Issues[0].ID, fixture.Teams[0].ID
-	for _, kind := range []string{"issue", "comment", "scoped", "team", "settings", "createTeam"} {
+	key, issueID := fixture.Workspace.URLKey, fixture.Issues[0].ID
+	for _, kind := range []string{"issue", "comment", "scoped"} {
 		t.Run(kind, func(t *testing.T) {
 			stored, _ := repo.storedWorkspace(key)
 			hash := scaleP04Hash(t, stored)
@@ -259,22 +226,6 @@ func TestScaleP04CommittedWritesKeepSnapshots(t *testing.T) {
 				err = repo.mutateIssueScope(WithIssueDiscussionMutation(t.Context(), issueID, ""), key, "comment.created", nil, comment)
 			case "scoped":
 				err = repo.mutateScoped(WithIssueDiscussionMutation(t.Context(), issueID, ""), key, "comment.created", nil, MutationScope{IssueIDs: []string{issueID}}, comment)
-			case "team":
-				err = repo.MutateWorkspace(t.Context(), key, "team.updated", teamID, map[string]string{"name": "P04 committed team"}, func(data *domain.Bootstrap) error { data.Teams[0].Name = "P04 committed team"; return nil })
-			case "settings":
-				err = repo.MutateWorkspace(t.Context(), key, "team.settings_updated", teamID, map[string]string{"timezone": "UTC"}, func(data *domain.Bootstrap) error {
-					settings := data.TeamSettings[teamID]
-					settings.Timezone = "UTC"
-					data.TeamSettings[teamID] = settings
-					return nil
-				})
-			case "createTeam":
-				id := idgen.New("scale_p04_team_")
-				err = repo.MutateWorkspace(t.Context(), key, "team.created", id, nil, func(data *domain.Bootstrap) error {
-					data.Teams = append(data.Teams, domain.Team{ID: id, Name: "Owned creation", Key: "OWN"})
-					data.TeamSettings[id] = domain.TeamSettings{TeamID: id, Timezone: "UTC"}
-					return nil
-				})
 			}
 			if err != nil {
 				t.Fatal(err)

@@ -229,12 +229,6 @@ func NoteTeamKeyChanged(data *Bootstrap, teamID, oldKey, newKey string) {
 }
 
 func SyncTeamAncestorMembers(data *Bootstrap) {
-	parentOf := func(id string) string {
-		if settings, ok := data.TeamSettings[id]; ok {
-			return settings.ParentTeamID
-		}
-		return data.TeamParents[id]
-	}
 	guests := map[string]bool{}
 	for _, member := range data.Members {
 		if member.Role == "guest" {
@@ -250,7 +244,7 @@ func SyncTeamAncestorMembers(data *Bootstrap) {
 		if guests[member.UserID] {
 			continue
 		}
-		for parent := parentOf(member.TeamID); parent != "" && !visited[parent]; parent = parentOf(parent) {
+		for parent := data.TeamSettings[member.TeamID].ParentTeamID; parent != "" && !visited[parent]; parent = data.TeamSettings[parent].ParentTeamID {
 			visited[parent] = true
 			key := parent + "\x00" + member.UserID
 			if !seen[key] {

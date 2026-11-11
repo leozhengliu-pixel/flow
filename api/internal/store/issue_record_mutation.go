@@ -279,7 +279,25 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if len(fields) > 0 && !slices.Contains(fields, "projects") {
 			copyMutationProjects(&metadata, storedMetadata)
 		}
-		err = mutate(&metadata, target)
+		if len(fields) > 0 && verifyNarrowMutationInputs() {
+			_, err = s.verifyMutationCallback(ctx, tx, "issue", storedMetadata, &metadata, fields, scope.Payload, func(input *domain.Bootstrap) (string, error) {
+				for i := range input.Issues {
+					if input.Issues[i].ID == id {
+						return id, mutate(input, &input.Issues[i])
+					}
+				}
+				return id, sql.ErrNoRows
+			})
+			fields = nil
+			for i := range metadata.Issues {
+				if metadata.Issues[i].ID == id {
+					target = &metadata.Issues[i]
+					break
+				}
+			}
+		} else {
+			err = mutate(&metadata, target)
+		}
 		metadata.CollaborationUpdates = nil
 		metadata.FormerMembers = nil
 		if len(fields) > 0 {

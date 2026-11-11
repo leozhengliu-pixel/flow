@@ -340,7 +340,14 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		traceMark(ctx, "load")
 		next.FormerMembers = s.formerMemberLookup(ctx, tx, &next)
 		next.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspaceKey)
-		aggregateID, err := mutate(&next)
+		var aggregateID string
+		if len(fields) > 0 && verifyNarrowMutationInputs() {
+			aggregateID, err = s.verifyMutationCallback(ctx, tx, "scoped discussion", stored, &next, fields, payload, mutate)
+			restoreUnlistedMetadata(&current, stored, fields)
+			fields = nil
+		} else {
+			aggregateID, err = mutate(&next)
+		}
 		next.CollaborationUpdates = nil
 		if len(fields) > 0 {
 			restoreUnlistedMetadata(&current, stored, fields)
