@@ -158,8 +158,12 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		}
 	} else if strings.Contains(event.Type, "permission") && !strings.HasPrefix(event.Type, "issue.") {
 		// Document and other permission changes carry subject lists the viewer may
-		// not see: send the bare signal, clients reload the affected metadata.
-		return domain.RealtimeEvent{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, ClientID: event.ClientID, ActorID: event.ActorID, CreatedAt: event.CreatedAt}, true, nil
+		// not see: send the bare signal, clients reload the affected metadata. A
+		// viewer who cannot open the document (any more) is not told which one.
+		if strings.HasPrefix(event.Type, "document.") && !s.documentPresenceAllowed(r, event.AggregateID) {
+			return anonymousRealtimeEvent(event), true, nil
+		}
+		return bareRealtimeEvent(event, nil), true, nil
 	}
 	if strings.HasPrefix(event.Type, "document.") && event.AggregateID != "" {
 		projected, visible := s.pagedDocumentEvent(r, data, event)
@@ -201,7 +205,15 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 	if visible, decided := s.pagedPulseSourceVisible(r, data, event); decided {
 		return event, visible, nil
 	}
-	return event, realtimeEventVisible(data, event), nil
+	if strings.HasPrefix(event.Type, "project.") || strings.HasPrefix(event.Type, "project_update.") || strings.HasPrefix(event.Type, "initiative.") || strings.HasPrefix(event.Type, "initiative_update.") {
+		// A relation or update the Pulse sources do not index: as before, the
+		// stream's metadata holds no projects or initiatives to check it against.
+		return event, false, nil
+	}
+	// Every other kind follows the read rule of the record it names
+	// (realtime_event_policy.go); its payload is never forwarded as it is.
+	projected, visible := s.pagedPolicyEvent(r, data, query, event)
+	return projected, visible, nil
 }
 
 // pagedDocumentEvent authorizes a document event against the document itself, since the realtime metadata carries no

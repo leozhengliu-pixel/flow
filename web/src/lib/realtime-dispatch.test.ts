@@ -48,6 +48,16 @@ describe('classifyRealtimeEvent', () => {
     }
   })
 
+  it('reloads metadata for the anonymous signal a viewer gets when a record left their reach or is gone', () => {
+    // The server names neither the record nor the actor: type only.
+    for (const type of ['view.updated', 'view.deleted', 'label.deleted', 'issue_template.updated', 'release_pipeline.deleted', 'document.permissions_updated', 'team.resource_deleted']) {
+      expect(classifyRealtimeEvent(event(type), true), type).toEqual({ kind: 'metadata', visibility: false })
+    }
+    for (const type of ['team_member.updated', 'team.updated', 'team.archived']) {
+      expect(classifyRealtimeEvent(event(type), true), type).toEqual({ kind: 'metadata', visibility: true })
+    }
+  })
+
   it('resyncs only for overflow, an expired cursor and unknown events', () => {
     for (const type of ['resync', 'workspace.resync_required', 'something.unheard_of']) {
       expect(classifyRealtimeEvent(event(type), true), type).toEqual({ kind: 'resync' })

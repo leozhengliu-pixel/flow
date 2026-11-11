@@ -697,7 +697,15 @@ Flow keeps history it no longer serves out of the database, or bounded:
   `cursor`; `Last-Event-ID`/`since` on the stream also accepts a cursor (a numeric `since` replays from the durable log, so it survives restarts and ring eviction). Replayed
   events carry the persisted payload (the mutation input), not the transient
   `entity` envelope; entities the viewer may read are re-projected, and events
-  that SSE turns into `workspace.resync_required` do so here too. Presence,
+  that SSE turns into `workspace.resync_required` do so here too. Live,
+  replayed and other replicas' events pass the same per-viewer filter: issues,
+  documents, projects and initiatives are projected for the viewer; any other
+  record (views, labels, statuses, templates, teams, pipelines, SLA and triage
+  rules, customers, settings, credentials, ...) reaches only viewers who may
+  read it through the API, as a bare signal (type, id, actor, plus the few
+  fields clients patch locally) to reload from; a viewer who cannot read it
+  gets nothing, or an anonymous signal (type only) when the change may have
+  taken it out of their reach or the record is gone. Presence,
   agent task and session state (`agent_task.updated` and streaming; refetch
   agent sessions after a resume, `agent_task.replied` is logged), coding session
   state (`coding_session.*`: a numeric `since` does not replay it, so refetch open
