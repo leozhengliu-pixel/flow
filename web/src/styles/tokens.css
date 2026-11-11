@@ -557,6 +557,11 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --insight-card-border: lch(16% 1.2 272);
   --insight-control-shadow: 0 0 0 .5px lch(100% 0 0 / .088), 0 .5px 1px 1px lch(0% 0 0 / .3);
   --insight-value-text: lch(90.826% 1.425 272);
+  --insight-action-text: var(--accent-primary);
+  --insight-toolbar-selected-bg: var(--issue-toolbar-open-bg);
+  --settings-primary-action-bg: var(--set-primary);
+  --product-name-body-inline-size: 2.95em;
+  --product-name-emphasis-inline-size: 3em;
 }
 :root[data-theme="light"] {
   --insight-row-bg: lch(100% 0 282);
@@ -581,6 +586,9 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --insight-card-border: lch(91.9% 0 282);
   --insight-control-shadow: 0 0 0 .5px lch(0% 0 0 / .088), 0 3px 6px -2px lch(0% 0 0 / .02), 0 1px 1px lch(0% 0 0 / .04);
   --insight-value-text: lch(10% 0 282);
+  --insight-action-text: #4363dc;
+  --insight-toolbar-selected-bg: #f0f0f0;
+  --settings-primary-action-bg: #6b76d2;
 }
 
 /* Boot previews load these rules before the rich editor's route CSS. */

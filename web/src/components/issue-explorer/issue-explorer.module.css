@@ -70,6 +70,7 @@
   .headerViewIcon{margin-right:0}
   .iconButton[data-details-trigger]{--ui-pill-active-bg:var(--issue-toolbar-open-bg);--ui-pill-active-hover-bg:var(--issue-toolbar-open-bg)}
   [data-issue-explorer] [data-content-view-subheader] [data-toolbar-buttons-navigation] button[aria-expanded=true]{--ui-pill-active-bg:var(--issue-toolbar-open-bg);--ui-pill-active-hover-bg:var(--issue-toolbar-open-bg)}
+  .insightsButton{--toolbar-icon-pill-hover-bg:var(--insight-toolbar-selected-bg);--toolbar-icon-pill-open-bg:var(--insight-toolbar-selected-bg)}
   .filterBar{border:.5px solid var(--issue-filter-band-border);box-shadow:none}
   .filterBar>div:first-child>button{padding-inline:2px}
   [data-issue-explorer]:has(section[data-mode="create"]) [data-header-row]{padding-left:8px}

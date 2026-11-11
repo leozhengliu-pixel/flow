@@ -94,7 +94,7 @@
 .emptyMark { color: var(--theme-text-tertiary); }
 .emptyMark svg { width: 40px; height: 40px; }
 .footer { flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 12px; margin-top: 9px; padding: 6px 20px; border-top: .5px solid var(--insight-card-border); }
-.setDefault, .resetDefault { padding: 4px 0; border: 0; background: transparent; color: var(--accent-primary); font: 500 12px/normal var(--font); cursor: pointer; }
+.setDefault, .resetDefault { padding: 4px 0; border: 0; background: transparent; color: var(--insight-action-text); font: 500 12px/normal var(--font); cursor: pointer; }
 .resetDefault { color: var(--insight-header-text); }
 .setDefault:disabled { cursor: default; }
 

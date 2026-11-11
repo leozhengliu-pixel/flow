@@ -206,7 +206,7 @@ export function IssueExplorerSurface({
                   onNavigateView(view.id)
                 }}
               >
-                {view.label}
+                <span>{t(view.label)}</span>
               </a>
             ))}
             {savedViews.length > SAVED_VIEW_VIRTUALIZATION_THRESHOLD ? (

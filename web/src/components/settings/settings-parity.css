@@ -180,7 +180,7 @@ html:root .settings-app .settings-main .feature-button:not(.danger):not(.primary
 html:root .settings-app .settings-main .settings-action.primary,
 html:root .settings-app .settings-main .personal-action.primary,
 html:root .settings-app .settings-main .feature-button.primary {
-  background: var(--set-primary);
+  background: var(--settings-primary-action-bg);
   box-shadow: var(--set-primary-shadow);
   color: var(--set-primary-text);
 }

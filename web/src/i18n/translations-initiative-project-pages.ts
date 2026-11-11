@@ -3,6 +3,7 @@
  * details sidebar). Merged into zhCN by translations.ts.
  */
 export const initiativeProjectPagesZhCN: Record<string, string> = {
+  "Initiatives are larger, strategic product efforts that set the direction of your company. They are comprised of all projects that align with the goals of the initiative and allow you to monitor their progress at scale.": "目标是为公司指明方向的大型战略性产品工作。它包含所有与目标一致的项目，让你能够统一跟踪各项目的进展。",
   "{completed} of {total} projects completed. Click to view projects.": "已完成 {completed} / {total} 个项目。点击查看项目。",
   "Milestone {name}. Progress: {progress}%.": "里程碑 {name}。进度：{progress}%。",
   "Latest update": "最新更新",
