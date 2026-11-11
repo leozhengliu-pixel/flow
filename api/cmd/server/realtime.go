@@ -30,8 +30,6 @@ type realtimeHub struct {
 	historyTotal int
 	presence     map[string]map[string]domain.Presence
 	sockets      map[string]map[uint64]*realtimeSocketClient
-	// payloads shares a per-event value between streams (realtime_payload_cache.go).
-	payloads realtimePayloadCache
 	// node tags this instance's stream ids when several instances share
 	// events (Redis coordination). Each instance has its own replay window, in
 	// its own arrival order, so a cursor from another instance cannot be
