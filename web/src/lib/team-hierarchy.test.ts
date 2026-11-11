@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolvedTeamSettings, teamHierarchy, teamRowTree } from './team-hierarchy'
+import { resolvedTeamSettings, teamHierarchy, teamRowTree, treeGuideLevels } from './team-hierarchy'
 import type { Team } from '@/types/flow'
 
 const teams: Team[] = Array.from({length:6},(_,i)=>({id:`t${i}`,name:`Level ${i+1}`,key:`T${i}`,color:'#888888'}))
@@ -37,6 +37,18 @@ describe('team hierarchy',()=>{
     expect(resolvedTeamSettings(settings,'child')?.estimateType).toBe('fibonacci')
     expect(settings.child.estimateType).toBe('notUsed')
     expect(teams).toHaveLength(2)
+  })
+})
+
+describe('tree guide levels',()=>{
+  it('keeps a level running past every sibling but the last, and past an earlier sibling’s own sub-teams',()=>{
+    // Parent > {first > {nested}, middle, last}, then a second root with a single child.
+    expect(treeGuideLevels([0,1,2,1,1,0,1])).toEqual([[],[1],[1],[1],[],[],[]])
+    // Deeper: an ancestor level continues through its subtree; a last child ends its own level.
+    expect(treeGuideLevels([0,1,2,2,3,1])).toEqual([[],[1],[1,2],[1],[1],[]])
+    // A single child, and a flat list, draw no continuing guide.
+    expect(treeGuideLevels([0,1])).toEqual([[],[]])
+    expect(treeGuideLevels([0,0,0])).toEqual([[],[],[]])
   })
 })
 

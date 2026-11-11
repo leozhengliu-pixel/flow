@@ -317,6 +317,10 @@
 .team-body[data-has-subteams] > .team-links { padding-bottom: 1px; }
 .team-subteams { margin: 1px 0 0; padding: 0; list-style: none; }
 .sidebar-subteam { position: relative; }
+/* Sibling sub-teams sit 1px apart, and an open sub-team's links end 1px above the next sibling's gap (reference: a
+   collapsed sibling's heading is 29px from the next one, an open one's links leave 2px before it). */
+.sidebar-subteam + .sidebar-subteam { margin-top: 1px; }
+.sidebar-subteam:not(:last-child) > .sidebar-team > .team-body > .team-links { padding-bottom: 1px; }
 .team-connector { position: absolute; top: -9993px; left: calc(var(--team-indent) - 4px); width: 1px; height: 9999px; background: var(--team-connector); pointer-events: none; }
 .team-elbow { position: absolute; top: 5px; left: calc(var(--team-indent) - 4px); width: 10px; height: 9px; color: var(--team-connector); pointer-events: none; }
 .team-elbow svg { display: block; width: 10px; height: 9px; fill: currentColor; }

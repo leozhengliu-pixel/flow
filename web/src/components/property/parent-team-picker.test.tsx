@@ -37,3 +37,17 @@ it('lists teams as an indented tree with keys, without a "No parent team" row un
   fireEvent.click(screen.getByRole('combobox',{name:'Parent team'}))
   expect(screen.getAllByRole('option')[0]).toHaveTextContent('No parent team')
 })
+
+it('hangs sibling sub-teams from one guide: earlier siblings keep a full-height line, the last ends in its elbow',()=>{
+  localStorage.setItem('flow:locale','en-US')
+  // Alpha > {Beta > {Gamma}, Delta, Omega}: Beta and Delta continue level 1; Gamma also carries level 1 through Beta's subtree.
+  const teams:Team[]=['Alpha','Beta','Gamma','Delta','Omega'].map(name=>({id:name,key:name.slice(0,3).toUpperCase(),name,color:'#888888'}))
+  const settings={Beta:{parentTeamId:'Alpha'},Gamma:{parentTeamId:'Beta'},Delta:{parentTeamId:'Alpha'},Omega:{parentTeamId:'Alpha'}}
+  render(<I18nProvider><ParentTeamPicker teams={teams} settings={settings} onChange={vi.fn()}/></I18nProvider>)
+  fireEvent.click(screen.getByRole('combobox',{name:'Parent team'}))
+  const rows=screen.getAllByRole('option')
+  expect(rows.map(row=>row.textContent)).toEqual(['AlphaALP','BetaBET','GammaGAM','DeltaDEL','OmegaOME'])
+  const lines=(row:HTMLElement)=>[...row.querySelectorAll<HTMLElement>(':scope > .property-command-tree-line')].map(line=>line.style.getPropertyValue('--tree-level'))
+  expect(rows.map(row=>Boolean(row.querySelector(':scope > .property-command-tree-elbow')))).toEqual([false,true,true,true,true])
+  expect(rows.map(lines)).toEqual([[],['1'],['1'],['1'],[]])
+})

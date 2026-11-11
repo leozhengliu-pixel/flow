@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Archive, ArchiveRestore, ArrowDown, ArrowUp, ChevronDown, MoreHorizontal, RotateCcw, Search, Settings, SquareStack, Trash2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDesktopSettings } from '@/hooks/use-desktop-settings';
@@ -14,11 +14,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
+import { TreeCurve } from "@/components/property/property-menu";
 import { useI18n } from "@/i18n/i18n";
 import { deleteTeam, listDeletedTeams, restoreDeletedTeam, updateTeam } from "@/lib/api";
 import { settingsPath, teamIssuesPath } from "@/lib/app-routes";
 import { teamContentAccessible } from "@/lib/team-access";
-import { teamHierarchy } from "@/lib/team-hierarchy";
+import { teamHierarchy, treeGuideLevels } from "@/lib/team-hierarchy";
 import { DELETE_TEAM_DESCRIPTION } from "@/lib/team-deletion";
 import type { BootstrapData, DeletedTeam, Team } from "@/types/flow";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
@@ -96,6 +97,8 @@ export function WorkspaceTeamsSettings({
     });
   const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(() => new Set());
   const teamRows = teamHierarchy(data.teams, data.teamSettings).rows(teams, collapsedTeams);
+  // Levels whose branch line runs on to a later sibling: those lines reach into the next row instead of ending in the elbow.
+  const teamGuides = treeGuideLevels(teamRows.map(row => row.depth));
   function visibilityLabel(team: Team) {
     const access = data.teamSettings?.[team.id]?.access;
     if (team.private || access === "private") return "Private";
@@ -201,7 +204,7 @@ export function WorkspaceTeamsSettings({
             <span>{teams.length}</span>
           </div>
         )}
-        {teamRows.map(({ team, depth, hasChildren }) => (
+        {teamRows.map(({ team, depth, hasChildren }, rowIndex) => (
           <div
             className="settings-member-directory-row settings-teams-row"
             key={team.id}
@@ -215,10 +218,9 @@ export function WorkspaceTeamsSettings({
             <span className="settings-teams-name" style={depth > 0 ? { paddingLeft: depth * 27 } : undefined}>
               {depth > 0 && (
                 <>
-                  <i className="settings-team-branch-line" style={{ left: depth * 27 - 19 }} aria-hidden="true" />
-                  <svg className="settings-team-branch-elbow" style={{ left: depth * 27 - 19 }} width="10" height="9" viewBox="0 0 10 9" fill="none" aria-hidden="true">
-                    <path d="M.5 0v4.5a4 4 0 0 0 4 4H10" stroke="currentColor" strokeWidth="1" />
-                  </svg>
+                  {teamGuides[rowIndex].filter(level => level < depth).map(level => <i key={level} className="settings-team-branch-line" data-continues="" style={{ "--branch-level": level } as CSSProperties} aria-hidden="true" />)}
+                  <i className="settings-team-branch-line" data-continues={teamGuides[rowIndex].includes(depth) ? "" : undefined} style={{ "--branch-level": depth } as CSSProperties} aria-hidden="true" />
+                  <TreeCurve className="settings-team-branch-elbow" style={{ "--branch-level": depth } as CSSProperties} />
                 </>
               )}
               <span className="settings-team-icon" style={{ color: team.color }}>

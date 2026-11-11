@@ -87,6 +87,24 @@ export function teamRowTree(rows: { team: Team; depth: number }[]): TeamRowNode[
   return roots
 }
 
+/**
+ * Tree guides for a flat list of rows in tree order (`depths[i]` is row i's nesting level, 0 for a root): for every row,
+ * the levels (1…depth) whose vertical guide runs on past the row's bottom edge because a later sibling at that level
+ * follows. A sub-item's own level is in the list unless it is its parent's last shown child; an ancestor's level is in
+ * it while that ancestor still has a later sibling, so the guide passes the ancestor's whole subtree.
+ */
+export function treeGuideLevels(depths: number[]): number[][] {
+  return depths.map((depth, index) => {
+    const levels: number[] = []
+    for (let level = 1; level <= depth; level++) {
+      let next = index + 1
+      while (next < depths.length && depths[next] > level) next++
+      if (next < depths.length && depths[next] === level) levels.push(level)
+    }
+    return levels
+  })
+}
+
 /** Left offset of a team's rows in the sidebar: the first sub-level steps in by 19px, every deeper level by 16px more (an elbow's left is this offset minus 4px). */
 export function teamIndentPx(depth: number): number {
   return depth <= 0 ? 0 : 19 + (depth - 1) * 16

@@ -187,9 +187,13 @@
 
 /* Settings > Teams: sub-teams nest under their parent with a branch connector and a collapse toggle. */
 @media (--desktop-layout) {
-  html:root .settings-app .settings-main .settings-teams-row > .settings-teams-name { position: relative; }
-  html:root .settings-app .settings-main .settings-team-branch-line { position: absolute; top: -9px; width: 1px; height: 24px; background: var(--set-sep); }
-  html:root .settings-app .settings-main .settings-team-branch-elbow { position: absolute; top: 14px; color: var(--set-sep); }
+  /* The branch hangs from the 44px row (the name cell clips its overflow for long names): the 1px line starts 9px above
+     the row and ends in the 10x9 curve at y14, under the parent's icon (52px row inset + 27px per level - 19px). */
+  html:root .settings-app .settings-main .settings-teams-row > .settings-teams-name { position: static; }
+  html:root .settings-app .settings-main .settings-team-branch-line { position: absolute; top: -9px; left: calc(52px + var(--branch-level, 1) * 27px - 19px); width: 1px; height: 24px; background: var(--nesting-line); pointer-events: none; }
+  /* A level with a later sibling below: the line runs 48px, past the row's bottom edge into the next row's line. */
+  html:root .settings-app .settings-main .settings-team-branch-line[data-continues] { height: 48px; }
+  html:root .settings-app .settings-main .settings-team-branch-elbow { position: absolute; top: 14px; left: calc(52px + var(--branch-level, 1) * 27px - 19px); fill: var(--nesting-line); pointer-events: none; }
   html:root .settings-app .settings-main .settings-team-collapse { width: 22px; height: 24px; box-sizing: border-box; display: inline-grid; place-items: center; margin-left: -1px; padding: 0 6px 0 0; border: 0; border-radius: 6px; background: transparent; color: var(--shortcut-muted); cursor: pointer; }
   html:root .settings-app .settings-main .settings-team-collapse[data-collapsed] svg { transform: rotate(-90deg); }
   html:root .settings-app .settings-main .settings-team-collapse:hover { background: var(--bg-hover); }

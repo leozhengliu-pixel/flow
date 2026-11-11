@@ -311,6 +311,33 @@ describe('sidebar team hierarchy', () => {
     expect(within(list.querySelector('li.sidebar-subteam')!).getByRole('button', { name: 'Sub team' })).toHaveAttribute('aria-expanded', 'false')
   })
 
+  it('hangs sibling sub-teams from one guide: each connector rises past its earlier siblings to the parent, the last ends in its elbow', () => {
+    const data = sidebarData({})
+    const parent = data.teams[0]
+    const subs = ['First', 'Middle', 'Last'].map((name, i) => ({ ...parent, id: `team-s${i}`, key: `S${i}`, name }))
+    const nested = { ...parent, id: 'team-n', key: 'N', name: 'Nested' }
+    render(sidebarTree({
+      ...data,
+      teams: [...data.teams, ...subs, nested],
+      teamMembers: [...data.teamMembers, ...[...subs, nested].map(team => ({ teamId: team.id, userId: data.viewer.id, role: 'member', joinedAt: '2026-08-01T00:00:00Z' }))] as BootstrapData['teamMembers'],
+      teamSettings: Object.fromEntries([...subs.map(team => [team.id, { teamId: team.id, parentTeamId: parent.id }]), [nested.id, { teamId: nested.id, parentTeamId: subs[0].id }]]) as unknown as BootstrapData['teamSettings'],
+    }))
+    const parentBody = document.querySelector('.sidebar-team-list .sidebar-team > .team-body')!
+    const siblings = [...parentBody.querySelectorAll<HTMLElement>(':scope > .team-subteams > li.sidebar-subteam')]
+    expect(siblings.map(li => li.querySelector('.team-title strong')?.textContent)).toEqual(['First', 'Middle', 'Last'])
+    // Every sibling, first to last, sits in the parent's clipping body with its own full-height connector and elbow at the same x,
+    // so a later sibling's connector is the guide that runs past the earlier ones (and past the first one's own sub-team).
+    for (const li of siblings) {
+      expect(li.querySelector(':scope > .team-connector')).not.toBeNull()
+      expect(li.querySelector(':scope > .team-elbow svg')).not.toBeNull()
+      expect(li.style.getPropertyValue('--team-indent')).toBe('19px')
+    }
+    const nestedItem = siblings[0].querySelector<HTMLElement>('li.sidebar-subteam')!
+    expect(nestedItem).toHaveTextContent('Nested')
+    expect(nestedItem.style.getPropertyValue('--team-indent')).toBe('35px')
+    expect(nestedItem.closest('.team-body')).toBe(siblings[0].querySelector('.sidebar-team > .team-body'))
+  })
+
   it('indents every level by its own step so each elbow hangs from its parent guide line', () => {
     const data = sidebarData({})
     const root = data.teams[0]

@@ -150,6 +150,8 @@
   .valueItem[data-team] .optionSlot{width:18px;flex-basis:18px;margin-left:calc(var(--option-indent,0)*24px)}
   .valueItem[data-team] .optionSlot>svg{width:14px;height:14px}
   .valueItem[data-indent]>:global(.property-command-tree-elbow){position:absolute;top:0;left:calc(44.25px + (var(--option-indent,1) - 1)*24px);fill:var(--pk-tree-elbow);pointer-events:none}
+  /* A level whose later sibling follows keeps its 1px guide for the row's full height (see `treeGuideLevels`). */
+  .valueItem[data-indent]>:global(.property-command-tree-line){position:absolute;top:0;bottom:0;left:calc(44.25px + (var(--tree-level,1) - 1)*24px);width:1px;background:var(--pk-tree-elbow);pointer-events:none}
 }
 
 /* Value pickers use the same inset, absolute row slots as the phone's root menu. */

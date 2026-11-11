@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { makeBootstrap } from '@/test/fixtures'
 import type { BootstrapData, TeamSettings } from '@/types/flow'
-import { settingsSidebarTeams } from './settings-sidebar-teams'
+import { settingsSidebarTeams, settingsTeamGuideX, settingsTeamIndent } from './settings-sidebar-teams'
+
+describe('settings sidebar team tree geometry', () => {
+  it('insets a sub-team 22px, 18px more per level, and draws each level’s line under its parent’s icon', () => {
+    expect([0, 1, 2, 3].map(settingsTeamIndent)).toEqual([0, 22, 40, 58])
+    // 16px into a top-level row (x 28 for a row at x 12), 12px into a nested one.
+    expect([1, 2, 3].map(settingsTeamGuideX)).toEqual([16, 34, 52])
+  })
+})
 
 function fixture(role: BootstrapData['viewerRole'] = 'admin') {
   return makeBootstrap({ viewerRole: role, teams: Array.from({ length: 1000 }, (_, index) => ({ id: `team-${index}`, name: `Team ${index}`, key: `T${index}`, color: '#777777' })), teamMembers: [{ teamId: 'team-8', userId: 'user-1', role: 'member', joinedAt: '' }, { teamId: 'team-20', userId: 'user-1', role: 'owner', joinedAt: '' }, { teamId: 'team-3', userId: 'user-2', role: 'owner', joinedAt: '' }] })

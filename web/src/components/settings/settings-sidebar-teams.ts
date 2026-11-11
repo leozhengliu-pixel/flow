@@ -1,5 +1,16 @@
 import type { BootstrapData, Team } from '@/types/flow'
 
+/** Left inset of a team row in the settings sidebar: 22px for a sub-team, 18px more per deeper level. */
+export function settingsTeamIndent(depth: number): number {
+  return depth <= 0 ? 0 : 22 + (depth - 1) * 18
+}
+
+/** x of the tree line joining level `level` teams to their parent, from the left of a top-level team row: under the
+ *  parent's icon (16px into a top-level row, 12px into a nested one). */
+export function settingsTeamGuideX(level: number): number {
+  return settingsTeamIndent(level - 1) + (level > 1 ? 12 : 16)
+}
+
 export function settingsSidebarTeams(data: BootstrapData, query = ''): { team: Team; depth: number }[] {
   if (data.viewerRole === 'guest') return []
   const memberships = new Set((data.teamMembers ?? []).filter(member => member.userId === data.viewer.id).map(member => member.teamId))

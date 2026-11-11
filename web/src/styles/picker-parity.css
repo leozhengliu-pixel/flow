@@ -1314,6 +1314,28 @@ html:root body .property-command-surface.is-tree:not(#_) .property-command-optio
 html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option]:not(:has(.property-command-checkbox)) > .property-command-tree-elbow {
   left: calc(14px + 8.25px + (var(--option-indent, 1) - 1) * 24px);
 }
+/* Sibling guides: while a later sibling follows at a level, that level's 1px guide runs the row's full height (the
+   elbow's own level unless it is the last child, and every ancestor level whose ancestor has a later sibling), so a
+   parent's sub-teams hang from one continuous line that ends in the last child's elbow. Same x as the elbow of that
+   level, in every list that draws the elbow. */
+html:root body .property-command-options [role=option] > .property-command-tree-line,
+html:root body .lp-projects-filter__values:not(#_) button[data-indent] > .property-command-tree-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(14px + 30.25px + (var(--tree-level, 1) - 1) * 24px);
+  width: 1px;
+  height: auto;
+  border-radius: 0;
+  background: var(--pk-tree-elbow);
+  pointer-events: none;
+}
+html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option]:not(:has(.property-command-checkbox)) > .property-command-tree-line {
+  left: calc(14px + 8.25px + (var(--tree-level, 1) - 1) * 24px);
+}
+html:root body .lp-projects-filter__values:not(#_) button[data-indent] > .property-command-tree-line {
+  left: calc(38.25px + (var(--tree-level, 1) - 1) * 24px);
+}
 
 /* ── Estimate picker (composer pill, issue properties, sub-issue composer) ──
    228px menu; rows are a 16px estimate icon at 14.5px, the label at 38.5px and

@@ -17,7 +17,9 @@ import { persistUserSettings } from '@/lib/settings-persistence';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { WorkspaceInitials } from '@/components/workspace/workspace-initials';
 import { workspaceAvatarColor } from '@/lib/avatar-color';
-import { settingsSidebarTeams } from './settings-sidebar-teams';
+import { settingsSidebarTeams, settingsTeamGuideX, settingsTeamIndent } from './settings-sidebar-teams';
+import { treeGuideLevels } from '@/lib/team-hierarchy';
+import { TreeCurve } from '@/components/property/property-menu';
 import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
 import { McpSettingsPage } from './mcp-settings-page';
@@ -546,6 +548,8 @@ export function SettingsPage(props: SettingsPageProps) {
   const teamNavActive = (teamKey: string) => props.page === "team" && (props.teamSection ?? "overview") === "overview" && props.teamKey?.toLowerCase() === teamKey.toLowerCase();
   const allSidebarTeams = useMemo(() => settingsSidebarTeams(props.data, ""), [props.data]);
   const sidebarTeams = allSidebarTeams;
+  // Levels whose tree line runs on past a team's row to a later sibling (desktop sidebar tree).
+  const sidebarTeamGuides = useMemo(() => treeGuideLevels(sidebarTeams.map(item => item.depth)), [sidebarTeams]);
   const visible = useMemo(
     () => {
       const sections = NAV.map((section) => ({
@@ -782,13 +786,19 @@ export function SettingsPage(props: SettingsPageProps) {
                       key={team.id}
                       data-depth={depth}
                       data-has-children={sidebarTeams[index + 1]?.depth > depth ? "" : undefined}
-                      style={{ "--team-depth": Math.min(depth, 6) } as CSSProperties}
+                      style={{ "--team-depth": Math.min(depth, 6), "--team-inset": `${settingsTeamIndent(depth)}px` } as CSSProperties}
                       aria-current={teamNavActive(team.key) ? 'page' : undefined}
                       className={teamNavActive(team.key) ? "active" : ""}
                       onClick={() => { props.onNavigate("team", team.key); setMobileNav(false); }}
                       onPointerEnter={() => { void TeamWorkflowSettings.preload().catch(() => undefined); }}
                       onFocus={() => { void TeamWorkflowSettings.preload().catch(() => undefined); }}
                     >
+                      {(depth > 0 || sidebarTeams[index + 1]?.depth > depth) && <span className="settings-nav-team-tree" aria-hidden="true">
+                        {sidebarTeamGuides[index].filter(level => level < depth).map(level => <i key={level} data-continues="" style={{ left: settingsTeamGuideX(level) - settingsTeamIndent(depth) }}/>)}
+                        {depth > 0 && <i data-continues={sidebarTeamGuides[index].includes(depth) ? "" : undefined} style={{ left: settingsTeamGuideX(depth) - settingsTeamIndent(depth) }}/>}
+                        {depth > 0 && <TreeCurve style={{ left: settingsTeamGuideX(depth) - settingsTeamIndent(depth) }}/>}
+                        {sidebarTeams[index + 1]?.depth > depth && <i data-stub="" style={{ left: settingsTeamGuideX(depth + 1) - settingsTeamIndent(depth) }}/>}
+                      </span>}
                       <span
                         className="settings-team-icon"
                         style={{ color: team.color }}
