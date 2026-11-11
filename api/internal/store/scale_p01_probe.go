@@ -285,15 +285,26 @@ func (c *scaleP01Conn) record(query string, args []driver.NamedValue, err error)
 		return
 	}
 	lower := strings.ToLower(strings.TrimSpace(query))
+	words := strings.Fields(lower)
+	verb, tableName := "", ""
+	if len(words) >= 2 {
+		verb = words[0]
+		if verb == "update" {
+			tableName = words[1]
+		}
+		if len(words) >= 3 && (verb == "insert" && words[1] == "into" || verb == "delete" && words[1] == "from") {
+			tableName = strings.SplitN(words[2], "(", 2)[0]
+		}
+	}
 	// Membership writes commit before their audit event. Link that first
 	// business commit to the event using the test-only request context.
 	for _, table := range []string{"team_memberships", "issue_records", "workspace_metadata_records", "workspace_content_records", "domain_events"} {
-		if strings.HasPrefix(lower, "insert into "+table) || strings.HasPrefix(lower, "update "+table) || strings.HasPrefix(lower, "delete from "+table) {
+		if tableName == table {
 			c.mutated = true
 			break
 		}
 	}
-	if !strings.HasPrefix(lower, "insert into domain_events(") || len(args) < 3 {
+	if verb != "insert" || tableName != "domain_events" || len(args) < 3 {
 		return
 	}
 	event := ScaleP01Commit{ID: fmt.Sprint(args[0].Value), Type: fmt.Sprint(args[1].Value), AggregateID: fmt.Sprint(args[2].Value)}
