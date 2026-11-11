@@ -16,6 +16,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 func TestScaleP04MutationSideEffectsDifferential(t *testing.T) {
@@ -56,12 +57,6 @@ func scaleP04HotWriteScript(t *testing.T) mutationScriptResult {
 	repo := database.repo
 	handler := database.handler(t, true)
 	result := mutationScriptResult{state: map[string]string{}}
-	repo.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
-		result.events = append(result.events, event.Type+" "+mutationNanoID.ReplaceAllString(event.AggregateID, "<n>")+" "+scaleP04Normalize(event.Payload))
-	})
-	repo.SetWebhookSink(func(_ string, event domain.DomainEvent) {
-		result.webhooks = append(result.webhooks, event.Type+" "+mutationNanoID.ReplaceAllString(event.AggregateID, "<n>")+" "+scaleP04Normalize(event.Payload)+" "+scaleP04Normalize(event.PreviousValues))
-	})
 	data, _ := repo.BootstrapFor(database.key)
 	// The fixture replaces its initial generated team with team_test but
 	// retains that team's settings. Keep its ID distinct from teams created
@@ -76,7 +71,17 @@ func scaleP04HotWriteScript(t *testing.T) mutationScriptResult {
 	for i, id := range fixtureTeamIDs {
 		substitutions = append(substitutions, id, fmt.Sprintf("fixture_team_%d", i))
 	}
+	for i, user := range database.users {
+		substitutions = append(substitutions, user.ID, fmt.Sprintf("fixture_user_%d", i), user.Email, fmt.Sprintf("fixture-user-%d@example.test", i))
+	}
 	fixtureIDs := strings.NewReplacer(substitutions...)
+	normalizeIdentity := func(raw []byte) string { return scaleP04Normalize([]byte(fixtureIDs.Replace(string(raw)))) }
+	repo.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
+		result.events = append(result.events, event.Type+" "+mutationNanoID.ReplaceAllString(event.AggregateID, "<n>")+" "+normalizeIdentity(event.Payload))
+	})
+	repo.SetWebhookSink(func(_ string, event domain.DomainEvent) {
+		result.webhooks = append(result.webhooks, event.Type+" "+mutationNanoID.ReplaceAllString(event.AggregateID, "<n>")+" "+normalizeIdentity(event.Payload)+" "+normalizeIdentity(event.PreviousValues))
+	})
 	team, recipient := data.Teams[0], data.Users[1]
 	requestJSON[any](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "P04 watcher", "status": "published", "triggerType": "issue", "triggerConfig": map[string]any{"event": "updated"}, "instructions": "Watch"}, http.StatusCreated)
 	requestJSON[any](t, handler, http.MethodPatch, "/api/teams/"+team.ID+"/settings", map[string]any{"autoCloseSubIssues": true, "autoCloseParents": true, "progressOrder": "last"}, http.StatusOK)
@@ -272,10 +277,8 @@ func scaleP04GuestWriteAndRevoke(t *testing.T) {
 	repo := database.repo
 	host := httptest.NewServer(database.handler(t, false))
 	defer host.Close()
-	admin := peerAdmin(t, host.URL)
-	guest, user := verifiedAuthClient(t, host.URL, "P04 Guest", idgen.New("p04-guest-")+"@example.test")
-	invites := authRequest[[]domain.Invitation](t, admin, http.MethodPost, host.URL+"/api/workspaces/test-workspace/invitations", map[string]any{"emails": []string{user.Email}, "role": "guest", "teamIds": []string{"team_test"}}, "", http.StatusCreated)
-	authRequest[domain.WorkspaceMembership](t, guest, http.MethodPost, host.URL+"/api/invitations/accept", map[string]string{"token": invites[0].Token}, "", http.StatusOK)
+	admin := database.login(t, host.URL, database.users[0])
+	guest, user := database.join(t, host.URL, admin, "P04 Guest", "guest", "team_test")
 	team := authRequest[domain.Team](t, admin, http.MethodPost, host.URL+"/api/workspaces/test-workspace/teams", map[string]any{"name": "P04 private", "key": "PVT", "private": true}, "", http.StatusCreated)
 	issue := authRequest[domain.Issue](t, admin, http.MethodPost, host.URL+"/api/issues", map[string]any{"title": "Private P04 issue", "teamId": team.ID}, "test-workspace", http.StatusCreated)
 	path := host.URL + "/api/issues/" + issue.ID
@@ -283,7 +286,7 @@ func scaleP04GuestWriteAndRevoke(t *testing.T) {
 	authRequest[any](t, admin, http.MethodPut, path+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": user.ID, "role": "editor"}}}, "test-workspace", http.StatusOK)
 	authRequest[domain.Issue](t, guest, http.MethodPatch, path, map[string]string{"title": "Granted guest edit"}, "test-workspace", http.StatusOK)
 	authRequest[domain.Comment](t, guest, http.MethodPost, path+"/comments", map[string]string{"body": "Granted guest comment"}, "test-workspace", http.StatusCreated)
-	foreign, err := repo.CreateWorkspace(t.Context(), "P04 other workspace", idgen.New("p04-other-"), "us")
+	foreign, err := repo.CreateWorkspace(store.ContextWithActor(t.Context(), database.users[0]), "P04 other workspace", idgen.New("p04-other-"), "us")
 	if err != nil {
 		t.Fatal(err)
 	}

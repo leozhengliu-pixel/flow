@@ -27,7 +27,11 @@ func favoriteTabTestStores(t *testing.T) map[string]*store.SQLiteStore {
 	t.Cleanup(func() { sqlite.Close() })
 	stores["sqlite"] = sqlite
 	if driver, url := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL"); driver != "" && url != "" {
-		external, err := store.OpenDatabase(store.DatabaseConfig{Driver: driver, URL: url, FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 4})
+		config := store.DatabaseConfig{Driver: driver, URL: url, FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 4}
+		if driver == "sqlite" {
+			config.Path, config.MaxOpenConns = url, 1
+		}
+		external, err := store.OpenDatabase(config)
 		if err != nil {
 			t.Fatal(err)
 		}

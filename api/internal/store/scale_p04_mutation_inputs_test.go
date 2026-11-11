@@ -5,29 +5,16 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"testing"
 
 	"flow/api/internal/domain"
-	"flow/api/internal/idgen"
 )
 
 func scaleP04Store(t *testing.T) *SQLiteStore {
 	t.Helper()
-	var repo *SQLiteStore
-	var err error
-	if driver, url := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL"); driver != "" && url != "" {
-		repo, err = OpenDatabase(DatabaseConfig{Driver: driver, URL: url, FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 4})
-	} else {
-		repo, err = OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { repo.Close() })
+	repo, _ := scaleP04OwnedStore(t)
 	return repo
 }
 
@@ -152,26 +139,29 @@ func TestScaleP04CallbacksOwnSnapshots(t *testing.T) {
 }
 
 func TestScaleP04MixedReplicaWrites(t *testing.T) {
-	for name, pair := range peerStoreSets(t) {
-		t.Run(name, func(t *testing.T) {
-			key, template := peerWorkspace(t, pair[0])
-			issue := createPeerIssue(t, pair[0], key, idgen.New("scale_p04_"), template)
-			for index, mode := range []string{"off", "on", "off", "on"} {
-				t.Setenv("FLOW_NARROW_MUTATION_INPUTS", mode)
-				before, err := pair[index%2].IssueRecord(t.Context(), key, issue.ID)
-				if err != nil {
-					t.Fatal(err)
-				}
-				title := mode + string(rune('a'+index))
-				updated, err := pair[index%2].UpdateIssueRecord(context.Background(), key, issue.ID, &before.Version, IssueMutationScope{Payload: domain.IssueUpdateInput{Title: &title}}, func(_ *domain.Bootstrap, target *domain.Issue) error {
-					target.Title = title
-					return nil
-				})
-				if err != nil || updated.Title != title || updated.Version != before.Version+1 {
-					t.Fatalf("%s update = %+v, err=%v", mode, updated, err)
-				}
-			}
+	first, config := scaleP04OwnedStore(t)
+	second, err := OpenDatabase(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = second.Close() })
+	pair := [2]*SQLiteStore{first, second}
+	fixture := first.Bootstrap()
+	key, issue := fixture.Workspace.URLKey, fixture.Issues[0]
+	for index, mode := range []string{"off", "on", "off", "on"} {
+		t.Setenv("FLOW_NARROW_MUTATION_INPUTS", mode)
+		before, err := pair[index%2].IssueRecord(t.Context(), key, issue.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		title := mode + string(rune('a'+index))
+		updated, err := pair[index%2].UpdateIssueRecord(context.Background(), key, issue.ID, &before.Version, IssueMutationScope{Payload: domain.IssueUpdateInput{Title: &title}}, func(_ *domain.Bootstrap, target *domain.Issue) error {
+			target.Title = title
+			return nil
 		})
+		if err != nil || updated.Title != title || updated.Version != before.Version+1 {
+			t.Fatalf("%s update = %+v, err=%v", mode, updated, err)
+		}
 	}
 }
 

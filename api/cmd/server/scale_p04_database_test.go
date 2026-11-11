@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
@@ -22,25 +24,83 @@ type scaleP04Database struct {
 	config           store.DatabaseConfig
 	key, workspaceID string
 	reader           *sql.DB
+	users            []domain.User
+	workspaces       []string
+	ownsRepo         bool
+}
+
+const scaleP04Password = "p04-fixture-password"
+
+func scaleP04DatabaseConfig(t *testing.T) store.DatabaseConfig {
+	t.Helper()
+	driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
+	if (driver == "") != (databaseURL == "") {
+		t.Fatal("P04 tests require both FLOW_TEST_DATABASE_DRIVER and FLOW_TEST_DATABASE_URL")
+	}
+	config := store.DatabaseConfig{Driver: driver, URL: databaseURL, MaxOpenConns: 4}
+	switch driver {
+	case "":
+		config.Driver, config.Path, config.MaxOpenConns = "sqlite", filepath.Join(t.TempDir(), "flow.db"), 1
+	case "sqlite":
+		config.Path, config.MaxOpenConns = databaseURL, 1
+	case "mysql", "postgres", "postgresql":
+	default:
+		t.Fatalf("unsupported P04 test driver %q", driver)
+	}
+	return config
 }
 
 func newScaleP04Database(t *testing.T) *scaleP04Database {
 	t.Helper()
+	config := scaleP04DatabaseConfig(t)
+	repo, err := store.OpenDatabase(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return newScaleP04DatabaseForStore(t, repo, config, true)
+}
+
+func newScaleP04DatabaseForStore(t *testing.T, repo *store.SQLiteStore, config store.DatabaseConfig, ownsRepo bool) *scaleP04Database {
+	t.Helper()
+	database := &scaleP04Database{repo: repo, config: config, key: idgen.New("p04-"), ownsRepo: ownsRepo}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if database.reader != nil {
+			_ = database.reader.Close()
+		}
+		for i := len(database.workspaces) - 1; i >= 0; i-- {
+			if err := database.repo.DeleteWorkspace(ctx, database.workspaces[i]); err != nil {
+				t.Errorf("clean up owned workspace: %v", err)
+			}
+		}
+		for _, user := range database.users {
+			if err := database.repo.EraseAccount(ctx, user.ID); err != nil {
+				t.Errorf("clean up owned account: %v", err)
+			}
+		}
+		if database.ownsRepo {
+			_ = database.repo.Close()
+		}
+	})
 	fixtureRepo, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "fixture.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	fixture := fixtureRepo.Bootstrap()
 	fixtureRepo.Close()
-	config := store.DatabaseConfig{Driver: "sqlite", Path: filepath.Join(t.TempDir(), "flow.db"), FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 1}
-	if driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL"); driver != "" && databaseURL != "" {
-		config.Driver, config.URL, config.MaxOpenConns = driver, databaseURL, 4
+	var replacements []string
+	for _, original := range fixture.Users {
+		user := database.register(t, original.Name)
+		replacements = append(replacements, original.ID, user.ID, original.Email, user.Email)
 	}
-	repo, err := store.OpenDatabase(config)
+	raw, err := json.Marshal(fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
-	database := &scaleP04Database{repo: repo, config: config, key: idgen.New("p04-")}
+	if err := json.Unmarshal([]byte(strings.NewReplacer(replacements...).Replace(string(raw))), &fixture); err != nil {
+		t.Fatal(err)
+	}
 	ctx := store.ContextWithActor(context.Background(), fixture.Viewer)
 	created, err := repo.CreateWorkspaceWith(ctx, "P04 differential", database.key, "us", func(data *domain.Bootstrap) error {
 		workspace := data.Workspace
@@ -49,10 +109,10 @@ func newScaleP04Database(t *testing.T) *scaleP04Database {
 		return nil
 	})
 	if err != nil {
-		repo.Close()
 		t.Fatal(err)
 	}
 	database.workspaceID = created.Workspace.ID
+	database.workspaces = append(database.workspaces, database.key)
 	for _, user := range fixture.Users {
 		if err := repo.EnsureWorkspaceMembership(ctx, created.Workspace.ID, user.ID); err != nil {
 			t.Fatal(err)
@@ -65,19 +125,60 @@ func newScaleP04Database(t *testing.T) *scaleP04Database {
 			t.Fatal(err)
 		}
 	}
-	t.Cleanup(func() {
-		if database.reader != nil {
-			database.reader.Close()
-		}
-		_ = database.repo.DeleteWorkspace(context.Background(), database.key)
-		database.repo.Close()
-	})
 	return database
 }
 
+func (database *scaleP04Database) register(t *testing.T, name string) domain.User {
+	t.Helper()
+	user, token, err := database.repo.Register(t.Context(), name, idgen.New("p04-user-")+"@example.test", scaleP04Password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	database.users = append(database.users, user)
+	if err := database.repo.VerifyEmail(t.Context(), token); err != nil {
+		t.Fatal(err)
+	}
+	user.EmailVerified = true
+	database.users[len(database.users)-1] = user
+	return user
+}
+
+func (database *scaleP04Database) login(t *testing.T, baseURL string, user domain.User) *http.Client {
+	t.Helper()
+	client := authClient(t)
+	authRequest[domain.AuthSession](t, client, http.MethodPost, baseURL+"/api/auth/login", map[string]string{"email": user.Email, "password": scaleP04Password}, "", http.StatusOK)
+	return client
+}
+
+func (database *scaleP04Database) join(t *testing.T, baseURL string, admin *http.Client, name, role string, teams ...string) (*http.Client, domain.User) {
+	t.Helper()
+	user := database.register(t, name)
+	client := database.login(t, baseURL, user)
+	invites := authRequest[[]domain.Invitation](t, admin, http.MethodPost, baseURL+"/api/workspaces/"+database.key+"/invitations", map[string]any{"emails": []string{user.Email}, "role": role, "teamIds": teams}, "", http.StatusCreated)
+	authRequest[domain.WorkspaceMembership](t, client, http.MethodPost, baseURL+"/api/invitations/accept", map[string]string{"token": invites[0].Token}, "", http.StatusOK)
+	return client, user
+}
+
 func (database *scaleP04Database) handler(t *testing.T, authDisabled bool) http.Handler {
-	handler := newHandler(&server{store: database.repo, authDisabled: authDisabled, uploadPath: t.TempDir()})
+	// In-process script requests still use a real owned session. The global
+	// development viewer can belong to an earlier shared-database fixture.
+	var ownerToken string
+	if authDisabled {
+		_, token, err := database.repo.Login(t.Context(), database.users[0].Email, scaleP04Password)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ownerToken = token
+	}
+	service := &server{store: database.repo, uploadPath: t.TempDir()}
+	handler := newHandler(service)
+	if err := service.stopDeliveryScheduler(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if ownerToken != "" {
+			r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: ownerToken})
+		}
 		if key := r.Header.Get("X-Workspace-Key"); key == "" || key == "test-workspace" {
 			r.Header.Set("X-Workspace-Key", database.key)
 		}

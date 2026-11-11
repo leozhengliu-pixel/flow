@@ -16,7 +16,7 @@ func TestScaleP04VerificationDetectsOmittedReadsAndWrites(t *testing.T) {
 	for _, write := range []bool{false, true} {
 		t.Run(fmt.Sprint(write), func(t *testing.T) {
 			repo := scaleP04Store(t)
-			stored, _ := repo.storedWorkspace("test-workspace")
+			stored, _ := repo.storedWorkspace(repo.lastWorkspaceKey)
 			stored.Settings = map[string]any{"p04Required": "required value"}
 			input := metadataFieldSnapshot(stored, []string{"users"})
 			input.Issues = []domain.Issue{{ID: "p04-guard"}}
@@ -46,7 +46,7 @@ func TestScaleP04VerificationDetectsOmittedReadsAndWrites(t *testing.T) {
 func TestScaleP04VerificationProductionFallback(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
 	repo := scaleP04Store(t)
-	stored, _ := repo.storedWorkspace("test-workspace")
+	stored, _ := repo.storedWorkspace(repo.lastWorkspaceKey)
 	stored.Settings = map[string]any{"p04Required": "full result"}
 	input := metadataFieldSnapshot(stored, []string{"users"})
 	input.Issues = []domain.Issue{{ID: "p04-guard"}}
@@ -69,7 +69,7 @@ func TestScaleP04VerificationProductionFallback(t *testing.T) {
 func TestScaleP04VerificationDetectsResponseOnlyDifferences(t *testing.T) {
 	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
 	repo := scaleP04Store(t)
-	stored, _ := repo.storedWorkspace("test-workspace")
+	stored, _ := repo.storedWorkspace(repo.lastWorkspaceKey)
 	stored.Settings = map[string]any{"required": "response metadata"}
 	input := metadataFieldSnapshot(stored, []string{"users"})
 	tx, err := repo.db.BeginTx(t.Context(), nil)
