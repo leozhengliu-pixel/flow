@@ -47,14 +47,19 @@ type projectionHold struct {
 func (g *metadataReadGate) holdProjections(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hold := &projectionHold{gate: g}
+		// Released even when the handler panics (an aborted streamed
+		// response does): a slot that is never returned would leave the
+		// gate full and every later read answered 503.
+		defer func() {
+			hold.mu.Lock()
+			held := hold.held
+			hold.held = false
+			hold.mu.Unlock()
+			if held {
+				<-g.slots
+			}
+		}()
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), projectionHoldKey{}, hold)))
-		hold.mu.Lock()
-		held := hold.held
-		hold.held = false
-		hold.mu.Unlock()
-		if held {
-			<-g.slots
-		}
 	})
 }
 
@@ -69,9 +74,9 @@ func acquireProjection(r *http.Request) bool {
 
 // acquireProjectionWaiting is acquireProjection for a caller that cannot
 // answer 503 (it returns data, not a response): it waits for the slot, or
-// until the client leaves.
-func acquireProjectionWaiting(r *http.Request) {
-	acquireProjectionSlot(r, false)
+// until the client leaves. False means the client left: build nothing.
+func acquireProjectionWaiting(r *http.Request) bool {
+	return acquireProjectionSlot(r, false)
 }
 
 func acquireProjectionSlot(r *http.Request, bounded bool) bool {

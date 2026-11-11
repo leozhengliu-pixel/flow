@@ -155,21 +155,29 @@ func TestPagedProjectEventsCarryTheViewersProjection(t *testing.T) {
 
 	// Moving the shared project into the private team only: the outsider loses it and is told to reload, without the entity.
 	authRequest[domain.Project](t, fixture.admin, http.MethodPatch, base+"/api/projects/project_shared", map[string]any{"teamIds": []string{fixture.private.ID}}, key, http.StatusOK)
-	// Deleting the hidden project reaches everyone as a bare signal.
+	// Deleting the hidden project: who could see it is no longer known, so everyone gets an anonymous signal.
 	authRequest[any](t, fixture.admin, http.MethodDelete, base+"/api/projects/project_hidden", nil, key, http.StatusNoContent)
 	waitForEvents(t, func() bool {
-		return fixture.outsider.has("project.updated", "project_shared") && fixture.outsider.has("project.deleted", "project_hidden") && fixture.insider.has("project.updated", "project_shared")
+		return anonymousRealtimeSignal(fixture.outsider, "project.updated") && anonymousRealtimeSignal(fixture.outsider, "project.deleted") && fixture.insider.has("project.updated", "project_shared")
 	})
-	moved := lastPayload(t, fixture.outsider, "project.updated", "project_shared")
-	if moved["scopeChanged"] != true || moved["entity"] != nil || moved["teamIds"] != nil {
-		t.Fatalf("outsider's scope change = %v", moved)
-	}
+	// The outsider is told to reload, but not which project left their reach, nor who moved or deleted it.
 	if insideMoved := lastPayload(t, fixture.insider, "project.updated", "project_shared"); insideMoved["scopeChanged"] != true || insideMoved["entity"] == nil {
 		t.Fatalf("insider's scope change = %v", insideMoved)
 	}
-	if deleted := lastPayload(t, fixture.outsider, "project.deleted", "project_hidden"); deleted["deleted"] != true || len(deleted) != 1 {
-		t.Fatalf("project.deleted = %v", deleted)
+	if fixture.outsider.has("project.deleted", "project_hidden") {
+		t.Fatal("the outsider learned the id of a project they could not see")
 	}
+}
+
+// anonymousRealtimeSignal reports whether the stream's last eventType event
+// names nothing: no aggregate, actor or payload.
+func anonymousRealtimeSignal(stream *sseCollector, eventType string) bool {
+	events := stream.find(eventType)
+	if len(events) == 0 {
+		return false
+	}
+	last := events[len(events)-1]
+	return last.AggregateID == "" && last.ActorID == "" && len(last.Payload) == 0
 }
 
 // Document events carry the stored document to everyone who may open it (and
@@ -207,7 +215,7 @@ func TestPagedDocumentEventsCarryTheDocument(t *testing.T) {
 	// Moving the public document into the private team: the outsider drops it.
 	authRequest[domain.Document](t, fixture.admin, http.MethodPatch, base+"/api/documents/"+public.ID, map[string]any{"teamIds": []string{fixture.private.ID}}, key, http.StatusOK)
 	waitForEvents(t, func() bool {
-		return fixture.outsider.has("document.draft_published", draft.ID) && fixture.adminSSE.has("document.draft_updated", draft.ID) && len(fixture.outsider.find("document.updated")) >= 2
+		return fixture.outsider.has("document.draft_published", draft.ID) && fixture.adminSSE.has("document.draft_updated", draft.ID) && anonymousRealtimeSignal(fixture.outsider, "document.updated")
 	})
 	if len(fixture.outsider.find("document.draft_created")) != 0 || len(fixture.outsider.find("document.draft_updated")) != 0 || len(fixture.insider.find("document.draft_updated")) != 0 {
 		t.Fatal("another member received the author's draft events")
@@ -216,9 +224,9 @@ func TestPagedDocumentEventsCarryTheDocument(t *testing.T) {
 	if entity, _ := published["entity"].(map[string]any); entity["content"] != "draft body 2" || published["documentId"] != public.ID || published["draftId"] != draft.ID {
 		t.Fatalf("document.draft_published payload = %v", published)
 	}
-	removed := lastPayload(t, fixture.outsider, "document.updated", public.ID)
-	if removed["removed"] != true || removed["entity"] != nil || removed["documentId"] != public.ID {
-		t.Fatalf("outsider's removal = %v", removed)
+	// The move reached the outsider as an anonymous signal (they reload), never with the document.
+	if !anonymousRealtimeSignal(fixture.outsider, "document.updated") {
+		t.Fatalf("outsider's last document.updated = %+v", fixture.outsider.find("document.updated"))
 	}
 }
 

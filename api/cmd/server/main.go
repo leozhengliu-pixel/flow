@@ -2523,7 +2523,10 @@ func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
 			data, handedOff := takePagedMetadata(r, workspaceKey(r), authUser(r).ID)
 			if !handedOff {
 				// Bounded with the other projections; this caller cannot answer 503, so it waits.
-				acquireProjectionWaiting(r)
+				if !acquireProjectionWaiting(r) {
+					// The client left while waiting: nothing reads the answer.
+					return domain.Bootstrap{}
+				}
 				data, _ = s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
 			}
 			filterBootstrapForAPIKey(&data, r)

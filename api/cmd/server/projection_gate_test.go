@@ -110,3 +110,29 @@ func TestProjectionGateLetsALeavingClientGo(t *testing.T) {
 		t.Fatal("the waiting read did not notice its client left")
 	}
 }
+
+// A handler that took a slot and then panicked (an aborted streamed response
+// panics with http.ErrAbortHandler) gives the slot back: otherwise a few
+// aborted reads would leave the gate full and answer every later read 503.
+func TestProjectionGateReleasesTheSlotWhenTheHandlerPanics(t *testing.T) {
+	gate := newMetadataReadGate(1, 4, time.Second, 0)
+	handler := gate.holdProjections(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !acquireProjection(r) {
+			t.Error("the free slot was refused")
+		}
+		panic(http.ErrAbortHandler)
+	}))
+	for range 3 {
+		func() {
+			defer func() {
+				if recovered := recover(); recovered != http.ErrAbortHandler {
+					t.Fatalf("recovered %v", recovered)
+				}
+			}()
+			handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/projects/x", nil))
+		}()
+		if len(gate.slots) != 0 {
+			t.Fatalf("slot still held after the handler panicked: %d", len(gate.slots))
+		}
+	}
+}

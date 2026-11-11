@@ -138,3 +138,15 @@ describe('applyLabelStateRename', () => {
     expect(() => applyLabelStateRename(data, event('label.updated', { payload: { label } as never }))).not.toThrow()
   })
 })
+
+// A deleted or out-of-reach document, project or initiative reaches viewers who
+// cannot see it as an anonymous signal (no id, actor or payload): the client
+// reloads instead of dropping it, so a viewer who held it loses it.
+describe('anonymous entity signals', () => {
+  for (const type of ['document.updated', 'project.updated', 'project.deleted', 'initiative.deleted']) {
+    it(`reloads for an anonymous ${type}`, () => {
+      const event = { id: 'event-1', type, createdAt: '2026-11-11T00:00:00Z' } as RealtimeEvent
+      expect(['metadata', 'resync']).toContain(classifyRealtimeEvent(event, true).kind)
+    })
+  }
+})

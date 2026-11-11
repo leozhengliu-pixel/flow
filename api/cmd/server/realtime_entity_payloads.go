@@ -159,16 +159,17 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 		project := rules.projects[event.AggregateID]
 		if project == nil {
 			if event.Type == "project.deleted" {
-				// Gone: who could see it is no longer known. The bare signal
-				// lets clients that hold it drop it.
-				return bareRealtimeEvent(event, map[string]any{"deleted": true}), true, true
+				// Gone: who could see it is no longer known, so the signal
+				// names neither it nor who deleted it; clients reload.
+				return anonymousRealtimeEvent(event), true, true
 			}
 			return event, false, false
 		}
 		if !rules.projectVisible(viewer, project) {
 			if scopeChanged {
-				// It may have just left this viewer's reach: they reload.
-				return bareRealtimeEvent(event, extra), true, true
+				// It may have just left this viewer's reach: they reload,
+				// told neither which project it was nor who moved it.
+				return anonymousRealtimeEvent(event), true, true
 			}
 			return event, false, true
 		}
@@ -190,13 +191,13 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 	initiative := rules.initiatives[event.AggregateID]
 	if initiative == nil {
 		if event.Type == "initiative.deleted" {
-			return bareRealtimeEvent(event, map[string]any{"deleted": true}), true, true
+			return anonymousRealtimeEvent(event), true, true
 		}
 		return event, false, true
 	}
 	if !rules.initiativeVisible(viewer, initiative) {
 		if scopeChanged {
-			return bareRealtimeEvent(event, extra), true, true
+			return anonymousRealtimeEvent(event), true, true
 		}
 		return event, false, true
 	}
@@ -238,12 +239,14 @@ func (s *server) pagedDocumentEvent(r *http.Request, data domain.Bootstrap, even
 	}
 	document, ok := s.store.DocumentByID(workspaceKey(r), documentID)
 	if !ok {
-		return bareRealtimeEvent(event, nil), true
+		// Gone: its readers are no longer known, so the signal does not name it.
+		return anonymousRealtimeEvent(event), true
 	}
 	scopeChanged := s.realtime.scopeChanged(event)
 	if documentRole(s, data, document) == "none" {
 		if scopeChanged {
-			return bareRealtimeEvent(event, map[string]any{"documentId": document.ID, "removed": true}), true
+			// It may have just left this viewer's reach: an anonymous signal, they reload.
+			return anonymousRealtimeEvent(event), true
 		}
 		return event, false
 	}
