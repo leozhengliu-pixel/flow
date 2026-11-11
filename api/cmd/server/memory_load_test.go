@@ -500,6 +500,16 @@ func TestLoadBootstrapProfile(t *testing.T) {
 // FLOW_LOAD_USERS (100), FLOW_LOAD_DURATION (2m), FLOW_LOAD_CHANGE_EVERY (10s),
 // FLOW_LOAD_ACCESS_EVERY (10).
 func TestLoadUsers(t *testing.T) {
+	if os.Getenv("FLOW_LOAD_LEGACY") == "1" {
+		scaleP01LegacyUsers(t)
+		return
+	}
+	scaleP01RunLocal(t)
+}
+
+// Kept verbatim so earlier incident reports can be reproduced with the same
+// five-account fixture and success-only freshness calculation.
+func scaleP01LegacyUsers(t *testing.T) {
 	users := loadEnvInt("FLOW_LOAD_USERS", 100)
 	accessEvery := max(loadEnvInt("FLOW_LOAD_ACCESS_EVERY", 10), 1)
 	duration := loadEnvDuration("FLOW_LOAD_DURATION", 2*time.Minute)

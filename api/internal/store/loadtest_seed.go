@@ -18,6 +18,11 @@ type SyntheticMetadata struct {
 	// Approximate serialized bytes per item.
 	ProjectBytes, TrashBytes, DocumentBytes, ConversationBytes int
 	TeamIDs                                                    []string
+	// Zero retains the original fixture. Count and body growth are independent.
+	CountScale, BodyScale float64
+	Notifications         int
+	UserIDs               []string
+	Relations             bool
 }
 
 func filler(seed string, n int) string {
@@ -35,22 +40,38 @@ func filler(seed string, n int) string {
 // and AI conversations through the normal persistence path, in batches that
 // stay under the per-transaction write budget.
 func (s *SQLiteStore) SeedSyntheticMetadata(ctx context.Context, workspace string, spec SyntheticMetadata) error {
+	var err error
+	spec, err = scaleP01SyntheticSpec(spec)
+	if err != nil {
+		return err
+	}
 	const batchBytes = 6 << 20
 	kinds := []struct {
 		total, size int
 		add         func(data *domain.Bootstrap, index int, now time.Time)
 	}{
 		{spec.Projects, spec.ProjectBytes, func(data *domain.Bootstrap, i int, now time.Time) {
-			data.Projects = append(data.Projects, syntheticProject(data.Viewer, spec, i, now))
+			data.Projects = append(data.Projects, scaleP01SyntheticProject(data.Viewer, spec, i, now))
 		}},
 		{spec.Trash, spec.TrashBytes, func(data *domain.Bootstrap, i int, now time.Time) {
 			data.Trash = append(data.Trash, syntheticTrash(data.Viewer, spec, i, now))
 		}},
 		{spec.Documents, spec.DocumentBytes, func(data *domain.Bootstrap, i int, now time.Time) {
-			data.Documents = append(data.Documents, syntheticDocument(data.Viewer, spec, i, now))
+			data.Documents = append(data.Documents, scaleP01SyntheticDocument(data.Viewer, spec, i, now))
 		}},
 		{spec.Conversations, spec.ConversationBytes, func(data *domain.Bootstrap, i int, now time.Time) {
 			data.AIConversations = append(data.AIConversations, syntheticConversation(data.Viewer, i, spec.ConversationBytes, now))
+		}},
+		{spec.Notifications, 1000, func(data *domain.Bootstrap, i int, now time.Time) {
+			userID := data.Viewer.ID
+			if len(spec.UserIDs) > 0 {
+				userID = spec.UserIDs[i%len(spec.UserIDs)]
+			}
+			projectID := ""
+			if spec.Projects > 0 {
+				projectID = fmt.Sprintf("lt-project-%05d", i%spec.Projects)
+			}
+			data.Notifications = append(data.Notifications, domain.Notification{ID: fmt.Sprintf("lt-notification-%06d", i), RecipientID: userID, Type: "project.updated", SourceType: "project", SourceID: projectID, ProjectID: projectID, Actor: data.Viewer, Category: "updates", OccurrenceCount: 1, CreatedAt: now, UpdatedAt: now})
 		}},
 	}
 	for _, kind := range kinds {
