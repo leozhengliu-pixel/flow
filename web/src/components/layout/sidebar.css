@@ -317,8 +317,8 @@
 .team-body[data-has-subteams] > .team-links { padding-bottom: 1px; }
 .team-subteams { margin: 1px 0 0; padding: 0; list-style: none; }
 .sidebar-subteam { position: relative; }
-.team-connector { position: absolute; top: -9993px; left: 15px; width: 1px; height: 9999px; background: var(--team-connector); pointer-events: none; }
-.team-elbow { position: absolute; top: 5px; left: 15px; width: 10px; height: 9px; color: var(--team-connector); pointer-events: none; }
+.team-connector { position: absolute; top: -9993px; left: calc(var(--team-indent) - 4px); width: 1px; height: 9999px; background: var(--team-connector); pointer-events: none; }
+.team-elbow { position: absolute; top: 5px; left: calc(var(--team-indent) - 4px); width: 10px; height: 9px; color: var(--team-connector); pointer-events: none; }
 .team-elbow svg { display: block; width: 10px; height: 9px; fill: currentColor; }
 .sidebar-subteam .team-title { width: calc(100% - var(--team-indent) - 2px); margin-left: var(--team-indent); padding-left: 6px; }
 .sidebar-subteam > .sidebar-team > .team-body > .team-links { padding-left: calc(var(--team-indent) + 16px); }

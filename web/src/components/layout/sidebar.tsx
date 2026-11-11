@@ -6,7 +6,7 @@ import { SidebarIssuesTooltip } from './sidebar-issues-tooltip';
 import { PhoneInboxIcon, PhoneViewsIcon, PhoneTriageIcon, PhoneTeamBranchIcon } from './sidebar-phone-glyphs';
 import { SettingsNavGlyph } from '@/components/settings/settings-nav-glyphs';
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
-import { teamHierarchy, teamRowTree, type TeamRowNode } from '@/lib/team-hierarchy';
+import { teamHierarchy, teamIndentPx, teamRowTree, type TeamRowNode } from '@/lib/team-hierarchy';
 import { roleAllowed } from '@/lib/settings-access';
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as Select from "@radix-ui/react-select";
@@ -813,7 +813,7 @@ export function Sidebar({
                     onReload={onReload}
                     key={team.id}
                     depth={depth}
-                    subTeams={node.children.map(child => <li className="sidebar-subteam" key={child.team.id} data-team-depth={depth + 1}><i className="team-connector" aria-hidden="true"/><span className="team-elbow" aria-hidden="true"><PhoneTeamBranchIcon /></span>{renderTeam(child, depth + 1)}</li>)}
+                    subTeams={node.children.map(child => <li className="sidebar-subteam" key={child.team.id} data-team-depth={depth + 1} style={{ "--team-indent": `${teamIndentPx(depth + 1)}px` } as CSSProperties}><i className="team-connector" aria-hidden="true"/><span className="team-elbow" aria-hidden="true"><PhoneTeamBranchIcon /></span>{renderTeam(child, depth + 1)}</li>)}
                     cyclesEnabled={Boolean(
                       data.cycleSettings[team.id]?.enabled,
                     )}
@@ -1646,7 +1646,7 @@ function TeamNavigation({
   const homeTab = useTeamHomeTab(data.viewer.id, team.id);
   const homePath = teamHomeTabPath(workspaceSlug, team.key, homeTab, workspaceFeatureEnabled(data.workspaceSettings?.featureFlags, "loops"));
   return (
-    <div className="sidebar-team" data-expanded={expanded} data-team-depth={depth} style={{ "--team-indent": `${depth * 19}px` } as CSSProperties}>
+    <div className="sidebar-team" data-expanded={expanded} data-team-depth={depth} style={{ "--team-indent": `${teamIndentPx(depth)}px` } as CSSProperties}>
       <div className="team-heading">
         <button
           type="button"

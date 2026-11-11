@@ -8,6 +8,7 @@ import { asksPath, customersPath, loopsPath } from '@/lib/app-routes'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import type { AccountBootstrap, BootstrapData, WorkspaceSettings } from '@/types/flow'
 import { sidebarEntryAvailable, workspaceFeatureEnabled, type SidebarOrder, type SidebarPreferences } from './sidebar-customization-state'
+import { teamIndentPx } from '@/lib/team-hierarchy'
 import { Sidebar, SidebarCustomization } from './sidebar'
 
 const order: SidebarOrder = {
@@ -308,5 +309,26 @@ describe('sidebar team hierarchy', () => {
     expect(within(list.querySelector('li.sidebar-subteam')!).getByRole('button', { name: 'Sub team' })).toHaveAttribute('aria-expanded', 'true')
     await user.click(within(list.querySelector('li.sidebar-subteam')!).getByRole('button', { name: 'Sub team' }))
     expect(within(list.querySelector('li.sidebar-subteam')!).getByRole('button', { name: 'Sub team' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('indents every level by its own step so each elbow hangs from its parent guide line', () => {
+    const data = sidebarData({})
+    const root = data.teams[0]
+    const chain = [root, ...['Deep', 'Deeper', 'Deepest'].map((name, i) => ({ ...root, id: `team-l${i + 1}`, key: `L${i + 1}`, name }))]
+    const parentOf = (i: number) => chain[i - 1].id
+    render(sidebarTree({
+      ...data,
+      teams: chain,
+      teamMembers: [...data.teamMembers, ...chain.slice(1).map(team => ({ teamId: team.id, userId: data.viewer.id, role: 'member', joinedAt: '2026-08-01T00:00:00Z' }))] as BootstrapData['teamMembers'],
+      teamSettings: Object.fromEntries(chain.slice(1).map((team, i) => [team.id, { teamId: team.id, parentTeamId: parentOf(i + 1) }])) as unknown as BootstrapData['teamSettings'],
+    }))
+    const indents = [0, 19, 35, 51]
+    expect([0, 1, 2, 3].map(depth => teamIndentPx(depth))).toEqual(indents)
+    expect(teamIndentPx(5)).toBe(83)
+    const teams = [...document.querySelectorAll<HTMLElement>('.sidebar-team')]
+    expect(teams.map(team => team.style.getPropertyValue('--team-indent'))).toEqual(indents.map(px => `${px}px`))
+    const subs = [...document.querySelectorAll<HTMLElement>('li.sidebar-subteam')]
+    expect(subs.map(li => li.style.getPropertyValue('--team-indent'))).toEqual(['19px', '35px', '51px'])
+    expect(subs.map(li => li.getAttribute('data-team-depth'))).toEqual(['1', '2', '3'])
   })
 })

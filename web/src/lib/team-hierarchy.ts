@@ -86,3 +86,8 @@ export function teamRowTree(rows: { team: Team; depth: number }[]): TeamRowNode[
   }
   return roots
 }
+
+/** Left offset of a team's rows in the sidebar: the first sub-level steps in by 19px, every deeper level by 16px more (an elbow's left is this offset minus 4px). */
+export function teamIndentPx(depth: number): number {
+  return depth <= 0 ? 0 : 19 + (depth - 1) * 16
+}
