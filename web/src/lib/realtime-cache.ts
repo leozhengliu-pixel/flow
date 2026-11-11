@@ -1,4 +1,6 @@
 import type { BootstrapData } from '@/types/flow'
+import { APPLIED_CURSOR_SCHEMA, appliedRealtimeCursorEnabled } from '@/lib/scale-p08'
+import { registerSessionCacheClearer } from '@/lib/session-cache-registry'
 
 /**
  * Small durable cache for the workspace stream cursor and latest snapshot.
@@ -7,6 +9,8 @@ import type { BootstrapData } from '@/types/flow'
  */
 export interface RealtimeCacheRecord {
   workspaceKey: string
+  viewerId?: string
+  schema?: number
   cursor?: string
   snapshot?: BootstrapData
   updatedAt: string
@@ -38,9 +42,40 @@ function readLocal(workspaceKey: string): RealtimeCacheRecord | undefined {
   }
 }
 
-export function loadRealtimeCursor(workspaceKey: string): string | undefined {
+export function loadRealtimeCursor(workspaceKey: string, viewerId?: string, schema = APPLIED_CURSOR_SCHEMA): string | undefined {
+  if (appliedRealtimeCursorEnabled()) return readAppliedCheckpoint(workspaceKey, viewerId, schema)?.cursor
   return readLocal(workspaceKey)?.cursor
 }
+
+const appliedPrefix = 'flow:realtime:applied:'
+
+function appliedKey(workspaceKey: string, viewerId: string, schema: number) {
+  return `${appliedPrefix}${schema}:${encodeURIComponent(viewerId)}:${encodeURIComponent(workspaceKey)}`
+}
+
+function readAppliedCheckpoint(workspaceKey: string, viewerId?: string, schema = APPLIED_CURSOR_SCHEMA): RealtimeCacheRecord | undefined {
+  if (!workspaceKey || !viewerId || typeof localStorage === 'undefined') return undefined
+  try {
+    const raw = localStorage.getItem(appliedKey(workspaceKey, viewerId, schema))
+    if (!raw || raw.length > 4096) return undefined
+    const record = JSON.parse(raw) as RealtimeCacheRecord
+    return record.workspaceKey === workspaceKey && record.viewerId === viewerId && record.schema === schema && typeof record.cursor === 'string' ? record : undefined
+  } catch { return undefined }
+}
+
+function clearAppliedCheckpoints(viewerId?: string, workspaceKey?: string) {
+  if (typeof localStorage === 'undefined') return
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i)
+      if (!key?.startsWith(appliedPrefix)) continue
+      const [, viewer, workspace] = key.slice(appliedPrefix.length).split(':')
+      if ((!viewerId || viewer === encodeURIComponent(viewerId)) && (!workspaceKey || workspace === encodeURIComponent(workspaceKey))) localStorage.removeItem(key)
+    }
+  } catch { /* Storage is optional; checkpoints never replace initialization. */ }
+}
+
+registerSessionCacheClearer(clearAppliedCheckpoints)
 
 function writeLocal(record: RealtimeCacheRecord) {
   if (typeof localStorage === 'undefined') return
@@ -70,8 +105,9 @@ function openDatabase(): Promise<IDBDatabase | undefined> {
   })
 }
 
-export async function loadRealtimeCache(workspaceKey: string): Promise<RealtimeCacheRecord | undefined> {
+export async function loadRealtimeCache(workspaceKey: string, viewerId?: string, schema = APPLIED_CURSOR_SCHEMA): Promise<RealtimeCacheRecord | undefined> {
   if (!workspaceKey) return undefined
+  if (appliedRealtimeCursorEnabled()) return readAppliedCheckpoint(workspaceKey, viewerId, schema)
   const database = await openDatabase()
   if (!database) return withCursor(undefined, workspaceKey)
   return new Promise((resolve) => {
@@ -84,6 +120,12 @@ export async function loadRealtimeCache(workspaceKey: string): Promise<RealtimeC
 
 export async function saveRealtimeCache(record: RealtimeCacheRecord): Promise<void> {
   if (!record.workspaceKey) return
+  if (appliedRealtimeCursorEnabled()) {
+    // There is no atomic entity+cursor store. Keep only a diagnostic checkpoint;
+    // a new tab still subscribes and loads a fresh server baseline.
+    if (record.cursor) await saveRealtimeCursor(record.workspaceKey, record.cursor, record.viewerId, record.schema)
+    return
+  }
   writeLocal({ ...record, cursor: readLocal(record.workspaceKey)?.cursor ?? record.cursor })
   const database = await openDatabase()
   if (!database) {
@@ -99,14 +141,22 @@ export async function saveRealtimeCache(record: RealtimeCacheRecord): Promise<vo
   database.close()
 }
 
-export async function saveRealtimeCursor(workspaceKey: string, cursor: string): Promise<void> {
+export async function saveRealtimeCursor(workspaceKey: string, cursor: string, viewerId?: string, schema = APPLIED_CURSOR_SCHEMA): Promise<void> {
   if (!workspaceKey || !cursor) return
+  if (appliedRealtimeCursorEnabled()) {
+    if (!viewerId || typeof localStorage === 'undefined') return
+    try {
+      localStorage.setItem(appliedKey(workspaceKey, viewerId, schema), JSON.stringify({ workspaceKey, viewerId, schema, cursor, updatedAt: new Date().toISOString() }))
+    } catch { /* Quota/private-mode failures must not interrupt delivery. */ }
+    return
+  }
   // Cursor checkpoints must not read, serialize, or rewrite a workspace snapshot.
   writeLocal({ workspaceKey, cursor, updatedAt: new Date().toISOString() })
 }
 
 export async function clearRealtimeCache(workspaceKey: string): Promise<void> {
   if (!workspaceKey) return
+  clearAppliedCheckpoints(undefined, workspaceKey)
   memorySnapshots.delete(workspaceKey)
   if (typeof localStorage !== 'undefined') {
     try {

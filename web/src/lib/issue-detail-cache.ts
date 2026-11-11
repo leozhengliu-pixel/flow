@@ -1,5 +1,57 @@
 import type { BootstrapData, Issue } from '@/types/flow'
 import { mergeAgentSessions } from '@/lib/agent-session-merge'
+import { boundedBrowserCacheEnabled, cacheStringBytes, ISSUE_DETAIL_CACHE_MAX_BYTES } from '@/lib/scale-p08'
+
+const detailBytes = new WeakMap<Issue, number>()
+const openDetails = new Map<string, number>()
+
+/** Foreground editors must not lose their body when an unrelated page arrives. */
+export function retainOpenIssueDetail(issueId?: string): () => void {
+  if (!issueId) return () => undefined
+  openDetails.set(issueId, (openDetails.get(issueId) ?? 0) + 1)
+  return () => {
+    const count = (openDetails.get(issueId) ?? 1) - 1
+    if (count) openDetails.set(issueId, count)
+    else openDetails.delete(issueId)
+  }
+}
+
+export function issueCacheSummary(issue: Issue): Issue {
+  type SummaryHints = { hasContent?: boolean; reactionCounts?: Record<string, number> }
+  const hints = issue as Issue & SummaryHints
+  const summary: Partial<Issue> & SummaryHints = {
+    ...issue, isSummary: true, needsDetailRefresh: true,
+    hasContent: Object.hasOwn(issue, 'hasContent') ? hints.hasContent : Boolean(issue.description?.trim() || issue.documentContent?.content?.trim()),
+    reactionCounts: Object.hasOwn(issue, 'reactionCounts') ? hints.reactionCounts : issue.reactions ? Object.fromEntries(Object.entries(issue.reactions).filter(([, users]) => users.length).map(([emoji, users]) => [emoji, users.length])) : undefined,
+  }
+  delete summary.description
+  delete summary.descriptionState
+  delete summary.documentContent
+  delete summary.reactions
+  return summary as Issue
+}
+
+function retainedBytes(issue: Issue) {
+  let bytes = detailBytes.get(issue)
+  if (bytes === undefined) {
+    bytes = cacheStringBytes(JSON.stringify(issue))
+    detailBytes.set(issue, bytes)
+  }
+  return bytes
+}
+
+/** The merged array is ordered most recently used first, with evicted bodies kept as summaries. */
+function boundIssueDetails(issues: Issue[]): Issue[] {
+  let bytes = issues.filter(issue => !issue.isSummary && openDetails.has(issue.id)).reduce((sum, issue) => sum + retainedBytes(issue), 0)
+  return issues.map(issue => {
+    // An unusually large open record is a foreground read, not an LRU entry.
+    if (issue.isSummary || openDetails.has(issue.id)) return issue
+    const size = retainedBytes(issue)
+    if (bytes + size > ISSUE_DETAIL_CACHE_MAX_BYTES) return issueCacheSummary(issue)
+    bytes += size
+    return issue
+  })
+}
 
 export function mergeIssueRecords(current: Issue[], incoming: Issue[], limit = 2000): Issue[] {
   limit = Math.max(0, Math.min(2000, Math.floor(limit)))
@@ -17,13 +69,14 @@ export function mergeIssueRecords(current: Issue[], incoming: Issue[], limit = 2
         description: previous.description, descriptionState: previous.descriptionState, documentContent: previous.documentContent,
         reactions: previous.reactions, subscriberIds: previous.subscriberIds,
       })
-    } else result.set(issue.id, !issue.isSummary && issue.needsDetailRefresh ? { ...issue, needsDetailRefresh: false } : issue)
+    } else result.set(issue.id, boundedBrowserCacheEnabled() && issue.isSummary ? issueCacheSummary(issue) : !issue.isSummary && issue.needsDetailRefresh ? { ...issue, needsDetailRefresh: false } : issue)
   }
   for (const issue of current) {
     if (result.size >= limit) break
     if (!result.has(issue.id)) result.set(issue.id, issue)
   }
-  return [...result.values()]
+  const issues = [...result.values()]
+  return boundedBrowserCacheEnabled() ? boundIssueDetails(issues) : issues
 }
 
 export function mergeWorkspaceDirectory(current: BootstrapData | null, next: BootstrapData, visibleIds?: ReadonlySet<string>): BootstrapData {
@@ -48,7 +101,7 @@ export function mergeWorkspaceDirectory(current: BootstrapData | null, next: Boo
       relations: issue.relations?.filter(relation => !revoked(relation.relatedIssueId)),
     }))
   }
-  const keep = new Set(issues.map(issue => issue.id))
+  const keep = new Set(issues.filter(issue => !boundedBrowserCacheEnabled() || !issue.isSummary).map(issue => issue.id))
   const retainHistory = <T,>(previous: Record<string,T> = {}, fresh: Record<string,T> = {}): Record<string,T> => ({
     ...Object.fromEntries(Object.entries(fresh).filter(([id]) => !issueIds.has(id) || keep.has(id))),
     ...Object.fromEntries(Object.entries(previous).filter(([id]) => keep.has(id))),

@@ -1,13 +1,15 @@
 import type { BootstrapData, Issue } from '@/types/flow'
-import { mergeIssueRecords } from '@/lib/issue-detail-cache'
+import { issueCacheSummary, mergeIssueRecords } from '@/lib/issue-detail-cache'
 import { agentSessionSummary } from '@/lib/agent-session-merge'
 import { clearSessionCaches } from '@/lib/session-cache-registry'
+import { boundedBrowserCacheEnabled, cacheStringBytes, NAVIGATION_CACHE_MAX_BYTES } from '@/lib/scale-p08'
 
 export interface NavigationCacheRecord {
   viewerId: string
   workspaceKey: string
   updatedAt: string
   data: BootstrapData
+  schema?: number
 }
 
 export interface CachedIssuePreview {
@@ -18,6 +20,43 @@ export interface CachedIssuePreview {
 
 const storagePrefix = 'flow:navigation:'
 const memory = new Map<string, NavigationCacheRecord>()
+const boundedMemory = new Map<string, string>()
+const navigationSchema = 2
+
+function trimNavigationStorage() {
+  if (typeof localStorage === 'undefined') return
+  try {
+    const records: Array<{ key: string; bytes: number; at: string }> = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (!key?.startsWith(storagePrefix)) continue
+      const raw = localStorage.getItem(key) ?? ''
+      if (raw.length * 2 > NAVIGATION_CACHE_MAX_BYTES) { localStorage.removeItem(key); i--; continue }
+      try { records.push({ key, bytes: cacheStringBytes(raw), at: JSON.parse(raw).updatedAt ?? '' }) }
+      catch { localStorage.removeItem(key); i-- }
+    }
+    let bytes = records.reduce((sum, record) => sum + record.bytes, 0)
+    records.sort((a, b) => a.at.localeCompare(b.at))
+    for (const record of records) {
+      if (bytes <= NAVIGATION_CACHE_MAX_BYTES) break
+      localStorage.removeItem(record.key)
+      boundedMemory.delete(record.key)
+      memory.delete(record.key)
+      bytes -= record.bytes
+    }
+  } catch { /* Storage is optional. */ }
+}
+
+function rememberBounded(key: string, raw: string) {
+  boundedMemory.delete(key)
+  boundedMemory.set(key, raw)
+  let bytes = [...boundedMemory.values()].reduce((sum, value) => sum + cacheStringBytes(value), 0)
+  while (bytes > NAVIGATION_CACHE_MAX_BYTES && boundedMemory.size) {
+    const oldest = boundedMemory.keys().next().value!
+    bytes -= cacheStringBytes(boundedMemory.get(oldest)!)
+    boundedMemory.delete(oldest)
+  }
+}
 // A hydrated snapshot has not been confirmed by a bootstrap yet. It may be used
 // for the first paint, but it must never replace a server snapshot on disk.
 const hydratedSnapshots = new WeakSet<BootstrapData>()
@@ -64,6 +103,23 @@ function stripIssue(issue: Issue): Issue {
 
 /** Directory snapshot safe to reuse as left-nav chrome. Issue bodies stay out of storage. */
 export function toNavigationSnapshot(data: BootstrapData): BootstrapData {
+  if (boundedBrowserCacheEnabled()) {
+    // Only navigation fields survive. Preserve empty collection shapes for the
+    // existing adapter, and keep every detail surface behind its bootstrap.
+    const omitted = Object.fromEntries(Object.entries(data).map(([key, value]) => [key, Array.isArray(value) ? [] : value && typeof value === 'object' ? {} : undefined])) as unknown as BootstrapData
+    return {
+      ...omitted,
+      workspace: data.workspace, viewer: data.viewer, viewerRole: data.viewerRole,
+      resourceDetailsOmitted: true, issueCollectionPaged: true,
+      users: data.users, teams: data.teams, states: data.states, labels: data.labels, labelGroups: data.labelGroups,
+      favorites: data.favorites ?? [], favoriteFolders: data.favoriteFolders ?? [],
+      teamResourceSections: data.teamResourceSections ?? [], teamPinnedResources: data.teamPinnedResources ?? [],
+      issues: (data.issues ?? []).map(issueCacheSummary),
+      projects: [], initiatives: [], documents: [],
+      comments: {}, activities: {}, projectUpdates: {}, initiativeUpdates: {}, issueHistoryCursors: {},
+      notifications: [], agentSessions: [], workspaceSettings: data.workspaceSettings,
+    }
+  }
   return {
     ...data,
     issues: (data.issues ?? []).map(stripIssue),
@@ -95,6 +151,17 @@ export function toNavigationSnapshot(data: BootstrapData): BootstrapData {
 export function readNavigationCache(viewerId: string, workspaceKey: string): BootstrapData | undefined {
   if (!viewerId || !workspaceKey) return undefined
   const key = storageKey(viewerId, workspaceKey)
+  if (boundedBrowserCacheEnabled()) {
+    trimNavigationStorage()
+    try {
+      const raw = typeof localStorage === 'undefined' ? boundedMemory.get(key) : localStorage.getItem(key) ?? boundedMemory.get(key)
+      if (!raw || cacheStringBytes(raw) > NAVIGATION_CACHE_MAX_BYTES) return undefined
+      const record = JSON.parse(raw) as NavigationCacheRecord
+      if (record.schema !== navigationSchema || !isAuthorizedRecord(record, viewerId, workspaceKey)) return undefined
+      rememberBounded(key, raw)
+      return markNavigationHydrated(record.data)
+    } catch { boundedMemory.delete(key); return undefined }
+  }
   if (typeof localStorage !== 'undefined') {
     try {
       const raw = localStorage.getItem(key)
@@ -122,6 +189,23 @@ export function writeNavigationCache(viewerId: string, workspaceKey: string, dat
   // Only a completed bootstrap (which produces a new, unmarked snapshot) may
   // replace the stored one.
   if (isNavigationHydrated(data)) return
+  if (boundedBrowserCacheEnabled()) {
+    const key = storageKey(viewerId, workspaceKey)
+    try {
+      const raw = JSON.stringify({ schema: navigationSchema, viewerId, workspaceKey, updatedAt: new Date().toISOString(), data: toNavigationSnapshot(data) } satisfies NavigationCacheRecord)
+      boundedMemory.delete(key)
+      memory.delete(key)
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(key)
+      if (cacheStringBytes(raw) > NAVIGATION_CACHE_MAX_BYTES) return
+      rememberBounded(key, raw)
+      if (typeof localStorage !== 'undefined') {
+        trimNavigationStorage()
+        localStorage.setItem(key, raw)
+        trimNavigationStorage()
+      }
+    } catch { /* Quota/private-mode failures must not block bootstrap. */ }
+    return
+  }
   const record: NavigationCacheRecord = {
     viewerId,
     workspaceKey,
@@ -142,6 +226,14 @@ const pendingWrites = new Map<string, { data: BootstrapData; cancel: () => void 
 /** Same as writeNavigationCache, but the snapshot is serialised when the browser is idle. */
 export function writeNavigationCacheWhenIdle(viewerId: string, workspaceKey: string, data: BootstrapData): void {
   if (isNavigationHydrated(data)) return
+  if (boundedBrowserCacheEnabled()) {
+    // Pending idle work must not retain an entire bootstrap per workspace.
+    cancelPendingWrites(storagePrefix)
+    try {
+      data = toNavigationSnapshot(data)
+      if (cacheStringBytes(JSON.stringify(data)) > NAVIGATION_CACHE_MAX_BYTES) return
+    } catch { return }
+  }
   const key = storageKey(viewerId, workspaceKey)
   pendingWrites.get(key)?.cancel()
   const run = () => {
@@ -159,9 +251,9 @@ export function writeNavigationCacheWhenIdle(viewerId: string, workspaceKey: str
   pendingWrites.set(key, { data, cancel })
 }
 
-function cancelPendingWrites(prefix: string) {
+function cancelPendingWrites(prefix: string, exact = false) {
   for (const [key, pending] of [...pendingWrites]) {
-    if (!key.startsWith(prefix)) continue
+    if (exact ? key !== prefix : !key.startsWith(prefix)) continue
     pending.cancel()
     pendingWrites.delete(key)
   }
@@ -190,7 +282,9 @@ export function rememberWorkspace(viewerId: string, workspaceKey: string): void 
 
 export function clearNavigationCache(viewerId?: string, workspaceKey?: string): void {
   clearSessionCaches(viewerId, workspaceKey)
-  cancelPendingWrites(viewerId && workspaceKey ? storageKey(viewerId, workspaceKey) : viewerId ? `${storagePrefix}${viewerId}:` : storagePrefix)
+  cancelPendingWrites(viewerId && workspaceKey ? storageKey(viewerId, workspaceKey) : viewerId ? `${storagePrefix}${viewerId}:` : storagePrefix, boundedBrowserCacheEnabled() && Boolean(viewerId && workspaceKey))
+  const boundedPrefix = viewerId ? workspaceKey ? storageKey(viewerId, workspaceKey) : `${storagePrefix}${viewerId}:` : storagePrefix
+  for (const key of boundedMemory.keys()) if (viewerId && workspaceKey ? key === boundedPrefix : key.startsWith(boundedPrefix)) boundedMemory.delete(key)
   if (!viewerId) { try { localStorage.removeItem(lastWorkspaceKey) } catch { /* ignore */ } }
   if (viewerId && workspaceKey) {
     memory.delete(storageKey(viewerId, workspaceKey))
@@ -224,7 +318,7 @@ export function hydrateWorkspaceNavigation({
   viewerId: string
   preview?: CachedIssuePreview | null
 }): BootstrapData | null {
-  if (current?.workspace.urlKey === requestedWorkspaceKey) return current
+  if (current?.workspace.urlKey === requestedWorkspaceKey && (!boundedBrowserCacheEnabled() || current.viewer.id === viewerId)) return current
   if (!cached || cached.viewer.id !== viewerId || cached.workspace.urlKey !== requestedWorkspaceKey) return null
   // Older builds stored notifications here. They may already be deleted on the
   // server, so the inbox reconciles them from /api/notifications instead.

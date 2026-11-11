@@ -14,16 +14,18 @@
  * used. Without BroadcastChannel the tab simply keeps its own stream, exactly
  * as before.
  *
- * Gap handling: every tab tracks the newest real stream cursor it has seen
- * (from the leader's rebroadcasts), so a promoted follower reconnects with
- * `since=<cursor>` and the server replays what was missed. If no cursor is
- * known, a synthetic `resync` is delivered instead.
+ * With applied cursors each tab resumes only from its own completed delivery
+ * frontier. A promoted follower never borrows another tab's checkpoint.
  */
+
+import { APPLIED_CURSOR_SCHEMA, appliedRealtimeCursorEnabled } from '@/lib/scale-p08'
 
 export interface RealtimeMessage {
   data: string
   lastEventId: string
 }
+
+export type RealtimeAcknowledge = (() => void) & { pending?: () => boolean }
 
 export interface StreamLike {
   onopen: ((event: unknown) => void) | null
@@ -58,11 +60,14 @@ export interface SharedRealtimeOptions {
   workspaceKey: string
   /** Session owner. Tabs of different users never share a stream. */
   userId?: string
+  schema?: number
+  appliedCursor?: boolean
   /** Builds the stream URL for an optional resume cursor. */
   url(cursor?: string): string
-  /** Persisted cursor used by a leader that has not seen any shared traffic yet. */
+  /** Legacy checkpoint, or a caller-owned applied baseline in applied mode. */
   cursor?(): string | undefined
-  onMessage(message: RealtimeMessage): void
+  onMessage(message: RealtimeMessage, acknowledge: RealtimeAcknowledge): void
+  onAppliedCursor?(cursor: string): void
   onStatus(connected: boolean): void
   onRole?(role: 'leader' | 'follower'): void
   env?: Partial<SharedRealtimeEnv>
@@ -115,8 +120,21 @@ function newTabId() {
   return `${Date.now().toString(36).padStart(9, '0')}-${random}`
 }
 
-export function realtimeChannelName(workspaceKey: string, userId?: string) {
-  return `flow:realtime:${encodeURIComponent(workspaceKey)}:${encodeURIComponent(userId || 'anonymous')}`
+export function realtimeChannelName(workspaceKey: string, userId?: string, schema?: number) {
+  return `flow:realtime:${encodeURIComponent(workspaceKey)}:${encodeURIComponent(userId || 'anonymous')}${schema === undefined ? '' : `:applied:${schema}`}`
+}
+
+function appliedMessagePosition(message: RealtimeMessage): { cursor?: string; type?: string } {
+  const fallback = message.lastEventId && !message.lastEventId.startsWith('connected_') ? message.lastEventId : undefined
+  try {
+    const event = JSON.parse(message.data)
+    if (!event || typeof event !== 'object') return { cursor: fallback }
+    const type = typeof event.type === 'string' ? event.type : undefined
+    if (/^(connected$|presence\.updated$|resync$|workspace\.resync_required$|coding_session\.|loop_run\.|notification\.created$)/.test(type ?? '') || type?.startsWith('agent_task.') && type !== 'agent_task.replied') return { type }
+    if (typeof event.seq === 'string' && /^[1-9]\d*$/.test(event.seq)) return { type, cursor: event.seq }
+    if (typeof event.seq === 'number' && Number.isSafeInteger(event.seq) && event.seq > 0) return { type, cursor: String(event.seq) }
+    return { type, cursor: fallback }
+  } catch { return { cursor: fallback } }
 }
 
 class SharedRealtime {
@@ -136,6 +154,10 @@ class SharedRealtime {
   private keepalives = false
   private cursor?: string
   private initialSince?: string
+  private readonly appliedCursor: boolean
+  private generation = 0
+  private baselineStarted = false
+  private pending: Array<{ cursor?: string; done: boolean }> = []
   private sawStream = false
   private connectedNow = false
   private presence?: RealtimeMessage
@@ -152,8 +174,12 @@ class SharedRealtime {
 
   constructor(options: SharedRealtimeOptions) {
     this.options = options
+    this.appliedCursor = options.appliedCursor ?? appliedRealtimeCursorEnabled()
     this.env = { ...defaultEnv(), ...options.env }
-    this.name = realtimeChannelName(options.workspaceKey, options.userId)
+    this.name = realtimeChannelName(options.workspaceKey, options.userId, this.appliedCursor ? options.schema ?? APPLIED_CURSOR_SCHEMA : undefined)
+    // Capture a caller-owned baseline once; a follower must not read a newer
+    // localStorage checkpoint belonging to a faster tab when it is promoted.
+    if (this.appliedCursor) this.initialSince = options.cursor?.()
   }
 
   start() {
@@ -172,6 +198,8 @@ class SharedRealtime {
   dispose() {
     if (this.disposed) return
     this.disposed = true
+    this.pending = []
+    this.generation++
     if (this.role === 'leader' && this.heartbeat) this.post({ k: 'resign', from: this.tabId })
     clearTimeout(this.reconnectTimer)
     clearTimeout(this.joinTimer)
@@ -238,8 +266,8 @@ class SharedRealtime {
     this.options.onStatus(false)
     this.post({ k: 'status', from: this.tabId, connected: false })
     this.retry = 0
-    this.initialSince = this.cursor ?? this.options.cursor?.()
-    if (this.sawStream && !this.initialSince) {
+    if (!this.appliedCursor) this.initialSince = this.cursor ?? this.options.cursor?.()
+    if (!this.appliedCursor && this.sawStream && !this.initialSince) {
       // We followed a live stream but never saw a resumable id, so events may
       // have been missed during the handover. Ask every tab for a snapshot.
       this.accept({ data: JSON.stringify({ id: `resync_${Date.now()}`, type: 'resync', createdAt: new Date().toISOString() }), lastEventId: '' }, true)
@@ -275,6 +303,9 @@ class SharedRealtime {
       this.retry = 0
       this.options.onStatus(true)
       this.post({ k: 'status', from: this.tabId, connected: true })
+      // Subscribe first, then recover the baseline. A disk cursor alone is
+      // never evidence that this tab holds the entities through that cursor.
+      if (this.appliedCursor && !this.cursor && !this.initialSince) this.accept(this.resyncMessage(), true)
     }
     const fail = () => {
       if (this.stream !== stream) return
@@ -316,14 +347,60 @@ class SharedRealtime {
   // ---- delivery --------------------------------------------------------
 
   private accept(message: RealtimeMessage, broadcast: boolean) {
+    const position = this.appliedCursor ? appliedMessagePosition(message) : undefined
+    if (this.appliedCursor && !this.baselineStarted) {
+      this.baselineStarted = true
+      // A live broadcast can precede the leader's hello replay. Recover once
+      // before acknowledging either, so that a late replay cannot fall behind
+      // an already acknowledged live cursor during a subsequent failover.
+      const ownedLeaderBaseline = this.role === 'leader' && (this.cursor || this.initialSince)
+      if (!ownedLeaderBaseline && position?.type !== 'resync' && position?.type !== 'workspace.resync_required') this.accept(this.resyncMessage(), false)
+    }
     this.sawStream = true
     // `connected_*` is a per-connection handshake id that the server cannot
     // replay from; never use it as a resume point.
-    if (message.lastEventId && !message.lastEventId.startsWith('connected_')) this.cursor = message.lastEventId
+    if (!this.appliedCursor && message.lastEventId && !message.lastEventId.startsWith('connected_')) this.cursor = message.lastEventId
     if (presenceMessage.test(message.data)) this.presence = message
     else this.remember(message)
     if (broadcast) this.post({ k: 'msg', from: this.tabId, data: message.data, lastEventId: message.lastEventId })
-    this.options.onMessage(message)
+    if (!this.appliedCursor) {
+      this.options.onMessage(message, () => undefined)
+      return
+    }
+    const cursor = position?.cursor
+    // Sparse numeric sequences are valid: continuity refers to deliveries,
+    // including ignored messages, rather than every integer in the journal.
+    const held = this.cursor ?? this.initialSince
+    if (cursor && held && /^\d+$/.test(cursor) && /^\d+$/.test(held) && BigInt(cursor) <= BigInt(held)) return
+    let delivery = message
+    if (this.pending.length >= replayMaxEvents) {
+      this.generation++
+      this.pending = []
+      delivery = this.resyncMessage()
+    }
+    const generation = this.generation
+    const item = { cursor, done: false }
+    this.pending.push(item)
+    const acknowledge: RealtimeAcknowledge = () => {
+      if (this.disposed || generation !== this.generation || item.done) return
+      item.done = true
+      let advanced = false
+      while (this.pending[0]?.done) {
+        const completed = this.pending.shift()!
+        if (completed.cursor && (!this.cursor || !/^\d+$/.test(this.cursor) || !/^\d+$/.test(completed.cursor) || BigInt(completed.cursor) > BigInt(this.cursor))) {
+          this.cursor = completed.cursor
+          advanced = true
+        }
+      }
+      if (advanced && this.cursor) this.options.onAppliedCursor?.(this.cursor)
+    }
+    acknowledge.pending = () => !this.disposed && generation === this.generation && !item.done
+    try { this.options.onMessage(delivery, acknowledge) }
+    catch { /* An unacknowledged delivery is replayed or recovered, never skipped. */ }
+  }
+
+  private resyncMessage(): RealtimeMessage {
+    return { data: JSON.stringify({ id: `resync_${Date.now()}`, type: 'resync', createdAt: new Date().toISOString() }), lastEventId: '' }
   }
 
   private remember(message: RealtimeMessage) {
@@ -368,7 +445,10 @@ class SharedRealtime {
         this.accept({ data: wire.data, lastEventId: wire.lastEventId }, false)
         return
       case 'status':
-        if (this.role !== 'leader') this.options.onStatus(wire.connected)
+        if (this.role !== 'leader') {
+          this.options.onStatus(wire.connected)
+          if (this.appliedCursor && wire.connected && !this.baselineStarted) this.accept(this.resyncMessage(), false)
+        }
         return
       case 'beat':
         if (this.role === 'leader') {
