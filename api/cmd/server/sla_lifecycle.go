@@ -135,6 +135,7 @@ func slaEventRecorded(data *domain.Bootstrap, slaID, kind string) bool {
 func recordSLAChange(data *domain.Bootstrap, issue domain.Issue, rule domain.SLARule, sla domain.IssueSLA, kind string, now time.Time, before *domain.IssueSLA) {
 	recordSLAEvent(data, issue.ID, sla.ID, kind, now)
 	metadata := map[string]string{"slaId": sla.ID, "ruleId": rule.ID, "targetMinutes": strconv.Itoa(rule.TargetMinutes), "businessHours": strconv.FormatBool(rule.BusinessHours), "dueAt": sla.DueAt.UTC().Format(time.RFC3339)}
+	metadata["manual"] = strconv.FormatBool(sla.Manual)
 	if before != nil {
 		metadata["previousDueAt"] = before.DueAt.UTC().Format(time.RFC3339)
 		metadata["previousTargetMinutes"] = strconv.Itoa(before.TargetMinutes)
