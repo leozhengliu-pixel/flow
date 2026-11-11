@@ -155,7 +155,7 @@ func (s *server) batchNotifications(w http.ResponseWriter, r *http.Request) {
 		}
 		snoozedUntil = &parsed
 	}
-	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
 	if !ok {
 		writeError(w, 404, "workspace not found")
 		return

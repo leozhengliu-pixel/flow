@@ -187,8 +187,10 @@ func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	w.Header().Set("Server-Timing", fmt.Sprintf("bootstrap;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
-	writeJSON(w, 200, data)
+	w.Header().Add("Server-Timing", fmt.Sprintf("bootstrap;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
+	// Streamed: a large workspace's bootstrap is tens of MiB of JSON, which
+	// writeJSON would hold in one buffer until the client has read it all.
+	writeStreamedJSON(r.Context(), w, 200, data)
 }
 
 // issueRecordsBootstrapData is the viewer's workspace metadata the bootstrap

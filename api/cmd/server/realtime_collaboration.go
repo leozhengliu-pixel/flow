@@ -212,7 +212,7 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "workspace and clientId are required")
 		return
 	}
-	if _, ok := s.store.WorkspaceMetadata(workspace); !ok {
+	if !s.store.HasWorkspace(workspace) {
 		writeError(w, http.StatusNotFound, "Workspace not found")
 		return
 	}

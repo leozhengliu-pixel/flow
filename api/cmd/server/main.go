@@ -44,6 +44,8 @@ var (
 
 type server struct {
 	store *store.SQLiteStore
+	// metadataGate bounds concurrent workspace metadata projections (metadata_read_gate.go).
+	metadataGate *metadataReadGate
 	// coding is the coding-session runtime (coding_runtime.go).
 	coding *codingServices
 	// agentAutoTitle names new Agent chats with a small extra model call (off in test fixtures).
@@ -334,6 +336,9 @@ func runHealthcheck() int {
 
 func newHandler(s *server) http.Handler {
 	legacyReadGate := make(chan struct{}, 1)
+	if s.metadataGate == nil {
+		s.metadataGate = metadataReadGateFromEnv()
+	}
 	if s.importSlots == nil {
 		s.importSlots = make(chan struct{}, 2)
 	}
@@ -897,7 +902,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/issue-records", s.createIssueRecord)
 	mux.HandleFunc("POST /api/issue-records/batch", s.issueRecordAlias(s.batchUpdate))
 	mux.HandleFunc("GET /api/issue-records/project-summary", s.issueRecordProjectSummary)
-	mux.HandleFunc("GET /api/issue-records/bootstrap", s.issueRecordsBootstrap)
+	mux.Handle("GET /api/issue-records/bootstrap", s.metadataGate.wrap(http.HandlerFunc(s.issueRecordsBootstrap)))
 	mux.HandleFunc("GET /api/issue-records/groups", s.listIssueRecordGroups)
 	mux.HandleFunc("GET /api/issue-records/search-ids", s.searchIssueRecordIDs)
 	mux.HandleFunc("GET /api/issue-records/{id}", s.getIssueRecord)
@@ -2509,7 +2514,10 @@ func workspaceKey(r *http.Request) string {
 func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
 	if metadataReadRequest(r) || r.URL.Path == "/api/views" || strings.HasPrefix(r.URL.Path, "/api/views/") {
 		if !s.authDisabled {
-			data, _ := s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
+			data, handedOff := takePagedMetadata(r, workspaceKey(r), authUser(r).ID)
+			if !handedOff {
+				data, _ = s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
+			}
 			filterBootstrapForAPIKey(&data, r)
 			return data
 		}
@@ -2591,7 +2599,9 @@ func (s *server) listNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	// Only the canonical workspace key is needed: notifications are records,
+	// not part of the metadata snapshot, so the snapshot is not copied.
+	data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
 	if !ok {
 		writeError(w, 404, "workspace not found")
 		return
@@ -2621,7 +2631,7 @@ func (s *server) updateNotification(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := r.PathValue("id")
-	metadata, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	metadata, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return

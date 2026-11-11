@@ -115,7 +115,7 @@ import type { ApplicationInstallation } from "@/lib/application-agents";
 import { rememberTrashRetention } from "@/lib/trash-retention";
 import { rememberChatPlatform } from "@/lib/chat-platform";
 import { markSuspendedMembersInactive } from "@/lib/people";
-import { apiFetch, ApiError as PulseApiError, jsonRequest, request } from "@/lib/api-client";
+import { apiFetch, ApiError as PulseApiError, jsonRequest, request, requestRetryingBusy } from "@/lib/api-client";
 import { queueIssuesWrite, queueIssueUpdate, queueIssueWrite } from "@/lib/issue-mutation-queue";
 
 export { ApiError, realtimeClientId } from "@/lib/api-client";
@@ -422,7 +422,8 @@ export function fetchPagedBootstrap(workspaceKey?: string, projection?: Bootstra
   const headers: Record<string, string> = {}
   if (workspaceKey) headers['X-Workspace-Key'] = workspaceKey
   if (projection) headers['X-Flow-Projection'] = projection
-  return request<BootstrapData>('/api/issue-records/bootstrap', {headers, signal, quiet}).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform)
+  // The server bounds concurrent metadata loads and answers a crowd with 503 + Retry-After.
+  return requestRetryingBusy<BootstrapData>('/api/issue-records/bootstrap', {headers, signal, quiet}).then(normalizeBootstrapData).then(rememberTrashRetention).then(rememberChatPlatform)
 }
 export type IssueQueryInput = {
   q?: string;

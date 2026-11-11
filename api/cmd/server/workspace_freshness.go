@@ -148,17 +148,40 @@ func (s *server) reloadWorkspaceTo(ctx context.Context, workspace string, target
 		versions.loading[workspace] = done
 		versions.mu.Unlock()
 
-		// Read the version first: the reload then includes every change it
-		// counts (a writer commits before it bumps the version).
-		version, versionErr := s.sharedWorkspaceVersion(ctx, workspace)
-		err := s.store.ReloadWorkspace(ctx, workspace)
-		versions.mu.Lock()
-		delete(versions.loading, workspace)
-		close(done)
-		if err == nil && versionErr == nil && version > versions.applied[workspace] {
-			versions.applied[workspace] = version
+		// The reload outlives the request that started it. A large workspace
+		// can take longer to decode than a request waits (3s); cancelling it
+		// then threw the decoded copy away without recording the version, so
+		// the next request decoded the whole workspace again, and again, while
+		// the server was already short of memory. The requester still stops
+		// waiting at its own deadline and is served the copy it has.
+		go func() {
+			reloadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), workspaceReloadTimeout)
+			defer cancel()
+			started := time.Now()
+			// Read the version first: the reload then includes every change it
+			// counts (a writer commits before it bumps the version).
+			version, versionErr := s.sharedWorkspaceVersion(reloadCtx, workspace)
+			err := s.store.ReloadWorkspace(reloadCtx, workspace)
+			if elapsed := time.Since(started); err != nil {
+				log.Printf("Reload workspace=%s after %s: %v", workspace, elapsed.Round(time.Millisecond), err)
+			} else if elapsed > time.Second {
+				log.Printf("Reload workspace=%s took %s", workspace, elapsed.Round(time.Millisecond))
+			}
+			versions.mu.Lock()
+			delete(versions.loading, workspace)
+			close(done)
+			if err == nil && versionErr == nil && version > versions.applied[workspace] {
+				versions.applied[workspace] = version
+			}
+			versions.mu.Unlock()
+		}()
+		select {
+		case <-done:
+		case <-ctx.Done():
 		}
-		versions.mu.Unlock()
 		return
 	}
 }
+
+// workspaceReloadTimeout bounds one shared reload of a workspace's metadata.
+const workspaceReloadTimeout = 2 * time.Minute

@@ -1028,6 +1028,22 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		// Labels and statuses are team settings, which admins manage without joining.
 		return slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) && (access.Admin || access.WorkspaceAdmin || slices.Contains(access.VisibleTeamIDs, teamID))
 	}
+	// Notifications are per-recipient records, and realtime routes check every
+	// payload against the viewer's access themselves. Neither reads the
+	// viewer's workspace projection below, which copies every project,
+	// document and trash entry of the workspace (tens of MiB in a large one)
+	// on each poll. authorizeWorkspaceRequest has checked the active membership.
+	if parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/"); len(parts) >= 2 && (parts[1] == "notifications" || parts[1] == "realtime") {
+		if parts[1] == "notifications" && len(parts) >= 3 && parts[2] != "batch" {
+			metadata, ok := s.store.WorkspaceSettingsMetadata(workspace)
+			if !ok {
+				return false
+			}
+			_, err := s.store.NotificationRecord(r.Context(), metadata.Workspace.URLKey, userID, parts[2])
+			return err == nil
+		}
+		return true
+	}
 	var data domain.Bootstrap
 	var ok bool
 	var err error
@@ -1044,14 +1060,20 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	if err != nil || !ok {
 		return false
 	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	documentCommentWrite := len(parts) >= 5 && parts[1] == "documents" && parts[3] == "comments" && (r.Method == http.MethodPatch || r.Method == http.MethodDelete)
+	if !isIssueRecordsRequest(r) && !resourcePreferenceRequest(r) && !documentCommentWrite {
+		// Below, the projection is only read: the handler may take it
+		// instead of building the same one again (request_metadata.go).
+		handOffPagedMetadata(r, workspace, userID, data)
+	}
 	if resourcePreferenceRequest(r) {
 		filterBootstrapForAPIKey(&data, r)
 	}
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(parts) > 1 && parts[1] == "issue-records" {
 		parts[1] = "issues"
 	}
-	if len(parts) >= 5 && parts[1] == "documents" && parts[3] == "comments" && (r.Method == http.MethodPatch || r.Method == http.MethodDelete) {
+	if documentCommentWrite {
 		comment, readErr := s.store.ResourceComment(r.Context(), data.Workspace.URLKey, parts[2], parts[4])
 		if readErr != nil {
 			return false

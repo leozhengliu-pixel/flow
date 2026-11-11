@@ -279,7 +279,7 @@ func enrichNotificationEvent(raw json.RawMessage, notification domain.Notificati
 func (s *server) agentTaskRealtimeVisible(r *http.Request, taskID string) bool {
 	workspace := workspaceKey(r)
 	if workspace == "" {
-		if metadata, ok := s.store.WorkspaceMetadata(""); ok {
+		if metadata, ok := s.store.WorkspaceSettingsMetadata(""); ok {
 			workspace = metadata.Workspace.URLKey
 		}
 	}
@@ -321,7 +321,7 @@ func (s *server) codingSessionRealtimeVisible(r *http.Request, sessionID string)
 	}
 	workspace := workspaceKey(r)
 	if workspace == "" {
-		if metadata, ok := s.store.WorkspaceMetadata(""); ok {
+		if metadata, ok := s.store.WorkspaceSettingsMetadata(""); ok {
 			workspace = metadata.Workspace.URLKey
 		}
 	}

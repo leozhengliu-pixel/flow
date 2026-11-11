@@ -39,7 +39,11 @@ func (s *server) publicMetadata(w http.ResponseWriter, r *http.Request) (domain.
 		data.ViewerRole = "admin"
 		return data, true
 	}
-	data, err := s.store.PagedWorkspaceMetadata(r.Context(), key, authUser(r).ID)
+	data, handedOff := takePagedMetadata(r, key, authUser(r).ID)
+	var err error
+	if !handedOff {
+		data, err = s.store.PagedWorkspaceMetadata(r.Context(), key, authUser(r).ID)
+	}
 	if err != nil {
 		if errors.Is(err, store.ErrAuthForbidden) {
 			writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
