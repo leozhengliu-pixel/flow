@@ -363,7 +363,7 @@ func (s *server) publishDocumentDraft(w http.ResponseWriter, r *http.Request) {
 	var result domain.Document
 	var replacedCollaborationID string
 	workspace := workspaceKey(r)
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.draft_published", r.PathValue("draftId"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.draft_published", r.PathValue("draftId"), map[string]string{"documentId": r.PathValue("id")}, func(data *domain.Bootstrap) error {
 		document, docErr := documentByID(data, r.PathValue("id"))
 		if docErr != nil {
 			return docErr

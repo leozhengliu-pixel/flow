@@ -119,7 +119,9 @@ import {
   uploadAttachment,
   ApiError,
   fetchPagedBootstrap,
+  getDocument,
   listDocumentComments,
+  listDocumentDrafts,
   listIssueRecords,
   listReviews,
 } from "@/lib/api";
@@ -362,6 +364,7 @@ import { PeopleProvider } from '@/components/property/people-provider'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
 import { applyLabelStateRename, applyRealtimePatch, canApplyRealtimePatch, isLabelStateRenameEvent } from '@/store/apply-realtime-patch'
 import { classifyRealtimeEvent } from '@/lib/realtime-dispatch'
+import { inaccessible as inaccessibleResource, removeDocument, runEntityPlan, upsertDocument } from '@/lib/realtime-entity-sync'
 import { createRealtimeCoalescer } from '@/lib/realtime-bootstrap-coalescer'
 
 import { applyMemberStatusChange, memberStatusChange } from '@/lib/member-status-realtime'
@@ -1551,6 +1554,21 @@ function App() {
       }
       // Team overview pins and sections: refetch only that team's list.
       if (await refreshTeamResourcesForEvent(data, event)) return;
+      // Everything below is an entity patch, an issue patch, a metadata reload, a refetch of just the affected
+      // issues, or (only for overflow, an expired cursor and unknown event types) a full resync. See realtime-dispatch.
+      const action = classifyRealtimeEvent(event, Boolean(data.issueCollectionPaged));
+      if (action.kind === 'entity') {
+        // Documents, projects, initiatives and team renames apply from the viewer's projected payload (realtime-entity-sync).
+        await runEntityPlan(action.plan, event, {
+          update: apply => setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? apply(current) : current),
+          snapshot: () => { const current = dataRef.current; return current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? current : undefined; },
+          reload: () => reloadWorkspaceMetadata(workspace, realtimeMetadataBootstrap),
+          listDocumentDrafts,
+          listDocumentComments,
+          onDocumentComment: documentId => window.dispatchEvent(new CustomEvent(AGENT_TASK_ACTIVITY_EVENT, { detail: documentId })),
+        });
+        return;
+      }
       // LS-0718: entity Map / SSE patch path — merge when payload is self-contained.
       if (canApplyRealtimePatch(event)) {
         setData((current) => {
@@ -1560,19 +1578,6 @@ function App() {
         });
         return;
       }
-      if (/^document\.comment_/.test(event.type) && event.aggregateId) {
-        const document = data.documents.find(item => item.id === event.aggregateId || item.slugId === event.aggregateId);
-        if (document) {
-          // A comment can @-mention an agent, which starts a task on the document.
-          window.dispatchEvent(new CustomEvent(AGENT_TASK_ACTIVITY_EVENT, { detail: document.id }));
-          const comments = await listDocumentComments(document.id);
-          setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? { ...current, comments: { ...current.comments, [document.id]: comments } } : current);
-          return;
-        }
-      }
-      // Everything below is a patch, a metadata reload, a refetch of just the affected issues, or (only for
-      // overflow, an expired cursor and unknown event types) a full resync. See realtime-dispatch.
-      const action = classifyRealtimeEvent(event, Boolean(data.issueCollectionPaged));
       if (isLabelStateRenameEvent(event)) {
         setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? applyLabelStateRename(current, event) : current);
         await reloadWorkspaceMetadata(workspace, realtimeMetadataBootstrap);
@@ -5768,12 +5773,27 @@ function App() {
             document={pageDocument}
             openHistoryRequest={new URLSearchParams(location.search).has("history")}
             onHistoryRequestHandled={() => navigateTo({ pathname: location.pathname, search: "" }, { replace: true, state: location.state })}
-            onReload={async () => {
-              // Document comments are content records the metadata
-              // projection omits; refresh just this document's thread.
-              const workspaceKey = data.workspace.urlKey, documentId = pageDocument.id;
-              const [, comments] = await Promise.all([reloadWorkspaceMetadata(workspaceKey), listDocumentComments(documentId).catch(() => undefined)]);
-              if (comments) setData(current => current?.workspace.urlKey === workspaceKey ? { ...current, comments: { ...current.comments, [documentId]: comments } } : current);
+            onReload={async (saved) => {
+              // A write answers with the document: apply it (an autosave never reloads the workspace metadata).
+              // Other document actions refetch just this document and its thread (comments are content records
+              // the metadata projection omits); a document the viewer can no longer open is dropped.
+              const workspaceKey = data.workspace.urlKey, viewerId = data.viewer.id, documentId = pageDocument.id;
+              const mine = (current: BootstrapData | null): current is BootstrapData => current?.workspace.urlKey === workspaceKey && current.viewer.id === viewerId;
+              if (saved) {
+                setData(current => mine(current) ? upsertDocument(current, saved) : current);
+                return;
+              }
+              const [document, comments] = await Promise.all([
+                getDocument(documentId).catch(error => { if (inaccessibleResource(error)) return null; throw error; }),
+                listDocumentComments(documentId).catch(() => undefined),
+              ]);
+              setData(current => {
+                if (!mine(current)) return current;
+                // A deleted document still answers (from "Recently deleted"), with deletedAt.
+                const live = document && !document.deletedAt ? document : undefined;
+                const next = live ? upsertDocument(current, live) : removeDocument(current, documentId);
+                return comments && live ? { ...next, comments: { ...next.comments, [documentId]: comments } } : next;
+              });
             }}
             onBack={() => {
               const source = navigationReturnPath(location.state, data.workspace.urlKey, '');

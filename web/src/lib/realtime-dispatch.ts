@@ -1,14 +1,19 @@
 import { requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
+import { entityRealtimePlan, type EntityRealtimePlan } from '@/lib/realtime-entity-sync'
 import { metadataOnlyRealtimeEvent } from '@/lib/workspace-metadata-refresh'
 import { canApplyRealtimePatch, isLabelStateRenameEvent } from '@/store/apply-realtime-patch'
 import type { RealtimeEvent } from '@/types/flow'
 
 /**
  * What the client does with a realtime event it cannot answer from a more
- * specific handler. `resync` is the only action that downloads the whole
- * bootstrap: overflow, an expired cursor, or an event this client does not know.
+ * specific handler. `entity` applies a document, project, initiative or team
+ * change locally (realtime-entity-sync); `metadata` reloads the metadata
+ * projection, coalesced per workspace; `resync` is the only action that
+ * downloads the whole bootstrap: overflow, an expired cursor, or an event this
+ * client does not know.
  */
 export type RealtimeAction =
+  | { kind: 'entity'; plan: EntityRealtimePlan }
   | { kind: 'patch' }
   | { kind: 'refetch'; issueIds: string[]; removedIssueIds: string[] }
   | { kind: 'metadata'; visibility: boolean }
@@ -40,6 +45,8 @@ function ids(value: unknown): string[] {
 
 export function classifyRealtimeEvent(event: RealtimeEvent, paged: boolean): RealtimeAction {
   if (event.type === 'resync' || event.type === 'workspace.resync_required') return { kind: 'resync' }
+  const plan = entityRealtimePlan(event)
+  if (plan) return { kind: 'entity', plan }
   if (canApplyRealtimePatch(event)) return { kind: 'patch' }
   const removedIssueIds = ids(event.payload?.removedIssueIds)
   const issueIds = ids(event.payload?.issueIds)

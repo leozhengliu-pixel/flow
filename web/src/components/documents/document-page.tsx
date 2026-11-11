@@ -56,7 +56,8 @@ export interface DocumentPageProps {
   origin?: DocumentOrigin
   data: BootstrapData
   document: FlowDocument
-  onReload: () => Promise<void>
+  /** Refreshes the page's document after a change; `saved` is the document a write answered with, applied without a request. */
+  onReload: (saved?: FlowDocument) => Promise<void>
   onBack: () => void
   /** Open the history dialog on arrival (e.g. from a project resource menu). */
   openHistoryRequest?: boolean
@@ -110,7 +111,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const [titleFocused, setTitleFocused] = useState(false)
 
   const navigate = useCallback((path: string) => { if (onNavigate) onNavigate(path); else window.location.assign(path) }, [onNavigate])
-  const ctx: DocumentActionContext = { data, reload: onReload, navigate, t }
+  const ctx: DocumentActionContext = { data, reload: () => onReload(), navigate, t }
   const favorite = data.favorites.some(item => item.resourceType === 'document' && item.resourceId === document.id) || document.favorite
   const subscribed = data.subscriptions.some(item => item.resourceType === 'document' && item.resourceId === document.id && isActiveSubscription(item)) || document.subscriberIds.includes(data.viewer.id)
   const collaborators = [...new Map(presence.filter(user => Boolean(user.id) && user.id !== data.viewer.id).map(user => [user.id, user])).values()]
@@ -127,7 +128,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
     window.clearTimeout(pending.current)
     setSaveState('saving')
     pending.current = window.setTimeout(() => {
-      void updateDocument(document.id, input).then(async () => { await onReload(); setSaveState('saved'); window.setTimeout(() => setSaveState('idle'), 900) }).catch(() => setSaveState('error'))
+      void updateDocument(document.id, input).then(async saved => { await onReload(saved); setSaveState('saved'); window.setTimeout(() => setSaveState('idle'), 900) }).catch(() => setSaveState('error'))
     }, 600)
   }
 
@@ -338,13 +339,13 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
       <div className="document-icon-row">
         {!canEdit
           ? <span className={`document-icon${defaultDocumentIcon ? ' is-empty' : ''}`}><DocumentGlyph document={document}/></span>
-          : <DocumentIconPicker document={document} onChange={visual => void updateDocument(document.id, visual).then(onReload)} triggerClassName={`document-icon${defaultDocumentIcon ? ' is-empty' : ''}`}/>}
+          : <DocumentIconPicker document={document} onChange={visual => void updateDocument(document.id, visual).then(saved => onReload(saved))} triggerClassName={`document-icon${defaultDocumentIcon ? ' is-empty' : ''}`}/>}
         {canEdit && <DocumentTemplateChip ctx={ctx} document={document} className="document-template-chip"/>}
       </div>
       <div className="document-title-editor"><input
         aria-label={t('Document title')}
         className="document-title"
-        onBlur={() => { setTitleFocused(false); if (canEdit && title !== document.title) { window.clearTimeout(pending.current); void updateDocument(document.id, { title }).then(onReload) } }}
+        onBlur={() => { setTitleFocused(false); if (canEdit && title !== document.title) { window.clearTimeout(pending.current); void updateDocument(document.id, { title }).then(saved => onReload(saved)) } }}
         onChange={event => { setTitle(event.target.value); schedule({ title: event.target.value }) }}
         onFocus={() => { setTitleFocused(true) }}
         placeholder={t('New document')}
@@ -362,7 +363,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
               onUploadFile={async file => (await uploadDocumentAttachment(document.id, file)).url}
               selectionActions={documentSelectionActions({ data, document, t, onAskAgent: askAgent, onComment: canComment ? startComment : undefined })}
               onChange={snapshot => { setBody({ value: snapshot.markdown, state: snapshot.documentJSON }); schedule({ content: snapshot.markdown, contentData: snapshot.document as Record<string, unknown> }) }}
-              onPersist={async (snapshot, sync) => { const saved = await updateDocument(document.id, { content: snapshot.markdown, contentState: snapshot.contentState, contentData: snapshot.document as Record<string, unknown>, ...sync }); await onReload(); return saved }}/>}
+              onPersist={async (snapshot, sync) => { const saved = await updateDocument(document.id, { content: snapshot.markdown, contentState: snapshot.contentState, contentData: snapshot.document as Record<string, unknown>, ...sync }); await onReload(saved); return saved }}/>}
         </DocumentContentProvider>
         {!deleted && <DocumentInlineComments data={data} document={document} comments={comments} editor={liveEditor} shell={shell} draft={commentDraft} onDraftChange={setCommentDraft} canComment={canComment} canEdit={canEdit} visible onReload={onReload} onGutterChange={setCommentGutter} onPersist={() => persistEditorRef.current?.() ?? Promise.resolve()}/>}
       </div>

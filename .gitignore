@@ -12,6 +12,8 @@ web/node_modules/
 web/test-results/
 web/test-results-security/
 web/playwright-report-security/
+web/test-results-realtime/
+web/playwright-report-realtime/
 
 # Feature tour recordings: demo credentials, sessions and raw frames
 /scripts/feature-tour/.state/

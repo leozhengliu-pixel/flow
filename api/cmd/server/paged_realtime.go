@@ -106,7 +106,10 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 	if strings.HasPrefix(event.Type, "integration.") {
 		event.Payload = redactIntegrationEvent(event.Payload)
 	}
-	if strings.HasPrefix(event.Type, "favorite.") || strings.HasPrefix(event.Type, "favorite_folder.") || strings.HasPrefix(event.Type, "subscription.") || strings.HasPrefix(event.Type, "notifications.") {
+	// The viewer's own records: favorites, subscriptions, notification batches, drafts and AI
+	// conversations (a draft's or a conversation's payload carries its content).
+	if strings.HasPrefix(event.Type, "favorite.") || strings.HasPrefix(event.Type, "favorite_folder.") || strings.HasPrefix(event.Type, "subscription.") || strings.HasPrefix(event.Type, "notifications.") ||
+		strings.HasPrefix(event.Type, "draft.") || strings.HasPrefix(event.Type, "drafts.") || strings.HasPrefix(event.Type, "ai.") {
 		return event, event.ActorID == data.Viewer.ID || s.authDisabled && event.ActorID == "", nil
 	}
 	if strings.HasPrefix(event.Type, "notification.") && event.Type != "notification.desktop_acknowledged" && event.Type != "notification.delivery_retried" {
@@ -202,8 +205,8 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		event.Payload, _ = json.Marshal(payload)
 		return event, true, nil
 	}
-	if visible, decided := s.pagedPulseSourceVisible(r, data, event); decided {
-		return event, visible, nil
+	if projected, visible, decided := s.pagedPulseSourceEvent(r, data, event); decided {
+		return projected, visible, nil
 	}
 	if strings.HasPrefix(event.Type, "project.") || strings.HasPrefix(event.Type, "project_update.") || strings.HasPrefix(event.Type, "initiative.") || strings.HasPrefix(event.Type, "initiative_update.") {
 		// A relation or update the Pulse sources do not index: as before, the
@@ -214,58 +217,6 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 	// (realtime_event_policy.go); its payload is never forwarded as it is.
 	projected, visible := s.pagedPolicyEvent(r, data, query, event)
 	return projected, visible, nil
-}
-
-// pagedDocumentEvent authorizes a document event against the document itself, since the realtime metadata carries no
-// documents: the viewer gets it when they may open the document (a new one included, which no snapshot of theirs holds
-// yet). Without this every document event was dropped and a tab never learned of a document created elsewhere, so an
-// Agent reply's link to the document it had just written opened an empty page. A document that is gone (deleted or
-// purged) sends only the bare signal (type and id) for clients to reload their documents.
-func (s *server) pagedDocumentEvent(r *http.Request, data domain.Bootstrap, event domain.RealtimeEvent) (domain.RealtimeEvent, bool) {
-	if document, ok := s.store.DocumentByID(workspaceKey(r), event.AggregateID); ok {
-		return event, documentRole(s, data, document) != "none"
-	}
-	return domain.RealtimeEvent{ID: event.ID, Seq: event.Seq, Type: event.Type, AggregateID: event.AggregateID, ClientID: event.ClientID, ActorID: event.ActorID, CreatedAt: event.CreatedAt}, true
-}
-
-// pagedPulseSourceVisible authorizes project and initiative events (updates,
-// comments, reactions, edits) for paged clients, whose request metadata
-// carries no projects or initiatives: the aggregate's visibility is checked
-// against the shared project/initiative snapshot with the viewer's teams.
-// decided is false for events of other kinds or unknown aggregates.
-func (s *server) pagedPulseSourceVisible(r *http.Request, data domain.Bootstrap, event domain.RealtimeEvent) (visible, decided bool) {
-	kind := ""
-	switch {
-	case strings.HasPrefix(event.Type, "project.") || strings.HasPrefix(event.Type, "project_update."):
-		kind = "project"
-	case strings.HasPrefix(event.Type, "initiative.") || strings.HasPrefix(event.Type, "initiative_update."):
-		kind = "initiative"
-	default:
-		return false, false
-	}
-	if event.AggregateID == "" {
-		return false, false
-	}
-	snapshot, ok := s.store.PulseSources(workspaceKey(r))
-	if !ok {
-		return false, true
-	}
-	rules := newPulseRules(snapshot)
-	role := data.ViewerRole
-	if s.authDisabled && role == "" {
-		role = "admin"
-	}
-	viewer := newPulseViewer(snapshot, data.Viewer.ID, role, data.TeamMembers, pulseRestrictTeams(r))
-	if kind == "project" {
-		if project := rules.projects[event.AggregateID]; project != nil {
-			return rules.projectVisible(viewer, project), true
-		}
-		return false, false
-	}
-	if initiative := rules.initiatives[event.AggregateID]; initiative != nil {
-		return rules.initiativeVisible(viewer, initiative), true
-	}
-	return false, true
 }
 
 func (s *server) pagedIssueVisible(r *http.Request, id string) bool {

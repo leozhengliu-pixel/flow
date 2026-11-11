@@ -1,6 +1,6 @@
 import { mergeIssueRecords } from '@/lib/issue-detail-cache'
 import { deriveResourceCounts } from '@/lib/resource-counts'
-import { syncIssueProjectSummaries } from '@/lib/workspace-metadata-refresh'
+import { removeProject, upsertProject } from '@/lib/realtime-entity-sync'
 import type { BootstrapData, Issue, IssueLabel, Project, RealtimeEvent, WorkflowState } from '@/types/flow'
 
 export type RealtimePatchResult =
@@ -53,10 +53,6 @@ function upsertById<T extends { id: string }>(items: T[], next: T): T[] {
     : [next, ...items]
 }
 
-function removeById<T extends { id: string }>(items: T[], id: string): T[] {
-  return items.filter((item) => item.id !== id)
-}
-
 /**
  * Apply an SSE / realtime event as an entity-level patch when the payload is
  * self-contained. Returns `{ handled: false }` so callers can fall back to a
@@ -93,25 +89,13 @@ export function applyRealtimePatch(
     return { handled: true, data: deriveResourceCounts({ ...current, issues: next }) }
   }
 
+  // The same merge as realtime-entity-sync (version check, the viewer's own issue count, embedded summaries).
   if ((event.type === 'project.updated' || event.type === 'project.created') && isProjectLike(entity)) {
-    return {
-      handled: true,
-      data: deriveResourceCounts({
-        ...current,
-        projects: upsertById(current.projects, entity),
-        issues: syncIssueProjectSummaries(current.issues, entity),
-      }),
-    }
+    return { handled: true, data: upsertProject(current, entity) }
   }
 
   if (event.type === 'project.deleted' && event.aggregateId) {
-    return {
-      handled: true,
-      data: deriveResourceCounts({
-        ...current,
-        projects: removeById(current.projects, event.aggregateId),
-      }),
-    }
+    return { handled: true, data: removeProject(current, event.aggregateId) }
   }
 
   return { handled: false }

@@ -16,6 +16,7 @@ package main
 // FLOW_LOAD_REPORT (path for a JSON report).
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -26,6 +27,7 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -481,15 +483,24 @@ func TestLoadBootstrapProfile(t *testing.T) {
 }
 
 // TestLoadUsers models users of the web client against one reading replica
-// while another replica commits metadata changes: page load (bootstrap,
-// notifications, issue list), a presence heartbeat every 20s, a navigation
-// read now and then, and one coalesced metadata reload (0-1s spread, plus a
-// visibility check) per change the writer makes. It reports memory, latency,
-// errors, busy (503) answers and how long a change takes to reach every user.
+// while another replica commits changes: page load (bootstrap, notifications,
+// issue list), a presence heartbeat every 20s, a navigation read now and then,
+// and a realtime stream per user that answers each event the way the web
+// client does (realtime-dispatch, realtime-entity-sync): a document edit, a
+// project comment or a team rename is applied from the event (no request); an
+// access change (a team membership) makes one coalesced metadata reload (0-1s
+// spread, plus a visibility check). The writer cycles through document edit,
+// project comment and team rename, with an access change every
+// FLOW_LOAD_ACCESS_EVERY changes. It reports memory, latency, errors, busy
+// (503) answers, the events users received, and how long each kind of change
+// takes to reach users (to the event for applied changes, to the finished
+// reload for access changes).
 //
-// FLOW_LOAD_USERS (100), FLOW_LOAD_DURATION (2m), FLOW_LOAD_CHANGE_EVERY (10s).
+// FLOW_LOAD_USERS (100), FLOW_LOAD_DURATION (2m), FLOW_LOAD_CHANGE_EVERY (10s),
+// FLOW_LOAD_ACCESS_EVERY (10).
 func TestLoadUsers(t *testing.T) {
 	users := loadEnvInt("FLOW_LOAD_USERS", 100)
+	accessEvery := max(loadEnvInt("FLOW_LOAD_ACCESS_EVERY", 10), 1)
 	duration := loadEnvDuration("FLOW_LOAD_DURATION", 2*time.Minute)
 	changeEvery := loadEnvDuration("FLOW_LOAD_CHANGE_EVERY", 10*time.Second)
 	peers := newPeerServers(t)
@@ -503,6 +514,7 @@ func TestLoadUsers(t *testing.T) {
 	}
 	teamIDs := []string{teams[0].ID, teams[1].ID, teams[2].ID, teams[3].ID}
 	accounts := []*http.Client{admin}
+	people := []domain.User{}
 	for index := range 4 {
 		role, joined := "member", []string{teams[index%2].ID}
 		switch index {
@@ -513,8 +525,9 @@ func TestLoadUsers(t *testing.T) {
 		case 3:
 			role, joined = "guest", []string{teams[1].ID}
 		}
-		client, _ := joinByInvitation(t, base, admin, fmt.Sprintf("Users Person %d", index), fmt.Sprintf("users-person-%d-%s@example.com", index, suffix), role, joined...)
+		client, person := joinByInvitation(t, base, admin, fmt.Sprintf("Users Person %d", index), fmt.Sprintf("users-person-%d-%s@example.com", index, suffix), role, joined...)
 		accounts = append(accounts, client)
+		people = append(people, person)
 	}
 	issueIDs := []string{}
 	for index := range 60 {
@@ -593,17 +606,26 @@ func TestLoadUsers(t *testing.T) {
 		return false
 	}
 
-	// Changes fan out to every user like realtime events do.
-	type change struct {
-		at time.Time
-		n  int
-	}
-	subscribers := make([]chan change, users)
-	for index := range subscribers {
-		subscribers[index] = make(chan change, 64)
-	}
+	// Each change the writer commits, by kind: when it was committed.
+	var changeMu sync.Mutex
+	changedAt := map[string]time.Time{}
+	changeCounts := map[string]int{}
 	var freshMu sync.Mutex
-	freshness := []time.Duration{}
+	freshness := map[string][]time.Duration{}
+	fresh := func(kind string, at time.Time) {
+		changeMu.Lock()
+		committed, ok := changedAt[kind]
+		changeMu.Unlock()
+		if !ok {
+			return
+		}
+		freshMu.Lock()
+		freshness[kind] = append(freshness[kind], at.Sub(committed))
+		freshMu.Unlock()
+	}
+	var eventsMu sync.Mutex
+	eventCounts := map[string]int{}
+	actionCounts := map[string]int{}
 	var wg sync.WaitGroup
 	for index := range users {
 		wg.Add(1)
@@ -620,6 +642,25 @@ func TestLoadUsers(t *testing.T) {
 			bootstrap(client)
 			do(client, "notifications", http.MethodGet, "/api/notifications?limit=50", nil)
 			do(client, "issues", http.MethodGet, "/api/issue-records?limit=50", nil)
+			// The coalesced metadata reload: one at a time, one queued behind it, spread over 0-1s.
+			reloads := make(chan string, 1)
+			go func() {
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case kind := <-reloads:
+						time.Sleep(time.Duration(int64(time.Second) * int64(index%1000) / 1000))
+						ok := bootstrap(client)
+						do(client, "visibility", http.MethodPost, "/api/issue-records/visibility", visibilityBody)
+						if ok {
+							fresh(kind, time.Now())
+						}
+					}
+				}
+			}()
+			events := make(chan loadRealtimeEvent, 256)
+			go loadRealtimeStream(ctx, &http.Client{Jar: jar, Transport: transport}, base, events)
 			heartbeat := time.NewTicker(20 * time.Second)
 			defer heartbeat.Stop()
 			navigate := time.NewTicker(time.Duration(30+index%30) * time.Second)
@@ -633,25 +674,21 @@ func TestLoadUsers(t *testing.T) {
 				case <-navigate.C:
 					do(client, "project", http.MethodGet, fmt.Sprintf("/api/projects/lt-project-%05d", index%2321), nil)
 					do(client, "issues", http.MethodGet, "/api/issue-records?limit=50", nil)
-				case event := <-subscribers[index]:
-					// Coalesce: drop events already queued behind this one.
-					for drained := false; !drained; {
+				case event := <-events:
+					kind, action := loadClientAction(event)
+					eventsMu.Lock()
+					eventCounts[event.Type]++
+					actionCounts[action]++
+					eventsMu.Unlock()
+					switch action {
+					case "apply":
+						fresh(kind, event.received)
+					case "reload":
 						select {
-						case newer := <-subscribers[index]:
-							event = newer
-						default:
-							drained = true
+						case reloads <- kind:
+						default: // a reload is already queued: it sees this change too
 						}
 					}
-					time.Sleep(time.Duration(int64(time.Second) * int64(index%1000) / 1000))
-					ok := bootstrap(client)
-					do(client, "visibility", http.MethodPost, "/api/issue-records/visibility", visibilityBody)
-					if ok {
-						freshMu.Lock()
-						freshness = append(freshness, time.Since(event.at))
-						freshMu.Unlock()
-					}
-					do(client, "notifications", http.MethodGet, "/api/notifications?limit=50", nil)
 				}
 			}
 		}()
@@ -662,27 +699,54 @@ func TestLoadUsers(t *testing.T) {
 		defer wg.Done()
 		ticker := time.NewTicker(changeEvery)
 		defer ticker.Stop()
+		member := people[1].ID
+		joined := false
+		send := func(method, path string, body any) {
+			var reader io.Reader
+			if body != nil {
+				raw, _ := json.Marshal(body)
+				reader = bytes.NewReader(raw)
+			}
+			request, _ := http.NewRequest(method, other+path, reader)
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("X-Workspace-Key", "test-workspace")
+			if response, err := admin.Do(request); err == nil {
+				_, _ = io.Copy(io.Discard, response.Body)
+				response.Body.Close()
+			}
+		}
 		for n := 0; ; n++ {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
 			}
-			raw, _ := json.Marshal(map[string]any{"description": fmt.Sprintf("Users change %d", n)})
-			request, _ := http.NewRequest(http.MethodPatch, other+"/api/workspaces/test-workspace/teams/"+teamIDs[0], bytes.NewReader(raw))
-			request.Header.Set("Content-Type", "application/json")
-			if response, err := admin.Do(request); err == nil {
-				_, _ = io.Copy(io.Discard, response.Body)
-				response.Body.Close()
+			kind := []string{"document", "comment", "team"}[n%3]
+			if n%accessEvery == accessEvery-1 {
+				kind = "access"
+			}
+			// Record the time first: a fast stream can deliver the event before the writer's response.
+			changeMu.Lock()
+			changedAt[kind] = time.Now()
+			changeCounts[kind]++
+			changeMu.Unlock()
+			switch kind {
+			case "document":
+				send(http.MethodPatch, "/api/documents/lt-doc-0000", map[string]any{"content": fmt.Sprintf("Users change %d\n\n%s", n, strings.Repeat("Body text. ", 200))})
+			case "comment":
+				send(http.MethodPost, "/api/projects/lt-project-00000/comments", map[string]any{"body": fmt.Sprintf("Users comment %d", n)})
+			case "team":
+				send(http.MethodPatch, "/api/workspaces/test-workspace/teams/"+teamIDs[0], map[string]any{"name": fmt.Sprintf("Users Team 0 %s r%d", suffix, n)})
+			case "access":
+				// A member joins or leaves a private team: what they may see changes.
+				if joined {
+					send(http.MethodDelete, "/api/teams/"+teamIDs[2]+"/members/"+member, nil)
+				} else {
+					send(http.MethodPut, "/api/teams/"+teamIDs[2]+"/members/"+member, map[string]any{"role": "member"})
+				}
+				joined = !joined
 			}
 			changes++
-			event := change{at: time.Now(), n: n}
-			for _, subscriber := range subscribers {
-				select {
-				case subscriber <- event:
-				default:
-				}
-			}
 		}
 	}()
 
@@ -719,8 +783,15 @@ func TestLoadUsers(t *testing.T) {
 		"peakHeapInuseMiB": peak.heapInuse >> 20, "maxRSSMiB": maxRSSBytes() >> 20, "baselineHeapInuseMiB": before.HeapInuse >> 20,
 		"settledHeapInuseMiB": settled.HeapInuse >> 20, "totalAllocGiB": float64(after.TotalAlloc-before.TotalAlloc) / (1 << 30),
 		"numGC": after.NumGC - before.NumGC, "gcPauseTotalMs": float64(after.PauseTotalNs-before.PauseTotalNs) / 1e6,
-		"freshnessP50s": percentile(freshness, 0.5).Seconds(), "freshnessP95s": percentile(freshness, 0.95).Seconds(), "freshnessMaxs": percentile(freshness, 1).Seconds(), "refreshes": len(freshness),
 	}
+	all := []time.Duration{}
+	byKind := map[string]any{}
+	for kind, values := range freshness {
+		all = append(all, values...)
+		byKind[kind] = map[string]any{"changes": changeCounts[kind], "deliveries": len(values), "p50s": percentile(values, 0.5).Seconds(), "p95s": percentile(values, 0.95).Seconds(), "maxs": percentile(values, 1).Seconds()}
+	}
+	report["freshnessP50s"], report["freshnessP95s"], report["freshnessMaxs"], report["refreshes"] = percentile(all, 0.5).Seconds(), percentile(all, 0.95).Seconds(), percentile(all, 1).Seconds(), len(all)
+	report["freshnessByKind"], report["events"], report["clientActions"] = byKind, eventCounts, actionCounts
 	routeReport := map[string]any{}
 	for name, values := range collected {
 		routeReport[name] = map[string]any{"count": len(values), "statuses": statuses[name], "p50ms": percentile(values, 0.5).Milliseconds(), "p95ms": percentile(values, 0.95).Milliseconds(), "maxms": percentile(values, 1).Milliseconds()}
@@ -731,4 +802,79 @@ func TestLoadUsers(t *testing.T) {
 	if path := os.Getenv("FLOW_LOAD_REPORT"); path != "" {
 		_ = os.WriteFile(path, raw, 0o644)
 	}
+}
+
+// loadRealtimeEvent is what the simulated client reads of a realtime event.
+type loadRealtimeEvent struct {
+	Type        string          `json:"type"`
+	AggregateID string          `json:"aggregateId"`
+	Payload     json.RawMessage `json:"payload"`
+	received    time.Time
+}
+
+// loadRealtimeStream reads the user's realtime stream until ctx ends,
+// reconnecting after a drop like the browser's EventSource.
+func loadRealtimeStream(ctx context.Context, client *http.Client, base string, events chan<- loadRealtimeEvent) {
+	for ctx.Err() == nil {
+		request, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/realtime/events?workspace=test-workspace", nil)
+		request.Header.Set("X-Workspace-Key", "test-workspace")
+		response, err := client.Do(request)
+		if err == nil {
+			scanner := bufio.NewScanner(response.Body)
+			scanner.Buffer(make([]byte, 1<<20), 16<<20)
+			for scanner.Scan() {
+				line := scanner.Text()
+				if !strings.HasPrefix(line, "data: ") {
+					continue
+				}
+				var event loadRealtimeEvent
+				if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event) != nil || event.Type == "connected" || event.Type == "presence.updated" {
+					continue
+				}
+				event.received = time.Now()
+				select {
+				case events <- event:
+				case <-ctx.Done():
+				}
+			}
+			response.Body.Close()
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+// loadClientAction is what the web client does with an event (realtime-dispatch
+// and realtime-entity-sync), reduced to the requests it makes: "apply" (patched
+// from the event, no request), "reload" (one coalesced metadata reload) or
+// "ignore". kind names the writer's change the event announces.
+func loadClientAction(event loadRealtimeEvent) (kind, action string) {
+	var payload map[string]json.RawMessage
+	_ = json.Unmarshal(event.Payload, &payload)
+	scopeChanged := string(payload["scopeChanged"]) == "true"
+	switch {
+	case event.Type == "workspace.resync_required" || event.Type == "resync":
+		return "access", "reload"
+	case strings.HasPrefix(event.Type, "team_member.") || strings.HasPrefix(event.Type, "workspace_member.") || strings.HasPrefix(event.Type, "membership."):
+		return "access", "reload"
+	case strings.HasPrefix(event.Type, "document.permission"):
+		return "access", "reload"
+	case strings.HasPrefix(event.Type, "document."):
+		return "document", "apply"
+	case strings.HasPrefix(event.Type, "project.") || strings.HasPrefix(event.Type, "initiative."):
+		if scopeChanged || strings.Contains(event.Type, ".relation_") {
+			return "access", "reload"
+		}
+		return "comment", "apply"
+	case event.Type == "team.updated":
+		for key := range payload {
+			if key != "name" && key != "icon" && key != "color" && key != "entity" && key != "deleted" {
+				return "access", "reload"
+			}
+		}
+		return "team", "apply"
+	}
+	return "", "ignore"
 }

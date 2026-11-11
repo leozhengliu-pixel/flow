@@ -1,3 +1,4 @@
+import { supersedingEntityKey } from '@/lib/realtime-entity-sync'
 import type { RealtimeEvent } from '@/types/flow'
 
 const maxEvents = 256
@@ -26,6 +27,17 @@ export class RealtimeEventQueue {
       const last = this.items.findLastIndex(item => item.event.aggregateId === event.aggregateId)
       const previous = this.items[last]
       if (previous && fullIssueReplacement(previous.event)) {
+        this.items.splice(last, 1)
+        this.bytes -= previous.bytes
+      }
+    }
+    // A document, project or initiative event carries the entity as the server holds it when it is sent, so a
+    // later one replaces a pending one (an autosave burst of a large document must not overflow into a resync).
+    const entityKey = supersedingEntityKey(event)
+    if (entityKey) {
+      const last = this.items.findLastIndex(item => supersedingEntityKey(item.event) === entityKey)
+      const previous = this.items[last]
+      if (previous && !this.items.slice(last + 1).some(item => item.event.aggregateId === event.aggregateId)) {
         this.items.splice(last, 1)
         this.bytes -= previous.bytes
       }

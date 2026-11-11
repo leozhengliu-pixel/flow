@@ -42,6 +42,8 @@ type realtimeHub struct {
 	// newer change first and keep the older state.
 	ordered bool
 	order   map[string]*realtimeSeqOrder
+	// payloads shares per-viewer entity projections between streams (realtime_entity_payloads.go).
+	payloads realtimePayloadCache
 }
 
 // realtimeSeqOrder is one workspace's delivery position in the change log.
