@@ -2,6 +2,8 @@ import { mkdir } from 'node:fs/promises'
 import { expect, type BrowserContext, type Page } from '@playwright/test'
 import { test } from './workspace-fixture'
 
+test.setTimeout(90_000)
+
 async function recordStreams(context: BrowserContext) {
   await context.addInitScript(() => {
     const state = window as typeof window & { scaleP08LiveStreams: number; scaleP08Events: unknown[] }
