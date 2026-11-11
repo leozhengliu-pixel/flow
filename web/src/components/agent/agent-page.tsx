@@ -336,13 +336,16 @@ export function AgentPage({
       // A stopped reply leaves the message in the chat and the composer empty; only a send that never
       // reached the server (nothing to show yet) puts the text back.
       const stopped = reason instanceof DOMException && reason.name === "AbortError";
-      if (!retrying && !answer && !failedInChat && !(stopped && started)) writeInput(message);
+      if (!retrying && !answer && !failedInChat && !started) writeInput(message);
       if (stopped) {
         // Keep the stopped chat (the server already saved the message) in the workspace data too.
         if (started && streamed) saveSession(markAgentSessionStopped(streamed));
         return;
       }
-      if (failedInChat && streamed) {
+      // The server reported the failure, or the connection dropped after it took the message (a proxy's idle timeout,
+      // a network change): the reply goes on there and the chat follows it (useAgentReplyFollow). Neither puts the
+      // message back or offers to send it again, which would run the whole request a second time (two documents).
+      if (started && streamed) {
         saveSession(streamed);
         return;
       }

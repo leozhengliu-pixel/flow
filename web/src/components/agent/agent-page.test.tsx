@@ -459,6 +459,32 @@ describe('agent page composer', () => {
       expect(streams.streamAgentSessionMessage).not.toHaveBeenCalled()
     })
 
+    it('follows the reply when the stream drops after the server took the message, without offering to send it again', async () => {
+      api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+      const started: AgentSession = { ...failedChat(), id: 'session-live', slugId: 'live', messages: [{ id: 'user-message', role: 'user', content: 'Write the release checklist', createdAt: '2026-08-31T00:00:00Z' }] }
+      const finished: AgentSession = { ...started, updatedAt: '2026-08-31T00:00:09Z', messages: [...started.messages, { id: 'assistant-message', role: 'assistant', content: 'Created the release checklist.', createdAt: '2026-08-31T00:00:09Z', parts: [{ id: 'assistant-message_text', type: 'text', status: 'completed', text: 'Created the release checklist.' }] }] }
+      api.getAgentSession.mockResolvedValue(finished)
+      // A reverse proxy closes the stream mid-reply: no error event, the body just ends.
+      streams.streamNewAgentSession.mockImplementation(async (_input, onEvent) => {
+        onEvent({ type: 'session.started', session: started, messageId: 'assistant-message' })
+        throw new Error('Flow Agent stream ended before completion')
+      })
+      const user = userEvent.setup()
+      render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+      const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
+      await user.type(editor, 'Write the release checklist')
+      await user.click(screen.getByRole('button', { name: 'Send message' }))
+      expect(await within(conversation()).findByText('Created the release checklist.')).toBeVisible()
+      // The message is not put back and nothing offers to send it again: that ran the request twice (two documents).
+      expect(editor).toHaveTextContent('')
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+      expect(within(conversation()).getAllByText('Write the release checklist')).toHaveLength(1)
+      expect(streams.streamNewAgentSession).toHaveBeenCalledTimes(1)
+      expect(streams.streamAgentSessionMessage).not.toHaveBeenCalled()
+      expect(streams.streamAgentSessionMessageEdit).not.toHaveBeenCalled()
+    })
+
     it('leaves the composer draft alone when retrying', async () => {
       api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
       const failed = failedChat()

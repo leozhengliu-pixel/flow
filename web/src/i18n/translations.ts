@@ -2912,6 +2912,7 @@ export const zhCN: Record<string, string> = {
   "Loading details": "正在加载详情",
   "Loading issues": "正在加载事项",
   "Loading issue": "正在加载事项",
+  "Loading document": "正在加载文档",
   "Checking issue access": "正在检查事项访问权限",
   "Open command menu": "打开命令菜单",
   "See issues": "查看事项",

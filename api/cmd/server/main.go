@@ -97,6 +97,7 @@ type server struct {
 	triageEditDebounce             time.Duration // zero means triageAIEditDebounce
 	recurringNormalized            sync.Map      // workspace keys whose legacy recurring schedules were upgraded
 	agentRuns                      sync.Map
+	agentToolCalls                 agentToolCallLog // write calls of chat replies by call id (agent_tool_once.go)
 	allowedOrigin                  string
 	workspaceRegionSelectorEnabled bool
 	workspaceDefaultRegion         string

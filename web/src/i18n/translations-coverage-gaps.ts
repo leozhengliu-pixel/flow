@@ -116,6 +116,7 @@ export const coverageGapsZhCN: Record<string, string> = {
   "Bug Reporter Corp": "缺陷报告公司",
   // Not found pages
   "Cycle not found": "找不到周期",
+  "Document not found": "找不到文档",
   "Initiative not found": "找不到目标",
   "Member not found": "找不到成员",
   "Project not found": "找不到项目",
@@ -124,6 +125,7 @@ export const coverageGapsZhCN: Record<string, string> = {
   "This team does not exist in the current workspace.": "当前工作区中不存在此团队。",
   "This member is not available in the workspace.": "此成员在工作区中不可用。",
   "This cycle does not exist or is no longer available.": "此周期不存在或已不可用。",
+  "This document does not exist or is no longer available.": "此文档不存在或已不可用。",
   "This project does not exist or is no longer available.": "此项目不存在或已不可用。",
   "This project view does not exist or is no longer available.": "此项目视图不存在或已不可用。",
   "This initiative does not exist or is no longer available.": "此目标不存在或已不可用。",

@@ -161,6 +161,10 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		// not see: send the bare signal, clients reload the affected metadata.
 		return domain.RealtimeEvent{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, ClientID: event.ClientID, ActorID: event.ActorID, CreatedAt: event.CreatedAt}, true, nil
 	}
+	if strings.HasPrefix(event.Type, "document.") && event.AggregateID != "" {
+		projected, visible := s.pagedDocumentEvent(r, data, event)
+		return projected, visible, nil
+	}
 	if strings.HasPrefix(event.Type, "issue.") || strings.HasPrefix(event.Type, "comment.") || strings.HasPrefix(event.Type, "attachment.") {
 		if strings.HasPrefix(event.Type, "comment.") && slices.ContainsFunc(data.Documents, func(document domain.Document) bool { return document.ID == event.AggregateID }) {
 			return event, realtimeEventVisible(data, event), nil
@@ -198,6 +202,18 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		return event, visible, nil
 	}
 	return event, realtimeEventVisible(data, event), nil
+}
+
+// pagedDocumentEvent authorizes a document event against the document itself, since the realtime metadata carries no
+// documents: the viewer gets it when they may open the document (a new one included, which no snapshot of theirs holds
+// yet). Without this every document event was dropped and a tab never learned of a document created elsewhere, so an
+// Agent reply's link to the document it had just written opened an empty page. A document that is gone (deleted or
+// purged) sends only the bare signal (type and id) for clients to reload their documents.
+func (s *server) pagedDocumentEvent(r *http.Request, data domain.Bootstrap, event domain.RealtimeEvent) (domain.RealtimeEvent, bool) {
+	if document, ok := s.store.DocumentByID(workspaceKey(r), event.AggregateID); ok {
+		return event, documentRole(s, data, document) != "none"
+	}
+	return domain.RealtimeEvent{ID: event.ID, Seq: event.Seq, Type: event.Type, AggregateID: event.AggregateID, ClientID: event.ClientID, ActorID: event.ActorID, CreatedAt: event.CreatedAt}, true
 }
 
 // pagedPulseSourceVisible authorizes project and initiative events (updates,

@@ -168,6 +168,27 @@ type agentEventWriter struct {
 	// sessions navigate to the new loop mid-turn); later events are dropped.
 	detached bool
 	lenient  bool
+	// mu orders events and keep-alive comments written from the heartbeat.
+	mu sync.Mutex
+}
+
+// agentStreamKeepAlive is how often a quiet reply stream gets a comment line. Reasoning is not streamed, so a model
+// thinking for a minute sent nothing, and a reverse proxy's idle timeout (nginx: 60 s) closed the stream while the
+// reply went on: the page took it as a failed send and offered to send the message again, which wrote everything
+// a second time (two identical documents).
+var agentStreamKeepAlive = 15 * time.Second
+
+// keepAlive writes an SSE comment, which clients ignore, so the connection never looks idle.
+func (w *agentEventWriter) keepAlive() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.detached {
+		return
+	}
+	// A failed write is left to the next event, which handles a gone client (lenient or not).
+	if _, err := fmt.Fprint(w.w, ": keep-alive\n\n"); err == nil {
+		w.flusher.Flush()
+	}
 }
 
 func newAgentEventWriter(w http.ResponseWriter) (*agentEventWriter, error) {
@@ -187,6 +208,8 @@ func (w *agentEventWriter) send(event agentStreamEvent) error {
 	if err != nil {
 		return err
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if w.detached {
 		return nil
 	}
@@ -266,6 +289,24 @@ func (s *server) streamAgentSession(w http.ResponseWriter, r *http.Request, id s
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// The heartbeat stops (and is waited for) before the handler returns: nothing writes to w after that.
+	stopKeepAlive, keepAliveDone := make(chan struct{}), make(chan struct{})
+	defer func() { close(stopKeepAlive); <-keepAliveDone }()
+	go func() {
+		defer close(keepAliveDone)
+		ticker := time.NewTicker(agentStreamKeepAlive)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stopKeepAlive:
+				return
+			case <-r.Context().Done():
+				return
+			case <-ticker.C:
+				writer.keepAlive()
+			}
+		}
+	}()
 	completed, err := s.runAgentSession(r, id, writer)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -682,6 +723,8 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			truncated = agentTurnTruncated(turn.StopReason)
 			break
 		}
+		// A call the stream delivered twice runs once (and is answered once).
+		turn.ToolCalls = uniqueAgentToolCalls(turn.ToolCalls)
 		for index := range turn.ToolCalls {
 			annotateConnectorCall(r.Context(), &turn.ToolCalls[index])
 		}
@@ -889,7 +932,8 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 					}
 				}
 			}
-			result, callErr := s.executeAgentToolRecordingChange(r, data, &call) // records the change for result cards and Undo
+			// Records the change for result cards and Undo; a write call that already ran answers with its first result.
+			result, callErr := s.executeAgentToolCallOnce(r, data, *session, &call)
 			call.Status = "completed"
 			if callErr != nil {
 				call.Status, call.Error = "error", callErr.Error()
@@ -1392,6 +1436,10 @@ func (s *server) runAgentToolCall(r *http.Request, data domain.Bootstrap, call d
 	ctx := context.WithValue(r.Context(), authUserContextKey{}, data.Viewer)
 	ctx = context.WithValue(ctx, workspaceKeyContextKey{}, workspaceKey(r))
 	ctx = store.ContextWithActor(ctx, data.Viewer)
+	// The agent's writes are made on the server, not by the tab that asked (it applies nothing itself): their realtime
+	// events go to that tab too. With the asking tab's client id it dropped them as its own echo, so the document a
+	// reply had just created was missing from that tab and the reply's link to it opened an empty page.
+	ctx = store.ContextWithRealtimeClient(ctx, "")
 	result, err := s.callFlowTool(ctx, actor, call.Name, args)
 	if err != nil {
 		return nil, err

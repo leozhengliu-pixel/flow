@@ -341,6 +341,7 @@ async function fetchAllInboxNotifications(): Promise<BootstrapData['notification
 }
 
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
+import { useRouteDocument } from "@/hooks/use-route-document";
 import { isPulseRealtimeEvent, pulseSidebarPath, pulseUnread } from "@/components/pulse/pulse-unread";
 import { useEntityUpdatesLoader, useRequestEntityUpdates } from "@/lib/entity-updates";
 import { applyFavoriteDelta, FAVORITES_CHANGED, overlayPendingFavoriteIntents, toggleFavoriteFor } from '@/lib/favorites';
@@ -1336,6 +1337,8 @@ function App() {
   // A deleted document stays on its URL (read-only, restorable) while it is in the trash.
   const trashedDocument = !selectedDocument && !data?.resourceDetailsOmitted && route.kind === "document" ? findTrashedDocument(data?.trash, route.documentSlugId) : undefined;
   const pageDocument = selectedDocument ?? trashedDocument?.document ?? null;
+  // A document the loaded data does not hold yet (one an Agent reply just wrote) is fetched instead of left blank.
+  const routeDocument = useRouteDocument({ data, slugId: route.kind === "document" ? route.documentSlugId : undefined, found: Boolean(pageDocument), setData });
   const selectedCustomer =
     route.kind === "customer"
       ? data?.customers.find((customer) =>
@@ -5791,6 +5794,16 @@ function App() {
                       : documentsRedirectPath(data),
               );
             }}
+          />
+        )}
+        {page === "document-detail" && !pageDocument && routeDocument === "loading" && (
+          <main className="main-panel" aria-busy="true"><LoadingContainer loading label="Loading document"/></main>
+        )}
+        {page === "document-detail" && !pageDocument && routeDocument === "missing" && (
+          <RouteNotFound
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
+            title="Document not found"
+            description="This document does not exist or is no longer available."
           />
         )}
         {page === "customer-detail" &&
