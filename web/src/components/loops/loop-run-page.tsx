@@ -30,7 +30,7 @@ import { LoopActionsMenu } from "./loop-actions";
 import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
 import { dayLabel, runDuration } from "./loop-model";
-import { describeRunFailure, runSkipNote, runTriggerText } from "./loop-run-labels";
+import { describeRunFailure, runEmptyState, runSkipNote, runTriggerText } from "./loop-run-labels";
 import { FallbackExplanation, LoopContractSummary } from "./loop-output-contract";
 import { CONTRACT_FALLBACK_NOTICE } from "./loop-output-contract-model";
 import { AgentErrorDetail, ErrorDetails } from "@/components/agent/agent-error-detail";
@@ -70,6 +70,13 @@ function RunFailureDetail({ run }: { run: LoopRun | LoopRunReply }) {
       {detail && <ErrorDetails className="loops-run-error-details" detail={detail} />}
     </>
   );
+}
+
+/** Where a finished run's (or reply's) answer would be when the agent wrote none. */
+function RunEmptyState({ run, hasWork }: { run: { status: string; output?: string; summary?: LoopRun["summary"] }; hasWork: boolean }) {
+  const { t } = useI18n();
+  const empty = runEmptyState(run, hasWork, t);
+  return empty ? <p className="loops-run-empty-reply" data-i18n-ignore>{empty}</p> : null;
 }
 
 /** Why a finished run did not simply complete: needs review, failed, cancelled or interrupted. */
@@ -612,6 +619,7 @@ export function LoopRunPage({
                 </p>
               )}
               {selected.output && <AgentAnswerText className="loops-run-answer" data={data} markdown={selected.output} />}
+              <RunEmptyState run={selected} hasWork={parts.length > 0} />
               <RunOutcome data={data} run={selected} />
               {selected.status !== "running" && (
                 <div className="loops-run-feedback" role="group" aria-label={t("Rate this run")}>
@@ -672,6 +680,7 @@ function RunReply({ data, reply }: { data: BootstrapData; reply: LoopRunReply })
         </p>
       )}
       {reply.output && <AgentAnswerText className="loops-run-answer" data={data} markdown={reply.output} />}
+      <RunEmptyState run={reply} hasWork={parts.length > 0} />
       {reply.status === "failed" && (
         <div className="loops-run-error" role="alert">
           <XCircle size={16} />

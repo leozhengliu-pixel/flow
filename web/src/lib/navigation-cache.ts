@@ -1,5 +1,6 @@
 import type { BootstrapData, Issue } from '@/types/flow'
 import { mergeIssueRecords } from '@/lib/issue-detail-cache'
+import { agentSessionSummary } from '@/lib/agent-session-merge'
 import { clearSessionCaches } from '@/lib/session-cache-registry'
 
 export interface NavigationCacheRecord {
@@ -76,7 +77,8 @@ export function toNavigationSnapshot(data: BootstrapData): BootstrapData {
     aiConversations: [],
     aiPromptProgress: [],
     agentActivities: [],
-    agentSessions: data.agentSessions?.map(session => ({ ...session, messages: [] })) ?? [],
+    // Conversations stay out of storage: a marked summary, so the restored list never passes for the chats.
+    agentSessions: data.agentSessions?.map(agentSessionSummary) ?? [],
     // The inbox is server-owned: a notification deleted elsewhere must not
     // survive in this device's snapshot and reappear on the next reload.
     notifications: [],

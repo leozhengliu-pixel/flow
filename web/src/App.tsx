@@ -370,6 +370,7 @@ import { TeamPagesLayout } from '@/components/team/team-pages-layout'
 import { isTeamPagesRoute } from '@/components/team/team-pages-routes'
 import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
+import { mergeAgentSession, mergeAgentSessions } from '@/lib/agent-session-merge'
 import { bootstrapNavigationDecision, bootstrapRefreshProjection, bootstrapRequestKey } from '@/lib/bootstrap-navigation'
 import { teamWorkflowStateOfType } from '@/lib/team-workflow'
 import type { WorkspaceSecondaryKind } from '@/components/workspace/workspace-secondary-page'
@@ -520,7 +521,8 @@ function App() {
     const id = event.aggregateId;
     if (!id) {
       const agentSessions = await listAgentSessions();
-      if (Array.isArray(agentSessions)) setData(current => applies(current) ? { ...current!, agentSessions } : current);
+      // Lists send long chats as summaries: chats read whole keep their messages.
+      if (Array.isArray(agentSessions)) setData(current => applies(current) ? { ...current!, agentSessions: mergeAgentSessions(current!.agentSessions, agentSessions) } : current);
       return;
     }
     let session: AgentSession | undefined;
@@ -528,7 +530,8 @@ function App() {
       try { session = await getAgentSession(id); }
       catch (error) { if (!(error instanceof ApiError && [403, 404].includes(error.status))) throw error; }
     }
-    setData(current => applies(current) ? withAgentSession(current!, id, session) : current);
+    // Reads of two quick events can land out of order: the older never replaces the newer.
+    setData(current => applies(current) ? withAgentSession(current!, id, session && mergeAgentSession(current!.agentSessions?.find(item => item.id === id), session)) : current);
     // Chat surfaces that hold their own copy (the floating chat, entity and loop panels) follow the reply from it.
     if (session) pushAgentSession(session);
   }, []);

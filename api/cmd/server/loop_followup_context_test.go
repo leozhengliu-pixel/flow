@@ -44,7 +44,7 @@ func TestLoopReplyAnswersFromTheSavedRunRecord(t *testing.T) {
 		t.Fatalf("the status question changed the run: %+v", after)
 	}
 	for _, want := range []string{
-		"Status: needs_review (reason: no_output)", "No output produced", "Required outputs: statusUpdate; successful changes made: nothing",
+		"Status: needs_review (reason: no_output)", "Required output missing", "Required outputs: statusUpdate; successful changes made: nothing",
 		"Listed projects", "Final report: none", "no tools are available", "Everything looks fine.", "[The run ended needs_review (no_output)",
 	} {
 		if !strings.Contains(input, want) {

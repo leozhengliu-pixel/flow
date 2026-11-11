@@ -179,6 +179,9 @@ type AgentMessage struct {
 	// Status is "streaming" while the reply is still being written (its parts are what it has done so far, including
 	// approvals and questions waiting for the owner); empty once it finished, failed or was stopped.
 	Status string `json:"status,omitempty"`
+	// Outcome is how a finished assistant reply's run ended. Replies saved before outcomes were recorded have none
+	// (their error part, if any, tells a failed or stopped one); it is empty while the reply streams.
+	Outcome *AgentReplyOutcome `json:"outcome,omitempty"`
 	// UpdatedAt is when a streaming reply was last saved; the running server refreshes it while the reply waits.
 	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 	// WorkerCursor is how far a streaming reply written by an agent worker run has applied the run's activities
@@ -187,6 +190,16 @@ type AgentMessage struct {
 	// Offloaded names fields stored outside the workspace record and not
 	// loaded yet (see OffloadedContent).
 	Offloaded OffloadedContent `json:"_offloaded,omitempty"`
+}
+
+// AgentReplyOutcome is how an assistant reply's run ended; saving the reply does not make it a success.
+// Status is "completed" (the run finished its turn), "failed" (it ended on an error), "interrupted" (the server or
+// worker running it went away) or "canceled" (its owner stopped it). Reason is a machine-readable cause such as
+// "provider_error", "output_limit", "user_stop" or "worker_lost"; on a completed reply it qualifies the success
+// ("no_reply_text": the work ran and the reply has no written answer; "empty_response": nothing came back).
+type AgentReplyOutcome struct {
+	Status string `json:"status" enum:"completed,failed,interrupted,canceled"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // AgentWorkerCursor names the last activity of an agent worker run a reply holds: the run, its attempt and the
@@ -389,6 +402,11 @@ type AgentSession struct {
 	// OriginChat is the name of the group a conversation was started in by mentioning the bot; empty for direct
 	// messages and chats started in Flow.
 	OriginChat string `json:"originChat,omitempty"`
+	// MessagesOmitted marks a summary: a list or the bootstrap sent the conversation without its messages (part of
+	// its transcript is stored outside the workspace record), so the empty Messages is not the conversation and must
+	// never replace a copy that has them. The app reads GET /api/agent/sessions/{id} to show it. Responses only; a
+	// stored session never has it.
+	MessagesOmitted bool `json:"messagesOmitted,omitempty"`
 }
 
 type PersonalAgentSkill struct {

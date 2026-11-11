@@ -12,6 +12,8 @@ import { useI18n } from "@/i18n/i18n";
 import { usePhoneLayout } from "@/hooks/use-phone-layout";
 import type { AgentSession } from "@/types/flow";
 import { AgentOriginBadge } from "./agent-origin-badge";
+import { agentSessionStale } from "./agent-reply-status";
+import { AgentStaleLabel } from "./agent-stale-reply";
 import { agentSessionUnread, formatAgentHistoryTime } from "./agent-read-state";
 import styles from "./agent-page.module.css";
 
@@ -83,6 +85,8 @@ export function AgentHistoryList({
                       </>}
                       <span className={styles.historyTitle} data-agent-chat-title="" data-i18n-ignore>{session.title}</span>
                       <AgentOriginBadge origin={session.origin} chat={session.originChat} />
+                      {/* A chat whose latest reply was interrupted: "Stopped responding" / "Didn't start". */}
+                      <AgentStaleLabel stale={agentSessionStale(session)} />
                       <time className={styles.historyTime} dateTime={session.updatedAt}>{formatAgentHistoryTime(session.updatedAt, t, undefined, phone)}</time>
                     </a>
                   </FlowContextMenuTrigger>

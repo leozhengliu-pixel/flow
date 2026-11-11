@@ -186,7 +186,7 @@ func TestLoopRunAcceptance(t *testing.T) {
 	provider.replies = []string{`tool:list_projects {"limit":5}`, "All projects look fine."}
 	loop, started := startTestRun(t, handler, "Flow 项目周更新", "List the projects and their issues.", nil)
 	run := waitForRun(t, handler, loop.ID, started.ID)
-	if run.Status != "needs_review" || run.FailureReason != "no_output" || !strings.Contains(run.Error, "No output produced") {
+	if run.Status != "needs_review" || run.FailureReason != "no_output" || !strings.Contains(run.Error, "Required output missing") {
 		t.Fatalf("run without updates = %+v", run)
 	}
 

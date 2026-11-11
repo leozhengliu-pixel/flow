@@ -275,3 +275,63 @@ describe('Agent chat panel following a reply that runs on the server', () => {
     expect(screen.getByText('Response sent')).toBeVisible()
   })
 })
+
+describe('Agent chat panel after a dropped stream', () => {
+  const asked: AgentSession = { ...session, messages: [...session.messages, { id: 'user-2', role: 'user', content: 'Write the checklist', createdAt: new Date().toISOString() }], updatedAt: '2026-08-31T00:00:05Z' }
+  const finished: AgentSession = { ...asked, messages: [...asked.messages, { id: 'assistant-2', role: 'assistant', content: 'Created the checklist.', createdAt: '2026-08-31T00:00:06Z' }], updatedAt: '2026-08-31T00:00:06Z' }
+  beforeEach(() => {
+    Object.values(api).forEach(mock => mock.mockReset())
+    Object.values(streams).forEach(mock => mock.mockReset())
+    api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+    api.markAgentSessionRead.mockResolvedValue(undefined)
+    api.stopAgentSession.mockResolvedValue(undefined)
+  })
+  const send = async () => {
+    const user = userEvent.setup()
+    const input = screen.getByRole('textbox', { name: 'Send a message to Flow Agent' })
+    await waitFor(() => expect(input).toBeEnabled())
+    await user.type(input, 'Write the checklist')
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
+    return input
+  }
+
+  it('reads the conversation instead of offering a Retry that would run the turn again', async () => {
+    api.getAgentSession.mockResolvedValue(finished)
+    streams.streamAgentSessionMessage.mockImplementation(async (_id, _message, onEvent) => {
+      onEvent({ type: 'session.started', session: asked, messageId: 'assistant-2' })
+      onEvent({ type: 'text.delta', messageId: 'assistant-2', delta: 'Creat' })
+      throw new Error('Flow Agent stream ended before completion')
+    })
+    const onSessionChange = vi.fn()
+    render(<I18nProvider><AgentChatPanel initialSession={session} issues={[]} onClose={vi.fn()} onSessionChange={onSessionChange} open/></I18nProvider>)
+    const input = await send()
+    expect(await screen.findByText('Created the checklist.')).toBeVisible()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    expect(screen.getAllByText('Write the checklist')).toHaveLength(1)
+    expect(input).toHaveTextContent('')
+    expect(onSessionChange).toHaveBeenCalledWith(finished)
+    expect(streams.streamAgentSessionMessage).toHaveBeenCalledTimes(1)
+    expect(streams.streamAgentSessionMessageEdit).not.toHaveBeenCalled()
+  })
+
+  it('still lets the user retry a send the server never took', async () => {
+    streams.streamAgentSessionMessage.mockRejectedValueOnce(new Error('Failed to fetch')).mockImplementation(() => new Promise(() => {}))
+    render(<I18nProvider><AgentChatPanel initialSession={session} issues={[]} onClose={vi.fn()} open/></I18nProvider>)
+    await send()
+    expect(await screen.findByRole('alert')).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(streams.streamAgentSessionMessage.mock.calls.length + streams.streamAgentSessionMessageEdit.mock.calls.length).toBe(2))
+    expect(api.getAgentSession).not.toHaveBeenCalled()
+  })
+
+  it('keeps the messages when a refreshed list hands in the same chat as a summary', async () => {
+    const panel = (initial: AgentSession) => <I18nProvider><AgentChatPanel initialSession={initial} issues={[]} onClose={vi.fn()} open/></I18nProvider>
+    const view = render(panel(session))
+    expect(await screen.findByText('Summary')).toBeVisible()
+    view.rerender(panel({ ...session, title: 'Renamed', messages: [], messagesOmitted: true }))
+    expect(screen.getByText('Summary')).toBeVisible()
+    expect(await screen.findByText('Renamed')).toBeVisible()
+    expect(api.getAgentSession).not.toHaveBeenCalled()
+  })
+})

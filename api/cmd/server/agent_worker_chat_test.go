@@ -744,12 +744,11 @@ func TestWorkerChatUnclaimedRunEndsTheReply(t *testing.T) {
 	f.s.agent.WorkerClaimTimeout = time.Second
 	events := f.stream("/api/agent/sessions/stream", `{"message":"Anyone there?","location":"page"}`)
 	started := nextEvent(t, events, "session.started")
-	failed := nextEvent(t, events, "error")
-	if failed.Error != workerChatNoWorker {
-		t.Fatalf("stream error = %+v", failed)
-	}
+	// Like the reference app's "Agent didn't start", the stream ends with the saved chat, not an error event; the
+	// reply keeps its outcome (failed, worker_unavailable) and error row for the app to read.
+	nextEvent(t, events, "session.completed")
 	final := f.reply(t, started.Session.ID)
-	if last := final.Parts[len(final.Parts)-1]; final.ID != started.MessageID || final.Status != "" || last.Type != "error" || last.Text != workerChatNoWorker {
+	if last := final.Parts[len(final.Parts)-1]; final.ID != started.MessageID || final.Status != "" || last.Type != "error" || last.Text != workerChatNoWorker || final.Outcome == nil || final.Outcome.Reason != agentReasonWorkerUnavailable {
 		t.Fatalf("unclaimed reply = %+v", final)
 	}
 	runs, _ := f.s.store.SessionAgentRuns(ctx, f.data.Workspace.URLKey, started.Session.ID, 5)

@@ -105,6 +105,27 @@ export function runSkipNote(run: Pick<LoopRun, "status" | "summary">, t: Transla
   return { label: t(SUMMARY_STATUS_LABELS.skipped), reason: run.summary.skipReason?.trim() || undefined };
 }
 
+/** Empty states of a finished run (or reply) with no written reply, as translation keys. */
+export const RUN_EMPTY_STATES = {
+  nothing: "This run recorded no work and no reply.",
+  noReply: "The agent did not write a reply.",
+  cancelled: "Cancelled before the agent did any work or wrote a reply.",
+  interrupted: "Interrupted before the agent did any work or wrote a reply.",
+} as const;
+
+/**
+ * What a finished run or reply shows where its answer would be when it has none, so a terminal run never reads as
+ * blank. It is about the reply text only: whether the run's required outputs exist is its failure reason (no_output),
+ * and a skipped run shows its skip note instead.
+ */
+export function runEmptyState(run: { status: string; output?: string; summary?: LoopRun["summary"] }, hasWork: boolean, t: Translate) {
+  if (run.status === "running" || run.output?.trim() || (run.status === "completed" && run.summary?.status === "skipped")) return undefined;
+  if (hasWork) return t(RUN_EMPTY_STATES.noReply);
+  if (run.status === "cancelled") return t(RUN_EMPTY_STATES.cancelled);
+  if (run.status === "interrupted") return t(RUN_EMPTY_STATES.interrupted);
+  return t(RUN_EMPTY_STATES.nothing);
+}
+
 /**
  * Fixed run failure messages the server stores in run.error (loop_run_reliability.go, loop_runtime.go), as
  * translation keys; {limit}, {size} are read back from the stored text.

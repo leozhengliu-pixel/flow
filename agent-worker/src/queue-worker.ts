@@ -92,6 +92,7 @@ async function execute(run: AgentRun) {
   session = worker.session({
     sessionId: run.sessionId,
     flowToken: token,
+    runId: run.id,
     heldCalls: chat?.heldCalls ?? thread?.heldCalls,
     guard: async request => {
       if (loop && request.op === 'model') await poster?.drain()

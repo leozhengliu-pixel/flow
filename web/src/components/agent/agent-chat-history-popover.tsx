@@ -22,6 +22,8 @@ import {
   type ChatHistorySection,
 } from "./agent-chat-history-model";
 import { AgentOriginBadge } from "./agent-origin-badge";
+import { agentSessionStale } from "./agent-reply-status";
+import { AgentStaleLabel } from "./agent-stale-reply";
 import { agentSessionUnread, formatAgentHistoryTime } from "./agent-read-state";
 import styles from "./agent-chat-history-popover.module.css";
 
@@ -241,6 +243,8 @@ function ChatHistoryDialog({
           <AgentOriginBadge origin={session.origin} chat={session.originChat} />
         </span>
         <span className={styles.rowMeta}>
+          {/* A chat whose latest reply was interrupted: "Stopped responding" / "Didn't start". */}
+          <AgentStaleLabel stale={agentSessionStale(session)} />
           {toolbarIds.has(session.id) && <span>{t("Toolbar")}</span>}
           <time dateTime={session.updatedAt}>{time === t("now") || time === "now" ? t("just now") : time}</time>
         </span>

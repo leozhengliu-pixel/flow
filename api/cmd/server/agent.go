@@ -297,11 +297,14 @@ func (s *server) withAgentBodies(r *http.Request, session domain.AgentSession) d
 }
 
 // agentSessionSummary is how lists send a session whose transcript is partly
-// offloaded: without messages, so the app loads the conversation
+// offloaded: without messages and marked MessagesOmitted, so the app knows
+// the empty list is not the conversation and loads it
 // (GET /api/agent/sessions/{id}) when it is opened.
 func agentSessionSummary(session domain.AgentSession) domain.AgentSession {
+	session.MessagesOmitted = false
 	if store.AgentSessionHasOffloaded(session) {
 		session.Messages = []domain.AgentMessage{}
+		session.MessagesOmitted = true
 	}
 	return session
 }

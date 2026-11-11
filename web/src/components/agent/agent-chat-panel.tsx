@@ -9,6 +9,10 @@ import { toast } from '@/lib/toast'
 import { streamAgentSessionMessage, streamAgentSessionMessageEdit, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
 import { createAgentStreamEventCoalescer } from '@/lib/agent-stream-coalescer'
 import { markStoppedAgentReply } from './agent-stopped-reply'
+import { agentSessionStale } from './agent-reply-status'
+import { AgentStaleLabel } from './agent-stale-reply'
+import { markDroppedAgentReply } from './agent-stream-state'
+import { agentSessionNeedsDetail } from '@/lib/agent-session-merge'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData, PersonalAgentSkill } from '@/types/flow'
 import { AgentAddMenu } from './agent-add-menu'
 import { AgentPageContextIcon } from './agent-icons'
@@ -33,7 +37,7 @@ import { useMarkAgentSessionRead } from './agent-read-state'
 import { AgentChatMenu, AgentRenamePalette } from './agent-chat-actions'
 import { deleteAgentChat, useAgentChatHotkeys } from './agent-chat-commands'
 import { AgentSessionFeedbackDialog } from './agent-message-actions'
-import { agentShownParts, useAgentApprovalAnswer, useAgentReplyFollow } from './use-agent-reply-follow'
+import { AGENT_CHAT_GONE_NOTICE, agentShownParts, useAgentApprovalAnswer, useAgentReplyFollow } from './use-agent-reply-follow'
 // coding sessions (track G)
 import { ChatCodingSessionCards } from '@/components/coding-sessions/chat-coding-session-cards'
 
@@ -124,6 +128,8 @@ export function AgentChatPanel({
   const [fullscreen, setFullscreen] = useState(false)
   const abortRef = useRef<AbortController | undefined>(undefined)
   const retryMessage = useRef('')
+  // The last send failed before the server took it (Retry sends the composer text again, as a new message).
+  const [unsent, setUnsent] = useState(false)
   // A reply running on the server without this panel streaming it (opened or reloaded mid-reply, or asked from another
   // surface): its saved progress shows with live approval and question cards, followed until it finishes.
   const shownSession = useMemo(() => session && { ...session, messages }, [messages, session])
@@ -131,9 +137,19 @@ export function AgentChatPanel({
     session: shownSession,
     streaming: loading,
     enabled: open,
-    onUpdate: latest => { setSession(latest); setMessages(latest.messages); onSessionChange?.(latest) },
+    onUpdate: latest => { setSession(latest); setMessages(latest.messages); setStreamParts([]); onSessionChange?.(latest) },
   })
   const replyRunning = loading || follow.following
+  // The chat whose stream dropped after the server took the message: once the panel stops streaming, its saved
+  // state is read and followed (never sent again).
+  const droppedStreamRef = useRef<string | undefined>(undefined)
+  const recoverReply = follow.recover
+  useEffect(() => {
+    if (loading || !droppedStreamRef.current) return
+    const id = droppedStreamRef.current
+    droppedStreamRef.current = undefined
+    void recoverReply(id)
+  }, [loading, recoverReply])
   const shownParts = useMemo(() => agentShownParts(messages, streamParts), [messages, streamParts])
   const { approvalBusy, decideToolApproval, retryApproval } = useAgentApprovalAnswer({ sessionId: session?.id, parts: shownParts, onError: setError, onStale: follow.refresh })
   // Seeing the chat here (once its reply has settled) clears its unread dot on the Agent page too.
@@ -211,14 +227,22 @@ export function AgentChatPanel({
   if (seenInitial.initialSession !== initialSession || seenInitial.open !== open) {
     setSeenInitial({ initialSession, open })
     if (open && initialSession) {
-      setSession(initialSession)
-      setMessages(initialSession.messages)
+      // A summary of the chat shown here (a refreshed list) updates its title and the like but never empties it.
+      // A newer summary means the chat changed on the server: it is read again (the messages show meanwhile).
+      const keepMessages = Boolean(initialSession.messagesOmitted && session && session.id === initialSession.id && messages.length > 0)
+      const changed = keepMessages && Date.parse(initialSession.updatedAt) > Date.parse(session!.updatedAt)
+      setSession(keepMessages ? { ...initialSession, messages, messagesOmitted: false, needsDetailRefresh: changed || Boolean(session!.needsDetailRefresh) } : initialSession)
+      if (!keepMessages) setMessages(initialSession.messages)
     }
   }
+  const held = useLatestRef({ session, messages })
   useEffect(() => {
     if (!open || !initialSession) return
     // A long chat is listed without its messages: read it, so a reply still running shows (and is followed) too.
-    if (initialSession.messages.length || initialSession.id.startsWith('pending-')) return
+    if (initialSession.id.startsWith('pending-')) return
+    const shown = held.current
+    if (shown.session?.id === initialSession.id && shown.messages.length && !agentSessionNeedsDetail(shown.session)) return
+    if (initialSession.messages.length && !agentSessionNeedsDetail(initialSession)) return
     let active = true
     const id = initialSession.id
     void Promise.resolve().then(() => getAgentSession(id)).then(full => {
@@ -227,7 +251,7 @@ export function AgentChatPanel({
       setMessages(full.messages)
     }).catch(() => undefined)
     return () => { active = false }
-  }, [initialSession, open])
+  }, [held, initialSession, open])
 
   const [seenPrompt, setSeenPrompt] = useState(initialPrompt)
   if (seenPrompt !== initialPrompt) {
@@ -308,6 +332,9 @@ export function AgentChatPanel({
     const message = followUp !== undefined ? followUp.trim() : quoteAgentMessage(quote, input).trim()
     if (!message || replyRunning || !status?.enabled || (followUp === undefined && filesUploading)) return
     retryMessage.current = message
+    // What the chat showed before this send: a send the server never took puts it back (no phantom question to follow).
+    const shownBefore = messages
+    setUnsent(false)
     const sentFiles = followUp === undefined ? attachments : []
     // Files go with the message for the server to keep and give to the model (images as images, not text).
     const sentAttachments = await Promise.all(sentFiles.map(agentFileAttachment))
@@ -340,7 +367,8 @@ export function AgentChatPanel({
     setStreamParts([])
     // The work shown while streaming, kept for a stopped reply (it folds to "Worked for N seconds").
     const liveWork = new Map<string, AgentMessagePart>()
-    let started = false
+    let started = false, failedInChat = false
+    let startedMessageId: string | undefined, startedSessionId: string | undefined
     let coalescer: ReturnType<typeof createAgentStreamEventCoalescer> | undefined
     try {
       const controller = new AbortController()
@@ -351,7 +379,8 @@ export function AgentChatPanel({
           next = event.session
           setSession(event.session)
         }
-        if (event.type === 'session.started' && event.session) { started = true; setMessages(event.session.messages) }
+        if (event.type === 'session.started' && event.session) { started = true; startedSessionId = event.session.id; startedMessageId = event.messageId; setMessages(event.session.messages) }
+        if (event.type === 'error') failedInChat = true
         if (event.type === 'text.replaced') {
           setMessages(current => current.at(-1)?.role === 'assistant'
             ? current.map((item, index) => index === current.length - 1 ? { ...item, content: event.delta ?? '' } : item)
@@ -434,7 +463,21 @@ export function AgentChatPanel({
         setMessages(current => markStoppedAgentReply(current, [...liveWork.values()].filter(part => part.type === 'reasoning' || part.type === 'step' || part.type === 'toolCall')))
         return
       }
-      if (!started) setInput(message)
+      if (started && !failedInChat && startedSessionId) {
+        // The connection dropped after the server took the message (no error from the server): the reply goes on
+        // there. Follow its saved copy instead of showing a Retry that would run the whole request again.
+        const work = [...liveWork.values()]
+        setStreamParts([])
+        setMessages(current => markDroppedAgentReply(current, startedMessageId, work))
+        droppedStreamRef.current = startedSessionId
+        return
+      }
+      if (!started) {
+        // The server never took the message: it goes back to the composer and the banner's Retry sends it from there.
+        setMessages(shownBefore)
+        setInput(message)
+        setUnsent(true)
+      }
       setError(reason instanceof Error ? reason.message : t('Flow Agent is unavailable'))
     } finally {
       coalescer?.flush()
@@ -466,8 +509,8 @@ export function AgentChatPanel({
       onRequestHide={onHide}
       open={open}
       title={session?.title ?? t('New chat')}
-      titleExtra={session ? (
-        // The reference app's chat menu, right after the title once the chat exists.
+      titleExtra={session ? (<>
+        {/* The reference app's chat menu, right after the title once the chat exists. */}
         <AgentChatMenu
           unsaved={session.id.startsWith('pending-')}
           onCopy={() => void navigator.clipboard.writeText(conversationMarkdown(messages)).then(
@@ -478,7 +521,9 @@ export function AgentChatPanel({
           onFeedback={() => setFeedbackOpen(true)}
           onRename={() => setRenameOpen(true)}
         />
-      ) : undefined}
+        {/* The chat's status when its latest reply was interrupted ("Stopped responding" / "Didn't start"). */}
+        {!replyRunning && <AgentStaleLabel stale={agentSessionStale({ messages })}/>}
+      </>) : undefined}
       unread={unread}
       variant="floating"
     >
@@ -562,7 +607,7 @@ export function AgentChatPanel({
           />
         </>}
         enabled={Boolean(status?.enabled)}
-        error={error}
+        error={error ?? (follow.lost?.kind === 'gone' ? AGENT_CHAT_GONE_NOTICE : undefined)}
         input={input}
         loading={replyRunning}
         messages={displayMessages}
@@ -571,7 +616,8 @@ export function AgentChatPanel({
         onStop={() => { void follow.stop(); abortRef.current?.abort() }}
         onSubmit={() => void submit()}
         onRetry={target => void submit(target?.content ?? retryMessage.current, undefined, target ?? session?.messages.findLast(item => item.role === 'user'))}
-        onRetryError={retryApproval ?? (!status?.enabled ? () => { void fetchAgentStatus().then(next => { setStatus(next); setError(next.enabled ? undefined : t('Flow Agent is not configured')) }).catch(reason => setError(String(reason))) } : undefined)}
+        // A send the server never took is sent again from the composer; a chat that is gone has nothing to retry.
+        onRetryError={retryApproval ?? (error && unsent && status?.enabled ? () => void submit() : !error && follow.lost?.kind === 'gone' ? null : !status?.enabled ? () => { void fetchAgentStatus().then(next => { setStatus(next); setError(next.enabled ? undefined : t('Flow Agent is not configured')) }).catch(reason => setError(String(reason))) } : undefined)}
         onSendSuggestion={message => void submit(message)}
         onAnswer={(part, choice) => void submit(choice.label, { partId: part.id, value: choice.value })}
         sessionId={session?.id}

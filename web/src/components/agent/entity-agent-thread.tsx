@@ -14,6 +14,8 @@ import { useAgentEntityData } from './agent-entity-data'
 import { AgentQuestionPrompt } from './agent-approval-question'
 import { AgentWorkGroup } from './agent-work-group'
 import { isBlankStoppedReply, settleStoppedAgentReply } from './agent-stopped-reply'
+import { agentSessionStale } from './agent-reply-status'
+import { AgentStaleReplyStatus } from './agent-stale-reply'
 import { formatAgentTime, shouldShowAgentTime } from './agent-time'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
@@ -46,7 +48,8 @@ export type EntityAgentThreadProps = {
   onInputChange: (value: string) => void
   onSubmit: () => void
   onRetry?: (message?: AgentMessage) => void
-  onRetryError?: () => void
+  /** Retry on the error banner instead of sending again; null shows the error without a Retry. */
+  onRetryError?: (() => void) | null
   /** Incremented for an explicit send so a manually scrolled-up reader follows the new turn. */
   scrollRequest?: number
   /** Sends a follow-up suggestion chip as the next user message; without it the chip fills the composer. */
@@ -234,6 +237,8 @@ export function EntityAgentThread({
   const decide = onToolApproval ?? (() => undefined)
   const firstUserIndex = messages.findIndex(message => message.role === 'user')
   const latestAssistantIndex = messages.findLastIndex(message => message.role === 'assistant')
+  // The latest reply's run went away (agent-reply-status.ts): the reference app's stale status replaces its error row.
+  const staleReply = loading ? undefined : agentSessionStale({ messages: savedMessages })
   const entityData = useAgentEntityData(mentionData)
   const sendSuggestion = (suggestion: string) => {
     if (onSendSuggestion) onSendSuggestion(suggestion)
@@ -431,6 +436,8 @@ export function EntityAgentThread({
               : part.text}
           </div>
         ))}
+        {/* An interrupted latest reply: the reference app's stale status in place of an error row. */}
+        {staleReply && <AgentStaleReplyStatus stale={staleReply} onRetry={onRetry ? () => onRetry(savedMessages.findLast(item => item.role === 'user')) : undefined}/>}
       </div>
       <div className={styles.composerArea}>
       {/* Context chips describe what a new conversation will start with; once it has started they read as "added to context". */}
@@ -454,7 +461,7 @@ export function EntityAgentThread({
           </div>
         )}
       {composerHeader}
-      {error && !messages.at(-1)?.parts?.some(part => part.type === 'error') && <div className={styles.errorBanner} role="alert"><AgentErrorDetail error={error} onRetry={onRetryError ?? (!loading ? () => onRetry ? onRetry() : onSubmit() : undefined)}/></div>}
+      {error && !staleReply && !messages.at(-1)?.parts?.some(part => part.type === 'error') && <div className={styles.errorBanner} role="alert"><AgentErrorDetail error={error} onRetry={onRetryError === null ? undefined : onRetryError ?? (!loading ? () => onRetry ? onRetry() : onSubmit() : undefined)}/></div>}
       <div className={styles.composer} data-tooltip-elevated="">
         {mentionData ? (
           <AgentMentionInput

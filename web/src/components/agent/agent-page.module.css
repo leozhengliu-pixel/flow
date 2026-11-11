@@ -665,6 +665,8 @@
   text-overflow: ellipsis;
 }
 .toolCallError .toolCallRow { color: var(--theme-text-secondary); }
+/* A write call that failed: muted, never the danger color (its text says what did not happen). */
+.toolCallFailed .toolCallRow { color: var(--theme-text-tertiary); }
 .toolCallErrorText {
   margin: 6px 0 0;
   color: var(--theme-text-secondary);

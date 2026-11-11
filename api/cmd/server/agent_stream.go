@@ -340,11 +340,12 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		// Unlike a browser stream, a DM is owned by a renewable queue lease.
 		parent = r.Context()
 	}
-	runCtx, cancelRun := context.WithCancel(parent)
-	defer cancelRun()
-	release := s.registerAgentRun(workspaceKey(r), session.ID, cancelRun)
+	runCtx, cancelRun := context.WithCancelCause(parent)
+	defer cancelRun(nil)
+	// A stop (stopAgentRun) cancels with errAgentReplyStopped, so the reply is saved as stopped, not interrupted.
+	release := s.registerAgentRun(workspaceKey(r), session.ID, func() { cancelRun(errAgentReplyStopped) })
 	defer release()
-	r = r.WithContext(runCtx)
+	r = r.WithContext(withAgentRunContext(runCtx))
 	if writer != nil {
 		writer.lenient = true
 	}
@@ -420,7 +421,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	connectorCtx, _, err := s.withConnectorTools(r.Context(), data, connectorContext)
 	r = r.WithContext(connectorCtx)
 	if err != nil {
-		return s.persistAgentFailure(r, *session, messageID, "", parts, started, err)
+		return s.persistAgentFailure(r, *session, messageID, "", parts, started, agentReasonRunFailed, err)
 	}
 	emit := func(event agentProviderEvent) error {
 		streamBytes += len(event.Delta)
@@ -520,7 +521,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	// The user answered an approval the previous reply stopped on: run the held calls (or drop them) first.
 	resumed, err := s.resumeAgentApproval(r, data, session, messageID, writer, &parts, partIndex)
 	if err != nil {
-		return s.persistAgentFailure(r, *session, messageID, "", parts, started, err)
+		return s.persistAgentFailure(r, *session, messageID, "", parts, started, agentReasonRunFailed, err)
 	}
 	messages = append(messages, resumed...)
 	finalText := ""
@@ -609,7 +610,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				failureRequest = r.Clone(context.WithoutCancel(r.Context()))
 			}
-			return s.persistAgentFailure(failureRequest, *session, messageID, finalText, parts, started, err)
+			return s.persistAgentFailure(failureRequest, *session, messageID, finalText, parts, started, agentTurnFailureReason(err), err)
 		}
 		if wrapUp && len(turn.ToolCalls) > 0 {
 			// The last word calls no tools, even when the provider ignored tool_choice: its streamed rows go.
@@ -693,7 +694,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				return domain.AgentSession{}, err
 			}
 			if textApprovalRetried {
-				return s.persistAgentFailure(r, *session, messageID, finalText, parts, started, errors.New(agentTextApprovalError))
+				return s.persistAgentFailure(r, *session, messageID, finalText, parts, started, agentReasonTextApproval, errors.New(agentTextApprovalError))
 			}
 			textApprovalRetried = true
 			messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, Reasoning: turn.Reasoning}, agentProviderMessage{Role: "user", Content: agentTextApprovalNudge})
@@ -1063,8 +1064,14 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		// The reply's text (and what the model sees of it later) ends with the question; the part draws its options.
 		finalText = strings.TrimSpace(strings.TrimSpace(finalText) + "\n\n" + asked)
 	}
-	if strings.TrimSpace(finalText) == "" {
-		return s.persistAgentFailure(r, *session, messageID, finalText, parts, started, fmt.Errorf("Flow Agent provider returned an empty response"))
+	outcome := domain.AgentReplyOutcome{Status: agentOutcomeCompleted}
+	if strings.TrimSpace(finalText) == "" && !truncated {
+		// An empty answer does not fail a run that ended normally. Like the reference app, an empty turn shows
+		// nothing (no error row, no Retry); the reason says whether its tool work ran.
+		outcome.Reason = agentReasonEmptyResponse
+		if agentReplyDidWork(parts) {
+			outcome.Reason = agentReasonNoReplyText
+		}
 	}
 	// Links to this workspace's pages under a made-up host point at the app instead.
 	linkBase := agentLinkBaseURL(r)
@@ -1085,12 +1092,13 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	// stays and the error row offers Retry).
 	if truncated {
 		parts = append(parts, domain.AgentMessagePart{ID: messageID + "_error", Type: "error", Text: agentOutputLimitError, Status: "error"})
+		outcome = domain.AgentReplyOutcome{Status: agentOutcomeFailed, Reason: agentReasonOutputLimit}
 	}
 	// Title generation is deliberately not on the reply's critical path. The
 	// browser refreshes the title after completion while this goroutine persists
 	// it independently, so a slow title model cannot delay the first answer.
 	_ = titleDone
-	return s.persistAgentCompletion(r, *session, domain.AgentMessage{ID: messageID, Role: "assistant", Content: strings.TrimSpace(finalText), Parts: parts, DurationMS: time.Since(started).Milliseconds(), CreatedAt: time.Now().UTC()})
+	return s.persistAgentCompletion(r, *session, domain.AgentMessage{ID: messageID, Role: "assistant", Content: strings.TrimSpace(finalText), Parts: parts, DurationMS: time.Since(started).Milliseconds(), CreatedAt: time.Now().UTC(), Outcome: &outcome})
 }
 
 // agentChatPrompt is what a chat reply starts from: the system prompt and the conversation so far (with the latest
@@ -1555,7 +1563,8 @@ func (s *server) persistAgentCompletion(r *http.Request, session domain.AgentSes
 		} else {
 			current.Messages = append(current.Messages, message)
 		}
-		data.AgentActivities = append(data.AgentActivities, domain.AgentActivity{ID: idgen.New("agent_activity_"), SessionID: session.ID, Type: "response", Status: "completed", Body: message.Content, Metadata: map[string]any{"durationMs": message.DurationMS, "partCount": len(message.Parts)}, CreatedAt: message.CreatedAt, UpdatedAt: message.CreatedAt})
+		// The activity says how the run ended (agent_reply_outcome.go), not only that the reply was saved.
+		data.AgentActivities = append(data.AgentActivities, agentReplyActivity(session.ID, message, nil))
 		current.UpdatedAt = message.CreatedAt
 		completed = *current
 		return nil
@@ -1563,22 +1572,30 @@ func (s *server) persistAgentCompletion(r *http.Request, session domain.AgentSes
 	return completed, err
 }
 
-func (s *server) persistAgentFailure(r *http.Request, session domain.AgentSession, messageID, text string, parts []domain.AgentMessagePart, started time.Time, cause error) (domain.AgentSession, error) {
+// persistAgentFailure saves a reply that did not finish: failed (reasonCode names the cause), stopped by its owner,
+// or interrupted (its run was canceled by something else, such as a chat platform's lease that ran out).
+func (s *server) persistAgentFailure(r *http.Request, session domain.AgentSession, messageID, text string, parts []domain.AgentMessagePart, started time.Time, reasonCode string, cause error) (domain.AgentSession, error) {
+	canceled := errors.Is(cause, context.Canceled)
+	stopped := canceled && agentReplyStoppedByOwner(r.Context())
 	// Tool calls that never finished get a result, so the next message in this chat is a valid conversation.
-	settleInterruptedAgentParts(parts, errors.Is(cause, context.Canceled))
+	settleInterruptedAgentParts(parts, canceled)
 	for index := range parts {
 		if parts[index].Status == "running" {
 			parts[index].Status = "error"
 		}
 	}
 	reason := cause.Error()
-	if errors.Is(cause, context.Canceled) {
-		reason = "Generation stopped"
+	outcome := domain.AgentReplyOutcome{Status: agentOutcomeFailed, Reason: firstNonEmpty(reasonCode, agentReasonRunFailed)}
+	switch {
+	case stopped:
+		reason, outcome = "Generation stopped", domain.AgentReplyOutcome{Status: agentOutcomeCanceled, Reason: agentReasonUserStop}
+	case canceled:
+		reason, outcome = agentReplyInterrupted, domain.AgentReplyOutcome{Status: agentOutcomeInterrupted, Reason: agentReasonConnectionLost}
 	}
 	parts = append(parts, domain.AgentMessagePart{ID: messageID + "_error", Type: "error", Text: reason, Status: "error"})
 	// Always save the failed reply (with its error) so the question never
 	// looks like it's still waiting for an answer when the chat is reopened.
-	_, _ = s.persistAgentCompletion(r, session, domain.AgentMessage{ID: messageID, Role: "assistant", Content: strings.TrimSpace(text), Parts: parts, DurationMS: time.Since(started).Milliseconds(), CreatedAt: time.Now().UTC()})
+	_, _ = s.persistAgentCompletion(r, session, domain.AgentMessage{ID: messageID, Role: "assistant", Content: strings.TrimSpace(text), Parts: parts, DurationMS: time.Since(started).Milliseconds(), CreatedAt: time.Now().UTC(), Outcome: &outcome})
 	return domain.AgentSession{}, cause
 }
 

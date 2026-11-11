@@ -173,6 +173,11 @@ func loopRetry(ctx context.Context, limits loopRunLimits, call func() error) (in
 
 // loopFailureReasons are the failure reason codes runs and replies store. The
 // web app labels each one (REASON_LABELS in web/src/components/loops/loop-run-status.ts).
+// no_output means a required output of the run's output contract (a document,
+// comment, issue or status update) was not written; it says nothing about the
+// reply's text, which is empty_response (no text and no tool call),
+// reasoning_only or output_truncated. A summary that describes a change is not
+// the change: only the run's tool records count (acceptLoopRun).
 var loopFailureReasons = []string{"cancelled", "interrupted", "timeout", "provider_timeout", "provider_error", "empty_response", "output_truncated", "reasoning_only", "stream_error", "tool_error", "budget_exhausted", "no_output", "incomplete", "unavailable", "error"}
 
 // classifyLoopRunFailure maps how a run ended to its status, failure reason
@@ -850,9 +855,9 @@ func acceptLoopRun(run *domain.LoopRun, ending *loopRunEnding) (string, string, 
 		call = failed(func(domain.LoopRunToolCall) bool { return true })
 	}
 	if call != nil {
-		return "needs_review", "tool_error", fmt.Sprintf("No output produced: expected %s, but %s failed: %s", strings.Join(missing, " and "), firstNonEmpty(call.Label, call.Name), strings.TrimSpace(call.Error)) + claimed
+		return "needs_review", "tool_error", fmt.Sprintf("Required output missing: expected %s, but %s failed: %s", strings.Join(missing, " and "), firstNonEmpty(call.Label, call.Name), strings.TrimSpace(call.Error)) + claimed
 	}
-	message := fmt.Sprintf("No output produced: the loop's instructions call for %s, but the run made none", strings.Join(missing, " and ")) + note
+	message := fmt.Sprintf("Required output missing: the loop's instructions call for %s, but the run made none", strings.Join(missing, " and ")) + note
 	switch {
 	case skipped:
 		message += fmt.Sprintf(" (the agent skipped the run — %s — but the instructions name no skip condition)", run.Summary.SkipReason)

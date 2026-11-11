@@ -6,6 +6,8 @@
  */
 import type { AgentMessage, AgentToolCall } from "@/types/flow"
 import phaseTemplates from "./agent-phase-titles.json"
+// The Flow tools that change data, as the server classifies them (kept current by TestAgentWriteToolNamesFixtureCurrent).
+import writeToolNames from "./agent-write-tool-names.json"
 
 type Translate = (source: string) => string
 
@@ -91,6 +93,37 @@ export const UNKNOWN_CONNECTOR_TOOL = "a connector tool"
 
 /** The opaque name the server gives a connector tool: external_ and 32 hex digits. */
 const CONNECTOR_HASH_NAME = /^external_[0-9a-f]{32}$/
+
+/**
+ * Labels of a write call that failed, by the verb of its done label: what did not happen ("Couldn't update issue").
+ * {subject} is the rest of the done label. A failed write is never labelled as done.
+ */
+export const CHAT_TOOL_FAILED_VERBS: Record<string, string> = {
+  Created: "Couldn't create {subject}", Updated: "Couldn't update {subject}", Deleted: "Couldn't delete {subject}",
+  Saved: "Couldn't save {subject}", Added: "Couldn't add {subject}", Archived: "Couldn't archive {subject}",
+  Restored: "Couldn't restore {subject}", Triaged: "Couldn't triage {subject}", Started: "Couldn't start {subject}",
+  Merged: "Couldn't merge {subject}", Prepared: "Couldn't prepare {subject}", Submitted: "Couldn't submit {subject}",
+  Resolved: "Couldn't resolve {subject}", Logged: "Couldn't log {subject}", Ran: "Couldn't run {subject}",
+}
+
+/** The failed label of a write without a subject ("Reacted"). */
+export const CHAT_TOOL_FAILED_BARE: Record<string, string> = { Reacted: "Couldn't react" }
+
+const WRITE_TOOLS = new Set<string>(writeToolNames)
+
+/** Whether a chat tool call is a Flow tool that changes data (create, save, update, delete, comment…). */
+export function isAgentWriteTool(call: Pick<AgentToolCall, "name" | "remoteTool">) {
+  return !call.remoteTool && WRITE_TOOLS.has(call.name.replace(/^mcp__flow\./, ""))
+}
+
+/** A Flow write tool call that failed: what it did not do, translated ("Couldn't update issue"); its target shows beside it. */
+export function toolFailedLabel(name: string, t: Translate, args?: Record<string, unknown>) {
+  const done = toolStatusLabel(name, false, source => source, args)
+  if (CHAT_TOOL_FAILED_BARE[done]) return t(CHAT_TOOL_FAILED_BARE[done])
+  const [, verb = "", subject = ""] = /^(\S+) (.+)$/.exec(done) ?? []
+  const template = CHAT_TOOL_FAILED_VERBS[verb]
+  return template ? fillSubject(template, subject, t) : fillSubject(CHAT_TOOL_FAILED_VERBS.Ran, name.replace(/^mcp__flow\./, "").replaceAll("_", " "), t)
+}
 
 /** A running or finished chat tool call's label, translated. */
 export function toolStatusLabel(name: string, running: boolean, t: Translate, args?: Record<string, unknown>, argumentsPending = false, connector?: ConnectorToolRef) {

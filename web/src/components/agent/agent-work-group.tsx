@@ -3,7 +3,7 @@ import type { AgentMessage, AgentMessageAttachment, AgentToolCall } from "@/type
 import { useI18n } from "@/i18n/i18n";
 import { AgentRichText } from "./agent-rich-text";
 import { AgentErrorDetail } from "./agent-error-detail";
-import { isProviderReasoning, readFileName, toolStatusLabel, translatePhaseTitle, translateToolTitle, workingLabel } from "./agent-step-labels";
+import { isAgentWriteTool, isProviderReasoning, readFileName, toolFailedLabel, toolStatusLabel, translatePhaseTitle, translateToolTitle, workingLabel } from "./agent-step-labels";
 import styles from "./agent-page.module.css";
 import workStyles from "./agent-work-group.module.css";
 
@@ -21,15 +21,15 @@ export function AgentWorkGroup({ message, parts: allParts, onToolApproval, appro
     // tool rows and explicit progress steps.
     !(settled && part.type === "step" && part.id.includes("_phase_")) &&
     (part.type !== "toolCall" || Boolean(part.toolCall?.name) || !settled) && part.toolCall?.name !== "ask_question");
-  // A failed call is an implementation detail once the model has retried it successfully.
-  const parts = visibleParts.filter((part, index) => {
-    if (part.type !== "toolCall" || part.toolCall?.status !== "error") return true;
-    const name = part.toolCall.name;
-    return !visibleParts.slice(index + 1).some(next => next.type === "toolCall" && next.toolCall?.name === name && next.toolCall.status === "completed");
-  });
+  // A failed call is an implementation detail once the model has run the same call again (same tool, same target)
+  // and it succeeded; a later success of the tool on another target recovers nothing.
+  const retries = toolCallRetries(visibleParts);
+  const parts = visibleParts.filter(part => !(part.toolCall && retries.get(part.toolCall)?.recovered));
   // A finished reply (older stopped chats saved calls as still running) is never "working…".
   const running = forceRunning || !settled && parts.some(part => part.status === "running" || part.status === "pending" || part.toolCall?.status === "running" || part.toolCall?.status === "pending");
-  const failed = parts.some(part => part.status === "error" || part.toolCall?.status === "error");
+  // Like the reference app, a tool call that failed is an ordinary step (the reply's text says what happened); only
+  // a step that is not a tool call (a progress step marked failed) styles the group as failed.
+  const failed = parts.some(part => part.type !== "toolCall" && part.status === "error");
   const [open, setOpen] = useState(running || failed);
   // When the turn starts, fails or (with collapseWhenDone) finishes, the group follows; the user's own toggle stands otherwise.
   const followKey = `${collapseWhenDone}|${failed}|${running}`;
@@ -57,7 +57,7 @@ export function AgentWorkGroup({ message, parts: allParts, onToolApproval, appro
         ? <div className={styles.stepRow} key={part.id}><span data-i18n-ignore>{translatePhaseTitle(part.title ?? "", t)}</span>{part.text && <div className={styles.reasoningRow}><AgentReasoningText text={part.text}/></div>}</div>
         : part.type === "reasoning"
         ? <div className={styles.reasoningRow} key={part.id}>{part.status === "running" && !part.text && <span className={styles.workShimmer}>{t("Thinking…")}</span>}{part.text && <AgentReasoningText text={part.text}/>}</div>
-        : part.toolCall ? <AgentToolCallItem key={part.id} attachments={attachments} part={settled ? settledToolPart(part) : part} onApproval={onToolApproval} approvalBusy={approvalBusy}/> : null)}
+        : part.toolCall ? <AgentToolCallItem key={part.id} attachments={attachments} part={settled ? settledToolPart(part) : part}  onApproval={onToolApproval} approvalBusy={approvalBusy}/> : null)}
     </div>
   </details>;
 }
@@ -79,20 +79,73 @@ function AgentToolCallItem({ part, onApproval, approvalBusy, attachments }: { at
   const running = call.status === "running" || call.status === "pending";
   const detail = readableToolDetail(call.arguments, call.result, call.name, attachments);
   const approvalPending = call.status === "pending" && Boolean(call.approvalId);
-  const failed = call.status === "error";
-  const failedLabel = failed ? t("Couldn't complete this step — retried") : "";
-  return <div className={`${styles.toolCall} ${failed ? styles.toolCallError : ""}`}>
-    <div className={styles.toolCallRow} title={failed ? undefined : call.error || undefined}><span className={running ? styles.workShimmer : undefined} data-i18n-ignore>{failed ? failedLabel : call.title && !running ? translateToolTitle(call.title, t, call) : toolStatusLabel(call.name, running, t, call.arguments, call.status === "running", call)}</span>{!failed && detail && <span data-i18n-ignore>{detail}</span>}</div>
+  // A read call that failed reads like any finished step (its done label and target), like the reference app: the
+  // reply's text says what went wrong and the raw error stays on hover. A write call that failed never reads as done:
+  // it says what did not happen ("Couldn't update issue AGE-1"), muted, never "retried". A step a finished reply never
+  // completed (`notRecorded`) adds a short note.
+  const notRecorded = (part as SettledToolPart).completionNotRecorded === true || (call.status === "error" && call.error === STEP_NOT_RECORDED);
+  const failedWrite = call.status === "error" && isAgentWriteTool(call);
+  const label = failedWrite ? toolFailedLabel(call.name, t, call.arguments)
+    : call.title && !running ? translateToolTitle(call.title, t, call) : toolStatusLabel(call.name, running, t, call.arguments, call.status === "running", call);
+  // A failed write names what it tried to change (AGE-1), not a value it would have written (the new title).
+  const shownDetail = failedWrite ? writeCallReference(call.arguments) ?? detail : detail;
+  return <div className={`${styles.toolCall}${failedWrite ? ` ${styles.toolCallFailed}` : ""}`} data-tool-failed={failedWrite ? "" : undefined}>
+    <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined} data-i18n-ignore>{label}</span>{shownDetail && <span data-i18n-ignore>{shownDetail}</span>}</div>
     {approvalPending && <div className={styles.approvalPrompt}><span>{t("Waiting for approval")}</span><span className={styles.approvalActions}><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "approve")} type="button">{t("Approve tool")}</button></span></div>}
-    {failed && call.error && <div className={styles.toolCallErrorText} role="alert"><AgentErrorDetail error={call.error}/></div>}
+    {notRecorded && <div className={styles.toolCallErrorText}><AgentErrorDetail error={call.error ?? STEP_NOT_RECORDED}/></div>}
   </div>;
 }
 
+/** The record a write call targets, from its arguments: an identifier (AGE-1) or id, when it names one. */
+function writeCallReference(argumentsJSON: AgentToolCall["arguments"]): string | undefined {
+  let value: unknown = argumentsJSON;
+  if (typeof value === "string") {
+    try { value = JSON.parse(value); } catch { return undefined; }
+  }
+  if (!value || typeof value !== "object") return undefined;
+  const args = value as Record<string, unknown>;
+  for (const key of ["identifier", "issueIdentifier", "issueId", "issue", "id"]) {
+    const reference = args[key];
+    if (typeof reference === "string" && reference.trim()) return reference.trim();
+  }
+  return undefined;
+}
+
+/**
+ * Failed calls the reply ran again later in the turn: the same tool on the same target (its arguments, ignoring key
+ * order). `recovered` when such a later attempt completed (the failed attempt is then left out, as a repeat). A call
+ * whose arguments are unknown is never matched, and a success on another target recovers nothing.
+ */
+function toolCallRetries(parts: NonNullable<AgentMessage["parts"]>): Map<AgentToolCall, { recovered: boolean }> {
+  const retries = new Map<AgentToolCall, { recovered: boolean }>();
+  parts.forEach((part, index) => {
+    const call = part.type === "toolCall" ? part.toolCall : undefined;
+    if (!call || call.status !== "error" || !call.name || !call.arguments) return;
+    const target = toolCallTarget(call);
+    const later = parts.slice(index + 1).flatMap(next => next.type === "toolCall" && next.toolCall && next.toolCall.id !== call.id && next.toolCall.name === call.name && next.toolCall.arguments && toolCallTarget(next.toolCall) === target ? [next.toolCall] : []);
+    if (later.length) retries.set(call, { recovered: later.some(next => next.status === "completed") });
+  });
+  return retries;
+}
+
+function toolCallTarget(call: AgentToolCall) {
+  return stableJSON(call.arguments);
+}
+
+function stableJSON(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJSON).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJSON((value as Record<string, unknown>)[key])}`).join(",")}}`;
+  return JSON.stringify(value) ?? "null";
+}
+
+const STEP_NOT_RECORDED = "Stopped before this step finished.";
+type SettledToolPart = NonNullable<AgentMessage["parts"]>[number] & { completionNotRecorded?: boolean };
+
 /** A step a finished reply never completed (stopped mid-call in an older chat) reads as stopped, not as running. */
-function settledToolPart(part: NonNullable<AgentMessage["parts"]>[number]) {
+function settledToolPart(part: NonNullable<AgentMessage["parts"]>[number]): SettledToolPart {
   const call = part.toolCall;
   if (!call || (call.status !== "running" && call.status !== "pending") || call.approvalId) return part;
-  return { ...part, status: "error" as const, toolCall: { ...call, status: "error" as const, error: call.error || "Stopped before this step finished." } };
+  return { ...part, status: "error" as const, completionNotRecorded: true, toolCall: { ...call, status: "error" as const, error: call.error || STEP_NOT_RECORDED } };
 }
 
 /** Step subtitle: the looked-up entity's name when the result has one, never a bare internal id (project_123…). */

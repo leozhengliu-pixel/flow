@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
 import { test } from 'node:test'
 import { newRunContext } from '../src/context.js'
-import { allowlisted, approvedMeta, connectorToolTimeoutMs, flowMcpServer, flowToolTimeoutMs } from '../src/flow-mcp.js'
+import { allowlisted, approvedMeta, connectorToolTimeoutMs, flowMcpServer, flowToolTimeoutMs, idempotencyKey } from '../src/flow-mcp.js'
 import { approvalKind } from '../src/policy.js'
 
 // Connector tools come from Flow's /mcp (api/cmd/server/agent_runtime_connectors.go): one whose connector is set to
@@ -68,4 +69,67 @@ test('a run-token allowlist admits connector tools through external_*', () => {
   assert.ok(allowlisted(['get_issue', 'external_*'], 'external_a'))
   assert.ok(!allowlisted(['external_*'], 'save_issue'))
   assert.ok(allowlisted(['external_a'], 'external_a'))
+})
+
+// Flow's /mcp answers a repeated write of a run with the first result when the call carries an Idempotency-Key
+// (api/cmd/server/mcp.go callMCPRunTool): each call of a run sends "<runId>:<callId>:<tool+arguments digest>".
+test('each call of a run carries its Idempotency-Key header, keyed by run, call id, tool and arguments', async () => {
+  const seen: { method: string; key?: string; meta?: unknown }[] = []
+  const http = createServer((request, response) => {
+    let body = ''
+    request.on('data', chunk => { body += chunk })
+    request.on('end', () => {
+      if (request.method !== 'POST') { response.writeHead(405).end(); return }
+      const message = JSON.parse(body)
+      seen.push({ method: message.method, key: request.headers['idempotency-key'] as string | undefined, meta: message.params?._meta })
+      if (message.id === undefined) { response.writeHead(202).end(); return }
+      const result = message.method === 'initialize'
+        ? { protocolVersion: message.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'flow', version: 'test' } }
+        : message.method === 'tools/list'
+          ? { tools: [{ name: 'save_issue', inputSchema: { type: 'object' } }] }
+          : { content: [{ type: 'text', text: 'ok' }], isError: false }
+      response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }))
+    })
+  })
+  await new Promise<void>(resolve => http.listen(0, '127.0.0.1', resolve))
+  const port = (http.address() as { port: number }).port
+  const server = flowMcpServer(`http://127.0.0.1:${port}`, 'flowrun_test', { runId: 'agent_run_1' }) as any
+  try {
+    await server.connect()
+    const context = newRunContext('s', 'file two bugs', [])
+    // Two calls of one turn with the same tool and arguments are two calls (each its own key).
+    context.turns.push([
+      { callId: 'call_a', name: 'save_issue', arguments: '{"title":"Bug","team":"DEV"}' },
+      { callId: 'call_b', name: 'save_issue', arguments: '{"team":"DEV","title":"Bug"}' },
+    ])
+    const runContext = { context }
+    const args = { team: 'DEV', title: 'Bug' }
+    const first = await server.toolMetaResolver({ runContext, serverName: 'flow', toolName: 'save_issue', arguments: args })
+    const second = await server.toolMetaResolver({ runContext, serverName: 'flow', toolName: 'save_issue', arguments: args })
+    assert.equal(first['flow/idempotency-key'], idempotencyKey('agent_run_1', 'call_a', 'save_issue', args))
+    assert.equal(second['flow/idempotency-key'], idempotencyKey('agent_run_1', 'call_b', 'save_issue', args))
+    // A call the model did not make in a recorded turn goes out without a key (Flow then runs it as before).
+    assert.equal(await server.toolMetaResolver({ runContext, serverName: 'flow', toolName: 'save_issue', arguments: { title: 'Other' } }), undefined)
+    await server.callToolResult('save_issue', args, first)
+    await server.callToolResult('save_issue', args, { ...second, [approvedMeta]: true })
+    await server.callToolResult('get_issue', { id: 'DEV-1' })
+    const calls = seen.filter(request => request.method === 'tools/call')
+    assert.deepEqual(calls.map(call => call.key), [first['flow/idempotency-key'], second['flow/idempotency-key'], undefined])
+    assert.match(calls[0].key!, /^agent_run_1:call_a:[0-9a-f]{16}$/)
+    // The key is a header only: the call's _meta keeps what Flow reads (the approval) and nothing else.
+    assert.equal(calls[0].meta, undefined)
+    assert.deepEqual(calls[1].meta, { [approvedMeta]: true })
+    // The handshake and the tool list carry no key.
+    assert.ok(seen.filter(request => request.method !== 'tools/call').every(request => request.key === undefined))
+  } finally {
+    await server.close().catch(() => {})
+    http.close()
+  }
+})
+
+test('an Idempotency-Key stays within the 160 characters Flow accepts', () => {
+  const key = idempotencyKey('agent_run_'.padEnd(120, 'x'), 'call_'.padEnd(80, 'y'), 'save_issue', { title: 'Bug' })
+  assert.ok(key.length <= 160)
+  assert.equal(key, idempotencyKey('agent_run_'.padEnd(120, 'x'), 'call_'.padEnd(80, 'y'), 'save_issue', { title: 'Bug' }))
+  assert.notEqual(idempotencyKey('r', 'c', 'save_issue', { title: 'A' }), idempotencyKey('r', 'c', 'save_issue', { title: 'B' }))
 })

@@ -151,8 +151,9 @@ describe('agent page composer', () => {
     const user = userEvent.setup()
     await user.type(screen.getByRole('textbox', { name: 'Send a message to Flow AI' }), 'Think first')
     await user.click(screen.getByRole('button', { name: 'Send message' }))
-    await waitFor(() => expect(api.getAgentSession).toHaveBeenCalledWith('session-opened'))
     await waitFor(() => expect(screen.getByText('Thinking…')).toBeVisible())
+    // The page streams this chat itself: its stream is newer than any read, so the chat is not read meanwhile.
+    expect(api.getAgentSession).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Stop responding' }))
   })
 

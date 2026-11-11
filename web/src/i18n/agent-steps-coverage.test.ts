@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { AGENT_ERROR_MESSAGES } from '@/components/agent/agent-error-detail'
-import { CHAT_CONNECTOR_TOOL_LABELS, CHAT_TOOL_FALLBACK, CHAT_TOOL_LABELS, CHAT_TOOL_UPDATE_LABELS, CHAT_TOOL_VERBS, LOOP_CONNECTOR_TOOL_TEMPLATE, LOOP_TOOL_TEMPLATES, PHASE_TITLE_TEMPLATES, toolStatusLabel, translatePhaseTitle, translateToolTitle } from '@/components/agent/agent-step-labels'
+import { CHAT_CONNECTOR_TOOL_LABELS, CHAT_TOOL_FAILED_BARE, CHAT_TOOL_FAILED_VERBS, CHAT_TOOL_FALLBACK, CHAT_TOOL_LABELS, CHAT_TOOL_UPDATE_LABELS, CHAT_TOOL_VERBS, LOOP_CONNECTOR_TOOL_TEMPLATE, LOOP_TOOL_TEMPLATES, PHASE_TITLE_TEMPLATES, toolFailedLabel, toolStatusLabel, translatePhaseTitle, translateToolTitle } from '@/components/agent/agent-step-labels'
+// Kept equal to the server's write tools by TestAgentWriteToolNamesFixtureCurrent (Go).
+import writeToolNames from '@/components/agent/agent-write-tool-names.json'
 // Kept equal to api/cmd/server/flow_mcp_tools.json by TestAgentToolNamesFixtureCurrent (Go).
 import toolNames from '@/components/agent/agent-tool-names.json'
 import { FAILURE_MESSAGES, OUTPUT_LABELS, TRIGGER_REASON_NONE, TRIGGER_REASON_TEXTS, triggerReasonTemplate } from '@/components/loops/loop-run-labels'
@@ -37,6 +39,23 @@ describe('agent step and loop run vocabulary', () => {
         }
       }
     }
+  })
+
+  it('words every failed Flow write as what did not happen, in English and Chinese', () => {
+    for (const source of [...Object.values(CHAT_TOOL_FAILED_VERBS), ...Object.values(CHAT_TOOL_FAILED_BARE)]) expectTranslated(source)
+    expect(writeToolNames.length).toBeGreaterThan(40)
+    for (const name of writeToolNames) {
+      for (const args of [undefined, { id: 'x' }]) {
+        expect(toolFailedLabel(name, source => source, args), name).toMatch(/^Couldn't /)
+        const label = toolFailedLabel(name, translateToChinese, args)
+        expect(label, name).toMatch(/^未能/)
+        expect(englishWords(label), `${name}: ${label}`).toEqual([])
+      }
+    }
+    expect(toolFailedLabel('save_issue', translateToChinese, { id: 'AGE-99999' })).toBe('未能更新事项')
+    expect(toolFailedLabel('save_issue', source => source, { id: 'AGE-99999' })).toBe("Couldn't update issue")
+    expect(toolFailedLabel('save_document', source => source)).toBe("Couldn't save document")
+    expect(toolFailedLabel('delete_project', translateToChinese)).toBe('未能删除项目')
   })
 
   it('labels delete and customer tool rows the way the reference app words them', () => {

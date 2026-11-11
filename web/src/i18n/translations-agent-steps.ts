@@ -5,7 +5,26 @@
  */
 export const agentStepsZhCN: Record<string, string> = {
   "Drafted the loop": "已起草 Loop",
-  "Couldn't complete this step — retried": "此步骤未完成，已重试",
+  // A write call that failed: what did not happen (components/agent/agent-step-labels.ts CHAT_TOOL_FAILED_VERBS).
+  "Couldn't create {subject}": "未能创建{subject}",
+  "Couldn't update {subject}": "未能更新{subject}",
+  "Couldn't delete {subject}": "未能删除{subject}",
+  "Couldn't save {subject}": "未能保存{subject}",
+  "Couldn't add {subject}": "未能添加{subject}",
+  "Couldn't archive {subject}": "未能归档{subject}",
+  "Couldn't restore {subject}": "未能恢复{subject}",
+  "Couldn't triage {subject}": "未能分流{subject}",
+  "Couldn't start {subject}": "未能启动{subject}",
+  "Couldn't merge {subject}": "未能合并{subject}",
+  "Couldn't prepare {subject}": "未能准备{subject}",
+  "Couldn't submit {subject}": "未能提交{subject}",
+  "Couldn't resolve {subject}": "未能解决{subject}",
+  "Couldn't log {subject}": "未能记录{subject}",
+  "Couldn't run {subject}": "未能运行{subject}",
+  "Couldn't react": "未能添加表情回应",
+  // Chat notices: a chat that could not be read, or one that is gone (deleted, or no longer the viewer's).
+  "Couldn't load this chat.": "无法加载此对话。",
+  "This chat is no longer available.": "此对话已不可用。",
   // Chat tool labels: running and done.
   "Looking at issues…": "正在查看事项…",
   "Looked at issues": "已查看事项",
@@ -221,6 +240,11 @@ export const agentStepsZhCN: Record<string, string> = {
 
   // Subjects of tool labels built from tool names (flow_mcp_tools.json), under their own keys (subjectNoun).
   "subject:issue": "事项",
+  // Subjects only a failed write's label names ("Couldn't update document access").
+  "subject:project update": "项目更新",
+  "subject:document access": "文档访问权限",
+  "subject:inbox": "收件箱",
+  "subject:file request": "请求",
   "subject:coding session": "编码会话",
   "subject:issues": "事项",
   "subject:project": "项目",

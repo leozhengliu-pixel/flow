@@ -343,10 +343,36 @@ describe('LoopRunPage', () => {
     api.getLoopRun.mockResolvedValue(review)
     renderPage('run-4')
     expect(await screen.findByText('Needs review', { selector: 'strong' })).toBeVisible()
-    expect(screen.getByText('No output produced')).toBeVisible()
+    // no_output names the missing required output, not an empty reply: the run's reply is still shown.
+    expect(screen.getByText('Required output missing')).toBeVisible()
     expect(screen.getByText(/but the run made none/)).toBeVisible()
+    expect(screen.getByText('weekly')).toBeVisible()
+    expect(screen.queryByText('The agent did not write a reply.')).toBeNull()
     expect(screen.getAllByLabelText('Needs review').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'Cancel run' })).toBeNull()
+  })
+
+  it('says when a finished run has no reply, apart from its failure reason', async () => {
+    const empty: LoopRun = { ...completed, id: 'run-7', status: 'failed', failureReason: 'empty_response', error: 'Flow Agent returned an empty response', output: undefined, steps: [], toolCalls: [] }
+    api.listLoopRuns.mockResolvedValue([empty])
+    api.getLoopRun.mockResolvedValue(empty)
+    renderPage('run-7')
+    expect(await screen.findByText('This run recorded no work and no reply.')).toBeVisible()
+    expect(screen.getByText('The model returned an empty response')).toBeVisible()
+    expect(screen.queryByText('Required output missing')).toBeNull()
+
+    const quiet: LoopRun = { ...completed, id: 'run-8', status: 'needs_review', failureReason: 'empty_response', error: 'Model turns with no text and no tool call after the run\'s tool calls: 2 (stop reason completed).', output: undefined }
+    api.listLoopRuns.mockResolvedValue([quiet])
+    api.getLoopRun.mockResolvedValue(quiet)
+    cleanupAndRender('run-8')
+    expect(await screen.findByText('The agent did not write a reply.')).toBeVisible()
+
+    const cancelled: LoopRun = { ...completed, id: 'run-9', status: 'cancelled', failureReason: 'cancelled', error: 'Cancelled', output: undefined, steps: [], toolCalls: [] }
+    api.listLoopRuns.mockResolvedValue([cancelled])
+    api.getLoopRun.mockResolvedValue(cancelled)
+    cleanupAndRender('run-9')
+    expect(await screen.findByText('Cancelled before the agent did any work or wrote a reply.')).toBeVisible()
+    expect(screen.getByText('Run cancelled')).toBeVisible()
   })
 
   it('shows the output contract the run worked to and the work its agent listed as not done', async () => {

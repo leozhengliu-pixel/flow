@@ -77,6 +77,8 @@ export type SessionOptions = {
   systemPrompt: string
   /** Run token for /mcp (defaults to the worker's configured token). */
   flowToken?: string
+  /** The Flow run this session runs: its /mcp calls carry Idempotency-Keys under it (flow-mcp.ts). */
+  runId?: string
   /** Run-token tool allowlist. */
   allowlist?: string[]
   maxTurns?: number
@@ -157,7 +159,7 @@ export class FlowAgentSession {
       this.elicitations = new ConnectorElicitationWatcher(options.elicitations, elicitation => this.sink?.({ type: 'connector.elicitation', at: Date.now(), elicitation }))
     }
     const watcher = this.elicitations
-    this.mcp = options.mcpServers ?? [flowMcpServer(config.flowUrl, options.flowToken ?? config.flowToken, { toolErrors: this.toolErrors, onConnectorCall: watcher ? () => watcher.begin() : undefined, serial: options.serialCalls })]
+    this.mcp = options.mcpServers ?? [flowMcpServer(config.flowUrl, options.flowToken ?? config.flowToken, { toolErrors: this.toolErrors, onConnectorCall: watcher ? () => watcher.begin() : undefined, serial: options.serialCalls, runId: options.runId })]
     if (options.hostedWebSearch) this.hostedSearch = hostedWebSearchTool(config.protocol)
     this.agent = new FlowAgent({
       name: 'Flow Agent',

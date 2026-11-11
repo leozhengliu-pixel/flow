@@ -1,5 +1,7 @@
 import { MCPServerStreamableHttp, type MCPToolFilterCallable } from '@openai/agents'
-import type { FlowRunContext } from './context.js'
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { createHash } from 'node:crypto'
+import type { FlowRunContext, TurnCall } from './context.js'
 import { isConnectorTool, ToolErrorFlags } from './run-guard.js'
 import { toolOffered, waitingTools } from './tool-groups.js'
 
@@ -28,6 +30,66 @@ export type FlowMcpOptions = {
   onConnectorCall?: () => () => unknown
   /** Run the calls one at a time, in the order the model made them (a loop run, as in-process). */
   serial?: boolean
+  /** The Flow run the token belongs to: each call carries an Idempotency-Key under it (idempotencyKey). */
+  runId?: string
+}
+
+/** A private `_meta` key that carries a call's Idempotency-Key from the meta resolver to the request; never sent. */
+const callKeyMeta = 'flow/idempotency-key'
+/** Flow refuses longer keys (api/cmd/server/mcp.go). */
+const maxIdempotencyKey = 160
+
+/** The Idempotency-Key of the call in flight in this async context (read by the fetch of its request). */
+const callKeys = new AsyncLocalStorage<string>()
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'null'
+}
+
+function parsedArguments(raw: string) {
+  try {
+    return JSON.parse(raw || '{}')
+  } catch {
+    return raw
+  }
+}
+
+/**
+ * A call's Idempotency-Key: "<runId>:<callId>:<digest of tool and arguments>". Like the in-process reply
+ * (agent_tool_once.go), only the same call (id, tool and arguments) is answered with an earlier run's result: some
+ * providers number call ids per response, so an id alone may name a new call. Flow keeps the result per run, so a
+ * retried or resumed attempt of the run that sends the same call again gets the first result instead of a second
+ * write.
+ */
+export function idempotencyKey(runId: string, callId: string, tool: string, args: unknown) {
+  const digest = createHash('sha256').update(`${tool}\u0000${canonicalJson(args ?? {})}`).digest('hex')
+  const key = `${runId}:${callId}:${digest.slice(0, 16)}`
+  if (key.length <= maxIdempotencyKey) return key
+  return `${runId.slice(0, 80)}:${createHash('sha256').update(`${runId}\u0000${callId}\u0000${digest}`).digest('hex')}`
+}
+
+/**
+ * The model's call this tool call runs: the latest turn's call of the tool with the same arguments that has not run
+ * yet in this process. The SDK hands the meta resolver the tool and arguments, not the call id; the model observer
+ * records every turn's calls (context.turns) before the runner runs them.
+ */
+const claimedCalls = new WeakMap<FlowRunContext, Set<string>>()
+function turnCall(context: FlowRunContext, tool: string, args: unknown): TurnCall | undefined {
+  const wanted = canonicalJson(args ?? {})
+  let claimed = claimedCalls.get(context)
+  if (!claimed) claimedCalls.set(context, (claimed = new Set()))
+  for (const turn of [...(context.turns ?? [])].reverse()) {
+    const call = turn.find(call => call.name === tool && !claimed.has(call.callId) && canonicalJson(parsedArguments(call.arguments)) === wanted)
+    if (call) {
+      claimed.add(call.callId)
+      return call
+    }
+  }
+  return undefined
 }
 
 /** Whether a run-token allowlist admits a tool (connector tools through `external_*` or by name). */
@@ -77,7 +139,14 @@ class FlowMcpServer extends MCPServerStreamableHttp {
     const timer = new AbortController()
     const handle = setTimeout(() => timer.abort(), timeoutMs)
     const signal = options?.signal ? AbortSignal.any([options.signal, timer.signal]) : timer.signal
+    // The call's Idempotency-Key goes out as a header (strictMcpFetch), not in the call's _meta.
+    const key = typeof meta?.[callKeyMeta] === 'string' ? meta[callKeyMeta] as string : undefined
+    if (meta && callKeyMeta in meta) {
+      const { [callKeyMeta]: _key, ...rest } = meta
+      meta = Object.keys(rest).length ? rest : undefined
+    }
     try {
+      if (key) return await callKeys.run(key, () => super.callToolResult(name, input, meta, { ...options, signal }))
       return await super.callToolResult(name, input, meta, { ...options, signal })
     } catch (error) {
       if (timer.signal.aborted && !options?.signal?.aborted) throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)} s`)
@@ -128,8 +197,16 @@ export function flowMcpServer(flowUrl: string, token: string, options: FlowMcpOp
     toolFilter: toolFilter as MCPToolFilterCallable,
     // A held call runs only after the person approved it (needsApproval), so a call of an always-ask tool carries
     // the approval.
-    toolMetaResolver: ({ runContext, toolName }) =>
-      (runContext.context as FlowRunContext).alwaysAskTools?.includes(toolName) ? { [approvedMeta]: true } : undefined,
+    // Each call of a run carries its Idempotency-Key (idempotencyKey), so a retried or resumed attempt does not write
+    // twice.
+    toolMetaResolver: ({ runContext, toolName, arguments: args }) => {
+      const context = runContext.context as FlowRunContext
+      const meta: Record<string, unknown> = {}
+      if (context.alwaysAskTools?.includes(toolName)) meta[approvedMeta] = true
+      const call = options.runId ? turnCall(context, toolName, args) : undefined
+      if (options.runId && call) meta[callKeyMeta] = idempotencyKey(options.runId, call.callId, toolName, args)
+      return Object.keys(meta).length ? meta : undefined
+    },
     errorFunction: ({ error }) => mcpErrorText(error),
     customDataExtractor: ({ isError, structuredContent }) => {
       const change = (structuredContent as Record<string, unknown> | undefined)?.change
@@ -155,6 +232,12 @@ export function mcpErrorText(error: unknown): string {
  * which the MCP spec (and the strict MCP client) rejects. Wrap arrays as `{ items }` until mcp.go does.
  */
 export const strictMcpFetch: typeof fetch = async (input, init) => {
+  const key = callKeys.getStore()
+  if (key) {
+    const headers = new Headers(init?.headers)
+    headers.set('Idempotency-Key', key)
+    init = { ...init, headers }
+  }
   const response = await fetch(input, init)
   if (!response.headers.get('content-type')?.includes('application/json')) return response
   const text = await response.text()

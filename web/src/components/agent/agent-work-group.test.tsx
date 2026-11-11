@@ -202,4 +202,114 @@ describe('AgentErrorDetail', () => {
     expect(screen.getByText('The agent ran into an error.')).toBeVisible()
     expect(container.querySelector('details')).not.toHaveAttribute('open')
   })
+
+  // Like the reference app: a failed tool call is an ordinary step (its done label; the reply's text says what went
+  // wrong), never "retried", and a success of the same tool on another target recovers nothing.
+  describe('failed steps and retries', () => {
+    const call = (id: string, name: string, args: Record<string, unknown>, status: 'completed' | 'error'): Parts[number] =>
+      ({ id, type: 'toolCall', status, toolCall: { id, name, arguments: args, status, ...(status === 'error' ? { error: 'Issue not found' } : { result: { identifier: String(args.id ?? args.title ?? '') } }) } })
+    const rows = (container: HTMLElement) => [...container.querySelectorAll('[class*="toolCallRow"]')].map(row => row.textContent)
+    const failedLook = (rendered: { container: HTMLElement }) => {
+      expect(rendered.container.textContent).not.toMatch(/retried|Couldn't complete|已重试|未完成/)
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(rendered.container.querySelector('[class*="toolCallError"]')).toBeNull()
+      expect(rendered.container.querySelector('details')!.className).not.toMatch(/workFailed/)
+    }
+
+    it('shows a failed call with its normal done label, no failed style and no "retried"', () => {
+      const rendered = renderGroup([call('t1', 'get_issue', { id: 'ENG-1' }, 'error')])
+      expect(rows(rendered.container)).toEqual(['Looked at issueENG-1'])
+      failedLook(rendered)
+      // The raw error stays available on hover.
+      expect(rendered.container.querySelector('[class*="toolCallRow"]')).toHaveAttribute('title', 'Issue not found')
+    })
+
+    it('never says "retried" for the same call run again either', () => {
+      const rendered = renderGroup([
+        call('t1', 'get_issue', { id: 'ENG-1', fields: ['title'] }, 'error'),
+        call('t2', 'get_issue', { fields: ['title'], id: 'ENG-1' }, 'error'),
+      ])
+      expect(rows(rendered.container)).toEqual(['Looked at issueENG-1', 'Looked at issueENG-1'])
+      failedLook(rendered)
+    })
+
+    it('leaves out a failed attempt the same call (same tool, same target) then completed', () => {
+      const rendered = renderGroup([
+        call('t1', 'get_issue', { id: 'ENG-1', fields: ['title'] }, 'error'),
+        call('t2', 'get_issue', { fields: ['title'], id: 'ENG-1' }, 'completed'),
+      ])
+      expect(rows(rendered.container)).toEqual(['Looked at issueENG-1'])
+    })
+
+    it('keeps a failed call when the same tool succeeded on another target', () => {
+      const rendered = renderGroup([
+        call('t1', 'get_issue', { id: 'ENG-1' }, 'error'),
+        call('t2', 'get_issue', { id: 'ENG-2' }, 'completed'),
+      ])
+      expect(rows(rendered.container)).toEqual(['Looked at issueENG-1', 'Looked at issueENG-2'])
+      failedLook(rendered)
+    })
+
+    it('keeps the steps that already succeeded when a later step fails', () => {
+      const rendered = renderGroup([
+        call('t1', 'create_document', { title: 'Release checklist' }, 'completed'),
+        call('t2', 'get_issue', { id: 'ENG-1' }, 'error'),
+      ])
+      expect(rows(rendered.container)).toHaveLength(2)
+      expect(rows(rendered.container)[0]).toContain('Release checklist')
+      failedLook(rendered)
+    })
+
+    // A failed write never reads as done: it says what did not happen, muted, without "retried" or a Retry.
+    it('words a failed write as what did not happen, with the raw error on hover', () => {
+      const rendered = renderGroup([call('t1', 'save_issue', { id: 'AGE-99999', priority: 2 }, 'error')])
+      expect(rows(rendered.container)).toEqual(["Couldn't update issueAGE-99999"])
+      expect(rendered.container.textContent).not.toContain('Updated issue')
+      expect(rendered.container.textContent).not.toMatch(/retried/i)
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(rendered.container.querySelector('[data-tool-failed]')!.className).toMatch(/toolCallFailed/)
+      expect(rendered.container.querySelector('[class*="toolCallError"]')).toBeNull()
+      expect(rendered.container.querySelector('[class*="toolCallRow"]')).toHaveAttribute('title', 'Issue not found')
+    })
+
+    it('words a failed create as not created', () => {
+      const rendered = renderGroup([call('t1', 'save_issue', { title: 'Release checklist' }, 'error')])
+      expect(rows(rendered.container)[0]).toMatch(/^Couldn't create issue/)
+    })
+
+    it('lets a later success of the same write on the same target supersede the failure', () => {
+      const rendered = renderGroup([
+        call('t1', 'save_issue', { id: 'AGE-1', priority: 2 }, 'error'),
+        call('t2', 'save_issue', { priority: 2, id: 'AGE-1' }, 'completed'),
+      ])
+      expect(rows(rendered.container)).toEqual(['Updated issueAGE-1'])
+      expect(rendered.container.querySelector('[data-tool-failed]')).toBeNull()
+    })
+
+    // A failed rename names the issue it tried to change, not the title it would have written.
+    it('names the record a failed write targeted, not the value it would have written', () => {
+      const rendered = renderGroup([call('t1', 'save_issue', { id: 'AGE-99999', title: 'test' }, 'error')])
+      expect(rows(rendered.container)).toEqual(["Couldn't update issueAGE-99999"])
+    })
+
+    it('keeps a failed write when the same tool succeeded on another target', () => {
+      const rendered = renderGroup([
+        call('t1', 'save_issue', { id: 'AGE-1', priority: 2 }, 'error'),
+        call('t2', 'save_issue', { id: 'AGE-2', priority: 2 }, 'completed'),
+      ])
+      expect(rows(rendered.container)).toEqual(["Couldn't update issueAGE-1", 'Updated issueAGE-2'])
+    })
+
+    it('words a failed write in Chinese', () => {
+      const rendered = renderGroup([call('t1', 'save_issue', { id: 'AGE-99999' }, 'error'), call('t2', 'delete_document', { id: 'Plan' }, 'error')], 'zh-CN')
+      expect(rows(rendered.container)).toEqual(['未能更新事项AGE-99999', '未能删除文档Plan'])
+    })
+
+    it('reads the same in Chinese', () => {
+      const rendered = renderGroup([call('t1', 'get_issue', { id: 'ENG-1' }, 'error'), call('t2', 'get_issue', { id: 'ENG-1' }, 'error')], 'zh-CN')
+      expect(rows(rendered.container)).toEqual(['已查看事项ENG-1', '已查看事项ENG-1'])
+      failedLook(rendered)
+    })
+  })
 })

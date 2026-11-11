@@ -408,14 +408,14 @@ func (s *server) chatDMInterruptSavedReply(l *chatDMReplyLease, dm chatDMRequest
 			return nil
 		}
 		s.stopAgentRun(p.Workspace, p.SessionID)
-		mutationCtx := store.WithMetadataFields(store.ContextWithActor(ctx, domain.User{ID: p.UserID}), "agentSessions")
+		mutationCtx := withAgentReplyFields(store.ContextWithActor(ctx, domain.User{ID: p.UserID}))
 		return s.store.MutateWorkspace(mutationCtx, p.Workspace, "agent.message_completed", p.SessionID, nil, func(data *domain.Bootstrap) error {
 			for index := range data.AgentSessions {
 				session := &data.AgentSessions[index]
 				if session.ID != p.SessionID || session.UserID != p.UserID {
 					continue
 				}
-				if interruptAgentLiveMessages(session, func(message domain.AgentMessage) bool {
+				if interruptAgentLiveMessages(data, session, agentReasonConnectionLost, func(message domain.AgentMessage) bool {
 					return message.ID == p.MessageID && !workerChatMessage(message.ID)
 				}) {
 					return nil

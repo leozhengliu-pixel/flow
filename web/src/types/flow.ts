@@ -3150,8 +3150,19 @@ export interface AgentMessage extends AgentChatMessage {
   createdAt: string;
   /** "streaming" while the reply is still being written on the server (its parts so far, waiting approvals included). */
   status?: "streaming";
+  /**
+   * How a finished assistant reply's run ended (api/cmd/server/agent_reply_outcome.go). Replies saved before
+   * outcomes were recorded have none: their error part tells a failed, stopped or interrupted one.
+   */
+  outcome?: AgentReplyOutcome;
   /** When a streaming reply was last saved. */
   updatedAt?: string;
+}
+/** How an assistant reply's run ended: saving the reply does not make it a success. */
+export interface AgentReplyOutcome {
+  status: "completed" | "failed" | "interrupted" | "canceled";
+  /** Machine-readable cause, e.g. "provider_error", "output_limit", "user_stop", "worker_lost"; on a completed reply "no_reply_text" (the work ran, no written answer) or "empty_response" (nothing came back; shown as nothing). */
+  reason?: string;
 }
 /** A rating and/or note about agent output (the reference app's "This was helpful" / "Leave feedback…"). */
 export interface AgentFeedback {
@@ -3275,6 +3286,13 @@ export interface AgentSession {
   origin?: "lark" | "feishu";
   /** The group's name, for a conversation started by mentioning the bot in a group. */
   originChat?: string;
+  /**
+   * Set by lists and the bootstrap on a summary sent without its messages: `messages` is empty and is not the
+   * conversation, which is read with GET /api/agent/sessions/{id}. A summary never replaces a copy that has them.
+   */
+  messagesOmitted?: boolean;
+  /** Client only: `messages` is an older full copy (a newer summary arrived); the conversation must be read again. */
+  needsDetailRefresh?: boolean;
 }
 export interface PersonalAgentSkill {
   id: UUID;

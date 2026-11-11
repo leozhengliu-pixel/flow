@@ -8,6 +8,19 @@ import { agentReplyInProgress, agentReplySignature } from "./agent-reply-progres
 /** How often a chat surface re-reads a reply that runs on the server without it. */
 export const AGENT_REPLY_FOLLOW_INTERVAL_MS = 2000;
 
+/**
+ * Reads in a row that may fail before a surface stops re-reading a reply on its own. The reply still shows as running
+ * (a connection problem changes nothing in the message; the workspace's Offline indicator says the rest), and it is
+ * read again when the browser comes back online, the tab is shown again, or a realtime push arrives.
+ */
+export const AGENT_REPLY_FOLLOW_MAX_FAILURES = 5;
+
+/** Re-reading a chat's reply stopped: its reads kept failing ("failed", paused), or the chat is gone ("gone"). */
+export type AgentReplyFollowLost = { sessionId: string; kind: "failed" | "gone" };
+
+/** The notice for a chat that is gone (deleted, or no longer the viewer's) while its reply was followed. */
+export const AGENT_CHAT_GONE_NOTICE = "This chat is no longer available.";
+
 /** Window event carrying a chat the realtime channel just re-read (`detail` is the AgentSession). */
 export const AGENT_SESSION_PUSHED_EVENT = "flow:agent-session-pushed";
 
@@ -39,7 +52,13 @@ export function useAgentReplyFollow({
   intervalMs?: number;
 }) {
   const id = session && !session.id.startsWith("pending-") ? session.id : undefined;
-  const following = Boolean(enabled && id && !streaming && agentReplyInProgress(session));
+  // Reads that failed in a row for one chat; at AGENT_REPLY_FOLLOW_MAX_FAILURES (or a chat that is gone) following stops.
+  const failures = useRef<{ sessionId?: string; count: number }>({ count: 0 });
+  const [lostState, setLost] = useState<AgentReplyFollowLost>();
+  const lost = lostState && lostState.sessionId === id ? lostState : undefined;
+  const following = Boolean(enabled && id && !streaming && lost?.kind !== "gone" && agentReplyInProgress(session));
+  // Failed reads pause the timer (bounded); the reply keeps its running state until a read says how it ended.
+  const polling = following && !lost;
   const listening = Boolean(enabled && id && !streaming);
   // Latest values for the timer and listeners, so a new callback or copy never restarts them.
   const latest = useLatestRef({ onUpdate, session, streaming });
@@ -57,15 +76,44 @@ export function useAgentReplyFollow({
   const generation = useRef(0);
   const read = useCallback(async (sessionId: string) => {
     const asked = ++generation.current;
-    const next = await getAgentSession(sessionId);
-    if (asked === generation.current) apply(next);
+    let next: AgentSession;
+    try {
+      next = await getAgentSession(sessionId);
+    } catch (reason) {
+      // Only the latest read counts; a chat that is gone, or reads failing again and again, stop the following (bounded).
+      if (asked !== generation.current) return;
+      if (failures.current.sessionId !== sessionId) failures.current = { sessionId, count: 0 };
+      if (chatGone(reason)) setLost({ sessionId, kind: "gone" });
+      else if (++failures.current.count >= AGENT_REPLY_FOLLOW_MAX_FAILURES) setLost({ sessionId, kind: "failed" });
+      return;
+    }
+    failures.current = { sessionId, count: 0 };
+    setLost(current => current?.sessionId === sessionId ? undefined : current);
+    if (asked === generation.current && next) apply(next);
   }, [apply]);
 
   useEffect(() => {
-    if (!following || !id) return;
-    const timer = window.setInterval(() => void read(id).catch(() => undefined), intervalMs);
+    if (!polling || !id) return;
+    const timer = window.setInterval(() => void read(id), intervalMs);
     return () => window.clearInterval(timer);
-  }, [following, id, intervalMs, read]);
+  }, [polling, id, intervalMs, read]);
+
+  // Paused after failed reads: back online, or the tab shown again, reads the reply once more (and resumes on success).
+  const paused = following && lost?.kind === "failed";
+  useEffect(() => {
+    if (!paused || !id) return;
+    const resume = () => {
+      if (document.visibilityState === "hidden") return;
+      failures.current = { sessionId: id, count: 0 };
+      void read(id);
+    };
+    window.addEventListener("online", resume);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      window.removeEventListener("online", resume);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, [id, paused, read]);
 
   useEffect(() => {
     if (!listening || !id) return;
@@ -73,6 +121,8 @@ export function useAgentReplyFollow({
       const next = (event as CustomEvent<AgentSession>).detail;
       if (next?.id !== id) return;
       generation.current++;
+      // News from the server: re-reading works again.
+      setLost(current => current?.sessionId === id && current.kind === "failed" ? undefined : current);
       apply(next);
     };
     window.addEventListener(AGENT_SESSION_PUSHED_EVENT, pushed);
@@ -81,8 +131,19 @@ export function useAgentReplyFollow({
 
   /** Re-reads the chat now (after an answer or a Stop, rather than at the next tick). */
   const refresh = useCallback(async () => {
-    if (id) await read(id).catch(() => undefined);
+    if (id) await read(id);
   }, [id, read]);
+
+  /**
+   * Reads the chat's saved state now and follows it again: after this surface's own stream ended without the reply
+   * finishing (a dropped connection, not a Stop). It only reads the conversation; nothing is sent again. Call it once
+   * the surface no longer streams (a read is ignored while it does).
+   */
+  const recover = useCallback(async (sessionId = id) => {
+    if (!sessionId || sessionId !== latest.current.session?.id) return;
+    failures.current = { sessionId, count: 0 };
+    await read(sessionId);
+  }, [id, latest, read]);
 
   /** Stops the reply on the server (it runs there even when this surface streams it) and shows how it ended. */
   const stop = useCallback(async () => {
@@ -91,7 +152,7 @@ export function useAgentReplyFollow({
     if (!streaming) await refresh();
   }, [id, refresh, streaming]);
 
-  return { following, refresh, stop };
+  return { following, lost, paused, recover, refresh, stop };
 }
 
 /**
@@ -151,10 +212,19 @@ export function agentShownParts(messages: { parts?: AgentMessagePart[] }[] | und
   return [...(messages ?? []).flatMap((message) => message.parts ?? []), ...streamParts];
 }
 
-/** `next` is an older read of a reply `shown` already has finished (a settled reply never runs again). */
+/**
+ * `next` is an older read of a reply `shown` already has finished (a settled reply never runs again). Any status but
+ * "streaming" is settled, so an outcome the server names (failed, interrupted, stopped, completed) counts too.
+ */
 function settledEarlier(shown: AgentSession | undefined, next: AgentSession) {
   const mine = shown?.messages.at(-1), theirs = next.messages.at(-1);
-  return Boolean(mine && theirs && mine.id === theirs.id && mine.role === "assistant" && !mine.status && theirs.status === "streaming");
+  return Boolean(mine && theirs && mine.id === theirs.id && mine.role === "assistant" && mine.status !== "streaming" && theirs.status === "streaming");
+}
+
+/** The chat was deleted or is no longer the viewer's: reading it again cannot help. */
+function chatGone(reason: unknown) {
+  const status = (reason as { status?: unknown } | null)?.status;
+  return status === 403 || status === 404;
 }
 
 /** The approval was already answered (from another surface or tab) or expired: the server no longer holds it. */

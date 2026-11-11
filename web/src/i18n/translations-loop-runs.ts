@@ -22,7 +22,7 @@ export const loopRunsZhCN: Record<string, string> = {
   "The model's response could not be read": "无法读取模型的响应",
   "A change the loop needed failed": "Loop 需要的变更执行失败",
   "Run budget exceeded": "超出运行预算",
-  "No output produced": "未产生任何输出",
+  "Required output missing": "缺少要求的产出",
   "The agent reported unfinished work": "Agent 报告有未完成的工作",
   "The loop could not run": "Loop 无法运行",
   "Run cancelled": "运行已取消",
@@ -35,5 +35,10 @@ export const loopRunsZhCN: Record<string, string> = {
   "Loading runs…": "正在加载运行记录…",
   "Cancel run": "取消运行",
   "Reply cancelled": "回复已取消",
+  // A finished run or reply with no written answer (RUN_EMPTY_STATES in loop-run-labels.ts).
+  "This run recorded no work and no reply.": "此次运行没有记录任何工作，也没有回复。",
+  "The agent did not write a reply.": "Agent 没有写回复。",
+  "Cancelled before the agent did any work or wrote a reply.": "在 Agent 开始工作或写回复之前已取消。",
+  "Interrupted before the agent did any work or wrote a reply.": "在 Agent 开始工作或写回复之前已中断。",
   "Reply interrupted": "回复已中断",
 };

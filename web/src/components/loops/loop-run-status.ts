@@ -23,7 +23,7 @@ export const REASON_LABELS: Record<LoopRunFailureReason, string> = {
   stream_error: "The model's response could not be read",
   tool_error: "A change the loop needed failed",
   budget_exhausted: "Run budget exceeded",
-  no_output: "No output produced",
+  no_output: "Required output missing",
   incomplete: "The agent reported unfinished work",
   needs_target: "The loop's target document is not chosen",
   unavailable: "The loop could not run",

@@ -1,4 +1,5 @@
 import { deriveResourceCounts } from '@/lib/resource-counts'
+import { mergeAgentSessions } from '@/lib/agent-session-merge'
 import type { BootstrapData, Issue, IssueLabel, Project, RealtimeEvent } from '@/types/flow'
 
 // Server mutations for these events never create, delete or rewrite issue,
@@ -53,6 +54,8 @@ export function mergeWorkspaceMetadata(current: BootstrapData, next: BootstrapDa
     issueHistoryCursors: current.issueHistoryCursors,
     issueCollectionPaged: current.issueCollectionPaged,
     issueCollectionRevision: current.issueCollectionRevision,
+    // The metadata sends long chats as summaries: chats read whole keep their messages.
+    agentSessions: mergeAgentSessions(current.agentSessions, next.agentSessions),
     // Development workspaces synthesize members only in the full bootstrap.
     members: next.members?.length ? next.members : current.members,
     teamMembers: next.teamMembers?.length ? next.teamMembers : current.teamMembers,

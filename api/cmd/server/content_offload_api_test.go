@@ -42,7 +42,7 @@ func TestOffloadedBodiesLoadWhereTheyAreServed(t *testing.T) {
 	}}
 	if err := repository.MutateWorkspace(ctx, "test-workspace", "test.seed", "seed", nil, func(data *domain.Bootstrap) error {
 		data.Documents = append(data.Documents, document)
-		data.AgentSessions = append(data.AgentSessions, session)
+		data.AgentSessions = append(data.AgentSessions, session, domain.AgentSession{ID: "agent_session_small", SlugID: "small", UserID: viewer.ID, Title: "Small", Location: "page", IssueIDs: []string{}, SkillIDs: []string{}, CreatedAt: now, UpdatedAt: now, Messages: []domain.AgentMessage{{ID: "message_small", Role: "user", Content: "Hi", CreatedAt: now}}})
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -106,7 +106,18 @@ func TestOffloadedBodiesLoadWhereTheyAreServed(t *testing.T) {
 			t.Fatalf("listed session carries %d messages", len(item.Messages))
 		}
 	}
+	// Every response that leaves the messages out says so, so the app never
+	// takes the empty list for the conversation; a whole one has no marker.
+	assertAgentSummaryMarked(t, "GET /api/agent/sessions", sessions, session.ID)
+	assertAgentSummaryMarked(t, "GET /api/bootstrap", requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK).AgentSessions, session.ID)
+	assertAgentSummaryMarked(t, "GET /api/issue-records/bootstrap", requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/issue-records/bootstrap", nil, http.StatusOK).AgentSessions, session.ID)
 	opened := requestJSON[domain.AgentSession](t, handler, http.MethodGet, "/api/agent/sessions/"+session.ID, nil, http.StatusOK)
+	if opened.MessagesOmitted {
+		t.Fatal("the opened conversation is marked as a summary")
+	}
+	if raw, _ := json.Marshal(opened); strings.Contains(string(raw), "messagesOmitted") {
+		t.Fatal("the opened conversation carries the summary marker")
+	}
 	wantMessages, _ := json.Marshal(session.Messages)
 	gotMessages, _ := json.Marshal(opened.Messages)
 	if string(gotMessages) != string(wantMessages) {
@@ -126,5 +137,30 @@ func TestOffloadedBodiesLoadWhereTheyAreServed(t *testing.T) {
 	text := string(encoded)
 	if !strings.Contains(text, "issue text issue text") || !strings.Contains(text, "A long answer. A long answer.") {
 		t.Fatal("the model's history is missing offloaded replies or tool results")
+	}
+}
+
+// assertAgentSummaryMarked checks that the offloaded conversation is sent as a
+// marked summary and a conversation kept whole is sent with its messages and
+// no marker.
+func assertAgentSummaryMarked(t *testing.T, route string, sessions []domain.AgentSession, summaryID string) {
+	t.Helper()
+	found := 0
+	for _, item := range sessions {
+		switch item.ID {
+		case summaryID:
+			found++
+			if !item.MessagesOmitted || len(item.Messages) != 0 {
+				t.Fatalf("%s: summary marked=%v with %d messages", route, item.MessagesOmitted, len(item.Messages))
+			}
+		case "agent_session_small":
+			found++
+			if item.MessagesOmitted || len(item.Messages) != 1 {
+				t.Fatalf("%s: whole conversation marked=%v with %d messages", route, item.MessagesOmitted, len(item.Messages))
+			}
+		}
+	}
+	if found != 2 {
+		t.Fatalf("%s: listed %d of the 2 conversations", route, found)
 	}
 }

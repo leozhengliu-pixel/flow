@@ -22,6 +22,12 @@ export const AGENT_ERROR_MESSAGES: Record<AgentErrorKind, string> = {
   generic: 'The agent ran into an error.',
 }
 
+/** Notices the app words itself about a chat it could not read or follow: shown as they are (translated), never as a provider error. */
+export const AGENT_APP_NOTICES: ReadonlySet<string> = new Set([
+  "Couldn't load this chat.",
+  'This chat is no longer available.',
+])
+
 /** Classifies raw error text: "Flow Agent provider returned status 429: …", "Flow Agent provider stopped responding"… */
 export function classifyAgentError(raw: string): AgentErrorKind {
   const text = raw.toLowerCase()
@@ -50,6 +56,7 @@ export function looksRaw(raw: string) {
 export function describeAgentError(raw: string, t: Translate, _locale: string, kind: AgentErrorKind = classifyAgentError(raw)): { message: string; detail?: string } {
   const text = raw.trim()
   if (kind === 'stopped') return { message: t(AGENT_ERROR_MESSAGES.stopped) }
+  if (AGENT_APP_NOTICES.has(text)) return { message: t(text) }
   const translated = t(text)
   if (translated !== text) return { message: translated }
   const message = t(AGENT_ERROR_MESSAGES[kind])

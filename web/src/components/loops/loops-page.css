@@ -876,6 +876,8 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-expand-button.is-small { height: 24px; padding: 0 8px; font-size: 12px; }
 .loops-run-work { margin: 4px 0 12px; }
 .loops-run-working { margin: 0; color: var(--theme-text-secondary); font-size: 13px; }
+/* A finished run or reply with no written answer says so instead of leaving the answer area blank. */
+.loops-run-empty-reply { margin: 0; color: var(--theme-text-secondary); font-size: 13px; }
 .loops-run-shimmer {
   background: linear-gradient(90deg, var(--theme-text-secondary) 0%, var(--text) 50%, var(--theme-text-secondary) 100%) 0 0 / 200% 100%;
   -webkit-background-clip: text;

@@ -1,0 +1,15 @@
+/* A chat whose latest reply was interrupted: the reference app's stale session status, muted (it is not an error). */
+.stale {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 8px;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+.stale > strong { color: var(--theme-text-primary); font-weight: 500; }
+.retry { display: inline-flex; align-items: center; gap: 4px; width: fit-content; margin-top: 2px; padding: 2px 0; border: 0; background: transparent; color: var(--theme-text-secondary); font: inherit; cursor: pointer; }
+.retry:hover { color: var(--theme-text-primary); }
+/* The status beside a chat's title in lists and headers. */
+.label { flex: none; color: var(--theme-text-secondary); font-size: 12px; white-space: nowrap; }

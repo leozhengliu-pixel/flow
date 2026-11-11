@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { toolStatusLabel, translateToolTitle } from '@/components/agent/agent-step-labels'
 import { translateToChinese } from '@/i18n/translate'
-import type { LoopRun } from '@/types/flow'
+import type { LoopRun, LoopRunFailureReason } from '@/types/flow'
 import { runParts } from './loop-data'
-import { describeRunFailure, fixedFailureMessage, parseTriggerLabel, runSkipNote, runTriggerText } from './loop-run-labels'
+import { RUN_EMPTY_STATES, describeRunFailure, fixedFailureMessage, parseTriggerLabel, runEmptyState, runSkipNote, runTriggerText } from './loop-run-labels'
+import { REASON_LABELS } from './loop-run-status'
 
 const zh = translateToChinese
 const en = (source: string) => source
@@ -138,5 +139,49 @@ describe('connector tool rows in the run log', () => {
     expect(translateToolTitle(stored, zh)).toBe('已使用连接器工具')
     expect(toolStatusLabel(hash, true, en)).toBe('Running a connector tool…')
     expect(toolStatusLabel(hash, false, zh)).toBe('已运行连接器工具')
+  })
+})
+
+describe('run outcome states', () => {
+  // Each way a run ends reads differently, in English and in Chinese: a missing required output (no_output) is not
+  // an empty reply (empty_response), and neither is reasoning only, a cut-off answer, unfinished work, an
+  // interruption, a cancel or an allowed skip.
+  it('labels every terminal state distinctly in both languages', () => {
+    const states: [LoopRunFailureReason, string, string][] = [
+      ['no_output', 'Required output missing', '缺少要求的产出'],
+      ['empty_response', 'The model returned an empty response', '模型返回了空响应'],
+      ['reasoning_only', 'The model returned only reasoning', '模型只返回了推理过程'],
+      ['output_truncated', "The model's output was cut off at its output limit", '模型输出在输出上限处被截断'],
+      ['incomplete', 'The agent reported unfinished work', 'Agent 报告有未完成的工作'],
+      ['interrupted', 'Interrupted by a server restart', '因服务器重启而中断'],
+      ['cancelled', 'Cancelled', '已取消'],
+    ]
+    for (const [reason, english, chinese] of states) {
+      expect(REASON_LABELS[reason]).toBe(english)
+      expect(zh(REASON_LABELS[reason])).toBe(chinese)
+    }
+    expect(new Set(states.map(([reason]) => REASON_LABELS[reason])).size).toBe(states.length)
+    const skipped = { ...base, status: 'completed' as const, summary: { status: 'skipped' as const, summary: 'Holiday', skipReason: 'public holiday' } }
+    expect(runSkipNote(skipped, en)).toEqual({ label: 'Skipped', reason: 'public holiday' })
+    expect(runSkipNote(skipped, zh)?.label).not.toBe('Skipped')
+  })
+
+  it('reads the missing output from the new and the old stored message alike', () => {
+    const now: LoopRun = { ...base, failureReason: 'no_output', expectedOutputs: ['comment'], error: "Required output missing: the loop's instructions call for a comment, but the run made none (the agent's summary says the work is done, but this output is not there)" }
+    expect(describeRunFailure(now, en, 'en-US').message).toBe("The loop's instructions call for a comment, but the run made none. The agent's summary says the work is done, but this output is not there.")
+    const before: LoopRun = { ...now, error: now.error!.replace('Required output missing', 'No output produced') }
+    expect(describeRunFailure(before, en, 'en-US')).toEqual(describeRunFailure(now, en, 'en-US'))
+  })
+
+  it('gives a finished run without a reply an empty state, apart from its outputs', () => {
+    const finished = (status: LoopRun['status'], extra: Partial<LoopRun> = {}) => ({ ...base, status, ...extra })
+    expect(runEmptyState(finished('running'), false, en)).toBeUndefined()
+    expect(runEmptyState(finished('completed', { output: 'Posted.' }), true, en)).toBeUndefined()
+    expect(runEmptyState(finished('completed', { summary: { status: 'skipped', summary: '', skipReason: 'holiday' } }), false, en)).toBeUndefined()
+    expect(runEmptyState(finished('failed'), false, en)).toBe(RUN_EMPTY_STATES.nothing)
+    expect(runEmptyState(finished('needs_review', { output: '  ' }), true, en)).toBe(RUN_EMPTY_STATES.noReply)
+    expect(runEmptyState(finished('cancelled'), false, en)).toBe(RUN_EMPTY_STATES.cancelled)
+    expect(runEmptyState(finished('interrupted'), false, en)).toBe(RUN_EMPTY_STATES.interrupted)
+    for (const text of Object.values(RUN_EMPTY_STATES)) expect(zh(text)).not.toBe(text)
   })
 })

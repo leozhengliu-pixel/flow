@@ -17,7 +17,6 @@ import (
 
 	appconfig "flow/api/internal/config"
 	"flow/api/internal/domain"
-	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -246,7 +245,7 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 	if _, err := s.enqueueWorkerChatRun(r.Context(), store.AgentRun{ID: runID, WorkspaceKey: workspaceKey(r), SessionID: session.ID, Principal: principal}, info, &promptContext, ""); err != nil {
 		run := store.AgentRun{ID: runID, WorkspaceKey: workspaceKey(r), SessionID: session.ID, Kind: store.AgentRunKindChat, Principal: principal}
 		if reply, replyErr := s.workerChatReplyFor(context.WithoutCancel(r.Context()), run, info); replyErr == nil {
-			reply.finishFailure(context.WithoutCancel(r.Context()), "The reply could not be queued for the agent worker.", false)
+			reply.finishFailure(context.WithoutCancel(r.Context()), "The reply could not be queued for the agent worker.", agentReasonWorkerUnavailable, false)
 		}
 		return domain.AgentSession{}, err
 	}
@@ -305,8 +304,13 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 			continue
 		}
 		if last := message.Parts[len(message.Parts)-1]; last.Type == "error" && last.ID == message.ID+"_error" {
-			if last.Text == "Generation stopped" {
+			switch outcome := agentReplyOutcomeOf(message); {
+			case outcome.Status == agentOutcomeCanceled:
 				return domain.AgentSession{}, context.Canceled
+			case outcome.Status == agentOutcomeInterrupted, outcome.Reason == agentReasonWorkerUnavailable:
+				// Like the reference app, a reply whose run went away (or never reached a worker) has no error copy:
+				// the stream ends with the saved chat, whose status says it stopped responding (or didn't start).
+				return *completed, nil
 			}
 			return domain.AgentSession{}, errors.New(last.Text)
 		}
@@ -590,7 +594,12 @@ func (c *workerChatReply) save(ctx context.Context, stored domain.AgentMessage, 
 		}
 		message.Status, message.UpdatedAt, message.Content = agentMessageStreaming, &now, agentLiveText(message.Parts)
 	}
-	err := c.s.store.MutateWorkspace(c.ctx(ctx), c.run.WorkspaceKey, event, c.run.SessionID, nil, func(data *domain.Bootstrap) error {
+	mutationCtx := c.ctx(ctx)
+	if draft.activity != nil {
+		// Scoped to agentSessions alone, the mutation would drop the activity.
+		mutationCtx = withAgentReplyFields(mutationCtx)
+	}
+	err := c.s.store.MutateWorkspace(mutationCtx, c.run.WorkspaceKey, event, c.run.SessionID, nil, func(data *domain.Bootstrap) error {
 		session, err := ownedAgentSession(data, c.run.SessionID)
 		if err != nil {
 			return errAgentLiveSkip
@@ -805,16 +814,22 @@ func (d *workerChatDraft) foldNarration() {
 	d.publish(agentStreamEvent{Type: "text.replaced", MessageID: d.c.info.MessageID, Delta: ""})
 }
 
-// finish makes message the reply's final form.
-func (d *workerChatDraft) finish(message domain.AgentMessage) {
+// finish makes message the reply's final form, ended as outcome says (agent_reply_outcome.go).
+func (d *workerChatDraft) finish(message domain.AgentMessage, outcome domain.AgentReplyOutcome) {
 	message.Status, message.UpdatedAt, message.WorkerCursor = "", nil, nil
-	d.activity = &domain.AgentActivity{ID: idgen.New("agent_activity_"), SessionID: d.c.run.SessionID, Type: "response", Status: "completed", Body: message.Content, Metadata: map[string]any{"durationMs": message.DurationMS, "partCount": len(message.Parts), "runId": d.c.run.ID}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	message.Outcome = &outcome
+	activity := agentReplyActivity(d.c.run.SessionID, message, map[string]any{"runId": d.c.run.ID})
+	activity.CreatedAt = time.Now().UTC()
+	activity.UpdatedAt = activity.CreatedAt
+	d.activity = &activity
 	d.message, d.finished, d.changed = message, true, true
 	d.publish(agentStreamEvent{Type: workerChatSettledEvent, MessageID: d.c.info.MessageID})
 }
 
 // complete finishes the reply with its answer, as persistAgentCompletion saves an in-process one.
 func (d *workerChatDraft) complete(answer string, durationMS int64, extra ...domain.AgentMessagePart) {
+	// Before unfinished calls are settled as completed below.
+	didWork := agentReplyDidWork(d.message.Parts)
 	message, err := cloneAgentMessage(d.message)
 	if err != nil {
 		return
@@ -843,11 +858,22 @@ func (d *workerChatDraft) complete(answer string, durationMS int64, extra ...dom
 	message.Parts = append(message.Parts, extra...)
 	message.Content, message.DurationMS = answer, durationMS
 	d.publish(agentStreamEvent{Type: "text.replaced", MessageID: d.c.info.MessageID, Delta: answer})
-	d.finish(message)
+	outcome := domain.AgentReplyOutcome{Status: agentOutcomeCompleted}
+	if answer == "" {
+		// An empty answer does not fail a run that ended normally; like the reference app, an empty turn shows
+		// nothing. The reason says whether its tool work ran.
+		outcome.Reason = agentReasonEmptyResponse
+		if didWork {
+			outcome.Reason = agentReasonNoReplyText
+		}
+	}
+	d.finish(message, outcome)
 }
 
-// fail finishes the reply as failed (or stopped), as persistAgentFailure saves an in-process one.
-func (d *workerChatDraft) fail(reason string, stopped bool, durationMS int64) {
+// fail finishes the reply as failed (code names the cause) or stopped, as persistAgentFailure saves an in-process one.
+func (d *workerChatDraft) fail(reason, code string, stopped bool, durationMS int64) {
+	// A worker that ends a stopped run with an error activity says so in its text.
+	stopped = stopped || strings.TrimSpace(reason) == "Generation stopped"
 	message, err := cloneAgentMessage(d.message)
 	if err != nil {
 		return
@@ -872,7 +898,11 @@ func (d *workerChatDraft) fail(reason string, stopped bool, durationMS int64) {
 	}
 	message.Parts = append(message.Parts, domain.AgentMessagePart{ID: message.ID + "_error", Type: "error", Text: agentClip(reason, 2000), Status: "error"})
 	message.Content, message.DurationMS = strings.TrimSpace(d.text()), durationMS
-	d.finish(message)
+	outcome := domain.AgentReplyOutcome{Status: agentOutcomeFailed, Reason: firstNonEmpty(code, agentReasonRunFailed)}
+	if stopped {
+		outcome = domain.AgentReplyOutcome{Status: agentOutcomeCanceled, Reason: agentReasonUserStop}
+	}
+	d.finish(message, outcome)
 }
 
 // interrupt finishes the reply as interrupted (its run's worker went away), as the live-reply sweeper does.
@@ -881,9 +911,9 @@ func (d *workerChatDraft) interrupt(durationMS int64) {
 	if err != nil {
 		return
 	}
-	interruptAgentLiveMessage(&message)
+	interruptAgentLiveMessage(&message, agentReasonWorkerLost)
 	message.DurationMS = durationMS
-	d.finish(message)
+	d.finish(message, *message.Outcome)
 }
 
 // holdsApprovals reports whether held calls wait for the person's decision.
@@ -893,9 +923,9 @@ func (d *workerChatDraft) holdsApprovals() bool {
 	})
 }
 
-// finishFailure saves the reply as failed (or stopped).
-func (c *workerChatReply) finishFailure(ctx context.Context, reason string, stopped bool) {
-	if _, err := c.update(ctx, false, func(d *workerChatDraft) { d.fail(reason, stopped, c.durationMS()) }); err != nil && !errors.Is(err, errAgentLiveSkip) {
+// finishFailure saves the reply as failed (code names the cause) or stopped.
+func (c *workerChatReply) finishFailure(ctx context.Context, reason, code string, stopped bool) {
+	if _, err := c.update(ctx, false, func(d *workerChatDraft) { d.fail(reason, code, stopped, c.durationMS()) }); err != nil && !errors.Is(err, errAgentLiveSkip) {
 		log.Printf("finish worker chat reply %s: %v", c.info.MessageID, err)
 	}
 }
@@ -1298,7 +1328,7 @@ func (d *workerChatDraft) apply(input workerChatStoredActivity) {
 		d.hold(*input.Elicitation, input.Approvals)
 	case "response":
 		if input.End == "stop" {
-			d.fail("", true, input.DurationMS)
+			d.fail("", agentReasonUserStop, true, input.DurationMS)
 			break
 		}
 		answer := input.Answer
@@ -1310,13 +1340,9 @@ func (d *workerChatDraft) apply(input workerChatStoredActivity) {
 			}
 			extra = append(extra, domain.AgentMessagePart{ID: messageID + "_budget", Type: "event", Text: agentToolBudgetNotice(input.BudgetStop, info.MaxTurns, info.MaxCalls, info.Chinese), Status: "completed"})
 		}
-		if strings.TrimSpace(answer) == "" {
-			d.fail("Flow Agent provider returned an empty response", false, input.DurationMS)
-			break
-		}
 		d.complete(answer, input.DurationMS, extra...)
 	case "error":
-		d.fail(input.Body, input.End == "stop", input.DurationMS)
+		d.fail(input.Body, agentReasonProviderError, input.End == "stop", input.DurationMS)
 	}
 }
 
@@ -1371,7 +1397,7 @@ func (d *workerChatDraft) ask(elicitation workerChatElicitation, durationMS int6
 	}
 	// The reply's text (and what the model sees of it later) ends with the question; the part draws its options.
 	message.Content, message.DurationMS = strings.TrimSpace(text+"\n\n"+question), durationMS
-	d.finish(message)
+	d.finish(message, domain.AgentReplyOutcome{Status: agentOutcomeCompleted})
 }
 
 // hold shows the calls a connector set to always ask holds, each waiting for the person's decision under the
@@ -1485,20 +1511,20 @@ func (s *server) settleWorkerChatRun(ctx context.Context, run store.AgentRun, in
 		case store.AgentRunAwaiting:
 			// Held calls wait for the person (the reply stays streaming); anything else is an unfinished reply.
 			if !d.holdsApprovals() {
-				d.fail("The reply stopped waiting for an answer it never asked for.", false, duration)
+				d.fail("The reply stopped waiting for an answer it never asked for.", agentReasonRunFailed, false, duration)
 			}
 		case store.AgentRunDone:
 			if text := d.text(); strings.TrimSpace(text) != "" {
 				d.complete(s.workerChatCheckedAnswer(ctx, run, info, text), duration)
 				return
 			}
-			d.fail("Flow Agent provider returned an empty response", false, duration)
+			d.complete("", duration)
 		case store.AgentRunCanceled:
-			d.fail("", true, duration)
+			d.fail("", agentReasonUserStop, true, duration)
 		case store.AgentRunInterrupted:
 			d.interrupt(duration)
 		default:
-			d.fail(firstNonEmpty(strings.TrimSpace(failure), "The agent run failed."), false, duration)
+			d.fail(firstNonEmpty(strings.TrimSpace(failure), "The agent run failed."), agentReasonRunFailed, false, duration)
 		}
 	})
 	if err != nil && !errors.Is(err, errAgentLiveSkip) {
@@ -1589,7 +1615,7 @@ func (s *server) stopWorkerChat(ctx context.Context, session domain.AgentSession
 		}
 		_ = s.store.DeleteAgentSessionState(ctx, workspace, session.ID)
 		if reply, err := s.workerChatReplyFor(ctx, canceled, info); err == nil {
-			reply.finishFailure(ctx, "", true)
+			reply.finishFailure(ctx, "", agentReasonUserStop, true)
 		}
 	}
 	return stopped
@@ -1699,7 +1725,7 @@ func (s *server) expireWorkerChatRun(ctx context.Context, run store.AgentRun, in
 		if err != nil {
 			return false
 		}
-		reply.finishFailure(ctx, workerChatNoWorker, false)
+		reply.finishFailure(ctx, workerChatNoWorker, agentReasonWorkerUnavailable, false)
 		return true
 	case store.AgentRunAwaiting:
 		// An awaiting run's FinishedAt is when it suspended on its held calls.
@@ -1882,7 +1908,7 @@ func (s *server) sweepWorkerChatReplies(ctx context.Context, now time.Time) int 
 				canceled := run.Status == store.AgentRunCanceled
 				if _, err := reply.update(ctx, true, func(d *workerChatDraft) {
 					if canceled {
-						d.fail("", true, reply.durationMS())
+						d.fail("", agentReasonUserStop, true, reply.durationMS())
 					} else {
 						d.interrupt(reply.durationMS())
 					}

@@ -259,12 +259,12 @@ func (l *agentLiveReply) release() {
 	written, finalized, gone := l.written, l.finalized, l.gone
 	l.mu.Unlock()
 	if written != nil && !finalized && !gone {
-		_ = l.s.store.MutateWorkspace(l.ctx, l.workspace, "agent.message_completed", l.sessionID, nil, func(data *domain.Bootstrap) error {
+		_ = l.s.store.MutateWorkspace(withAgentReplyFields(l.ctx), l.workspace, "agent.message_completed", l.sessionID, nil, func(data *domain.Bootstrap) error {
 			session, err := ownedAgentSession(data, l.sessionID)
 			if err != nil {
 				return err
 			}
-			if !interruptAgentLiveMessages(session, func(message domain.AgentMessage) bool { return message.ID == written.ID }) {
+			if !interruptAgentLiveMessages(data, session, agentReasonReplyAbandoned, func(message domain.AgentMessage) bool { return message.ID == written.ID }) {
 				return errAgentLiveSkip
 			}
 			return nil
@@ -275,8 +275,8 @@ func (l *agentLiveReply) release() {
 
 // interruptAgentLiveMessage turns a reply that stopped being written into a failed one: unfinished tool calls get an
 // "interrupted" result (so the next message is a valid conversation), waiting approvals and questions expire, and an
-// error row offers Retry.
-func interruptAgentLiveMessage(message *domain.AgentMessage) {
+// error row offers Retry. Its outcome is "interrupted" with reason (agent_reply_outcome.go).
+func interruptAgentLiveMessage(message *domain.AgentMessage, reason string) {
 	settleInterruptedAgentParts(message.Parts, false)
 	for index := range message.Parts {
 		part := &message.Parts[index]
@@ -295,17 +295,25 @@ func interruptAgentLiveMessage(message *domain.AgentMessage) {
 	message.Parts = append(message.Parts, domain.AgentMessagePart{ID: message.ID + "_error", Type: "error", Text: agentReplyInterrupted, Status: "error"})
 	message.Status = ""
 	message.UpdatedAt = nil
+	message.Outcome = &domain.AgentReplyOutcome{Status: agentOutcomeInterrupted, Reason: reason}
 }
 
-// interruptAgentLiveMessages interrupts session's streaming replies that match; it reports whether any did.
-func interruptAgentLiveMessages(session *domain.AgentSession, match func(domain.AgentMessage) bool) bool {
+// interruptAgentLiveMessages interrupts session's streaming replies that match, logging each one's activity in
+// data; it reports whether any did.
+func interruptAgentLiveMessages(data *domain.Bootstrap, session *domain.AgentSession, reason string, match func(domain.AgentMessage) bool) bool {
 	changed := false
 	for index := range session.Messages {
 		message := &session.Messages[index]
 		if message.Status != agentMessageStreaming || !match(*message) {
 			continue
 		}
-		interruptAgentLiveMessage(message)
+		interruptAgentLiveMessage(message, reason)
+		if data != nil {
+			activity := agentReplyActivity(session.ID, *message, nil)
+			activity.CreatedAt = time.Now().UTC()
+			activity.UpdatedAt = activity.CreatedAt
+			data.AgentActivities = append(data.AgentActivities, activity)
+		}
 		changed = true
 	}
 	return changed
@@ -371,14 +379,14 @@ func (s *server) sweepAgentLiveReplies(ctx context.Context, now time.Time) int {
 				continue
 			}
 			sessionID, owner := session.ID, session.UserID
-			mutationCtx := store.WithMetadataFields(store.ContextWithActor(ctx, domain.User{ID: owner}), "agentSessions")
+			mutationCtx := withAgentReplyFields(store.ContextWithActor(ctx, domain.User{ID: owner}))
 			err := s.store.MutateWorkspace(mutationCtx, key, "agent.message_completed", sessionID, nil, func(next *domain.Bootstrap) error {
 				for index := range next.AgentSessions {
 					current := &next.AgentSessions[index]
 					if current.ID != sessionID {
 						continue
 					}
-					if interruptAgentLiveMessages(current, func(message domain.AgentMessage) bool { return s.agentLiveReplyAbandoned(message, now) }) {
+					if interruptAgentLiveMessages(next, current, agentReasonReplyAbandoned, func(message domain.AgentMessage) bool { return s.agentLiveReplyAbandoned(message, now) }) {
 						swept++
 						return nil
 					}

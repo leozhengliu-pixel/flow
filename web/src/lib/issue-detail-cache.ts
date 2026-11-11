@@ -1,4 +1,5 @@
 import type { BootstrapData, Issue } from '@/types/flow'
+import { mergeAgentSessions } from '@/lib/agent-session-merge'
 
 export function mergeIssueRecords(current: Issue[], incoming: Issue[], limit = 2000): Issue[] {
   limit = Math.max(0, Math.min(2000, Math.floor(limit)))
@@ -27,6 +28,8 @@ export function mergeIssueRecords(current: Issue[], incoming: Issue[], limit = 2
 
 export function mergeWorkspaceDirectory(current: BootstrapData | null, next: BootstrapData, visibleIds?: ReadonlySet<string>): BootstrapData {
   if (!current || current.workspace.id !== next.workspace.id || current.viewer.id !== next.viewer.id || !next.issueCollectionPaged) return next
+  // Chats the app already read whole keep their messages over the summaries a bootstrap sends.
+  const agentSessions = mergeAgentSessions(current.agentSessions, next.agentSessions)
   const retained = visibleIds ? current.issues.filter(issue => visibleIds.has(issue.id)) : current.issues
   const incoming = visibleIds ? (next.issues ?? []).filter(issue => visibleIds.has(issue.id)) : next.issues ?? []
   let issues = mergeIssueRecords(retained, incoming)
@@ -55,7 +58,7 @@ export function mergeWorkspaceDirectory(current: BootstrapData | null, next: Boo
     const ids = new Set(alive.map(entry => entry.id))
     return { ...Object.fromEntries(Object.entries(previous).filter(([id]) => ids.has(id))), ...Object.fromEntries(Object.entries(fresh).filter(([, list]) => list?.length)) }
   }
-  return {...next, issues,
+  return {...next, issues, agentSessions,
     projectUpdates: retainUpdates(current.projectUpdates, next.projectUpdates, next.projects),
     initiativeUpdates: retainUpdates(current.initiativeUpdates, next.initiativeUpdates, next.initiatives),
     comments: retainHistory(current.comments, next.comments),

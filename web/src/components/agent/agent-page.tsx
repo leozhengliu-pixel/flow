@@ -45,13 +45,13 @@ import { uploadAgentFile } from '@/lib/api'
 import { AgentAddMenu } from './agent-add-menu'
 import { applyAgentStreamEvent, markAgentSessionFailed, markAgentSessionStopped } from './agent-stream-state'
 import { isBlankStoppedReply, settleStoppedAgentReply } from './agent-stopped-reply'
+import { agentSessionStale } from './agent-reply-status'
+import { AgentStaleLabel } from './agent-stale-reply'
 import { clearLiveAgentSession, liveAgentSession, setLiveAgentSession, useLiveAgentSessionsVersion } from './agent-live-sessions'
-import { agentShownParts, useAgentApprovalAnswer, useAgentReplyFollow } from './use-agent-reply-follow'
+import { AGENT_CHAT_GONE_NOTICE, agentShownParts, useAgentApprovalAnswer, useAgentReplyFollow } from './use-agent-reply-follow'
+import { agentSessionDetailNotice, useAgentSessionDetail } from './use-agent-session-detail'
+import { agentSessionNeedsDetail, mergeAgentSession, mergeAgentSessions } from '@/lib/agent-session-merge'
 import { AgentElicitation } from './agent-elicitation';
-import {
-  asPersistedConversation,
-  useDeferredHydratedConversation,
-} from '@/hooks/use-deferred-hydrated-conversation';
 import { AgentElicitationResponseQueue } from './agent-elicitation-response-queue';
 import { summarizeElicitationQueue } from './agent-elicitation-queue-model';
 import { FlowLogo } from '@/components/ui/flow-logo';
@@ -132,9 +132,20 @@ export function AgentPage({
   const agentDraftKey = `flow:agent-draft:${data.workspace.id}`;
   const restoredAgentDraft = useRef(readAgentDraft(agentDraftKey));
   const [seenAgentSessions, setSeenAgentSessions] = useState(data.agentSessions);
-  if (seenAgentSessions !== data.agentSessions) {
+  const sessionScope = `${data.workspace.id}:${data.viewer.id}`;
+  const [seenSessionScope, setSeenSessionScope] = useState(sessionScope);
+  if (seenAgentSessions !== data.agentSessions || seenSessionScope !== sessionScope) {
     setSeenAgentSessions(data.agentSessions);
-    setSessions(data.agentSessions ?? []);
+    if (seenSessionScope !== sessionScope) {
+      // Another workspace or viewer: nothing read for the previous one carries over.
+      setSeenSessionScope(sessionScope);
+      setHydratedIds(new Set());
+      setSessions(data.agentSessions ?? []);
+    } else {
+      // A refreshed list (a metadata refresh, a realtime re-read) sends long chats as summaries: chats read whole here
+      // keep their messages, and one that changed on the server since is read again.
+      setSessions((list) => mergeAgentSessions(list, data.agentSessions));
+    }
   }
   useEffect(() => {
     if (chatSlug || !restoredAgentDraft.current?.input) return;
@@ -178,23 +189,24 @@ export function AgentPage({
   );
   // A reply still streaming from an earlier visit to this page.
   const live = busy ? undefined : liveAgentSession(chatSlug ?? activeStreamId);
-  const deferredConversation = useMemo(() => {
-    if (!currentSummary) return currentSummary;
-    // Opening a chat re-reads it from the server once, so a reply that
-    // finished while the page was away (or in another tab) shows up.
-    if (hydratedIds.has(currentSummary.id)) return currentSummary;
-    return asPersistedConversation(currentSummary, async (id) => {
-      const full = await getAgentSession(id);
-      setHydratedIds((ids) => new Set(ids).add(id));
+  // Opening a chat re-reads it from the server once, so a reply that finished while the page was away (or in another
+  // tab) shows up; a summary (sent without its messages) or a copy a newer summary outdated is read again. Not while
+  // this page streams the chat itself: the stream is newer than any read.
+  const detailId = currentSummary && !busy && !currentSummary.id.startsWith("pending-")
+    && (!hydratedIds.has(currentSummary.id) || agentSessionNeedsDetail(currentSummary)) ? currentSummary.id : undefined;
+  const detail = useAgentSessionDetail({
+    sessionId: detailId,
+    version: detailId ? currentSummary?.updatedAt : undefined,
+    onLoaded: (full) => {
+      setHydratedIds((ids) => (ids.has(full.id) ? ids : new Set(ids).add(full.id)));
       // A reply streamed meanwhile (an answer sent right after opening) is newer than this read: keep it.
-      setSessions((list) =>
-        list.map((item) => (item.id === full.id && Date.parse(full.updatedAt) >= Date.parse(item.updatedAt) ? full : item)),
-      );
-      return full;
-    });
-  }, [currentSummary, hydratedIds]);
-  const hydratedCurrent = useDeferredHydratedConversation(deferredConversation) ?? undefined;
-  const current = live ?? hydratedCurrent;
+      setSessions((list) => list.map((item) => (item.id === full.id ? mergeAgentSession(item, full) : item)));
+    },
+  });
+  // A chat that is gone (deleted, or no longer the viewer's) shows none of the messages held from before.
+  const detailGone = detail.failure?.kind === "gone";
+  const goneSummary = useMemo(() => (detailGone && currentSummary ? { ...currentSummary, messages: [] } : undefined), [currentSummary, detailGone]);
+  const current = live ?? goneSummary ?? currentSummary;
   // The reply is still running on the server while this page does not stream it (the page that asked was reloaded or
   // closed, or it was asked from another tab or chat surface): show its saved progress, approvals and questions
   // included, and follow it until it finishes.
@@ -208,6 +220,16 @@ export function AgentPage({
   });
   const awaitingReply = follow.following;
   const replyRunning = busy || Boolean(live) || awaitingReply;
+  // The chat whose stream just dropped (the server took the message; the reply goes on there). Once this page stops
+  // streaming, the chat's saved state is read and followed until it settles; the message is never sent again.
+  const droppedStreamRef = useRef<string | undefined>(undefined);
+  const recoverReply = follow.recover;
+  useEffect(() => {
+    if (busy || !droppedStreamRef.current) return;
+    const id = droppedStreamRef.current;
+    droppedStreamRef.current = undefined;
+    void recoverReply(id);
+  }, [busy, recoverReply]);
   // Seeing a chat (once its reply has settled) clears its unread dot here and in the history list.
   useMarkAgentSessionRead(current, replyRunning, (read, lastReadAt) => {
     const listed = sessions.find((item) => item.id === read.id);
@@ -287,6 +309,8 @@ export function AgentPage({
           setSessions((list) => [next, ...list.filter((item) => item.id !== next.id)]);
           if (event.type === "session.started") {
             started = true;
+            // The stream carries the whole chat: no read is needed when it ends.
+            setHydratedIds((ids) => (ids.has(next.id) ? ids : new Set(ids).add(next.id)));
             setActiveStreamId(next.id);
             if (mountedRef.current) onNavigate(agentPath(data.workspace.urlKey, next.slugId));
           }
@@ -346,6 +370,7 @@ export function AgentPage({
       // a network change): the reply goes on there and the chat follows it (useAgentReplyFollow). Neither puts the
       // message back or offers to send it again, which would run the whole request a second time (two documents).
       if (started && streamed) {
+        if (!failedInChat) droppedStreamRef.current = streamed.id;
         saveSession(streamed);
         return;
       }
@@ -607,6 +632,7 @@ export function AgentPage({
             </Popover.Content>
           </Popover.Portal>
         </Popover.Root>
+        {!replyRunning && <AgentStaleLabel stale={agentSessionStale(current)} />}
         {current && (
           <>
             <button
@@ -822,11 +848,22 @@ export function AgentPage({
               type="button"
             ><AgentSubmitIcon /></button></FlowTooltip>}
           </footer>
-          {error && (
+          {error ? (
             <span className={styles.error} role="alert">
               <AgentErrorDetail error={error} onRetry={retryApproval ?? (() => void send())} />
             </span>
-          )}
+          ) : detail.failure && (detail.failure.kind === "gone" || currentSummary?.messagesOmitted) ? (
+            // The chat could not be read: Retry reads it again (a chat that is gone has nothing to retry). A chat whose
+            // messages are already here keeps showing them without a notice, like the reference app.
+            <span className={styles.error} role="alert">
+              <AgentErrorDetail error={agentSessionDetailNotice(detail.failure)} onRetry={detail.failure.kind === "failed" ? detail.retry : undefined} />
+            </span>
+          ) : follow.lost?.kind === "gone" ? (
+            // The chat went away while its reply was followed (deleted, or no longer the viewer's).
+            <span className={styles.error} role="alert">
+              <AgentErrorDetail error={AGENT_CHAT_GONE_NOTICE} />
+            </span>
+          ) : null}
         </div>
         {!shown && status?.enabled && !data.integrationConnections?.some((item) => item.provider === "github") && <button
           className={styles.connectGitHub}
