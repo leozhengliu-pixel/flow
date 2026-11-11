@@ -92,6 +92,9 @@ func scaleP02Config(t *testing.T) DatabaseConfig {
 		config.Driver, config.URL = databaseDriver, databaseURL
 		if databaseDriver == "sqlite" {
 			config.Path = databaseURL
+		} else {
+			// External audit-head initialization writes outside its transaction.
+			config.MaxOpenConns = 4
 		}
 	}
 	return config
@@ -116,7 +119,7 @@ func scaleP02StoreAt(t *testing.T, config DatabaseConfig) (*SQLiteStore, *scaleP
 	base := repo.db.DB
 	stats := &scaleP02SQL{}
 	repo.db.DB = sql.OpenDB(scaleP02Connector{driver: base.Driver(), dsn: dsn, stats: stats})
-	repo.db.SetMaxOpenConns(1)
+	repo.db.SetMaxOpenConns(config.MaxOpenConns)
 	repo.db.SetMaxIdleConns(1)
 	t.Cleanup(func() {
 		_ = repo.Close()
@@ -143,6 +146,27 @@ func scaleP02User(t *testing.T, repo *SQLiteStore) domain.User {
 	}
 	user.EmailVerified = true
 	return user
+}
+
+func TestScaleP02SQLCounterPreservesPoolCapacity(t *testing.T) {
+	config := scaleP02Config(t)
+	if config.Driver == "sqlite" {
+		config.MaxOpenConns = 4
+	} else if config.MaxOpenConns < 2 {
+		t.Fatal("external fixture needs a connection outside an open audit transaction")
+	}
+	repo, _ := scaleP02StoreAt(t, config)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	var one int
+	if err := repo.db.QueryRowContext(ctx, `SELECT 1`).Scan(&one); err != nil || one != 1 {
+		t.Fatalf("statement outside open transaction: value=%d error=%v", one, err)
+	}
 }
 
 func TestScaleP02SessionTouchMeasurement(t *testing.T) {
