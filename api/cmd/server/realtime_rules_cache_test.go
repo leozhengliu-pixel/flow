@@ -125,6 +125,7 @@ func TestWriteSSEKeepsThePayloadAsIs(t *testing.T) {
 // A heartbeat that changes nothing but the time reaches no stream.
 func TestPresenceHeartbeatWithoutChangesIsNotPublished(t *testing.T) {
 	s := &server{store: pulseTestRepo(t), realtime: newRealtimeHub()}
+	s.realtime.presenceInterval = -1
 	channel, stop := s.realtime.subscribe("w")
 	defer stop()
 	user := domain.User{ID: "usr_a", Name: "A"}
@@ -136,5 +137,35 @@ func TestPresenceHeartbeatWithoutChangesIsNotPublished(t *testing.T) {
 	s.publishPresence("w", roster("/w/projects"))
 	if len(channel) != 2 {
 		t.Fatalf("presence events = %d, want 2 (the first roster and the route change)", len(channel))
+	}
+}
+
+// Rosters of a workspace go out at most once per interval: a burst of joins
+// sends the first at once and the roster as it is at the end of the interval.
+func TestPresenceBroadcastsAreCoalescedPerWorkspace(t *testing.T) {
+	hub := newRealtimeHub()
+	hub.presenceInterval = 150 * time.Millisecond
+	channel, stop := hub.subscribe("w")
+	defer stop()
+	for index := range 20 {
+		hub.updatePresence("w", "tab_"+string(rune('a'+index)), domain.User{ID: "usr_" + string(rune('a'+index))}, "", "/w/inbox")
+	}
+	if len(channel) != 1 {
+		t.Fatalf("events during the interval = %d, want 1", len(channel))
+	}
+	time.Sleep(300 * time.Millisecond)
+	if len(channel) != 2 {
+		t.Fatalf("events after the interval = %d, want 2", len(channel))
+	}
+	<-channel
+	last := <-channel
+	var payload struct {
+		Presence []domain.Presence `json:"presence"`
+	}
+	if err := json.Unmarshal(last.Payload, &payload); err != nil || len(payload.Presence) != 20 {
+		t.Fatalf("the deferred roster has %d entries, want all 20 (%v)", len(payload.Presence), err)
+	}
+	if !hub.presenceCleanupDue("w", 15*time.Second) || hub.presenceCleanupDue("w", 15*time.Second) {
+		t.Fatal("presence cleanup should run once per interval per workspace")
 	}
 }

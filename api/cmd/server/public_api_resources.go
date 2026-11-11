@@ -42,6 +42,12 @@ func (s *server) publicMetadata(w http.ResponseWriter, r *http.Request) (domain.
 	data, handedOff := takePagedMetadata(r, key, authUser(r).ID)
 	var err error
 	if !handedOff {
+		if !acquireProjection(r) {
+			if retryAfter, refused := projectionRefused(r); refused {
+				writeProjectionBusy(w, retryAfter)
+			}
+			return data, false
+		}
 		data, err = s.store.PagedWorkspaceMetadata(r.Context(), key, authUser(r).ID)
 	}
 	if err != nil {

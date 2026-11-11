@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ApiError, requestRetryingBusy } from './api-client'
+import { ApiError, request, requestRetryingBusy } from './api-client'
 
 const busy = (retryAfter?: string) => new Response(JSON.stringify({ error: 'busy' }), { status: 503, headers: retryAfter ? { 'Retry-After': retryAfter } : {} })
 const ok = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { 'Content-Type': 'application/json' } })
@@ -50,5 +50,23 @@ describe('requestRetryingBusy', () => {
     await assertion
     await vi.advanceTimersByTimeAsync(20000)
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries a busy resource read (a project, document or initiative) but never a write', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(busy('2')).mockResolvedValueOnce(ok({ id: 'project-1' }))
+    const read = request<{ id: string }>('/api/projects/project-1')
+    await vi.advanceTimersByTimeAsync(3000)
+    await expect(read).resolves.toEqual({ id: 'project-1' })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    fetchMock.mockReset().mockResolvedValue(busy('2'))
+    await expect(request('/api/projects/project-1', { method: 'PATCH', body: '{}' })).rejects.toMatchObject({ status: 503 })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    // Bounded: a read the server keeps turning away fails after three tries.
+    fetchMock.mockReset().mockResolvedValue(busy('1'))
+    const stuck = request('/api/documents/doc-1')
+    const assertion = expect(stuck).rejects.toMatchObject({ status: 503 })
+    await vi.advanceTimersByTimeAsync(5000)
+    await assertion
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 })

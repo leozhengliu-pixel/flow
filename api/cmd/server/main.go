@@ -46,6 +46,8 @@ type server struct {
 	store *store.SQLiteStore
 	// metadataGate bounds concurrent workspace metadata projections (metadata_read_gate.go).
 	metadataGate *metadataReadGate
+	// projectionGate bounds resource requests that build the viewer's projection (projection_gate.go).
+	projectionGate *metadataReadGate
 	// coding is the coding-session runtime (coding_runtime.go).
 	coding *codingServices
 	// agentAutoTitle names new Agent chats with a small extra model call (off in test fixtures).
@@ -339,6 +341,9 @@ func newHandler(s *server) http.Handler {
 	legacyReadGate := make(chan struct{}, 1)
 	if s.metadataGate == nil {
 		s.metadataGate = metadataReadGateFromEnv()
+	}
+	if s.projectionGate == nil {
+		s.projectionGate = projectionGateFromEnv()
 	}
 	if s.importSlots == nil {
 		s.importSlots = make(chan struct{}, 2)
@@ -1085,7 +1090,7 @@ func newHandler(s *server) http.Handler {
 	s.registerPublicAPIRoutes(mux)
 	s.registerCodingRoutes(mux)
 
-	handler := s.withStaticFiles(boundedLegacyIssueWrites(s.limitFailedAuthentication(s.authenticate(s.limitAuthenticatedAPI(mux)))))
+	handler := s.withStaticFiles(boundedLegacyIssueWrites(s.limitFailedAuthentication(s.projectionGate.holdProjections(s.authenticate(s.limitAuthenticatedAPI(mux))))))
 	securityConfig := appconfig.DefaultSecurityHeaders()
 	if s.securityHeaders != nil {
 		securityConfig = *s.securityHeaders
@@ -2517,6 +2522,8 @@ func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
 		if !s.authDisabled {
 			data, handedOff := takePagedMetadata(r, workspaceKey(r), authUser(r).ID)
 			if !handedOff {
+				// Bounded with the other projections; this caller cannot answer 503, so it waits.
+				acquireProjectionWaiting(r)
 				data, _ = s.store.PagedWorkspaceMetadata(r.Context(), workspaceKey(r), authUser(r).ID)
 			}
 			filterBootstrapForAPIKey(&data, r)

@@ -49,6 +49,13 @@ type realtimeHub struct {
 	rosters presenceRosterCache
 	// presenceSignatures is the roster each workspace's streams last got (presenceSignature).
 	presenceSignatures map[string]string
+	// presenceMu guards the per-workspace roster broadcast and cleanup schedule
+	// (broadcastPresence, presenceCleanupDue). presenceInterval overrides
+	// presenceBroadcastInterval (tests; negative sends every roster at once).
+	presenceMu         sync.Mutex
+	presenceBroadcasts map[string]*presenceBroadcastState
+	presenceCleanups   map[string]time.Time
+	presenceInterval   time.Duration
 }
 
 // presenceSignature identifies a roster by who is where, not when they last
@@ -461,8 +468,90 @@ func (h *realtimeHub) presenceLocked(workspace string, now time.Time) []domain.P
 }
 
 func (h *realtimeHub) publishPresence(workspace string, presence []domain.Presence) {
+	h.broadcastPresence(workspace, func() { h.sendPresence(workspace, presence) }, func() { h.sendPresence(workspace, h.snapshotPresence(workspace)) })
+}
+
+func (h *realtimeHub) sendPresence(workspace string, presence []domain.Presence) {
+	if h.presenceUnchanged(workspace, presence) {
+		return
+	}
 	payload, _ := json.Marshal(map[string]any{"presence": presence})
 	h.publish(workspace, domain.RealtimeEvent{ID: idgen.New("presence_"), Type: "presence.updated", Payload: payload, CreatedAt: time.Now().UTC()})
+}
+
+// presenceBroadcastInterval is the least time between two roster events of
+// a workspace on one server: a ramp of N people opening the app (or N tabs
+// navigating) sends one roster per interval to every stream instead of N.
+const presenceBroadcastInterval = time.Second
+
+type presenceBroadcastState struct {
+	last     time.Time
+	timer    *time.Timer
+	deferred func()
+}
+
+// broadcastPresence runs immediate when the workspace's last roster went out
+// more than an interval ago; otherwise it runs deferred once at the end of
+// the interval, and later calls within it only replace deferred (it publishes
+// the roster as it is then, so the latest wins).
+func (h *realtimeHub) broadcastPresence(workspace string, immediate, deferred func()) {
+	interval := h.presenceInterval
+	if interval == 0 {
+		interval = presenceBroadcastInterval
+	}
+	if interval < 0 {
+		immediate()
+		return
+	}
+	h.presenceMu.Lock()
+	if h.presenceBroadcasts == nil {
+		h.presenceBroadcasts = map[string]*presenceBroadcastState{}
+	}
+	state := h.presenceBroadcasts[workspace]
+	if state == nil {
+		state = &presenceBroadcastState{}
+		h.presenceBroadcasts[workspace] = state
+	}
+	now := time.Now()
+	if state.timer != nil {
+		state.deferred = deferred
+		h.presenceMu.Unlock()
+		return
+	}
+	if wait := state.last.Add(interval).Sub(now); wait > 0 {
+		state.deferred = deferred
+		state.timer = time.AfterFunc(wait, func() {
+			h.presenceMu.Lock()
+			run := state.deferred
+			state.deferred, state.timer, state.last = nil, nil, time.Now()
+			h.presenceMu.Unlock()
+			if run != nil {
+				run()
+			}
+		})
+		h.presenceMu.Unlock()
+		return
+	}
+	state.last = now
+	h.presenceMu.Unlock()
+	immediate()
+}
+
+// presenceCleanupDue reports whether this server should expire the
+// workspace's presence entries now: at most once per interval, whichever of
+// its streams' tickers asks first.
+func (h *realtimeHub) presenceCleanupDue(workspace string, interval time.Duration) bool {
+	h.presenceMu.Lock()
+	defer h.presenceMu.Unlock()
+	if h.presenceCleanups == nil {
+		h.presenceCleanups = map[string]time.Time{}
+	}
+	now := time.Now()
+	if last, ok := h.presenceCleanups[workspace]; ok && now.Sub(last) < interval-time.Second {
+		return false
+	}
+	h.presenceCleanups[workspace] = now
+	return true
 }
 
 func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
@@ -574,13 +663,17 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 				flusher.Flush()
 			}
 		case <-ticker.C:
-			if s.coordinator != nil {
-				presence, changed, err := s.coordinator.CleanupPresence(r.Context(), workspace, presenceTTL)
-				if err == nil && changed {
-					s.publishPresence(workspace, presence)
+			// One cleanup per workspace per interval on this server, not one per open stream (each read the
+			// whole roster from Redis).
+			if s.realtime.presenceCleanupDue(workspace, 15*time.Second) {
+				if s.coordinator != nil {
+					presence, changed, err := s.coordinator.CleanupPresence(r.Context(), workspace, presenceTTL)
+					if err == nil && changed {
+						s.publishPresence(workspace, presence)
+					}
+				} else {
+					s.realtime.cleanupPresence(workspace)
 				}
-			} else {
-				s.realtime.cleanupPresence(workspace)
 			}
 			// A named event (not a comment): browsers expose it to the page,
 			// which reconnects a stream that stops sending it (a proxy can keep
@@ -864,7 +957,22 @@ func (s *server) snapshotPresence(ctx context.Context, workspace string) ([]doma
 	return s.realtime.snapshotPresence(workspace), nil
 }
 
+// publishPresence sends the roster to every stream (and the peers), at most
+// once per workspace per presenceBroadcastInterval: within an interval the
+// roster read from the shared store when it ends goes out instead.
 func (s *server) publishPresence(workspace string, presence []domain.Presence) {
+	s.realtime.broadcastPresence(workspace, func() { s.sendPresence(workspace, presence) }, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		current, err := s.snapshotPresence(ctx, workspace)
+		if err != nil {
+			current = presence
+		}
+		s.sendPresence(workspace, current)
+	})
+}
+
+func (s *server) sendPresence(workspace string, presence []domain.Presence) {
 	if s.realtime.presenceUnchanged(workspace, presence) {
 		// A heartbeat: the roster is what every stream here (and, through the shared roster, on the peers) has.
 		return

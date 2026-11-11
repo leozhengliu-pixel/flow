@@ -624,6 +624,15 @@ func TestLoadUsers(t *testing.T) {
 		}
 		return false
 	}
+	// Other reads retry a busy answer three times, like the web client's request().
+	read := func(client *http.Client, name, path string) {
+		for attempt := 1; attempt <= 3 && ctx.Err() == nil; attempt++ {
+			if do(client, name, http.MethodGet, path, nil) != http.StatusServiceUnavailable || attempt == 3 {
+				return
+			}
+			time.Sleep(time.Duration(float64(2*time.Second) * (0.75 + 0.5*float64(attempt%3)/2)))
+		}
+	}
 
 	// Each change the writer commits, by kind: when it was committed.
 	var changeMu sync.Mutex
@@ -714,7 +723,7 @@ func TestLoadUsers(t *testing.T) {
 				case <-heartbeat.C:
 					do(client, "presence", http.MethodPost, "/api/realtime/presence", presenceBody(index))
 				case <-navigate.C:
-					do(client, "project", http.MethodGet, fmt.Sprintf("/api/projects/lt-project-%05d", index%2321), nil)
+					read(client, "project", fmt.Sprintf("/api/projects/lt-project-%05d", index%2321))
 					do(client, "issues", http.MethodGet, "/api/issue-records?limit=50", nil)
 				}
 			}

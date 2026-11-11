@@ -30,6 +30,10 @@ export function jsonRequest(method: string, input: unknown): RequestInit {
 }
 
 export async function request<T>(url: string, init?: ApiRequestInit): Promise<T> {
+	// A read the server turned away as busy (503 + Retry-After: its bounded projection gates for the bootstrap and
+	// for project, document and initiative reads) is tried again after the wait it names, a few times. Writes are not.
+	const method = (init?.method ?? 'GET').toUpperCase()
+	if (method === 'GET' || method === 'HEAD') return requestRetryingBusy<T>(url, init ?? {}, 3)
 	return parseResponse<T>(await apiFetch(url, init))
 }
 

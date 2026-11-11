@@ -623,6 +623,10 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	// AUTH_DISABLED previously skipped authorizeWorkspaceRequest entirely, so
 	// team-scoped resourceAllowed checks must not block local/dev fixtures.
 	if !s.authDisabled && !s.resourceAllowed(r, key, user.ID) {
+		if retryAfter, refused := projectionRefused(r); refused {
+			writeProjectionBusy(w, retryAfter)
+			return false
+		}
 		writeError(w, http.StatusForbidden, "This resource is outside your teams")
 		return false
 	}
@@ -1050,10 +1054,11 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	if isIssueRecordsRequest(r) {
 		data, err = s.issueRecordAuthorizationData(r)
 		ok = err == nil
-	} else if metadataAuthorizationRequest(r) {
-		data, err = s.store.PagedWorkspaceMetadata(r.Context(), workspace, userID)
-		ok = err == nil
 	} else {
+		// The viewer's whole projection: bounded by the projection gate (projection_gate.go).
+		if !acquireProjection(r) {
+			return false
+		}
 		data, err = s.store.PagedWorkspaceMetadata(r.Context(), workspace, userID)
 		ok = err == nil
 	}
