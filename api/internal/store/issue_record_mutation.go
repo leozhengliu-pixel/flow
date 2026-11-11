@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"time"
 
 	"flow/api/internal/domain"
@@ -29,9 +30,9 @@ type IssueMutationScope struct {
 // UpdateIssueRecord is a bounded entity transaction. The callback may update
 // the target, its immediate family, and the supplied related IDs. Large graph
 // changes must be scheduled as batches rather than materialized in a request.
-// Its metadata changes other than to documents are discarded; data.Projects
-// and data.Trash are shared with the stored copy and must not be changed at
-// all (issueUpdateMetadata).
+// Its metadata changes other than to documents are discarded. With narrow
+// mutation inputs disabled, data.Projects and data.Trash share the stored
+// copy and must not be changed (issueUpdateMetadata).
 func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id string, expected *int64, scope IssueMutationScope, mutate func(*domain.Bootstrap, *domain.Issue) error) (domain.Issue, error) {
 	mutationKey := ChatMutationKey(ctx)
 	mutationActor := ""
@@ -48,13 +49,17 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	}
 	// Each attempt starts from the server's current copy of the metadata.
 	// It runs under writeMu, so the copy cannot change meanwhile.
+	fields := issueRecordCallbackFields(scope.Payload)
+	var storedMetadata domain.Bootstrap
 	loadMetadata := func() (domain.Bootstrap, error) {
 		stored, ok := s.storedWorkspace(workspace)
 		if !ok {
 			return domain.Bootstrap{}, sql.ErrNoRows
 		}
-		metadata := issueUpdateMetadata(stored)
+		storedMetadata = stored
+		metadata := issueUpdateMetadata(stored, fields...)
 		if actor, ok := actorFromContext(ctx); ok {
+			actor = mutationInputActor(actor)
 			metadata.Viewer = actor
 			role, status, err := s.WorkspaceRole(ctx, metadata.Workspace.ID, actor.ID)
 			if err != nil {
@@ -271,9 +276,15 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		metadata.FormerMembers = s.formerMemberLookup(ctx, tx, &metadata)
 		metadata.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
+		if len(fields) > 0 && !slices.Contains(fields, "projects") {
+			copyMutationProjects(&metadata, storedMetadata)
+		}
 		err = mutate(&metadata, target)
 		metadata.CollaborationUpdates = nil
 		metadata.FormerMembers = nil
+		if len(fields) > 0 {
+			restoreUnlistedMetadata(&metadata, storedMetadata, fields)
+		}
 		if err != nil {
 			if errors.Is(err, ErrNoMutation) {
 				result = original

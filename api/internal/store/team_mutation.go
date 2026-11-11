@@ -117,10 +117,18 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		base, baseKnown := s.copyRevisionLocked(workspaceKey)
 		ctx, copyWrite := s.watchMetadataWriteFrom(ctx, workspaceKey, base, baseKnown)
 		domain.EnsureTeamDirectory(&current)
-		next := current
-		snap := snapshotTeamMutation(eventType, mutationAggregateID(ctx), &next)
+		next, fields := teamCallbackInput(current, eventType, payload)
+		if narrowMutationInputs() {
+			domain.EnsureTeamDirectory(&next)
+		}
+		snapshotSource := &next
+		if len(fields) > 0 {
+			snapshotSource = &current
+		}
+		snap := snapshotTeamMutation(eventType, mutationAggregateID(ctx), snapshotSource)
 		originalViewerRole, originalViewer := next.ViewerRole, next.Viewer
 		if actor, ok := actorFromContext(ctx); ok {
+			actor = mutationInputActor(actor)
 			next.Viewer = actor
 			if role, status, roleErr := s.WorkspaceRole(ctx, next.Workspace.ID, actor.ID); roleErr == nil && status == "active" {
 				next.ViewerRole = role
@@ -142,12 +150,35 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		if aggregateID == "" {
 			aggregateID = snap.hintID
 		}
-		if err != nil {
+		rollback := func(installDeletion bool) {
+			if narrowMutationInputs() {
+				return
+			}
 			rollbackTeamMutation(&next, &snap, aggregateID)
-			if snap.deletion != nil {
+			if installDeletion && snap.deletion != nil {
 				s.setWorkspaceLocked(workspaceKey, next)
 			}
+		}
+		if err != nil {
+			rollback(true)
 			return err
+		}
+		if len(fields) > 0 {
+			if eventType == "team.created" {
+				settings := maps.Clone(current.TeamSettings)
+				if settings == nil {
+					settings = map[string]domain.TeamSettings{}
+				}
+				for id, value := range next.TeamSettings {
+					if _, exists := current.TeamSettings[id]; !exists {
+						settings[id] = value
+					}
+				}
+				next.TeamSettings = settings
+				fields = append(slices.Clone(fields), "teamSettings", "cycleSettings")
+			}
+			restoreUnlistedMetadata(&next, current, fields)
+			copyMutationTeamDirectory(&next, current)
 		}
 		previousValues := json.RawMessage(nil)
 		if webhookEnabled {
@@ -155,10 +186,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		}
 		upserts, err := collectDirtyTeamRecords(eventType, aggregateID, &snap, next)
 		if err != nil {
-			rollbackTeamMutation(&next, &snap, aggregateID)
-			if snap.deletion != nil {
-				s.setWorkspaceLocked(workspaceKey, next)
-			}
+			rollback(true)
 			return err
 		}
 		if snap.deletion != nil {
@@ -175,7 +203,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		if len(upserts) > 0 || membersChanged || teamMembersChanged {
 			payloadRaw, err := json.Marshal(payload)
 			if err != nil {
-				rollbackTeamMutation(&next, &snap, aggregateID)
+				rollback(false)
 				return err
 			}
 			event = domain.DomainEvent{ID: idgen.New("evt_"), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
@@ -185,10 +213,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 				snap.deletion.removedIssues = removedIssues
 			}
 			if err != nil {
-				rollbackTeamMutation(&next, &snap, aggregateID)
-				if snap.deletion != nil {
-					s.setWorkspaceLocked(workspaceKey, next)
-				}
+				rollback(true)
 				return err
 			}
 		}

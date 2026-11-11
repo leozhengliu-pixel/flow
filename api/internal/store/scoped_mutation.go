@@ -190,7 +190,14 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		// writeMu holds the copy (and its revision) until the install.
 		ctx, copyWrite := s.watchMetadataWrite(ctx, workspaceKey)
 		discussionOnly := IsIssueDiscussionMutation(ctx)
-		current := cloneBootstrap(collectionMetadata(stored))
+		var fields []string
+		var current domain.Bootstrap
+		if narrowMutationInputs() && discussionOnly && scope.Resolve == nil && scope.Expand == nil && !scope.StatusAutomation && !scope.CreateIssues {
+			fields = discussionCallbackFields
+			current = metadataFieldSnapshot(stored, fields)
+		} else {
+			current = cloneBootstrap(collectionMetadata(stored))
+		}
 		if discussionOnly {
 			current.IssueSLAs = nil
 			current.SLAEvents = nil
@@ -209,6 +216,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		// Resolve the actor's role before opening the transaction: SQLite
 		// pools can hold a single connection.
 		actor, hasActor := actorFromContext(ctx)
+		actor = mutationInputActor(actor)
 		actorRole := ""
 		var actorTeams []string
 		if hasActor {
@@ -307,6 +315,9 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		}
 		// Snapshot clones drop json:"-" fields such as the next issue number.
 		next.NextIssueNumber = nextIssueNumber
+		if len(fields) > 0 {
+			copyMutationProjects(&next, stored)
+		}
 		refreshDisplayReferences(&next)
 		refreshIssueReferences(&next)
 		originalViewerRole := next.ViewerRole
@@ -331,6 +342,10 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		next.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspaceKey)
 		aggregateID, err := mutate(&next)
 		next.CollaborationUpdates = nil
+		if len(fields) > 0 {
+			restoreUnlistedMetadata(&current, stored, fields)
+			restoreUnlistedMetadata(&next, stored, fields)
+		}
 		if discussionOnly {
 			// These collections are unrelated to a comment but may contain
 			// hundreds of thousands of records. Restore their shared snapshots

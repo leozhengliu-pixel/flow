@@ -77,18 +77,10 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		}
 		// writeMu holds the copy (and its revision) until the install.
 		ctx, copyWrite := s.watchMetadataWrite(ctx, workspace)
-		metadata := collectionMetadata(current)
-		if discussionOnly {
-			// No discussion callback (the comment, reaction and thread
-			// subscription handlers, the comment action claim, the MCP
-			// comment tool) uses the trash, the second largest collection:
-			// keep it out of the clone, then put the stored entries back
-			// (TestIssueWritesLeaveTheSharedCollectionsAlone).
-			metadata.Trash = nil
-		}
-		data := cloneBootstrap(metadata)
+		data, fields := issueScopeCallbackInput(current, discussionOnly)
 		originalRole := data.ViewerRole
 		if actor, ok := actorFromContext(ctx); ok {
+			actor = mutationInputActor(actor)
 			data.Viewer = actor
 			role, status, err := s.WorkspaceRole(ctx, data.Workspace.ID, actor.ID)
 			if err != nil || status != "active" {
@@ -260,6 +252,9 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		for _, delivery := range data.NotificationDeliveries {
 			oldDeliveries[delivery.ID] = true
 		}
+		if len(fields) > 0 {
+			copyMutationProjects(&data, current)
+		}
 		refreshDisplayReferences(&data)
 		refreshIssueReferences(&data)
 		traceMark(ctx, "load")
@@ -270,6 +265,9 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		data.FormerMembers = nil
 		traceMark(ctx, "mutate")
 		data.Members, data.TeamMembers = storedMembers, storedTeamMembers
+		if len(fields) > 0 {
+			restoreUnlistedMetadata(&data, current, fields)
+		}
 		if discussionOnly {
 			data.Trash = current.Trash
 		}

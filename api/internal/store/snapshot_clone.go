@@ -161,8 +161,8 @@ func cloneStructInPlace(target reflect.Value, plan *structClonePlan) {
 	}
 }
 
-// issueUpdateMetadata is the metadata an issue record update's callback
-// works on: a clone of the stored copy without the record-backed
+// issueUpdateMetadata prepares an owned callback input when narrow inputs
+// are enabled. Otherwise it retains the legacy clone without record-backed
 // collections, except Projects and Trash, which it shares with stored. They
 // are the largest collections (a deep copy of a large workspace's projects is
 // tens of MiB per issue edit) and no issue update callback changes them: the
@@ -172,7 +172,21 @@ func cloneStructInPlace(target reflect.Value, plan *structClonePlan) {
 // callback under writeMu, so the shared collections cannot change meanwhile
 // (no writer edits a copy in place without writeMu).
 // TestIssueWritesLeaveTheSharedCollectionsAlone (cmd/server) checks it.
-func issueUpdateMetadata(stored domain.Bootstrap) domain.Bootstrap {
+func issueUpdateMetadata(stored domain.Bootstrap, fields ...string) domain.Bootstrap {
+	if narrowMutationInputs() {
+		var owned domain.Bootstrap
+		if len(fields) > 0 {
+			owned = metadataFieldSnapshot(stored, fields)
+		} else {
+			owned = cloneBootstrap(collectionMetadata(stored))
+		}
+		owned.Issues = []domain.Issue{}
+		owned.Activities = map[string][]domain.ActivityEvent{}
+		owned.Comments = map[string][]domain.Comment{}
+		owned.Notifications = []domain.Notification{}
+		owned.NotificationDeliveries = []domain.NotificationDelivery{}
+		return owned
+	}
 	projects, trash := stored.Projects, stored.Trash
 	stored.Projects, stored.Trash = nil, nil
 	stored.Issues = nil
