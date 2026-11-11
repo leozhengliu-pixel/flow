@@ -1266,6 +1266,35 @@ html:root body .property-command-options [role=option] > .property-command-tree-
   pointer-events: none;
 }
 
+/* The Team menu hugs its rows and lists sub-teams as a tree: a team row is an 18px icon cell, an 8px gap, then the name
+   and key; each level moves the icon cell 24px right and hangs a 1x8 line plus a 10x9 curve (the shared tree elbow) from
+   the row above, under the middle of the parent's icon (x 8.25 into the 16px column that starts at the 14px padding).
+   The selected team ends in a 16px tick 14px from the edge; rows without a tick keep 18px. */
+html:root body .property-command-surface.issue-team-menu:not(#_) { min-width: 175px; }
+html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option] {
+  grid-template-columns: calc(18px + var(--option-indent, 0) * 24px) minmax(0, 1fr);
+  gap: 8px;
+  padding: 0 18px 0 14px;
+}
+html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option]:has(.property-command-check) {
+  grid-template-columns: calc(18px + var(--option-indent, 0) * 24px) minmax(0, 1fr) auto;
+  padding-right: 14px;
+}
+html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option] .property-command-icon {
+  width: 18px;
+  height: 18px;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option] .issue-team-name { color: var(--pk-text-strong); }
+html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option] .property-command-check { margin-right: 1px; color: var(--pk-muted); }
+html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option] .property-command-icon > svg { width: 14px !important; height: 14px !important; flex-basis: 14px; }
+html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option] > .property-command-tree-elbow {
+  left: calc(14px + 8.25px + (var(--option-indent, 1) - 1) * 24px);
+}
+
 /* ── Estimate picker (composer pill, issue properties, sub-issue composer) ──
    228px menu; rows are a 16px estimate icon at 14.5px, the label at 38.5px and
    the check 15.5px from the right edge (no shortcut column, so no empty gap). */

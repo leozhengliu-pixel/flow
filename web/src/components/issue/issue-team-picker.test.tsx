@@ -24,6 +24,21 @@ describe('issue team property', () => {
     await waitFor(() => expect(onUpdate).toHaveBeenCalledExactlyOnceWith({ teamId: child.id }))
   })
 
+  it('lists sub-teams as an indented tree with a connector instead of a breadcrumb', async () => {
+    const issue = makeIssue()
+    const child = { ...issue.team, id: 'child', name: 'Child', key: 'CHD' }
+    const grandchild = { ...issue.team, id: 'grandchild', name: 'Grand', key: 'GRD' }
+    const data = makeBootstrap({ teams: [issue.team, child, grandchild], teamSettings: { child: { parentTeamId: issue.team.id }, grandchild: { parentTeamId: child.id } } as never })
+    render(<I18nProvider><IssueTeamPicker issue={issue} data={data} onUpdate={vi.fn()}/></I18nProvider>)
+    await userEvent.click(screen.getByRole('combobox', { name: 'Change team' }))
+    const rows = screen.getAllByRole('option')
+    expect(rows.map(row => row.getAttribute('data-indent'))).toEqual([null, '1', '2'])
+    expect(rows.map(row => row.querySelector('.property-command-tree-elbow') !== null)).toEqual([false, true, true])
+    expect(rows[1].querySelector('.issue-team-parent')).toBeNull()
+    expect(rows[1]).toHaveTextContent('ChildCHD')
+    expect(rows[1]).toHaveAccessibleName(`${issue.team.name} > Child CHD`)
+  })
+
   it.each(['guest', 'member'] as const)('prevents forbidden destinations for %s', async role => {
     const issue = makeIssue()
     const privateTeam = { ...issue.team, id: 'private', name: 'Private', private: true }

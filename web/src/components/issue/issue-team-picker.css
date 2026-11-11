@@ -1,9 +1,9 @@
-.issue-team-path { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.issue-team-path { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; }
 .issue-team-parent { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--pk-muted); }
-.issue-team-name,
-.issue-team-parent > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .issue-team-parent > svg { width: 5px; height: 9px; flex: none; }
-.issue-team-key { flex: none; color: var(--pk-faint); }
+.issue-team-parent > span,
+.issue-team-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.issue-team-key { flex: 1 0 auto; color: var(--pk-faint); }
 .issue-team-filter { position: absolute; left: -99999px; width: 1px; height: 1px; overflow: hidden; }
 .issue-team-property:hover .issue-assignee-profile,
 .issue-team-property:focus-within .issue-assignee-profile { opacity: 1; transform: none; }
