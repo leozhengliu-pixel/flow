@@ -65,13 +65,7 @@ func scaleP01NewPeers(t *testing.T) peerServers {
 	redisServer := miniredis.RunT(t)
 	path := filepath.Join(t.TempDir(), "scale-p01.db")
 	config := store.DatabaseConfig{Driver: "sqlite", Path: path, FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 1}
-	if driver := os.Getenv("FLOW_TEST_DATABASE_DRIVER"); driver != "" {
-		config.Driver, config.URL = driver, os.Getenv("FLOW_TEST_DATABASE_URL")
-		config.MaxOpenConns = 20
-		if config.URL == "" {
-			t.Fatal("FLOW_TEST_DATABASE_URL is required")
-		}
-	}
+	config = scaleP01TestDatabaseConfig(t, config, 20)
 	return scaleP01Peers(t, config, redisServer.Addr())
 }
 
@@ -97,7 +91,7 @@ func scaleP01Peers(t *testing.T, config store.DatabaseConfig, redisAddr string) 
 		repo.SetWorkspaceCoordinator(coordinator)
 		ctx, cancel := context.WithCancel(context.Background())
 		instance := &server{store: repo, uploadPath: uploads, coordinator: coordinator, coordinationContext: ctx}
-		host := httptest.NewServer(scaleP01Handler(newHandler(instance)))
+		host := httptest.NewServer(scaleP01Handler(newHandler(instance), probe))
 		t.Cleanup(func() {
 			host.Close()
 			cancel()
@@ -121,8 +115,12 @@ type scaleP01Identity struct {
 	ExpectedKinds   map[string]bool
 }
 
-func scaleP01Handler(next http.Handler) http.Handler {
+func scaleP01Handler(next http.Handler, probe *store.ScaleP01Probe) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Scale-P01-Request") != "" && r.Method != http.MethodGet && r.Method != http.MethodHead && !strings.HasPrefix(r.URL.Path, "/api/realtime/") {
+			probe.BeginLoadWrite()
+			defer probe.EndLoadWrite()
+		}
 		r = r.WithContext(store.ScaleP01RequestContext(r.Context(), r.Header.Get("X-Scale-P01-Request")))
 		next.ServeHTTP(w, r)
 	})

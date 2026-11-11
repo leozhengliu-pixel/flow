@@ -71,6 +71,27 @@ type scaleP01PermissionViewer struct {
 	private, shared bool
 }
 
+func scaleP01TestDatabaseConfig(t *testing.T, config store.DatabaseConfig, externalConnections int) store.DatabaseConfig {
+	t.Helper()
+	driver := strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_TEST_DATABASE_DRIVER")))
+	if driver == "" {
+		return config
+	}
+	config.Driver, config.URL = driver, os.Getenv("FLOW_TEST_DATABASE_URL")
+	if config.URL == "" {
+		t.Fatal("FLOW_TEST_DATABASE_URL is required")
+	}
+	config.MaxOpenConns = externalConnections
+	if driver == "sqlite" {
+		config.Path = filepath.Clean(config.URL)
+		if !filepath.IsAbs(config.Path) || (!strings.HasPrefix(config.Path, "/tmp/codex-scale-p01/") && !strings.HasPrefix(config.Path, "/private/tmp/codex-scale-p01/")) {
+			t.Fatal("explicit SQLite test paths must be inside /tmp/codex-scale-p01")
+		}
+		config.MaxOpenConns = 1
+	}
+	return config
+}
+
 func scaleP01PermissionRead(t *testing.T, viewer scaleP01PermissionViewer, base, workspace, path string) (int, []byte) {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, base+path, nil)
@@ -100,7 +121,7 @@ func TestScaleP01PermissionMatrix(t *testing.T) {
 		if os.Getenv("FLOW_TEST_DATABASE_URL") == "" {
 			t.Fatal("FLOW_TEST_DATABASE_URL is required")
 		}
-		configs[driver] = store.DatabaseConfig{Driver: driver, URL: os.Getenv("FLOW_TEST_DATABASE_URL"), FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 4}
+		configs[driver] = scaleP01TestDatabaseConfig(t, store.DatabaseConfig{FixtureProfile: "test", FixturePassword: "test-password"}, 4)
 	}
 	for name, config := range configs {
 		t.Run(name, func(t *testing.T) { scaleP01PermissionMatrix(t, config) })
@@ -141,7 +162,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	issue := authRequest[domain.Issue](t, admin, "POST", base+"/api/issues", map[string]any{"title": "P01 explicitly granted", "teamId": private.ID}, workspace, http.StatusCreated)
+	issue := authRequest[domain.Issue](t, admin, "POST", base+"/api/issues", map[string]any{"title": "P01 explicitly granted", "teamId": private.ID, "projectId": projectID}, workspace, http.StatusCreated)
 	authRequest[[]domain.IssuePermission](t, admin, "PUT", base+"/api/issues/"+issue.ID+"/permissions", map[string]any{"permissions": []map[string]string{{"subjectType": "user", "subjectId": guestUser.ID, "role": "viewer"}}}, workspace, http.StatusOK)
 	viewers := []scaleP01PermissionViewer{
 		{"admin", admin, "", true, true}, {"admin-outside-private", outsideAdmin, "", false, true},
@@ -238,13 +259,26 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 					}
 					scaleP01EqualJSON(t, expected, scaleP01LegacyProjectList(actual))
 					wantDetail := oracle.Projects[index]
+					// The existing detail/list routes retain the stored aggregate
+					// zero; full bootstrap derives its count from visible issues.
+					wantDetail.IssueCount = 0
 					if viewer.name == "key-selected-set" {
 						wantDetail.TeamIDs = []string{public.ID}
 					}
-					scaleP01EqualJSON(t, wantDetail, actual)
-					leaks := !viewer.private && (slices.Contains(actual.TeamIDs, private.ID) || slices.Contains(actual.DependencyIDs, hiddenID) || actual.IssueCount != 0)
+					scaleP01EqualJSON(t, wantDetail, json.RawMessage(raw))
+					visibleCount := 0
+					for _, item := range oracle.Issues {
+						if item.Project != nil && item.Project.ID == target.id {
+							visibleCount++
+						}
+					}
+					bootstrapCountLeak := oracle.Projects[index].IssueCount > visibleCount
+					if viewer.name == "admin" && target.id == projectID && oracle.Projects[index].IssueCount != 1 {
+						t.Fatal("hidden-count fixture has no nonzero control")
+					}
+					leaks := !viewer.private && (slices.Contains(actual.TeamIDs, private.ID) || slices.Contains(actual.DependencyIDs, hiddenID) || actual.IssueCount > visibleCount || bootstrapCountLeak)
 					if leaks && viewer.name == "key-selected-set" {
-						t.Logf("BASELINE DEFECT: selected-set key retains owner projection: hiddenDependency=%v hiddenCount=%v hiddenTeam=%v", slices.Contains(actual.DependencyIDs, hiddenID), actual.IssueCount != 0, slices.Contains(actual.TeamIDs, private.ID))
+						t.Logf("BASELINE DEFECT: selected-set key retains owner projection: hiddenDependency=%v hiddenBootstrapCount=%v hiddenTeam=%v", slices.Contains(actual.DependencyIDs, hiddenID), bootstrapCountLeak, slices.Contains(actual.TeamIDs, private.ID))
 						if os.Getenv("FLOW_LOAD_STRICT_PERMISSIONS") == "1" {
 							t.Error("selected-set key leaks hidden references/counts")
 						}

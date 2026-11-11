@@ -122,7 +122,7 @@ func TestScaleP01ReplicaProcess(t *testing.T) {
 		value, _ := scaleP01LocalMetricSource(probe)(r.Context())
 		writeJSON(w, http.StatusOK, value)
 	})
-	mux.Handle("/", scaleP01Handler(newHandler(srv)))
+	mux.Handle("/", scaleP01Handler(newHandler(srv), probe))
 	host := httptest.NewServer(mux)
 	defer host.Close()
 	if err := os.WriteFile(filepath.Join(dir, "url"), []byte(host.URL), 0o600); err != nil {
@@ -140,12 +140,7 @@ func TestScaleP01TwoProcessLoad(t *testing.T) {
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
 	root := t.TempDir()
 	config := store.DatabaseConfig{Driver: "sqlite", Path: filepath.Join(root, "external.db"), FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 1}
-	if driver := os.Getenv("FLOW_TEST_DATABASE_DRIVER"); driver != "" {
-		config.Driver, config.URL, config.MaxOpenConns = driver, os.Getenv("FLOW_TEST_DATABASE_URL"), 20
-		if config.URL == "" {
-			t.Fatal("FLOW_TEST_DATABASE_URL is required")
-		}
-	}
+	config = scaleP01TestDatabaseConfig(t, config, 20)
 	redisServer := miniredis.RunT(t)
 	// Close the seeding handlers and their stores before starting the processes.
 	var fixture scaleP01Fixture

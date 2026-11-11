@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -36,14 +37,19 @@ type ScaleP01SQL struct {
 // transactions. It excludes prepare/BEGIN/COMMIT from Statements. Query timing
 // measures driver execution, not subsequent row iteration or server lock time.
 type ScaleP01Probe struct {
-	mu          sync.Mutex
-	sql         ScaleP01SQL
-	events      [10000]ScaleP01Commit
-	next        int64
-	firstCommit map[string]time.Time
-	requests    [10000]string
-	requestNext int
+	activeWrites atomic.Int64
+	mu           sync.Mutex
+	sql          ScaleP01SQL
+	events       [10000]ScaleP01Commit
+	next         int64
+	firstCommit  map[string]time.Time
+	requests     [10000]string
+	requestNext  int
 }
+
+func (p *ScaleP01Probe) BeginLoadWrite()         { p.activeWrites.Add(1) }
+func (p *ScaleP01Probe) EndLoadWrite()           { p.activeWrites.Add(-1) }
+func (p *ScaleP01Probe) ActiveLoadWrites() int64 { return p.activeWrites.Load() }
 
 func (p *ScaleP01Probe) Snapshot() (ScaleP01SQL, []ScaleP01Commit, int64) {
 	p.mu.Lock()

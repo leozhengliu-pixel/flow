@@ -34,6 +34,8 @@ type scaleP01Metrics struct {
 	PID                  int
 	HeapAlloc, HeapInuse uint64
 	MaxRSS               int64
+	ActiveWrites         int64
+	RequestTracking      bool
 }
 
 type scaleP01MetricSource func(context.Context) (scaleP01Metrics, error)
@@ -43,7 +45,7 @@ func scaleP01LocalMetricSource(probe *store.ScaleP01Probe) scaleP01MetricSource 
 		sql, commits, evicted := probe.Snapshot()
 		var memory runtime.MemStats
 		runtime.ReadMemStats(&memory)
-		return scaleP01Metrics{SQL: sql, Commits: commits, Evicted: evicted, CPU: scaleP01CPUTime(), PID: os.Getpid(), HeapAlloc: memory.HeapAlloc, HeapInuse: memory.HeapInuse, MaxRSS: maxRSSBytes()}, nil
+		return scaleP01Metrics{SQL: sql, Commits: commits, Evicted: evicted, CPU: scaleP01CPUTime(), PID: os.Getpid(), HeapAlloc: memory.HeapAlloc, HeapInuse: memory.HeapInuse, MaxRSS: maxRSSBytes(), ActiveWrites: probe.ActiveLoadWrites(), RequestTracking: true}, nil
 	}
 }
 
@@ -461,11 +463,37 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 	}
 	workers.Wait()
 	pollMetrics()
-	metricMu.Lock()
-	deadline := lastCommit.Add(deliveryTimeout)
-	metricMu.Unlock()
-	if remaining := time.Until(deadline); remaining > 0 {
-		scaleP01Pause(streamCtx, remaining)
+	// A client deadline does not prove the API rolled back. Observe late
+	// commits while the server finishes its already admitted write handlers.
+	drainDeadline := time.Now().Add(timeout + deliveryTimeout)
+	outstandingWrites := int64(0)
+	for {
+		metricMu.Lock()
+		outstandingWrites = 0
+		tracking := len(sources) > 0
+		for _, value := range metricsAfter {
+			outstandingWrites += value.ActiveWrites
+			tracking = tracking && value.RequestTracking
+		}
+		ready := outstandingWrites == 0 && (lastCommit.IsZero() || time.Since(lastCommit) >= deliveryTimeout)
+		if !tracking && writeFailures.Load() > 0 {
+			metricErrors = append(metricErrors, "write outcomes cannot be confirmed without server request tracking")
+			ready = true
+		}
+		metricMu.Unlock()
+		if ready {
+			break
+		}
+		if time.Now().After(drainDeadline) {
+			metricMu.Lock()
+			metricErrors = append(metricErrors, "server write handlers did not drain before the observation deadline")
+			metricMu.Unlock()
+			break
+		}
+		if !scaleP01Pause(streamCtx, 100*time.Millisecond) {
+			break
+		}
+		pollMetrics()
 	}
 	pollMetrics()
 	cancel()
@@ -489,7 +517,8 @@ func scaleP01Run(t *testing.T, bases []string, fixture scaleP01Fixture, sources 
 		"commitToClientApply": apply, "commitToReceive": ledger.report(ended, deliveryTimeout, "received"), "commitToBrowserApply": ledger.report(ended, deliveryTimeout, "browser"),
 		"browserApplySource":     "unavailable unless FLOW_LOAD_BROWSER_ACKS supplies instrumented browser apply acknowledgements; receiving an SSE event is insufficient",
 		"commitMetricsAvailable": len(sources) > 0, "browserMetricsAvailable": browserLog.path != "", "metricsComplete": len(sources) > 0 && len(metricErrors) == 0 && unaccounted == 0, "unaccountedSuccessfulWrites": unaccounted, "apiProcessIsolationVerified": external && len(sources) == 2,
-		"writes": writeCount.Load(), "writeErrors": writeFailures.Load(), "events": events, "clientActions": actions, "routes": stats.report(), "streamAttempts": streamAttempts.Load(), "streamErrors": streamFailures.Load(),
+		"outstandingServerWrites": outstandingWrites,
+		"writes":                  writeCount.Load(), "writeErrors": writeFailures.Load(), "events": events, "clientActions": actions, "routes": stats.report(), "streamAttempts": streamAttempts.Load(), "streamErrors": streamFailures.Load(),
 		"processCPU": scaleP01CPUReport(cpuBefore, cpuAfter, ended.Sub(start), users), "memoryScope": "generator and both APIs in the same process", "metricErrors": metricErrors,
 	}
 	if driver := os.Getenv("FLOW_TEST_DATABASE_DRIVER"); driver != "" {

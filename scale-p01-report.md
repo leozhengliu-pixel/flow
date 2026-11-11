@@ -56,6 +56,9 @@ func (s *SQLiteStore) EnableScaleP01Probe(config DatabaseConfig) (*ScaleP01Probe
 func (p *ScaleP01Probe) Snapshot() (ScaleP01SQL, []ScaleP01Commit, int64)
 func (p *ScaleP01Probe) SQLSnapshot() ScaleP01SQL
 func ScaleP01RequestContext(ctx context.Context, requestID string) context.Context
+func (p *ScaleP01Probe) BeginLoadWrite()
+func (p *ScaleP01Probe) EndLoadWrite()
+func (p *ScaleP01Probe) ActiveLoadWrites() int64
 ```
 
 `SeedSyntheticMetadata(ctx context.Context, workspace string, spec SyntheticMetadata) error`
@@ -68,6 +71,11 @@ audit event, so access latency is not measured from the later audit commit.
 Events and applies are joined by event ID and client ID, with duplicate protection
 and support for a stream beating its writer's response. Eligibility is established
 from the actual event permission policy before load, including document links.
+Test-only request tracking keeps commit observation and SSE readers running while
+timed-out API handlers finish. The drain is bounded by the request timeout plus
+the delivery timeout; unfinished handlers make metrics explicitly incomplete.
+The late-commit test forces an actual write after its caller's deadline and the
+load window, and requires that commit and apply to remain in the report.
 
 `routes.*.sloLatencyMs` and `commitToClientApply.sloLatencySeconds` include every
 attempt/eligible recipient. Failures sort at positive infinity; a censored
@@ -140,12 +148,16 @@ hidden project references/counts, and actor/payload suppression after revocation
 for an already projected queued frame and durable replay. It compares serialized
 fields without general null/empty normalization. Frozen list projection accounts
 for the existing intentional list/detail field difference; bootstrap additionally
-checks visibility and full detail fields. The selected-key bootstrap team-reference
-shape is a distinct existing route contract.
+checks visibility and full detail fields. The fixture includes a linked private
+issue and a nonzero count control. Full bootstrap derives its issue count from
+visible issues, while current REST metadata/detail reads report the stored zero;
+that route distinction is explicit in the oracle. The selected-key bootstrap team
+reference shape is another distinct existing route contract.
 
 Existing defect found: a selected-set key owned by an admin who can read a private
-project can retain a hidden dependency ID and aggregate issue count in a shared
-project's response. The baseline logs `BASELINE DEFECT`; strict mode fails. This
+project can retain its hidden dependency ID in REST and the private issue's count
+in bootstrap after key scope filtering. The baseline logs `BASELINE DEFECT` with
+separate booleans for both findings; strict mode fails. This
 is not fixed or silently normalized by P01. Do not claim the entire security M
 matrix is clean or use these baseline passes to enable another package by default.
 
