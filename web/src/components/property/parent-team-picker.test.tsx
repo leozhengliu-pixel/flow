@@ -17,7 +17,23 @@ it('searches ancestor names and prevents choosing a parent at the fifth level',(
   expect(deepest).toHaveAttribute('aria-disabled','true')
   fireEvent.click(deepest)
   expect(change).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('option',{name:/Unit 3$/}))
+  fireEvent.click(screen.getByRole('option',{name:/Unit 3 T3$/}))
   fireEvent.click(screen.getByRole('button',{name:'Set parent team'}))
   expect(change).toHaveBeenCalledWith('t3')
+})
+
+it('lists teams as an indented tree with keys, without a "No parent team" row until a parent is set',()=>{
+  localStorage.setItem('flow:locale','en-US')
+  const teams:Team[]=[{id:'a',key:'AAA',name:'Alpha',color:'#888888'},{id:'b',key:'BBB',name:'Beta',color:'#888888'}]
+  const settings={b:{parentTeamId:'a'}}
+  const view=render(<I18nProvider><ParentTeamPicker teams={teams} settings={settings} onChange={vi.fn()}/></I18nProvider>)
+  fireEvent.click(screen.getByRole('combobox',{name:'Parent team'}))
+  const rows=screen.getAllByRole('option')
+  expect(rows.map(row=>row.textContent)).toEqual(['AlphaAAA','BetaBBB'])
+  expect(rows[1]).toHaveAttribute('data-indent','1')
+  expect(rows[1].querySelector('.property-command-tree-elbow')).not.toBeNull()
+  view.unmount()
+  render(<I18nProvider><ParentTeamPicker teams={teams} settings={settings} value="a" onChange={vi.fn()}/></I18nProvider>)
+  fireEvent.click(screen.getByRole('combobox',{name:'Parent team'}))
+  expect(screen.getAllByRole('option')[0]).toHaveTextContent('No parent team')
 })

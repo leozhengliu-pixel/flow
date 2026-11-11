@@ -73,7 +73,7 @@ export interface PropertyOptionSubmenu {
 
 export type PropertyMenuKind = 'standard' | 'labels' | 'project-labels' | 'project' | 'milestone'
 
-export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, closeOnSelect, keepSelectedVisible = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, createOptionLabel, searchPlaceholder, searchShortcut, showGroupHeadings = true, groupHeading, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, phoneSurfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, hoverPlacement = 'left', valueIsEntityName = false, open: controlledOpen, onOpenChange, labelGroupId, embedded = false, tooltip, tooltipShortcut, menuContext, disabled = false }: {
+export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, closeOnSelect, keepSelectedVisible = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, createOptionLabel, searchPlaceholder, searchShortcut, showGroupHeadings = true, groupHeading, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, tree = false, phoneSurfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, hoverPlacement = 'left', valueIsEntityName = false, open: controlledOpen, onOpenChange, labelGroupId, embedded = false, tooltip, tooltipShortcut, menuContext, disabled = false }: {
   label: string
   disabled?: boolean
   value?: string
@@ -102,6 +102,8 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   triggerClassName?: string
   triggerRole?: 'button' | 'combobox'
   surfaceClassName?: string
+  /** Team menus: rows are teams, sub-teams (options with `indent`) hang under their parent with the shared tree elbow. */
+  tree?: boolean
   phoneSurfaceClassName?: string
   side?: 'top' | 'right' | 'bottom' | 'left'
   align?: 'start' | 'center' | 'end'
@@ -237,7 +239,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}><Tooltip.Root open={Boolean(tooltipContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false); else { setActiveTrigger(undefined); setOpenLabelGroupId(undefined); setOpenSubmenuId(undefined) } }}>
     {menuTrigger}
     <Popover.Portal>
-      <Popover.Content data-flow-motion="floating" className={`property-command-surface property-command-${kind}${labelGroupId ? ' is-label-group' : ''}${surfaceClassName ? ` ${surfaceClassName}` : ''}`} role="dialog" aria-label={`Change ${label}`} align={align} alignOffset={alignOffset} side={side} sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}>
+      <Popover.Content data-flow-motion="floating" className={`property-command-surface property-command-${kind}${labelGroupId ? ' is-label-group' : ''}${tree ? ' is-tree' : ''}${surfaceClassName ? ` ${surfaceClassName}` : ''}`} role="dialog" aria-label={`Change ${label}`} align={align} alignOffset={alignOffset} side={side} sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}>
         {content}
       </Popover.Content>
     </Popover.Portal>
@@ -400,7 +402,7 @@ const BESIDE_MENU_GAP = 5
 
 /** The reference app's tree elbow tying a sub-item to its parent row: a 1x8 line down from the row's top edge,
  *  then the 10x9 curve from y7 toward the icon. */
-function TreeElbow() {
+export function TreeElbow() {
   return <svg aria-hidden="true" className="property-command-tree-elbow" width="10" height="16" viewBox="0 0 10 16"><path d="M0 0h1v8H0z"/><path transform="translate(0 7)" d="M0 0h1v1c0 2.5 2.212 3.546 2.212 3.546L9.737 8.06c.568.306.094 1.186-.474.88l-6.48-3.488S0 4 0 1V0Z"/></svg>
 }
 

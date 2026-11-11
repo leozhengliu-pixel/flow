@@ -2,7 +2,7 @@ import { FilterGlyph } from '@/components/issue/filter-glyph'
 import type { MyIssuesFilterOption } from '@/components/my-issues/my-issues-surface'
 import { CustomerGlyph } from '@/components/customer/customer-filter-glyphs'
 import { ProjectCustomerFilterValues } from './project-customer-filter'
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronDown } from 'lucide-react'
@@ -31,6 +31,8 @@ import { usePeopleDirectory } from '@/components/property/people-context'
 import { directoryPerson } from '@/lib/people'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { TeamIcon } from '@/components/issue/issue-icons'
+import { TreeElbow } from '@/components/property/property-menu'
+import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 
 export type ProjectsView = {
   id: string
@@ -79,11 +81,11 @@ export type ProjectsPageSurfaceProps = {
 const FILTER_GROUPS = [
   ['AI filter'],
   ['Advanced filter'],
-  ['Status', 'Priority', 'Labels', 'Lead', 'Members', 'Creator', 'Health', 'Dates', 'Initiatives', 'Milestones', 'Relations'],
+  ['Status', 'Priority', 'Labels', 'Teams', 'Lead', 'Members', 'Creator', 'Health', 'Dates', 'Initiatives', 'Milestones', 'Relations'],
   ['Customers'],
   ['Template', 'Title & summary', 'Specific project'],
 ]
-const FILTER_CHILDREN = new Set(['Status', 'Priority', 'Labels', 'Lead', 'Members', 'Creator', 'Health', 'Dates', 'Initiatives', 'Milestones', 'Relations', 'Customers', 'Template', 'Title & summary', 'Specific project'])
+const FILTER_CHILDREN = new Set(['Status', 'Priority', 'Labels', 'Teams', 'Lead', 'Members', 'Creator', 'Health', 'Dates', 'Initiatives', 'Milestones', 'Relations', 'Customers', 'Template', 'Title & summary', 'Specific project'])
 type Surface = { kind: 'filter' | 'display'; origin: 'toolbar' | 'editor' } | null
 const VIEW_VIRTUALIZATION_THRESHOLD = 40
 
@@ -262,7 +264,10 @@ function IconButton({ active = false, badge = false, buttonRef, children, classN
 function ProjectsFilterMenu({ customerFilterOptions = [], filterOptions = {}, onSelect, rootRef, selectedFilters, onSearchFilterOptions }: { customerFilterOptions?: MyIssuesFilterOption[]; filterOptions?: Partial<Record<string, ProjectFilterOption[]>>; onSelect: (filter: string, option?: ProjectFilterOption) => void; rootRef?: RefObject<HTMLDivElement | null>; selectedFilters: ProjectFilter[]; onSearchFilterOptions?: (field: string, query: string) => Promise<ProjectFilterOption[]> }) {
   const [nested, setNested] = useState<string>()
   const [nestedPosition, setNestedPosition] = useState({ top: 112, openRight: false, maxHeight: 360 })
-  const options=FILTER_GROUPS.flat().map(item=>({id:item,label:item}))
+  // Like the reference, the Teams filter only exists once the workspace has more than one team.
+  const desktopLayout = useDesktopLayout()
+  const showTeams = desktopLayout && (filterOptions.Teams?.length ?? 0) > 1
+  const options=FILTER_GROUPS.flat().filter(item=>item!=='Teams'||showTeams).map(item=>({id:item,label:item}))
   const { inputRef, ...command } = usePropertyCommand({open:true,options,onOpenChange:()=>{},onSelect:option=>choose(option.id)})
   const selectedByField = new Map(selectedFilters.map(filter => [filter.field, new Set(filter.values.map(value => value.id))]))
   const placeNested = (item: string, anchor: HTMLElement) => {
@@ -330,7 +335,7 @@ function ProjectsFilterMenu({ customerFilterOptions = [], filterOptions = {}, on
 }
 
 const PROJECT_FILTER_FIELD_IDS: Record<string, string> = {
-  Status: 'status', Priority: 'priority', Labels: 'labels', Lead: 'lead', Members: 'members', Creator: 'lead', Health: 'health', Dates: 'dates', Initiatives: 'project', Milestones: 'milestones', Relations: 'project', Customers: 'project', Template: 'project', 'Title & summary': 'project', 'Specific project': 'project',
+  Status: 'status', Priority: 'priority', Labels: 'labels', Teams: 'teams', Lead: 'lead', Members: 'members', Creator: 'lead', Health: 'health', Dates: 'dates', Initiatives: 'project', Milestones: 'milestones', Relations: 'project', Customers: 'project', Template: 'project', 'Title & summary': 'project', 'Specific project': 'project',
 }
 
 function ProjectFilterIcon({ field }: { field: string }) {
@@ -341,6 +346,7 @@ function ProjectFilterIcon({ field }: { field: string }) {
     case 'Status': return <CircleDot {...props}/>
     case 'Priority': return <BarChart3 {...props}/>
     case 'Labels': return <Tags {...props}/>
+    case 'Teams': return <TeamIcon size={14}/>
     case 'Lead':
     case 'Creator': return <UserRound {...props}/>
     case 'Members': return <Users {...props}/>
@@ -381,6 +387,7 @@ function ProjectPeopleFilterValues({field,nestedPosition,onSelect,options,select
   </div>
 }
 function ProjectStandardFilterValues({ field, nestedPosition, onSelect, onSearch, options, selectedIds }: { field: string; nestedPosition?: FilterNestedPosition; onSelect: (option: ProjectFilterOption) => void; onSearch?: (query: string) => Promise<ProjectFilterOption[]>; options: ProjectFilterOption[]; selectedIds?: Set<string> }) {
+  const desktop=useDesktopLayout()
   const [resolvedOptions,setResolvedOptions]=useState(options)
   const { inputRef, ...command } = usePropertyCommand({personOptions:isPeopleProperty(field),open:true,options:resolvedOptions,onOpenChange:()=>{},onSelect:option=>{const selected=resolvedOptions.find(item=>item.id===option.id);if(selected)onSelect(selected)}})
   // New options, or an emptied search, reset the list to the options as given (adjusted while rendering).
@@ -388,5 +395,5 @@ function ProjectStandardFilterValues({ field, nestedPosition, onSelect, onSearch
   if(syncedOptions!==options){setSyncedOptions(options);setResolvedOptions(options)}
   else if(!command.query.trim()&&resolvedOptions!==options)setResolvedOptions(options)
   useEffect(()=>{if(!onSearch)return;if(!command.query.trim())return;let active=true;const timer=setTimeout(()=>{void onSearch(command.query.trim()).then(next=>{if(active)setResolvedOptions(next)})},150);return()=>{active=false;clearTimeout(timer)}},[command.query,onSearch,options])
-  return <div aria-label={`${field} filters`} className={nestedFilterClass(nestedPosition)} style={nestedFilterStyle(nestedPosition)} role="dialog"><div className="lp-projects-filter__search"><input ref={inputRef} aria-label="Filter…" autoFocus onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder="Filter…" value={command.query}/></div><div className="lp-projects-filter__values" role="listbox" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=>{const selected=selectedIds?.has(option.id) ?? false;return <PersonHover key={option.id} userId={isPeopleProperty(field)?option.id:undefined}><button aria-selected={command.activeId===option.id} aria-checked={selected} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="lp-projects-filter__checkbox">{selected&&<CheckIcon/>}</span>{field === 'Teams' ? <TeamIcon team={{ icon: option.teamIcon, color: option.color ?? 'currentColor' }} size={14}/> : <i style={{background:option.color??'var(--theme-text-secondary)'}}/>}<span className="lp-projects-filter__value-label" title={option.label}>{option.label}</span>{(option.count??0)>0&&<small>{option.count} {option.count===1?'project':'projects'}</small>}</button></PersonHover>})}{!command.filteredOptions.length&&<div className="lp-projects-filter__empty">No results</div>}</div></div>
+  return <div aria-label={`${field} filters`} className={nestedFilterClass(nestedPosition, field === 'Teams' ? ' lp-projects-filter__teams' : '')} style={nestedFilterStyle(nestedPosition)} role="dialog">{!(desktop && field === 'Teams' && options.length < 4) && <div className="lp-projects-filter__search"><input ref={inputRef} aria-label="Filter…" autoFocus onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown} placeholder="Filter…" value={command.query}/></div>}<div className="lp-projects-filter__values" role="listbox" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=>{const selected=selectedIds?.has(option.id) ?? false;return <PersonHover key={option.id} userId={isPeopleProperty(field)?option.id:undefined}><button aria-selected={command.activeId===option.id} aria-checked={selected} data-indent={option.indent||undefined} style={option.indent?{'--option-indent':option.indent} as CSSProperties:undefined} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button">{option.indent?<TreeElbow/>:null}<span className="lp-projects-filter__checkbox">{selected&&<CheckIcon/>}</span>{field === 'Teams' ? <span className="lp-projects-filter__team-slot"><TeamIcon team={{ icon: option.teamIcon, color: option.color ?? 'currentColor' }} size={14}/></span> : <i style={{background:option.color??'var(--theme-text-secondary)'}}/>}<span className="lp-projects-filter__value-label" title={option.label}>{option.label}</span>{(option.count??0)>0&&<small>{option.count} {option.count===1?'project':'projects'}</small>}</button></PersonHover>})}{!command.filteredOptions.length&&<div className="lp-projects-filter__empty">No results</div>}</div></div>
 }

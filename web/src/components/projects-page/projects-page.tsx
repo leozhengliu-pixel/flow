@@ -385,7 +385,7 @@ export function ProjectsPage({
     status: statusOptions,
     targetDate: targetDateOptions(),
   }), [labelGroups, projectLabelGroupNames, projectLabels, statusOptions, users])
-  const filterOptions = useMemo(() => projectFilterOptions(leadScopedItems, users, availableProjectStatuses, projectLabels, teams), [availableProjectStatuses, leadScopedItems, projectLabels, teams, users])
+  const filterOptions = useMemo(() => projectFilterOptions(leadScopedItems, users, availableProjectStatuses, projectLabels, teams, teamSettings, teamParents), [availableProjectStatuses, leadScopedItems, projectLabels, teamParents, teamSettings, teams, users])
   // The reference app's Customers filter blocks (Customer name … Customer size), offered while Customer requests is on.
   const customerOptions = useMemo(() => customerSource && featureFlags?.['customer-requests'] !== false ? customerFilterOptions(customerSource) : [], [customerSource, featureFlags])
   const saveTargets = useMemo<SavedViewTarget[]>(() => [
@@ -919,7 +919,7 @@ const PROJECT_FILTER_FIELDS: Record<string, ProjectFilterField> = {
   Status: 'status', Priority: 'priority', Lead: 'lead', Members: 'members', Health: 'health', Dates: 'dates', Milestones: 'milestones', Labels: 'labels', Teams: 'teams', 'Specific project': 'project',
 }
 
-function projectFilterOptions(items: ProjectPageItem[], users: User[], projectStatuses: ProjectStatus[], labels: IssueLabel[], teams: Team[]): Partial<Record<ProjectFilterField, ProjectFilterOption[]>> {
+function projectFilterOptions(items: ProjectPageItem[], users: User[], projectStatuses: ProjectStatus[], labels: IssueLabel[], teams: Team[], teamSettings?: TeamHierarchySettings, teamParents?: Record<string, string>): Partial<Record<ProjectFilterField, ProjectFilterOption[]>> {
   const counts = new Map<ProjectFilterField, Map<string, number>>()
   const increment = (field: ProjectFilterField, value: string) => {
     let values = counts.get(field)
@@ -951,7 +951,7 @@ function projectFilterOptions(items: ProjectPageItem[], users: User[], projectSt
     dates: values('dates', [{ id: 'has-target', label: 'Has target date' }, { id: 'no-target', label: 'No target date' }, { id: 'overdue', label: 'Target date is overdue', color: '#d8605f' }]),
     milestones: values('milestones', uniqueFilterOptions(items.filter(item => item.milestone).map(item => ({ id: item.milestone!, label: item.milestone! })))),
     labels: values('labels', [{ id: '', label: 'No labels' }, ...labels.map(label => ({ id: label.id, label: label.name, color: label.color }))]),
-    teams: values('teams', teams.map(team => ({ id: team.id, label: team.name, color: team.color, teamIcon: team.icon }))),
+    teams: values('teams', teamHierarchy(teams, teamSettings, teamParents).rows(teams).map(({ team, depth }) => ({ id: team.id, label: team.name, color: team.color, teamIcon: team.icon, indent: depth || undefined }))),
     project: items.map(item => ({ id: item.id, label: item.name, color: item.color, count: 1 })),
   }
 }

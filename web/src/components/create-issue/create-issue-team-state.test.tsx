@@ -382,6 +382,22 @@ describe('new issue from a project', () => {
   })
 })
 
+describe('create issue team picker', () => {
+  it('lists a sub-team under its parent as a tree with the team key, like the Team property', async () => {
+    const user = userEvent.setup()
+    mount()
+    await settle()
+    await user.click(teamTrigger())
+    const rows = await screen.findAllByRole('option', { hidden: true })
+    const names = rows.map(row => row.textContent)
+    expect(names.indexOf('Child teamCHD')).toBe(names.indexOf('Custom teamCUS') + 1)
+    const child = rows[names.indexOf('Child teamCHD')]
+    expect(child).toHaveAttribute('data-indent', '1')
+    expect(child.querySelector('.property-command-tree-elbow')).not.toBeNull()
+    expect(rows[names.indexOf('Custom teamCUS')]).not.toHaveAttribute('data-indent')
+  })
+})
+
 describe('projectCreateIssueContext', () => {
   const data = workspace()
   it('uses the given team, else the project team whose workflow has the status, else the first project team', () => {

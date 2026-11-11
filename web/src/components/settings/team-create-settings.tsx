@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 
-import { TeamIcon } from "@/components/issue/issue-icons";
+import { teamTreeOptions } from "@/components/property/team-tree-options";
 import { ViewIconPicker } from "@/components/views/view-icon-picker";
 import { useI18n } from "@/i18n/i18n";
 import { teamHierarchy } from "@/lib/team-hierarchy";
@@ -129,23 +129,17 @@ export function TeamCreateSettings({
     }
   };
 
-  const teamOption = (team: (typeof teams)[number], label: string) => ({
-    value: team.id,
-    label,
-    entityName: true,
-    keywords: `${team.key} ${label}`,
-    icon: <TeamIcon team={team} size={16} />,
+  const teamTree = (items: typeof teams) => teamTreeOptions({ teams, teamSettings: data.teamSettings }, items).map((option) => {
+    const team = hierarchy.byId.get(option.id)!;
+    return { value: team.id, label: team.name, entityName: true, keywords: `${team.key} ${hierarchy.path(team.id)}`, icon: option.icon, indent: option.indent, labelContent: option.labelContent, ariaLabel: option.ariaLabel };
   });
   const parentOptions = [
     ...(parentTeamId ? [{ value: "", label: t("No parent team") }] : []),
-    ...hierarchy
-      .rows(activeTeams)
-      .filter(({ team }) => !hierarchy.parentError("", team.id) || team.id === parentTeamId)
-      .map(({ team }) => teamOption(team, hierarchy.path(team.id))),
+    ...teamTree(activeTeams.filter((team) => !hierarchy.parentError("", team.id) || team.id === parentTeamId)),
   ];
   const copyOptions = [
     ...(copySourceId && !parentTeamId ? [{ value: "", label: t("Don’t copy") }] : []),
-    ...activeTeams.map((team) => teamOption(team, team.name)),
+    ...teamTree(activeTeams),
   ];
   const accessOptions = [
     ...(restrictedRoot && !privateTeam
@@ -221,6 +215,7 @@ export function TeamCreateSettings({
               searchPlaceholder={t("Set parent team…")}
               value={parentTeamId}
               options={parentOptions}
+              tree
               onChange={(value) => {
                 setParentTeamId(value);
                 setCopyFromId("");
@@ -281,6 +276,7 @@ export function TeamCreateSettings({
                 searchPlaceholder={t("Select a team…")}
                 value={copySourceId}
                 options={copyOptions}
+                tree
                 onChange={setCopyFromId}
               />
             </span>

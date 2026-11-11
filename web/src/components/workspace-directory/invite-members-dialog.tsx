@@ -210,6 +210,7 @@ function InviteTeamSelect({ teams, teamSettings, value, onChange }: {
       options={options}
       searchPlaceholder="Search teams…"
       triggerClassName="invite-members-role-trigger invite-members-team-trigger"
+      tree
       surfaceClassName="project-teams-menu invite-members-team-menu"
       onChange={(id) => onChange(value.includes(id) ? value.filter((item) => item !== id) : [...value, id])}
       trigger={

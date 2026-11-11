@@ -728,6 +728,26 @@ html:root body .lp-projects-filter__values:not(#_) small {
 html:root body .lp-projects-filter__values button:not(:hover):not(.is-active):not([aria-selected=true]) .lp-projects-filter__checkbox:not(:has(svg)) {
   opacity: 0;
 }
+/* A short team list has no search and the menu hugs its rows (175px). */
+html:root body .lp-projects-filter__nested.lp-projects-filter__teams:not(#_) { width: 175px; min-width: 175px; }
+/* Team values: the icon sits in an 18px cell; a sub-team moves the cell and name 24px right per level and hangs the shared
+   tree elbow (positions are the reference's, 44.25px from the list edge, minus the row's 6px inset). */
+html:root body .lp-projects-filter__values:not(#_) button { position: relative; }
+html:root body .lp-projects-filter__values:not(#_) .lp-projects-filter__team-slot {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  margin-left: calc(var(--option-indent, 0) * 24px);
+}
+html:root body .lp-projects-filter__values:not(#_) button[data-indent] > .property-command-tree-elbow {
+  position: absolute;
+  top: 0;
+  left: calc(38.25px + (var(--option-indent, 1) - 1) * 24px);
+  fill: var(--pk-tree-elbow);
+  pointer-events: none;
+}
 
 /* ── Member directory filter menu ──────────────────────────────────────── */
 html:root body .workspace-directory-filter-menu:not(#_),
@@ -1251,13 +1271,18 @@ html:root body .property-command-surface .property-command-options [role=option]
 html:root body .property-command-surface .property-command-options [role=option].has-submenu .property-command-group-chevron { grid-column: 4; justify-self: end; color: var(--pk-muted); }
 html:root body .property-command-surface.project-teams-menu:not(#_) .property-command-search-shortcut > span { font: 450 10px/11px var(--font); }
 
-/* Sub-teams: listed under their parent; the icon and name shift 24px per level, the checkbox column stays, and the
-   elbow (a 1x8 line from the row's top edge, then a 10x9 curve from y7) starts at row x+44.25, under the middle of
-   the parent's 14px icon. */
-html:root body .property-command-surface.project-teams-menu:not(#_) .property-command-options [role=option][data-indent] {
+/* Team trees (`tree` on PropertyMenu): sub-teams hang under their parent. One rule set for every team picker.
+   The elbow is the shared 1x8 line plus 10x9 curve drawn from the row's top edge, under the middle of the parent's icon;
+   each level moves the icon and name 24px right.
+   - Multi-select rows (checkbox column, project teams, filters): 16px checkbox, icon column of 16px + 24px per level;
+     the elbow starts at row x + 44.25.
+   - Single-select rows (Team property, create issue, move to team): an 18px icon cell, an 8px gap, then name and key;
+     the elbow starts at row x + 22.25. The selected team ends in a 16px tick 14px from the edge; rows without a tick
+     keep 18px. The menu hugs its rows (175px at least). */
+html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option]:has(.property-command-checkbox) {
   grid-template-columns: 16px calc(16px + var(--option-indent, 0) * 24px) minmax(0, 1fr) auto;
 }
-html:root body .property-command-surface.project-teams-menu:not(#_) .property-command-options [role=option][data-indent] .property-command-icon { justify-self: end; }
+html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option]:has(.property-command-checkbox) .property-command-icon { justify-self: end; }
 html:root body .property-command-options [role=option] > .property-command-tree-elbow {
   position: absolute;
   top: 0;
@@ -1265,22 +1290,17 @@ html:root body .property-command-options [role=option] > .property-command-tree-
   fill: var(--pk-tree-elbow);
   pointer-events: none;
 }
-
-/* The Team menu hugs its rows and lists sub-teams as a tree: a team row is an 18px icon cell, an 8px gap, then the name
-   and key; each level moves the icon cell 24px right and hangs a 1x8 line plus a 10x9 curve (the shared tree elbow) from
-   the row above, under the middle of the parent's icon (x 8.25 into the 16px column that starts at the 14px padding).
-   The selected team ends in a 16px tick 14px from the edge; rows without a tick keep 18px. */
-html:root body .property-command-surface.issue-team-menu:not(#_) { min-width: 175px; }
-html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option] {
+html:root body .property-command-surface.is-tree:not(#_):not(:has(.property-command-checkbox)) { min-width: 175px; }
+html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option]:not(:has(.property-command-checkbox)) {
   grid-template-columns: calc(18px + var(--option-indent, 0) * 24px) minmax(0, 1fr);
   gap: 8px;
   padding: 0 18px 0 14px;
 }
-html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option]:has(.property-command-check) {
+html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option]:not(:has(.property-command-checkbox)):has(.property-command-check) {
   grid-template-columns: calc(18px + var(--option-indent, 0) * 24px) minmax(0, 1fr) auto;
   padding-right: 14px;
 }
-html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option] .property-command-icon {
+html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option]:not(:has(.property-command-checkbox)) .property-command-icon {
   width: 18px;
   height: 18px;
   justify-self: end;
@@ -1288,10 +1308,10 @@ html:root body .property-command-surface.issue-team-menu:not(#_) .property-comma
   align-items: center;
   justify-content: center;
 }
-html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option] .issue-team-name { color: var(--pk-text-strong); }
-html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option] .property-command-check { margin-right: 1px; color: var(--pk-muted); }
-html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option] .property-command-icon > svg { width: 14px !important; height: 14px !important; flex-basis: 14px; }
-html:root body .property-command-surface.issue-team-menu:not(#_) .property-command-options [role=option] > .property-command-tree-elbow {
+html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option]:not(:has(.property-command-checkbox)) .property-command-icon > svg { width: 14px !important; height: 14px !important; flex-basis: 14px; }
+html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option] .issue-team-name { color: var(--pk-text-strong); }
+html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option] .property-command-check { margin-right: 1px; color: var(--pk-muted); }
+html:root body .property-command-surface.is-tree:not(#_) .property-command-options [role=option]:not(:has(.property-command-checkbox)) > .property-command-tree-elbow {
   left: calc(14px + 8.25px + (var(--option-indent, 1) - 1) * 24px);
 }
 

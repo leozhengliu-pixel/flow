@@ -179,7 +179,7 @@ export function SettingsToggle({
 
 export type SettingsSelectOption =
   | string
-  | { value: string; label: string; disabled?: boolean; entityName?: boolean; /** Extra words the searchable menu matches. */ keywords?: string; icon?: ReactNode; /** Draws a separator above the option. */ divider?: boolean; /** Muted text after the label, shown in the menu only. */ hint?: string; /** Dimmed text after the label, e.g. "(default)". */ suffix?: string };
+  | { value: string; label: string; disabled?: boolean; entityName?: boolean; /** A sub-team's nesting level in a `tree` menu (see PropertyMenu). */ indent?: number; /** Rich label content and accessible name for the searchable menu's row. */ labelContent?: ReactNode; ariaLabel?: string; /** Extra words the searchable menu matches. */ keywords?: string; icon?: ReactNode; /** Draws a separator above the option. */ divider?: boolean; /** Muted text after the label, shown in the menu only. */ hint?: string; /** Dimmed text after the label, e.g. "(default)". */ suffix?: string };
 
 /** A parenthesised suffix (a scale's points) is a quiet detail, smaller than the label. */
 const suffixClass = (suffix: string) => (/^[(（]/.test(suffix) ? "settings-select-suffix is-detail" : "settings-select-suffix");
@@ -200,6 +200,7 @@ export function SettingsSelect({
   placeholder,
   searchPlaceholder,
   nativeSuffix = true,
+  tree = false,
   value,
 }: {
   align?: "start" | "center" | "end";
@@ -218,6 +219,8 @@ export function SettingsSelect({
   searchPlaceholder?: string;
   /** false: the phone's native select lists the plain labels, without the muted suffixes the desktop menu shows. */
   nativeSuffix?: boolean;
+  /** Team lists: sub-teams hang under their parent with the shared tree elbow (searchable menu only). */
+  tree?: boolean;
   value: string;
 }) {
   const phone = usePhoneLayout();
@@ -227,7 +230,7 @@ export function SettingsSelect({
       : option,
   );
   const selected = normalized.find((option) => option.value === value);
-  if (!disabled && (searchPlaceholder || isPeopleProperty(label))) return <PropertyMenu label={label} ariaLabel={label} value={selected?.label} selectedId={value} options={normalized.map(option => ({ id: option.value, label: option.label, icon: option.icon, disabled: option.disabled, i18nIgnore: option.entityName, keywords: 'keywords' in option ? option.keywords : undefined }))} onChange={onChange} triggerClassName={className || 'settings-select'} surfaceClassName={menuClassName} align={searchPlaceholder ? align : undefined} searchPlaceholder={searchPlaceholder ?? "Search people…"} trigger={searchPlaceholder
+  if (!disabled && (searchPlaceholder || isPeopleProperty(label))) return <PropertyMenu label={label} ariaLabel={label} value={selected?.label} selectedId={value} options={normalized.map(option => ({ id: option.value, label: option.label, icon: option.icon, disabled: option.disabled, i18nIgnore: option.entityName, keywords: 'keywords' in option ? option.keywords : undefined, indent: 'indent' in option ? option.indent : undefined, labelContent: 'labelContent' in option ? option.labelContent : undefined, ariaLabel: 'ariaLabel' in option ? option.ariaLabel : undefined }))} tree={tree} onChange={onChange} triggerClassName={className || 'settings-select'} surfaceClassName={menuClassName} align={searchPlaceholder ? align : undefined} searchPlaceholder={searchPlaceholder ?? "Search people…"} trigger={searchPlaceholder
     ? <><span className="settings-select-value">{selected?.icon}<span data-i18n-ignore={selected?.entityName || undefined}>{selected?.label ?? (placeholder || value)}</span></span><span aria-hidden="true"><SettingsChevron /></span></>
     : <span className="settings-select-value">{selected?.icon}{selected?.label ?? value}</span>}/>
   return (

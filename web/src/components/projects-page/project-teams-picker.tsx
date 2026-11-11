@@ -79,6 +79,7 @@ export function ProjectTeamsPicker({ teams, teamIds, onChange, fallbackLabel = '
     searchPlaceholder="Change teams…"
     searchShortcut={searchShortcut}
     triggerClassName={triggerClassName}
+    tree
     surfaceClassName={`project-teams-menu${surfaceClassName ? ` ${surfaceClassName}` : ''}`}
     side={side}
     align={align}

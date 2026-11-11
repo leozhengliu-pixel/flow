@@ -79,6 +79,9 @@ describe('issue explorer workflow model', () => {
     expect(explorerFilterOptions('assignee', options)?.[0].count).toBe(1)
     expect(options.labels[0].count).toBe(1)
     expect(options.team.some(option => option.id === first.team.id)).toBe(true)
+    expect(options.team.every(option => option.indent === undefined)).toBe(true)
+    const nested = explorerPropertyOptions(makeBootstrap({ issues: [first], teams: [first.team, { ...first.team, id: 'sub-team', name: 'Sub', key: 'SUB' }], teamSettings: { 'sub-team': { parentTeamId: first.team.id } } as never }))
+    expect(nested.team.map(option => [option.id, option.indent])).toEqual([[first.team.id, undefined], ['sub-team', 1]])
     expect(options.estimate.find(option => option.id === '2')?.count).toBe(1)
 
     expect(applyExplorerFilters(data.issues, [filter('priority', ['2'])], data).map(issue => issue.id)).toEqual([first.id])

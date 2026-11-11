@@ -11,7 +11,7 @@ import { compareDateFilter, DATE_FILTER_FIELDS, dateFilterMenu, parseDateFilterV
 import { advancedFilterTree, conditionAsFilter, isAdvancedGroup } from './advanced-filter'
 import { labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } from '@/lib/labels'
 import { teamStateChanges, teamWorkflowStates, workflowStatusOptions } from '@/lib/team-workflow'
-import { resolvedTeamSettings } from '@/lib/team-hierarchy'
+import { resolvedTeamSettings, teamHierarchy } from '@/lib/team-hierarchy'
 import { estimateOnTeamScale } from '@/lib/estimates'
 import { estimateBulkOptions } from '@/components/issue/estimate-menu'
 import { statusGroupIndex, type StatusGroupIndex } from '@/lib/status-groups'
@@ -343,7 +343,7 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
     status: [...scopedStates].sort((a, b) => (a.position??0) - (b.position??0)).map(state => ({ id: state.id, teamId: state.teamId, label: state.name, color: state.color, count: statusCounts.get(state.id) ?? 0, kind: 'status' as const, stateType: state.type })),
     statusFilter: statusFilterOptions(data, scopedStates, statusCounts),
     priority: PRIORITIES.map(priority => ({ ...priority, count: priorityCounts.get(priority.id) ?? 0 })),
-    team: data.teams.map(team => ({ id: team.id, label: team.name, teamIcon: team.icon, color: team.color, kind: 'team' as const, count: teamCounts.get(team.id) ?? 0 })),
+    team: teamHierarchy(data.teams, data.teamSettings, data.teamParents).rows(data.teams).map(({ team, depth }) => ({ id: team.id, label: team.name, teamIcon: team.icon, color: team.color, kind: 'team' as const, count: teamCounts.get(team.id) ?? 0, indent: depth || undefined })),
     estimate: [{ id: '', label: 'No estimate', count: noEstimate }, ...[...estimateCounts.keys()].sort((a, b) => Number(a) - Number(b)).map(id => ({ id, label: id, count: estimateCounts.get(id) ?? 0 }))],
     // The Assignee filter lists people only; delegated agents are filtered under "Agent".
     assigneeFilter: [{ id: '', label: 'No assignee', count: noAssignee, kind: 'assignee' as const }, ...data.users.filter(user => user.active && !user.app).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: assigneeCounts.get(user.id) ?? 0, kind: 'assignee' as const }))],

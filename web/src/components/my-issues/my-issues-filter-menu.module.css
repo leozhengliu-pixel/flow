@@ -143,6 +143,15 @@
 .numberComparison{color:var(--pk-muted)}
 .valueRowSlot{display:contents}
 
+/* Team values (desktop): the icon sits in an 18px cell 8px after the checkbox, the name 8px after it; a sub-team
+   moves the cell and name 24px right per level and hangs the shared tree elbow (1x8 line + 10x9 curve) from the row
+   above, 44.25px from the row's left edge. */
+@media(min-width:768px){
+  .valueItem[data-team] .optionSlot{width:18px;flex-basis:18px;margin-left:calc(var(--option-indent,0)*24px)}
+  .valueItem[data-team] .optionSlot>svg{width:14px;height:14px}
+  .valueItem[data-indent]>:global(.property-command-tree-elbow){position:absolute;top:0;left:calc(44.25px + (var(--option-indent,1) - 1)*24px);fill:var(--pk-tree-elbow);pointer-events:none}
+}
+
 /* Value pickers use the same inset, absolute row slots as the phone's root menu. */
 @media(max-width:767px){
   .valueRowSlot{display:block;position:relative;height:46px;margin:0;}
