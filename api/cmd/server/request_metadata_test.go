@@ -44,7 +44,7 @@ func TestResourceProjectionHandoffKeepsPrivateTeamsPrivate(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = repo.Close() })
 	server := newAuthServerForStore(t, repo)
-	suffix := fmt.Sprint(time.Now().UnixNano() % 100000)
+	suffix := fmt.Sprintf("%05d", time.Now().UnixNano()%100000)
 	admin := peerAdmin(t, server.URL)
 	teams := server.URL + "/api/workspaces/test-workspace/teams"
 	open := authRequest[domain.Team](t, admin, http.MethodPost, teams, map[string]any{"name": "Handoff Open " + suffix, "key": "HO" + suffix[len(suffix)-3:]}, "", http.StatusCreated)
