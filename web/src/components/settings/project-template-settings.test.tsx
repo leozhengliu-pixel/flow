@@ -150,9 +150,9 @@ describe('project template editor', () => {
     await user.click(trigger)
     const listbox = screen.getByRole('listbox', { name: 'Teams' })
     expect(within(listbox).getAllByRole('option').map(row => row.getAttribute('aria-checked'))).toEqual(['false', 'false', 'false'])
-    // A sub-team follows its parent, indented.
-    expect(within(listbox).getAllByRole('option').map(row => row.getAttribute('data-indent'))).toEqual([null, null, '1'])
-    expect(within(listbox).getAllByRole('option')[2]).toHaveTextContent('Design Web')
+    // Teams sort by name and a sub-team follows its parent, indented: Design, Design Web, Test team.
+    expect(within(listbox).getAllByRole('option').map(row => row.getAttribute('data-indent'))).toEqual([null, '1', null])
+    expect(within(listbox).getAllByRole('option')[1]).toHaveTextContent('Design Web')
     await user.click(within(listbox).getByRole('option', { name: /Design Web/ }))
     expect(screen.getByRole('combobox', { name: 'Change project teams' })).toHaveTextContent('Design Web')
     await user.click(screen.getByRole('combobox', { name: 'Change project teams' }))

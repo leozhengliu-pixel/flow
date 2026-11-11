@@ -55,8 +55,9 @@ function abortableDelay(ms: number, signal?: AbortSignal | null) {
 export async function requestRetryingBusy<T>(url: string, init: ApiRequestInit = {}, attempts = 5): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     const response = await apiFetch(url, init)
-    const retryAfter = Number(response.headers.get('Retry-After'))
-    if (response.status !== 503 || attempt >= attempts || !Number.isFinite(retryAfter) || retryAfter <= 0) return parseResponse<T>(response)
+    if (response.status !== 503 || attempt >= attempts) return parseResponse<T>(response)
+    const retryAfter = Number(response.headers?.get('Retry-After'))
+    if (!Number.isFinite(retryAfter) || retryAfter <= 0) return parseResponse<T>(response)
     await response.body?.cancel().catch(() => undefined)
     await abortableDelay(Math.min(retryAfter, 30) * 1000 * (0.75 + Math.random() * 0.5), init.signal)
   }
