@@ -77,7 +77,16 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		}
 		// writeMu holds the copy (and its revision) until the install.
 		ctx, copyWrite := s.watchMetadataWrite(ctx, workspace)
-		data := cloneBootstrap(collectionMetadata(current))
+		metadata := collectionMetadata(current)
+		if discussionOnly {
+			// No discussion callback (the comment, reaction and thread
+			// subscription handlers, the comment action claim, the MCP
+			// comment tool) uses the trash, the second largest collection:
+			// keep it out of the clone, then put the stored entries back
+			// (TestIssueWritesLeaveTheSharedCollectionsAlone).
+			metadata.Trash = nil
+		}
+		data := cloneBootstrap(metadata)
 		originalRole := data.ViewerRole
 		if actor, ok := actorFromContext(ctx); ok {
 			data.Viewer = actor
@@ -261,6 +270,9 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		data.FormerMembers = nil
 		traceMark(ctx, "mutate")
 		data.Members, data.TeamMembers = storedMembers, storedTeamMembers
+		if discussionOnly {
+			data.Trash = current.Trash
+		}
 		if err != nil {
 			return err
 		}

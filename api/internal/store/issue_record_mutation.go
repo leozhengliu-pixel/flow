@@ -29,6 +29,9 @@ type IssueMutationScope struct {
 // UpdateIssueRecord is a bounded entity transaction. The callback may update
 // the target, its immediate family, and the supplied related IDs. Large graph
 // changes must be scheduled as batches rather than materialized in a request.
+// Its metadata changes other than to documents are discarded; data.Projects
+// and data.Trash are shared with the stored copy and must not be changed at
+// all (issueUpdateMetadata).
 func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id string, expected *int64, scope IssueMutationScope, mutate func(*domain.Bootstrap, *domain.Issue) error) (domain.Issue, error) {
 	mutationKey := ChatMutationKey(ctx)
 	mutationActor := ""
@@ -44,11 +47,13 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		return domain.Issue{}, fmt.Errorf("too many related issues")
 	}
 	// Each attempt starts from the server's current copy of the metadata.
+	// It runs under writeMu, so the copy cannot change meanwhile.
 	loadMetadata := func() (domain.Bootstrap, error) {
-		metadata, ok := s.WorkspaceMetadata(workspace)
+		stored, ok := s.storedWorkspace(workspace)
 		if !ok {
 			return domain.Bootstrap{}, sql.ErrNoRows
 		}
+		metadata := issueUpdateMetadata(stored)
 		if actor, ok := actorFromContext(ctx); ok {
 			metadata.Viewer = actor
 			role, status, err := s.WorkspaceRole(ctx, metadata.Workspace.ID, actor.ID)
@@ -81,15 +86,16 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	// rerun the write; after the last attempt the conflict is the error.
 	err := mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
 		var err error
+		// The callback edits a metadata clone (sharing only what it never
+		// changes, see issueUpdateMetadata) and progress refreshes copy the
+		// projects they change, so readers keep the committed snapshot while
+		// the transaction runs (see SQLiteStore.writeMu).
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
 		if metadata, err = loadMetadata(); err != nil {
 			return err
 		}
 		progressMetadata, metadataWritten, written, affected = nil, false, nil, nil
-		// The callback edits a metadata clone and progress refreshes copy
-		// the projects they change, so readers keep the committed snapshot
-		// while the transaction runs (see SQLiteStore.writeMu).
-		s.writeMu.Lock()
-		defer s.writeMu.Unlock()
 		// writeMu holds the copy persistIssueMetadata starts from (and its
 		// revision) until the install. The metadata this write changes is
 		// that copy's projects and documents.
