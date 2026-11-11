@@ -364,3 +364,29 @@ separate documentation commit. Review ref: `refs/heads/review/scale-p01`.
 The branch is rebased onto `origin/main`; the lead owns merging it. Production
 data, deployed services, web/SDK sources and tracked `api/server` were not changed.
 No browser screenshots were taken and no browser verification is claimed.
+
+## Shared-database CI follow-up
+
+The initial Infrastructure integration run `43099590098` failed PostgreSQL
+fixture setup before MySQL could run. Its database already held unrelated users,
+so the global test seed skipped creation of P01's assumed accounts. Following
+P03 commit `dc963c61`, the untagged store and HTTP permission fixtures now register
+and verify unique users, create an isolated workspace, and clean up only their
+own workspaces and accounts. They open databases without the global test fixture.
+The HTTP test stops its delivery scheduler before arranging test-owned data.
+
+`TestScaleP01FixturePreservesExistingAccount` creates an unrelated account and
+workspace, runs and cleans up a separate fixture, then verifies that the unrelated
+credentials and workspace remain valid and that owned resources are gone. The
+non-strict `BASELINE DEFECT` diagnostic is preserved unchanged. These changes
+affect fixture setup and cleanup only; the saved load baselines above are retained.
+
+Local reproduction runs the untagged P01 test set twice in separate Go processes
+against `/tmp/codex-scale-p01/ci-followup/persistent.db`, using
+`FLOW_TEST_DATABASE_DRIVER=sqlite FLOW_TEST_DATABASE_URL=<that path>` and
+`go test -p 1 ./internal/store ./cmd/server -run '^TestScaleP01' -count=1 -timeout=5m -v`.
+All heavy commands use `heavy.sh`, `GOMAXPROCS=4`, and `GOMEMLIMIT=1536MiB`.
+Detailed command results and the new CI run are recorded in the follow-up logs.
+The two persistent-file passes, tagged P01 tests, `go vet ./...`, and tagged
+store/server vet all exited 0. Logs are under
+`/tmp/codex-scale-p01/ci-followup/`; no saved capacity baseline was rerun or replaced.

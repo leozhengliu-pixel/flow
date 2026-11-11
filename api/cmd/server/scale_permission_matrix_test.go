@@ -116,14 +116,7 @@ func scaleP01PermissionRead(t *testing.T, viewer scaleP01PermissionViewer, base,
 
 func TestScaleP01PermissionMatrix(t *testing.T) {
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
-	configs := map[string]store.DatabaseConfig{"sqlite": {Driver: "sqlite", Path: filepath.Join(t.TempDir(), "p01-permissions.db"), FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 1}}
-	if driver := os.Getenv("FLOW_TEST_DATABASE_DRIVER"); driver != "" {
-		if os.Getenv("FLOW_TEST_DATABASE_URL") == "" {
-			t.Fatal("FLOW_TEST_DATABASE_URL is required")
-		}
-		configs[driver] = scaleP01TestDatabaseConfig(t, store.DatabaseConfig{FixtureProfile: "test", FixturePassword: "test-password"}, 4)
-	}
-	for name, config := range configs {
+	for name, config := range scaleP01PermissionConfigs(t) {
 		t.Run(name, func(t *testing.T) { scaleP01PermissionMatrix(t, config) })
 	}
 }
@@ -135,24 +128,19 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { repo.Close() })
-	srv := &server{store: repo, uploadPath: t.TempDir()}
-	host := httptest.NewServer(newHandler(srv))
-	t.Cleanup(host.Close)
-	base, workspace := host.URL, "test-workspace"
-	admin := peerAdmin(t, base)
+	srv, host, admin, data, owned := scaleP01OwnedWorkspace(t, repo)
+	base, workspace := host.URL, data.Workspace.URLKey
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	teamsURL := base + "/api/workspaces/" + workspace + "/teams"
 	public := authRequest[domain.Team](t, admin, "POST", teamsURL, map[string]any{"name": "P01 public " + suffix, "key": "P1A" + suffix[len(suffix)-4:]}, "", http.StatusCreated)
 	private := authRequest[domain.Team](t, admin, "POST", teamsURL, map[string]any{"name": "P01 private " + suffix, "key": "P1B" + suffix[len(suffix)-4:], "private": true}, "", http.StatusCreated)
 	child := authRequest[domain.Team](t, admin, "POST", teamsURL, map[string]any{"name": "P01 child " + suffix, "key": "P1C" + suffix[len(suffix)-4:], "parentTeamId": private.ID}, "", http.StatusCreated)
-	outsideAdmin, _ := joinByInvitation(t, base, admin, "P01 outside admin", "p01-admin-"+suffix+"@example.test", "admin", public.ID)
-	member, memberUser := joinByInvitation(t, base, admin, "P01 member", "p01-member-"+suffix+"@example.test", "member", public.ID, private.ID)
-	guest, guestUser := joinByInvitation(t, base, admin, "P01 guest", "p01-guest-"+suffix+"@example.test", "guest", public.ID)
-	outsider := authClient(t)
-	authRequest[domain.AuthSession](t, outsider, "POST", base+"/api/auth/login", map[string]string{"email": "member@example.test", "password": "test-password"}, "", http.StatusOK)
-	authRequest[domain.WorkspaceMember](t, admin, "PATCH", base+"/api/workspaces/"+workspace+"/members/usr_member", map[string]string{"role": "member"}, "", http.StatusOK)
+	outsideAdmin, _ := scaleP01Join(t, owned, base, workspace, admin, "P01 outside admin", "admin", public.ID)
+	member, memberUser := scaleP01Join(t, owned, base, workspace, admin, "P01 member", "member", public.ID, private.ID)
+	guest, guestUser := scaleP01Join(t, owned, base, workspace, admin, "P01 guest", "guest", public.ID)
+	outsider, _ := scaleP01Join(t, owned, base, workspace, admin, "P01 outsider", "member", public.ID)
 	projectID, hiddenID, childID := "p01-shared-"+suffix, "p01-hidden-"+suffix, "p01-child-"+suffix
-	if err := repo.MutateWorkspace(store.ContextWithActor(t.Context(), repo.Bootstrap().Viewer), workspace, "test.p01_fixture", "", nil, func(data *domain.Bootstrap) error {
+	if err := repo.MutateWorkspace(store.ContextWithActor(t.Context(), data.Viewer), workspace, "test.p01_fixture", "", nil, func(data *domain.Bootstrap) error {
 		data.Projects = append(data.Projects,
 			domain.Project{ID: hiddenID, SlugID: "hidden-000000000001", Name: "P01 hidden", TeamIDs: []string{private.ID}},
 			domain.Project{ID: childID, SlugID: "child-000000000003", Name: "P01 inherited", TeamIDs: []string{child.ID}},
@@ -300,7 +288,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 	}
 	// A queued frame is projected again against current access. The old
 	// projected payload must not survive revocation, including its actor.
-	queued := domain.RealtimeEvent{ID: "p01-queued", Type: "project.updated", AggregateID: childID, ActorID: "usr_admin", Payload: json.RawMessage(`{"entity":{"id":"` + childID + `","description":"P01 private body"}}`)}
+	queued := domain.RealtimeEvent{ID: "p01-queued", Type: "project.updated", AggregateID: childID, ActorID: data.Viewer.ID, Payload: json.RawMessage(`{"entity":{"id":"` + childID + `","description":"P01 private body"}}`)}
 	request := httptest.NewRequest("GET", "/api/realtime/events", nil)
 	request.Header.Set("X-Workspace-Key", workspace)
 	request = request.WithContext(context.WithValue(request.Context(), authUserContextKey{}, memberUser))
@@ -309,7 +297,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 		t.Fatal("inherited project not visible before revocation")
 	}
 	head := authRequest[changesResponse](t, member, "GET", base+"/api/realtime/changes?since=0", nil, workspace, http.StatusOK).Head
-	if err := repo.MutateWorkspace(store.ContextWithActor(t.Context(), repo.Bootstrap().Viewer), workspace, "project.updated", childID, map[string]string{"name": "queued change"}, func(data *domain.Bootstrap) error { return nil }); err != nil {
+	if err := repo.MutateWorkspace(store.ContextWithActor(t.Context(), data.Viewer), workspace, "project.updated", childID, map[string]string{"name": "queued change"}, func(data *domain.Bootstrap) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	authRequest[any](t, admin, "DELETE", base+"/api/teams/"+private.ID+"/members/"+memberUser.ID, nil, workspace, http.StatusOK)
@@ -331,6 +319,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 	}
 	otherKey := "p01-other-" + suffix
 	authRequest[domain.Bootstrap](t, admin, "POST", base+"/api/workspaces", map[string]string{"name": "P01 other", "urlKey": otherKey}, "", http.StatusCreated)
+	owned.workspaces = append(owned.workspaces, otherKey)
 	for _, viewer := range viewers {
 		code, raw := scaleP01PermissionRead(t, viewer, base, otherKey, "/api/projects/"+projectID)
 		if code == http.StatusOK || bytes.Contains(raw, []byte(projectID)) {
