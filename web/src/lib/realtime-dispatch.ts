@@ -21,6 +21,7 @@ const PAGED_METADATA_EVENT = new RegExp('^(?:' + [
   'user\\.[a-z_]+', 'workspace\\.(?!resync_required$)[a-z_]+', 'workspace_member\\.[a-z_]+', 'membership\\.[a-z_]+',
   'team\\.[a-z_]+', 'team_member\\.[a-z_]+', 'workflow_state\\.[a-z_]+', 'label\\.[a-z_]+', 'label_group\\.[a-z_]+', 'issue_label\\.[a-z_]+',
   'cycle\\.(?:started|completed)', 'sla_[a-z_]+\\.[a-z_]+', 'triage_[a-z_]+\\.[a-z_]+', 'custom_emoji\\.[a-z_]+',
+  'sla\\.maintained',
   'issue_permission\\.[a-z_]+',
 ].join('|') + ')$')
 

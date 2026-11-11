@@ -18,7 +18,7 @@ import { IssueContextMenu, IssueParentTrail, RowCommandPicker, SubIssueProgress,
 import type { MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { CalendarIcon, CycleIcon, PriorityIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
-import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
+import { IssueRowSLA } from '@/components/issue/issue-sla-picker'
 import { useI18n } from '@/i18n/i18n'
 import styles from './issue-board.module.css'
 import { toggleGroupedLabelIds } from '@/lib/labels'
@@ -193,7 +193,7 @@ export function HiddenBoardColumns({ groups, onShowGroup }: { groups: MyIssuesGr
           <strong>{t('Hidden columns')}</strong>
         </button>
       </div>
-      {!hiddenCollapsed&&<div className={styles.hiddenList}>{groups.map(group=><button className={styles.hiddenStatus} key={group.id} type="button" data-board-hidden-status onClick={()=>onShowGroup?.(group.id)}><div className={styles.hiddenStatusCard}><StatusIcon state={{...group.state,id:group.id,name:group.label,type:group.stateType??'unstarted',color:group.state?.color??'var(--status-neutral)'}} size={14}/><span className={styles.hiddenStatusName} data-i18n-ignore>{group.label}</span><b><span className={styles.desktopIcon}><EstimateIcon size={14}/></span><span className={styles.phoneIcon}><BoardWarningIcon size={14}/></span><span>{group.totalCount ?? group.issues.length}</span></b></div></button>)}</div>}
+      {!hiddenCollapsed&&<div className={styles.hiddenList}>{groups.map(group=><button className={styles.hiddenStatus} key={group.id} type="button" data-board-hidden-status onClick={()=>onShowGroup?.(group.id)}><div className={styles.hiddenStatusCard}><StatusIcon state={{...group.state,id:group.id,name:group.label,type:group.stateType??'unstarted',color:group.state?.color??'var(--status-neutral)'}} size={14}/><span className={styles.hiddenStatusName} data-i18n-ignore>{group.translatableLabel ? t(group.label) : group.label}</span><b><span className={styles.desktopIcon}><EstimateIcon size={14}/></span><span className={styles.phoneIcon}><BoardWarningIcon size={14}/></span><span>{group.totalCount ?? group.issues.length}</span></b></div></button>)}</div>}
     </section>
 }
 
@@ -270,7 +270,7 @@ export function IssueBoardGroupHeader({group,estimateSum,createIssueLabel='Add n
           state={{ id: group.id, teamId: group.state?.teamId, name: group.label, type: group.stateType, color: group.state?.color ?? 'var(--status-neutral)' }}
           size={14}
         />}
-        <strong data-board-column-title data-i18n-ignore>{group.label}</strong><button className={styles.count} data-board-column-count type="button" aria-label={[t(`${count} issues`), pointsLabel].filter(Boolean).join(', ')}>{estimateSum !== undefined && <EstimateIcon className={styles.countEstimate} size={14}/>}<span className={styles.countValue}><span className={styles.issueCount}>{count}</span>{estimateSum !== undefined && <span className={styles.estimateValue} aria-label={pointsLabel}>{formatEstimatePoints(estimateSum)}</span>}</span></button>
+        <strong data-board-column-title data-i18n-ignore>{group.translatableLabel ? t(group.label) : group.label}</strong><button className={styles.count} data-board-column-count type="button" aria-label={[t(`${count} issues`), pointsLabel].filter(Boolean).join(', ')}>{estimateSum !== undefined && <EstimateIcon className={styles.countEstimate} size={14}/>}<span className={styles.countValue}><span className={styles.issueCount}>{count}</span>{estimateSum !== undefined && <span className={styles.estimateValue} aria-label={pointsLabel}>{formatEstimatePoints(estimateSum)}</span>}</span></button>
         <div className={styles.columnActions}>
         <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.headerButton} type="button" aria-label={t('Open menu')}><span className={styles.desktopIcon}><Ellipsis size={14}/></span><span className={styles.phoneIcon}><BoardEllipsisIcon/></span></button></DropdownMenu.Trigger><DropdownMenu.Portal><FlowDropdownMenuContent label={t('Open menu')} align="start" sideOffset={4}><FlowMenuItem label={count>group.issues.length?'Select loaded issues':'Select all in column'} onSelect={()=>group.issues.forEach(issue=>onSelectIssue?.(issue.id,true,false))}/><FlowMenuItem label="Hide column" onSelect={()=>onHideGroup?.(group.id)}/></FlowDropdownMenuContent></DropdownMenu.Portal></DropdownMenu.Root>
         <button className={styles.headerButton} type="button" aria-label={t(createIssueLabel)} onClick={() => onCreateIssue?.(group)}><span className={styles.desktopIcon}><Plus size={15}/></span><span className={styles.phoneIcon}><BoardPlusIcon/></span></button>
@@ -327,7 +327,7 @@ function CardProperties({ issue, properties, propertyOptions, onPropertyChange, 
     {properties.has('priority') && <RowCommandPicker propertyLabel="Priority" label={`${priorityName(issue.priority)} priority`} searchLabel="Change priority to..." selectedIds={[String(issue.priority)]} options={propertyOptions.priority} onSelect={value => onPropertyChange('priority', value)} triggerClassName={`${styles.metaTrigger} ${styles.iconBadge}`} trigger={<PriorityIcon priority={issue.priority} size={14}/>}/>}
     {showEstimate && <span className={styles.cardBadge} data-board-card-badge><EstimateChip className={styles.badge} value={issue.estimate!} settings={estimateSettings} label={`Estimate ${issue.estimate}`} board/></span>}
     {hasSubIssues && <SubIssueProgress className={styles.subIssueBadge} progress={issue.subIssueProgress!} subIssues={issue.subIssues!} onOpenSubIssue={onOpenSubIssue}/>}
-    {properties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
+    {properties.has('sla') && issue.sla && <IssueRowSLA sla={issue.sla}/>}
     {properties.has('release') && issue.releases?.length ? <IssueReleaseChip className={styles.badge} iconSize={12} releases={issue.releases}/> : null}
     {properties.has('links') && issue.linkCount ? <span className={styles.badge}><Link2 size={12}/><span>{issue.linkCount}</span></span> : null}
     {((properties.has('pullRequests') && issue.pullRequestCount) || issue.blockedByCount || issue.blockingCount) ? <span className={styles.badge}><IssueWidgetAdornments showPullRequests={properties.has('pullRequests')} pullRequestLifecycle={issue.pullRequestLifecycle} pullRequestCount={issue.pullRequestCount ?? 0} blockedByCount={issue.blockedByCount ?? 0} blockingCount={issue.blockingCount ?? 0} blockedByIds={issue.blockedByIds} blockingIds={issue.blockingIds} compact/></span> : null}

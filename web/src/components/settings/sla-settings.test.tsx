@@ -43,10 +43,21 @@ beforeEach(() => {
 })
 
 describe('SLASettings', () => {
+  it('saves the issue creation clock and displays it on existing rules', async () => {
+    const user = userEvent.setup()
+    renderPage(data({ slaRules: [rule('creation', { startMode: 'issueCreation' })] }))
+    expect(cards()[0]).toHaveTextContent('of 24 hours from issue creation')
+    await user.click(screen.getByRole('button', { name: 'Add rule' }))
+    const dialog = screen.getByRole('dialog', { name: 'Add rule' })
+    await user.click(within(dialog).getByRole('combobox', { name: 'Start counting' }))
+    await user.click(await screen.findByRole('option', { name: 'from issue creation' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Add rule' }))
+    await waitFor(() => expect(createSLARule).toHaveBeenCalledWith(expect.objectContaining({ startMode: 'issueCreation' })))
+  })
   it('reads in Chinese: rule sentences, durations and the rule dialog', async () => {
     localStorage.setItem('flow:locale', 'zh-CN')
     const user = userEvent.setup()
-    renderPage(data({ slaRules: [...RULES, rule('weeks', { filters: { priority: 4 }, targetMinutes: 2400, businessHours: true })] }))
+    renderPage(data({ slaRules: [...RULES, rule('weeks', { filters: { priority: 4 }, targetMinutes: 7200, businessHours: true })] }))
     expect(screen.getByText('自动化规则')).toBeInTheDocument()
     const [urgent, , medium, business] = cards()
     expect(urgent).toHaveTextContent('当优先级是紧急则添加 SLA时限 24 小时，自升级起计')
@@ -79,7 +90,7 @@ describe('SLASettings', () => {
 
   it('shows a rule written before actions existed as one that adds an SLA, in business time when it was', () => {
     renderPage(data({ slaRules: [rule('old', { filters: { priority: 2 }, targetMinutes: 4320, businessHours: true, teamIds: ['team-1'] })] } as never))
-    expect(cards()[0]).toHaveTextContent('Add SLAof 9 business days from escalation')
+    expect(cards()[0]).toHaveTextContent('Add SLAof 3 business days from escalation')
   })
 
   it('does not list the teams an older rule was saved with as a condition', () => {
@@ -203,7 +214,7 @@ describe('SLASettings', () => {
     const user = userEvent.setup()
     const onReload = renderPage()
     await user.click(within(cards()[1]).getByRole('button', { name: 'Delete configuration' }))
-    expect(confirmAction).toHaveBeenCalledWith('Delete this SLA rule?', expect.objectContaining({ confirmLabel: 'Delete' }))
+    expect(confirmAction).toHaveBeenCalledWith('Delete this SLA?', expect.objectContaining({ confirmLabel: 'Delete' }))
     await waitFor(() => expect(deleteSLARule).toHaveBeenCalledWith('high'))
     await waitFor(() => expect(onReload).toHaveBeenCalled())
   })

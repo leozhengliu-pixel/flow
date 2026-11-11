@@ -370,7 +370,8 @@ import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityChec
 import { bootstrapNavigationDecision, bootstrapRefreshProjection, bootstrapRequestKey } from '@/lib/bootstrap-navigation'
 import { teamWorkflowStateOfType } from '@/lib/team-workflow'
 import type { WorkspaceSecondaryKind } from '@/components/workspace/workspace-secondary-page'
-import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, teamIssueScope, type IssueRefreshScope } from '@/lib/workspace-metadata-refresh'
+import { applyLabelUpdate, archiveProjectUpdateReminders, eventRequiresSLARefresh, issueMutationAffectsSLA, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, teamIssueScope, type IssueRefreshScope } from '@/lib/workspace-metadata-refresh'
+import { slaFeatureEnabled } from '@/components/settings/sla-model'
 import { ISSUE_QUERY_INVALIDATED } from '@/components/issue-explorer/paged-issue-invalidation'
 import { canInviteMembers, setViewerCanInvite } from '@/lib/invite-navigation'
 
@@ -430,6 +431,11 @@ function App() {
     }
     return next;
   }, []);
+  const refreshSLAAfterIssueMutation = useCallback(async (workspaceKey: string | undefined, input: IssueUpdateInput) => {
+    const current = dataRef.current;
+    if (!workspaceKey || current?.workspace.urlKey !== workspaceKey || !slaFeatureEnabled(current) || !issueMutationAffectsSLA(input)) return;
+    await reloadWorkspaceMetadata(workspaceKey).catch(() => undefined);
+  }, [reloadWorkspaceMetadata]);
   // Refetch only the issues an action can have rewritten. Paged workspaces
   // hold query windows, so their queries are invalidated instead; a full
   // collection pages through the scope and drops owned issues that left it.
@@ -1547,6 +1553,7 @@ function App() {
           const result = applyRealtimePatch(current, event);
           return result.handled ? result.data : current;
         });
+        if (eventRequiresSLARefresh(event, data)) await reloadWorkspaceMetadata(workspace);
         return;
       }
       if (/^document\.comment_/.test(event.type) && event.aggregateId) {
@@ -1593,6 +1600,7 @@ function App() {
           const missing = wanted.filter(id => !returned.has(id));
           if (missing.length) setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? deriveResourceCounts({ ...current, issues: current.issues.filter(issue => !missing.includes(issue.id)) }) : current);
         }
+        if (eventRequiresSLARefresh(event, data)) await reloadWorkspaceMetadata(workspace);
         return;
       }
       const issue = event.payload?.issue ?? (
@@ -2128,6 +2136,7 @@ function App() {
       });
       burst.settled = updated;
       if (finish()) replaceIssue(updated);
+      await refreshSLAAfterIssueMutation(data?.workspace.urlKey, input);
       return updated;
     } catch (error) {
       const conflict =
@@ -3768,6 +3777,7 @@ function App() {
         : current,
     );
     setSelected(new Set());
+    await refreshSLAAfterIssueMutation(data?.workspace.urlKey, input);
   };
   const batchToggleLabel = async (labelId: string) => {
     if (!data) return;
@@ -3803,6 +3813,7 @@ function App() {
         : current,
     );
     setSelected(new Set());
+    await refreshSLAAfterIssueMutation(data.workspace.urlKey, { labelIds: [] });
   };
   const batchDelete = async () => {
     if (
@@ -3910,6 +3921,7 @@ function App() {
           }
         : current,
     );
+    await refreshSLAAfterIssueMutation(data?.workspace.urlKey, input);
     return issues;
   };
   const deleteIssuesFromPage = async (ids: string[]) => {

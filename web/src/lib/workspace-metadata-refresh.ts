@@ -1,5 +1,17 @@
 import { deriveResourceCounts } from '@/lib/resource-counts'
-import type { BootstrapData, Issue, IssueLabel, Project, RealtimeEvent } from '@/types/flow'
+import type { BootstrapData, Issue, IssueLabel, IssueUpdateInput, Project, RealtimeEvent } from '@/types/flow'
+import { slaFeatureEnabled } from '@/components/settings/sla-model'
+
+const SLA_ISSUE_FIELDS: (keyof IssueUpdateInput)[] = ['priority', 'teamId', 'stateId', 'labelIds', 'projectId', 'slaBreachesAt', 'slaType']
+
+/** These writes can attach, replace or remove metadata-backed SLA instances. */
+export function issueMutationAffectsSLA(input: IssueUpdateInput): boolean {
+  return SLA_ISSUE_FIELDS.some(field => input[field] !== undefined)
+}
+
+export function eventRequiresSLARefresh(event: Pick<RealtimeEvent, 'type'>, data: Pick<BootstrapData, 'settings' | 'slaRules' | 'issueSlas'>): boolean {
+  return (slaFeatureEnabled(data) || Boolean(data.issueSlas?.length)) && /^issue\.(?:created|updated|batch_updated|deleted|restored)$/.test(event.type)
+}
 
 // Server mutations for these events never create, delete or rewrite issue,
 // comment or activity records: they only change workspace metadata (projects,

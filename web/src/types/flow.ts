@@ -2194,6 +2194,7 @@ export interface SLARule {
   filters: Record<string, unknown>;
   /** What a match does: add an SLA or take it away. Rules saved before actions existed have none and add one. */
   action?: "add" | "remove";
+  startMode?: "ruleMatch" | "issueCreation";
   targetMinutes: number;
   pauseStatuses: string[];
   businessHours: boolean;
@@ -2205,8 +2206,14 @@ export interface IssueSLA {
   id: UUID;
   issueId: UUID;
   ruleId: UUID;
+  startMode?: "ruleMatch" | "issueCreation";
+  manual?: boolean;
   startedAt: string;
   dueAt: string;
+  highRiskAt?: string;
+  mediumRiskAt?: string;
+  targetMinutes?: number;
+  businessHours?: boolean;
   pausedAt?: string;
   pausedMinutes: number;
   breachedAt?: string;
@@ -3064,6 +3071,8 @@ export interface FilterCondition {
 }
 
 export interface IssueUpdateInput {
+  slaBreachesAt?: string;
+  slaType?: "all" | "onlyBusinessDays";
   delegateId?: UUID;
   expectedVersion?: number;
   title?: string;

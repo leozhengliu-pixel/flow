@@ -1,5 +1,7 @@
 import type { ActivityEvent, BootstrapData } from '@/types/flow'
 import { isAgentBot, sameActivityActor } from '@/lib/actor-attribution'
+import { formatSlaDuration } from '@/components/settings/sla-model'
+import { slaTimeLeft } from '@/lib/issue-sla-copy'
 
 export type ActivityContext = Pick<BootstrapData, 'users' | 'projects' | 'labels' | 'cycles' | 'issues' | 'states' | 'workspace'> & Partial<Pick<BootstrapData, 'releases' | 'reviews'>>
 type Translate = (text: string) => string
@@ -56,6 +58,21 @@ export function describeIssueActivityParts(event: ActivityEvent, context?: Activ
     return parts
   }
   const text = (value: string): ActivityPart[] => [value]
+  if (event.type === 'issue.sla_breached') return text(t('SLA breached'))
+  if (event.type === 'issue.sla_high_risk') return text(t('High risk of breaching SLA'))
+  if (event.type === 'issue.sla_removed') return text(t('removed the SLA'))
+  if (event.type === 'issue.sla_started' || event.type === 'issue.sla_changed') {
+    const manualDuration = (date: string) => {
+      const remaining = Date.parse(date) - Date.parse(event.createdAt)
+      const duration = slaTimeLeft(remaining, t)
+      return remaining < 0 ? t('{duration} ago').replace('{duration}', duration) : duration
+    }
+    const manual = m.manual === 'true' || m.ruleId === ''
+    const duration = manual && m.dueAt ? manualDuration(m.dueAt) : formatSlaDuration(Number(m.targetMinutes), m.businessHours === 'true', t)
+    return event.type === 'issue.sla_changed'
+      ? phrase('changed the SLA from {from} to {to}', { from: manual && m.previousDueAt ? manualDuration(m.previousDueAt) : formatSlaDuration(Number(m.previousTargetMinutes), m.businessHours === 'true', t), to: duration })
+      : phrase('set the SLA to {duration}', { duration })
+  }
   const person = (id: string) => context?.users.find(user => user.id === id)?.displayName
   const issueRef = (id: string): ActivityRef => {
     const issue = context?.issues.find(item => item.id === id || item.identifier === id)
@@ -94,6 +111,13 @@ export function describeIssueActivityParts(event: ActivityEvent, context?: Activ
       changes.push(!ids.length ? text(t('removed all labels')) : labels.length === ids.length ? phrase('changed labels to {labels}', { labels }) : text(t('changed the labels')))
     }
     if ('dueDate' in m) changes.push(m.dueDate ? phrase('set the due date to {date}', { date: m.dueDate }) : text(t('removed the due date')))
+    if ('slaBreachesAt' in m && m.slaActivityRecorded !== 'true') {
+      const since = Date.parse(event.createdAt)
+      const duration = (value: string) => slaTimeLeft(Date.parse(value) - since, t)
+      changes.push(!m.slaBreachesAt ? text(t('removed the SLA')) : m.slaBreachesAtBefore
+        ? phrase('changed the SLA from {from} to {to}', { from: duration(m.slaBreachesAtBefore), to: duration(m.slaBreachesAt) })
+        : phrase('set the SLA to {duration}', { duration: duration(m.slaBreachesAt) }))
+    }
     if ('estimate' in m) changes.push(Number(m.estimate) ? phrase('set the estimate to {estimate}', { estimate: m.estimate }) : text(t('removed the estimate')))
     if ('parent' in m) changes.push(!m.parent ? text(t('removed the parent issue')) : phrase('set the parent issue to {issue}', { issue: issueRef(m.parent) }))
     if ('archived' in m) changes.push(text(t(m.archived === 'true' ? 'archived the issue' : 'restored the issue')))
@@ -149,12 +173,12 @@ export function activityTimeLabel(createdAt: string, now: number, locale: string
 }
 
 /** Field families an `issue.updated` event can change (a family's before / id / type keys travel with it). */
-const ISSUE_FIELD_KEYS = ['state', 'title', 'priority', 'assignee', 'delegate', 'project', 'projectMilestone', 'cycle', 'labels', 'dueDate', 'estimate', 'parent', 'archived', 'recurrence', 'recurringNext', 'nextOccurrenceAt']
+const ISSUE_FIELD_KEYS = ['state', 'title', 'priority', 'assignee', 'delegate', 'project', 'projectMilestone', 'cycle', 'labels', 'dueDate', 'slaBreachesAt', 'estimate', 'parent', 'archived', 'recurrence', 'recurringNext', 'nextOccurrenceAt']
 
 /** How many fields an `issue.updated` event changed. */
 export function issueEventFieldCount(event: ActivityEvent): number {
   const metadata = event.metadata ?? {}
-  return ISSUE_FIELD_KEYS.filter(key => key in metadata).length
+  return ISSUE_FIELD_KEYS.filter(key => key in metadata && !(key === 'slaBreachesAt' && metadata.slaActivityRecorded === 'true')).length
 }
 
 /** Consecutive changes by the same actor this close together read as one history row (the reference app's coalesced rows). */

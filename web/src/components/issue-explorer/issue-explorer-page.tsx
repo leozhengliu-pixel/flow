@@ -44,9 +44,11 @@ import {
 } from './issue-explorer-model'
 import { IssuesSplitLayout, IssueViewSplitPage } from '@/components/issues-split-view'
 import { MyIssuesSummaryCard } from '@/components/my-issues/my-issues-summary-card'
-import { labelGroups, PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, pagedDisplayQuery } from './issue-grouping'
+import { labelGroups, availableIssueGroupings, PAGED_ORDERINGS, groupSummaries, pagedDisplayQuery } from './issue-grouping'
 import { isActiveSubscription } from '@/lib/subscription-records'
 import { BacklogEmptyState } from './backlog-empty-state'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
+import { filtersUseSla } from './issue-filter-query'
 
 export interface IssueExplorerPageProps {
   data: BootstrapData
@@ -170,27 +172,30 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const scopedIssues = useMemo(() => filterInsightTeams(issuesForScope(data.issues, scope, view, Boolean(display.showArchived), scopeTeamIds), initialInsightFilters?.teamIds).filter(issue => !scopeFilter || scopeFilter(issue)), [data.issues, display.showArchived, initialInsightFilters?.teamIds, scope, scopeFilter, scopeTeamIds, view])
   const insightIssues = useMemo(() => insightsOpen ? filterInsightTeams(issuesForScope(data.issues, scope, view, true, scopeTeamIds), initialInsightFilters?.teamIds) : [], [data.issues, initialInsightFilters?.teamIds, insightsOpen, scope, scopeTeamIds, view])
   const issuesById = useMemo(() => new Map([...data.issues, ...pagedIssues].map(issue => [issue.id, issue])), [data.issues, pagedIssues])
-  const rowOptions = useMemo(() => explorerPropertyOptions(data, scopedIssues), [data, scopedIssues])
+  const slaNow = useCurrentTimeMs()
+  const rowOptions = useMemo(() => explorerPropertyOptions(data, scopedIssues, slaNow), [data, scopedIssues, slaNow])
   // Bootstrap/sync owns the complete visible collection. Group before virtualizing;
   // replacing it with one query page truncates both group counts and membership.
   const bandActive = Boolean(savedView && !viewEditor)
   const effectiveFilters = useMemo(() => bandActive && extraFilters.length ? [...filters, ...extraFilters] : filters, [bandActive, extraFilters, filters])
-  const visibleIssues = useMemo(() => data.issueCollectionPaged ? pagedIssues : applyExplorerFilters(scopedIssues, effectiveFilters, data), [data, effectiveFilters, scopedIssues, pagedIssues])
+  const visibleIssues = useMemo(() => data.issueCollectionPaged ? pagedIssues : applyExplorerFilters(scopedIssues, effectiveFilters, data, slaNow), [data, effectiveFilters, scopedIssues, pagedIssues, slaNow])
   const [explorerRows] = useState(() => createExplorerRowCache())
   const baseRows = useMemo(() => explorerRows(visibleIssues, data).map((row, index) => rowOverrides.get(visibleIssues[index].id) ?? row), [data, explorerRows, rowOverrides, visibleIssues])
   const rows = drillRows ?? baseRows
-  const insightRows = useMemo(() => insightsOpen ? applyExplorerFilters(insightIssues, effectiveFilters, data).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)) : [], [data, effectiveFilters, insightIssues, insightsOpen, rowOverrides])
+  const insightRows = useMemo(() => insightsOpen ? applyExplorerFilters(insightIssues, effectiveFilters, data, slaNow).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)) : [], [data, effectiveFilters, insightIssues, insightsOpen, rowOverrides, slaNow])
   const activeInsightRows = useMemo(() => insightRows.filter(row => !row.archivedAt), [insightRows])
-  const groups = useMemo(() => buildExplorerIssueGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
+  const groups = useMemo(() => buildExplorerIssueGroups(rows, display, data, view, manualOrder, slaNow), [data, display, manualOrder, rows, view, slaNow])
   const summaryRows = useMemo(() => [...new Map(groups.flatMap(group => group.issues).map(row => [row.id, row])).values()], [groups])
+  const slaQueryTime = display.grouping === 'sla' || display.grouping === 'focus' || filtersUseSla(effectiveFilters) ? slaNow : 0
   const buildPagedQuery = useCallback((list: MyIssuesAppliedFilter[]) => {
     const triageTeamIds = Object.values(data.teamSettings ?? {}).filter(settings => settings.triageEnabled).map(settings => settings.teamId)
-    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(display, Date.now(), triageTeamIds, data)
+    const now = slaQueryTime || Date.now()
+    const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(display, now, triageTeamIds, data)
     if (view === 'backlog') conditions.push({ field: 'status', operator: 'is', values: ['backlog'] })
     if (view === 'active') conditions.push({ field: 'status', operator: 'in', values: ['unstarted', 'started'] })
     const includeSubTeams = scope.kind === 'team' && display.showSubTeamIssues !== false
-    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(list, { data }), ...conditions, ...(scopeConditions ?? [])] } }
-  }, [data, display, initialInsightFilters?.teamIds, scope, scopeConditions, view])
+    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(list, { data, now }), ...conditions, ...(scopeConditions ?? [])] } }
+  }, [data, display, initialInsightFilters?.teamIds, scope, scopeConditions, view, slaQueryTime])
   const pagedQuery = useMemo(() => buildPagedQuery(effectiveFilters), [buildPagedQuery, effectiveFilters])
   // Compare the same scope and display settings, clearing only personal filters, never the saved view's filters.
   const clearableFilters = bandActive ? extraFilters : filters
@@ -330,7 +335,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     hideCompletedIssues: view !== 'all',
     groups: menuGroups,
     labelGroupOptions: labelGroups(data.labels),
-    availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
+    availableGroupings: availableIssueGroupings(data),
     availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
     toggles: displayToggles(scope.kind === 'team' ? scope.team.id : undefined, data),
     modified: displayModified,

@@ -36,7 +36,7 @@ import { agentHoverProps } from '@/components/agent/agent-hover-props'
 import { ASSIGNEE_INVITE_ID, assigneeShortcut } from '@/lib/agent-members'
 import { openMemberInvite, viewerCanInvite } from '@/lib/invite-navigation'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
-import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
+import { IssueRowSLA } from '@/components/issue/issue-sla-picker'
 import { SubIssueProgressRing } from '@/components/issue/sub-issue-progress-ring'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { LoadingContainer, LoadingListFooter } from '@/components/ui/loading-caret'
@@ -464,7 +464,7 @@ function MyIssuesRowView({ issue, active = false, selected = false, displayPrope
               blockedByIds={issue.blockedByIds}
               blockingIds={issue.blockingIds}
             /> : null}
-            {displayProperties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
+            {displayProperties.has('sla') && issue.sla && <IssueRowSLA sla={issue.sla}/>}
             {showEstimate && <EstimateChip className={styles.estimateChip} value={issue.estimate!} settings={estimateSettings} label={`Estimate ${issue.estimate}`}/>}
             {displayProperties.has('creator') && issue.creatorId ? <span className={styles.creatorAvatar} data-row-creator aria-label={`Creator ${issue.creatorName ?? creator?.displayName ?? ''}`.trim()}><UserAvatar avatarUrl={creator?.avatarUrl} className={styles.avatar} color={avatarColor(issue.creatorId)} name={issue.creatorName ?? creator?.displayName ?? ''}/></span> : null}
             {displayProperties.has('assignee') ? <IssueAssigneeSlot issue={issue} options={propertyOptions.assignee} onChange={value => change('assignee', value)} avatarClassName={styles.avatar} emptyClassName={styles.noAssignee} sessionLabel={sessionLabel}/> : null}

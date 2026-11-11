@@ -90,8 +90,8 @@ export function SLASettings({
     void run(() => reorderSLARules(ids));
   };
   const remove = async (rule: SLARule) => {
-    const confirmed = await confirmAction(t("Delete this SLA rule?"), {
-      description: t("Issues that follow it lose their SLA. This can't be undone."),
+    const confirmed = await confirmAction(t("Delete this SLA?"), {
+      description: t("This action cannot be undone."),
       confirmLabel: t("Delete"),
     });
     if (confirmed) await run(() => deleteSLARule(rule.id));
@@ -293,7 +293,7 @@ function RuleCard({
               <SettingsNavGlyph name="sla" size={16} />
               <span>{t("Add SLA")}</span>
               <span>
-                {t("of {duration} from escalation").replace("{duration}", () =>
+                {t(rule.startMode === "issueCreation" ? "of {duration} from issue creation" : "of {duration} from escalation").replace("{duration}", () =>
                   formatSlaDuration(rule.targetMinutes, rule.businessHours, t),
                 )}
               </span>
@@ -410,7 +410,7 @@ function RuleDialog({
   const [busy, setBusy] = useState(false);
   const adds = draft.action === "add";
   const amount = Number(amountText.trim());
-  const amountOk = !adds || (amountText.trim() !== "" && validAmount(amount));
+  const amountOk = !adds || (amountText.trim() !== "" && validAmount(amount) && draftMinutes({ ...draft, amount }) <= 153722867);
   const valuesOk = draft.conditions.length > 0 && draft.conditions.every((condition) => condition.value !== "");
   const valid = amountOk && valuesOk;
   const unused = SLA_CONDITION_KINDS.filter((kind) => !draft.conditions.some((condition) => condition.kind === kind));
@@ -481,6 +481,7 @@ function RuleDialog({
       action: draft.action,
       enabled: draft.enabled,
       businessHours: adds ? draft.businessHours : (rule?.businessHours ?? false),
+      ...(draft.startMode === "issueCreation" || rule?.startMode ? { startMode: draft.startMode ?? "ruleMatch" } : {}),
       ...(adds ? { targetMinutes: draftMinutes({ ...draft, amount }) } : {}),
     };
     try {
@@ -592,7 +593,14 @@ function RuleDialog({
                     options={unitOptions}
                     onChange={(unit) => setDraft((current) => ({ ...current, unit: unit as SlaUnit }))}
                   />
-                  <span className="sla-dialog-is">{t("from escalation")}</span>
+                  <SettingsSelect
+                    align="start"
+                    menuClassName="settings-select-menu sla-select-menu"
+                    label={t("Start counting")}
+                    value={draft.startMode ?? "ruleMatch"}
+                    options={[{ value: "ruleMatch", label: t("from escalation") }, { value: "issueCreation", label: t("from issue creation") }]}
+                    onChange={(startMode) => setDraft(current => ({ ...current, startMode: startMode as SlaDraft["startMode"] }))}
+                  />
                 </div>
                 <div className="sla-dialog-condition">
                   <SettingsSelect

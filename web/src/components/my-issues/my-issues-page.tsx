@@ -3,7 +3,7 @@ import { IssueRowActionsProvider } from './issue-row-actions'
 import { unavailableDisplayProperties } from './display-property-availability'
 import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { useDepsSnapshot } from '@/hooks/use-deps-snapshot'
-import { PAGED_GROUPINGS, PAGED_ORDERINGS, focusCasesKey, groupSummaries, labelGroups, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
+import { availableIssueGroupings, PAGED_ORDERINGS, focusCasesKey, groupSummaries, labelGroups, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { PagedIssueList } from '@/components/issue-explorer/paged-issue-list'
 import { issueFiltersToQueryAst } from './my-issues-filter-types'
@@ -31,6 +31,8 @@ import { IssuesSplitLayout, IssueViewSplitPage } from '@/components/issues-split
 import { MyIssuesSummaryCard } from './my-issues-summary-card'
 import { AdvancedFilterChip } from '@/components/issue-explorer/advanced-filter-editor'
 import { createAdvancedFilter } from '@/components/issue-explorer/advanced-filter'
+import { useCurrentTimeMs } from '@/hooks/use-current-time'
+import { filtersUseSla } from '@/components/issue-explorer/issue-filter-query'
 
 export interface MyIssuesPageProps {
   data: BootstrapData
@@ -53,7 +55,7 @@ export interface MyIssuesPageProps {
   onConvertIssue?: (issue: Issue, kind: IssueConversionKind) => Promise<void>
 }
 
-const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = { ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',triageIntelligence:'Triage Intelligence',suggestedLabel:'Suggested label',dates:'Dates',projectMilestone:'Project milestone',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',customers:'Customers',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template' }
+const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = { ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',sla:'SLA status',labels:'Labels',relations:'Relations',triageIntelligence:'Triage Intelligence',suggestedLabel:'Suggested label',dates:'Dates',projectMilestone:'Project milestone',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',customers:'Customers',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template' }
 
 export function MyIssuesPage({ data, initialView = 'assigned', loading = false, error, workspaceSlug = data.workspace.urlKey, onClearError, onCreateIssue, onDeleteIssues, onNavigateView, onOpenIssue, onOpenSidebar, renderIssuePreview, onPersistDisplay, onPersistFilters, onUpdateIssue, onUpdateIssues, onConvertIssue }: MyIssuesPageProps) {
   const { t } = useI18n()
@@ -76,9 +78,10 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const hierarchyIssues = useMemo(() => data.issueCollectionPaged ? sourceIssues : issuesWithHierarchyContext(sourceIssues, data.issues), [data.issueCollectionPaged, data.issues, sourceIssues])
   const initialGroups = useMemo(() => groupIssues(hierarchyIssues, workspaceSlug, data, sourceIssueIds), [data, hierarchyIssues, sourceIssueIds, workspaceSlug])
   const issuesById = useMemo(() => new Map([...data.issues, ...pagedIssues].map(issue => [issue.id, issue])), [data.issues, pagedIssues])
-  const rowOptions = useMemo(() => explorerPropertyOptions(data, sourceIssues), [data, sourceIssues])
+  const slaNow = useCurrentTimeMs()
+  const rowOptions = useMemo(() => explorerPropertyOptions(data, sourceIssues, slaNow), [data, sourceIssues, slaNow])
 
-  const groupingContext = useMemo(() => ({ data }), [data])
+  const groupingContext = useMemo(() => ({ data, now: slaNow }), [data, slaNow])
   const desktop = useDesktopLayout()
   const displayDefaults = useMemo(() => desktop ? { ...defaultMyIssuesDisplayOptions, ...desktopDisplayDefaults() } : defaultMyIssuesDisplayOptions, [desktop])
   const controller = useMyIssuesController({
@@ -96,8 +99,9 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     },
   })
   // Focus buckets depend on the current cycles, triage teams and SLA risk: the query changes only when they do.
-  const focusKey = focusCasesKey(controller.display, data)
-  const myIssuesPagedQuery = useDepsSnapshot([controller.display, controller.filters, data.viewer.id, projectedView, focusKey], () => {
+  const focusKey = focusCasesKey(controller.display, data, slaNow)
+  const slaFilterTime = filtersUseSla(controller.filters) ? slaNow : 0
+  const myIssuesPagedQuery = useDepsSnapshot([controller.display, controller.filters, data.viewer.id, data.issueSlas, projectedView, focusKey, slaFilterTime], () => {
     const { sort, direction, groupBy, groupCases, archived, conditions } = pagedDisplayQuery(controller.display, Date.now(), [], focusKey ? data : undefined)
     return { archived, groupBy, groupCases, sort, direction, filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : projectedView === 'shared' ? 'sharedWith' : 'assignee', values: [data.viewer.id] }, ...conditions] } }
   })
@@ -221,7 +225,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       insightsOpen={insightsOpen}
       displayOptions={controller.display}
       displayMenuProps={{
-        availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
+        availableGroupings: availableIssueGroupings(data),
         availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
         toggles: ['triage'],
         hiddenProperties: desktop ? unavailableDisplayProperties(data, undefined, { activity: controller.view === 'activity' }) : undefined,
@@ -410,8 +414,7 @@ function groupIssues(issues: Issue[], workspaceSlug: string, data: BootstrapData
 }
 
 function toRow(issue: Issue, workspaceSlug: string, data: BootstrapData, viewMatch = true): MyIssuesRowData {
-  const sla=data.issueSlas.find(item=>item.issueId===issue.id&&item.status!=='removed');const rule=sla?data.slaRules.find(item=>item.id===sla.ruleId):undefined
-  return { ...issueToExplorerRow(issue,workspaceSlug,data.issues,data), viewMatch, sla:sla?{...sla,ruleName:rule?.name}:undefined }
+  return { ...issueToExplorerRow(issue,workspaceSlug,data.issues,data), viewMatch }
 }
 
 function bulkOptions(action: MyIssuesBulkAction, options: ReturnType<typeof explorerPropertyOptions>): MyIssuesBulkActionOption[] | undefined {

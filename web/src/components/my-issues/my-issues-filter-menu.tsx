@@ -2,7 +2,7 @@ import { cloneElement, Fragment, isValidElement, useInsertionEffect, useLayoutEf
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
 import { Command, defaultFilter } from 'cmdk'
-import { Diamond, Link2, Rocket } from 'lucide-react'
+import { Clock3, Diamond, Link2, Rocket } from 'lucide-react'
 import { EstimateIcon } from '@/components/issue/estimate-icon'
 import { CalendarIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
@@ -30,6 +30,8 @@ import { UserAvatar } from '@/components/ui/user-avatar'
 import { ReleasePipelineIcon } from '@/components/releases/release-icons'
 import { durationFilterOptions } from '@/components/issue-explorer/issue-date-filter'
 import { MyIssuesPhoneFilterIcon } from './my-issues-phone-filter-icons'
+import { SlaIcon } from '@/components/issue/issue-sla-indicator'
+import type { SlaState } from '@/lib/issue-sla'
 
 export type IssueFilterScope = 'issues' | 'project'
 
@@ -66,7 +68,7 @@ const MY_ISSUES_FILTER_GROUPS = [
   [
     { id: 'team', label: 'Team', submenu: true }, { id: 'status', label: 'Status', submenu: true }, { id: 'assignee', label: 'Assignee', submenu: true },
     { id: 'agent', label: 'Agent', submenu: true }, { id: 'agentSession', label: 'Agent Session', submenu: true },
-    { id: 'creator', label: 'Creator', submenu: true }, { id: 'priority', label: 'Priority', submenu: true }, { id: 'estimate', label: 'Estimate', submenu: true },
+    { id: 'creator', label: 'Creator', submenu: true }, { id: 'priority', label: 'Priority', submenu: true }, { id: 'sla', label: 'SLA status', submenu: true }, { id: 'estimate', label: 'Estimate', submenu: true },
     { id: 'labels', label: 'Labels', submenu: true }, { id: 'relations', label: 'Relations', submenu: true }, { id: 'suggestedLabel', label: 'Suggested label', submenu: true },
     { id: 'triageIntelligence', label: 'Triage Intelligence', submenu: true }, { id: 'dates', label: 'Dates', submenu: true },
   ],
@@ -123,13 +125,14 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
     const field = item.id as MyIssuesFilterKey
     if (field === 'advanced' && (variant === 'advanced' || !onAdvanced)) return false
     if (field === 'ai' && (variant === 'advanced' || !aiAllowed)) return false
+    if (field === 'sla' && !options?.(field)?.length) return false
     if (desktop && layout === 'issues' && variant === 'root' && ['triageIntelligence', 'releases'].includes(field)) return false
     // Fields with nothing to pick from (no cycles, no customers, no external sources) are not offered in the compact desktop root.
     if (desktop && layout === 'issues' && variant === 'root' && options) {
       // "No cycle" / "No external source" are not values to pick: without a real cycle or source the field is not offered.
       const probe = field === 'addedToCycle' ? 'cycle' : field
       if (['cycle', 'externalSource'].includes(probe) && !options(probe)?.some(option => option.id)) return false
-      if (field === 'customers' && !options(field)?.length) return false
+      if ((field === 'customers' || field === 'sla') && !options(field)?.length) return false
     }
     return (!availableFields || availableFields.includes(field)) && !hiddenFields.includes(field)
   })).filter(group => group.length)
@@ -345,7 +348,7 @@ function isCategoryList(field: MyIssuesFilterKey, options: MyIssuesFilterOption[
 }
 /** Labels Flow defines (presets, "No …", categories) are translated; names users typed are not. */
 function isSystemOption(field: MyIssuesFilterKey, option: MyIssuesFilterOption) {
-  return !option.id || option.id === '*' || option.id.endsWith(':*') || option.id.endsWith(':') || Boolean(option.children?.length) || Boolean(option.numberInput) || option.kind === 'priority' || option.kind === 'projectPriority' || option.label === 'Current user' || field === 'relations' || field === 'dates' || field === 'agentSession' || valueRowKind(field, option) !== 'check'
+  return !option.id || option.id === '*' || option.id.endsWith(':*') || option.id.endsWith(':') || Boolean(option.children?.length) || Boolean(option.numberInput) || option.kind === 'priority' || option.kind === 'projectPriority' || option.label === 'Current user' || field === 'relations' || field === 'dates' || field === 'agentSession' || field === 'sla' || valueRowKind(field, option) !== 'check'
 }
 
 function FilterValueItems({ activeId, field, isSelected = () => false, layer, onActive = () => {}, onChoose, options }: { activeId?: string; field: MyIssuesFilterKey; isSelected?: (id: string) => boolean; layer: number; onActive?: (id: string) => void; onChoose: (option: MyIssuesFilterOption) => void; options: MyIssuesFilterOption[] }) {
@@ -446,6 +449,7 @@ export function OptionMark({ field, option }: { field: MyIssuesFilterKey; option
   const glyph=categoryGlyph(field,option)
   if(glyph)return glyph
   if(field==='agent'&&!option.id)return <FlowGlyph name="noAgent"/>
+  if(field==='sla')return <span className={styles.optionIcon} style={{color:option.id==='breached'||option.id==='failed'?'var(--semantic-danger)':option.id==='high'?'var(--priority-high)':option.id==='medium'?'var(--priority-medium)':option.id==='achieved'?'var(--semantic-success)':'var(--theme-text-secondary)'}}><SlaIcon state={option.id as SlaState}/></span>
   if(field==='agent'&&option.id==='*')return <FlowGlyph name="agent"/>
   // The reference app's session state glyphs: Active in yellow, the rest in the menu's secondary text colour.
   if(field==='agentSession'){const state=agentSessionStateOption(option.id);if(state)return <FlowGlyph name={state.glyph} style={state.id==='state:active'?{color:'var(--agent-session-active)'}:undefined}/>}
@@ -507,6 +511,7 @@ export function FilterFieldIcon({field}:{field:MyIssuesFilterKey}){
   const glyph=FIELD_GLYPHS[field]
   if(glyph)return <FlowGlyph name={glyph}/>
   if(field==='priority')return <ProjectPropertyCategoryIcon kind="priority"/>
+  if(field==='sla')return <Clock3 size={16}/>
   if(field==='owner')return <ProjectPropertyCategoryIcon kind="lead"/>
   if(field==='projectMilestone')return <ProjectPropertyCategoryIcon kind="milestone"/>
   if(field==='project')return <ViewGlyph icon="Project" color="currentColor" style={{width:16,height:16}}/>

@@ -38,11 +38,12 @@ export function filterChipItem(filter: Pick<MyIssuesAppliedFilter, 'id' | 'field
 }
 
 /** Values a chip's picker offers: leaf options, narrowed to the chip's own sub-field (Due date, Project status…). */
-export function chipValueOptions(fieldLabel: string, options: MyIssuesFilterOption[] = []): MyIssuesFilterOption[] {
+export function chipValueOptions(fieldLabel: string, options: MyIssuesFilterOption[] = [], t: (value: string) => string = value => value): MyIssuesFilterOption[] {
   // Number blocks (Customer count…) have no value list: the chip keeps its typed number.
   if (flattenFilterOptions(options).some(option => option.numberInput && option.label === fieldLabel)) return []
   const leaves = flattenFilterOptions(options).filter(option => !option.children?.length && !option.numberInput && !option.textConditionPrefix && option.id !== 'content-prompt')
   const own = leaves.filter(option => option.filterLabel === fieldLabel)
-  return own.length ? own : leaves
+  const result = own.length ? own : leaves
+  return fieldLabel === 'SLA' || fieldLabel === 'SLA status' ? result.map(option => ({ ...option, label: t(option.label) })) : result
 }
 

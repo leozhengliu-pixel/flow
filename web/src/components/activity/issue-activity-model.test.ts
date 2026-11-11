@@ -7,6 +7,20 @@ import { ACTIVITY_COALESCE_WINDOW_MS, activityPartsText, activityTimeLabel, canC
 const event = (metadata: Record<string,string>, type = 'issue.updated'): ActivityEvent => ({ id: 'event', type, actor: viewer, createdAt: '2026-09-08T06:00:00Z', metadata })
 
 describe('issue activity projection', () => {
+  it('describes SLA automations and system risk events in both languages', async () => {
+    expect(describeIssueActivity(event({ targetMinutes: '1440' }, 'issue.sla_started'))).toBe('set the SLA to 24 hours')
+    expect(describeIssueActivity(event({ targetMinutes: '2880', previousTargetMinutes: '1440' }, 'issue.sla_changed'))).toBe('changed the SLA from 24 hours to 2 days')
+    expect(describeIssueActivity(event({}, 'issue.sla_removed'))).toBe('removed the SLA')
+    expect(describeIssueActivity(event({}, 'issue.sla_breached'))).toBe('SLA breached')
+    expect(describeIssueActivity(event({}, 'issue.sla_high_risk'))).toBe('High risk of breaching SLA')
+    const alreadyRecorded = event({ slaBreachesAt: '2026-09-09T06:00:00Z', slaActivityRecorded: 'true' })
+    expect(describeIssueActivity(alreadyRecorded)).toBeNull()
+    expect(issueEventFieldCount(alreadyRecorded)).toBe(0)
+    expect(describeIssueActivity(event({ manual: 'true', dueAt: '2026-09-08T18:00:00Z', targetMinutes: '719' }, 'issue.sla_started'))).toBe('set the SLA to 12h')
+    expect(describeIssueActivity(event({ manual: 'true', dueAt: '2026-09-08T04:00:00Z', targetMinutes: '1' }, 'issue.sla_started'))).toBe('set the SLA to 2h ago')
+    await loadChineseDictionary()
+    expect(describeIssueActivity(event({}, 'issue.sla_breached'), undefined, translateToChinese)).toBe('SLA 已违约')
+  })
   it('names this issue in blocking events in English and Chinese', async () => {
     const context = makeBootstrap()
     const target = context.issues[0]

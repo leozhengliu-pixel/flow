@@ -21,9 +21,12 @@ import { confirmAction } from '@/components/ui/action-dialog-service'
 import { AGENT_SESSION_STATE_FILTERS, agentSessionStatesFor, agentsAvailable, assigneeCandidates, assigneeUpdate, isAssignableAgent } from '@/lib/agent-members'
 import { CUSTOMER_NUMBER_PREFIXES, isCustomerNumberComparison, matchesCustomerNumberValues, matchesCustomerValues } from './customer-filter'
 import { countTriageSuggestions, emptyTriageCounts, matchesTriageIntelligence, triageIntelligenceFilterOptions } from './triage-intelligence-filter'
+import { getSlaState, issueSlaFor, SLA_STATE_LABELS, SLA_STATE_ORDER, slaInstances } from '@/lib/issue-sla'
+import { slaFeatureEnabled } from '@/components/settings/sla-model'
 
 export const ISSUE_FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = {
   team: 'Team',
+  sla: 'SLA status',
   ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',owner:'Owner',priority:'Priority',labels:'Labels',relations:'Relations',triageIntelligence:'Triage Intelligence',suggestedLabel:'Suggested label',dates:'Dates',projectMilestone:'Project milestone',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',customers:'Customers',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template',
 }
 
@@ -40,7 +43,7 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
   const fullProject = index?.projectsById.get(issue.project?.id ?? '')
   const issueReleases=index?.releasesByIssueId.get(issue.id)??[]
   const issuePullRequests=index?.reviewsByIssueId.get(issue.id)??[]
-  const issueSla=index?.slaByIssueId.get(issue.id)
+  const issueSla=!data || !slaFeatureEnabled(data) || issue.canceledAt || issue.state.type === 'canceled' ? undefined : index?.slaByIssueId.get(issue.id) ?? issueSlaFor(issue, [])
   const slaRule=issueSla ? index?.slaRulesById.get(issueSla.ruleId) : undefined
   const myActivityAt=data?.viewer?.id ? data.activities?.[issue.id]?.filter(event=>event.actor.id===data.viewer.id).sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt))[0]?.createdAt : undefined
   const statusIntervals = issueStatusIntervals(issue, data)
@@ -141,7 +144,7 @@ function resolveExplorerPullRequestLifecycle(
 
 /** Everything `issueToExplorerRow` reads from the bootstrap other than the issue collection itself. */
 function explorerRowDependencies(data: BootstrapData): unknown[] {
-  return [data.workspace?.urlKey, data.viewer?.id, data.projects, data.cycles, data.releases, data.releasePipelines, data.reviews, data.issueSlas, data.slaRules, data.customers, data.customerRequests, data.workspaceSettings?.featureSettings, data.teamSettings, data.activities, data.states]
+  return [data.workspace?.urlKey, data.viewer?.id, data.projects, data.cycles, data.releases, data.releasePipelines, data.reviews, data.issueSlas, data.slaRules, data.settings?.sla, data.customers, data.customerRequests, data.workspaceSettings?.featureSettings, data.teamSettings, data.activities, data.states]
 }
 
 /** An issue whose row can show, or be shown on, another issue's row (hierarchy, milestone progress). */
@@ -304,7 +307,10 @@ export function issueHierarchyFields(issue: Issue, issues: Issue[], byId = issue
   }
 }
 
-export function explorerPropertyOptions(data: BootstrapData, issues = data.issues) {
+export function explorerPropertyOptions(data: BootstrapData, issues = data.issues, now = Date.now()) {
+  const slas = slaInstances(data)
+  const slaCounts = new Map<string, number>()
+  for (const issue of issues) incrementCount(slaCounts, getSlaState(slas.get(issue.id), now))
   const issueLabels = labelsForResource(data.labels, 'issue', data.labelGroups)
   const labelGroupNames = new Map(data.labelGroups.filter(group => group.resourceType === 'issue').map(group => [group.id, group.name]))
   const issueTeamIds = [...new Set(issues.map(issue => issue.team.id))]
@@ -343,6 +349,7 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
     status: [...scopedStates].sort((a, b) => (a.position??0) - (b.position??0)).map(state => ({ id: state.id, teamId: state.teamId, label: state.name, color: state.color, count: statusCounts.get(state.id) ?? 0, kind: 'status' as const, stateType: state.type })),
     statusFilter: statusFilterOptions(data, scopedStates, statusCounts),
     priority: PRIORITIES.map(priority => ({ ...priority, count: priorityCounts.get(priority.id) ?? 0 })),
+    sla: slaFeatureEnabled(data) ? ['none' as const, ...SLA_STATE_ORDER.filter(state => state !== 'none' && (state !== 'paused' || data.issueSlas.some(sla => sla.status === 'paused')))].map(state => ({ id: state, label: SLA_STATE_LABELS[state], count: slaCounts.get(state) ?? 0 })) : [],
     team: data.teams.map(team => ({ id: team.id, label: team.name, teamIcon: team.icon, color: team.color, kind: 'team' as const, count: teamCounts.get(team.id) ?? 0 })),
     estimate: [{ id: '', label: 'No estimate', count: noEstimate }, ...[...estimateCounts.keys()].sort((a, b) => Number(a) - Number(b)).map(id => ({ id, label: id, count: estimateCounts.get(id) ?? 0 }))],
     // The Assignee filter lists people only; delegated agents are filtered under "Agent".
@@ -416,6 +423,7 @@ export function explorerFilterOptions(field: MyIssuesFilterKey, options: Explore
   if (field === 'labels') return [{ id: '', label: 'No labels', kind: 'labels' as const }, ...options.labels]
   if (field === 'assignee') return options.assigneeFilter
   if (field === 'status') return options.statusFilter
+  if (field === 'sla') return options.sla
   if (field==='team'||field==='estimate'||field==='agent'||field==='agentSession'||field==='creator'||field==='priority'||field==='relations'||field==='triageIntelligence'||field==='suggestedLabel'||field==='dates'||field==='projectMilestone'||field==='project'||field==='projectProperties'||field==='initiative'||field==='cycle'||field==='addedToCycle'||field==='releases'||field==='customers'||field==='subscribers'||field==='externalSource'||field==='autoClosed'||field==='content'||field==='links'||field==='template') return options[field]
 }
 
@@ -540,11 +548,11 @@ export function replaceExplorerRow(groups: MyIssuesGroupData[], row: MyIssuesRow
   return groups.map(group => ({ ...group, issues: group.issues.map(issue => issue.id === row.id ? row : issue) }))
 }
 
-export function applyExplorerFilters(issues: Issue[], filters: MyIssuesAppliedFilter[], data?: BootstrapData) {
+export function applyExplorerFilters(issues: Issue[], filters: MyIssuesAppliedFilter[], data?: BootstrapData, now = Date.now()) {
   const workspaceSlug = data?.workspace.urlKey ?? ''
   const allIssues = data?.issues ?? issues
   const statusGroups = data?.states.length ? statusGroupIndex(data) : undefined
-  return issues.filter(issue => filters.every(filter => matchesExplorerFilter(issueToExplorerRow(issue, workspaceSlug, allIssues, data), filter, Date.now(), statusGroups)))
+  return issues.filter(issue => filters.every(filter => matchesExplorerFilter(issueToExplorerRow(issue, workspaceSlug, allIssues, data), filter, now, statusGroups)))
 }
 
 /**
@@ -562,6 +570,7 @@ export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAp
   const comparison = filter.operator === 'before' || filter.operator === 'after' ? filter.operator : undefined
   let matched = true
   if (filter.field === 'priority') matched = values.includes(String(issue.priority))
+  else if (filter.field === 'sla') matched = values.includes(getSlaState(issue.sla, now))
   else if (filter.field === 'team') matched = values.includes(issue.teamId ?? '')
   else if (filter.field === 'estimate') matched = values.includes(issue.estimate == null || issue.estimate < 0 ? '' : String(issue.estimate))
   else if (filter.field === 'status') matched = values.includes(issue.state.id) || values.includes(issue.state.type) || Boolean(statusGroups && values.some(value => statusGroups.memberIds(value).includes(issue.state.id)))
@@ -637,11 +646,11 @@ function matchesDateFilter(issue: MyIssuesRowData, value: string, comparison?: '
 function matchesAIFilter(issue: MyIssuesRowData, values: string[]) {
   return values.some(value => value === 'assigned-to-me' ? Boolean(issue.isAssignedToViewer) : value === 'completed-last-month' ? Boolean(issue.completedAt && Date.parse(issue.completedAt) >= Date.now() - 30 * 86_400_000) : value === 'due-next-two-weeks' ? Boolean(issue.dueDate && Date.parse(`${issue.dueDate.slice(0, 10)}T00:00:00`) <= Date.now() + 14 * 86_400_000) : value.startsWith('query:') ? `${issue.title} ${issue.description ?? ''}`.toLocaleLowerCase().includes(value.slice(6).toLocaleLowerCase()) : false)
 }
-export function buildExplorerIssueGroups(issues: MyIssuesRowData[], display: MyIssuesDisplayOptions, data: BootstrapData, view: TeamIssuesRouteView = 'all', manualOrder: string[] = []): MyIssuesGroupData[] {
+export function buildExplorerIssueGroups(issues: MyIssuesRowData[], display: MyIssuesDisplayOptions, data: BootstrapData, view: TeamIssuesRouteView = 'all', manualOrder: string[] = [], now = Date.now()): MyIssuesGroupData[] {
   // Active / Backlog tabs already exclude closed issues; the completed window only applies to "All".
   const scoped = view === 'all' ? issues : issues.filter(issue => issue.state.type !== 'completed' && issue.state.type !== 'canceled')
   const states = data.states.filter(state => stateVisibleInView(state.type, view, display.completedWindow))
-  return buildIssueGroups(scoped, display, { data, manualOrder, states, skipCompletedWindow: view !== 'all' })
+  return buildIssueGroups(scoped, display, { data, manualOrder, states, skipCompletedWindow: view !== 'all', now })
 }
 
 export const nestedIssueProjection = nestIssueRows

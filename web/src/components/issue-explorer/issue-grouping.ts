@@ -3,6 +3,8 @@ import type { MyIssuesGroupData, MyIssuesRowData } from '@/components/my-issues/
 import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesOrdering } from '@/components/my-issues/my-issues-surface'
 import { teamEquivalentState } from '@/lib/team-workflow'
 import { statusGroupIndex } from '@/lib/status-groups'
+import { getSlaState, SLA_STATE_LABELS, SLA_STATE_ORDER, slaInstances, slaIssueIdsQuery, type SlaState } from '@/lib/issue-sla'
+import { slaFeatureEnabled } from '@/components/settings/sla-model'
 
 /**
  * Single grouping / ordering engine for every issue surface (the reference app `ViewPreferences` + list grouping).
@@ -176,7 +178,7 @@ export function focusDescriptor(row: MyIssuesRowData, context: IssueGroupingCont
   if (row.delegate && row.agentSessionId && agentNeedsAnswer && type !== 'backlog') return bucket('focus-agents')
   if (row.priority === 1) return bucket('focus-urgent')
   const sla = slaDescriptor(row, now)
-  if (sla.id !== 'sla-none' && sla.id !== 'sla-met') return bucket(`focus-${sla.id}`)
+  if (!['sla-none', 'sla-achieved', 'sla-failed', 'sla-paused'].includes(sla.id)) return bucket(`focus-${sla.id}`)
   const cycle = row.cycleId ? context.data?.cycles.find(item => item.id === row.cycleId) : undefined
   if (cycle && cycle.status === 'current' && type !== 'backlog') return bucket(`focus-cycle-${cycle.id}`)
   if ((row.blockingCount ?? 0) > 0) return bucket('focus-blocking')
@@ -210,7 +212,7 @@ export function focusGroupDescriptor(id: string, data?: Pick<BootstrapData, 'cyc
   return { id, label: 'Other active', stateType: 'started', rank: 50, translatableLabel: true }
 }
 
-export type FocusCaseData = Pick<BootstrapData, 'cycles'> & Partial<Pick<BootstrapData, 'teamSettings' | 'issueSlas'>>
+export type FocusCaseData = Pick<BootstrapData, 'cycles'> & Partial<Pick<BootstrapData, 'teamSettings' | 'issueSlas' | 'issues'>>
 type QueryNode = Record<string, unknown>
 
 /**
@@ -223,10 +225,10 @@ export function focusGroupCases(data: FocusCaseData, now = Date.now()): { value:
   const notBacklog: QueryNode = { not: type(['backlog']) }
   const triageTeams = Object.entries(data.teamSettings ?? {}).filter(([, settings]) => settings?.triageEnabled).map(([id]) => id).sort()
   const slaIssues = new Map<string, string[]>()
-  const slas = new Map((data.issueSlas ?? []).filter(sla => sla.status !== 'removed').map(sla => [sla.issueId, sla]))
+  const slas = slaInstances(data)
   for (const [issueId, sla] of slas) {
     const risk = slaDescriptor({ sla } as MyIssuesRowData, now).id
-    if (risk !== 'sla-none' && risk !== 'sla-met') slaIssues.set(risk, [...slaIssues.get(risk) ?? [], issueId])
+    if (!['sla-none', 'sla-achieved', 'sla-failed', 'sla-paused'].includes(risk)) slaIssues.set(risk, [...slaIssues.get(risk) ?? [], issueId])
   }
   const cases: { value: string; filter: QueryNode }[] = [
     { value: 'focus-completed', filter: type(['completed']) },
@@ -261,14 +263,24 @@ export function isTriage(row: Pick<MyIssuesRowData, 'state' | 'triagedAt' | 'tri
 }
 
 function slaDescriptor(row: MyIssuesRowData, now: number): GroupDescriptor {
-  const sla = row.sla
-  if (!sla || sla.status === 'removed') return { id: 'sla-none', label: 'No SLA', rank: 9 }
-  if (sla.status === 'completed') return { id: 'sla-met', label: 'SLA met', rank: 8 }
-  if (sla.status === 'breached' || sla.breachedAt) return { id: 'sla-breached', label: 'SLA breached', rank: 0 }
-  const remaining = sla.status === 'paused' ? sla.remainingMinutes : (Date.parse(sla.dueAt) - now) / 60_000
-  if (remaining <= 60 * 24) return { id: 'sla-high', label: 'High risk', rank: 1 }
-  if (remaining <= 60 * 24 * 3) return { id: 'sla-medium', label: 'Medium risk', rank: 2 }
-  return { id: 'sla-low', label: 'Low risk', rank: 3 }
+  return slaGroupDescriptor(getSlaState(row.sla, now))
+}
+
+export function slaGroupDescriptor(state: SlaState): GroupDescriptor {
+  return { id: `sla-${state}`, label: SLA_STATE_LABELS[state], rank: SLA_STATE_ORDER.indexOf(state), translatableLabel: true }
+}
+
+export function caseGroupDescriptor(id: string, data?: Pick<BootstrapData, 'cycles'>): GroupDescriptor {
+  const state = id.startsWith('sla-') ? id.slice(4) as SlaState : undefined
+  return state && SLA_STATE_ORDER.includes(state) ? slaGroupDescriptor(state) : focusGroupDescriptor(id, data)
+}
+
+export function slaGroupCases(data: Partial<Pick<BootstrapData, 'issueSlas' | 'issues'>>, now = Date.now()): { value: string; filter: QueryNode }[] {
+  const instances = slaInstances(data)
+  return SLA_STATE_ORDER.map(state => ({
+    value: `sla-${state}`,
+    filter: state === 'none' ? { not: slaIssueIdsQuery([...instances.keys()]) } : slaIssueIdsQuery([...instances].filter(([, sla]) => getSlaState(sla, now) === state).map(([id]) => id)),
+  }))
 }
 
 function activityDescriptor(value: string, now: number): GroupDescriptor {
@@ -301,7 +313,7 @@ export function issueComparator(ordering: MyIssuesOrdering, direction: 'asc' | '
       case 'created': return Date.parse(row.createdAt)
       case 'updated': return Date.parse(row.updatedAt)
       case 'myActivity': return row.myActivityAt ? Date.parse(row.myActivityAt) : undefined
-      case 'dueDate': return row.dueDate ? Date.parse(row.dueDate) : undefined
+      case 'dueDate': return row.sla && row.sla.status !== 'removed' ? Date.parse(row.sla.dueAt) : row.dueDate ? Date.parse(row.dueDate) : undefined
       case 'linkCount': return row.linkCount ?? 0
       case 'customerCount': return row.customerCount ?? row.customerIds?.length ?? 0
       case 'customerImportantCount': return row.importantCustomerIds?.length ?? 0
@@ -488,16 +500,21 @@ export function groupMoveUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping
 }
 
 /** Groupings the server-backed issue list can group by (`issueGroupAttribute` in the API). */
-export const PAGED_GROUPINGS: MyIssuesGrouping[] = ['none', 'focus', 'status', 'assignee', 'project', 'milestone', 'priority', 'cycle', 'label', 'team', 'customer']
+export const PAGED_GROUPINGS: MyIssuesGrouping[] = ['none', 'focus', 'status', 'assignee', 'project', 'milestone', 'priority', 'cycle', 'label', 'team', 'sla', 'customer']
 /** Orderings the server-backed issue list can sort by. */
-export const PAGED_ORDERINGS: MyIssuesOrdering[] = ['importance', 'title', 'priority', 'created', 'updated', 'customerCount', 'customerRevenue', 'customerImportantCount']
+export const PAGED_ORDERINGS: MyIssuesOrdering[] = ['importance', 'title', 'priority', 'created', 'updated', 'dueDate', 'customerCount', 'customerRevenue', 'customerImportantCount']
+
+export function availableIssueGroupings(data: Pick<BootstrapData, 'issueCollectionPaged' | 'settings' | 'slaRules'>): MyIssuesGrouping[] {
+  const groupings = data.issueCollectionPaged ? PAGED_GROUPINGS : Object.keys(GROUPING_LABELS) as MyIssuesGrouping[]
+  return groupings.filter(grouping => grouping !== 'sla' || slaFeatureEnabled(data))
+}
 
 /**
  * Sort, direction, groupBy and display-derived conditions for `PagedIssueList` queries. Focus groups by the
  * ordered Focus cases (`focusGroupCases`) when the workspace data is given, else by status.
  */
 export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.now(), triageTeamIds: string[] = [], focusData?: FocusCaseData) {
-  const sort = ({ importance: 'sortOrder', title: 'title', priority: 'priority', created: 'createdAt', updated: 'updatedAt', customerCount: 'customerCount', customerRevenue: 'customerRevenue', customerImportantCount: 'customerImportantCount' } as const)[display.ordering as 'importance' | 'title' | 'priority' | 'created' | 'updated' | 'customerCount' | 'customerRevenue' | 'customerImportantCount'] ?? 'sortOrder'
+  const sort = ({ importance: 'sortOrder', title: 'title', priority: 'priority', created: 'createdAt', updated: 'updatedAt', dueDate: 'dueDate', customerCount: 'customerCount', customerRevenue: 'customerRevenue', customerImportantCount: 'customerImportantCount' } as const)[display.ordering as 'importance' | 'title' | 'priority' | 'created' | 'updated' | 'dueDate' | 'customerCount' | 'customerRevenue' | 'customerImportantCount'] ?? 'sortOrder'
   const direction = display.orderDirection ?? defaultOrderDirection(display.ordering)
   const conditions: Record<string, unknown>[] = []
   if (!display.showSubIssues) conditions.push({ field: 'parent', operator: 'isEmpty' })
@@ -510,8 +527,8 @@ export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.no
   }
   // Hide untriaged backlog issues of triage-enabled teams, like the local isTriage() check.
   if (display.showTriageIssues === false && triageTeamIds.length) conditions.push({ not: { and: [{ field: 'team', operator: 'in', values: triageTeamIds }, { field: 'statusType', operator: 'in', values: ['backlog'] }, { field: 'triagedAt', operator: 'isEmpty' }] } })
-  const focus = display.grouping === 'focus' && focusData ? focusGroupCases(focusData, now) : undefined
-  const groupBy = focus ? 'cases' : display.grouping === 'focus' ? 'status' : PAGED_GROUPINGS.includes(display.grouping) ? display.grouping : 'status'
+  const focus = focusData ? display.grouping === 'focus' ? focusGroupCases(focusData, now) : display.grouping === 'sla' ? slaGroupCases(focusData, now) : undefined : undefined
+  const groupBy = focus ? 'cases' : display.grouping === 'focus' || display.grouping === 'sla' ? 'status' : PAGED_GROUPINGS.includes(display.grouping) ? display.grouping : 'status'
   return { sort, direction, groupBy, ...(focus ? { groupCases: focus } : {}), archived: display.showArchived ? 'all' as const : 'false' as const, conditions }
 }
 
@@ -520,7 +537,7 @@ export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.no
  * buckets change; empty when the list is not a paged Focus list.
  */
 export function focusCasesKey(display: Pick<MyIssuesDisplayOptions, 'grouping'>, data: FocusCaseData & Pick<BootstrapData, 'issueCollectionPaged'>, now = Date.now()) {
-  return display.grouping === 'focus' && data.issueCollectionPaged ? JSON.stringify(focusGroupCases(data, now)) : ''
+  return data.issueCollectionPaged ? display.grouping === 'focus' ? JSON.stringify(focusGroupCases(data, now)) : display.grouping === 'sla' ? JSON.stringify(slaGroupCases(data, now)) : '' : ''
 }
 
 /** Top-level groups (sub-groups roll up to their parent) for the display menu's group list. */

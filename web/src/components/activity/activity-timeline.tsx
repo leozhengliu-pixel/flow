@@ -2,6 +2,7 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { Archive, ArrowUp, Bell, BellOff, CheckCircle2, ChevronRight, Copy, Edit3, Ellipsis, Link2, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
 import type { ActivityEvent, Comment, ThreadSubscription, ThreadSubscriptionState, WorkflowState } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
+import { SlaIcon } from '@/components/issue/issue-sla-indicator'
 import { PersonCardHover } from '@/components/property/assignee-hover-card'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { AttributedAction, ViaApp } from '@/components/ui/via-app'
@@ -397,7 +398,7 @@ export function ActivityTimeline({
 }
 
 /** Rows whose sentence names no actor ("Session with Flow archived"). */
-const ACTORLESS_ACTIVITY = new Set(['issue.coding_session_archived'])
+const ACTORLESS_ACTIVITY = new Set(['issue.coding_session_archived', 'issue.sla_breached', 'issue.sla_high_risk'])
 
 function ActivityRow({ event, description, context, now }: { event: ActivityEvent; description: ActivityPart[]; context?: ActivityContext; now: number }) {
   const { locale } = useI18n()
@@ -446,6 +447,7 @@ function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?:
   const phone = usePhoneLayout()
   const desktop = useDesktopLayout()
   const m = event.metadata ?? {}
+  if (event.type.startsWith('issue.sla_')) return <SlaIcon state={event.type === 'issue.sla_breached' ? 'breached' : event.type === 'issue.sla_high_risk' ? 'high' : 'low'}/>
   // Like the reference app, a row that changed several fields shows who did it rather than one field's icon.
   if (event.type === 'issue.updated' && issueEventFieldCount(event) < 2) {
     if (m.state)
@@ -467,6 +469,7 @@ function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?:
     if ('project' in m || 'projectMilestone' in m) return <ProjectIcon size={14} />
     if ('cycle' in m) return <CycleIcon size={14} />
     if ('dueDate' in m) return <CalendarIcon size={14} />
+    if ('slaBreachesAt' in m) return <SlaIcon state="low"/>
     if ('title' in m) return <Edit3 size={14} />
   }
   if (event.type === 'issue.coding_session_archived') return <Archive size={14} />

@@ -26,9 +26,8 @@ describe('SLA durations', () => {
     expect(splitDuration(4320, false)).toEqual({ amount: 3, unit: 'days' })
     expect(splitDuration(1440, false)).toEqual({ amount: 24, unit: 'hours' })
     expect(splitDuration(90, false)).toEqual({ amount: 90, unit: 'minutes' })
-    // A business day is the eight working hours the deadline maths counts; a business week is five of them.
-    expect(splitDuration(2400, true)).toEqual({ amount: 1, unit: 'weeks' })
-    expect(splitDuration(1440, true)).toEqual({ amount: 3, unit: 'days' })
+    expect(splitDuration(7200, true)).toEqual({ amount: 1, unit: 'weeks' })
+    expect(splitDuration(4320, true)).toEqual({ amount: 3, unit: 'days' })
     expect(splitDuration(480, true)).toEqual({ amount: 8, unit: 'hours' })
   })
 
@@ -36,16 +35,16 @@ describe('SLA durations', () => {
     expect(formatSlaDuration(1440, false, t)).toBe('24 hours')
     expect(formatSlaDuration(10080, false, t)).toBe('1 week')
     expect(formatSlaDuration(60, false, t)).toBe('1 hour')
-    expect(formatSlaDuration(4320, true, t)).toBe('9 business days')
-    expect(formatSlaDuration(2400, true, t)).toBe('1 business week')
+    expect(formatSlaDuration(4320, true, t)).toBe('3 business days')
+    expect(formatSlaDuration(7200, true, t)).toBe('1 business week')
     expect(formatSlaDuration(1000, false, (value) => `[${value}]`)).toBe('[{count} minutes]'.replace('{count}', '1,000'))
   })
 
   it('turns a draft back into minutes in the unit it was written in', () => {
     const draft = draftFromRule(rule({ targetMinutes: 4320, businessHours: true }), { teams })
-    expect(draft).toMatchObject({ amount: 9, unit: 'days', businessHours: true, action: 'add' })
+    expect(draft).toMatchObject({ amount: 3, unit: 'days', businessHours: true, action: 'add' })
     expect(draftMinutes(draft)).toBe(4320)
-    expect(draftMinutes({ ...draft, businessHours: false })).toBe(9 * 1440)
+    expect(draftMinutes({ ...draft, businessHours: false })).toBe(3 * 1440)
   })
 
   it('accepts only whole numbers from 1 up', () => {

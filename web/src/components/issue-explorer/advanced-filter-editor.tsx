@@ -71,7 +71,8 @@ export function AdvancedFilterChip({ defaultOpen = false, filter, filterOptions,
 }
 
 function SummaryValue({ condition, options }: { condition: AdvancedFilterCondition; options?: MyIssuesFilterOption[] }) {
-  const item = filterChipItem(conditionAsFilter(condition), options)
+  const { t } = useI18n()
+  const item = filterChipItem(conditionAsFilter(condition), condition.field === 'sla' ? options?.map(option => ({ ...option, label: t(option.label) })) : options)
   if (item.values.length !== 1) return <span data-i18n-ignore>{valueSummaryLabel(condition.field, item.values)}</span>
   return <span className={styles.summaryValue}>{item.values[0].icon}<span data-i18n-ignore>{item.values[0].label}</span></span>
 }
@@ -109,6 +110,7 @@ function GroupRows({ depth, filterOptions, group, layout, onChange, tree }: { de
 
 function ConditionRow({ condition, onChange, options, tree }: { condition: AdvancedFilterCondition; onChange: (tree: AdvancedFilterGroup) => void; options?: MyIssuesFilterOption[]; tree: AdvancedFilterGroup }) {
   const { t } = useI18n()
+  if (condition.field === 'sla') options = options?.map(option => ({ ...option, label: t(option.label) }))
   const item = filterChipItem(conditionAsFilter(condition), options)
   return <div className={styles.condition}>
     <FilterConditionChip

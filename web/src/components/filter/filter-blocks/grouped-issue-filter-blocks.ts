@@ -82,6 +82,7 @@ export function getGroupedIssueFilterBlocks(
 
   return [
     ...topLevel.slice(0, 6), // status → priority
+    ...byIds(['sla']),
     ...estimate,
     ...topLevel.slice(6, 7), // labels
     relations,

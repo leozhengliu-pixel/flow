@@ -8,6 +8,7 @@ export const issueFilterBlocks: FilterBlockDefinition[] = [
   block('agentSession', 'agentSessionId', 'Agent Session', 'equalValue', 26),
   block('creator', 'creatorId', 'Creator', 'equalValue', 30),
   block('priority', 'priority', 'Priority', 'equalValue', 40),
+  block('sla', 'sla', 'SLA status', 'equalValue', 45),
   block('labels', 'labelId', 'Labels', 'equalValue', 50),
   block('relations', 'relation', 'Relations', 'equalValue', 55),
   block('suggestedLabel', 'suggestedLabelId', 'Suggested label', 'equalValue', 56),

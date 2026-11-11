@@ -804,7 +804,7 @@ function projectInbox(data: BootstrapData, t: (source: string) => string): Inbox
       kind: agentReply && notification.payload?.agentActivity === 'finished' ? 'finished' : agentReply || comment ? 'comment' : event ? activityKind(event) : notificationKind(notification),
       identifier: issue.identifier,
       title: issue.title,
-      body: agentReply ?? withOccurrence(comment ? `${notification.actor.displayName} commented: ${markdownPlainText(comment.body)}` : event ? describeActivity(event, issue, data.viewer) : describeNotification(notification, issue), notification.occurrenceCount),
+      body: agentReply ?? withOccurrence(notification.type === 'sla' || String(notification.payload?.eventType ?? '').startsWith('issue.sla_') || event?.type.startsWith('issue.sla_') ? t(event?.type === 'issue.sla_high_risk' || notification.payload?.eventType === 'issue.sla_high_risk' ? 'High risk of breaching SLA' : 'SLA breached') : comment ? `${notification.actor.displayName} commented: ${markdownPlainText(comment.body)}` : event ? describeActivity(event, issue, data.viewer) : describeNotification(notification, issue), notification.occurrenceCount),
       timeLabel: relativeTime(notification.updatedAt),
       timestamp: notification.updatedAt,
       read: Boolean(notification.readAt),

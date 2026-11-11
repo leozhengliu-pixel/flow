@@ -2,9 +2,41 @@ import { describe, expect, it } from 'vitest'
 
 import { applyRealtimePatch } from '@/store/apply-realtime-patch'
 import { completed, label, makeBootstrap, makeIssue, project, started } from '@/test/fixtures'
-import type { BootstrapData, Notification, Release } from '@/types/flow'
+import type { BootstrapData, IssueSLA, IssueUpdateInput, Notification, Release } from '@/types/flow'
 
-import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, syncIssueReferences, teamIssueScope } from './workspace-metadata-refresh'
+import { applyLabelUpdate, archiveProjectUpdateReminders, eventRequiresSLARefresh, issueMutationAffectsSLA, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, syncIssueReferences, teamIssueScope } from './workspace-metadata-refresh'
+
+describe('SLA metadata refresh', () => {
+  it('refreshes every rule-matching and manual deadline input, including clears', () => {
+    for (const input of [{ priority: 0 }, { teamId: 'team' }, { stateId: 'done' }, { labelIds: [] }, { projectId: '' }, { slaBreachesAt: '' }, { slaType: 'onlyBusinessDays' }] satisfies IssueUpdateInput[]) {
+      expect(issueMutationAffectsSLA(input), JSON.stringify(input)).toBe(true)
+    }
+    for (const input of [{ title: 'Rename' }, { description: 'Edit' }, { assigneeId: '' }, { expectedVersion: 2 }, { priority: undefined }, {}]) {
+      expect(issueMutationAffectsSLA(input), JSON.stringify(input)).toBe(false)
+    }
+  })
+
+  it('refreshes self-contained issue events for enabled or retained SLA metadata', () => {
+    const enabled = makeBootstrap({ settings: { sla: { enabled: true } } })
+    for (const type of ['issue.created', 'issue.updated', 'issue.batch_updated', 'issue.deleted', 'issue.restored']) expect(eventRequiresSLARefresh({ type }, enabled), type).toBe(true)
+    for (const type of ['comment.created', 'favorite.created', 'attachment.created']) expect(eventRequiresSLARefresh({ type }, enabled), type).toBe(false)
+    const disabled = makeBootstrap({ settings: { sla: { enabled: false } }, issueSlas: [] })
+    expect(eventRequiresSLARefresh({ type: 'issue.updated' }, disabled)).toBe(false)
+    expect(eventRequiresSLARefresh({ type: 'issue.updated' }, { ...disabled, issueSlas: [{ id: 'retained' } as IssueSLA] })).toBe(true)
+  })
+
+  it('replaces stale SLA instances independently of retained issue rows', () => {
+    const oldSla = { id: 'sla', issueId: 'issue-1', ruleId: 'rule', dueAt: '2026-11-10T12:00:00Z', status: 'active' } as IssueSLA
+    const current = makeBootstrap({ issues: [makeIssue({ labels: [] })], issueSlas: [oldSla] })
+    const updatedSla = { ...oldSla, dueAt: '2026-11-12T12:00:00Z' }
+    const next = makeBootstrap({ issues: [], issueSlas: [updatedSla] })
+    const merged = mergeWorkspaceMetadata(current, next)
+    expect(merged.issueSlas).toEqual([updatedSla])
+    expect(merged.issues).toEqual(current.issues)
+    expect(merged.issues[0]).toBe(current.issues[0])
+    expect(mergeWorkspaceMetadata(merged, { ...next, issueSlas: [] }).issueSlas).toEqual([])
+  })
+})
 
 describe('metadata-only realtime events', () => {
   it('covers project, release, document and other metadata edits', () => {

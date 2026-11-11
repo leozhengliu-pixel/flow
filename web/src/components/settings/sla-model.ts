@@ -18,14 +18,15 @@ export type SlaDraft = {
   unit: SlaUnit;
   businessHours: boolean;
   enabled: boolean;
+  startMode?: "ruleMatch" | "issueCreation";
 };
 
-/** Minutes in one unit: a business day is the eight working hours the deadline maths counts. */
+/** Business days keep the full day and skip the workspace's non-working weekdays. */
 export function minutesPerUnit(unit: SlaUnit, businessHours: boolean): number {
   if (unit === "minutes") return 1;
   if (unit === "hours") return 60;
-  if (unit === "days") return businessHours ? 480 : 1440;
-  return businessHours ? 2400 : 10080;
+  if (unit === "days") return 1440;
+  return businessHours ? 7200 : 10080;
 }
 
 /**
@@ -107,7 +108,7 @@ export function conditionsToRule(conditions: SlaCondition[]): { filters: Record<
 export function draftFromRule(rule: SLARule, data: Pick<BootstrapData, "teams">): SlaDraft {
   const businessHours = Boolean(rule.businessHours);
   const { amount, unit } = splitDuration(rule.targetMinutes > 0 ? rule.targetMinutes : 1440, businessHours);
-  return { conditions: ruleConditions(rule, data), action: ruleAction(rule), amount, unit, businessHours, enabled: rule.enabled };
+  return { conditions: ruleConditions(rule, data), action: ruleAction(rule), amount, unit, businessHours, enabled: rule.enabled, startMode: rule.startMode ?? "ruleMatch" };
 }
 
 export function newDraft(): SlaDraft {

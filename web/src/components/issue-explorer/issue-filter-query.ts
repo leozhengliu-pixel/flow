@@ -6,6 +6,7 @@ import { triageIntelligenceQueryNode } from './triage-intelligence-filter'
 import { agentSessionStatesFor } from '@/lib/agent-members'
 import { customerNumberQueryValue, isCustomerNumberComparison } from './customer-filter'
 import { statusGroupIndex } from '@/lib/status-groups'
+import { getSlaState, slaInstances, slaIssueIdsQuery } from '@/lib/issue-sla'
 
 /**
  * Translate a filter-bar filter into the server query vocabulary (`compileIssueFilter`), so every
@@ -13,13 +14,18 @@ import { statusGroupIndex } from '@/lib/status-groups'
  * workspace data (initiatives, releases, project properties) are resolved to ids here.
  */
 export interface IssueFilterQueryContext {
-  data: Pick<BootstrapData, 'projects' | 'releases' | 'viewer'> & Partial<Pick<BootstrapData, 'labels' | 'users' | 'states' | 'teams' | 'teamSettings'>>
+  data: Pick<BootstrapData, 'projects' | 'releases' | 'viewer'> & Partial<Pick<BootstrapData, 'labels' | 'users' | 'states' | 'teams' | 'teamSettings' | 'issueSlas' | 'issues'>>
   now?: number
 }
 
 const DAY = 86_400_000
 const any = (nodes: IssueQueryAstNode[]): IssueQueryAstNode => nodes.length === 1 ? nodes[0] : { or: nodes }
 const none: IssueQueryAstNode = { field: 'id', operator: 'in', values: [] }
+
+export function filtersUseSla(filters: MyIssuesAppliedFilter[]): boolean {
+  const visit = (group: AdvancedFilterGroup): boolean => group.items.some(item => isAdvancedGroup(item) ? visit(item) : item.field === 'sla')
+  return filters.some(filter => filter.field === 'sla' || filter.field === 'advanced' && visit(advancedFilterTree(filter)))
+}
 
 export function filterToQueryNode(filter: MyIssuesAppliedFilter, context: IssueFilterQueryContext): IssueQueryAstNode {
   if (filter.field === 'advanced') return advancedGroupToQueryNode(advancedFilterTree(filter), context)
@@ -56,6 +62,13 @@ function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], {
     // A status matches its whole status group: the same name and type in every team's workflow.
     case 'status': return { field: 'status', operator: 'in', values: data.states?.length && data.teams ? [...new Set(values.flatMap(value => statusGroupIndex({ states: data.states!, teams: data.teams!, teamSettings: data.teamSettings }).memberIds(value)))] : values }
     case 'priority': return { field: 'priority', operator: 'in', values }
+    case 'sla': {
+      const instances = slaInstances(data)
+      const matching = [...instances].filter(([, sla]) => values.includes(getSlaState(sla, now))).map(([id]) => id)
+      const nodes: IssueQueryAstNode[] = [slaIssueIdsQuery(matching)]
+      if (values.includes('none')) nodes.push({ not: slaIssueIdsQuery([...instances.keys()]) })
+      return any(nodes)
+    }
     case 'team': return { field: 'teamId', operator: 'in', values }
     case 'estimate': return nullable('estimate', values)
     case 'assignee': {

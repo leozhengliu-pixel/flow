@@ -37,6 +37,11 @@ describe('classifyRealtimeEvent', () => {
     expect(classifyRealtimeEvent(event('project.milestone_deleted'), true)).toEqual({ kind: 'metadata', visibility: false })
   })
 
+  it('refreshes SLA timer metadata without downloading the paged issue collection', () => {
+    expect(classifyRealtimeEvent(event('sla.maintained'), true)).toEqual({ kind: 'metadata', visibility: false })
+    expect(classifyRealtimeEvent(event('sla.maintained'), false)).toEqual({ kind: 'resync' })
+  })
+
   it('keeps full-collection workspaces on the resync path for directory events', () => {
     expect(classifyRealtimeEvent(event('label.deleted'), false)).toEqual({ kind: 'resync' })
     expect(classifyRealtimeEvent(event('project.update_created'), false)).toEqual({ kind: 'metadata', visibility: false })

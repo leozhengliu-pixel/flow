@@ -7,7 +7,7 @@ import { MyIssuesGroupHeader, MyIssuesRow, type MyIssuesGroupData, type MyIssues
 import { issueToExplorerRow } from './issue-explorer-model'
 import { nestedIssuePage, nestedPageLines } from './paged-issue-cache'
 import { teamEquivalentState } from '@/lib/team-workflow'
-import { focusGroupDescriptor } from './issue-grouping'
+import { caseGroupDescriptor } from './issue-grouping'
 import { pagedGroupQuery, pagedStatusGroups } from './paged-issue-groups'
 import { issueListState, pagedIssueListSignature, retainIssueList, trimPagedIssueListCache, type IssueListGroup } from './paged-issue-list-cache'
 import { ISSUE_QUERY_INVALIDATED, issueMayMatchQuery, queryUsesLabels, type IssueQueryInvalidation } from './paged-issue-invalidation'
@@ -171,7 +171,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
         const names = new Map((dataRef.current.customers ?? []).map(customer => [customer.id, customer.name]))
         groups.sort((a, b) => rank(a.value) - rank(b.value) || (names.get(a.value) ?? '').localeCompare(names.get(b.value) ?? ''))
       }
-      if (queryRef.current.groupBy === 'cases') groups.sort((a, b) => Number(focusGroupDescriptor(a.value).rank) - Number(focusGroupDescriptor(b.value).rank))
+      if (queryRef.current.groupBy === 'cases') groups.sort((a, b) => Number(caseGroupDescriptor(a.value).rank) - Number(caseGroupDescriptor(b.value).rank))
       if (refreshing) {
         cache.retainGroups(new Set(groups.map(group => group.value)))
         staleKeys.current = new Set(cache.pageKeys())
@@ -284,7 +284,7 @@ export function PagedIssueList({ data, query: listQuery, collapsedGroupIds, onGr
   const descriptor = useCallback((group: Group): MyIssuesGroupData => {
     const field = query.groupBy ?? 'status'
     if (field === 'cases') {
-      const { rank: _rank, ...focus } = focusGroupDescriptor(group.value, { cycles: data.cycles })
+      const { rank: _rank, ...focus } = caseGroupDescriptor(group.value, { cycles: data.cycles })
       return { ...focus, issues: [], totalCount: group.count }
     }
     const state = field === 'status' ? data.states.find(state => state.id === group.value) : undefined

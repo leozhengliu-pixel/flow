@@ -83,6 +83,12 @@ afterEach(() => {
 })
 
 describe('paged inbox', () => {
+  it('shows a system SLA reminder even when its activity is outside the loaded page', async () => {
+    vi.mocked(fetchInboxNotifications).mockResolvedValue(list([notification({ id: 'sla-reminder', type: 'reminder', category: 'reminders', issueId: 'issue-9', actor: flowActor, text: 'SLA breached', payload: { eventType: 'issue.sla_breached', slaId: 'sla-1' } })]))
+    renderInbox(pagedData())
+    expect(await screen.findByText('SLA breached')).toBeVisible()
+    expect(screen.queryByText('Flow updated the issue')).not.toBeInTheDocument()
+  })
   it('reads notifications from the API (paged bootstrap has none) and resolves their issues', async () => {
     renderInbox(pagedData())
     expect(await screen.findByText('Daily Pulse')).toBeInTheDocument()

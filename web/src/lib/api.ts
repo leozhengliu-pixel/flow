@@ -435,7 +435,7 @@ export type IssueQueryInput = {
   filter?: Record<string, unknown>;
   cursor?: string;
   limit?: number;
-  sort?: "priority" | "createdAt" | "updatedAt" | "title" | "sortOrder" | "customerCount" | "customerRevenue" | "customerImportantCount";
+  sort?: "priority" | "createdAt" | "updatedAt" | "title" | "sortOrder" | "dueDate" | "customerCount" | "customerRevenue" | "customerImportantCount";
   direction?: "asc" | "desc";
   groupBy?: string;
   groupValue?: string;
@@ -2116,6 +2116,7 @@ export function createSLARule(
       | "teamIds"
       | "filters"
       | "action"
+      | "startMode"
       | "targetMinutes"
       | "pauseStatuses"
       | "businessHours"
@@ -2134,6 +2135,7 @@ export function updateSLARule(
       | "teamIds"
       | "filters"
       | "action"
+      | "startMode"
       | "targetMinutes"
       | "pauseStatuses"
       | "businessHours"
