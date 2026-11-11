@@ -261,7 +261,7 @@ func (s *SQLiteStore) MutateLabelDeletion(ctx context.Context, workspace, eventT
 		if err := tx.Commit(); err != nil {
 			return err
 		}
-		s.workspaces[workspace] = next
+		s.setWorkspaceLocked(workspace, next)
 		return nil
 	}
 	var err error

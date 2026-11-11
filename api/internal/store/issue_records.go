@@ -35,7 +35,7 @@ func (s *SQLiteStore) migrateIssueCollections(ctx context.Context) error {
 		data.Comments = nil
 		data.Notifications = nil
 		data.NotificationDeliveries = nil
-		s.workspaces[key] = data
+		s.setWorkspaceLocked(key, data)
 	}
 	return nil
 }

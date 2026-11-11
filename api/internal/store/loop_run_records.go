@@ -487,7 +487,7 @@ func (s *SQLiteStore) migrateLoopRunRecords(ctx context.Context) error {
 		if err := s.persistWorkspaceFrom(ctx, key, &before, after, nil); err != nil {
 			return fmt.Errorf("drop migrated loop runs from workspace %s: %w", key, err)
 		}
-		s.workspaces[key] = after
+		s.setWorkspaceLocked(key, after)
 		if _, err := s.db.ExecContext(ctx, `INSERT INTO loop_run_migrations(workspace_key,migrated_runs,migrated_at) VALUES(?,?,?) ON CONFLICT(workspace_key) DO UPDATE SET migrated_runs=excluded.migrated_runs,migrated_at=excluded.migrated_at`, key, len(runs), formatLoopRunTime(time.Now())); err != nil {
 			return err
 		}

@@ -29,6 +29,21 @@ func (s *SQLiteStore) BeginWorkspaceRead(ctx context.Context, workspace string) 
 		return ctx, nil, err
 	}
 	release := func() { _ = tx.Rollback() }
+	// This server's copy, when it is exact at the snapshot's metadata
+	// revision, is the snapshot's metadata (metadata_copy_revision.go):
+	// share it instead of decoding the workspace again. Readers clone it.
+	stamp, err := readMetadataStamp(ctx, tx, workspace)
+	if err != nil {
+		release()
+		return ctx, nil, err
+	}
+	s.mu.RLock()
+	installed, installedOK := s.workspaces[workspace]
+	known, knownOK := s.copyRevisionLocked(workspace)
+	s.mu.RUnlock()
+	if installedOK && knownOK && known.workspaceID == stamp.workspaceID && known.revision == stamp.revision {
+		return context.WithValue(ctx, workspaceReadKey{}, workspaceRead{s.db, workspace, tx, installed}), release, nil
+	}
 	var raw []byte
 	if err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&raw); err != nil {
 		release()

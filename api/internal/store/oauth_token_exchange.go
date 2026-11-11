@@ -243,7 +243,7 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 		// The rows were written here, not through persistWorkspace.
 		s.dropMetadataCache(ctx, workspace)
 		current.APIKeys = append([]domain.APIKey{key}, kept...)
-		s.workspaces[workspace] = current
+		s.setWorkspaceLocked(workspace, current)
 		return nil
 	}
 	var err error

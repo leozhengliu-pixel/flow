@@ -34,7 +34,11 @@ type SQLiteStore struct {
 	issueGroupCounts issueGroupCountCache
 	workspaces       map[string]domain.Bootstrap
 	lastWorkspaceKey string
-	viewer           domain.User
+	// copyRevisions: the metadata revision each copy in workspaces is exact
+	// at, when known (metadata_copy_revision.go). Guarded by mu.
+	copyRevisions     map[string]copyRevision
+	copyRevisionEpoch uint64
+	viewer            domain.User
 	// The sinks are read after every committed write; atomics keep that
 	// read from queueing behind a writer holding mu.
 	realtimeSink atomic.Pointer[func(string, domain.RealtimeEvent)]
@@ -99,11 +103,12 @@ func (s *SQLiteStore) storedWorkspace(workspaceKey string) (domain.Bootstrap, bo
 	return data, ok
 }
 
-// installWorkspace publishes a copy-on-write writer's committed snapshot.
+// installWorkspace publishes a copy-on-write writer's committed snapshot,
+// whose metadata revision is not known (installWrittenWorkspace records it).
 // The caller holds writeMu.
 func (s *SQLiteStore) installWorkspace(workspaceKey string, data domain.Bootstrap, last bool) {
 	s.mu.Lock()
-	s.workspaces[workspaceKey] = data
+	s.setWorkspaceLocked(workspaceKey, data)
 	if last {
 		s.lastWorkspaceKey = workspaceKey
 	}
@@ -268,10 +273,16 @@ func (s *SQLiteStore) SetWorkspaceCoordinator(coordinator WorkspaceCoordinator) 
 // between the read and the install, so a reload never puts back a copy older
 // than the one in place (the write's result would be lost here, and the
 // instance, having counted the write as applied, would not reload again).
+// A copy still at the stored metadata revision is kept without decoding the
+// workspace again (metadata_copy_revision.go).
 func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	data, err := s.loadWorkspaceState(ctx, workspaceKey)
+	known, ok := s.copyRevisionOf(workspaceKey)
+	if s.copyIsCurrent(ctx, workspaceKey, known, ok) {
+		return nil
+	}
+	data, stamp, err := s.loadWorkspaceStamped(ctx, workspaceKey)
 	if err != nil {
 		return err
 	}
@@ -284,13 +295,19 @@ func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) 
 		}
 	}
 	s.mu.Lock()
-	s.workspaces[workspaceKey] = data
+	if historyChanged {
+		s.setWorkspaceLocked(workspaceKey, data)
+	} else {
+		s.workspaces[workspaceKey] = data
+		s.setCopyRevisionLocked(workspaceKey, stamp)
+	}
 	s.mu.Unlock()
 	return nil
 }
 
 // ReloadAllWorkspaces replaces every copy with the stored one, reading under
-// writeMu for the reason ReloadWorkspace does.
+// writeMu for the reason ReloadWorkspace does. Copies still at the stored
+// metadata revision are kept without decoding them again.
 func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -299,29 +316,49 @@ func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
 		return err
 	}
 	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `SELECT workspace_key,data FROM workspace_states`)
+	type kept struct {
+		data     domain.Bootstrap
+		revision copyRevision
+	}
+	current := map[string]kept{}
+	s.mu.RLock()
+	for key, data := range s.workspaces {
+		if revision, ok := s.copyRevisions[key]; ok {
+			current[key] = kept{data, revision}
+		}
+	}
+	s.mu.RUnlock()
+	rows, err := tx.QueryContext(ctx, `SELECT workspace_key,workspace_id,(SELECT COALESCE(SUM(r.revision),0) FROM workspace_cache_revisions r WHERE r.workspace_key=workspace_states.workspace_key AND r.kind=?) FROM workspace_states`, cacheKindMetadata)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	workspaces := map[string]domain.Bootstrap{}
-	stored := map[string][]byte{}
+	stamps := map[string]copyStamp{}
 	for rows.Next() {
 		var key string
-		var raw []byte
-		if err := rows.Scan(&key, &raw); err != nil {
+		var stamp copyStamp
+		if err := rows.Scan(&key, &stamp.workspaceID, &stamp.revision); err != nil {
 			return err
 		}
-		if len(raw) > s.maxStateBytes {
-			return fmt.Errorf("workspace %q state exceeds %d bytes", key, s.maxStateBytes)
-		}
-		stored[key] = raw
+		stamps[key] = stamp
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
 	rows.Close()
-	for key, raw := range stored {
+	for key, stamp := range stamps {
+		if held, ok := current[key]; ok && held.revision.workspaceID == stamp.workspaceID && held.revision.revision == stamp.revision {
+			workspaces[key] = held.data
+			continue
+		}
+		var raw []byte
+		if err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_states WHERE workspace_key=?`, key).Scan(&raw); err != nil {
+			return err
+		}
+		if len(raw) > s.maxStateBytes {
+			return fmt.Errorf("workspace %q state exceeds %d bytes", key, s.maxStateBytes)
+		}
 		data, err := s.decodeWorkspaceMetadata(ctx, key, raw, tx)
 		if err != nil {
 			return err
@@ -335,6 +372,10 @@ func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	s.workspaces = workspaces
+	s.copyRevisions = nil
+	for key, stamp := range stamps {
+		s.setCopyRevisionLocked(key, stamp)
+	}
 	if _, ok := workspaces[s.lastWorkspaceKey]; !ok {
 		s.lastWorkspaceKey = firstWorkspaceKey(workspaces)
 	}
@@ -343,28 +384,36 @@ func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) loadWorkspaceState(ctx context.Context, workspaceKey string) (domain.Bootstrap, error) {
+	data, _, err := s.loadWorkspaceStamped(ctx, workspaceKey)
+	return data, err
+}
+
+// loadWorkspaceStamped decodes the stored workspace metadata and reads, in
+// the same snapshot, the metadata revision the result is exact at.
+func (s *SQLiteStore) loadWorkspaceStamped(ctx context.Context, workspaceKey string) (domain.Bootstrap, copyStamp, error) {
+	var stamp copyStamp
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
-		return domain.Bootstrap{}, err
+		return domain.Bootstrap{}, stamp, err
 	}
 	defer tx.Rollback()
 	var raw []byte
-	if err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspaceKey).Scan(&raw); err != nil {
-		return domain.Bootstrap{}, err
+	if err := tx.QueryRowContext(ctx, `SELECT `+metadataStampColumns+`,data FROM workspace_states WHERE workspace_key=?`, workspaceKey, cacheKindMetadata, workspaceKey).Scan(&stamp.workspaceID, &stamp.revision, &raw); err != nil {
+		return domain.Bootstrap{}, stamp, err
 	}
 	if len(raw) > s.maxStateBytes {
-		return domain.Bootstrap{}, fmt.Errorf("workspace state exceeds %d bytes", s.maxStateBytes)
+		return domain.Bootstrap{}, stamp, fmt.Errorf("workspace state exceeds %d bytes", s.maxStateBytes)
 	}
 	data, err := s.decodeWorkspaceMetadata(ctx, workspaceKey, raw, tx)
 	if err != nil {
-		return domain.Bootstrap{}, err
+		return domain.Bootstrap{}, stamp, err
 	}
 	normalizeStoredMetadata(&data)
 	if err := tx.Commit(); err != nil {
-		return data, err
+		return data, stamp, err
 	}
 	domain.RebuildTeamDirectory(&data)
-	return data, nil
+	return data, stamp, nil
 }
 
 func (s *SQLiteStore) migrate(ctx context.Context) error {
@@ -575,25 +624,28 @@ func (s *SQLiteStore) makeAuthEmailNullable(ctx context.Context) error {
 
 func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	s.workspaces = map[string]domain.Bootstrap{}
+	s.copyRevisions = nil
 	historyChanged := map[string]bool{}
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `SELECT workspace_key,data FROM workspace_states ORDER BY updated_at ASC`)
+	rows, err := tx.QueryContext(ctx, `SELECT workspace_key,data,workspace_id,(SELECT COALESCE(SUM(r.revision),0) FROM workspace_cache_revisions r WHERE r.workspace_key=workspace_states.workspace_key AND r.kind=?) FROM workspace_states ORDER BY updated_at ASC`, cacheKindMetadata)
 	if err != nil {
 		return err
 	}
 	type storedWorkspace struct {
-		key string
-		raw []byte
+		key   string
+		raw   []byte
+		stamp copyStamp
 	}
 	stored := []storedWorkspace{}
 	for rows.Next() {
 		var key string
 		var raw []byte
-		if err := rows.Scan(&key, &raw); err != nil {
+		var stamp copyStamp
+		if err := rows.Scan(&key, &raw, &stamp.workspaceID, &stamp.revision); err != nil {
 			rows.Close()
 			return err
 		}
@@ -601,7 +653,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 			rows.Close()
 			return fmt.Errorf("workspace %q state exceeds %d bytes", key, s.maxStateBytes)
 		}
-		stored = append(stored, storedWorkspace{key, raw})
+		stored = append(stored, storedWorkspace{key, raw, stamp})
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -623,6 +675,9 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 		}
 		domain.RebuildTeamDirectory(&data)
 		s.workspaces[key] = data
+		if !historyChanged[key] {
+			s.setCopyRevisionLocked(key, item.stamp)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return err
@@ -658,7 +713,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 			normalize(&data)
 			refreshProjectProgressHistories(&data, time.Now().UTC())
 			domain.RebuildTeamDirectory(&data)
-			s.workspaces[data.Workspace.URLKey] = data
+			s.setWorkspaceLocked(data.Workspace.URLKey, data)
 			s.lastWorkspaceKey = data.Workspace.URLKey
 			s.viewer = data.Viewer
 			return s.persistWorkspace(ctx, data.Workspace.URLKey, data, nil)
@@ -677,7 +732,7 @@ func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
 	normalize(&data)
 	refreshProjectProgressHistories(&data, time.Now().UTC())
 	domain.RebuildTeamDirectory(&data)
-	s.workspaces[data.Workspace.URLKey] = data
+	s.setWorkspaceLocked(data.Workspace.URLKey, data)
 	s.lastWorkspaceKey = data.Workspace.URLKey
 	s.viewer = data.Viewer
 	return s.persistWorkspace(ctx, data.Workspace.URLKey, data, nil)
@@ -1505,17 +1560,17 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
 		if s.coordinator != nil {
-			latest, err := s.loadWorkspaceState(ctx, workspaceKey)
-			if err != nil {
+			if err := s.refreshWorkspaceCopy(ctx, workspaceKey); err != nil {
 				return fmt.Errorf("reload workspace before mutation: %w", err)
 			}
-			s.installWorkspace(workspaceKey, latest, false)
 			traceMark(ctx, "reload")
 		}
 		current, ok := s.storedWorkspace(workspaceKey)
 		if !ok {
 			return fmt.Errorf("workspace %q: %w", workspaceKey, errors.New("not found"))
 		}
+		// writeMu holds the copy (and its revision) until the install.
+		ctx, copyWrite := s.watchMetadataWrite(ctx, workspaceKey)
 		metadataOnly := metadataOnlyMutation(eventType, payload)
 		if metadataOnly {
 			traceStart(ctx, "metadata")
@@ -1633,7 +1688,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		traceMark(ctx, "persist")
 		next = collectionMetadata(next)
 		domain.RebuildTeamDirectory(&next)
-		s.installWorkspace(workspaceKey, next, true)
+		s.installWrittenWorkspace(workspaceKey, next, true, copyWrite)
 		return nil
 	}
 	// A record the callback changed was changed on another server after the
@@ -2088,7 +2143,7 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 	}
 	stored := collectionMetadata(data)
 	domain.RebuildTeamDirectory(&stored)
-	s.workspaces[urlKey] = stored
+	s.setWorkspaceLocked(urlKey, stored)
 	s.lastWorkspaceKey = urlKey
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,display_name=excluded.display_name,active=excluded.active,updated_at=excluded.updated_at`, viewer.ID, nullableString(viewer.Email), viewer.Name, viewer.DisplayName, viewer.AvatarURL, "", nullableTime(viewer.EmailVerified, time.Now().UTC()), boolInt(viewer.Active), now, now); err != nil {
@@ -2250,8 +2305,9 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 		s.issueGroupCounts.drop(workspace.URLKey)
 	}
 	delete(s.workspaces, workspaceKey)
+	s.forgetCopyRevisionLocked(workspaceKey)
 	domain.RebuildTeamDirectory(&data)
-	s.workspaces[workspace.URLKey] = data
+	s.setWorkspaceLocked(workspace.URLKey, data)
 	s.lastWorkspaceKey = workspace.URLKey
 	return data, nil
 }

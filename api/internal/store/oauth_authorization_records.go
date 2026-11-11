@@ -79,7 +79,7 @@ func (s *SQLiteStore) oauthMetadataTransaction(ctx context.Context, workspace st
 		// loses the change, e.g. an installed app no longer accepts
 		// delegation there.
 		s.dropMetadataCache(ctx, workspace)
-		s.workspaces[workspace] = next
+		s.setWorkspaceLocked(workspace, next)
 		return nil
 	}
 	if s.coordinator != nil {

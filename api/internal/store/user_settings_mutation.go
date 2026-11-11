@@ -49,6 +49,9 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 		if !ok {
 			return fmt.Errorf("workspace %q: %w", workspace, errors.New("not found"))
 		}
+		// mu holds the copy (and its revision) until the install.
+		base, baseKnown := s.copyRevisionLocked(workspace)
+		ctx, copyWrite := s.watchMetadataWriteFrom(ctx, workspace, base, baseKnown)
 		actor, hasActor := actorFromContext(ctx)
 		role := ""
 		if hasActor {
@@ -168,7 +171,7 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 		}
 		s.dropMetadataCache(ctx, workspace)
 		current.UserSettings = next.UserSettings
-		s.workspaces[workspace] = current
+		s.installWrittenWorkspaceLocked(workspace, current, copyWrite)
 		s.lastWorkspaceKey = workspace
 		return nil
 	}

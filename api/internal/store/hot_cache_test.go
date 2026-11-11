@@ -266,10 +266,8 @@ func TestHotCacheTeamCreatePreservesCollectionOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	createScopedTeam(t, repo, workspace, "ordered-team")
-	// The write retired the copy; the next reload refills it from the rows.
-	if err := repo.ReloadWorkspace(ctx, workspace); err != nil {
-		t.Fatal(err)
-	}
+	// The write retired the copy; the next decode refills it from the rows.
+	reloadFromRows(t, repo, workspace)
 	values, err := repo.hotCache().CacheHGetAll(ctx, repo.metadataFieldKey(workspace, "teams"))
 	if err != nil {
 		t.Fatal(err)

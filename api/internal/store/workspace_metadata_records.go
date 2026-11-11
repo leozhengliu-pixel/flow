@@ -72,7 +72,7 @@ func (s *SQLiteStore) migrateWorkspaceMetadataRecords(ctx context.Context) error
 				return err
 			}
 		}
-		s.workspaces[key] = collectionMetadata(data)
+		s.setWorkspaceLocked(key, collectionMetadata(data))
 	}
 	return nil
 }

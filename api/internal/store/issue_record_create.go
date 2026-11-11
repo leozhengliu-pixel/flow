@@ -76,6 +76,8 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 		if !ok {
 			return fmt.Errorf("workspace not found")
 		}
+		// writeMu holds the copy (and its revision) until the install.
+		ctx, copyWrite := s.watchMetadataWrite(ctx, workspace)
 		metadata = cloneBootstrap(collectionMetadata(current))
 		metadata.Viewer = actor
 		originalRole := metadata.ViewerRole
@@ -244,7 +246,7 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 			return err
 		}
 		traceMark(ctx, "persist")
-		s.installWorkspace(workspace, metadata, false)
+		s.installWrittenWorkspace(workspace, metadata, false, copyWrite)
 		metadataWritten = tx.metadataWritten
 		return nil
 	}, func(err error) error {

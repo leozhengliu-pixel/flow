@@ -52,6 +52,9 @@ func (s *SQLiteStore) mutateFeatureFlags(ctx context.Context, workspace string, 
 		if !ok {
 			return ErrAuthForbidden
 		}
+		// mu holds the copy (and its revision) until the install.
+		base, baseKnown := s.copyRevisionLocked(workspace)
+		ctx, copyWrite := s.watchMetadataWriteFrom(ctx, workspace, base, baseKnown)
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
@@ -130,7 +133,7 @@ func (s *SQLiteStore) mutateFeatureFlags(ctx context.Context, workspace string, 
 			return err
 		}
 		current.WorkspaceSettings = next.WorkspaceSettings
-		s.workspaces[workspace] = current
+		s.installWrittenWorkspaceLocked(workspace, current, copyWrite)
 		s.lastWorkspaceKey = workspace
 		return nil
 	}

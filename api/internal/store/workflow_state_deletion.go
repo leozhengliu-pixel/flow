@@ -175,7 +175,7 @@ func (s *SQLiteStore) DeleteWorkflowStateRecords(ctx context.Context, workspace,
 			return err
 		}
 		current.States = slices.DeleteFunc(slices.Clone(current.States), func(item domain.WorkflowState) bool { return item.ID == state.ID && item.TeamID == teamID })
-		s.workspaces[workspace] = current
+		s.setWorkspaceLocked(workspace, current)
 		return nil
 	}
 	var err error

@@ -105,16 +105,17 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		defer traceUnlocked(ctx)
 		event, realtimePayload = domain.DomainEvent{}, nil
 		if s.coordinator != nil {
-			latest, err := s.loadWorkspaceState(ctx, workspaceKey)
-			if err != nil {
+			if err := s.refreshWorkspaceCopyLocked(ctx, workspaceKey); err != nil {
 				return fmt.Errorf("reload workspace before mutation: %w", err)
 			}
-			s.workspaces[workspaceKey] = latest
 		}
 		current, ok := s.workspaces[workspaceKey]
 		if !ok {
 			return fmt.Errorf("workspace %q: %w", workspaceKey, errors.New("not found"))
 		}
+		// mu holds the copy (and its revision) until the install.
+		base, baseKnown := s.copyRevisionLocked(workspaceKey)
+		ctx, copyWrite := s.watchMetadataWriteFrom(ctx, workspaceKey, base, baseKnown)
 		domain.EnsureTeamDirectory(&current)
 		next := current
 		snap := snapshotTeamMutation(eventType, mutationAggregateID(ctx), &next)
@@ -144,7 +145,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		if err != nil {
 			rollbackTeamMutation(&next, &snap, aggregateID)
 			if snap.deletion != nil {
-				s.workspaces[workspaceKey] = next
+				s.setWorkspaceLocked(workspaceKey, next)
 			}
 			return err
 		}
@@ -156,7 +157,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		if err != nil {
 			rollbackTeamMutation(&next, &snap, aggregateID)
 			if snap.deletion != nil {
-				s.workspaces[workspaceKey] = next
+				s.setWorkspaceLocked(workspaceKey, next)
 			}
 			return err
 		}
@@ -186,7 +187,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			if err != nil {
 				rollbackTeamMutation(&next, &snap, aggregateID)
 				if snap.deletion != nil {
-					s.workspaces[workspaceKey] = next
+					s.setWorkspaceLocked(workspaceKey, next)
 				}
 				return err
 			}
@@ -217,7 +218,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			deletedProjectRefs = snap.deletion.projectsTouched
 		}
 		next = collectionMetadata(next)
-		s.workspaces[workspaceKey] = next
+		s.installWrittenWorkspaceLocked(workspaceKey, next, copyWrite)
 		s.lastWorkspaceKey = workspaceKey
 		return nil
 	}
@@ -225,10 +226,20 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 	// reload (an issue write's triage cursor, a project's progress): rerun on
 	// fresh records.
 	err := mutationAttempts(ctx, fullMutationAttempts, func(context.Context) error {
+		var err error
 		if s.coordinator != nil {
-			return s.coordinator.WithWorkspaceLock(ctx, workspaceKey, apply)
+			err = s.coordinator.WithWorkspaceLock(ctx, workspaceKey, apply)
+		} else {
+			err = apply()
 		}
-		return apply()
+		if err != nil {
+			// The write edits the copy in place and rolls it back on
+			// failure; the next write reloads it rather than trust that.
+			s.mu.Lock()
+			s.forgetCopyRevisionLocked(workspaceKey)
+			s.mu.Unlock()
+		}
+		return err
 	}, s.refreshConflictedMetadata(ctx, workspaceKey))
 	if err != nil {
 		if errors.Is(err, ErrNoMutation) {

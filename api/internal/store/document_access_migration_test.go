@@ -259,9 +259,7 @@ func TestDocumentDefaultAccessMigrationDropsSharedMetadataCache(t *testing.T) {
 	repo.SetWorkspaceCoordinator(connect())
 	seedLegacyDocuments(t, repo)
 	// Fill the shared metadata cache with the pre-migration records.
-	if err := repo.ReloadWorkspace(t.Context(), accessWorkspace); err != nil {
-		t.Fatal(err)
-	}
+	reloadFromRows(t, repo, accessWorkspace)
 	if ready, _ := repo.hotCache().CacheGet(t.Context(), repo.metadataReadyKey(accessWorkspace)); len(ready) == 0 {
 		t.Fatal("metadata cache was not filled")
 	}

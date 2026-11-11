@@ -90,6 +90,10 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		// while the transaction runs (see SQLiteStore.writeMu).
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
+		// writeMu holds the copy persistIssueMetadata starts from (and its
+		// revision) until the install. The metadata this write changes is
+		// that copy's projects and documents.
+		ctx, copyWrite := s.watchMetadataWrite(ctx, workspace)
 		tx, err := s.db.BeginTx(ctx, s.recordTxOptions())
 		if err != nil {
 			return err
@@ -376,7 +380,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			return err
 		}
 		if progressMetadata != nil {
-			s.installWorkspace(workspace, *progressMetadata, false)
+			s.installWrittenWorkspace(workspace, *progressMetadata, false, copyWrite)
 		}
 		if metadataWritten {
 			s.dropMetadataCache(ctx, workspace)

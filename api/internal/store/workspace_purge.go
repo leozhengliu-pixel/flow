@@ -974,6 +974,11 @@ func (s *SQLiteStore) removeWorkspaceFromCatalog(ctx context.Context, workspaceK
 	s.forgetChatSnapshotFlag(workspaceKey)
 	s.issueGroupCounts.drop(workspaceKey)
 	s.workspaces = remaining
+	for key := range s.copyRevisions {
+		if _, ok := remaining[key]; !ok {
+			s.forgetCopyRevisionLocked(key)
+		}
+	}
 	s.lastWorkspaceKey = nextWorkspaceKey
 	return nil
 }

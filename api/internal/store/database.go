@@ -149,12 +149,36 @@ func (tx *sqlTx) Commit() error {
 		_ = tx.Tx.Rollback()
 		return err
 	}
+	// A write following its copy's metadata revision reads it here, after
+	// its other statements and before its own increment
+	// (metadata_copy_revision.go).
+	write := tx.metadataWriteOf()
+	var revision int64
+	var revisionErr error
+	if write != nil {
+		var stamp copyStamp
+		stamp, revisionErr = readMetadataStamp(tx.context(), tx, write.workspace)
+		revision = stamp.revision
+		if revisionErr == nil && stamp.workspaceID != write.base.workspaceID {
+			revisionErr = errors.New("workspace replaced")
+		}
+	}
 	if err := tx.flushCacheRevisions(); err != nil {
 		_ = tx.Tx.Rollback()
+		if write != nil {
+			write.fail()
+		}
 		return err
 	}
 	if err := tx.Tx.Commit(); err != nil {
+		if write != nil {
+			// It may have committed all the same.
+			write.fail()
+		}
 		return err
+	}
+	if write != nil {
+		write.observe(revision, revisionErr)
 	}
 	if tx.audit != nil {
 		tx.audit.pending = nil

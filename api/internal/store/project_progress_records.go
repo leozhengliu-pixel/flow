@@ -485,7 +485,7 @@ func (s *SQLiteStore) backfillWorkspaceProjectProgress(ctx context.Context, work
 			// Only projects changed: write them as a metadata delta rather
 			// than re-encoding and comparing every metadata record.
 			if err = s.persistWorkspaceFrom(ctx, workspace, &before, data, nil); err == nil {
-				s.workspaces[workspace] = data
+				s.setWorkspaceLocked(workspace, data)
 			}
 		}
 		s.unlockWorkspaceWrites()

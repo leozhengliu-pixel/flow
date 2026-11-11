@@ -84,6 +84,9 @@ func (s *SQLiteStore) mutateStandaloneFavorite(ctx context.Context, workspace, e
 		if !ok {
 			return ErrAuthForbidden
 		}
+		// mu holds the copy (and its revision) until the install.
+		base, baseKnown := s.copyRevisionLocked(workspace)
+		ctx, copyWrite := s.watchMetadataWriteFrom(ctx, workspace, base, baseKnown)
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
@@ -168,7 +171,7 @@ func (s *SQLiteStore) mutateStandaloneFavorite(ctx context.Context, workspace, e
 			return err
 		}
 		current.Favorites = slices.Clone(next.Favorites)
-		s.workspaces[workspace] = current
+		s.installWrittenWorkspaceLocked(workspace, current, copyWrite)
 		s.lastWorkspaceKey = workspace
 		return nil
 	}

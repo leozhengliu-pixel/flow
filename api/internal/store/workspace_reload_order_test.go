@@ -53,6 +53,11 @@ func TestReloadNeverReplacesTheCopyAWriteInstalledMeanwhile(t *testing.T) {
 					}
 				}})
 				t.Cleanup(func() { repo.db.commitHooks.Store(nil) })
+				// The copy is current after the write; make the reload read
+				// the database as it does after another server's change.
+				repo.mu.Lock()
+				repo.forgetCopyRevisionLocked(workspace)
+				repo.mu.Unlock()
 				reloaded := make(chan error, 1)
 				go func() { reloaded <- reload(repo, context.WithValue(ctx, heldReloadKey{}, true), workspace) }()
 				select {

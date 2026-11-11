@@ -17,6 +17,7 @@ import (
 // Decode split metadata records directly into their typed destinations. Do not
 // rebuild a second giant JSON blob just to parse it again during startup/reload.
 func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace string, raw []byte, reader metadataReader) (domain.Bootstrap, error) {
+	metadataDecodes.Add(1)
 	var data domain.Bootstrap
 	if err := json.Unmarshal(raw, &data); err != nil {
 		return data, err

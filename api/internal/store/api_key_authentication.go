@@ -231,6 +231,6 @@ func (s *SQLiteStore) writeAPIKeyUse(ctx context.Context, use apiKeyUse) error {
 		at := use.at
 		data.OAuthAuthorizations[index].LastUsedAt = &at
 	}
-	s.workspaces[use.workspace] = data
+	s.setWorkspaceLocked(use.workspace, data)
 	return nil
 }

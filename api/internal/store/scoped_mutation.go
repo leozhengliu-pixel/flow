@@ -179,16 +179,16 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
 		if s.coordinator != nil {
-			latest, err := s.loadWorkspaceState(ctx, workspaceKey)
-			if err != nil {
+			if err := s.refreshWorkspaceCopy(ctx, workspaceKey); err != nil {
 				return fmt.Errorf("reload workspace before mutation: %w", err)
 			}
-			s.installWorkspace(workspaceKey, latest, false)
 		}
 		stored, ok := s.storedWorkspace(workspaceKey)
 		if !ok {
 			return fmt.Errorf("workspace %q: %w", workspaceKey, errors.New("not found"))
 		}
+		// writeMu holds the copy (and its revision) until the install.
+		ctx, copyWrite := s.watchMetadataWrite(ctx, workspaceKey)
 		discussionOnly := IsIssueDiscussionMutation(ctx)
 		current := cloneBootstrap(collectionMetadata(stored))
 		if discussionOnly {
@@ -408,7 +408,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		traceMark(ctx, "commit")
 		s.dropMetadataCache(ctx, workspaceKey)
 		domain.RebuildTeamDirectory(&metadata)
-		s.installWorkspace(workspaceKey, metadata, true)
+		s.installWrittenWorkspace(workspaceKey, metadata, true, copyWrite)
 		return nil
 	}
 	// A metadata record the callback changed was changed in the same field
