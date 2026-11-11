@@ -14574,7 +14574,8 @@
                 "updatedAt",
                 "priority",
                 "title",
-                "sortOrder"
+                "sortOrder",
+                "dueDate"
               ],
               "type": "string"
             }
@@ -14623,7 +14624,8 @@
                 "priority",
                 "createdAt",
                 "updatedAt",
-                "title"
+                "title",
+                "dueDate"
               ],
               "type": "string"
             }
@@ -37477,7 +37479,7 @@
     },
     "IssueSLA": {
       "post": {
-        "description": "IssueSLAWebhookEvent is sent when an SLA is set on an issue (set), is close to breaching (highRisk, once, when less than a quarter of the window of at most 24 hours remains) or breached (breached). Subscribe with resourceTypes \"issue_sla\" (or the payload type name). Answer with a 2xx status within 5 seconds.",
+        "description": "IssueSLAWebhookEvent is sent when an SLA is set on an issue (set), enters the high-risk window (highRisk, once, one calendar or business day before its deadline), or breaches (breached). Subscribe with resourceTypes \"issue_sla\" (or the payload type name). Answer with a 2xx status within 5 seconds.",
         "operationId": "webhook_IssueSLA",
         "parameters": [
           {
@@ -44698,7 +44700,7 @@
         "type": "object"
       },
       "IssueSLAWebhookEvent": {
-        "description": "IssueSLAWebhookEvent is sent when an SLA is set on an issue (set), is close to breaching (highRisk, once, when less than a quarter of the window of at most 24 hours remains) or breached (breached).",
+        "description": "IssueSLAWebhookEvent is sent when an SLA is set on an issue (set), enters the high-risk window (highRisk, once, one calendar or business day before its deadline), or breaches (breached).",
         "properties": {
           "action": {
             "enum": [

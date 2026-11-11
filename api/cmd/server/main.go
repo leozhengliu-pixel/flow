@@ -293,6 +293,7 @@ func main() {
 	go s.runCoding(shutdownSignal)
 	go s.runApplicationAgentWorker(shutdownSignal)
 	go s.runRecurringIssueScheduler(shutdownSignal)
+	go s.runSLAScheduler(shutdownSignal)
 	go s.runReviewImportScheduler(shutdownSignal)
 	go s.runPersonalConnectionScheduler(shutdownSignal)
 	go s.runStorageMaintenance(shutdownSignal, applicationConfig.Retention.DomainEvents)
@@ -6137,6 +6138,10 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		changes["dueDate"] = *input.DueDate
 	}
 	if input.SLABreachesAt != nil {
+		before := ""
+		if issue.SLABreachesAt != nil {
+			before = issue.SLABreachesAt.UTC().Format(time.RFC3339Nano)
+		}
 		if *input.SLABreachesAt == "" {
 			issue.SLABreachesAt = nil
 		} else {
@@ -6147,12 +6152,34 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			value = value.UTC()
 			issue.SLABreachesAt = &value
 		}
+		after := ""
+		if issue.SLABreachesAt != nil {
+			after = issue.SLABreachesAt.UTC().Format(time.RFC3339Nano)
+		}
+		if before != after {
+			changes["slaBreachesAt"], changes["slaBreachesAtBefore"] = after, before
+		}
 	}
 	if input.SLAType != nil {
 		if *input.SLAType != "" && !slices.Contains([]string{"all", "onlyBusinessDays"}, *input.SLAType) {
 			return nil, fmt.Errorf("%w: invalid SLA type", errInvalid)
 		}
-		issue.SLAType = *input.SLAType
+		if issue.SLAType != *input.SLAType {
+			issue.SLAType = *input.SLAType
+			changes["slaType"] = *input.SLAType
+		}
+	}
+	if input.SLABreachesAt != nil {
+		_, deadlineChanged := changes["slaBreachesAt"]
+		_, typeChanged := changes["slaType"]
+		clearAutomated := *input.SLABreachesAt == "" && slices.ContainsFunc(data.IssueSLAs, func(sla domain.IssueSLA) bool { return sla.IssueID == issue.ID && sla.Status != "removed" })
+		if deadlineChanged || typeChanged || clearAutomated {
+			applyManualSLADeadline(data, issue, time.Now().UTC())
+			changes["slaActivityRecorded"] = "true"
+			if clearAutomated {
+				changes["slaBreachesAt"] = ""
+			}
+		}
 	}
 	if input.Icon != nil && strings.TrimSpace(*input.Icon) != issue.Icon {
 		icon := strings.TrimSpace(*input.Icon)

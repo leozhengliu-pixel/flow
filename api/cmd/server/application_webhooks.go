@@ -615,21 +615,15 @@ func (s *server) sweepIssueSLAWebhooks(ctx context.Context, workspace string, no
 		if now.Sub(event.CreatedAt) > 15*time.Minute {
 			continue
 		}
-		action := map[string]string{"started": "set", "breached": "breached"}[event.Type]
+		action := map[string]string{"started": "set", "changed": "set", "high_risk": "highRisk", "breached": "breached"}[event.Type]
 		if action == "" {
 			continue
 		}
-		events = append(events, slaEvent{key: event.ID, action: action, issueID: event.IssueID, sla: slas[event.SLAID], at: event.CreatedAt})
-	}
-	// High risk: less than a quarter of the SLA window (at most 24 hours) left.
-	for _, sla := range data.IssueSLAs {
-		if sla.Status != "active" || sla.BreachedAt != nil || !now.Before(sla.DueAt) {
+		sla, exists := slas[event.SLAID]
+		if !exists {
 			continue
 		}
-		window := min(sla.DueAt.Sub(sla.StartedAt)/4, 24*time.Hour)
-		if sla.DueAt.Sub(now) <= window {
-			events = append(events, slaEvent{key: sla.ID + ":highRisk:" + sla.DueAt.UTC().Format(time.RFC3339), action: "highRisk", issueID: sla.IssueID, sla: sla, at: now})
-		}
+		events = append(events, slaEvent{key: event.ID, action: action, issueID: event.IssueID, sla: sla, at: event.CreatedAt})
 	}
 	if len(events) == 0 {
 		return

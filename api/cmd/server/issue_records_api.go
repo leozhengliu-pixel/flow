@@ -449,7 +449,8 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, issueEditForbiddenMessage)
 		return
 	}
-	if input.ExpectedVersion == nil && issueUpdateIsNoop(page.Items[0], input) && store.ChatMutationKey(r.Context()) == "" {
+	clearSLA := input.SLABreachesAt != nil && *input.SLABreachesAt == ""
+	if input.ExpectedVersion == nil && issueUpdateIsNoop(page.Items[0], input) && !clearSLA && store.ChatMutationKey(r.Context()) == "" {
 		projected, projectionErr := s.projectIssueRecordReferences(r, metadata, query, []domain.Issue{page.Items[0]})
 		if projectionErr != nil {
 			issueRecordsError(w, projectionErr)
@@ -535,7 +536,8 @@ func (s *server) updateIssueRecord(w http.ResponseWriter, r *http.Request) {
 				return store.ErrIssueVersion
 			}
 		}
-		if issueUpdateIsNoop(*issue, input) {
+		clearActiveSLA := input.SLABreachesAt != nil && *input.SLABreachesAt == "" && slices.ContainsFunc(data.IssueSLAs, func(sla domain.IssueSLA) bool { return sla.IssueID == issue.ID && sla.Status != "removed" })
+		if issueUpdateIsNoop(*issue, input) && !clearActiveSLA {
 			return store.ErrNoMutation
 		}
 		if issue.DocumentContent != nil {

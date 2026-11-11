@@ -20,7 +20,7 @@ import (
 const maxIssuePageSize = publicapi.MaxIssuePageSize
 
 // issueOrderings are the orderBy values of the connection form.
-var issueOrderings = []string{"createdAt", "updatedAt", "priority", "title", "sortOrder"}
+var issueOrderings = []string{"createdAt", "updatedAt", "priority", "title", "sortOrder", "dueDate"}
 
 type issueConnectionArgs struct {
 	Size      int

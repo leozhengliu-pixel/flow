@@ -254,7 +254,7 @@ type IssueSLAData struct {
 	Status  string `json:"status,omitempty"`
 }
 
-// IssueSLAWebhookEvent is sent when an SLA is set on an issue (set), is close to breaching (highRisk, once, when less than a quarter of the window of at most 24 hours remains) or breached (breached).
+// IssueSLAWebhookEvent is sent when an SLA is set on an issue (set), enters the high-risk window (highRisk, once, one calendar or business day before its deadline), or breaches (breached).
 type IssueSLAWebhookEvent struct {
 	WebhookEnvelope
 	Type      string        `json:"type" const:"IssueSLA"`

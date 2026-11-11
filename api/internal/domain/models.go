@@ -2448,6 +2448,7 @@ type SLARule struct {
 	TargetMinutes int            `json:"targetMinutes"`
 	PauseStatuses []string       `json:"pauseStatuses"`
 	BusinessHours bool           `json:"businessHours"`
+	StartMode     string         `json:"startMode,omitempty" enum:"ruleMatch,issueCreation"`
 	Enabled       bool           `json:"enabled"`
 	CreatedAt     time.Time      `json:"createdAt"`
 	UpdatedAt     time.Time      `json:"updatedAt"`
@@ -2462,6 +2463,12 @@ type IssueSLA struct {
 	RuleID           string     `json:"ruleId"`
 	StartedAt        time.Time  `json:"startedAt"`
 	DueAt            time.Time  `json:"dueAt"`
+	HighRiskAt       *time.Time `json:"highRiskAt,omitempty"`
+	MediumRiskAt     *time.Time `json:"mediumRiskAt,omitempty"`
+	TargetMinutes    int        `json:"targetMinutes,omitempty"`
+	BusinessHours    bool       `json:"businessHours,omitempty"`
+	StartMode        string     `json:"startMode,omitempty" enum:"ruleMatch,issueCreation"`
+	Manual           bool       `json:"manual,omitempty"`
 	PausedAt         *time.Time `json:"pausedAt,omitempty"`
 	PausedMinutes    int        `json:"pausedMinutes"`
 	BreachedAt       *time.Time `json:"breachedAt,omitempty"`

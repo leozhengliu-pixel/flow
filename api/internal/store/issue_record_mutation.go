@@ -261,6 +261,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		metadata.FormerMembers = s.formerMemberLookup(ctx, tx, &metadata)
 		metadata.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
+		slaBefore := cloneBootstrap(domain.Bootstrap{IssueSLAs: metadata.IssueSLAs, SLAEvents: metadata.SLAEvents})
 		err = mutate(&metadata, target)
 		metadata.CollaborationUpdates = nil
 		metadata.FormerMembers = nil
@@ -331,6 +332,19 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		if progressMetadata, err = s.persistIssueMetadata(ctx, tx, workspace, loadedIssues, metadata.Issues, documents); err != nil {
 			return err
+		}
+		if !reflect.DeepEqual(slaBefore.IssueSLAs, metadata.IssueSLAs) || !reflect.DeepEqual(slaBefore.SLAEvents, metadata.SLAEvents) {
+			base, _ := s.storedWorkspace(workspace)
+			if progressMetadata != nil {
+				base = *progressMetadata
+			}
+			next := base
+			base.IssueSLAs, base.SLAEvents = slaBefore.IssueSLAs, slaBefore.SLAEvents
+			next.IssueSLAs, next.SLAEvents = metadata.IssueSLAs, metadata.SLAEvents
+			if _, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspace, base, &next); err != nil {
+				return err
+			}
+			progressMetadata = &next
 		}
 		metadataWritten = tx.metadataWritten
 		oldRaw, _ := json.Marshal(original)

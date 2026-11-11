@@ -127,6 +127,7 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 	// Customer requests linked to issues: the team filter below only sees the
 	// (empty) paged issue list, so their issues are checked by id instead.
 	customerRequests := slices.Clone(data.CustomerRequests)
+	issueSLAs, slaEvents := slices.Clone(data.IssueSLAs), slices.Clone(data.SLAEvents)
 	data, ok, err := s.projectBootstrapForUser(ctx, data, userID)
 	if err != nil {
 		return data, err
@@ -156,6 +157,12 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 			ids = append(ids, item.IssueID)
 		}
 	}
+	for _, item := range issueSLAs {
+		ids = append(ids, item.IssueID)
+	}
+	for _, item := range slaEvents {
+		ids = append(ids, item.IssueID)
+	}
 	if len(ids) > 0 {
 		_, access, err := s.IssueQueryAccess(ctx, data.Workspace.URLKey, userID)
 		if err != nil {
@@ -175,6 +182,8 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 		data.CustomerRequests = slices.DeleteFunc(customerRequests, func(item domain.CustomerRequest) bool {
 			return guest || (item.IssueID != "" && !visible[item.IssueID]) || (item.ProjectID != "" && !visibleProjects[item.ProjectID])
 		})
+		data.IssueSLAs = slices.DeleteFunc(issueSLAs, func(item domain.IssueSLA) bool { return !visible[item.IssueID] })
+		data.SLAEvents = slices.DeleteFunc(slaEvents, func(item domain.SLAEvent) bool { return !visible[item.IssueID] })
 		for _, release := range releases {
 			if release.PipelineID != "" && !slices.ContainsFunc(data.ReleasePipelines, func(p domain.ReleasePipeline) bool { return p.ID == release.PipelineID }) {
 				continue
@@ -1087,6 +1096,9 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 		column = "updated_at"
 	case "title":
 		column = "title"
+	case "dueDate":
+		column = "due_date"
+		prefix, prefixArgs, expression = s.issueDueSort(ctx, query, prefix, prefixArgs)
 	case "customerCount", "customerImportantCount", "customerRevenue":
 		// The reference app's customer orderings: computed per row from the customer request index.
 		column = "customer"

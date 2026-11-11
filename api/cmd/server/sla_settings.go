@@ -45,24 +45,36 @@ func businessDeadline(from time.Time, minutes int, zone *time.Location, workWeek
 		return from
 	}
 	current := from.In(zone)
-	remaining := time.Duration(max(0, minutes)) * time.Minute
-	for {
-		start := time.Date(current.Year(), current.Month(), current.Day(), 9, 0, 0, 0, zone)
-		end := time.Date(current.Year(), current.Month(), current.Day(), 17, 0, 0, 0, zone)
-		if nonWorkingDay(current.Weekday(), workWeek) || !current.Before(end) {
-			current = start.AddDate(0, 0, 1)
-			continue
-		}
-		if current.Before(start) {
-			current = start
-		}
-		available := end.Sub(current)
-		if remaining <= available {
-			return current.Add(remaining).UTC()
-		}
-		remaining -= available
-		current = start.AddDate(0, 0, 1)
+	for day := 0; day < minutes/1440; day++ {
+		current = businessDayOffset(current, 1, zone, workWeek)
 	}
+	current = current.Add(time.Duration(minutes%1440) * time.Minute)
+	for nonWorkingDay(current.Weekday(), workWeek) {
+		current = current.AddDate(0, 0, 1)
+	}
+	return current.UTC()
+}
+
+func businessDayOffset(from time.Time, days int, zone *time.Location, workWeek string) time.Time {
+	current := from.In(zone)
+	direction := 1
+	if days < 0 {
+		direction = -1
+	}
+	for remaining := absInt(days); remaining > 0; {
+		current = current.AddDate(0, 0, direction)
+		if !nonWorkingDay(current.Weekday(), workWeek) {
+			remaining--
+		}
+	}
+	return current
+}
+
+func absInt(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func businessMinutes(from, to time.Time, zone *time.Location, workWeek string) int {
@@ -73,8 +85,8 @@ func businessMinutes(from, to time.Time, zone *time.Location, workWeek string) i
 	end := to.In(zone)
 	duration := time.Duration(0)
 	for current.Before(end) {
-		start := time.Date(current.Year(), current.Month(), current.Day(), 9, 0, 0, 0, zone)
-		close := time.Date(current.Year(), current.Month(), current.Day(), 17, 0, 0, 0, zone)
+		start := time.Date(current.Year(), current.Month(), current.Day(), 0, 0, 0, 0, zone)
+		close := start.AddDate(0, 0, 1)
 		if !nonWorkingDay(current.Weekday(), workWeek) {
 			left := current
 			if left.Before(start) {

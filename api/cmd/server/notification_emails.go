@@ -55,6 +55,9 @@ func notificationSummary(data *domain.Bootstrap, root string, notification domai
 		default:
 			item.Line = actor + " updated " + issue.Identifier
 		}
+		if notification.Payload != nil && (notification.Payload.EventType == "issue.sla_breached" || notification.Payload.EventType == "issue.sla_high_risk") {
+			item.Line = notification.Text
+		}
 	}
 	return item, nil
 }

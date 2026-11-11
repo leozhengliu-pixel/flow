@@ -481,7 +481,7 @@ export interface GetIssueRecordsQuery {
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
   /** Sort field; timestamps are newest first. */
-  orderBy?: "createdAt" | "updatedAt" | "priority" | "title" | "sortOrder"
+  orderBy?: "createdAt" | "updatedAt" | "priority" | "title" | "sortOrder" | "dueDate"
   /** Include archived resources. */
   includeArchived?: boolean
   /** Filter tree (JSON), see IssueFilter. */
@@ -491,7 +491,7 @@ export interface GetIssueRecordsQuery {
   /** Legacy continuation token (nextCursor), or an alias of after in connection form. */
   cursor?: string
   /** Legacy ordering (default sortOrder); an alias of orderBy in connection form. */
-  sort?: "sortOrder" | "priority" | "createdAt" | "updatedAt" | "title"
+  sort?: "sortOrder" | "priority" | "createdAt" | "updatedAt" | "title" | "dueDate"
   /** Sort direction. Default asc, except createdAt and updatedAt in connection form (desc). */
   direction?: "asc" | "desc"
   /** Alias of direction. */
@@ -526,7 +526,7 @@ export interface GetIssueRecordsLegacyQuery {
   /** Legacy continuation token (nextCursor), or an alias of after in connection form. */
   cursor?: string
   /** Legacy ordering (default sortOrder); an alias of orderBy in connection form. */
-  sort?: "sortOrder" | "priority" | "createdAt" | "updatedAt" | "title"
+  sort?: "sortOrder" | "priority" | "createdAt" | "updatedAt" | "title" | "dueDate"
   /** Sort direction. Default asc, except createdAt and updatedAt in connection form (desc). */
   direction?: "asc" | "desc"
   /** Alias of direction. */

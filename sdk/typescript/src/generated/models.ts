@@ -1715,7 +1715,7 @@ export interface IssueSLAIssue {
   title?: string
 }
 
-/** IssueSLAWebhookEvent is sent when an SLA is set on an issue (set), is close to breaching (highRisk, once, when less than a quarter of the window of at most 24 hours remains) or breached (breached). */
+/** IssueSLAWebhookEvent is sent when an SLA is set on an issue (set), enters the high-risk window (highRisk, once, one calendar or business day before its deadline), or breaches (breached). */
 export interface IssueSLAWebhookEvent {
   action: "set" | "highRisk" | "breached"
   /** Actor is who made the change; null for system changes. */

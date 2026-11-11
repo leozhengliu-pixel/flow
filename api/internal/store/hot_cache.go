@@ -201,6 +201,11 @@ func accessTeams(access *IssueRecordAccess) []string {
 // cacheGetIssueQuery returns a cached page, or on a miss the key to store
 // the page read next under (cacheSetIssueQuery).
 func (s *SQLiteStore) cacheGetIssueQuery(ctx context.Context, query IssueRecordQuery) (IssueRecordPage, string, bool) {
+	// SLA-only metadata writes can change due-date ordering without changing
+	// the issue-record revision used by the page cache.
+	if query.Sort == "dueDate" {
+		return IssueRecordPage{}, "", false
+	}
 	cache := s.hotCache()
 	if cache == nil {
 		return IssueRecordPage{}, "", false

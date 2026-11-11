@@ -113,9 +113,9 @@ func TestBusinessHourSLAAndGlobalSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	friday := time.Date(2026, 3, 6, 16, 0, 0, 0, zone)
-	want := time.Date(2026, 3, 9, 10, 0, 0, 0, zone)
+	want := time.Date(2026, 3, 6, 18, 0, 0, 0, zone)
 	if due := businessDeadline(friday, 120, zone, slaWorkWeekMonFri); !due.Equal(want) {
-		t.Fatalf("weekend/DST deadline: %s", due)
+		t.Fatalf("business-day deadline: %s", due)
 	}
 	if businessMinutes(friday, want, zone, slaWorkWeekMonFri) != 120 {
 		t.Fatal("remaining business time includes non-working hours")
@@ -142,13 +142,13 @@ func TestUploadPolicyUsesDetectedMediaInsteadOfDeclaredFilename(t *testing.T) {
 
 func TestBusinessDeadlineSundayToThursdayWeek(t *testing.T) {
 	zone := time.UTC
-	// Thursday 16:00 + 2 business hours skips Friday and Saturday.
+	// Thursday 16:00 + 1 business day skips Friday and Saturday.
 	thursday := time.Date(2026, 9, 24, 16, 0, 0, 0, zone)
-	want := time.Date(2026, 9, 27, 10, 0, 0, 0, zone)
-	if due := businessDeadline(thursday, 120, zone, slaWorkWeekSunThu); !due.Equal(want) {
+	want := time.Date(2026, 9, 27, 16, 0, 0, 0, zone)
+	if due := businessDeadline(thursday, 1440, zone, slaWorkWeekSunThu); !due.Equal(want) {
 		t.Fatalf("due = %s, want %s", due, want)
 	}
-	if got := businessMinutes(thursday, want, zone, slaWorkWeekSunThu); got != 120 {
-		t.Fatalf("business minutes = %d, want 120", got)
+	if got := businessMinutes(thursday, want, zone, slaWorkWeekSunThu); got != 1440 {
+		t.Fatalf("business minutes = %d, want 1440", got)
 	}
 }

@@ -1987,11 +1987,17 @@ func advanceCycleSchedule(data *domain.Bootstrap, teamID string, now time.Time) 
 
 func appendIssueNotifications(data *domain.Bootstrap, issue domain.Issue, activity domain.ActivityEvent, comment *domain.Comment) {
 	recipients := map[string]string{}
+	systemSLA := activity.Type == "issue.sla_breached" || activity.Type == "issue.sla_high_risk"
+	if systemSLA && issue.Assignee != nil {
+		recipients[issue.Assignee.ID] = "reminders"
+	}
 	if newAssignee := activity.Metadata["assignee"]; newAssignee != "" && newAssignee != activity.Metadata["previousAssignee"] {
 		recipients[newAssignee] = "assignments"
 	}
 	baseCategory := "subscriptions"
-	if comment != nil {
+	if systemSLA {
+		baseCategory = "reminders"
+	} else if comment != nil {
 		baseCategory = "comments"
 	} else if activity.Metadata["state"] != "" {
 		baseCategory = "statusChanges"
@@ -2030,7 +2036,7 @@ func appendIssueNotifications(data *domain.Bootstrap, issue domain.Issue, activi
 		if recipientID == "" || recipientID == activity.Actor.ID || userByID(data, recipientID) == nil || formerMember(data, recipientID) {
 			continue
 		}
-		if moved && !issueVisibleToMember(data, issue, recipientID) {
+		if (moved || systemSLA) && !issueVisibleToMember(data, issue, recipientID) {
 			continue
 		}
 		preferences, ok := data.NotificationPreferences[recipientID]
@@ -2046,7 +2052,17 @@ func appendIssueNotifications(data *domain.Bootstrap, issue domain.Issue, activi
 			sourceType, sourceID, commentID = "comment", comment.ID, comment.ID
 		}
 		groupKey := recipientID + ":" + issue.ID + ":" + category
+		if systemSLA {
+			groupKey += ":sla:" + activity.Metadata["slaId"] + ":" + activity.Type
+		}
 		notification := domain.Notification{ID: "notification_" + activity.ID + "_" + recipientID + "_" + category, RecipientID: recipientID, Type: kind, Category: category, GroupKey: groupKey, OccurrenceCount: 1, LatestActorIDs: []string{activity.Actor.ID}, SourceType: sourceType, SourceID: sourceID, IssueID: issue.ID, CommentID: commentID, ActivityID: activity.ID, Actor: activity.Actor, CreatedAt: activity.CreatedAt, UpdatedAt: activity.CreatedAt}
+		if systemSLA {
+			notification.Text = "SLA breached"
+			if activity.Type == "issue.sla_high_risk" {
+				notification.Text = "High risk of breaching SLA"
+			}
+			notification.Payload = &domain.NotificationPayload{EventType: activity.Type, SLAID: activity.Metadata["slaId"]}
+		}
 		if existing := aggregatableNotification(data, groupKey, activity.CreatedAt); existing != nil {
 			existing.OccurrenceCount++
 			existing.Actor = activity.Actor
@@ -2055,6 +2071,9 @@ func appendIssueNotifications(data *domain.Bootstrap, issue domain.Issue, activi
 				existing.LatestActorIDs = existing.LatestActorIDs[len(existing.LatestActorIDs)-3:]
 			}
 			existing.SourceType, existing.SourceID, existing.CommentID, existing.ActivityID, existing.UpdatedAt = sourceType, sourceID, commentID, activity.ID, activity.CreatedAt
+			if systemSLA {
+				existing.Text, existing.Payload = notification.Text, notification.Payload
+			}
 			notification = *existing
 		} else {
 			data.Notifications = append(data.Notifications, notification)

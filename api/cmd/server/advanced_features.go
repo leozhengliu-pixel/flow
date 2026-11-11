@@ -274,6 +274,7 @@ type slaRuleInput struct {
 	TargetMinutes *int           `json:"targetMinutes,omitempty"`
 	PauseStatuses *[]string      `json:"pauseStatuses,omitempty"`
 	BusinessHours *bool          `json:"businessHours,omitempty"`
+	StartMode     *string        `json:"startMode,omitempty"`
 	Enabled       *bool          `json:"enabled,omitempty"`
 }
 
@@ -2085,6 +2086,9 @@ func applySLARuleInput(data *domain.Bootstrap, rule *domain.SLARule, input slaRu
 		rule.TeamIDs = values
 	}
 	if input.Filters != nil {
+		if !validSLAFilters(data, input.Filters) {
+			return errInvalid
+		}
 		rule.Filters = input.Filters
 	}
 	if input.Action != nil {
@@ -2094,7 +2098,7 @@ func applySLARuleInput(data *domain.Bootstrap, rule *domain.SLARule, input slaRu
 		rule.Action = *input.Action
 	}
 	if input.TargetMinutes != nil {
-		if *input.TargetMinutes < 1 {
+		if *input.TargetMinutes < 1 || int64(*input.TargetMinutes) > int64((1<<63-1)/time.Minute) {
 			return errInvalid
 		}
 		rule.TargetMinutes = *input.TargetMinutes
@@ -2104,6 +2108,12 @@ func applySLARuleInput(data *domain.Bootstrap, rule *domain.SLARule, input slaRu
 	}
 	if input.BusinessHours != nil {
 		rule.BusinessHours = *input.BusinessHours
+	}
+	if input.StartMode != nil {
+		if *input.StartMode != "ruleMatch" && *input.StartMode != "issueCreation" {
+			return errInvalid
+		}
+		rule.StartMode = *input.StartMode
 	}
 	if input.Enabled != nil {
 		rule.Enabled = *input.Enabled
@@ -2212,13 +2222,40 @@ func (s *server) reorderSLARules(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteSLARule(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "sla_rule.deleted", id, nil, func(data *domain.Bootstrap) error {
+	scope := store.WithMutationScope(r.Context(), store.MutationScope{Resolve: func(data domain.Bootstrap) store.MutationScope {
+		scope := slaIssueScope(data, slices.DeleteFunc(slices.Clone(data.SLARules), func(rule domain.SLARule) bool { return rule.ID == id }))
+		for _, sla := range data.IssueSLAs {
+			if sla.RuleID == id {
+				scope.IssueIDs = append(scope.IssueIDs, sla.IssueID)
+			}
+		}
+		return scope
+	}})
+	err := s.store.MutateWorkspace(scope, workspaceKey(r), "sla_rule.deleted", id, nil, func(data *domain.Bootstrap) error {
 		before := len(data.SLARules)
+		removed := map[string]bool{}
+		now := time.Now().UTC()
+		for _, sla := range data.IssueSLAs {
+			if sla.RuleID == id {
+				removed[sla.ID] = true
+				if issueIndex := slices.IndexFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == sla.IssueID }); issueIndex >= 0 && sla.Status != "removed" {
+					if sla.Manual {
+						data.Issues[issueIndex].SLABreachesAt, data.Issues[issueIndex].SLAType = nil, ""
+					}
+					rule := domain.SLARule{ID: id, TargetMinutes: sla.TargetMinutes, BusinessHours: sla.BusinessHours}
+					recordSLAChange(data, data.Issues[issueIndex], rule, sla, "removed", now, nil)
+				}
+			}
+		}
 		data.SLARules = slices.DeleteFunc(data.SLARules, func(item domain.SLARule) bool { return item.ID == id })
 		if before == len(data.SLARules) {
 			return errNotFound
 		}
 		data.IssueSLAs = slices.DeleteFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.RuleID == id })
+		data.SLAEvents = slices.DeleteFunc(data.SLAEvents, func(item domain.SLAEvent) bool { return removed[item.SLAID] })
+		for issueIndex := range data.Issues {
+			applySLARules(data, &data.Issues[issueIndex], now)
+		}
 		appendAudit(data, "deleted", "sla_rule", id, nil)
 		return nil
 	})
@@ -2248,6 +2285,8 @@ func slaMatches(rule domain.SLARule, issue domain.Issue) bool {
 			if issue.Project == nil || issue.Project.ID != value {
 				return false
 			}
+		default:
+			return false
 		}
 	}
 	return true
@@ -2265,7 +2304,8 @@ func slaWinner(rules []domain.SLARule, issue domain.Issue) *domain.SLARule {
 }
 
 func newIssueSLA(data *domain.Bootstrap, issue domain.Issue, rule domain.SLARule, now time.Time) domain.IssueSLA {
-	value := domain.IssueSLA{ID: idgen.New("issue_sla_"), IssueID: issue.ID, RuleID: rule.ID, StartedAt: now, DueAt: slaDeadline(data, issue, rule, now, rule.TargetMinutes), RemainingMinutes: rule.TargetMinutes, Status: "active"}
+	started := slaStartedAt(issue, rule, now)
+	value := domain.IssueSLA{ID: idgen.New("issue_sla_"), IssueID: issue.ID, RuleID: rule.ID, StartedAt: started, DueAt: slaDeadline(data, issue, rule, started, rule.TargetMinutes), RemainingMinutes: rule.TargetMinutes, TargetMinutes: rule.TargetMinutes, BusinessHours: rule.BusinessHours, StartMode: normalizedSLAStartMode(rule.StartMode), Status: "active"}
 	if slices.Contains(rule.PauseStatuses, issue.State.ID) || slices.Contains(rule.PauseStatuses, issue.State.Type) {
 		value.PausedAt, value.Status = &now, "paused"
 	}
@@ -2277,13 +2317,46 @@ func applySLARules(data *domain.Bootstrap, issue *domain.Issue, now time.Time) {
 		return
 	}
 	winner := slaWinner(data.SLARules, *issue)
+	for index := range data.IssueSLAs {
+		sla := &data.IssueSLAs[index]
+		if sla.IssueID == issue.ID && sla.Manual && sla.RuleID == "" {
+			if sla.Status == "removed" {
+				if winner != nil && !winner.Removes() {
+					sla.Manual = false
+					continue
+				}
+				return
+			}
+			rule := manualSLARule(*sla)
+			if issue.State.Type == "canceled" {
+				sla.Status = "removed"
+				recordSLAChange(data, *issue, rule, *sla, "removed", now, nil)
+			} else {
+				advanceIssueSLA(data, *issue, rule, sla, now)
+			}
+			return
+		}
+	}
 	for _, rule := range data.SLARules {
 		index := slices.IndexFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.IssueID == issue.ID && item.RuleID == rule.ID })
 		// Only the winning rule keeps an SLA on the issue, and only when it adds one.
-		matches := winner != nil && winner.ID == rule.ID && !rule.Removes()
+		matches := winner != nil && winner.ID == rule.ID && !rule.Removes() && issue.State.Type != "canceled"
 		if !matches {
-			if index >= 0 && data.IssueSLAs[index].Status != "completed" {
+			if index >= 0 {
+				if data.IssueSLAs[index].Manual {
+					issue.SLABreachesAt, issue.SLAType = nil, ""
+				}
+				data.IssueSLAs[index].Manual = false
+			}
+			if index >= 0 && data.IssueSLAs[index].Status != "removed" && (data.IssueSLAs[index].Status != "completed" || issue.State.Type == "canceled") {
 				data.IssueSLAs[index].Status = "removed"
+				recordSLAChange(data, *issue, rule, data.IssueSLAs[index], "removed", now, nil)
+			}
+			continue
+		}
+		if index >= 0 && data.IssueSLAs[index].Manual {
+			if data.IssueSLAs[index].Status != "removed" {
+				advanceIssueSLA(data, *issue, manualSLARule(data.IssueSLAs[index]), &data.IssueSLAs[index], now)
 			}
 			continue
 		}
@@ -2291,60 +2364,20 @@ func applySLARules(data *domain.Bootstrap, issue *domain.Issue, now time.Time) {
 			// The issue matches again after its SLA was taken away (for example it was
 			// escalated back), so the clock starts over.
 			data.IssueSLAs[index] = newIssueSLA(data, *issue, rule, now)
-			recordSLAEvent(data, issue.ID, data.IssueSLAs[index].ID, "started", now)
+			recordSLAChange(data, *issue, rule, data.IssueSLAs[index], "started", now, nil)
 			if data.IssueSLAs[index].Status == "paused" {
 				recordSLAEvent(data, issue.ID, data.IssueSLAs[index].ID, "paused", now)
 			}
-			continue
-		}
-		if index < 0 {
+		} else if index < 0 {
 			value := newIssueSLA(data, *issue, rule, now)
 			data.IssueSLAs = append(data.IssueSLAs, value)
-			recordSLAEvent(data, issue.ID, value.ID, "started", now)
+			index = len(data.IssueSLAs) - 1
+			recordSLAChange(data, *issue, rule, value, "started", now, nil)
 			if value.Status == "paused" {
 				recordSLAEvent(data, issue.ID, value.ID, "paused", now)
 			}
-			continue
 		}
-		sla := &data.IssueSLAs[index]
-		paused := slices.Contains(rule.PauseStatuses, issue.State.ID) || slices.Contains(rule.PauseStatuses, issue.State.Type)
-		if paused && sla.PausedAt == nil {
-			if rule.BusinessHours {
-				sla.RemainingMinutes = businessMinutes(now, sla.DueAt, slaTimezone(data, *issue), slaWorkWeek(data))
-			}
-			sla.PausedAt, sla.Status = &now, "paused"
-			recordSLAEvent(data, issue.ID, sla.ID, "paused", now)
-		}
-		if !paused && sla.PausedAt != nil {
-			minutes := int(now.Sub(*sla.PausedAt).Minutes())
-			sla.PausedMinutes += max(0, minutes)
-			if rule.BusinessHours {
-				sla.DueAt = slaDeadline(data, *issue, rule, now, sla.RemainingMinutes)
-			} else {
-				sla.DueAt = sla.DueAt.Add(time.Duration(max(0, minutes)) * time.Minute)
-			}
-			sla.PausedAt, sla.Status = nil, "active"
-			recordSLAEvent(data, issue.ID, sla.ID, "resumed", now)
-		}
-		if issue.State.Type == "completed" || issue.State.Type == "canceled" {
-			if sla.CompletedAt == nil {
-				sla.CompletedAt, sla.Status = &now, "completed"
-				recordSLAEvent(data, issue.ID, sla.ID, "completed", now)
-			}
-			continue
-		}
-		if sla.PausedAt == nil {
-			sla.RemainingMinutes = int(sla.DueAt.Sub(now).Minutes())
-			if rule.BusinessHours {
-				sla.RemainingMinutes = businessMinutes(now, sla.DueAt, slaTimezone(data, *issue), slaWorkWeek(data))
-			}
-			if now.After(sla.DueAt) && sla.BreachedAt == nil {
-				sla.BreachedAt, sla.Status = &now, "breached"
-				recordSLAEvent(data, issue.ID, sla.ID, "breached", now)
-				activity := appendActivity(data, issue.ID, "issue.sla_breached", data.Viewer, map[string]string{"slaId": sla.ID, "ruleId": rule.ID})
-				appendIssueNotifications(data, *issue, activity, nil)
-			}
-		}
+		advanceIssueSLA(data, *issue, rule, &data.IssueSLAs[index], now)
 	}
 }
 
@@ -2392,7 +2425,17 @@ func (s *server) updateSLASettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result map[string]any
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "sla_settings.updated", "workspace", input, func(data *domain.Bootstrap) error {
+	scope := store.WithMutationScope(r.Context(), store.MutationScope{Resolve: func(data domain.Bootstrap) store.MutationScope {
+		enabled := slaEnabled(&data)
+		if input.Enabled != nil {
+			enabled = *input.Enabled
+		}
+		if enabled {
+			return slaIssueScope(data, data.SLARules)
+		}
+		return store.MutationScope{}
+	}})
+	err := s.store.MutateWorkspace(scope, workspaceKey(r), "sla_settings.updated", "workspace", input, func(data *domain.Bootstrap) error {
 		if data.Settings == nil {
 			data.Settings = map[string]any{}
 		}
@@ -2406,7 +2449,15 @@ func (s *server) updateSLASettings(w http.ResponseWriter, r *http.Request) {
 		if stored, ok := data.Settings["sla"]; ok && unchangedJSON(jsonSnapshot(stored), result) {
 			return store.ErrNoMutation
 		}
+		previousWeek := slaWorkWeek(data)
 		data.Settings["sla"] = result
+		now := time.Now().UTC()
+		for index := range data.Issues {
+			if previousWeek != slaWorkWeek(data) && slaEnabled(data) {
+				retimeBusinessSLAs(data, data.Issues[index], now)
+			}
+			applySLARules(data, &data.Issues[index], now)
+		}
 		appendAudit(data, "updated", "sla_settings", "workspace", result)
 		return nil
 	})
@@ -4028,12 +4079,14 @@ func csvText(value string) string {
 
 func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 	// Page loads run this check; read only what it inspects.
-	data, ok := s.store.WorkspaceMetadataFields(key, "settings", "issueSlas", "slaRules", "trash", "projects", "projectUpdates")
+	data, ok := s.store.WorkspaceMetadataFields(key, "settings", "issueSlas", "slaRules", "slaEvents", "trash", "projects", "projectUpdates")
 	if !ok {
 		return
 	}
 	now := time.Now().UTC()
-	needsMutation := slaEnabled(&data) && slices.ContainsFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.Status == "active" && now.After(item.DueAt) })
+	needsMutation := slaEnabled(&data) && slices.ContainsFunc(data.IssueSLAs, func(item domain.IssueSLA) bool {
+		return item.Status == "active" && (!now.Before(item.DueAt) || item.HighRiskAt != nil && !now.Before(*item.HighRiskAt) && !slaEventRecorded(&data, item.ID, "high_risk"))
+	})
 	needsMutation = needsMutation || slices.ContainsFunc(data.Trash, func(item domain.TrashEntry) bool { return trashExpired(item, now) })
 	settings, _ := data.Settings["projectUpdates"].(map[string]any)
 	defaultCadence := intFromAny(settings["cadenceDays"])

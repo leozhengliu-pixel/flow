@@ -91,9 +91,10 @@ func (diff PulseDiff) Empty() bool {
 	return diff.Status == nil && diff.Priority == nil && diff.Lead == nil && diff.StartDate == nil && diff.TargetDate == nil && diff.ProgressSince == nil && len(diff.Milestones) == 0 && diff.Projects == nil && diff.Initiatives == nil
 }
 
-// NotificationPayload carries structured data for notifications that are not
-// tied to one issue. Pulse summaries list the updates they cover.
+// NotificationPayload carries the structured context of system notifications.
 type NotificationPayload struct {
+	EventType   string           `json:"eventType,omitempty"`
+	SLAID       string           `json:"slaId,omitempty"`
 	Schedule    string           `json:"schedule,omitempty"`
 	WindowStart *time.Time       `json:"windowStart,omitempty"`
 	WindowEnd   *time.Time       `json:"windowEnd,omitempty"`

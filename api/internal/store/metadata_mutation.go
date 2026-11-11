@@ -193,7 +193,7 @@ func metadataOnlyMutation(event string, payload any) bool {
 		"custom_emoji.created", "custom_emoji.updated", "dashboard.created", "dashboard.deleted", "dashboard.share.updated",
 		"dashboard.subscription.updated", "meeting.created", "meeting.deleted", "post.created", "post.deleted", "export.retried",
 		"scim.enabled", "scim.token_rotated", "workspace_invite_link.disabled", "workspace_invite_link.rotated", "ask.deleted",
-		"review.commented", "review.submitted", "review.reaction_toggled", "review.comment_attachment_created", "sla_rule.deleted", "sla_settings.updated", "workspace.settings_updated":
+		"review.commented", "review.submitted", "review.reaction_toggled", "review.comment_attachment_created", "workspace.settings_updated":
 		return true
 	case "favorite.added", "favorite.removed", "favorite.updated",
 		"favorite_folder.created", "favorite_folder.updated", "favorite_folder.deleted",
