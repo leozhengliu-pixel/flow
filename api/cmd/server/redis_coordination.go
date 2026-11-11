@@ -145,7 +145,11 @@ func (s *server) applyRemoteEvents(workspace string) {
 				one = true
 			}
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		// The reload runs in the background, so it gets the reload budget, not a
+		// request's: a large workspace can take longer than 5s to decode under
+		// load, and a failed reload makes every client here resync (refetch
+		// the bootstrap) at once, which adds the load that slowed it down.
+		ctx, cancel := context.WithTimeout(context.Background(), workspaceReloadTimeout)
 		var err error
 		// Read before reloading: the reload includes every change it counts.
 		version, versionErr := int64(0), error(nil)

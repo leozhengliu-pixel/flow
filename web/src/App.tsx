@@ -361,6 +361,8 @@ import { PeopleProvider } from '@/components/property/people-provider'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
 import { applyLabelStateRename, applyRealtimePatch, canApplyRealtimePatch, isLabelStateRenameEvent } from '@/store/apply-realtime-patch'
 import { classifyRealtimeEvent } from '@/lib/realtime-dispatch'
+import { createRealtimeCoalescer } from '@/lib/realtime-bootstrap-coalescer'
+
 import { applyMemberStatusChange, memberStatusChange } from '@/lib/member-status-realtime'
 import { ActiveTeamProvider } from '@/lib/active-team'
 import { TeamPagesLayout } from '@/components/team/team-pages-layout'
@@ -373,6 +375,9 @@ import type { WorkspaceSecondaryKind } from '@/components/workspace/workspace-se
 import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, teamIssueScope, type IssueRefreshScope } from '@/lib/workspace-metadata-refresh'
 import { ISSUE_QUERY_INVALIDATED } from '@/components/issue-explorer/paged-issue-invalidation'
 import { canInviteMembers, setViewerCanInvite } from '@/lib/invite-navigation'
+
+// Realtime metadata reloads: one at a time per workspace, spread across tabs (realtime-bootstrap-coalescer).
+const realtimeMetadataBootstrap = createRealtimeCoalescer((workspaceKey: string) => fetchPagedBootstrap(workspaceKey))
 
 const ReleaseEditorDialog = lazy(() => import('@/components/releases/release-editor-dialog').then(module => ({default:module.ReleaseEditorDialog})))
 const IssueLoadingPreview = lazy(() => import('@/components/issue/issue-loading-preview').then(module => ({default:module.IssueLoadingPreview})))
@@ -409,8 +414,8 @@ function App() {
   // never rewrite issue records. Refresh the metadata projection and keep the
   // loaded issues instead of downloading every issue again; only issues a
   // release completion automation may have moved are refetched.
-  const reloadWorkspaceMetadata = useCallback(async (workspaceKey: string): Promise<BootstrapData> => {
-    const next = await fetchPagedBootstrap(workspaceKey);
+  const reloadWorkspaceMetadata = useCallback(async (workspaceKey: string, load: (workspaceKey: string) => Promise<BootstrapData> = fetchPagedBootstrap): Promise<BootstrapData> => {
+    const next = await load(workspaceKey);
     if (next.viewer.id !== sessionViewerRef.current) return next;
     const loaded = dataRef.current;
     const releasedIssueIds = loaded?.workspace.urlKey === workspaceKey && !loaded.issueCollectionPaged ? newlyReleasedIssueIds(loaded, next) : [];
@@ -1564,11 +1569,11 @@ function App() {
       const action = classifyRealtimeEvent(event, Boolean(data.issueCollectionPaged));
       if (isLabelStateRenameEvent(event)) {
         setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? applyLabelStateRename(current, event) : current);
-        await reloadWorkspaceMetadata(workspace);
+        await reloadWorkspaceMetadata(workspace, realtimeMetadataBootstrap);
         return;
       }
       if (action.kind === 'metadata' && metadataOnlyRealtimeEvent(event)) {
-        await reloadWorkspaceMetadata(workspace);
+        await reloadWorkspaceMetadata(workspace, realtimeMetadataBootstrap);
         const projectId = event.aggregateId;
         if (event.type === 'project.update_created' && projectId) {
           setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? archiveProjectUpdateReminders(current, projectId) : current);
@@ -1614,7 +1619,7 @@ function App() {
       if(checkVisibility && /resync|member|permission|shared|unshared/.test(event.type))setDetailAccessPending(workspace);
       let next:BootstrapData, visibility:{ids:string[]}|undefined;
       try {
-        [next,visibility]=await Promise.all([slim ? fetchPagedBootstrap(workspace) : fetchBootstrap(workspace,bootstrapRefreshProjection({routeProjection:bootstrapProjection,loadedRequestKey:loadedBootstrapRequestKey.current,viewerId,workspaceKey:workspace})),checkVisibility ? fetchVisibleIssueIds(workspace,checkedIds) : Promise.resolve(undefined)]);
+        [next,visibility]=await Promise.all([slim ? realtimeMetadataBootstrap(workspace) : fetchBootstrap(workspace,bootstrapRefreshProjection({routeProjection:bootstrapProjection,loadedRequestKey:loadedBootstrapRequestKey.current,viewerId,workspaceKey:workspace})),checkVisibility ? fetchVisibleIssueIds(workspace,checkedIds) : Promise.resolve(undefined)]);
       } catch(error) {
         if(checkVisibility && sessionViewerRef.current===viewerId)setDetailAccessPending(workspace);
         throw error;

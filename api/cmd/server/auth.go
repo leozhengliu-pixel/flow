@@ -1062,9 +1062,10 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	documentCommentWrite := len(parts) >= 5 && parts[1] == "documents" && parts[3] == "comments" && (r.Method == http.MethodPatch || r.Method == http.MethodDelete)
-	if !isIssueRecordsRequest(r) && !resourcePreferenceRequest(r) && !documentCommentWrite {
-		// Below, the projection is only read: the handler may take it
+	if (r.Method == http.MethodGet || r.Method == http.MethodHead) && !isIssueRecordsRequest(r) && !resourcePreferenceRequest(r) && !documentCommentWrite {
+		// Below, the projection is only read: a read handler may take it
 		// instead of building the same one again (request_metadata.go).
+		// Writes rebuild it, since they read the state around their change.
 		handOffPagedMetadata(r, workspace, userID, data)
 	}
 	if resourcePreferenceRequest(r) {

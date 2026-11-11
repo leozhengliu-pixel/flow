@@ -479,3 +479,256 @@ func TestLoadBootstrapProfile(t *testing.T) {
 		}
 	}
 }
+
+// TestLoadUsers models users of the web client against one reading replica
+// while another replica commits metadata changes: page load (bootstrap,
+// notifications, issue list), a presence heartbeat every 20s, a navigation
+// read now and then, and one coalesced metadata reload (0-1s spread, plus a
+// visibility check) per change the writer makes. It reports memory, latency,
+// errors, busy (503) answers and how long a change takes to reach every user.
+//
+// FLOW_LOAD_USERS (100), FLOW_LOAD_DURATION (2m), FLOW_LOAD_CHANGE_EVERY (10s).
+func TestLoadUsers(t *testing.T) {
+	users := loadEnvInt("FLOW_LOAD_USERS", 100)
+	duration := loadEnvDuration("FLOW_LOAD_DURATION", 2*time.Minute)
+	changeEvery := loadEnvDuration("FLOW_LOAD_CHANGE_EVERY", 10*time.Second)
+	peers := newPeerServers(t)
+	base, other := peers.first.URL, peers.second.URL
+	admin := peerAdmin(t, base)
+	suffix := fmt.Sprint(time.Now().UnixNano() % 100000)
+	teamsURL := base + "/api/workspaces/test-workspace/teams"
+	teams := []domain.Team{}
+	for index, private := range []bool{false, false, true, true} {
+		teams = append(teams, authRequest[domain.Team](t, admin, http.MethodPost, teamsURL, map[string]any{"name": fmt.Sprintf("Users Team %d %s", index, suffix), "key": fmt.Sprintf("U%c%s", 'A'+index, suffix[len(suffix)-3:]), "private": private}, "", http.StatusCreated))
+	}
+	teamIDs := []string{teams[0].ID, teams[1].ID, teams[2].ID, teams[3].ID}
+	accounts := []*http.Client{admin}
+	for index := range 4 {
+		role, joined := "member", []string{teams[index%2].ID}
+		switch index {
+		case 0:
+			joined = append(joined, teams[2].ID)
+		case 1:
+			joined = append(joined, teams[3].ID)
+		case 3:
+			role, joined = "guest", []string{teams[1].ID}
+		}
+		client, _ := joinByInvitation(t, base, admin, fmt.Sprintf("Users Person %d", index), fmt.Sprintf("users-person-%d-%s@example.com", index, suffix), role, joined...)
+		accounts = append(accounts, client)
+	}
+	issueIDs := []string{}
+	for index := range 60 {
+		issue := authRequest[domain.Issue](t, admin, http.MethodPost, base+"/api/issues", map[string]any{"title": fmt.Sprintf("Users issue %d", index), "teamId": teamIDs[index%len(teamIDs)]}, "test-workspace", http.StatusCreated)
+		issueIDs = append(issueIDs, issue.ID)
+	}
+	if err := peers.stores[1].SeedSyntheticMetadata(context.Background(), "test-workspace", store.SyntheticMetadata{
+		Projects: 2321, ProjectBytes: 12000, Trash: 210, TrashBytes: 41000, Documents: 78, DocumentBytes: 64000, Conversations: 400, ConversationBytes: 2000, TeamIDs: teamIDs,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := peers.stores[0].ReloadWorkspace(context.Background(), "test-workspace"); err != nil {
+		t.Fatal(err)
+	}
+	visibilityBody, _ := json.Marshal(map[string]any{"ids": issueIDs})
+	presenceBody := []byte(`{"clientId":"load","route":"/test-workspace/team/x/active","active":true}`)
+
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), duration)
+	defer cancel()
+	peak := &loadMemPeak{}
+	samplerDone := make(chan struct{})
+	go func() {
+		defer close(samplerDone)
+		ticker := time.NewTicker(25 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				peak.sample(start)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	transport := &http.Transport{MaxIdleConnsPerHost: users * 2, MaxConnsPerHost: 0}
+	results := make(chan loadResult, 1<<16)
+	do := func(client *http.Client, name, method, path string, body []byte) int {
+		var reader io.Reader
+		if body != nil {
+			reader = bytes.NewReader(body)
+		}
+		request, _ := http.NewRequest(method, base+path, reader)
+		request.Header.Set("X-Workspace-Key", "test-workspace")
+		if body != nil {
+			request.Header.Set("Content-Type", "application/json")
+		}
+		began := time.Now()
+		response, err := client.Do(request)
+		result := loadResult{route: name, err: err != nil}
+		if err == nil {
+			result.status = response.StatusCode
+			_, _ = io.Copy(io.Discard, response.Body)
+			response.Body.Close()
+		}
+		result.duration = time.Since(began)
+		results <- result
+		return result.status
+	}
+	// Bootstrap the way the web client does: retry a busy answer after its Retry-After.
+	bootstrap := func(client *http.Client) bool {
+		for attempt := 1; attempt <= 5 && ctx.Err() == nil; attempt++ {
+			status := do(client, "bootstrap", http.MethodGet, "/api/issue-records/bootstrap", nil)
+			if status == http.StatusOK {
+				return true
+			}
+			if status != http.StatusServiceUnavailable {
+				return false
+			}
+			time.Sleep(time.Duration(float64(2*time.Second) * (0.75 + 0.5*float64(attempt%3)/2)))
+		}
+		return false
+	}
+
+	// Changes fan out to every user like realtime events do.
+	type change struct {
+		at time.Time
+		n  int
+	}
+	subscribers := make([]chan change, users)
+	for index := range subscribers {
+		subscribers[index] = make(chan change, 64)
+	}
+	var freshMu sync.Mutex
+	freshness := []time.Duration{}
+	var wg sync.WaitGroup
+	for index := range users {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			jar := accounts[index%len(accounts)].Jar
+			client := &http.Client{Jar: jar, Transport: transport, Timeout: 2 * time.Minute}
+			// Users arrive over the first 20% of the run (a morning ramp).
+			select {
+			case <-time.After(time.Duration(float64(duration) * 0.2 * float64(index) / float64(users))):
+			case <-ctx.Done():
+				return
+			}
+			bootstrap(client)
+			do(client, "notifications", http.MethodGet, "/api/notifications?limit=50", nil)
+			do(client, "issues", http.MethodGet, "/api/issue-records?limit=50", nil)
+			heartbeat := time.NewTicker(20 * time.Second)
+			defer heartbeat.Stop()
+			navigate := time.NewTicker(time.Duration(30+index%30) * time.Second)
+			defer navigate.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-heartbeat.C:
+					do(client, "presence", http.MethodPost, "/api/realtime/presence", presenceBody)
+				case <-navigate.C:
+					do(client, "project", http.MethodGet, fmt.Sprintf("/api/projects/lt-project-%05d", index%2321), nil)
+					do(client, "issues", http.MethodGet, "/api/issue-records?limit=50", nil)
+				case event := <-subscribers[index]:
+					// Coalesce: drop events already queued behind this one.
+					for drained := false; !drained; {
+						select {
+						case newer := <-subscribers[index]:
+							event = newer
+						default:
+							drained = true
+						}
+					}
+					time.Sleep(time.Duration(int64(time.Second) * int64(index%1000) / 1000))
+					ok := bootstrap(client)
+					do(client, "visibility", http.MethodPost, "/api/issue-records/visibility", visibilityBody)
+					if ok {
+						freshMu.Lock()
+						freshness = append(freshness, time.Since(event.at))
+						freshMu.Unlock()
+					}
+					do(client, "notifications", http.MethodGet, "/api/notifications?limit=50", nil)
+				}
+			}
+		}()
+	}
+	changes := 0
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ticker := time.NewTicker(changeEvery)
+		defer ticker.Stop()
+		for n := 0; ; n++ {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			raw, _ := json.Marshal(map[string]any{"description": fmt.Sprintf("Users change %d", n)})
+			request, _ := http.NewRequest(http.MethodPatch, other+"/api/workspaces/test-workspace/teams/"+teamIDs[0], bytes.NewReader(raw))
+			request.Header.Set("Content-Type", "application/json")
+			if response, err := admin.Do(request); err == nil {
+				_, _ = io.Copy(io.Discard, response.Body)
+				response.Body.Close()
+			}
+			changes++
+			event := change{at: time.Now(), n: n}
+			for _, subscriber := range subscribers {
+				select {
+				case subscriber <- event:
+				default:
+				}
+			}
+		}
+	}()
+
+	collected := map[string][]time.Duration{}
+	statuses := map[string]map[int]int{}
+	collectDone := make(chan struct{})
+	go func() {
+		defer close(collectDone)
+		for result := range results {
+			collected[result.route] = append(collected[result.route], result.duration)
+			if statuses[result.route] == nil {
+				statuses[result.route] = map[int]int{}
+			}
+			code := result.status
+			if result.err {
+				code = -1
+			}
+			statuses[result.route][code]++
+		}
+	}()
+	wg.Wait()
+	close(results)
+	<-collectDone
+	<-samplerDone
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+	runtime.GC()
+	time.Sleep(2 * time.Second)
+	runtime.GC()
+	var settled runtime.MemStats
+	runtime.ReadMemStats(&settled)
+	report := map[string]any{
+		"users": users, "durationSeconds": duration.Seconds(), "changeEvery": changeEvery.String(), "changes": changes,
+		"peakHeapInuseMiB": peak.heapInuse >> 20, "maxRSSMiB": maxRSSBytes() >> 20, "baselineHeapInuseMiB": before.HeapInuse >> 20,
+		"settledHeapInuseMiB": settled.HeapInuse >> 20, "totalAllocGiB": float64(after.TotalAlloc-before.TotalAlloc) / (1 << 30),
+		"numGC": after.NumGC - before.NumGC, "gcPauseTotalMs": float64(after.PauseTotalNs-before.PauseTotalNs) / 1e6,
+		"freshnessP50s": percentile(freshness, 0.5).Seconds(), "freshnessP95s": percentile(freshness, 0.95).Seconds(), "freshnessMaxs": percentile(freshness, 1).Seconds(), "refreshes": len(freshness),
+	}
+	routeReport := map[string]any{}
+	for name, values := range collected {
+		routeReport[name] = map[string]any{"count": len(values), "statuses": statuses[name], "p50ms": percentile(values, 0.5).Milliseconds(), "p95ms": percentile(values, 0.95).Milliseconds(), "maxms": percentile(values, 1).Milliseconds()}
+	}
+	report["routes"] = routeReport
+	raw, _ := json.MarshalIndent(report, "", "  ")
+	t.Logf("users report:\n%s", raw)
+	if path := os.Getenv("FLOW_LOAD_REPORT"); path != "" {
+		_ = os.WriteFile(path, raw, 0o644)
+	}
+}
