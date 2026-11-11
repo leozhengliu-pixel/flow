@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 )
 
 // Count statements at the driver, including UPDATEs that match no rows.
@@ -82,9 +83,16 @@ func scaleP02Store(t *testing.T) (*SQLiteStore, *scaleP02SQL) {
 
 func scaleP02Config(t *testing.T) DatabaseConfig {
 	t.Helper()
-	config := DatabaseConfig{Driver: "sqlite", Path: filepath.Join(t.TempDir(), "sessions.db"), FixtureProfile: "test", FixturePassword: "test-password", MaxOpenConns: 1}
-	if databaseDriver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL"); databaseDriver != "" && databaseURL != "" {
+	config := DatabaseConfig{Driver: "sqlite", Path: filepath.Join(t.TempDir(), "sessions.db"), MaxOpenConns: 1}
+	databaseDriver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
+	if (databaseDriver == "") != (databaseURL == "") {
+		t.Fatal("P02 database tests require both FLOW_TEST_DATABASE_DRIVER and FLOW_TEST_DATABASE_URL")
+	}
+	if databaseDriver != "" {
 		config.Driver, config.URL = databaseDriver, databaseURL
+		if databaseDriver == "sqlite" {
+			config.Path = databaseURL
+		}
 	}
 	return config
 }
@@ -98,7 +106,7 @@ func scaleP02StoreAt(t *testing.T, config DatabaseConfig) (*SQLiteStore, *scaleP
 	dsn := config.URL
 	switch config.Driver {
 	case "sqlite":
-		dsn = config.Path + "?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
+		dsn = sqliteDSN(config.Path)
 	case "mysql":
 		dsn, err = mysqlDSN(config.URL)
 		if err != nil {
@@ -117,11 +125,31 @@ func scaleP02StoreAt(t *testing.T, config DatabaseConfig) (*SQLiteStore, *scaleP
 	return repo, stats
 }
 
+func scaleP02User(t *testing.T, repo *SQLiteStore) domain.User {
+	t.Helper()
+	user, verification, err := repo.Register(t.Context(), "P02 session user", idgen.New("scale-p02-store-")+"@example.test", "test-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if err := repo.EraseAccount(ctx, user.ID); err != nil {
+			t.Errorf("clean up owned account: %v", err)
+		}
+	})
+	if err := repo.VerifyEmail(t.Context(), verification); err != nil {
+		t.Fatal(err)
+	}
+	user.EmailVerified = true
+	return user
+}
+
 func TestScaleP02SessionTouchMeasurement(t *testing.T) {
 	t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "")
 	repo, stats := scaleP02Store(t)
 	ctx := t.Context()
-	user := repo.Bootstrap().Viewer
+	user := scaleP02User(t, repo)
 	_, token, err := repo.createSession(ctx, user)
 	if err != nil {
 		t.Fatal(err)
@@ -189,7 +217,7 @@ func TestScaleP02SessionTouchBoundaries(t *testing.T) {
 
 func scaleP02Session(t *testing.T, repo *SQLiteStore) string {
 	t.Helper()
-	return scaleP02SessionFor(t, repo, repo.Bootstrap().Viewer)
+	return scaleP02SessionFor(t, repo, scaleP02User(t, repo))
 }
 
 func scaleP02SessionFor(t *testing.T, repo *SQLiteStore, user domain.User) string {
@@ -222,7 +250,10 @@ func TestScaleP02SessionTouchWritesAndFailures(t *testing.T) {
 	t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "")
 	repo, stats := scaleP02Store(t)
 	token := scaleP02Session(t, repo)
-	user := repo.Bootstrap().Viewer
+	user, err := repo.AuthenticateSession(t.Context(), token)
+	if err != nil {
+		t.Fatal(err)
+	}
 	old := time.Now().Add(-2 * time.Minute).UTC().Format(time.RFC3339Nano)
 	for _, raw := range []string{old, "invalid", ""} {
 		scaleP02SetSeen(t, repo, token, raw)
@@ -268,14 +299,7 @@ func TestScaleP02SessionAuthenticationStaysLive(t *testing.T) {
 			t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", mode)
 			repo, stats := scaleP02Store(t)
 			ctx := t.Context()
-			user, verification, err := repo.Register(ctx, "Session lifecycle", fmt.Sprintf("p02-%d@example.test", time.Now().UnixNano()), "test-password")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := repo.VerifyEmail(ctx, verification); err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _, _ = repo.db.ExecContext(context.Background(), `DELETE FROM auth_users WHERE id=?`, user.ID) })
+			user := scaleP02User(t, repo)
 			for _, action := range []string{"password-change", "logout", "revoke", "revoke-others", "reset-password", "expired", "malformed-expiry", "duration", "inactive", "profile-change", "missing", "session-read-error", "user-read-error"} {
 				t.Run(action, func(t *testing.T) {
 					token := scaleP02SessionFor(t, repo, user)
@@ -443,7 +467,7 @@ func TestScaleP02SessionTouchSustainedWriteRate(t *testing.T) {
 	t.Setenv("FLOW_SESSION_TOUCH_INTERVAL", "")
 	repo, stats := scaleP02Store(t)
 	ctx := t.Context()
-	user := repo.Bootstrap().Viewer
+	user := scaleP02User(t, repo)
 	base := time.Now().UTC()
 	const sessions, seconds = 2000, 120
 	hashes := make([]string, sessions)

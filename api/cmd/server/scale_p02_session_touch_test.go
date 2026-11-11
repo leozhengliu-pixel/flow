@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
 	"flow/api/internal/store"
 )
 
@@ -77,33 +78,30 @@ func scaleP02Read(t *testing.T, client *http.Client, endpoint, workspace string)
 // Session activity is absent from these resource responses by contract.
 func TestScaleP02SessionTouchPermissionDifferential(t *testing.T) {
 	t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
-	for name, repo := range favoriteTabTestStores(t) {
-		t.Run(name, func(t *testing.T) { testScaleP02SessionTouchPermissionDifferential(t, repo) })
-	}
+	testScaleP02SessionTouchPermissionDifferential(t, scaleP02ServerStore(t))
 }
 
 func testScaleP02SessionTouchPermissionDifferential(t *testing.T, repo *store.SQLiteStore) {
 	suffix := fmt.Sprint(time.Now().UnixNano())
-	srv := &server{store: repo, uploadPath: t.TempDir()}
-	host := httptest.NewServer(newHandler(srv))
-	t.Cleanup(host.Close)
-	admin := peerAdmin(t, host.URL)
-	const workspace = "test-workspace"
+	fixture := scaleP02NewServerFixture(t, repo)
+	srv, host, admin := fixture.srv, fixture.host, fixture.admin
+	workspace := fixture.data.Workspace.URLKey
+	publicTeam := fixture.data.Teams[0].ID
 	base := host.URL
 	private := authRequest[domain.Team](t, admin, "POST", base+"/api/workspaces/"+workspace+"/teams", map[string]any{"name": "P02 private", "key": "PTP" + suffix[len(suffix)-5:], "private": true}, "", http.StatusCreated)
 	child := authRequest[domain.Team](t, admin, "POST", base+"/api/workspaces/"+workspace+"/teams", map[string]any{"name": "P02 child", "key": "PTC" + suffix[len(suffix)-5:], "parentTeamId": private.ID}, "", http.StatusCreated)
-	member, memberUser := joinByInvitation(t, base, admin, "P02 member", "p02-member-"+suffix+"@example.test", "member", "team_test", private.ID)
+	member, memberUser := fixture.join(t, "P02 member", "member", publicTeam, private.ID)
 	authRequest[any](t, admin, "PUT", base+"/api/workspaces/"+workspace+"/teams/"+private.ID+"/members/"+memberUser.ID, map[string]any{"member": true, "role": "owner"}, "", http.StatusNoContent)
-	outsider, _ := joinByInvitation(t, base, admin, "P02 outsider", "p02-outsider-"+suffix+"@example.test", "member", "team_test")
-	outsideAdmin, _ := joinByInvitation(t, base, admin, "P02 outside admin", "p02-admin-"+suffix+"@example.test", "admin", "team_test")
-	guest, guestUser := joinByInvitation(t, base, admin, "P02 guest", "p02-guest-"+suffix+"@example.test", "guest", "team_test")
+	outsider, _ := fixture.join(t, "P02 outsider", "member", publicTeam)
+	outsideAdmin, _ := fixture.join(t, "P02 outside admin", "admin", publicTeam)
+	guest, guestUser := fixture.join(t, "P02 guest", "guest", publicTeam)
 	// Persist new viewers' defaults: synthesized preferences carry the current
 	// time on every read, independently of session activity.
 	for _, client := range []*http.Client{member, outsider, outsideAdmin, guest} {
 		authRequest[domain.UserSettings](t, client, "PATCH", base+"/api/account/settings", map[string]any{"language": "en-US"}, workspace, http.StatusOK)
 		authRequest[domain.NotificationPreferences](t, client, "PATCH", base+"/api/notification-preferences", map[string]any{"emailFormat": "immediate"}, workspace, http.StatusOK)
 	}
-	public := repo.Bootstrap().Issues[0]
+	public := authRequest[domain.Issue](t, admin, "POST", base+"/api/issue-records", map[string]any{"title": "P02 public", "teamId": publicTeam}, workspace, http.StatusCreated)
 	hidden := authRequest[domain.Issue](t, admin, "POST", base+"/api/issue-records", map[string]any{"title": "P02 hidden", "teamId": private.ID}, workspace, http.StatusCreated)
 	shared := authRequest[domain.Issue](t, admin, "POST", base+"/api/issue-records", map[string]any{"title": "P02 shared", "teamId": private.ID}, workspace, http.StatusCreated)
 	inherited := authRequest[domain.Issue](t, admin, "POST", base+"/api/issue-records", map[string]any{"title": "P02 inherited", "teamId": child.ID}, workspace, http.StatusCreated)
@@ -111,27 +109,27 @@ func testScaleP02SessionTouchPermissionDifferential(t *testing.T, repo *store.SQ
 	project := authRequest[domain.Project](t, admin, "POST", base+"/api/projects", map[string]any{"name": "P02 old slug", "teamIds": []string{private.ID}}, workspace, http.StatusCreated)
 	authRequest[domain.Project](t, admin, "PATCH", base+"/api/projects/"+project.ID, map[string]string{"name": "P02 new slug"}, workspace, http.StatusOK)
 	other := authRequest[domain.Bootstrap](t, admin, "POST", base+"/api/workspaces", map[string]string{"name": "P02 other", "urlKey": "p02-other-" + suffix}, "", http.StatusCreated)
+	fixture.workspaces = append(fixture.workspaces, other.Workspace.URLKey)
 	if err := repo.MutateWorkspace(t.Context(), workspace, "issue.updated", public.ID, nil, func(data *domain.Bootstrap) error {
 		for i := range data.Issues {
 			if data.Issues[i].ID == public.ID {
 				data.Issues[i].SubIssueIDs = append(data.Issues[i].SubIssueIDs, hidden.ID)
-				data.Issues[i].Relations = append(data.Issues[i].Relations, domain.IssueRelation{ID: "p02-hidden-reference", Type: "related", IssueID: public.ID, RelatedIssueID: hidden.ID})
+				data.Issues[i].Relations = append(data.Issues[i].Relations, domain.IssueRelation{ID: idgen.New("p02-hidden-reference-"), Type: "related", IssueID: public.ID, RelatedIssueID: hidden.ID})
 			}
 		}
-		data.Activities[public.ID] = append(data.Activities[public.ID], domain.ActivityEvent{ID: "p02-hidden-actor", Type: "issue.updated", Actor: domain.User{ID: "p02-actor-outside-workspace", Name: "P02 actor"}})
+		data.Activities[public.ID] = append(data.Activities[public.ID], domain.ActivityEvent{ID: idgen.New("p02-hidden-actor-"), Type: "issue.updated", Actor: domain.User{ID: idgen.New("p02-actor-outside-workspace-"), Name: "P02 actor"}})
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
 	keyClients := map[string]*http.Client{}
-	keyIDs := []string{}
 	for _, item := range []struct {
 		name, restriction string
 		teams             []string
-	}{{"unrestricted", "all", nil}, {"selected-empty", "selected", []string{}}, {"selected-set", "selected", []string{"team_test"}}} {
+	}{{"unrestricted", "all", nil}, {"selected-empty", "selected", []string{}}, {"selected-set", "selected", []string{publicTeam}}} {
 		teams := item.teams
 		if item.name == "selected-empty" {
-			teams = []string{"team_test"}
+			teams = []string{publicTeam}
 		}
 		key := authRequest[struct {
 			Secret string        `json:"secret"`
@@ -153,15 +151,18 @@ func testScaleP02SessionTouchPermissionDifferential(t *testing.T, repo *store.SQ
 		}
 		client := &http.Client{Transport: issueReadKeyTransport{secret: key.Secret}}
 		keyClients[item.name] = client
-		keyIDs = append(keyIDs, key.Key.ID)
-		_ = scaleP02Read(t, client, base+"/api/issue-records", workspace)
+		if response := scaleP02Read(t, client, base+"/api/issue-records", workspace); response.status != http.StatusOK {
+			t.Fatalf("warm %s API key: status=%d", item.name, response.status)
+		}
+		// Finish each initial telemetry write before mutating the key collection
+		// again, then compare responses against the same stable key metadata.
+		waitForEvents(t, func() bool {
+			data, _ := repo.BootstrapFor(workspace)
+			return slices.ContainsFunc(data.APIKeys, func(candidate domain.APIKey) bool {
+				return candidate.ID == key.Key.ID && candidate.LastUsedAt != nil
+			})
+		})
 	}
-	// Let the existing API-key telemetry worker finish its first use before
-	// comparing responses that include key metadata.
-	waitForEvents(t, func() bool {
-		data, _ := repo.BootstrapFor(workspace)
-		return len(keyIDs) == 3 && slices.ContainsFunc(data.APIKeys, func(key domain.APIKey) bool { return key.ID == keyIDs[0] && key.LastUsedAt != nil }) && slices.ContainsFunc(data.APIKeys, func(key domain.APIKey) bool { return key.ID == keyIDs[1] && key.LastUsedAt != nil }) && slices.ContainsFunc(data.APIKeys, func(key domain.APIKey) bool { return key.ID == keyIDs[2] && key.LastUsedAt != nil })
-	})
 	type principal struct {
 		name                                     string
 		client                                   *http.Client
