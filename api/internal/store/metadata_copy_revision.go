@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"sync"
-	"sync/atomic"
 
 	"flow/api/internal/domain"
 )
@@ -67,11 +66,12 @@ type copyStamp struct {
 	revision    int64
 }
 
-var metadataDecodes atomic.Int64
-
-// WorkspaceMetadataDecodes counts the workspace metadata documents this
-// process decoded from the database (diagnostics and tests).
-func WorkspaceMetadataDecodes() int64 { return metadataDecodes.Load() }
+// WorkspaceMetadataDecodes counts the workspace metadata documents this store
+// decoded from the database (diagnostics and tests). The count is per store:
+// a process-wide one also counted the background reloads of other stores in
+// the same process (another test's servers), so a test could not tell its
+// own decodes apart.
+func (s *SQLiteStore) WorkspaceMetadataDecodes() int64 { return s.metadataDecodes.Load() }
 
 // metadataStampColumns selects a workspace_states row's stamp; its arguments
 // are the workspace key and cacheKindMetadata, before the row's condition.

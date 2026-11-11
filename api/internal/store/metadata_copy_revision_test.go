@@ -25,12 +25,12 @@ func copyRevisionPair(t *testing.T) (*SQLiteStore, *SQLiteStore, string) {
 }
 
 // countDecodes runs step and returns how many workspace metadata documents
-// it decoded.
-func countDecodes(t *testing.T, step func()) int64 {
+// repo decoded meanwhile.
+func countDecodes(t *testing.T, repo *SQLiteStore, step func()) int64 {
 	t.Helper()
-	before := WorkspaceMetadataDecodes()
+	before := repo.WorkspaceMetadataDecodes()
 	step()
-	return WorkspaceMetadataDecodes() - before
+	return repo.WorkspaceMetadataDecodes() - before
 }
 
 // renameStoredProject renames a project the way a writer without the
@@ -97,7 +97,7 @@ func hasCopyRevision(repo *SQLiteStore, workspace string) bool {
 // that is still current.
 func TestUnchangedMetadataRevisionSkipsTheDecode(t *testing.T) {
 	first, _, workspace := copyRevisionPair(t)
-	if n := countDecodes(t, func() {
+	if n := countDecodes(t, first, func() {
 		for range 3 {
 			if err := first.ReloadWorkspace(t.Context(), workspace); err != nil {
 				t.Fatal(err)
@@ -107,13 +107,13 @@ func TestUnchangedMetadataRevisionSkipsTheDecode(t *testing.T) {
 		t.Fatalf("reloads of an unchanged workspace decoded %d times", n)
 	}
 	var project string
-	if n := countDecodes(t, func() { project = raceProject(t, first, workspace) }); n != 0 {
+	if n := countDecodes(t, first, func() { project = raceProject(t, first, workspace) }); n != 0 {
 		t.Fatalf("a write on a current copy decoded %d times", n)
 	}
 	if !hasCopyRevision(first, workspace) {
 		t.Fatal("the write's copy has no revision")
 	}
-	if n := countDecodes(t, func() {
+	if n := countDecodes(t, first, func() {
 		raceProject(t, first, workspace)
 		if err := first.ReloadWorkspace(t.Context(), workspace); err != nil {
 			t.Fatal(err)
@@ -137,7 +137,7 @@ func TestMetadataChangeOnAnotherServerIsReloaded(t *testing.T) {
 	first, second, workspace := copyRevisionPair(t)
 	project := raceProject(t, first, workspace)
 	renameStoredProject(t, second, workspace, project, "Renamed elsewhere")
-	if n := countDecodes(t, func() {
+	if n := countDecodes(t, first, func() {
 		if err := first.ReloadWorkspace(t.Context(), workspace); err != nil {
 			t.Fatal(err)
 		}
@@ -150,7 +150,7 @@ func TestMetadataChangeOnAnotherServerIsReloaded(t *testing.T) {
 
 	// The next write reloads too, and keeps the other server's change.
 	other := raceProject(t, second, workspace)
-	if n := countDecodes(t, func() { raceProject(t, first, workspace) }); n != 1 {
+	if n := countDecodes(t, first, func() { raceProject(t, first, workspace) }); n != 1 {
 		t.Fatalf("write after another server's change decoded %d times, want 1", n)
 	}
 	if copyProjectName(t, first, workspace, other) == "" {
@@ -159,7 +159,7 @@ func TestMetadataChangeOnAnotherServerIsReloaded(t *testing.T) {
 
 	// So does a read snapshot, and every-workspace reload.
 	renameStoredProject(t, second, workspace, project, "Renamed again")
-	if n := countDecodes(t, func() {
+	if n := countDecodes(t, first, func() {
 		ctx, release, err := first.BeginWorkspaceRead(t.Context(), workspace)
 		if err != nil {
 			t.Fatal(err)
@@ -173,7 +173,7 @@ func TestMetadataChangeOnAnotherServerIsReloaded(t *testing.T) {
 	}); n != 1 {
 		t.Fatalf("read snapshot after a change decoded %d times, want 1", n)
 	}
-	if n := countDecodes(t, func() {
+	if n := countDecodes(t, first, func() {
 		if err := first.ReloadAllWorkspaces(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -184,7 +184,7 @@ func TestMetadataChangeOnAnotherServerIsReloaded(t *testing.T) {
 		t.Fatalf("copy after reloading every workspace has %q", name)
 	}
 	// Current again: the read snapshot shares the copy.
-	if n := countDecodes(t, func() {
+	if n := countDecodes(t, first, func() {
 		_, release, err := first.BeginWorkspaceRead(t.Context(), workspace)
 		if err != nil {
 			t.Fatal(err)
@@ -218,7 +218,7 @@ func TestInterleavedCommitLeavesNoStaleRevision(t *testing.T) {
 		if hasCopyRevision(first, workspace) {
 			t.Fatal("the write recorded a revision although another server committed in between")
 		}
-		if n := countDecodes(t, func() {
+		if n := countDecodes(t, first, func() {
 			if err := first.ReloadWorkspace(t.Context(), workspace); err != nil {
 				t.Fatal(err)
 			}
@@ -254,7 +254,7 @@ func TestInterleavedCommitLeavesNoStaleRevision(t *testing.T) {
 		first.db.commitHooks.Store(nil)
 		// The copy may carry the revision the write reached, but the stored
 		// one is past it: the next check reloads.
-		if n := countDecodes(t, func() {
+		if n := countDecodes(t, first, func() {
 			if err := first.ReloadWorkspace(t.Context(), workspace); err != nil {
 				t.Fatal(err)
 			}
@@ -280,7 +280,7 @@ func TestOtherCopyChangesForgetTheRevision(t *testing.T) {
 	if hasCopyRevision(first, workspace) {
 		t.Fatal("installWorkspace kept the revision")
 	}
-	if n := countDecodes(t, func() {
+	if n := countDecodes(t, first, func() {
 		if err := first.ReloadWorkspace(t.Context(), workspace); err != nil {
 			t.Fatal(err)
 		}

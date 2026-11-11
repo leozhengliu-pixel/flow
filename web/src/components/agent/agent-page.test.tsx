@@ -80,6 +80,9 @@ describe('agent page composer', () => {
     expect(streams.streamNewAgentSession).toHaveBeenCalled()
     // The finished chat is saved into the workspace data directly: no full workspace reload.
     expect(sessionChange).toHaveBeenCalledWith('session-1', expect.objectContaining({ id: 'session-1', messages: expect.arrayContaining([expect.objectContaining({ content: 'No bugs found.' })]) }))
+    // The generated title can land after the reply, so the new chat is re-read once its first poll is due (it stops
+    // here: the read fails). Waiting for it keeps that timer, which outlives the page, from reading during a later test.
+    await waitFor(() => expect(api.getAgentSession).toHaveBeenCalledWith('session-1'), { timeout: 5000 })
   })
 
   it('shows the sent message and a working state before the server answers', async () => {

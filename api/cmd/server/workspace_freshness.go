@@ -153,10 +153,13 @@ func (s *server) reloadWorkspaceTo(ctx context.Context, workspace string, target
 		// then threw the decoded copy away without recording the version, so
 		// the next request decoded the whole workspace again, and again, while
 		// the server was already short of memory. The requester still stops
-		// waiting at its own deadline and is served the copy it has.
+		// waiting at its own deadline and is served the copy it has. It does
+		// not outlive the store: closing it (shutdown) ends the reload, which
+		// then decodes nothing more.
 		go func() {
 			reloadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), workspaceReloadTimeout)
 			defer cancel()
+			defer context.AfterFunc(s.store.WorkerContext(), cancel)()
 			started := time.Now()
 			// Read the version first: the reload then includes every change it
 			// counts (a writer commits before it bumps the version).

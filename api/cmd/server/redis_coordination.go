@@ -54,7 +54,7 @@ func (s *server) startCoordination() {
 				// subscribed are gone, so reload and resync instead.
 				missed := resubscribed || subscribedBefore
 				subscribedBefore = true
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				ctx, cancel := context.WithTimeout(s.store.WorkerContext(), 10*time.Second)
 				err := s.store.ReloadAllWorkspaces(ctx)
 				cancel()
 				if err != nil {
@@ -148,8 +148,9 @@ func (s *server) applyRemoteEvents(workspace string) {
 		// The reload runs in the background, so it gets the reload budget, not a
 		// request's: a large workspace can take longer than 5s to decode under
 		// load, and a failed reload makes every client here resync (refetch
-		// the bootstrap) at once, which adds the load that slowed it down.
-		ctx, cancel := context.WithTimeout(context.Background(), workspaceReloadTimeout)
+		// the bootstrap) at once, which adds the load that slowed it down. A
+		// closed store (shutdown) ends it.
+		ctx, cancel := context.WithTimeout(s.store.WorkerContext(), workspaceReloadTimeout)
 		var err error
 		// Read before reloading: the reload includes every change it counts.
 		version, versionErr := int64(0), error(nil)

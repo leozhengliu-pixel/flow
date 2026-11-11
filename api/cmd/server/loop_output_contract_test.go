@@ -452,7 +452,13 @@ func TestLoopContractExtractionValidatesRetriesAndCaches(t *testing.T) {
 func TestLoopContractFallbackAndPersonOverrides(t *testing.T) {
 	provider := &fakeLoopProvider{}
 	srv, handler := newReliableLoopServer(t, provider)
-	srv.loopContractLive = true
+	// Each save also reads the contract in the background (after the debounce);
+	// parked here, so every read in this test is the one a request makes and
+	// the scripted replies go to it. Otherwise the instructions edit's review
+	// read (TestLoopStalePersonContractExtractsSuggestion) can still be running
+	// at the reset below, which then joins it (same text) instead of reading
+	// the scripted contract.
+	srv.loopContractLive, srv.loopContractDebounce = true, time.Hour
 	provider.contracts = []string{"I think it creates a document.", `tool:record_output_contract {"outputs":[{"kind":"page","operation":"create"}]}`}
 	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "每日总结", "instructions": loopDailyDocumentZH, "status": "published"}, http.StatusCreated)
 	analyzed := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/output-contract", nil, http.StatusOK)

@@ -31,15 +31,15 @@ type writeCost struct {
 	bytes   uint64
 }
 
-func measureWrite(t *testing.T, step func()) writeCost {
+func measureWrite(t *testing.T, peers peerServers, step func()) writeCost {
 	t.Helper()
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	decodes := store.WorkspaceMetadataDecodes()
+	decodes := peers.metadataDecodes()
 	step()
 	runtime.ReadMemStats(&after)
-	return writeCost{store.WorkspaceMetadataDecodes() - decodes, after.TotalAlloc - before.TotalAlloc}
+	return writeCost{peers.metadataDecodes() - decodes, after.TotalAlloc - before.TotalAlloc}
 }
 
 // writeLoadFixture is two replicas on the incident-size synthetic
@@ -137,9 +137,9 @@ func TestLoadWriteDecodes(t *testing.T) {
 	for _, phase := range phases {
 		var writer, reader writeCost
 		for index := range writes {
-			cost := measureWrite(t, func() { phase.write(index) })
+			cost := measureWrite(t, peers, func() { phase.write(index) })
 			writer.decodes, writer.bytes = writer.decodes+cost.decodes, writer.bytes+cost.bytes
-			cost = measureWrite(t, func() {
+			cost = measureWrite(t, peers, func() {
 				authRequest[domain.Issue](t, adminA, http.MethodGet, first+"/api/issue-records/"+issue.ID, nil, "test-workspace", http.StatusOK)
 			})
 			reader.decodes, reader.bytes = reader.decodes+cost.decodes, reader.bytes+cost.bytes
@@ -161,7 +161,7 @@ func TestLoadWriteDecodes(t *testing.T) {
 		if index%2 == 1 {
 			base, client = first, adminA
 		}
-		cost := measureWrite(t, func() {
+		cost := measureWrite(t, peers, func() {
 			authRequest[domain.Team](t, client, http.MethodPatch, base+teamsURL+"/"+team.ID, map[string]any{"name": fmt.Sprintf("Write Load Alt %d", index)}, "", http.StatusOK)
 		})
 		alternating.decodes, alternating.bytes = alternating.decodes+cost.decodes, alternating.bytes+cost.bytes

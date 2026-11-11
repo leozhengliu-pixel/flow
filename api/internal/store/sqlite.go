@@ -38,7 +38,10 @@ type SQLiteStore struct {
 	// at, when known (metadata_copy_revision.go). Guarded by mu.
 	copyRevisions     map[string]copyRevision
 	copyRevisionEpoch uint64
-	viewer            domain.User
+	// metadataDecodes counts decodeWorkspaceMetadata calls
+	// (WorkspaceMetadataDecodes).
+	metadataDecodes atomic.Int64
+	viewer          domain.User
 	// The sinks are read after every committed write; atomics keep that
 	// read from queueing behind a writer holding mu.
 	realtimeSink atomic.Pointer[func(string, domain.RealtimeEvent)]

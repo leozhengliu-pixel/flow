@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
-	"flow/api/internal/store"
 )
 
 // requestStatus sends a request and returns its status.
@@ -32,6 +31,16 @@ func requestStatus(t *testing.T, client *http.Client, method, url, workspace str
 // apply to this server's next request.
 func TestPeerAccessChangeAppliesToTheNextRequestDespiteKeptCopies(t *testing.T) {
 	peers := newPeerServers(t)
+	// The delivery scheduler's settings sweep (its first tick, then once a
+	// minute) schedules Pulse summaries for the members who joined below: a
+	// real metadata change, made by whichever server holds the leader lock at
+	// a moment of its own, that the other server then decodes. It is stopped
+	// so the decodes counted below are the issue edits' alone.
+	for _, instance := range peers.servers {
+		if err := instance.stopDeliveryScheduler(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
 	first, second := peers.first.URL, peers.second.URL
 	admin := peerAdmin(t, first)
 	teamsURL := first + "/api/workspaces/test-workspace/teams"
@@ -46,13 +55,13 @@ func TestPeerAccessChangeAppliesToTheNextRequestDespiteKeptCopies(t *testing.T) 
 
 	// Issue edits change no workspace metadata: the other server's peer
 	// events and requests keep its copy instead of decoding it again.
-	decodes := store.WorkspaceMetadataDecodes()
+	decodes := peers.metadataDecodes()
 	for index := range 5 {
 		authRequest[domain.Issue](t, admin, http.MethodPatch, first+"/api/issues/"+issue.ID, map[string]any{"title": "Revision issue " + string(rune('a'+index))}, "test-workspace", http.StatusOK)
 		authRequest[domain.Issue](t, member, http.MethodGet, issueURL, nil, "test-workspace", http.StatusOK)
 	}
 	time.Sleep(200 * time.Millisecond) // the peer events are applied
-	if n := store.WorkspaceMetadataDecodes() - decodes; n != 0 {
+	if n := peers.metadataDecodes() - decodes; n != 0 {
 		t.Errorf("issue edits decoded the workspace metadata %d times", n)
 	}
 

@@ -29,6 +29,12 @@ type peerServers struct {
 	deafen [2]context.CancelFunc
 }
 
+// metadataDecodes is how many workspace metadata documents the two servers'
+// stores decoded so far (not other stores in this process).
+func (p peerServers) metadataDecodes() int64 {
+	return p.stores[0].WorkspaceMetadataDecodes() + p.stores[1].WorkspaceMetadataDecodes()
+}
+
 func (p peerServers) stopListening(index int) {
 	p.deafen[index]()
 	// Listen returns once it sees the cancellation.
