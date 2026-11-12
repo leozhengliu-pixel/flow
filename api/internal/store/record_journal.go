@@ -703,11 +703,8 @@ func checkRecordJournalCoverage(ctx context.Context, reader metadataRowReader, w
 }
 
 func (s *SQLiteStore) committedMetadataRecordVersion(ctx context.Context, reader metadataRowReader, workspace string, item *MetadataRecord) error {
-	if recordJournalMode() != "on" {
+	if recordJournalMode() != "on" || !s.db.journalReady.Load() {
 		return nil
-	}
-	if !s.db.journalReady.Load() {
-		return ErrRecordJournalUnavailable
 	}
 	if err := checkRecordJournalCoverage(ctx, reader, workspace); err != nil {
 		return err

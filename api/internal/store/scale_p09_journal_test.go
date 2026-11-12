@@ -25,9 +25,6 @@ type scaleP09Fixture struct {
 
 func scaleP09Database(t *testing.T) scaleP09Fixture {
 	t.Helper()
-	if recordJournalMode() == "off" && os.Getenv("FLOW_RECORD_JOURNAL") != "off" {
-		t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
-	}
 	driver, databaseURL := os.Getenv("FLOW_TEST_DATABASE_DRIVER"), os.Getenv("FLOW_TEST_DATABASE_URL")
 	if (driver == "") != (databaseURL == "") {
 		t.Fatal("P09 requires both FLOW_TEST_DATABASE_DRIVER and FLOW_TEST_DATABASE_URL")
@@ -160,6 +157,7 @@ func TestScaleP09TransactionalJournal(t *testing.T) {
 }
 
 func TestScaleP09RollbackIsAtomic(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	workspace := f.data.Workspace.URLKey
 	after := scaleP09Head(t, f)
@@ -199,6 +197,7 @@ func TestScaleP09RollbackIsAtomic(t *testing.T) {
 }
 
 func TestScaleP09DirectSQLVersionsAndTombstones(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	workspace := f.data.Workspace.URLKey
 	after := scaleP09Head(t, f)
@@ -227,6 +226,7 @@ func TestScaleP09DirectSQLVersionsAndTombstones(t *testing.T) {
 }
 
 func TestScaleP09OldWritersFailCoverageAndRevokeAccess(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	access, err := f.ResolveAccess(t.Context(), f.data.Workspace.URLKey, f.data.Viewer.ID, nil)
 	if err != nil || strings.HasPrefix(access.AuthzEpoch, "p03:") {
@@ -259,6 +259,7 @@ func TestScaleP09OldWritersFailCoverageAndRevokeAccess(t *testing.T) {
 }
 
 func TestScaleP09AuthorizationWriters(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	workspace, workspaceID, user := f.data.Workspace.URLKey, f.data.Workspace.ID, f.data.Viewer.ID
 	// Enumerate ACL, key, membership and account writers. Use one identity
@@ -319,6 +320,7 @@ func TestScaleP09AuthorizationWriters(t *testing.T) {
 }
 
 func TestScaleP09BoundedTransactions(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	observed := 0
 	f.setRecordJournalCommitHook(func(_ context.Context, _ *sqlTx, _ string, records []RecordDelta) error {
@@ -374,6 +376,7 @@ func TestScaleP09OffRestoresLegacyWrites(t *testing.T) {
 }
 
 func TestScaleP09CommitBeforeNotificationRecovery(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	after := scaleP09Head(t, f)
 	// Simulate losing the writer after durable commit, before sequencing and
@@ -401,6 +404,7 @@ func TestScaleP09CommitBeforeNotificationRecovery(t *testing.T) {
 }
 
 func TestScaleP09LegacySequencesRemainGapFree(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	legacy, err := f.WorkspaceChangeHead(t.Context(), f.data.Workspace.URLKey)
 	if err != nil {
@@ -481,6 +485,7 @@ func TestScaleP09OrderedPagesAndRetention(t *testing.T) {
 }
 
 func TestScaleP09UsageTelemetryDoesNotRevoke(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	tx, err := f.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -512,6 +517,7 @@ func TestScaleP09UsageTelemetryDoesNotRevoke(t *testing.T) {
 }
 
 func TestScaleP09RepairStrandedJournal(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	after := scaleP09Head(t, f)
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_memberships SET role='admin' WHERE workspace_id=? AND user_id=?`, f.data.Workspace.ID, f.data.Viewer.ID); err != nil {
@@ -535,6 +541,7 @@ func TestScaleP09RepairStrandedJournal(t *testing.T) {
 }
 
 func TestScaleP09ContentKeysRetainParentScope(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	after := scaleP09Head(t, f)
 	tx, err := f.db.BeginTx(t.Context(), nil)
@@ -568,6 +575,7 @@ func TestScaleP09ContentKeysRetainParentScope(t *testing.T) {
 }
 
 func TestScaleP09MySQLStaleSessionToken(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	if os.Getenv("FLOW_TEST_DATABASE_DRIVER") != "mysql" {
 		t.Skip("requires the shared CI MySQL database")
 	}
@@ -611,6 +619,7 @@ func TestScaleP09MySQLStaleSessionToken(t *testing.T) {
 }
 
 func TestScaleP09RetentionWorkerStops(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	if f.db.journalStop == nil {
 		t.Fatal("journal retention worker was not started")

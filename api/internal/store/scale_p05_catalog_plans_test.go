@@ -13,6 +13,11 @@ import (
 
 func TestScaleP05CatalogExplainIndexes(t *testing.T) {
 	s, workspace := scaleP05Database(t)
+	scaleP05CatalogExplainIndexes(t, s, workspace, false)
+}
+
+func scaleP05CatalogExplainIndexes(t *testing.T, s *SQLiteStore, workspace string, journal bool) {
+	t.Helper()
 	previous := 0
 	for _, count := range []int{23210, 232100} {
 		scaleP05SeedPlanCatalog(t, s, workspace, previous, count)
@@ -49,7 +54,7 @@ func TestScaleP05CatalogExplainIndexes(t *testing.T) {
 							if after {
 								cursor = metadataCatalogCursor{Schema: 2, ID: fmt.Sprintf("catalog-%06d", count/2), Ordinal: int64(count / 2), Sort: time.Date(2026, 1, 1, 0, 8, 20, 0, time.UTC).Format(issueRecordTimestamp)}
 							}
-							statement, args, err := metadataCatalogPageStatement(workspace, q, query, cursor)
+							statement, args, err := metadataCatalogPageStatement(workspace, q, query, cursor, journal)
 							if err != nil {
 								t.Fatal(err)
 							}

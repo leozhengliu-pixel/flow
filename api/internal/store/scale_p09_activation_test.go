@@ -143,6 +143,7 @@ func TestScaleP09UnchangedSummaryKeepsRelations(t *testing.T) {
 }
 
 func TestScaleP09ContentKeysMatchGoEncoding(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	parameter := "?"
 	if f.dialect == "postgres" {
@@ -161,6 +162,7 @@ func TestScaleP09ContentKeysMatchGoEncoding(t *testing.T) {
 }
 
 func TestScaleP09TimezoneKeepsEpochAndAccessChangesRevoke(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	workspace, workspaceID := f.data.Workspace.URLKey, f.data.Workspace.ID
 	write := func(timezone, access string) {
@@ -198,6 +200,7 @@ func TestScaleP09TimezoneKeepsEpochAndAccessChangesRevoke(t *testing.T) {
 }
 
 func TestScaleP09SQLiteTextRowsUseByteOffsets(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite TEXT and BLOB storage classes")
@@ -218,6 +221,7 @@ func TestScaleP09SQLiteTextRowsUseByteOffsets(t *testing.T) {
 }
 
 func TestScaleP09ContentKeyFitsCanonicalIDLimits(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	resource, id := strings.Repeat("<", 191), strings.Repeat(">", 191)
 	raw, _ := json.Marshal(map[string]string{"id": id, "body": "Small content"})
@@ -232,6 +236,7 @@ func TestScaleP09ContentKeyFitsCanonicalIDLimits(t *testing.T) {
 }
 
 func TestScaleP09InlineKeysAreBoundedAndSpillIsAtomic(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite transaction input")
@@ -266,6 +271,7 @@ func TestScaleP09InlineKeysAreBoundedAndSpillIsAtomic(t *testing.T) {
 }
 
 func TestScaleP09InlineProtocolBypassFailsCoverageAndRepairs(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite transaction input")
@@ -294,6 +300,7 @@ func TestScaleP09InlineProtocolBypassFailsCoverageAndRepairs(t *testing.T) {
 }
 
 func TestScaleP09LockedOrderIsReusedAndInvalidatedByWrites(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite single-record order cache")
@@ -336,6 +343,7 @@ func TestScaleP09LockedOrderIsReusedAndInvalidatedByWrites(t *testing.T) {
 }
 
 func TestScaleP09AccountNoopPreservesTimestampAndWriteBudget(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	if f.dialect != "sqlite" {
 		t.Skip("SQLite account comparison")
@@ -460,6 +468,7 @@ func TestScaleP09EnableRequiresBoundedRepair(t *testing.T) {
 }
 
 func TestScaleP09SmallSummaryMatchesStreaming(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	f := scaleP09Database(t)
 	inputs := []string{
 		` { "id":"p09-projection", "name":"A name", "description":"Secret body", "teamIds":["one","two"], "createdAt":"2026-11-11T10:00:00Z" } `,

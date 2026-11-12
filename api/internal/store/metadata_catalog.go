@@ -297,7 +297,8 @@ func (s *SQLiteStore) readMetadataCatalogPage(ctx context.Context, workspace str
 	defer tx.Rollback()
 	var phase int
 	var omissions int64
-	if recordJournalMode() == "on" {
+	journal := recordJournalMode() == "on" && s.db.journalReady.Load()
+	if journal {
 		if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {
 			return page, err
 		}
@@ -314,7 +315,7 @@ func (s *SQLiteStore) readMetadataCatalogPage(ctx context.Context, workspace str
 	if err != nil {
 		return page, err
 	}
-	statement, args, err := metadataCatalogPageStatement(workspace, q, query, cursor)
+	statement, args, err := metadataCatalogPageStatement(workspace, q, query, cursor, journal)
 	if err != nil {
 		return page, err
 	}
@@ -340,7 +341,7 @@ func (s *SQLiteStore) readMetadataCatalogPage(ctx context.Context, workspace str
 		if err := rows.Scan(&row.key.ID, &row.order, &row.version, &row.summary, &omitted, &row.created, &row.updated); err != nil {
 			return page, err
 		}
-		if recordJournalMode() == "on" && row.version == "0" {
+		if journal && row.version == "0" {
 			return page, ErrRecordJournalCoverage
 		}
 		if scannedBytes > 0 && scannedBytes+len(row.summary) > MetadataRecordPageMaxBytes {
@@ -401,7 +402,7 @@ func (s *SQLiteStore) readMetadataCatalogPage(ctx context.Context, workspace str
 	return page, nil
 }
 
-func metadataCatalogPageStatement(workspace string, q PageRequest, query ProjectRecordQuery, cursor metadataCatalogCursor) (string, []any, error) {
+func metadataCatalogPageStatement(workspace string, q PageRequest, query ProjectRecordQuery, cursor metadataCatalogCursor, journal bool) (string, []any, error) {
 	column, descending := "collection_order", false
 	switch q.Order {
 	case "", "collection":
@@ -412,7 +413,16 @@ func metadataCatalogPageStatement(workspace string, q PageRequest, query Project
 	}
 	where, args := `workspace_key=? AND field=?`, []any{workspace, q.Kind}
 	if cursor.Schema != 0 {
-		if descending {
+		if journal {
+			// A tuple seek keeps version probes on one ordered index scan.
+			comparison := ">"
+			var value any = cursor.Ordinal
+			if descending {
+				comparison, value = "<", cursor.Sort
+			}
+			where += ` AND (` + column + `,record_key)` + comparison + `(?,?)`
+			args = append(args, value, cursor.ID)
+		} else if descending {
 			where += ` AND (` + column + `<? OR (` + column + `=? AND record_key<?))`
 			args = append(args, cursor.Sort, cursor.Sort, cursor.ID)
 		} else {
@@ -454,7 +464,7 @@ func metadataCatalogPageStatement(workspace string, q PageRequest, query Project
 		order = column + " DESC,record_key DESC"
 	}
 	version := "version"
-	if recordJournalMode() == "on" {
+	if journal {
 		version = `COALESCE((SELECT v.version FROM record_versions v WHERE v.workspace_key=metadata_catalog.workspace_key AND v.field=metadata_catalog.field AND v.record_key=metadata_catalog.record_key AND v.deleted=0),0)`
 	}
 	return `SELECT record_key,collection_order,` + version + `,summary,omitted,created_at,updated_at FROM metadata_catalog WHERE ` + where + ` ORDER BY ` + order + ` LIMIT 129`, args, nil
