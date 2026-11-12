@@ -89,6 +89,17 @@ describe('scale-p19 project query windows', () => {
     expect(window.selectedProjects).toEqual([])
   })
 
+  it('does not carry selected row models into a different filter result', async () => {
+    const window = new ScaleP19ProjectWindow('scope', directory(500))
+    const first = await window.read({ q: 'first' })
+    window.select(['p-0'], first.items)
+    await window.read({ q: 'first' }, 1)
+    expect(window.selectedProjects).toHaveLength(1)
+    await window.read({ q: 'different' })
+    expect(window.selectedProjects).toEqual([])
+    window.dispose()
+  })
+
   it('rejects unbounded pages, unavailable totals and non-progressing cursors for legacy fallback', async () => {
     for (const page of [
       { items: [], total: -1, hasMore: false },

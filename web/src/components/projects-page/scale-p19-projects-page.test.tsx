@@ -93,6 +93,19 @@ describe('scale-p19 ProjectsPage integration', () => {
     expect(document.querySelector('[aria-label="1 selected projects"]')).not.toBeNull()
   })
 
+  it('hides off-result selections after changing filters, as the legacy page does', async () => {
+    const { data } = scope()
+    render(page(data))
+    await waitFor(() => expect(ids()[0]).toBe('p-0'))
+    act(() => captured.data!.onSelectionChange!(['p-0']))
+    expect(document.querySelector('[aria-label="1 selected projects"]')).not.toBeNull()
+    api.listProjectRecords.mockResolvedValue({ items: [], total: 0, hasMore: false })
+    act(() => captured.surface!.onAddFilter!('Status', { id: 'Planned', label: 'Planned' }))
+    await waitFor(() => expect(captured.data!.loading).toBe(false))
+    await waitFor(() => expect(document.querySelector('[aria-label="1 selected projects"]')).toBeNull())
+    expect(captured.data!.selectedIds).toEqual(['p-0'])
+  })
+
   it('falls back before presenting unsupported timeline and global ordering semantics', async () => {
     const { data, client } = scope()
     render(page(data))

@@ -56,6 +56,7 @@ export class ScaleP19ProjectWindow {
     if (this.closed) throw new DOMException('Window disposed', 'AbortError')
     const key = JSON.stringify(query)
     if (key !== this.queryKey) {
+      this.selected.clear()
       this.invalidate()
       this.queryKey = key
     }
