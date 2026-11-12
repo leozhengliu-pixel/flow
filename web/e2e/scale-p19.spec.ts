@@ -210,6 +210,8 @@ test.describe('scale-p19 bounded navigation and control states', () => {
       writeFileSync(testInfo.outputPath('heap-samples.json'), JSON.stringify({ project: testInfo.project.name, samples, trend }, null, 2))
       // React DEV's sampled owner stacks vary with timing; storage bounds above remain strict on every page.
       expect(trend.lateBytesPerNavigation).toBeLessThanOrEqual(trend.allowedBytesPerNavigation)
+      // A steady per-navigation leak keeps early and late slopes equal, so cap total growth as well.
+      expect(samples[samples.length - 1].usedSize - samples[0].usedSize).toBeLessThanOrEqual(8 * 1024 * 1024)
     } finally {
       await probe.dispose()
     }
