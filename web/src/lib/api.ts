@@ -117,6 +117,7 @@ import { rememberChatPlatform } from "@/lib/chat-platform";
 import { markSuspendedMembersInactive } from "@/lib/people";
 import { apiFetch, ApiError as PulseApiError, jsonRequest, request, requestRetryingBusy } from "@/lib/api-client";
 import { queueIssuesWrite, queueIssueUpdate, queueIssueWrite } from "@/lib/issue-mutation-queue";
+import { modelChanges, modelManifest, modelRecordBatch, modelRecordPage, wireRecordKind, type SyncWireRecord } from '@/lib/scale-p13-wire';
 
 export { ApiError, realtimeClientId } from "@/lib/api-client";
 import type {
@@ -406,6 +407,30 @@ export function setTeamMembership(
   );
 }
 export type BootstrapProjection = 'project-list' | 'issue-detail'
+
+export function fetchSyncManifest(workspaceKey: string, signal?: AbortSignal, quiet?: boolean): Promise<import('@/types/flow').SyncManifest> {
+  return request<import('@/types/flow').SyncManifest>('/api/sync/manifest', { headers: { 'X-Workspace-Key': workspaceKey }, signal, quiet }).then(modelManifest)
+}
+
+export function fetchSyncRecords(workspaceKey: string, query: import('@/types/flow').SyncPageRequest, signal?: AbortSignal): Promise<import('@/types/flow').SyncRecordPage> {
+  const params = new URLSearchParams({ kind: wireRecordKind(query.kind), limit: String(Math.max(1, Math.min(100, query.limit ?? 100))), maxBytes: String(Math.max(1, Math.min(256 * 1024, query.maxBytes ?? 256 * 1024))) })
+  if (query.cursor) params.set('cursor', query.cursor)
+  if (query.filter) params.set('filter', query.filter)
+  if (query.order) params.set('order', query.order)
+  return request<Omit<import('@/types/flow').SyncRecordPage, 'items'> & { items: SyncWireRecord[] }>(`/api/sync/records?${params}`, { headers: { 'X-Workspace-Key': workspaceKey }, signal }).then(modelRecordPage)
+}
+
+export function fetchSyncBatch(workspaceKey: string, keys: import('@/types/flow').RecordKey[], projection: 'summary' | 'detail', signal?: AbortSignal): Promise<import('@/types/flow').SyncRecordBatch> {
+  if (keys.length > 50) return Promise.reject(new Error('Record batch exceeds 50 keys'))
+  const init = jsonRequest('POST', { keys: keys.map(key => ({ ...key, kind: wireRecordKind(key.kind) })), projection })
+  if (new TextEncoder().encode(String(init.body)).byteLength > 256 * 1024) return Promise.reject(new Error('Record batch exceeds byte budget'))
+  return request<Omit<import('@/types/flow').SyncRecordBatch, 'items'> & { items: SyncWireRecord[] }>('/api/sync/batch', { ...init, headers: { 'X-Workspace-Key': workspaceKey, 'Content-Type': 'application/json' }, signal }).then(batch => modelRecordBatch(batch, projection))
+}
+
+export function fetchSyncChanges(workspaceKey: string, after: string, signal?: AbortSignal): Promise<import('@/types/flow').SyncChanges> {
+  const params = new URLSearchParams({ after, limit: '100', maxBytes: String(256 * 1024) })
+  return request<import('@/types/flow').SyncChanges>(`/api/sync/changes?${params}`, { headers: { 'X-Workspace-Key': workspaceKey }, signal }).then(modelChanges)
+}
 
 export function fetchBootstrap(workspaceKey?: string, projection?: BootstrapProjection, signal?: AbortSignal, quiet?: boolean): Promise<BootstrapData> {
   if (projection === 'issue-detail' || import.meta.env.VITE_PAGED_ISSUES === 'true') return fetchPagedBootstrap(workspaceKey, projection, signal, quiet)
@@ -1820,8 +1845,8 @@ export function updateDocument(
   return request(`/api/documents/${id}`, jsonRequest("PATCH", input));
 }
 /** One document by id, slug or an earlier slug; a deleted document comes back with `deletedAt`. */
-export function getDocument(id: string): Promise<FlowDocument> {
-  return request(`/api/documents/${encodeURIComponent(id)}`);
+export function getDocument(id: string, signal?: AbortSignal, workspaceKey?: string): Promise<FlowDocument> {
+  return request(`/api/documents/${encodeURIComponent(id)}`, { signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}) });
 }
 /** Restores a deleted document from "Recently deleted". */
 export function restoreDeletedDocument(id: string): Promise<FlowDocument> {

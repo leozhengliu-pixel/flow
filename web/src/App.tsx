@@ -362,6 +362,8 @@ import { useExitPresence } from '@/components/ui/motion';
 
 import { PeopleProvider } from '@/components/property/people-provider'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
+import { fetchSurfaceBootstrap, migratedSyncSignal, syncBootstrapRequestKey, syncClientFor, syncScopeMatches, SyncResetRequired } from '@/lib/sync-client'
+import type { RealtimeEvent } from '@/types/flow'
 import { applyLabelStateRename, applyRealtimePatch, canApplyRealtimePatch, isLabelStateRenameEvent } from '@/store/apply-realtime-patch'
 import { classifyRealtimeEvent } from '@/lib/realtime-dispatch'
 import { inaccessible as inaccessibleResource, removeDocument, runEntityPlan, upsertDocument } from '@/lib/realtime-entity-sync'
@@ -383,6 +385,11 @@ import { canInviteMembers, setViewerCanInvite } from '@/lib/invite-navigation'
 
 // Realtime metadata reloads: one at a time per workspace, spread across tabs (realtime-bootstrap-coalescer).
 const realtimeMetadataBootstrap = createRealtimeCoalescer((workspaceKey: string) => fetchPagedBootstrap(workspaceKey))
+// P14 is additive and may be rolled out after this adapter.
+const recipientInbox = inboxUnread as typeof inboxUnread & {
+  configure?: (options?: { workspaceKey: string; viewerId: string; capabilities: readonly string[]; authzEpoch?: string }) => void;
+  receive?: (workspaceKey: string, viewerId: string, event: RealtimeEvent) => boolean;
+};
 
 const ReleaseEditorDialog = lazy(() => import('@/components/releases/release-editor-dialog').then(module => ({default:module.ReleaseEditorDialog})))
 const IssueLoadingPreview = lazy(() => import('@/components/issue/issue-loading-preview').then(module => ({default:module.IssueLoadingPreview})))
@@ -398,10 +405,37 @@ function App() {
     [data, setData] = useState<BootstrapData | null>(null),
     [error, setError] = useState(false);
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [syncFallback, setSyncFallback] = useState('');
   const sessionViewerRef=useRef(session?.user.id);
   sessionViewerRef.current=session?.user.id;
   const dataRef=useRef(data);
   dataRef.current=data;
+  const syncClient = syncClientFor(data);
+  const inboxWorkspaceKey = data?.workspace.urlKey;
+  const inboxViewerId = data?.viewer.id;
+  const inboxCapabilities = data?.sync?.capabilities;
+  const inboxEpoch = data?.sync?.authzEpoch;
+  useEffect(() => {
+    recipientInbox.configure?.(inboxWorkspaceKey && inboxViewerId ? { workspaceKey: inboxWorkspaceKey, viewerId: inboxViewerId, capabilities: inboxCapabilities ?? [], authzEpoch: inboxEpoch } : undefined);
+    return () => recipientInbox.configure?.();
+  }, [inboxWorkspaceKey, inboxViewerId, inboxCapabilities, inboxEpoch]);
+  useEffect(() => {
+    if (!syncClient) return;
+    const unsubscribe = syncClient.subscribe(() => {
+      if (syncClient.disposed) {
+        if (syncClient.legacyRequired) setSyncFallback(syncClient.manifest.core.workspace.urlKey);
+        clearNavigationCache(syncClient.manifest.viewerId, syncClient.manifest.core.workspace.urlKey);
+        initialIssueRef.current = null;
+        setInitialIssue(null);
+        setData(current => syncClientFor(current) === syncClient ? null : current);
+        loadedBootstrapRequestKey.current = '';
+        setBootstrapRetry(value => value + 1);
+        return;
+      }
+      setData(current => syncClientFor(current) === syncClient && !syncClient.disposed ? syncClient.adapt(current) : current);
+    });
+    return () => { unsubscribe(); syncClient.dispose(); };
+  }, [syncClient]);
   // Issue edits still waiting for an answer, by issue (see updateIssueById).
   const issueEditBursts=useRef(new Map<string,{pending:number;latest:Issue;settled:Issue}>());
   const reportedIssueErrors=useRef(new WeakSet<ApiError>());
@@ -410,8 +444,8 @@ function App() {
   const acceptBootstrap = useCallback((next:BootstrapData)=>{
     if(next.viewer.id!==sessionViewerRef.current) return;
     setData(current=>{
-      const merged=mergeWorkspaceDirectory(current,next);
-      writeNavigationCacheWhenIdle(next.viewer.id, next.workspace.urlKey, merged);
+      const merged=current?.sync || next.sync ? next : mergeWorkspaceDirectory(current,next);
+      if (!merged.sync) writeNavigationCacheWhenIdle(next.viewer.id, next.workspace.urlKey, merged);
       return merged;
     });
   },[]);
@@ -426,7 +460,7 @@ function App() {
     const releasedIssueIds = loaded?.workspace.urlKey === workspaceKey && !loaded.issueCollectionPaged ? newlyReleasedIssueIds(loaded, next) : [];
     setData(current => {
       if (current?.workspace.urlKey !== workspaceKey || current.viewer.id !== next.viewer.id) return current;
-      if (current.issueCollectionPaged) return mergeWorkspaceDirectory(current, next);
+      if (current.issueCollectionPaged) return current.sync || next.sync ? next : mergeWorkspaceDirectory(current, next);
       const merged = carryNavigationHydration(current, mergeWorkspaceMetadata(current, next));
       // A metadata projection still carries the cached notifications; until a
       // real bootstrap confirms the snapshot it must not replace the cache.
@@ -621,6 +655,9 @@ function App() {
   const loadedWorkspaceKey = data?.workspace.urlKey;
   const projectListProjection = isProjectListRoute(route);
   const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : undefined;
+  const syncSurface = route.kind === 'document' ? 'document-detail' : route.kind === 'issue' ? 'issue-detail' : undefined;
+  const fetchRouteBootstrap = useCallback((workspaceKey: string, projection?: import('@/lib/api').BootstrapProjection, signal?: AbortSignal, quiet?: boolean) =>
+    fetchSurfaceBootstrap(workspaceKey, syncFallback === workspaceKey ? undefined : syncSurface, () => fetchBootstrap(workspaceKey, projection, signal, quiet), signal, quiet), [syncSurface, syncFallback]);
   const { t: translateTitle, locale } = useI18n();
   useEffect(() => {
     // Search sets its own title (it includes the query); the OAuth consent page is titled "Flow" (the reference app: "the reference app").
@@ -667,17 +704,20 @@ function App() {
     if (!key) return;
     setError(false);
     try {
-      acceptBootstrap(await fetchBootstrap(key));
+      acceptBootstrap(await fetchRouteBootstrap(key));
     } catch {
       setError(true);
     }
   };
   useEffect(() => {
     const startup = startStartup(
-      { fetchSession: fetchAuthSession, fetchAccount: fetchAccountBootstrap, fetchBootstrap },
+      { fetchSession: fetchAuthSession, fetchAccount: fetchAccountBootstrap, fetchBootstrap: fetchRouteBootstrap },
       { requestedWorkspaceKey: requestedWorkspaceKey ?? "", isRoot: route.kind === "root", projection: bootstrapProjection },
     );
-    if (startup.speculative) bootstrapRequest.current = startup.speculative;
+    if (startup.speculative) {
+      startup.speculative.key = syncBootstrapRequestKey(startup.speculative.key, syncSurface);
+      bootstrapRequest.current = startup.speculative;
+    }
     startup.ready
       .then(({ session: authenticated, account: nextAccount }) => {
         setSession(authenticated);
@@ -862,9 +902,11 @@ function App() {
       setError(true);
       return;
     }
-    const requestKey = bootstrapRequestKey(account.viewer.id, requestedWorkspaceKey, bootstrapProjection);
+    const baseRequestKey = bootstrapRequestKey(account.viewer.id, requestedWorkspaceKey, bootstrapProjection);
+    const requestKey = syncBootstrapRequestKey(baseRequestKey, syncFallback === requestedWorkspaceKey ? undefined : syncSurface);
     // 'reuse' leaves loadedBootstrapRequestKey on the page the snapshot was loaded for, so going back there is a 'skip'.
-    if (bootstrapNavigationDecision({
+    if (requestKey !== baseRequestKey && dataRef.current?.workspace.urlKey === requestedWorkspaceKey && dataRef.current.viewer.id === account.viewer.id && loadedBootstrapRequestKey.current === requestKey) return;
+    if (requestKey === baseRequestKey && !(dataRef.current?.sync && dataRef.current.sync.surface !== syncSurface) && bootstrapNavigationDecision({
       current: dataRef.current,
       requestedWorkspaceKey,
       viewerId: account.viewer.id,
@@ -875,7 +917,7 @@ function App() {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     if (loadedWorkspaceKey !== requestedWorkspaceKey || loadedBootstrapRequestKey.current && loadedBootstrapRequestKey.current !== requestKey) {
-      const cachedNavigation = readNavigationCache(account.viewer.id, requestedWorkspaceKey);
+      const cachedNavigation = import.meta.env.VITE_SYNC_V2 === 'true' && syncSurface ? undefined : readNavigationCache(account.viewer.id, requestedWorkspaceKey);
       setData((current) => {
         if (loadedWorkspaceKey === requestedWorkspaceKey) {
           if (!projectListProjection || !current) return current;
@@ -901,23 +943,24 @@ function App() {
     if (bootstrapRequest.current?.key !== requestKey || bootstrapRequest.current.controller.signal.aborted) {
       bootstrapRequest.current?.controller.abort();
       bootstrapRequest.current?.release();
-      bootstrapRequest.current = createBootstrapRequest(requestKey, signal => fetchBootstrap(requestedWorkspaceKey, bootstrapProjection, signal));
+      bootstrapRequest.current = createBootstrapRequest(requestKey, signal => fetchRouteBootstrap(requestedWorkspaceKey, bootstrapProjection, signal));
     }
     const request = bootstrapRequest.current;
     const clear = () => { request.release(); if (bootstrapRequest.current === request) bootstrapRequest.current = null; };
     void request.promise.then(clear, clear);
-    settleBootstrapRequest(request, signal => fetchBootstrap(requestedWorkspaceKey, bootstrapProjection, signal))
+    settleBootstrapRequest(request, signal => fetchRouteBootstrap(requestedWorkspaceKey, bootstrapProjection, signal))
       .then(next => {
-        if (cancelled || next.viewer.id!==sessionViewerRef.current) return;
+        if (cancelled) return;
+        if (next.viewer.id!==sessionViewerRef.current) { syncClientFor(next)?.dispose(); return; }
         bootstrapFailures.current = { key: '', count: 0 };
         rememberWorkspace(account.viewer.id, requestedWorkspaceKey);
         loadedBootstrapRequestKey.current=requestKey;
         setData(current=>{
-          const merged=mergeWorkspaceDirectory(current,next), preview=initialIssueRef.current;
-          const withPreview=preview?.viewerId===account.viewer.id && preview?.key.startsWith(`${requestedWorkspaceKey}:`) && !preview.issue.isSummary
+          const merged=current?.sync || next.sync ? next : mergeWorkspaceDirectory(current,next), preview=initialIssueRef.current;
+          const withPreview=!next.sync && preview?.viewerId===account.viewer.id && preview?.key.startsWith(`${requestedWorkspaceKey}:`) && !preview.issue.isSummary
             ? {...merged,issues:mergeIssueRecords(merged.issues,[preview.issue])}
             : merged;
-          writeNavigationCacheWhenIdle(account.viewer.id, requestedWorkspaceKey, withPreview);
+          if (!withPreview.sync) writeNavigationCacheWhenIdle(account.viewer.id, requestedWorkspaceKey, withPreview);
           return withPreview;
         });
       })
@@ -936,7 +979,7 @@ function App() {
         setError(true);
       });
     return () => { cancelled = true; if (retryTimer) clearTimeout(retryTimer); };
-  }, [account, bootstrapRetry, connectPath, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, requestedWorkspaceKey, route.kind]);
+  }, [account, bootstrapRetry, connectPath, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, fetchRouteBootstrap, syncSurface, syncFallback, requestedWorkspaceKey, route.kind]);
   // Surfaces ("Actions" buttons) register a command context and ask for the palette.
   useEffect(() => {
     const open = () => setCommandOpen(true);
@@ -1247,30 +1290,33 @@ function App() {
   const detailKey = `${detailWorkspaceKey}:${recordIdentifier}`;
   const detailViewerId=session?.user.id;
   const detailLookupId=selectedIssue?.id ?? recordIdentifier;
-  const previewIssue = initialIssue?.key === detailKey && initialIssue.viewerId===session?.user.id ? initialIssue.issue : undefined;
+  const previewIssue = !data?.sync && initialIssue?.key === detailKey && initialIssue.viewerId===session?.user.id ? initialIssue.issue : undefined;
+  const detailVersion = selectedIssue?.version;
+  const detailSyncVersion = syncClient?.get({ kind: 'issue', id: detailLookupId })?.version;
   const missingIssueRecord = Boolean(recordIdentifier && (!selectedIssue || selectedIssue.isSummary || selectedIssue.needsDetailRefresh));
   useEffect(() => {
     if (!authReady || !detailViewerId || !detailWorkspaceKey || !recordIdentifier || !missingIssueRecord || detailAccessPending===detailWorkspaceKey) return;
     const viewerId=detailViewerId;
     const key = `${detailWorkspaceKey}:${recordIdentifier}`;
     const controller = new AbortController();
+    const signal = syncClient?.requestSignal(controller.signal) ?? controller.signal;
     setIssueContextLoading(true);
-    void fetchIssueRecord(detailLookupId, controller.signal, detailWorkspaceKey).then(issue => {
-      if (controller.signal.aborted || sessionViewerRef.current!==viewerId) return;
+    void fetchIssueRecord(detailLookupId, signal, detailWorkspaceKey).then(issue => {
+      if (signal.aborted || !syncScopeMatches(dataRef.current, syncClient) || sessionViewerRef.current!==viewerId) return;
       issueContextKey.current = key;
       initialIssueRef.current={key,viewerId,issue};
       setInitialIssue({key,viewerId,issue});
-      setData(current => current?.workspace.urlKey === detailWorkspaceKey && current.viewer.id===viewerId ? {...current,issues:mergeIssueRecords(current.issues,[issue])}:current);
-    }).catch(error => { if (!controller.signal.aborted && sessionViewerRef.current===viewerId) {
+      setData(current => current?.workspace.urlKey === detailWorkspaceKey && current.viewer.id===viewerId && syncScopeMatches(current, syncClient) ? {...current,issues:mergeIssueRecords(current.issues,[issue])}:current);
+    }).catch(error => { if (!signal.aborted && syncScopeMatches(dataRef.current, syncClient) && sessionViewerRef.current===viewerId) {
       issueContextKey.current = key;
       if(initialIssueRef.current?.key===key)initialIssueRef.current=null;
       setInitialIssue(current=>current?.key===key?null:current);
-      if (error instanceof ApiError && [403,404].includes(error.status)) setData(current=>current?.workspace.urlKey===detailWorkspaceKey?{...current,issues:current.issues.filter(issue=>issue.identifier.toUpperCase()!==recordIdentifier.toUpperCase())}:current);
+      if (error instanceof ApiError && [403,404].includes(error.status)) setData(current=>current?.workspace.urlKey===detailWorkspaceKey && syncScopeMatches(current, syncClient)?{...current,issues:current.issues.filter(issue=>issue.identifier.toUpperCase()!==recordIdentifier.toUpperCase())}:current);
       toast.error('Could not load issue', { description: error.message });
     } })
-      .finally(() => { if (!controller.signal.aborted) setIssueContextLoading(false); });
+      .finally(() => { if (!signal.aborted) setIssueContextLoading(false); });
     return () => controller.abort();
-  }, [authReady,detailViewerId,detailLookupId,detailWorkspaceKey,recordIdentifier,missingIssueRecord,detailAccessPending]);
+  }, [authReady,detailViewerId,detailLookupId,detailWorkspaceKey,recordIdentifier,missingIssueRecord,detailAccessPending,detailVersion,detailSyncVersion,syncClient]);
   const historyIssueId=selectedIssue?.id;
   const historyIssueSummary=Boolean(selectedIssue?.isSummary);
   const historyLoaded=Boolean(historyIssueId && Object.hasOwn(data?.issueHistoryCursors ?? {},historyIssueId));
@@ -1279,23 +1325,25 @@ function App() {
     if (!data?.issueCollectionPaged || !historyIssueId || historyIssueSummary || historyLoaded) return;
     const id=historyIssueId, workspace=data.workspace.urlKey, viewerId=data.viewer.id, key=`${workspace}:${id}`;
     const controller=new AbortController();
+    const signal=syncClient?.requestSignal(controller.signal) ?? controller.signal;
     const sequence=++historyRefreshSequence.current;
     setIssueHistoryState({key,loading:true,error:false});
-    void fetchIssueHistory(id,controller.signal).then(history=>{
-      if(controller.signal.aborted || sequence!==historyRefreshSequence.current)return;
-      setData(current=>current?.workspace.urlKey===workspace && current.viewer.id===viewerId?{...current,comments:{...current.comments,[id]:history.comments},activities:{...current.activities,[id]:history.activities},issueHistoryCursors:{...current.issueHistoryCursors,[id]:{commentsCursor:history.commentsCursor,activitiesCursor:history.activitiesCursor}}}:current);
+    void fetchIssueHistory(id,signal).then(history=>{
+      if(signal.aborted || sequence!==historyRefreshSequence.current || !syncScopeMatches(dataRef.current,syncClient))return;
+      setData(current=>current?.workspace.urlKey===workspace && current.viewer.id===viewerId && syncScopeMatches(current,syncClient)?{...current,comments:{...current.comments,[id]:history.comments},activities:{...current.activities,[id]:history.activities},issueHistoryCursors:{...current.issueHistoryCursors,[id]:{commentsCursor:history.commentsCursor,activitiesCursor:history.activitiesCursor}}}:current);
       setIssueHistoryState({key,loading:false,error:false});
-    }).catch(()=>{if(!controller.signal.aborted && sequence===historyRefreshSequence.current)setIssueHistoryState({key,loading:false,error:true});});
+    }).catch(()=>{if(!signal.aborted && sequence===historyRefreshSequence.current)setIssueHistoryState({key,loading:false,error:true});});
     return()=>controller.abort();
-  },[data?.issueCollectionPaged,data?.workspace.urlKey,data?.viewer.id,historyIssueId,historyIssueSummary,historyLoaded]);
+  },[data?.issueCollectionPaged,data?.workspace.urlKey,data?.viewer.id,historyIssueId,historyIssueSummary,historyLoaded,detailSyncVersion,syncClient]);
   useEffect(()=>{
     if(!data?.issueCollectionPaged || !historyIssueId || historyIssueSummary || relatedIssueKey==='[]')return;
     const controller=new AbortController(), workspace=data.workspace.urlKey, viewerId=data.viewer.id;
-    void fetchIssueRelated(historyIssueId,controller.signal).then(related=>{
-      if(!controller.signal.aborted)setData(current=>current?.workspace.urlKey===workspace && current.viewer.id===viewerId?{...current,issues:mergeIssueRecords(current.issues,related)}:current);
+    const signal=syncClient?.requestSignal(controller.signal) ?? controller.signal;
+    void fetchIssueRelated(historyIssueId,signal).then(related=>{
+      if(!signal.aborted)setData(current=>current?.workspace.urlKey===workspace && current.viewer.id===viewerId && syncScopeMatches(current,syncClient)?{...current,issues:mergeIssueRecords(current.issues,related)}:current);
     }).catch(()=>undefined);
     return()=>controller.abort();
-  },[data?.issueCollectionPaged,data?.workspace.urlKey,data?.viewer.id,historyIssueId,historyIssueSummary,relatedIssueKey]);
+  },[data?.issueCollectionPaged,data?.workspace.urlKey,data?.viewer.id,historyIssueId,historyIssueSummary,relatedIssueKey,syncClient]);
   const selectedProject =
     !data?.resourceDetailsOmitted && (route.kind === "project" || route.kind === "project-saved-view")
       ? // A stale-prefix or legacy slug (a link made before a rename) still resolves; the canonical-URL effect redirects.
@@ -1308,10 +1356,11 @@ function App() {
       if (historyIssueId !== issueId) return;
       active?.abort();
       const controller=new AbortController();active=controller;
+      const signal=syncClient?.requestSignal(controller.signal) ?? controller.signal;
       const sequence = ++historyRefreshSequence.current;
-      const context = await fetchIssueHistory(issueId,controller.signal);
-      if (controller.signal.aborted || sequence !== historyRefreshSequence.current) return;
-      setData(current => current && current.workspace.urlKey === data?.workspace.urlKey && current.viewer.id===data?.viewer.id ? { ...current,
+      const context = await fetchIssueHistory(issueId,signal);
+      if (signal.aborted || sequence !== historyRefreshSequence.current) return;
+      setData(current => current && current.workspace.urlKey === data?.workspace.urlKey && current.viewer.id===data?.viewer.id && syncScopeMatches(current,syncClient) ? { ...current,
         comments: { ...current.comments, [issueId]: context.comments }, activities: { ...current.activities, [issueId]: context.activities },
         issueHistoryCursors: { ...current.issueHistoryCursors, [issueId]: { commentsCursor: context.commentsCursor, activitiesCursor: context.activitiesCursor } },
       } : current);
@@ -1320,7 +1369,7 @@ function App() {
     const listener = (event: Event) => { void refresh(event).catch(() => undefined) };
     window.addEventListener('flow-issue-history-changed', listener);
     return () => { active?.abort(); window.removeEventListener('flow-issue-history-changed', listener) };
-  }, [historyIssueId, data?.workspace.urlKey, data?.viewer.id]);
+  }, [historyIssueId, data?.workspace.urlKey, data?.viewer.id, syncClient]);
   useEffect(() => {
     const resolved = (event: Event) => {
       const { issue, workspaceKey, viewerId } = (event as CustomEvent<CommentActionResolution>).detail;
@@ -1329,7 +1378,7 @@ function App() {
     window.addEventListener(COMMENT_ACTION_RESOLVED, resolved);
     return () => window.removeEventListener(COMMENT_ACTION_RESOLVED, resolved);
   }, []);
-  const selectedDocument =
+  const documentCandidate =
     !data?.resourceDetailsOmitted && route.kind === "document"
       ? (data?.documents.find(
           (document) =>
@@ -1340,11 +1389,15 @@ function App() {
           findDocumentBySlugSuffix(data?.documents ?? [], route.documentSlugId)) ||
         null
       : null;
+  const documentCompleteness = documentCandidate && syncClient?.get({ kind: 'document', id: documentCandidate.id })?.completeness;
+  const selectedDocument = documentCandidate && (!syncClient || documentCompleteness === 'detail' || documentCompleteness === 'stale' && syncClient.getDetail({ kind: 'document', id: documentCandidate.id })) ? documentCandidate : null;
+  const selectedDocumentId = selectedDocument?.id;
+  useEffect(() => selectedDocumentId && syncClient ? syncClient.retainDetail({ kind: 'document', id: selectedDocumentId }) : undefined, [selectedDocumentId, syncClient]);
   // A deleted document stays on its URL (read-only, restorable) while it is in the trash.
   const trashedDocument = !selectedDocument && !data?.resourceDetailsOmitted && route.kind === "document" ? findTrashedDocument(data?.trash, route.documentSlugId) : undefined;
   const pageDocument = selectedDocument ?? trashedDocument?.document ?? null;
   // A document the loaded data does not hold yet (one an Agent reply just wrote) is fetched instead of left blank.
-  const routeDocument = useRouteDocument({ data, slugId: route.kind === "document" ? route.documentSlugId : undefined, found: Boolean(pageDocument), setData });
+  const routeDocument = useRouteDocument({ data, slugId: route.kind === "document" ? route.documentSlugId : undefined, found: Boolean(pageDocument) && documentCompleteness !== 'stale', setData });
   const selectedCustomer =
     route.kind === "customer"
       ? data?.customers.find((customer) =>
@@ -1493,12 +1546,15 @@ function App() {
     workspaceKey: data?.workspace.urlKey,
     viewerId: data?.viewer.id,
     snapshot: data,
+    syncV2: Boolean(syncClient),
+    syncCursor: syncClient?.manifest.head,
     issueId: selectedIssue?.id,
     route: location.pathname,
     onRemoteSync: async (event) => {
       const workspace = data?.workspace.urlKey;
       if (!workspace) return;
       const viewerId=data.viewer.id;
+      if (recipientInbox.receive?.(workspace, viewerId, event)) return;
       if (event.type === 'workspace_preferences.updated' || event.type === 'user_settings.updated' && event.aggregateId === viewerId || /^(workspace_member|team_member|membership)\./.test(event.type)) {
         window.dispatchEvent(new CustomEvent(COMMENT_ACTIONS_CHANGED));
       }
@@ -1554,6 +1610,27 @@ function App() {
       }
       // Team overview pins and sections: refetch only that team's list.
       if (await refreshTeamResourcesForEvent(data, event)) return;
+      const activeSync = syncClientFor(dataRef.current);
+      if (activeSync) {
+        if (!migratedSyncSignal(event.type) && event.type !== 'sync.delta' && !Array.isArray(event.payload?.transactions)) {
+          activeSync.requestReset(true);
+          return;
+        }
+        try {
+          if (!activeSync.applyFrame(event.payload) || activeSync.needsCatchUp) await activeSync.catchUp();
+          setData(current => syncClientFor(current) === activeSync && !activeSync.disposed ? activeSync.adapt(current) : current);
+        } catch (error) {
+          if (!(error instanceof SyncResetRequired) && !activeSync.disposed) throw error;
+          // Revocation clears the old snapshot before any recovery read is awaited.
+          clearNavigationCache(viewerId, workspace);
+          initialIssueRef.current = null;
+          setInitialIssue(null);
+          setData(current => syncClientFor(current) === activeSync ? null : current);
+          loadedBootstrapRequestKey.current = '';
+          setBootstrapRetry(value => value + 1);
+        }
+        return;
+      }
       // Everything below is an entity patch, an issue patch, a metadata reload, a refetch of just the affected
       // issues, or (only for overflow, an expired cursor and unknown event types) a full resync. See realtime-dispatch.
       const action = classifyRealtimeEvent(event, Boolean(data.issueCollectionPaged));
@@ -1648,7 +1725,7 @@ function App() {
       setData(current=>{
         if(current?.workspace.urlKey!==workspace || current.viewer.id!==viewerId)return current;
         const authorized=visible?new Set([...visible,...current.issues.filter(issue=>!checked.has(issue.id)).map(issue=>issue.id)]):undefined;
-        const merged=mergeWorkspaceDirectory(current,next,authorized);
+        const merged=current.sync || next.sync ? next : mergeWorkspaceDirectory(current,next,authorized);
         if(deletedLabelIds)merged.issues=merged.issues.map(issue=>issue.labels.some(label=>deletedLabelIds.has(label.id))?{...issue,labels:issue.labels.filter(label=>!deletedLabelIds.has(label.id))}:issue);
         if(deletedWorkflowState){
           const replacement=next.states.find(state=>state.id===deletedWorkflowState.replacementStateId);
@@ -1666,6 +1743,22 @@ function App() {
     },
   });
   useDesktopNotifications(data);
+  useEffect(() => {
+    if (!syncClient || !realtime.connected) return;
+    let active = true;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const reconcile = async (attempt: number) => {
+      try { await syncClient.catchUp(); }
+      catch {
+        if (!active || syncClient.disposed) return;
+        if (attempt < 2) retry = setTimeout(() => void reconcile(attempt + 1), 400);
+        else syncClient.requestReset(true);
+      }
+    };
+    // Cover commits between H0 catch-up and the shared SSE connection becoming ready.
+    void reconcile(0);
+    return () => { active = false; clearTimeout(retry); };
+  }, [syncClient, realtime.connected]);
   const replaceIssue = (issue: Issue) =>
     setData((current) =>
       current && current.workspace.id===data?.workspace.id && current.viewer.id===data?.viewer.id
@@ -4929,6 +5022,7 @@ function App() {
       </Suspense>
     );
   }
+  if (data?.sync && data.sync.surface !== syncSurface) return withStore(<AppStartup />);
   if (!data && !error && route.kind !== "issue" && (!previewIssue || previewIssue.isSummary)) return withStore(<AppStartup />);
   if (!data)
     return withStore(

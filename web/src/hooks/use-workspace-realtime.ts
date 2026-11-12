@@ -10,24 +10,28 @@ import { canApplyRealtimePatch } from '@/store/apply-realtime-patch'
 import { RealtimeEventQueue } from '@/lib/realtime-event-queue'
 import { connectSharedRealtime, type RealtimeAcknowledge, type RealtimeMessage } from '@/lib/shared-realtime'
 import { APPLIED_CURSOR_SCHEMA, appliedRealtimeCursorEnabled, boundedBrowserCacheEnabled } from '@/lib/scale-p08'
+import { SYNC_V2_STREAM_SCHEMA } from '@/lib/scale-p13-wire'
 import { retainOpenIssueDetail } from '@/lib/issue-detail-cache'
 import { clearNavigationCache } from '@/lib/navigation-cache'
 import type { BootstrapData, Presence, RealtimeEvent } from '@/types/flow'
 import { ISSUE_QUERY_INVALIDATED, type IssueQueryInvalidation } from '@/components/issue-explorer/paged-issue-invalidation'
 
-export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, onRemoteSync }: {
+export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, syncV2 = false, syncCursor, onRemoteSync }: {
   workspaceKey?: string
   /** Tabs share one stream only with other tabs of the same user. */
   viewerId?: string
   issueId?: string
   route: string
   snapshot?: BootstrapData | null
+  syncV2?: boolean
+  syncCursor?: string
   onRemoteSync: (event: RealtimeEvent) => Promise<void>
 }) {
   const [presence, setPresence] = useState<Presence[]>([])
   const [connected, setConnected] = useState(false)
   const syncRef = useLatestRef(onRemoteSync)
-  const appliedCursor = appliedRealtimeCursorEnabled()
+  const appliedCursor = syncV2 || appliedRealtimeCursorEnabled()
+  const cursorSchema = syncV2 ? SYNC_V2_STREAM_SCHEMA : APPLIED_CURSOR_SCHEMA
   const presenceViewerId = appliedCursor ? viewerId : undefined
   const boundedCache = boundedBrowserCacheEnabled()
 
@@ -49,7 +53,7 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, o
       latestCursor = cursor
       window.clearTimeout(cursorTimer)
       cursorTimer = window.setTimeout(() => {
-        if (!disposed && latestCursor) void saveRealtimeCursor(workspaceKey, latestCursor, appliedCursor ? viewerId : undefined, APPLIED_CURSOR_SCHEMA)
+        if (!disposed && latestCursor) void saveRealtimeCursor(workspaceKey, latestCursor, appliedCursor ? viewerId : undefined, cursorSchema)
       }, 300)
     }
     // Consecutive self-contained entity patches (a bulk edit, an agent run) are applied in one task, so React
@@ -150,15 +154,16 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, o
     const disconnect = connectSharedRealtime({
       workspaceKey,
       userId: viewerId,
-      schema: APPLIED_CURSOR_SCHEMA,
+      schema: cursorSchema,
       appliedCursor,
       url: cursor => {
         const params = new URLSearchParams({ workspace: workspaceKey })
         if (import.meta.env.VITE_PAGED_ISSUES === 'true') params.set('issues', 'paged')
+        if (syncV2) params.set('sync', '2')
         if (cursor) params.set('since', cursor)
         return `/api/realtime/events?${params.toString()}`
       },
-      cursor: () => appliedCursor ? undefined : loadRealtimeCursor(workspaceKey),
+      cursor: () => syncV2 ? syncCursor : appliedCursor ? undefined : loadRealtimeCursor(workspaceKey),
       onAppliedCursor: checkpoint,
       onStatus: connected => { if (!disposed) setConnected(connected) },
       onMessage,
@@ -171,7 +176,7 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, o
       setConnected(false)
       setPresence([])
     }
-  }, [workspaceKey, viewerId, syncRef, appliedCursor])
+  }, [workspaceKey, viewerId, syncRef, appliedCursor, cursorSchema, syncV2, syncCursor])
 
   useEffect(() => {
     if (!workspaceKey) return

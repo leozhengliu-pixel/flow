@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { AccountBootstrap, AuthSession, BootstrapData } from '@/types/flow'
 import { ApplicationStoreContext, EntityStoreContext, type ApplicationStoreValue } from './application-store-contexts'
 import { createWorkspaceStore, type WorkspaceStore } from './workspace-store'
@@ -19,7 +19,12 @@ export function WorkspaceStoreProvider({
   children,
   store: storeProp,
 }: WorkspaceStoreProviderProps) {
-  const entityStore = useMemo(() => storeProp ?? createWorkspaceStore(data), [data, storeProp])
+  const [cached, setCached] = useState(() => ({ data, store: storeProp ?? createWorkspaceStore(data) }))
+  let entityStore = storeProp ?? cached.store
+  if (cached.data !== data || storeProp && cached.store !== storeProp) {
+    entityStore = storeProp ?? createWorkspaceStore(data, cached.store)
+    setCached({ data, store: entityStore })
+  }
   const applicationStore = useMemo<ApplicationStoreValue>(
     () => ({
       data,
