@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,9 +30,12 @@ const (
 )
 
 type realtimeSocketMessage struct {
-	binary bool
-	data   []byte
-	sent   chan error
+	binary     bool
+	data       []byte
+	documentID string
+	shared     *sharedSocketPayload
+	reserved   int64
+	sent       chan error
 }
 
 type realtimeSocketClient struct {
@@ -60,16 +64,40 @@ type realtimeSocketClient struct {
 	send          chan realtimeSocketMessage
 	queuedBytes   atomic.Int64
 	cancel        context.CancelFunc
+	queueMu       sync.Mutex
+	queueClosed   bool
+	budget        *realtimeBudget
+	baseBytes     int64
 }
 
 const maxSocketQueueBytes = 8 << 20
 
 func (client *realtimeSocketClient) enqueue(message realtimeSocketMessage, copyData bool) bool {
+	client.queueMu.Lock()
+	defer client.queueMu.Unlock()
+	if client.queueClosed {
+		return false
+	}
 	size := int64(len(message.data))
 	if client.queuedBytes.Add(size) > maxSocketQueueBytes {
 		client.queuedBytes.Add(-size)
 		client.cancel()
 		return false
+	}
+	message.reserved = int64(cap(message.data)) + 128
+	if copyData {
+		message.reserved = (size+8191)&^8191 + 128
+	}
+	if message.shared != nil {
+		message.reserved = 128
+	}
+	if !client.budget.acquire(message.reserved) {
+		client.queuedBytes.Add(-size)
+		client.cancel()
+		return false
+	}
+	if message.shared != nil {
+		message.shared.refs.Add(1)
 	}
 	if copyData {
 		message.data = slices.Clone(message.data)
@@ -78,7 +106,7 @@ func (client *realtimeSocketClient) enqueue(message realtimeSocketMessage, copyD
 	case client.send <- message:
 		return true
 	default:
-		client.queuedBytes.Add(-size)
+		message.release(client)
 		client.cancel()
 		return false
 	}
@@ -121,7 +149,12 @@ func (h *realtimeHub) addSocket(workspace, clientID string, cancel context.Cance
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.nextID++
-	client := &realtimeSocketClient{id: h.nextID, clientID: clientID, workspace: workspace, documents: map[string]struct{}{}, issueDocuments: map[string]string{}, issueAccess: map[string]*issueSocketAccess{}, documentAccess: map[string]*documentSocketAccess{}, send: make(chan realtimeSocketMessage, 256), cancel: cancel}
+	const baseBytes = 12 << 10
+	if !h.budget.acquire(baseBytes) {
+		cancel()
+		return nil
+	}
+	client := &realtimeSocketClient{id: h.nextID, clientID: clientID, workspace: workspace, documents: map[string]struct{}{}, issueDocuments: map[string]string{}, issueAccess: map[string]*issueSocketAccess{}, documentAccess: map[string]*documentSocketAccess{}, send: make(chan realtimeSocketMessage, 64), cancel: cancel, budget: h.budget, baseBytes: baseBytes}
 	if h.sockets[workspace] == nil {
 		h.sockets[workspace] = map[uint64]*realtimeSocketClient{}
 	}
@@ -136,6 +169,20 @@ func (h *realtimeHub) removeSocket(client *realtimeSocketClient) {
 	if len(h.sockets[client.workspace]) == 0 {
 		delete(h.sockets, client.workspace)
 	}
+	client.queueMu.Lock()
+	client.queueClosed = true
+drain:
+	for {
+		select {
+		case message := <-client.send:
+			message.release(client)
+		default:
+			break drain
+		}
+	}
+	client.budget.release(client.baseBytes)
+	client.baseBytes = 0
+	client.queueMu.Unlock()
 }
 
 func (h *realtimeHub) joinDocument(client *realtimeSocketClient, documentID string) {
@@ -195,6 +242,24 @@ func (h *realtimeHub) broadcastDocumentConflict(workspace, collaborationID strin
 func (h *realtimeHub) broadcastDocument(workspace, documentID string, excludedSocketID uint64, message realtimeSocketMessage) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	reserved := (int64(len(message.data))+8191)&^8191 + 128
+	if !h.budget.acquire(reserved) {
+		// Committed updates remain in the collaboration log. A disconnected
+		// editor rejoins and replays them rather than receiving a partial frame.
+		for _, client := range h.sockets[workspace] {
+			if _, joined := client.documents[documentID]; joined && client.id != excludedSocketID {
+				client.cancel()
+			}
+		}
+		return
+	}
+	shared := &sharedSocketPayload{data: slices.Clone(message.data), budget: h.budget, reserved: reserved}
+	shared.refs.Store(1)
+	defer shared.release()
+	message.data, message.shared = shared.data, shared
+	if message.binary {
+		message.documentID = documentID
+	}
 	for _, client := range h.sockets[workspace] {
 		if client.id == excludedSocketID {
 			continue
@@ -202,7 +267,7 @@ func (h *realtimeHub) broadcastDocument(workspace, documentID string, excludedSo
 		if _, joined := client.documents[documentID]; !joined {
 			continue
 		}
-		client.enqueue(message, true)
+		client.enqueue(message, false)
 	}
 }
 
@@ -223,6 +288,10 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 	connection.SetReadLimit(maxCollaborationFrameSize)
 	ctx, cancel := context.WithCancel(context.Background())
 	client := s.realtime.addSocket(workspace, clientID, cancel)
+	if client == nil {
+		_ = connection.Close(websocket.StatusTryAgainLater, "Realtime is temporarily unavailable")
+		return
+	}
 	s.realtime.mu.Lock()
 	client.userID = authUser(r).ID
 	client.checkDocument = func(collaborationID string) (string, bool, error) {
@@ -235,13 +304,14 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	client.checkCredential = func() bool { return s.socketCredentialValid(r) }
 	s.realtime.mu.Unlock()
+	writerDone := make(chan struct{})
 	defer func() {
 		cancel()
+		<-writerDone
 		s.realtime.removeSocket(client)
 		_ = connection.Close(websocket.StatusNormalClosure, "")
 	}()
 
-	writerDone := make(chan struct{})
 	go func() {
 		defer close(writerDone)
 		for {
@@ -249,7 +319,13 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 			case <-ctx.Done():
 				return
 			case message := <-client.send:
-				client.queuedBytes.Add(-int64(len(message.data)))
+				if !s.socketMessageAllowed(client, message) {
+					message.release(client)
+					if message.sent != nil {
+						message.sent <- store.ErrAuthForbidden
+					}
+					continue
+				}
 				messageType := websocket.MessageText
 				if message.binary {
 					messageType = websocket.MessageBinary
@@ -257,6 +333,7 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 				writeCtx, writeCancel := context.WithTimeout(ctx, 5*time.Second)
 				err := connection.Write(writeCtx, messageType, message.data)
 				writeCancel()
+				message.release(client)
 				if message.sent != nil {
 					message.sent <- err
 				}
@@ -269,19 +346,19 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	for {
-		messageType, message, err := connection.Read(ctx)
+		messageType, message, releaseInput, err := readBudgetedCollaboration(ctx, connection, client.budget)
 		if err != nil {
 			break
 		}
-		switch messageType {
-		case websocket.MessageText:
-			if err := s.handleCollaborationCommand(r, client, message); err != nil {
-				sendSocketJSON(client, map[string]any{"type": "error", "message": publicErrorMessage(r.Context(), err)})
-			}
-		case websocket.MessageBinary:
-			if err := s.handleCollaborationFrame(r, client, message); err != nil {
-				sendSocketJSON(client, map[string]any{"type": "error", "message": publicErrorMessage(r.Context(), err)})
-			}
+		err = func() error {
+			defer releaseInput()
+			return s.handleBudgetedCollaboration(ctx, r, client, messageType, message)
+		}()
+		if errors.Is(err, errRealtimeBudget) {
+			break
+		}
+		if err != nil {
+			sendSocketJSON(client, map[string]any{"type": "error", "message": publicErrorMessage(r.Context(), err)})
 		}
 	}
 	cancel()
@@ -360,12 +437,17 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 	bytes := len(contentState)
 	flush := func(more bool) error {
 		message.More = more
+		releaseEncode, err := acquireRealtimeWork(r.Context(), client.budget, collaborationSyncBytes(message)*2)
+		if err != nil {
+			return err
+		}
+		defer releaseEncode()
 		raw, err := json.Marshal(message)
 		if err != nil {
 			return err
 		}
 		sent := make(chan error, 1)
-		if !client.enqueue(realtimeSocketMessage{data: raw, sent: sent}, false) {
+		if !client.enqueue(realtimeSocketMessage{data: raw, sent: sent, documentID: command.DocumentID}, false) {
 			return errors.New("collaboration queue exceeded")
 		}
 		timer := time.NewTimer(6 * time.Second)
@@ -382,24 +464,57 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 			return r.Context().Err()
 		}
 	}
-	err := s.store.WalkDocumentUpdates(r.Context(), client.workspace, command.DocumentID, func(update store.DocumentCollaborationUpdate) error {
-		if len(message.Updates) > 0 && (bytes+len(update.Data)*4/3 > 1<<20 || len(message.Updates) >= 128) {
-			if err := flush(true); err != nil {
-				return err
-			}
+	recordID := command.DocumentID
+	s.realtime.mu.Lock()
+	if access := client.documentAccess[command.DocumentID]; access != nil {
+		recordID = access.documentID
+	}
+	s.realtime.mu.Unlock()
+	cursor := store.CollaborationRecoveryCursor{}
+	for {
+		releasePage, err := acquireRealtimeWork(r.Context(), client.budget, 16<<20)
+		if err != nil {
+			return err
 		}
-		encoded := base64.StdEncoding.EncodeToString(update.Data)
-		message.Updates = append(message.Updates, collaborationSyncUpdate{ID: update.ID, Data: encoded})
-		bytes += len(encoded)
-		return nil
-	})
-	if err != nil {
-		return err
+		page, err := s.store.ReadCollaborationRecoveryPage(r.Context(), client.workspace, command.DocumentID, command.IssueID, recordID, cursor, 4<<20)
+		if err != nil {
+			releasePage()
+			return err
+		}
+		if page.Conflict {
+			releasePage()
+			sendSocketJSON(client, map[string]any{"type": "document.conflict", "documentId": command.DocumentID})
+			return nil
+		}
+		if !cursor.Started || page.Restart {
+			message.ContentState = page.ContentState
+			bytes = len(message.ContentState)
+		}
+		err = func() error {
+			defer releasePage()
+			for _, update := range page.Updates {
+				if (len(message.Updates) > 0 || message.ContentState != "") && (bytes+base64.StdEncoding.EncodedLen(len(update.Data)) > 1<<20 || len(message.Updates) >= 128) {
+					if err := flush(true); err != nil {
+						return err
+					}
+				}
+				encoded := base64.StdEncoding.EncodeToString(update.Data)
+				message.Updates = append(message.Updates, collaborationSyncUpdate{ID: update.ID, Data: encoded})
+				bytes += len(encoded)
+			}
+			if message.Updates == nil {
+				message.Updates = []collaborationSyncUpdate{}
+			}
+			return flush(page.More)
+		}()
+		if err != nil {
+			return err
+		}
+		if !page.More {
+			return nil
+		}
+		cursor = page.Cursor
 	}
-	if message.Updates == nil {
-		message.Updates = []collaborationSyncUpdate{}
-	}
-	return flush(false)
 }
 
 func (s *server) handleCollaborationFrame(r *http.Request, client *realtimeSocketClient, raw []byte) error {

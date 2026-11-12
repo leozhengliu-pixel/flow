@@ -2764,10 +2764,10 @@ export function updatePresence(
   issueId: string | undefined,
   route: string,
   active = true,
-): Promise<Presence[]> {
+): Promise<Presence[] | undefined> {
   return request(
     import.meta.env.VITE_PAGED_ISSUES === 'true' ? '/api/realtime/presence?issues=paged' : '/api/realtime/presence',
-    jsonRequest("POST", { clientId, issueId, route, active }),
+    { ...jsonRequest("POST", { clientId, issueId, route, active }), headers: { "Content-Type": "application/json", "X-Flow-Presence": "minimal" } },
   );
 }
 export function updateDocumentPresence(
@@ -2775,10 +2775,10 @@ export function updateDocumentPresence(
   documentId: string,
   route: string,
   active = true,
-): Promise<Presence[]> {
+): Promise<Presence[] | undefined> {
   return request(
     "/api/realtime/presence",
-    jsonRequest("POST", { clientId, documentId, route, active }),
+    { ...jsonRequest("POST", { clientId, documentId, route, active }), headers: { "Content-Type": "application/json", "X-Flow-Presence": "minimal" } },
   );
 }
 

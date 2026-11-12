@@ -498,7 +498,7 @@ func TestLoadBootstrapProfile(t *testing.T) {
 // reload for access changes).
 //
 // FLOW_LOAD_USERS (100), FLOW_LOAD_DURATION (2m), FLOW_LOAD_CHANGE_EVERY (10s),
-// FLOW_LOAD_ACCESS_EVERY (10).
+// FLOW_LOAD_ACCESS_EVERY (10), and with FLOW_LOAD_LEGACY=1 FLOW_LOAD_PRESENCE_MINIMAL (0; 1 sends the negotiated heartbeat header).
 func TestLoadUsers(t *testing.T) {
 	if os.Getenv("FLOW_LOAD_LEGACY") == "1" {
 		scaleP01LegacyUsers(t)
@@ -510,7 +510,10 @@ func TestLoadUsers(t *testing.T) {
 // Kept verbatim so earlier incident reports can be reproduced with the same
 // five-account fixture and success-only freshness calculation.
 func scaleP01LegacyUsers(t *testing.T) {
+	var streamStats scaleP06LoadStreams
+	var transportStats scaleP06LoadTransport
 	users := loadEnvInt("FLOW_LOAD_USERS", 100)
+	minimalPresence := loadEnvInt("FLOW_LOAD_PRESENCE_MINIMAL", 0) != 0
 	accessEvery := max(loadEnvInt("FLOW_LOAD_ACCESS_EVERY", 10), 1)
 	duration := loadEnvDuration("FLOW_LOAD_DURATION", 2*time.Minute)
 	changeEvery := loadEnvDuration("FLOW_LOAD_CHANGE_EVERY", 10*time.Second)
@@ -578,6 +581,7 @@ func scaleP01LegacyUsers(t *testing.T) {
 			select {
 			case <-ticker.C:
 				peak.sample(start)
+				transportStats.sample(peers)
 				if peakProfile != "" && tick%40 == 0 {
 					peak.mu.Lock()
 					current := peak.heapInuse
@@ -605,6 +609,9 @@ func scaleP01LegacyUsers(t *testing.T) {
 		}
 		request, _ := http.NewRequest(method, base+path, reader)
 		request.Header.Set("X-Workspace-Key", "test-workspace")
+		if name == "presence" && minimalPresence {
+			request.Header.Set("X-Flow-Presence", "minimal")
+		}
 		if body != nil {
 			request.Header.Set("Content-Type", "application/json")
 		}
@@ -662,6 +669,7 @@ func scaleP01LegacyUsers(t *testing.T) {
 		freshMu.Unlock()
 	}
 	var eventsMu sync.Mutex
+	var reloadSuccess, reloadFailure atomic.Int64
 	eventCounts := map[string]int{}
 	actionCounts := map[string]int{}
 	var wg sync.WaitGroup
@@ -699,14 +707,17 @@ func scaleP01LegacyUsers(t *testing.T) {
 						ok := bootstrap(client)
 						do(client, "visibility", http.MethodPost, "/api/issue-records/visibility", visibilityBody)
 						if ok {
+							reloadSuccess.Add(1)
 							fresh(kind, time.Now())
+						} else {
+							reloadFailure.Add(1)
 						}
 					}
 				}
 			}()
 			// Events are answered as they arrive, like the browser's realtime queue: an applied change costs no
 			// request, an access change queues the coalesced reload. Nothing of the payload is kept.
-			go loadRealtimeStream(ctx, &http.Client{Jar: jar, Transport: transport}, base, func(event loadRealtimeEvent) {
+			go loadRealtimeStream(ctx, &http.Client{Jar: jar, Transport: transport}, base, &streamStats, func(event loadRealtimeEvent) {
 				kind, action := loadClientAction(event)
 				eventsMu.Lock()
 				eventCounts[event.Type]++
@@ -826,6 +837,9 @@ func scaleP01LegacyUsers(t *testing.T) {
 	runtime.ReadMemStats(&settled)
 	report := map[string]any{
 		"users": users, "durationSeconds": duration.Seconds(), "changeEvery": changeEvery.String(), "changes": changes,
+		"presenceMinimal": minimalPresence, "transport": transportStats.report(peers),
+		"reloadOutcomes":    map[string]int64{"succeeded": reloadSuccess.Load(), "failed": reloadFailure.Load()},
+		"streamConnections": streamStats.connections.Load(), "streamDisconnects": streamStats.disconnects.Load(), "streamReconnects": streamStats.reconnects.Load(),
 		"peakHeapInuseMiB": peak.heapInuse >> 20, "maxRSSMiB": maxRSSBytes() >> 20, "baselineHeapInuseMiB": before.HeapInuse >> 20,
 		"settledHeapInuseMiB": settled.HeapInuse >> 20, "totalAllocGiB": float64(after.TotalAlloc-before.TotalAlloc) / (1 << 30),
 		"numGC": after.NumGC - before.NumGC, "gcPauseTotalMs": float64(after.PauseTotalNs-before.PauseTotalNs) / 1e6,
@@ -834,7 +848,11 @@ func scaleP01LegacyUsers(t *testing.T) {
 	byKind := map[string]any{}
 	for kind, values := range freshness {
 		all = append(all, values...)
-		byKind[kind] = map[string]any{"changes": changeCounts[kind], "deliveries": len(values), "p50s": percentile(values, 0.5).Seconds(), "p95s": percentile(values, 0.95).Seconds(), "maxs": percentile(values, 1).Seconds()}
+		byKind[kind] = scaleP06PropagationSummary(changeCounts[kind], values)
+	}
+	for _, value := range byKind {
+		kind := value.(map[string]any)
+		kind["deliveryShare"] = float64(kind["deliveries"].(int)) / float64(max(1, len(all)))
 	}
 	report["freshnessP50s"], report["freshnessP95s"], report["freshnessMaxs"], report["refreshes"] = percentile(all, 0.5).Seconds(), percentile(all, 0.95).Seconds(), percentile(all, 1).Seconds(), len(all)
 	report["freshnessByKind"], report["events"], report["clientActions"] = byKind, eventCounts, actionCounts
@@ -860,12 +878,20 @@ type loadRealtimeEvent struct {
 
 // loadRealtimeStream reads the user's realtime stream until ctx ends,
 // reconnecting after a drop like the browser's EventSource.
-func loadRealtimeStream(ctx context.Context, client *http.Client, base string, handle func(loadRealtimeEvent)) {
+func loadRealtimeStream(ctx context.Context, client *http.Client, base string, stats *scaleP06LoadStreams, handle func(loadRealtimeEvent)) {
+	connected := false
 	for ctx.Err() == nil {
 		request, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/realtime/events?workspace=test-workspace", nil)
 		request.Header.Set("X-Workspace-Key", "test-workspace")
 		response, err := client.Do(request)
 		if err == nil {
+			if response.StatusCode == http.StatusOK {
+				stats.connections.Add(1)
+				if connected {
+					stats.reconnects.Add(1)
+				}
+				connected = true
+			}
 			scanner := bufio.NewScanner(response.Body)
 			// Grows to the largest event; most are small.
 			scanner.Buffer(make([]byte, 16<<10), 16<<20)
@@ -882,6 +908,9 @@ func loadRealtimeStream(ctx context.Context, client *http.Client, base string, h
 				handle(event)
 			}
 			response.Body.Close()
+			if ctx.Err() == nil && response.StatusCode == http.StatusOK {
+				stats.disconnects.Add(1)
+			}
 		}
 		select {
 		case <-ctx.Done():

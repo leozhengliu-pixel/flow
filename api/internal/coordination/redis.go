@@ -1,6 +1,7 @@
 package coordination
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -76,6 +77,14 @@ local values = redis.call('HVALS', KEYS[2])
 local result = {#stale}
 for _, value in ipairs(values) do table.insert(result, value) end
 return result`)
+	presenceTouchScript = redis.NewScript(`
+local previous = redis.call('HGET', KEYS[2], ARGV[1])
+local seen = redis.call('ZSCORE', KEYS[1], ARGV[1])
+redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1])
+redis.call('HSET', KEYS[2], ARGV[1], ARGV[3])
+redis.call('PEXPIRE', KEYS[1], ARGV[4])
+redis.call('PEXPIRE', KEYS[2], ARGV[4])
+return {previous or '', seen or ''}`)
 )
 
 func Open(ctx context.Context, config Config) (*Redis, error) {
@@ -348,6 +357,38 @@ func (r *Redis) UpdatePresence(ctx context.Context, workspace, clientID string, 
 		return nil, err
 	}
 	return r.Presence(ctx, workspace, ttl)
+}
+
+// TouchPresence refreshes one client atomically without reading the roster.
+// changed excludes the timestamp, but includes an expired client rejoining.
+func (r *Redis) TouchPresence(ctx context.Context, workspace, clientID string, presence domain.Presence, ttl time.Duration) (changed bool, err error) {
+	raw, err := json.Marshal(presence)
+	if err != nil {
+		return false, err
+	}
+	seenKey, itemsKey := r.presenceKeys(workspace)
+	values, err := presenceTouchScript.Run(ctx, r.client, []string{seenKey, itemsKey}, clientID, presence.LastSeenAt.UnixMilli(), raw, (ttl * 2).Milliseconds()).StringSlice()
+	if err != nil {
+		return false, err
+	}
+	var previous domain.Presence
+	if len(values) != 2 || values[1] == "" || json.Unmarshal([]byte(values[0]), &previous) != nil {
+		return true, nil
+	}
+	expired := presence.LastSeenAt.Sub(previous.LastSeenAt) > ttl
+	previous.LastSeenAt = presence.LastSeenAt
+	previousRaw, err := json.Marshal(previous)
+	return expired || !bytes.Equal(previousRaw, raw), err
+}
+
+// DeletePresence removes a single client without materializing other users.
+func (r *Redis) DeletePresence(ctx context.Context, workspace, clientID string) (bool, error) {
+	seenKey, itemsKey := r.presenceKeys(workspace)
+	pipe := r.client.TxPipeline()
+	pipe.ZRem(ctx, seenKey, clientID)
+	removed := pipe.HDel(ctx, itemsKey, clientID)
+	_, err := pipe.Exec(ctx)
+	return removed.Val() > 0, err
 }
 
 func (r *Redis) RemovePresence(ctx context.Context, workspace, clientID string, ttl time.Duration) ([]domain.Presence, error) {

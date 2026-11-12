@@ -177,7 +177,7 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, o
     if (!workspaceKey) return
     const clientId = realtimeClientId()
     let active = true
-    const heartbeat = () => void updatePresence(clientId, issueId, route).then(rows => { if (!appliedCursor || active) setPresence(rows) }).catch(() => undefined)
+    const heartbeat = () => void updatePresence(clientId, issueId, route).then(rows => { if (Array.isArray(rows) && (!appliedCursor || active)) setPresence(rows) }).catch(() => undefined)
     heartbeat()
     const timer = window.setInterval(heartbeat, 20_000)
     return () => {

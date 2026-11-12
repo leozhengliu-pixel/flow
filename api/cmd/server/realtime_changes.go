@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
-	"flow/api/internal/idgen"
 )
 
 const (
@@ -119,39 +118,5 @@ const maxReplayPages = 20
 // filtered like live events. It returns the cursor it reached; a cursor that
 // is unknown, older than retention or too far behind gets a resync marker.
 func (s *server) replayChanges(w http.ResponseWriter, r *http.Request, workspaceID string, since int64, flusher http.Flusher) (int64, bool) {
-	cursor := since
-	resync := func() (int64, bool) {
-		ok := writeSSE(w, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}, s.realtime.node)
-		flusher.Flush()
-		return cursor, ok
-	}
-	for page := 0; page < maxReplayPages; page++ {
-		changes, err := s.store.WorkspaceChanges(r.Context(), workspaceID, cursor, maxChangesLimit)
-		if err != nil {
-			return cursor, false
-		}
-		if changes.ResyncRequired {
-			cursor = max(cursor, changes.Head)
-			return resync()
-		}
-		for _, record := range changes.Records {
-			cursor = record.Seq
-			event := domain.RealtimeEvent{ID: record.Event.ID, Seq: record.Seq, Type: record.Event.Type, AggregateID: record.Event.AggregateID, ActorID: record.ActorID, Payload: record.Event.Payload, CreatedAt: record.Event.CreatedAt}
-			projected, visible, err := s.pagedRealtimeEvent(r, event)
-			if err != nil {
-				return cursor, false
-			}
-			if visible {
-				projected.Seq = record.Seq
-				if !writeSSE(w, projected, s.realtime.node) {
-					return cursor, false
-				}
-			}
-		}
-		flusher.Flush()
-		if !changes.HasMore {
-			return cursor, true
-		}
-	}
-	return resync()
+	return s.replayBudgetedChanges(w, r, workspaceID, since)
 }
