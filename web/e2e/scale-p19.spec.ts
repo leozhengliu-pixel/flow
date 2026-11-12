@@ -1,8 +1,9 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { test } from './scale-p19-fixture'
+import { scaleP19CheckRetention, scaleP19CollectHeap, scaleP19HeapOwners, scaleP19HeapSnapshot, scaleP19HeapTrend, scaleP19RetentionProbe } from './scale-p19-heap'
 
-const root = '/tmp/codex-scale-p19'
+const root = process.env.FLOW_SCALE_P19_ARTIFACTS ?? '/tmp/codex-scale-p19'
 
 async function directory(page: Page, request: APIRequestContext, workspace: string) {
   const headers = { 'X-Workspace-Key': workspace }
@@ -168,8 +169,8 @@ for (const enabled of [false, true]) for (const viewport of [{ width: 1440, heig
 
 test.describe('scale-p19 bounded navigation and control states', () => {
   test.use({ scaleP19Enabled: true, viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false })
-  test('100 cross-page navigations retain a stable heap and preserve selected IDs', async ({ page, request, workspaceKey }) => {
-    test.setTimeout(180_000)
+  test('100 cross-page navigations retain a stable heap and preserve selected IDs', async ({ page, request, workspaceKey }, testInfo) => {
+    test.setTimeout(process.env.FLOW_SCALE_P19_HEAP_SNAPSHOTS === 'true' ? 300_000 : 180_000)
     const fixture = await directory(page, request, workspaceKey)
     await page.goto(`/${workspaceKey}/projects/all`)
     await expect(page.getByRole('row', { name: '项目', exact: true })).toBeVisible()
@@ -183,18 +184,35 @@ test.describe('scale-p19 bounded navigation and control states', () => {
     await next.focus()
     await capture(page, 'pager-focus', '.scale-p19-project-pager')
     const cdp = await page.context().newCDPSession(page)
+    const probe = await scaleP19RetentionProbe(cdp)
+    const initial = await probe.read()
     const samples = []
-    for (let navigation = 1; navigation <= 100; navigation++) {
-      await next.click()
-      await expect(pager).toContainText(`${navigation * 100 + 1}–${navigation * 100 + 100}`)
-      if ([20, 50, 100].includes(navigation)) {
-        await cdp.send('HeapProfiler.collectGarbage')
-        samples.push({ navigation, ...await cdp.send('Runtime.getHeapUsage') })
+    try {
+      for (let navigation = 1; navigation <= 100; navigation++) {
+        await next.click()
+        await expect(pager).toContainText(`${navigation * 100 + 1}–${navigation * 100 + 100}`)
+        const retention = await probe.read()
+        scaleP19CheckRetention(retention, navigation, initial.listeners)
+        if (navigation % 20 === 0) {
+          const collected = await scaleP19CollectHeap(page, cdp, 3)
+          const median = [...collected.readings].sort((a, b) => a.usedSize - b.usedSize)[1]
+          const sample = { navigation, ...median, ...collected, retention, diagnostic: undefined as unknown }
+          if (process.env.FLOW_SCALE_P19_HEAP_SNAPSHOTS === 'true' && [20, 100].includes(navigation)) {
+            await scaleP19HeapSnapshot(cdp, testInfo.outputPath(`heap-${navigation}.heapsnapshot`))
+            sample.diagnostic = { owners: await scaleP19HeapOwners(cdp) }
+          }
+          samples.push(sample)
+        }
+        expect(await page.locator('.lp-project-row').count()).toBeLessThan(60)
       }
-      expect(await page.locator('.lp-project-row').count()).toBeLessThan(60)
+      const trend = scaleP19HeapTrend(samples)
+      writeFileSync(`${root}/browser-heap.json`, JSON.stringify({ project: testInfo.project.name, samples, trend }, null, 2))
+      writeFileSync(testInfo.outputPath('heap-samples.json'), JSON.stringify({ project: testInfo.project.name, samples, trend }, null, 2))
+      // React DEV's sampled owner stacks vary with timing; storage bounds above remain strict on every page.
+      expect(trend.lateBytesPerNavigation).toBeLessThanOrEqual(trend.allowedBytesPerNavigation)
+    } finally {
+      await probe.dispose()
     }
-    writeFileSync(`${root}/browser-heap.json`, JSON.stringify(samples, null, 2))
-    expect(samples[2].usedSize).toBeLessThanOrEqual(samples[0].usedSize + 4 * 1024 * 1024)
     await expect(page.getByRole('toolbar', { name: '1 selected projects' })).toBeVisible()
     await capture(page, 'navigation-100-projects-1440')
     fixture.revoke()
