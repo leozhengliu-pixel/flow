@@ -18,6 +18,9 @@ import { useDesktopLayout } from '@/hooks/use-desktop-layout'
 import { useWorkspacePreferences } from '@/lib/runtime-preferences'
 import { workspaceAIAllowed } from '@/lib/workspace-ai'
 import { AgentBadge } from '@/components/agent/agent-badge'
+import { DateFilterDialog } from '@/components/issue-explorer/date-filter-dialog'
+import { DateAfterGlyph, DateCompletedGlyph } from '@/components/issue-explorer/date-operator-glyphs'
+import { dateFilterValueLabel, durationFilterOptions, type DateFilterKind } from '@/components/issue-explorer/issue-date-filter'
 import styles from './my-issues-filter-menu.module.css'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { FlowGlyph, type FlowGlyphName } from '@/components/ui/menu-glyphs'
@@ -30,7 +33,6 @@ import { CustomerLogoPile } from '@/components/customer/customer-logo-pile'
 import { CUSTOMER_NUMBER_COMPARISONS, parseCustomerNumberInput } from '@/components/issue-explorer/customer-filter'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { ReleasePipelineIcon } from '@/components/releases/release-icons'
-import { durationFilterOptions } from '@/components/issue-explorer/issue-date-filter'
 import { MyIssuesPhoneFilterIcon } from './my-issues-phone-filter-icons'
 
 export type IssueFilterScope = 'issues' | 'project'
@@ -364,8 +366,8 @@ function FilterValueItem({ field, layer, option, treeThrough, active, selected, 
   const label = isSystemOption(field, option) ? t(option.label) : option.label
   // The reference app's customer tier values carry no image.
   const mark = kind === 'plain' || option.kind === 'customerTier' ? null : <span className={styles.optionSlot} aria-hidden="true"><OptionMark field={field} option={option}/></span>
-  // The reference app shows counts on selectable values only (not on categories or one-click relation rows).
-  const count = (optionCount(option)??0)>0 && kind === 'check' ? <span className={styles.valueMetaLine}>{desktop ? <span className={styles.countLine}><span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span></span> : <span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span>}</span> : null
+  // The reference app shows counts on selectable values and on the Dates presets (not on categories or one-click relation rows).
+  const count = (optionCount(option)??0)>0 && (kind === 'check' || option.kind === 'dueDate') ? <span className={styles.valueMetaLine}>{desktop ? <span className={styles.countLine}><span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span></span> : <span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span>}</span> : null
   if(option.numberInput)return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} data-row-kind={kind} onMouseMove={()=>{onActive();onNestedOpen(true)}}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span><span className={styles.submenuMarker} aria-hidden="true">▶</span></button></Popover.Trigger><Popover.Portal><NumberValueMenu field={field} layer={layer} option={option} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
   if(option.children&&(option.children.length||field==='customers'))return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} data-row-kind={kind} onMouseMove={()=>{onActive();onNestedOpen(true)}}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span><span className={styles.submenuMarker} aria-hidden="true">▶</span></button></Popover.Trigger><Popover.Portal><NestedValueMenu category={option} field={field} label={option.label} layer={layer} options={option.children} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
   if(kind!=='check')return <button type="button" role="option" aria-selected={active} className={styles.valueItem} data-row-kind={kind} onMouseMove={onActive} onClick={()=>onChoose(option)}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span>{count}</button>
@@ -377,7 +379,8 @@ function NestedValueMenu({ category, field, label, layer, onChoose, onClose, opt
   // The reference app's Time in current status also offers what the search reads as a duration ("2 days", "3w").
   const [typed, setTyped] = useState('')
   const typedOptions = useMemo(() => category?.durationSearch ? durationFilterOptions(category.durationSearch, typed, category.label).filter(option => !options.some(existing => existing.id === option.id)) : [], [category, options, typed])
-  const { inputRef: commandInputRef, ...command } = usePropertyCommand({ personOptions: isPeopleProperty(field), autoFocus: false, closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: onChoose, open: true, options: typedOptions.length ? [...options, ...typedOptions] : options })
+  const { inputRef: commandInputRef, ...command } = usePropertyCommand({ personOptions: isPeopleProperty(field), autoFocus: false, closeOnSelect: false, highlightOnOpen: field !== 'dates', onOpenChange: open => { if (!open) onClose() }, onSelect: onChoose, open: true, options: typedOptions.length ? [...options, ...typedOptions] : options })
+  // The reference app's Dates presets open with no row highlighted (arrow keys still move from the top).
   // Like the reference, a short team list (under four teams) has no search.
   const desktopLayout = useDesktopLayout()
   const hideSearch = isCategoryList(field, options) || (desktopLayout && field === 'team' && options.length < 4)
@@ -425,6 +428,20 @@ function formatCurrency(amount: number, currency: string) {
 }
 
 function TextConditionDialog({ condition, onApply, onClose }: { condition?: { field: MyIssuesFilterKey; option: MyIssuesFilterOption }; onApply: (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => void; onClose: () => void }) {
+  // Dates ▸ "Custom date or timeframe…": the reference app's day / month / quarter / half-year / year dialog.
+  if (condition?.option.textConditionInput === 'date' && condition.option.textConditionPrefix) return <CustomDateConditionDialog condition={condition} onApply={onApply} onClose={onClose}/>
+  return <TextConditionInputDialog condition={condition} onApply={onApply} onClose={onClose}/>
+}
+
+function CustomDateConditionDialog({ condition, onApply, onClose }: { condition: { field: MyIssuesFilterKey; option: MyIssuesFilterOption }; onApply: (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => void; onClose: () => void }) {
+  const prefix = condition.option.textConditionPrefix!
+  return <DateFilterDialog open fieldLabel={condition.option.filterLabel ?? condition.option.label} kind={prefix.slice(0, -1) as DateFilterKind} onClose={onClose} onApply={(value, operator) => {
+    const id = `${prefix}${value}`
+    onApply(condition.field, { ...condition.option, id, label: dateFilterValueLabel(id) ?? value, textConditionPrefix: undefined, textConditionInput: undefined, dateOperator: operator })
+  }}/>
+}
+
+function TextConditionInputDialog({ condition, onApply, onClose }: { condition?: { field: MyIssuesFilterKey; option: MyIssuesFilterOption }; onApply: (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => void; onClose: () => void }) {
   const { t } = useI18n()
   const [value, setValue] = useState('')
   const open = Boolean(condition)
@@ -526,13 +543,20 @@ export function FilterFieldIcon({field}:{field:MyIssuesFilterKey}){
   return <Link2 size={16}/>
 }
 
-const DATE_CATEGORY_GLYPHS: Record<string, FlowGlyphName> = { 'due-date': 'dates', 'created-date': 'createdDate', 'started-date': 'dates', 'updated-date': 'updatedDate', 'completed-date': 'updatedDate', 'auto-closed-date': 'autoClosed', 'released-date': 'dates', 'triaged-date': 'triagedDate' }
+const DATE_CATEGORY_GLYPHS: Record<string, FlowGlyphName> = { 'due-date': 'dates', 'created-date': 'createdDate', 'updated-date': 'updatedDate', 'canceled-date': 'autoClosed', 'auto-closed-date': 'autoClosed', 'released-date': 'dates', 'triaged-date': 'triagedDate' }
 /** The reference app's Releases submenu rows: release glyph, the pipeline glyph, and the Dates glyph for Released date. */
 const RELEASE_CATEGORY_IDS = new Set(['release', 'release-pipeline', 'release-stage', 'release-stage-type', 'released-date', 'no-releases'])
 const RELATION_GLYPHS: Record<string, FlowGlyphName> = { sub_issue_of: 'subIssues', recurring: 'dates', 'recurring-any': 'dates', 'recurring-none': 'dates', 'has-relations': 'relations', duplicate: 'duplicates' }
 const RELATION_ACTION_GLYPHS: Record<string, string> = { parent_of: 'Parent issue…', blocked_by: 'Blocked issue…', blocks: 'Blocking issue…' }
 const TRIAGE_GLYPHS: Record<string, FlowGlyphName> = { 'triage-label': 'labels', 'triage-team': 'moveTo', related: 'relations', duplicate: 'duplicates' }
 /** Icons for the reference app's category rows (Dates ▸ Due date…, Relations, Triage Intelligence ▸ Suggested …). */
+/** Dates values (presets, custom days, periods) carry their property's mark in a chip, like the reference app ("Created date after ✎ Nov 5"). */
+const DATE_KIND_CATEGORIES: Record<string, string> = { due: 'due-date', created: 'created-date', updated: 'updated-date', started: 'started-date', completed: 'completed-date', canceled: 'canceled-date', autoClosed: 'auto-closed-date', released: 'released-date', triaged: 'triaged-date', status: 'time-current-status' }
+export function DateValueMark({ value, fallback }: { value: string; fallback: ReactElement }) {
+  const category = DATE_KIND_CATEGORIES[value.slice(0, value.indexOf(':'))]
+  const glyph = category ? categoryGlyph('dates', { id: category, label: '' }) : undefined
+  return glyph && isValidElement<{ style?: CSSProperties }>(glyph) ? cloneElement(glyph, { style: { color: 'var(--chip-text)' } }) : fallback
+}
 function categoryGlyph(field: MyIssuesFilterKey, option: MyIssuesFilterOption) {
   if (field === 'releases' && RELEASE_CATEGORY_IDS.has(option.id)) {
     if (option.id === 'released-date') return <FlowGlyph name="dates"/>
@@ -541,6 +565,9 @@ function categoryGlyph(field: MyIssuesFilterKey, option: MyIssuesFilterOption) {
   }
   if (field === 'dates') {
     if (option.id === 'time-current-status') return <ViewGlyph icon="Stopwatch" color="currentColor" style={{ width: 16, height: 16 }}/>
+    // Started and Completed date: a calendar with an arrow / a check, as in the reference app (Flow's own drawings).
+    if (option.id === 'started-date') return <DateAfterGlyph/>
+    if (option.id === 'completed-date') return <DateCompletedGlyph/>
     const name = DATE_CATEGORY_GLYPHS[option.id]
     return name ? <FlowGlyph name={name}/> : undefined
   }

@@ -54,3 +54,6 @@
   .compact .commands button[aria-label="Clear all filters"] { opacity: .6; }
   .options [data-user-avatar] { width:18px;height:18px;font-weight:400; }
 }
+/* The reference app's date operator menu (on / before / after): 6px above and below, full-width square rows, icon then label. */
+.operatorMenu:has(button[data-icon]){padding:6px 0}
+.operatorMenu button[data-icon]{justify-content:flex-start;gap:8px;border-radius:0}

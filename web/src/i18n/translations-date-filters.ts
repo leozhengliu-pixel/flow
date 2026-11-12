@@ -6,4 +6,5 @@ export const dateFiltersZhCN: Record<string, string> = {
   "1 day": "1 天",
   "3 months": "3 个月",
   "6 months": "6 个月",
+  within: "在…之内",
 };

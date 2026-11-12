@@ -618,8 +618,8 @@ func issueFieldValues(issue domain.Issue, field string, data domain.Bootstrap) [
 		return []string{issue.CreatedAt.UTC().Format(time.RFC3339)}
 	case "updatedat":
 		return []string{issue.UpdatedAt.UTC().Format(time.RFC3339)}
-	case "startedat", "completedat", "triagedat", "statuschangedat", "autoclosedat":
-		value := map[string]*time.Time{"startedat": issue.StartedAt, "completedat": issue.CompletedAt, "triagedat": issue.TriagedAt, "statuschangedat": issue.StatusChangedAt, "autoclosedat": issue.AutoClosedAt}[strings.ToLower(strings.TrimSpace(field))]
+	case "startedat", "completedat", "canceledat", "triagedat", "statuschangedat", "autoclosedat":
+		value := map[string]*time.Time{"startedat": issue.StartedAt, "completedat": issue.CompletedAt, "canceledat": issue.CanceledAt, "triagedat": issue.TriagedAt, "statuschangedat": issue.StatusChangedAt, "autoclosedat": issue.AutoClosedAt}[strings.ToLower(strings.TrimSpace(field))]
 		if value == nil {
 			return nil
 		}

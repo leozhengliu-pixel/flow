@@ -1,0 +1,85 @@
+/* The reference app's "Custom date or timeframe…" dialog (Dates filters): measured at 1470×688 in the light theme. */
+.overlay{position:fixed;z-index:700;inset:0;background:var(--overlay-modal)}
+.dialog{position:fixed;z-index:701;top:33.333333vh;left:50%;transform:translate(-50%,-33.333333%);box-sizing:border-box;width:min(562px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:hidden;border:.5px solid var(--date-picker-panel-border);border-radius:12px;outline:0;background:var(--date-picker-panel);box-shadow:var(--date-picker-shadow);color:var(--date-picker-text);pointer-events:auto}
+.dialog form{display:flex;flex-direction:column;max-height:inherit}
+
+.head{flex:none;padding:32px 32px 16px;border-bottom:.5px solid var(--date-picker-divider)}
+.titleRow{display:flex;align-items:center;gap:8px;height:28px;margin-bottom:6px}
+.title{margin:0;color:var(--date-picker-title);font-size:15px;font-weight:600;line-height:23px}
+.operator{color:var(--date-picker-muted);font-size:15px;font-weight:600;line-height:23px}
+.titleRow .pill+.pill{margin-left:-4px}
+.pill{position:relative;box-sizing:border-box;height:28px;margin:2px;padding:4px 12px;border:.5px solid transparent;border-radius:9999px;background:var(--date-picker-panel);color:var(--date-picker-muted);font:inherit;font-size:12px;font-weight:500;line-height:normal;cursor:default}
+.pill::after{content:"";position:absolute;inset:0;border-radius:9999px;box-shadow:var(--date-picker-ring);pointer-events:none}
+.pill:hover{color:var(--date-picker-title)}
+.pill[aria-pressed=true],.pill[aria-selected=true]{background:var(--date-picker-active);color:var(--date-picker-title)}
+.pill[aria-pressed=true]::after,.pill[aria-selected=true]::after{box-shadow:none}
+.pill:focus-visible{outline:0;box-shadow:0 0 0 1px var(--date-picker-accent)}
+
+.field{position:relative;margin-top:14px}
+.input{box-sizing:border-box;display:block;width:100%;height:32px;padding:6px 12px;border:.5px solid var(--date-picker-border);border-radius:8px;outline:0;background:var(--date-picker-panel);color:var(--date-picker-title);font:inherit;font-size:12px;line-height:normal}
+.input::placeholder{color:var(--date-picker-faint)}
+.input:focus{outline:1px solid var(--date-picker-accent);outline-offset:-1px}
+.field .input:has(+.clear){padding-right:30px}
+.clear{position:absolute;top:50%;right:8px;display:grid;place-items:center;width:13px;height:13px;padding:0;border:0;border-radius:9999px;background:var(--date-picker-faint);color:var(--date-picker-panel);transform:translateY(-50%);cursor:default}
+
+.modes{display:flex;gap:2px;margin:14px 0 -2px}
+
+.body{position:relative;flex:none;box-sizing:border-box;height:298px;max-height:calc(100vh - 32px - 252px);margin:0 28px;padding:12px 4px 16px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.body[data-mode=day]{padding-top:8px;overflow:hidden}
+.yearGroup{margin-bottom:16px}
+.yearLabel{margin-bottom:8px;color:var(--date-picker-muted);font-size:12px;font-weight:500;line-height:14.5px}
+.grid{display:grid;gap:8px}
+.grid[data-unit=month]{grid-template-columns:repeat(3,minmax(0,1fr))}
+.grid[data-unit=quarter]{grid-template-columns:repeat(4,minmax(0,1fr))}
+.grid[data-unit=half]{grid-template-columns:repeat(2,minmax(0,1fr))}
+.yearList{display:grid;gap:12px}
+.cell{box-sizing:border-box;width:100%;height:24px;padding:0 8px;border:.5px solid var(--date-picker-border);border-radius:9999px;background:transparent;color:var(--date-picker-text);font:inherit;font-size:12px;font-weight:500;line-height:normal;cursor:default}
+.cell:hover{background:var(--date-picker-preview)}
+.cell[data-preview]{background:var(--date-picker-preview);box-shadow:0 0 0 .5px var(--date-picker-accent)}
+.cell[data-selected]{border-color:transparent;background:var(--date-picker-accent);color:var(--date-picker-on-accent)}
+
+.calendars{position:relative;display:flex;justify-content:space-between}
+.month{width:246px}
+.monthTitle{box-sizing:border-box;height:36px;padding:0 8px;color:var(--date-picker-text);font-size:12px;font-weight:400;line-height:36px}
+.weeks{position:relative;display:flex;gap:8px;margin-top:8px;padding:0 8px}
+/* The reference app's line under the weekday names: one rule from the Sunday column into the Saturday one, over the weekend shading. */
+.weeks::after{content:"";position:absolute;top:35px;left:8px;width:224.8px;height:.5px;background:var(--date-picker-divider);pointer-events:none}
+.weekday{display:flex;flex-direction:column;gap:8px;width:26px;padding-bottom:12px;border-radius:8px}
+.weekday[data-weekend]{background:var(--date-picker-weekend)}
+.weekdayName{box-sizing:border-box;height:35.5px;padding-top:8px;color:var(--date-picker-muted);font-size:13px;line-height:19.5px;text-align:center}
+.dayGap,.day{box-sizing:border-box;width:26px;height:26px;flex:none}
+.day{padding:0;border:0;border-radius:50%;background:transparent;color:var(--date-picker-text);font:inherit;font-size:13px;line-height:20px;cursor:default}
+.weekday[data-weekend] .day{color:var(--date-picker-muted)}
+.day:hover{background:var(--date-picker-preview)}
+.day[data-today]{border:1px solid var(--date-picker-faint);background:var(--date-picker-today);color:var(--date-picker-title)}
+.day[data-preview]{background:var(--date-picker-day-preview);box-shadow:inset 0 0 0 1px var(--date-picker-accent)}
+.day[data-selected]{border:0;background:var(--date-picker-accent);color:var(--date-picker-on-accent)}
+.nav{position:absolute;top:4px;right:8px;display:flex;gap:4px}
+.nav button{display:grid;place-items:center;width:28px;height:28px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--date-picker-muted);cursor:default}
+.nav button:hover{background:var(--date-picker-active);color:var(--date-picker-title)}
+
+.footer{display:flex;flex:none;justify-content:flex-end;margin-bottom:-4px;padding:16px 32px 32px;border-top:1px solid var(--date-picker-divider)}
+.cancel,.apply{box-sizing:border-box;height:32px;margin:4px 0 4px 4px;padding:0 12px;border:.5px solid transparent;border-radius:9999px;font:inherit;font-size:13px;font-weight:500;line-height:normal;cursor:default}
+.cancel{margin-right:6px;background:var(--date-picker-panel);box-shadow:var(--date-picker-ring);color:var(--date-picker-text)}
+.cancel:hover{background:var(--date-picker-active)}
+.apply{background:var(--date-picker-accent);box-shadow:var(--date-picker-apply-shadow);color:var(--date-picker-on-accent)}
+.apply:hover{filter:brightness(1.05)}
+
+/* Phone (the reference app at 390px): no search field; tabs tighten; 28px cells with 4px rows; one six-week month;
+   36px footer buttons. */
+.dialog[data-phone] .modes .pill{padding:4px 7.75px}
+.dialog[data-phone] .cell{height:28px}
+.dialog[data-phone] .grid{row-gap:4px}
+.dialog[data-phone] .yearGroup{margin-bottom:11.5px}
+.dialog[data-phone] .calendars{justify-content:flex-start}
+.dialog[data-phone] .month{width:100%}
+.dialog[data-phone] .weeks::after{width:271.7px}
+.dialog[data-phone] .weekday{width:32.7px;align-items:center}
+.dialog[data-phone] .weekdayName{width:100%}
+.dialog[data-phone] .nav{right:10.2px}
+.dialog[data-phone] .cancel,.dialog[data-phone] .apply{height:36px}
+.weekday .day[data-outside]{color:var(--date-picker-faint)}
+
+.dialog[data-phone] .modes{margin-top:20px}
+.dialog[data-phone] .nav{gap:7.6px}
+.dialog[data-phone] .weekday{padding-bottom:4px}

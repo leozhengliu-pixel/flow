@@ -11,7 +11,8 @@ import { isPeopleProperty } from '@/lib/people'
 
 export type AppliedFilterOperator = 'is' | 'isNot'
 export type AppliedFilterOption = { id: string; label: string; color?: string; count?: number; icon?: ReactNode; visualType?: 'person' | 'team'; end?: string; keywords?: string }
-export type AppliedFilterOperatorChoice<TOperator extends string = string> = { operator: TOperator; label: string }
+/** `icon` leads the menu row (the reference app's on / before / after date operators). */
+export type AppliedFilterOperatorChoice<TOperator extends string = string> = { operator: TOperator; label: string; icon?: ReactNode }
 export type AppliedFilterItem<TOption extends AppliedFilterOption = AppliedFilterOption, TOperator extends string = AppliedFilterOperator> = {
   id: string
   fieldLabel: string
@@ -23,6 +24,8 @@ export type AppliedFilterItem<TOption extends AppliedFilterOption = AppliedFilte
   operatorChoices?: AppliedFilterOperatorChoice<TOperator>[]
   /** Several values summarised ("2 priorities"); defaults to the joined labels. */
   valueSummary?: string
+  /** Opens the value's own editor instead of the option menu (a custom date reopens the date dialog, as in the reference app). */
+  onValueClick?: () => void
 }
 
 type Translate = (value: string) => string
@@ -97,7 +100,9 @@ export function FilterConditionChip<TOption extends AppliedFilterOption, TFilter
   return <div className={styles.condition} data-filter-chip="">
     <span className={styles.field}>{fieldVisual ?? <i/>}<span>{translate(filter.fieldLabel)}</span></span>
     <OperatorMenu filter={filter} onChange={onOperatorChange} translate={translate}/>
-    <ValueMenu countLabel={countLabel} filter={filter} onChange={onValuesChange} options={options} translate={translate} valueVisual={valueVisual}/>
+    {filter.onValueClick
+      ? <button aria-label={translate('{field} values').replace('{field}', () => translate(filter.fieldLabel))} className={styles.value} onClick={filter.onValueClick} type="button"><ValueSummary summary={filter.valueSummary} translate={translate} values={filter.values} visual={valueVisual}/></button>
+      : <ValueMenu countLabel={countLabel} filter={filter} onChange={onValuesChange} options={options} translate={translate} valueVisual={valueVisual}/>}
     <button className={styles.remove} aria-label={translate('Remove {field} filter').replace('{field}', () => translate(filter.fieldLabel))} onClick={onRemove} type="button"><X size={13}/></button>
   </div>
 }
@@ -106,7 +111,7 @@ function OperatorMenu<TOption extends AppliedFilterOption, TFilter extends Appli
   const choices: AppliedFilterOperatorChoice[] = filter.operatorChoices ?? [{ operator: 'is', label: filter.operatorLabel ?? 'is' }, { operator: 'isNot', label: filter.negativeOperatorLabel ?? 'is not' }]
   const current = choices.find(choice => choice.operator === filter.operator) ?? choices[0]
   return <Popover.Root><Popover.Trigger asChild><button className={styles.operator} type="button" aria-label={translate('{field} operator').replace('{field}', () => translate(filter.fieldLabel))}>{translate(current.label)}</button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="start" className={styles.operatorMenu} collisionPadding={8} sideOffset={4} role="menu">
-    {choices.map(choice => <Popover.Close asChild key={choice.operator}><button aria-checked={choice.operator === filter.operator} onClick={() => onChange(choice.operator)} role="menuitemradio" type="button"><span>{translate(choice.label)}</span>{choice.operator === filter.operator && <Check size={13}/>}</button></Popover.Close>)}
+    {choices.map(choice => <Popover.Close asChild key={choice.operator}><button aria-checked={choice.operator === filter.operator} data-icon={choice.icon ? '' : undefined} onClick={() => onChange(choice.operator)} role="menuitemradio" type="button">{choice.icon}<span>{translate(choice.label)}</span>{!choice.icon && choice.operator === filter.operator && <Check size={13}/>}</button></Popover.Close>)}
   </Popover.Content></Popover.Portal></Popover.Root>
 }
 
