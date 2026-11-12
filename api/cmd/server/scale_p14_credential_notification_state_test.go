@@ -139,6 +139,7 @@ func TestScaleP14CountReauthenticatesAfterMetadataDrift(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			secret, key := apiKeyScopeCredential(t, f, "user", "selected", []string{team}, []string{"read"})
 			pageRead, changed, authentications := false, false, 0
+			unchangedAuthority := false
 			ctx := store.WithSQLStatementObserver(t.Context(), func(query string) {
 				if strings.Contains(query, "FROM api_key_lookup locator") {
 					authentications++
@@ -146,12 +147,14 @@ func TestScaleP14CountReauthenticatesAfterMetadataDrift(t *testing.T) {
 				if strings.HasPrefix(query, "SELECT data,created_at,id FROM workspace_content_records") {
 					pageRead = true
 				}
-				if changed || !pageRead || !strings.HasPrefix(query, "SELECT workspace_id,(SELECT COALESCE(SUM(revision)") {
+				epochRead := strings.HasPrefix(query, "SELECT workspace_id,(SELECT COALESCE(SUM(revision)") || strings.HasPrefix(query, "SELECT COALESCE((SELECT epoch FROM workspace_authz_epochs")
+				if changed || !pageRead || !epochRead {
 					return
 				}
 				changed = true
 				write, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 				defer cancel()
+				before, beforeErr := repo.AuthzEpoch(write, f.data.Workspace.ID)
 				if err := repo.MutateWorkspace(store.ContextWithActor(write, f.data.Viewer), workspace, "scale_p14.credential_changed", key.ID, nil, func(data *domain.Bootstrap) error {
 					for i := range data.APIKeys {
 						if data.APIKeys[i].ID != key.ID {
@@ -170,6 +173,8 @@ func TestScaleP14CountReauthenticatesAfterMetadataDrift(t *testing.T) {
 				}); err != nil {
 					t.Errorf("change after read snapshot: %v", err)
 				}
+				after, afterErr := repo.AuthzEpoch(write, f.data.Workspace.ID)
+				unchangedAuthority = beforeErr == nil && afterErr == nil && before == after
 			})
 			if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p14.notice", "", nil, func(data *domain.Bootstrap) error {
 				now := time.Now().UTC()
@@ -179,8 +184,11 @@ func TestScaleP14CountReauthenticatesAfterMetadataDrift(t *testing.T) {
 				t.Fatal(err)
 			}
 			response := scaleP14StateRequestContext(t, ctx, f, nil, secret, workspace)
-			if !changed || authentications < 2 {
+			if !changed || !unchangedAuthority && authentications < 2 {
 				t.Fatalf("read did not reauthenticate after epoch drift: changed=%v auth=%d", changed, authentications)
+			}
+			if mode != "telemetry" && unchangedAuthority {
+				t.Fatal("credential scope change did not advance the authoritative epoch")
 			}
 			if mode == "revoked" {
 				if response.Code != http.StatusUnauthorized {

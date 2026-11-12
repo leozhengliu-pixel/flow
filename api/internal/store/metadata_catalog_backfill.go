@@ -63,6 +63,12 @@ func (s *SQLiteStore) BackfillMetadataCatalog(ctx context.Context, workspace, ki
 			return progress, err
 		}
 	}
+	if missingWorkspace && s.db.journalReady.Load() {
+		if err := read.Rollback(); err != nil {
+			return progress, err
+		}
+		return s.pruneOrphanRecordCatalog(ctx, workspace)
+	}
 	before, err := readMetadataCatalogCheckpoint(ctx, read, workspace, kind)
 	if err != nil {
 		return progress, err
@@ -224,6 +230,11 @@ func (s *SQLiteStore) BackfillMetadataCatalog(ctx context.Context, workspace, ki
 }
 
 func writeMetadataCatalogRow(ctx context.Context, tx *sqlTx, workspace string, row metadataCatalogRow) error {
+	if journalDatabaseReady(tx) {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO record_versions(workspace_key,field,record_key,version,deleted) SELECT workspace_key,field,record_key,1,0 FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=? ON CONFLICT(workspace_key,field,record_key) DO NOTHING`, workspace, row.key.Kind, row.key.ID); err != nil {
+			return err
+		}
+	}
 	omitted := 0
 	if row.omitted {
 		omitted = 1

@@ -572,6 +572,53 @@ jobs:
           go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
 
+      - name: Permit triggers in the isolated MySQL service
+        run: >-
+          docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
+          "SET GLOBAL log_bin_trust_function_creators=1;"
+
+      - name: Checkout main for the MySQL write baseline
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          path: scale-p09-write-baseline
+
+      - name: Create isolated binlog regression databases
+        run: >-
+          docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
+          "CREATE DATABASE flow_write_audit; CREATE DATABASE flow_write_prior;
+          GRANT ALL ON flow_write_audit.* TO 'flow'@'%'; GRANT ALL ON flow_write_prior.* TO 'flow'@'%';
+          GRANT REPLICATION CLIENT ON *.* TO 'flow'@'%';"
+
+      - name: Measure main MySQL import writes
+        working-directory: scale-p09-write-baseline/api
+        env:
+          FLOW_RECORD_JOURNAL: 'off'
+          FLOW_TEST_WRITE_MYSQL_DSN: flow:flow@tcp(127.0.0.1:3306)/flow_write_prior?parseTime=true
+        run: |
+          git rev-parse HEAD
+          go test ./cmd/server -run '^TestMySQLImportWriteAmplification$' -count=1 -v 2>&1 | tee /tmp/scale-p09-main-binlog.log
+          test "${PIPESTATUS[0]}" -eq 0
+
+      - name: Verify bounded MySQL import writes
+        working-directory: api
+        env:
+          FLOW_RECORD_JOURNAL: 'off'
+          FLOW_TEST_WRITE_MYSQL_DSN: flow:flow@tcp(127.0.0.1:3306)/flow_write_audit?parseTime=true
+          FLOW_ASSERT_WRITE_BOUNDS: '1'
+        run: |
+          go test ./cmd/server -run '^TestMySQLImportWriteAmplification$' -count=1 -v 2>&1 | tee /tmp/scale-p09-branch-binlog.log
+          test "${PIPESTATUS[0]}" -eq 0
+
+      - name: Compare MySQL writes with main
+        run: |
+          baseline_bytes=$(awk -F'bytes=' '/BINLOG phase=csv_commit_2000 / { split($2, value, " "); print value[1] }' /tmp/scale-p09-main-binlog.log)
+          branch_bytes=$(awk -F'bytes=' '/BINLOG phase=csv_commit_2000 / { split($2, value, " "); print value[1] }' /tmp/scale-p09-branch-binlog.log)
+          [[ "$baseline_bytes" =~ ^[0-9]+$ && "$branch_bytes" =~ ^[0-9]+$ ]]
+          printf 'binlog baseline_bytes=%s branch_bytes=%s allowance_bytes=65536\n' "$baseline_bytes" "$branch_bytes"
+          test "$baseline_bytes" -gt 0
+          test "$branch_bytes" -le "$((baseline_bytes + 65536))"
+
       - name: PostgreSQL round trip
         working-directory: api
         env:
@@ -607,18 +654,6 @@ jobs:
         env:
           FLOW_TEST_REDIS_ADDR: 127.0.0.1:6379
         run: go test -tags=integration ./internal/coordination -run TestExternalRedisCoordinationRoundTrip
-
-      - name: Create isolated binlog regression database
-        run: >-
-          docker exec -e MYSQL_PWD=root ${{ job.services.mysql.id }} mysql -uroot -e
-          "CREATE DATABASE flow_write_audit; GRANT ALL ON flow_write_audit.* TO 'flow'@'%'; GRANT REPLICATION CLIENT ON *.* TO 'flow'@'%';"
-
-      - name: Verify bounded MySQL import writes
-        working-directory: api
-        env:
-          FLOW_TEST_WRITE_MYSQL_DSN: flow:flow@tcp(127.0.0.1:3306)/flow_write_audit?parseTime=true
-          FLOW_ASSERT_WRITE_BOUNDS: '1'
-        run: go test ./cmd/server -run '^TestMySQLImportWriteAmplification$' -count=1 -v
 
       - name: Start S3 server
         # MinIO no longer publishes pullable images (quay.io and Docker Hub answer

@@ -829,7 +829,11 @@ func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey stri
 		}
 	}
 	if event != nil {
-		if _, err := insertDomainEvent(ctx, tx, domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: []byte(event.PreviousValues), CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: next.Workspace.ID}); err != nil {
+		row := domainEventRow{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, Payload: []byte(event.Payload), PreviousValues: []byte(event.PreviousValues), CreatedAt: event.CreatedAt.Format(time.RFC3339Nano), WorkspaceID: next.Workspace.ID}
+		if tx.journalToken != "" {
+			row.WorkspaceKey = workspaceKey
+		}
+		if _, err := insertDomainEvent(ctx, tx, row); err != nil {
 			return 0, err
 		}
 	}
@@ -937,7 +941,12 @@ func writeMetadataRecordUpserts(ctx context.Context, tx *sqlTx, workspace string
 	bases := map[string]int{}
 	for i, change := range upserts {
 		var existing sql.NullInt64
-		err := tx.QueryRowContext(ctx, `SELECT collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, change.field, change.key).Scan(&existing)
+		var err error
+		if order, known := tx.recordJournalOrder(workspace, change.field, change.key); known {
+			existing = sql.NullInt64{Int64: order, Valid: true}
+		} else {
+			err = tx.QueryRowContext(ctx, `SELECT collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, change.field, change.key).Scan(&existing)
+		}
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}

@@ -116,16 +116,16 @@ func (s *server) writeSyncV2Batch(w http.ResponseWriter, r *http.Request, state 
 	if !ok {
 		return false
 	}
-	target := state.cursor
+	hasChanges := false
 	sidechannelRequest := r.WithContext(context.WithValue(r.Context(), syncV2SidechannelKey{}, true))
 	for _, event := range batch {
 		if syncResourceEvent(event.Type) {
-			target = max(target, event.Seq)
+			hasChanges = true
 		}
 	}
-	if target > state.cursor {
+	if hasChanges {
 		next, ok := s.replaySyncJournal(w, r, journal, state.cursor)
-		if !ok || next < target {
+		if !ok || next < state.cursor {
 			return false
 		}
 		state.cursor = next

@@ -65,6 +65,9 @@ var workspaceRenameSkipped = map[string]string{
 // text people wrote keeps the links they wrote, and these tables do not store
 // a workspaceKey field.
 var workspaceRenameContentTables = map[string]bool{
+	"record_journal_coverage":        true,
+	"record_journal_dirty":           true,
+	"record_versions":                true,
 	"metadata_catalog":               true,
 	"metadata_catalog_relations":     true,
 	"metadata_catalog_collections":   true,

@@ -199,6 +199,11 @@ func eventsNumbered(ctx context.Context, db domainEventExecer, ids []string) (bo
 	clause, args := bindList("id", ids)
 	var unnumbered int
 	err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM domain_events WHERE seq IS NULL AND `+clause, args...).Scan(&unnumbered)
+	if err == nil && journalDatabaseReady(db) {
+		var journals int
+		err = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM record_journal WHERE seq IS NULL AND `+clause, args...).Scan(&journals)
+		unnumbered += journals
+	}
 	return unnumbered == 0, err
 }
 
@@ -251,18 +256,34 @@ func (d *sqlDatabase) sequenceWorkspaceBatch(ctx context.Context, workspaceID st
 	// e.seq is not null for an event already numbered (by the startup
 	// backfill or an older server); a missing event was deleted. Neither
 	// takes a seq.
-	rows, err := tx.QueryContext(ctx, `SELECT q.order_id,q.event_id,e.id,e.seq FROM domain_event_sequencing q LEFT JOIN domain_events e ON e.id=q.event_id WHERE q.workspace_id=? ORDER BY q.order_id LIMIT ?`, workspaceID, sequencingBatch)
+	query := `SELECT q.order_id,q.event_id,e.id,e.seq FROM domain_event_sequencing q LEFT JOIN domain_events e ON e.id=q.event_id WHERE q.workspace_id=? ORDER BY q.order_id LIMIT ?`
+	captureJournal := d.journalReady.Load()
+	if captureJournal {
+		query = `SELECT q.order_id,q.event_id,e.id,e.seq,j.id,j.seq FROM domain_event_sequencing q LEFT JOIN domain_events e ON e.id=q.event_id LEFT JOIN record_journal j ON j.id=` + recordJournalIdentitySQL(d.dialect, "q.event_id") + ` AND j.workspace_id=` + recordJournalIdentitySQL(d.dialect, "q.workspace_id") + ` WHERE q.workspace_id=? ORDER BY q.order_id LIMIT ?`
+	}
+	rows, err := tx.QueryContext(ctx, query, workspaceID, sequencingBatch)
 	if err != nil {
 		return 0, false, err
 	}
 	orders := []any{}
 	assign := []string{}
+	journals := []string{}
 	for rows.Next() {
 		var order int64
 		var eventID string
 		var found sql.NullString
 		var seq sql.NullInt64
-		if err := rows.Scan(&order, &eventID, &found, &seq); err != nil {
+		if captureJournal {
+			var journal sql.NullString
+			var journalSeq sql.NullInt64
+			err = rows.Scan(&order, &eventID, &found, &seq, &journal, &journalSeq)
+			if journal.Valid && !journalSeq.Valid {
+				journals = append(journals, journal.String)
+			}
+		} else {
+			err = rows.Scan(&order, &eventID, &found, &seq)
+		}
+		if err != nil {
 			rows.Close()
 			return 0, false, err
 		}
@@ -315,6 +336,11 @@ func (d *sqlDatabase) sequenceWorkspaceBatch(ctx context.Context, workspaceID st
 	if _, err := tx.ExecContext(ctx, `DELETE FROM domain_event_sequencing WHERE order_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(orders)), ",")+`)`, orders...); err != nil {
 		return 0, false, err
 	}
+	if captureJournal {
+		if err := tx.numberRecordJournal(ctx, workspaceID, journals); err != nil {
+			return 0, false, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return 0, false, err
 	}
@@ -326,12 +352,36 @@ func (d *sqlDatabase) sequenceWorkspaceBatch(ctx context.Context, workspaceID st
 // snapshot includes the previous numbering's commit even if we waited for
 // it. Taking the lock inside this CTE would reuse an older snapshot.
 func (tx *sqlTx) sequencePostgresBatch(ctx context.Context, workspaceID string) (int, bool, error) {
+	if !tx.database.journalReady.Load() {
+		return tx.sequenceLegacyPostgresBatch(ctx, workspaceID)
+	}
 	var consumed, assigned, expected int
+	pending := `SELECT e.id,row_number() OVER (ORDER BY q.order_id) AS position
+		FROM queued q JOIN domain_events e ON e.id=q.event_id WHERE e.seq IS NULL`
+	journalCTE, journalCount, journalExpected := "", "", ""
+	if tx.database.journalReady.Load() {
+		journalCTE = `, journal_pending AS MATERIALIZED (
+		SELECT j.id,row_number() OVER (ORDER BY q.order_id) AS position FROM queued q JOIN record_journal j ON j.id=q.event_id AND j.workspace_id=? WHERE j.seq IS NULL
+	), journal_advanced AS (
+		INSERT INTO workspace_record_journal_heads(workspace_id,head,pruned)
+		SELECT ?,COUNT(*),0 FROM journal_pending HAVING COUNT(*)>0
+		ON CONFLICT(workspace_id) DO UPDATE SET head=workspace_record_journal_heads.head+excluded.head RETURNING head
+	), journal_numbered AS (
+		UPDATE record_journal j SET seq=h.head-(SELECT COUNT(*) FROM journal_pending)+p.position
+		FROM journal_pending p CROSS JOIN journal_advanced h WHERE j.id=p.id AND j.seq IS NULL RETURNING j.id
+	)`
+		journalCount = `+(SELECT COUNT(*) FROM journal_numbered)`
+		journalExpected = `+(SELECT COUNT(*) FROM journal_pending)`
+	}
+	args := []any{workspaceID, sequencingBatch}
+	args = append(args, workspaceID)
+	if tx.database.journalReady.Load() {
+		args = append(args, workspaceID, workspaceID)
+	}
 	err := tx.QueryRowContext(ctx, `WITH queued AS MATERIALIZED (
 		SELECT order_id,event_id FROM domain_event_sequencing WHERE workspace_id=? ORDER BY order_id LIMIT ?
 	), pending AS MATERIALIZED (
-		SELECT e.id,row_number() OVER (ORDER BY q.order_id) AS position
-		FROM queued q JOIN domain_events e ON e.id=q.event_id WHERE e.seq IS NULL
+		`+pending+`
 	), advanced AS (
 		INSERT INTO workspace_event_seq(workspace_id,head,pruned)
 		SELECT ?,COUNT(*),0 FROM pending HAVING COUNT(*)>0
@@ -340,10 +390,10 @@ func (tx *sqlTx) sequencePostgresBatch(ctx context.Context, workspaceID string) 
 	), numbered AS (
 		UPDATE domain_events e SET seq=h.head-(SELECT COUNT(*) FROM pending)+p.position
 		FROM pending p CROSS JOIN advanced h WHERE e.id=p.id AND e.seq IS NULL RETURNING e.id
-	), retired AS (
+	)`+journalCTE+`, retired AS (
 		DELETE FROM domain_event_sequencing WHERE order_id IN (SELECT order_id FROM queued) RETURNING order_id
 	)
-	SELECT (SELECT COUNT(*) FROM retired),(SELECT COUNT(*) FROM numbered),(SELECT COUNT(*) FROM pending)`, workspaceID, sequencingBatch, workspaceID).Scan(&consumed, &assigned, &expected)
+	SELECT (SELECT COUNT(*) FROM retired),(SELECT COUNT(*) FROM numbered)`+journalCount+`,(SELECT COUNT(*) FROM pending)`+journalExpected, args...).Scan(&consumed, &assigned, &expected)
 	if err != nil {
 		return 0, false, err
 	}

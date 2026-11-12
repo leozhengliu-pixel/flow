@@ -465,6 +465,16 @@ func (s *server) projectCommittedChange(r *http.Request, access store.EventAcces
 		if err != nil {
 			return tx, err
 		}
+		if strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_JOURNAL")), "on") {
+			var deleted bool
+			version, deleted, err = s.store.RecordVersion(r.Context(), workspaceKey(r), record.Key)
+			if err != nil {
+				return tx, err
+			}
+			if deleted {
+				return invalidateCommittedChange(change), nil
+			}
+		}
 		if version != record.Version {
 			return invalidateCommittedChange(change), nil
 		}
@@ -526,6 +536,16 @@ func (s *server) projectCommittedMetadata(r *http.Request, access store.EventAcc
 }
 
 func (s *server) committedDeletionSource(r *http.Request, access store.EventAccess, change store.CommittedChange, seq int64) (*EventSource, error) {
+	legacy, journaled, err := s.store.RecordJournalEventSeqForType(r.Context(), access.WorkspaceID, change.TxID, "issue.deleted")
+	if err != nil {
+		return nil, err
+	}
+	if journaled {
+		if legacy == 0 {
+			return nil, errEventSourceUnsupported
+		}
+		seq = legacy
+	}
 	version := access.SourceVersion()
 	key := fmt.Sprintf("p12:deleted:%s:%s:%d:%d", access.WorkspaceID, change.Seq, version.Metadata, version.Issues)
 	build := func() (*EventSource, error) {

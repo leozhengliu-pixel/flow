@@ -217,6 +217,13 @@ func (s *SQLiteStore) ReadRealtimeProjectTeams(ctx context.Context, workspace st
 }
 
 func (s *SQLiteStore) RealtimeMetadataVersion(ctx context.Context, workspace string, key RecordKey) (string, error) {
+	if recordJournalMode() == "on" && s.db.journalReady.Load() {
+		version, deleted, err := s.RecordVersion(ctx, workspace, key)
+		if deleted {
+			version = ""
+		}
+		return version, err
+	}
 	var version string
 	err := s.db.QueryRowContext(ctx, `SELECT version FROM metadata_catalog WHERE workspace_key=? AND field=? AND record_key=?`, workspace, key.Kind, key.ID).Scan(&version)
 	if errors.Is(err, sql.ErrNoRows) {

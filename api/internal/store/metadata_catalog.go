@@ -297,6 +297,11 @@ func (s *SQLiteStore) readMetadataCatalogPage(ctx context.Context, workspace str
 	defer tx.Rollback()
 	var phase int
 	var omissions int64
+	if recordJournalMode() == "on" {
+		if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {
+			return page, err
+		}
+	}
 	err = tx.QueryRowContext(ctx, `SELECT phase,revision,omissions FROM metadata_catalog_collections WHERE workspace_key=? AND field=?`, workspace, q.Kind).Scan(&phase, &page.Revision, &omissions)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && (phase != 2 || q.Kind == "projects" && omissions > 0) {
 		return page, ErrMetadataCatalogGap
@@ -334,6 +339,9 @@ func (s *SQLiteStore) readMetadataCatalogPage(ctx context.Context, workspace str
 		row.key.Kind = q.Kind
 		if err := rows.Scan(&row.key.ID, &row.order, &row.version, &row.summary, &omitted, &row.created, &row.updated); err != nil {
 			return page, err
+		}
+		if recordJournalMode() == "on" && row.version == "0" {
+			return page, ErrRecordJournalCoverage
 		}
 		if scannedBytes > 0 && scannedBytes+len(row.summary) > MetadataRecordPageMaxBytes {
 			page.HasMore = true
@@ -445,5 +453,9 @@ func metadataCatalogPageStatement(workspace string, q PageRequest, query Project
 	if descending {
 		order = column + " DESC,record_key DESC"
 	}
-	return `SELECT record_key,collection_order,version,summary,omitted,created_at,updated_at FROM metadata_catalog WHERE ` + where + ` ORDER BY ` + order + ` LIMIT 129`, args, nil
+	version := "version"
+	if recordJournalMode() == "on" {
+		version = `COALESCE((SELECT v.version FROM record_versions v WHERE v.workspace_key=metadata_catalog.workspace_key AND v.field=metadata_catalog.field AND v.record_key=metadata_catalog.record_key AND v.deleted=0),0)`
+	}
+	return `SELECT record_key,collection_order,` + version + `,summary,omitted,created_at,updated_at FROM metadata_catalog WHERE ` + where + ` ORDER BY ` + order + ` LIMIT 129`, args, nil
 }

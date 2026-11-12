@@ -439,7 +439,7 @@ func ProjectEvent(source *EventSource, access store.EventAccess) (EventFrame, er
 	// Deleted grants and document ACLs depend on principal identity, not just
 	// the set of visible issue references.
 	if source.kind == "deleted" || source.kind == "document" {
-		cacheKey += "|" + access.AuthzEpoch
+		cacheKey += "|" + access.AuthzEpoch + "|" + access.PrincipalID + "|" + access.CredentialScope + "|" + access.PermissionFingerprint()
 	}
 	var raw json.RawMessage
 	if source.frames != nil {

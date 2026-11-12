@@ -34,15 +34,23 @@ type resourceAccessPolicy struct {
 	key                         *domain.APIKey
 }
 
-// ResolveAccess reads current membership on every call. Until the shared
-// authorization journal supplies a workspace epoch, AuthzEpoch is a digest of
-// the authoritative metadata revision and this principal's live policy. It is
-// opaque, scoped to this principal/credential, and is never a replay cursor.
+// ResolveAccess reads policy and a ready journal's authoritative epoch in one
+// small snapshot. Credential scope stays bound separately from the epoch.
 func (s *SQLiteStore) ResolveAccess(ctx context.Context, workspace, principal string, key *domain.APIKey) (AccessContext, error) {
 	if workspace == "" || principal == "" {
 		return AccessContext{}, ErrAuthForbidden
 	}
-	stamp, err := readMetadataStamp(ctx, s.db, workspace)
+	if s.db.journalReady.Load() {
+		if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); !ok || snapshot.database != s.db {
+			tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
+			if err != nil {
+				return AccessContext{}, err
+			}
+			defer tx.Rollback()
+			ctx = context.WithValue(ctx, workspaceReadKey{}, workspaceRead{database: s.db, workspace: workspace, reader: tx})
+		}
+	}
+	stamp, epoch, err := s.accessStampAndEpoch(ctx, workspace)
 	if err != nil {
 		return AccessContext{}, err
 	}
@@ -84,6 +92,12 @@ func (s *SQLiteStore) ResolveAccess(ctx context.Context, workspace, principal st
 	}
 	policy.teams = viewerTeamScope(data, allowed, principal, role)
 	policy.settingsTeams = resourceSettingsTeams(data)
+	if s.db.journalReady.Load() {
+		policy.epoch = epoch
+		return AccessContext{data.Workspace.ID, principal, policy.scope, policy.epoch, policy}, nil
+	}
+	// Restricted MySQL installations keep the proven live-policy digest
+	// until triggers can be installed. It cannot enable journal consumers.
 	raw, err = json.Marshal(struct {
 		Workspace, Principal, Scope string
 		Revision                    int64
@@ -92,7 +106,7 @@ func (s *SQLiteStore) ResolveAccess(ctx context.Context, workspace, principal st
 	if err != nil {
 		return AccessContext{}, err
 	}
-	policy.epoch = fmt.Sprintf("p03:%x", sha256.Sum256(raw))
+	policy.epoch = fmt.Sprintf("compat:%x", sha256.Sum256(raw))
 	return AccessContext{data.Workspace.ID, principal, policy.scope, policy.epoch, policy}, nil
 }
 
@@ -196,6 +210,16 @@ func (s *SQLiteStore) ValidateAccess(ctx context.Context, access AccessContext) 
 		return err
 	}
 	p := access.policy
+	if s.db.journalReady.Load() {
+		epoch, err := s.AuthzEpoch(ctx, access.WorkspaceID)
+		if err != nil {
+			return err
+		}
+		if epoch != access.AuthzEpoch {
+			return ErrAuthForbidden
+		}
+		return nil
+	}
 	current, err := s.ResolveAccess(ctx, p.workspace, p.principal, p.key)
 	if err != nil {
 		return err
@@ -328,6 +352,19 @@ func (s *SQLiteStore) ResourceReadMetadata(ctx context.Context, access AccessCon
 		data.Initiatives[0].Favorite = favorite == 1
 	}
 	if err == nil {
+		if s.db.journalReady.Load() {
+			// Credential usage can advance the metadata revision without
+			// changing policy. Check the live authorization authority; this
+			// also catches membership revocations with no metadata write.
+			epoch, epochErr := s.AuthzEpoch(ctx, access.WorkspaceID)
+			if epochErr != nil {
+				return domain.Bootstrap{}, false, epochErr
+			}
+			if epoch != access.AuthzEpoch {
+				return domain.Bootstrap{}, false, errors.Join(ErrAuthForbidden, ErrResourceAccessChanged)
+			}
+			return data, allowed, nil
+		}
 		stamp, stampErr := readMetadataStamp(ctx, s.db, p.workspace)
 		if stampErr != nil {
 			return domain.Bootstrap{}, false, stampErr

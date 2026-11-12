@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -122,6 +123,13 @@ func TestScaleP12DeltaHasAtomicBudgetAndOversizeInvalidation(t *testing.T) {
 			t.Fatal(err)
 		}
 		record := store.RecordDelta{Key: store.RecordKey{Kind: "issues", ID: issue.ID}, Version: strconv.FormatInt(issue.Version, 10)}
+		if os.Getenv("FLOW_RECORD_JOURNAL") == "on" {
+			version, deleted, err := repo.RecordVersion(t.Context(), f.data.Workspace.URLKey, record.Key)
+			if err != nil || deleted || version == "" {
+				t.Fatalf("fixture has no committed record version: %s %t %v", version, deleted, err)
+			}
+			record.Version = version
+		}
 		_, normal := scaleP12Changes(t, f, f.principals[0], []store.CommittedChange{{TxID: "small", Seq: "1", Records: []store.RecordDelta{record}}}, "1", false)
 		if len(normal.Transactions) != 1 || len(normal.Transactions[0].Upserts) != 1 {
 			t.Fatal("small delta did not upsert its summary")
@@ -207,6 +215,7 @@ func TestScaleP12RevokeWhileDeltaReadAndDurableReplay(t *testing.T) {
 }
 
 func TestScaleP12OldServerAndRollbackWireFallback(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := newScaleP12Fixture(t, repo)
 		for _, mode := range []string{"off", "on"} {

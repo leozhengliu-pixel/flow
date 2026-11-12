@@ -1130,18 +1130,34 @@ func lockMetadataRecords(ctx context.Context, tx *sqlTx, workspace, field string
 		lock = " FOR UPDATE"
 	}
 	stored := make(map[string][]byte, len(keys))
+	columns := "record_key,data"
+	rememberOrder := tx.dialect == "sqlite" && tx.database != nil && tx.database.journalReady.Load() && len(keys) == 1
+	if rememberOrder {
+		columns += ",collection_order"
+		tx.journalOrder.valid = false
+	}
 	for start := 0; start < len(keys); start += 500 {
 		clause, args := bindList("record_key", keys[start:min(start+500, len(keys))])
-		rows, err := tx.QueryContext(ctx, `SELECT record_key,data FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause+` ORDER BY record_key`+lock, append([]any{workspace, field}, args...)...)
+		rows, err := tx.QueryContext(ctx, `SELECT `+columns+` FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause+` ORDER BY record_key`+lock, append([]any{workspace, field}, args...)...)
 		if err != nil {
 			return nil, err
 		}
 		for rows.Next() {
 			var key string
 			var raw []byte
-			if err := rows.Scan(&key, &raw); err != nil {
+			var scanErr error
+			if rememberOrder {
+				var order int64
+				scanErr = rows.Scan(&key, &raw, &order)
+				if scanErr == nil {
+					tx.journalOrder = recordJournalOrder{workspace, field, key, order, true}
+				}
+			} else {
+				scanErr = rows.Scan(&key, &raw)
+			}
+			if scanErr != nil {
 				rows.Close()
-				return nil, err
+				return nil, scanErr
 			}
 			stored[key] = raw
 		}

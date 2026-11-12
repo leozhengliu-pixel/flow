@@ -581,6 +581,16 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	durable := numeric == nil && replaySeq >= 0
 	negotiated := s.negotiatedSummaryRequest(r)
 	if negotiated {
+		journalHead, err := s.store.RecordJournalHead(r.Context(), metadata.Workspace.ID)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "Realtime is temporarily unavailable")
+			return
+		}
+		head, err = strconv.ParseInt(journalHead, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "Realtime is temporarily unavailable")
+			return
+		}
 		cursor := head
 		if durable {
 			cursor = replaySeq

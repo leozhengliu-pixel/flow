@@ -59,6 +59,11 @@ type workspacePurgeTable struct {
 // steps; there are no foreign keys between these tables, so the order only
 // keeps children before the rows that name them.
 var workspacePurgeTables = []workspacePurgeTable{
+	// Move bookkeeping before canonical rows during a workspace rename;
+	// canonical triggers then advance the versions under their new key.
+	{"record_journal_dirty", "workspace_key", false},
+	{"record_journal_coverage", "workspace_key", false},
+	{"record_versions", "workspace_key", false},
 	// Agent runs and sessions.
 	{"agent_run_activities", "workspace_key", false},
 	{"agent_run_changes", "workspace_key", false},
@@ -162,6 +167,11 @@ var workspacePurgeTables = []workspacePurgeTable{
 	{"workspace_cache_revisions", "workspace_key", false},
 	{"workspace_states", "workspace_key", false},
 	// Rows keyed by the workspace ID.
+	{"record_journal_event_pending", "workspace_id", true},
+	{"record_journal_events", "workspace_id", true},
+	{"record_journal", "workspace_id", true},
+	{"workspace_authz_epochs", "workspace_id", true},
+	{"workspace_record_journal_heads", "workspace_id", true},
 	{"recently_viewed", "workspace_id", true},
 	{"search_history", "workspace_id", true},
 	{"scim_group_memberships", "workspace_id", true},
@@ -206,6 +216,13 @@ var workspacePurgeKept = map[string]string{
 
 // workspacePurgeExempt lists tables that hold no workspace rows.
 var workspacePurgeExempt = map[string]string{
+	"record_journal_mode":         "database-wide journal activation generation",
+	"record_journal_flush":        "transaction-local derived write input; no committed rows",
+	"record_journal_commit":       "SQLite input view; no stored rows",
+	"record_journal_commit_v2":    "SQLite input view; no stored rows",
+	"record_journal_active":       "transactional session token bookkeeping; no committed rows",
+	"record_journal_context":      "connection token bookkeeping for SQLite's single writer",
+	"record_journal_inline":       "bounded transaction input; context changes materialize any stranded keys",
 	"api_signing_secrets":         "instance signing keys",
 	"auth_identities":             "user accounts (account deletion)",
 	"auth_sessions":               "user accounts (account deletion)",
@@ -1151,6 +1168,9 @@ func (s *SQLiteStore) deleteWorkspaceRows(ctx context.Context, table, column, va
 		statement = `DELETE FROM ` + table + ` WHERE ctid IN (SELECT ctid FROM ` + table + ` WHERE ` + column + `=? LIMIT ` + fmt.Sprint(workspacePurgeBatch) + `)`
 	default:
 		statement = `DELETE FROM ` + table + ` WHERE rowid IN (SELECT rowid FROM ` + table + ` WHERE ` + column + `=? LIMIT ` + fmt.Sprint(workspacePurgeBatch) + `)`
+		if primary := recordJournalPrimaryKey(table); primary != "" {
+			statement = `DELETE FROM ` + table + ` WHERE (` + primary + `) IN (SELECT ` + primary + ` FROM ` + table + ` WHERE ` + column + `=? LIMIT ` + fmt.Sprint(workspacePurgeBatch) + `)`
+		}
 	}
 	var total int64
 	for {

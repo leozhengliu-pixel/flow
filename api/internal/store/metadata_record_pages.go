@@ -151,6 +151,9 @@ func (s *SQLiteStore) readCanonicalRecords(ctx context.Context, tx *sqlTx, works
 			item.Version, item.Data = row.version, row.summary
 			item.Omitted, item.Detail = true, &key
 		}
+		if err := s.committedMetadataRecordVersion(ctx, tx, workspace, &item); err != nil {
+			return result, err
+		}
 		encoded, err := json.Marshal(item)
 		if err != nil {
 			return result, err
@@ -281,7 +284,11 @@ func (r *canonicalMetadataReader) Read(p []byte) (int, error) {
 		if r.boundedCapture {
 			n = min(n, int64(r.captureLeft))
 		}
-		if err := r.tx.QueryRowContext(r.ctx, `SELECT SUBSTR(data,?,?) FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, r.offset+1, n, r.workspace, r.key.Kind, r.key.ID).Scan(&r.buffer); err != nil {
+		data := "data"
+		if r.tx.dialect == "sqlite" {
+			data = "CAST(data AS BLOB)"
+		}
+		if err := r.tx.QueryRowContext(r.ctx, `SELECT SUBSTR(`+data+`,?,?) FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, r.offset+1, n, r.workspace, r.key.Kind, r.key.ID).Scan(&r.buffer); err != nil {
 			return 0, err
 		}
 		if len(r.buffer) == 0 {
