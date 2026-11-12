@@ -145,6 +145,7 @@ func (s *server) writeSyncV2Batch(w http.ResponseWriter, r *http.Request, state 
 func (s *realtimeSubscriber) setSyncV2QueueLimit() {
 	s.mu.Lock()
 	s.maxBytes = 32 << 10
+	s.syncV2 = true
 	overflow := s.retained > s.maxBytes
 	s.mu.Unlock()
 	if overflow {

@@ -254,6 +254,11 @@ func (s *server) syncChangesWithJournal(w http.ResponseWriter, r *http.Request, 
 }
 
 func (s *server) collectSyncChanges(r *http.Request, access store.EventAccess, journal committedChangeReader, after string, limit int) (syncV2ChangesResponse, error) {
+	ctx, err := s.store.LiveEventContext(r.Context())
+	if err != nil {
+		return syncV2ChangesResponse{}, err
+	}
+	r = r.WithContext(ctx)
 	page, err := journal.ReadCommittedChanges(r.Context(), access.WorkspaceID, after, limit, syncV2DeltaBytes)
 	if err != nil {
 		return syncV2ChangesResponse{}, err
@@ -385,7 +390,7 @@ func (s *server) projectCommittedChange(r *http.Request, access store.EventAcces
 	if len(ids) > 0 {
 		payload, _ := json.Marshal(map[string]any{"issueIds": ids})
 		event := domain.RealtimeEvent{ID: change.TxID, Seq: seq, Type: "issue.batch_updated", Payload: payload}
-		source, err := s.eventSourceForVersion(r.Context(), workspaceKey(r), event, access.SourceVersion())
+		source, err := s.eventSourceForAuthority(r.Context(), workspaceKey(r), event, eventAuthority{access.SourceVersion(), access.AuthzEpoch})
 		if errors.Is(err, store.ErrEventSourceBudget) {
 			return invalidateCommittedChange(change), nil
 		}
@@ -500,7 +505,7 @@ func (s *server) projectCommittedMetadata(r *http.Request, access store.EventAcc
 		return syncV2Upsert{}, false, err
 	}
 	event := domain.RealtimeEvent{ID: change.TxID + "/" + record.Key.Kind + "/" + record.Key.ID, Seq: seq, Type: kind + ".updated", AggregateID: record.Key.ID, Payload: json.RawMessage(`{}`)}
-	source, err := s.eventSourceForVersion(r.Context(), workspaceKey(r), event, access.SourceVersion())
+	source, err := s.eventSourceForAuthority(r.Context(), workspaceKey(r), event, eventAuthority{access.SourceVersion(), access.AuthzEpoch})
 	if err != nil {
 		return syncV2Upsert{}, false, err
 	}
@@ -547,7 +552,7 @@ func (s *server) committedDeletionSource(r *http.Request, access store.EventAcce
 		seq = legacy
 	}
 	version := access.SourceVersion()
-	key := fmt.Sprintf("p12:deleted:%s:%s:%d:%d", access.WorkspaceID, change.Seq, version.Metadata, version.Issues)
+	key := fmt.Sprintf("p12:deleted:%s:%s:%d:%d:%s", access.WorkspaceID, change.Seq, version.Metadata, version.Issues, access.AuthzEpoch)
 	build := func() (*EventSource, error) {
 		page, err := s.store.ReadRealtimeReplayPage(r.Context(), store.RealtimeReplayWindow{WorkspaceID: access.WorkspaceID, Head: seq, MaxRecordBytes: syncV2DeltaBytes}, seq-1, syncV2DeltaBytes)
 		if err != nil {
@@ -557,7 +562,7 @@ func (s *server) committedDeletionSource(r *http.Request, access store.EventAcce
 			return nil, errEventSourceUnsupported
 		}
 		record := page.Records[0]
-		return s.BuildEventSource(r.Context(), workspaceKey(r), domain.RealtimeEvent{ID: record.Event.ID, Seq: seq, Type: record.Event.Type, AggregateID: record.Event.AggregateID, ActorID: record.ActorID, Payload: record.Event.Payload, CreatedAt: record.Event.CreatedAt})
+		return s.BuildEventSource(context.WithValue(r.Context(), eventSourceEpochKey{}, access.AuthzEpoch), workspaceKey(r), domain.RealtimeEvent{ID: record.Event.ID, Seq: seq, Type: record.Event.Type, AggregateID: record.Event.AggregateID, ActorID: record.ActorID, Payload: record.Event.Payload, CreatedAt: record.Event.CreatedAt})
 	}
 	if s.realtime != nil {
 		return s.realtime.rules.sources.load(r.Context(), key, build)

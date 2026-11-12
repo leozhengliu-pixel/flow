@@ -46,6 +46,7 @@ type EventSource struct {
 	recordVersion   string
 	owner           *server
 	authorization   string
+	authzEpoch      string
 }
 
 // EventFrame contains one immutable, validated JSON envelope. Callers receive
@@ -118,6 +119,10 @@ func (frame EventFrame) WriteSSE(w http.ResponseWriter, node string) bool {
 // BuildEventSource performs the source reads once. Delivery uses a versioned
 // byte-bounded singleflight cache, so a distinct ACL does not add source SQL.
 func (s *server) BuildEventSource(ctx context.Context, workspace string, event domain.RealtimeEvent) (*EventSource, error) {
+	ctx, err := s.store.LiveEventContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	if s.realtime != nil {
@@ -131,7 +136,14 @@ func (s *server) BuildEventSource(ctx context.Context, workspace string, event d
 	if err != nil {
 		return nil, err
 	}
-	source := &EventSource{event: event, version: version, owner: s}
+	epoch, _ := ctx.Value(eventSourceEpochKey{}).(string)
+	if epoch == "" {
+		epoch, err = s.store.AuthzEpoch(ctx, version.WorkspaceID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	source := &EventSource{event: event, version: version, owner: s, authzEpoch: epoch}
 	source.policy, err = s.sharedEventPolicy(ctx, workspace, version)
 	if err != nil {
 		return nil, err
@@ -276,7 +288,7 @@ func (s *server) BuildEventSource(ctx context.Context, workspace string, event d
 // ProjectEvent performs no reads. Its access must be resolved for the current
 // delivery batch and validated again before the frame is written.
 func ProjectEvent(source *EventSource, access store.EventAccess) (EventFrame, error) {
-	if source == nil || source.version != access.SourceVersion() || source.version.WorkspaceID != access.WorkspaceID {
+	if source == nil || source.version != access.SourceVersion() || source.version.WorkspaceID != access.WorkspaceID || source.authzEpoch != "" && source.authzEpoch != access.AuthzEpoch {
 		return EventFrame{}, store.ErrAuthForbidden
 	}
 	work := int64(source.bytes*4 + 16<<10)
@@ -451,6 +463,16 @@ func ProjectEvent(source *EventSource, access store.EventAccess) (EventFrame, er
 		return EventFrame{}, buildErr
 	}
 	visible = len(raw) > 0
+	release()
+	release = func() {}
+	if visible && source.budget != nil {
+		lease := domain.RealtimeEvent{ID: event.ID, Type: "sync.frame", Payload: raw}
+		if !source.budget.retainEvent(lease) {
+			return EventFrame{}, store.ErrEventSourceBudget
+		}
+		var closed sync.Once
+		release = func() { closed.Do(func() { source.budget.releaseEvent(eventKey(lease)) }) }
+	}
 	keep = true
 	validate := access.Validate
 	if source.owner != nil {
@@ -474,7 +496,7 @@ func (source *EventSource) cacheKey() string {
 	if source.event.ID == "" || source.event.Type == "agent_task.replied" {
 		_, _ = hash.Write(source.event.Payload)
 	}
-	_, _ = io.WriteString(hash, fmt.Sprintf("|%s|%d|%d", source.version.WorkspaceID, source.version.Metadata, source.version.Issues))
+	_, _ = io.WriteString(hash, fmt.Sprintf("|%s|%d|%d|%s", source.version.WorkspaceID, source.version.Metadata, source.version.Issues, source.authzEpoch))
 	return fmt.Sprintf("p12:%x", hash.Sum(nil))
 }
 
@@ -522,10 +544,23 @@ func (cache *eventSourceCache) load(ctx context.Context, key string, build func(
 }
 
 func (s *server) sharedEventFrame(r *http.Request, event domain.RealtimeEvent) (EventFrame, bool, error) {
+	if syncV2Enabled() && !s.authDisabled {
+		ctx, err := s.store.LiveEventContext(r.Context())
+		if err != nil {
+			return EventFrame{}, true, err
+		}
+		r = r.WithContext(ctx)
+		r = s.eventDeliveryRequest(r, event)
+		if delivery, _ := r.Context().Value(eventDeliveryKey{}).(eventDelivery); delivery.viewers == 1 && !s.negotiatedSummaryRequest(r) {
+			return EventFrame{}, false, nil
+		}
+	}
 	for range 8 {
 		frame, handled, err := s.sharedEventFrameOnce(r, event)
 		if handled && (errors.Is(err, errRealtimeProjectionStale) || errors.Is(err, store.ErrAuthForbidden)) && r.Context().Err() == nil {
 			frame.Close()
+			r = r.WithContext(context.WithValue(r.Context(), eventDeliveryKey{}, eventDelivery{}))
+			r = r.WithContext(context.WithValue(r.Context(), eventAccessRefreshKey{}, true))
 			continue
 		}
 		return frame, handled, err
@@ -551,16 +586,30 @@ func (s *server) sharedEventFrameOnce(r *http.Request, event domain.RealtimeEven
 	if credential, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
 		key = &credential
 	}
-	version, err := s.store.RealtimeSourceVersion(r.Context(), workspaceKey(r))
+	readAuthority := s.readEventSourceVersion
+	if refresh, _ := r.Context().Value(eventAccessRefreshKey{}).(bool); refresh {
+		readAuthority = s.readEventProjectionAuthority
+	}
+	authority, err := readAuthority(r.Context(), workspaceKey(r))
 	if err != nil {
 		return EventFrame{}, true, err
 	}
-	source, err := s.eventSourceForVersion(r.Context(), workspaceKey(r), event, version)
-	if errors.Is(err, store.ErrEventSourceBudget) && s.negotiatedSummaryRequest(r) {
-		access, accessErr := s.resolveSyncAccess(r)
-		if accessErr != nil {
-			return EventFrame{}, true, accessErr
+	policy, err := s.sharedEventPolicy(r.Context(), workspaceKey(r), authority.version)
+	if err != nil {
+		if errors.Is(err, store.ErrEventSourceBudget) && !s.negotiatedSummaryRequest(r) {
+			return EventFrame{}, false, nil
 		}
+		return EventFrame{}, true, err
+	}
+	// Resolve principal policy before reading source records. The final epoch
+	// check then covers both this policy and every cached source built under it.
+	access, err := s.cachedEventAccess(r.Context(), policy, authority, authUser(r).ID, key)
+	if err != nil {
+		return EventFrame{}, true, err
+	}
+	authority.epoch = access.AuthzEpoch
+	source, err := s.eventSourceForAuthority(r.Context(), workspaceKey(r), event, authority)
+	if errors.Is(err, store.ErrEventSourceBudget) && s.negotiatedSummaryRequest(r) {
 		raw, encodeErr := json.Marshal(anonymousRealtimeEvent(event))
 		if encodeErr != nil {
 			return EventFrame{}, true, encodeErr
@@ -575,10 +624,6 @@ func (s *server) sharedEventFrameOnce(r *http.Request, event domain.RealtimeEven
 	if errors.Is(err, errEventSourceUnsupported) || errors.Is(err, store.ErrEventSourceBudget) {
 		return EventFrame{}, false, nil
 	}
-	if err != nil {
-		return EventFrame{}, true, err
-	}
-	access, err := s.store.ResolveEventAccessFromSource(r.Context(), source.policy, authUser(r).ID, key)
 	if err != nil {
 		return EventFrame{}, true, err
 	}
@@ -606,18 +651,21 @@ func (s *server) sharedEventFrameOnce(r *http.Request, event domain.RealtimeEven
 }
 
 func (s *server) validateEventProjection(ctx context.Context, source *EventSource, access store.EventAccess) error {
-	version, err := s.store.RealtimeSourceVersion(ctx, access.WorkspaceKey())
+	authority, err := s.readEventAuthority(ctx, access.WorkspaceKey())
 	if err != nil {
 		return err
 	}
-	if version == source.version {
-		return access.Validate(ctx)
+	if authority.epoch != access.AuthzEpoch || source.authzEpoch != "" && source.authzEpoch != authority.epoch {
+		return errRealtimeProjectionStale
 	}
-	current, err := s.eventSourceForVersion(ctx, access.WorkspaceKey(), source.event, version)
+	if authority.version == source.version && authority.epoch == access.AuthzEpoch {
+		return access.CheckCredential()
+	}
+	current, err := s.eventSourceForAuthority(ctx, access.WorkspaceKey(), source.event, authority)
 	if err != nil {
 		return err
 	}
-	fresh, err := s.store.RefreshEventAccess(ctx, current.policy, access)
+	fresh, err := access.ForSource(current.policy, authority.epoch)
 	if err != nil {
 		return err
 	}
@@ -628,45 +676,42 @@ func (s *server) validateEventProjection(ctx context.Context, source *EventSourc
 }
 
 func (s *server) writeSharedEventFrame(w http.ResponseWriter, r *http.Request, event domain.RealtimeEvent) (bool, bool) {
-	for range 8 {
-		frame, handled, err := s.sharedEventFrame(r, event)
-		if !handled {
-			return false, false
-		}
-		if err != nil {
-			frame.Close()
-			slog.Warn("realtime projection stopped", "event_type", event.Type, "error_type", fmt.Sprintf("%T", err), "denied", errors.Is(err, store.ErrAuthForbidden), "stale", errors.Is(err, errRealtimeProjectionStale), "budget", errors.Is(err, store.ErrEventSourceBudget), "missing", errors.Is(err, sql.ErrNoRows))
-			var typed *json.UnmarshalTypeError
-			if errors.As(err, &typed) {
-				slog.Warn("realtime record field type", "field", typed.Field, "expected", typed.Type.String())
-			}
-			return true, false
-		}
-		err = frame.Validate(r.Context())
-		if (errors.Is(err, errRealtimeProjectionStale) || errors.Is(err, store.ErrAuthForbidden)) && r.Context().Err() == nil {
-			frame.Close()
-			continue
-		}
-		if err != nil {
-			frame.Close()
-			return true, false
-		}
-		// This batch is authorized immediately before its write. The shared
-		// encoding remains immutable; only this delivery owns the proof/lease.
-		frame.validate = nil
-		if sidechannel, _ := r.Context().Value(syncV2SidechannelKey{}).(bool); sidechannel {
-			frame.noCursor = true
-		}
-		ok := frame.WriteSSE(w, s.realtime.node) && flushRealtime(w)
-		frame.Close()
-		return true, ok
+	frame, handled, err := s.sharedEventFrame(r, event)
+	if !handled {
+		return false, false
 	}
-	return true, false
+	if err != nil {
+		frame.Close()
+		slog.Warn("realtime projection stopped", "event_type", event.Type, "error_type", fmt.Sprintf("%T", err), "denied", errors.Is(err, store.ErrAuthForbidden), "stale", errors.Is(err, errRealtimeProjectionStale), "budget", errors.Is(err, store.ErrEventSourceBudget), "missing", errors.Is(err, sql.ErrNoRows))
+		var typed *json.UnmarshalTypeError
+		if errors.As(err, &typed) {
+			slog.Warn("realtime record field type", "field", typed.Field, "expected", typed.Type.String())
+		}
+		return true, false
+	}
+	// sharedEventFrame just validated this delivery. Retained EventFrames keep
+	// their live validator; this immediate write consumes only this proof.
+	frame.validate = nil
+	if sidechannel, _ := r.Context().Value(syncV2SidechannelKey{}).(bool); sidechannel {
+		frame.noCursor = true
+	}
+	ok := frame.WriteSSE(w, s.realtime.node) && flushRealtime(w)
+	frame.Close()
+	return true, ok
 }
 
-func (s *server) eventSourceForVersion(ctx context.Context, workspace string, event domain.RealtimeEvent, version store.EventSourceVersion) (*EventSource, error) {
-	identity := &EventSource{event: event, version: version}
-	build := func() (*EventSource, error) { return s.BuildEventSource(ctx, workspace, event) }
+func (s *server) eventSourceForAuthority(ctx context.Context, workspace string, event domain.RealtimeEvent, authority eventAuthority) (*EventSource, error) {
+	identity := &EventSource{event: event, version: authority.version, authzEpoch: authority.epoch}
+	build := func() (*EventSource, error) {
+		source, err := s.BuildEventSource(context.WithValue(ctx, eventSourceEpochKey{}, authority.epoch), workspace, event)
+		if err != nil {
+			return nil, err
+		}
+		if source.version != authority.version {
+			return nil, errRealtimeProjectionStale
+		}
+		return source, nil
+	}
 	if s.realtime != nil {
 		return s.realtime.rules.sources.load(ctx, identity.cacheKey(), build)
 	}
@@ -703,11 +748,16 @@ func (s *server) sharedEventPolicy(ctx context.Context, workspace string, versio
 }
 
 func (s *server) resolveSyncAccess(r *http.Request) (store.EventAccess, error) {
-	version, err := s.store.RealtimeSourceVersion(r.Context(), workspaceKey(r))
+	ctx, err := s.store.LiveEventContext(r.Context())
 	if err != nil {
 		return store.EventAccess{}, err
 	}
-	policy, err := s.sharedEventPolicy(r.Context(), workspaceKey(r), version)
+	r = r.WithContext(ctx)
+	authority, err := s.readEventAuthority(r.Context(), workspaceKey(r))
+	if err != nil {
+		return store.EventAccess{}, err
+	}
+	policy, err := s.sharedEventPolicy(r.Context(), workspaceKey(r), authority.version)
 	if err != nil {
 		return store.EventAccess{}, err
 	}
@@ -715,7 +765,7 @@ func (s *server) resolveSyncAccess(r *http.Request) (store.EventAccess, error) {
 	if credential, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
 		key = &credential
 	}
-	return s.store.ResolveEventAccessFromSource(r.Context(), policy, authUser(r).ID, key)
+	return s.cachedEventAccess(r.Context(), policy, authority, authUser(r).ID, key)
 }
 
 func frameSequence(event domain.RealtimeEvent) string { return strconv.FormatInt(event.Seq, 10) }

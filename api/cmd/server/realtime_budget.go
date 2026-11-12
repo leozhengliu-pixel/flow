@@ -193,6 +193,7 @@ type realtimeSubscriber struct {
 	pending  []realtimePendingEvent
 	held     map[realtimeEventKey]int
 	maxBytes int64
+	syncV2   bool
 }
 
 func realtimeEventBytes(event domain.RealtimeEvent) int {
@@ -438,6 +439,9 @@ func (s *server) replayBudgetedRecord(w http.ResponseWriter, r *http.Request, wo
 }
 
 func (s *server) replayBudgetedPage(w http.ResponseWriter, r *http.Request, window store.RealtimeReplayWindow, cursor int64) (int64, bool, bool) {
+	if syncV2Enabled() {
+		r = r.WithContext(context.WithValue(r.Context(), eventDeliverySuppressKey{}, true))
+	}
 	release, err := acquireRealtimeWork(r.Context(), s.realtime.budget, 9<<20)
 	if err != nil {
 		return cursor, false, false

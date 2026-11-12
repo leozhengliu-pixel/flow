@@ -26,8 +26,12 @@ type EventSourceVersion struct {
 }
 
 func (s *SQLiteStore) RealtimeSourceVersion(ctx context.Context, workspace string) (EventSourceVersion, error) {
+	ctx, err := s.LiveEventContext(ctx)
+	if err != nil {
+		return EventSourceVersion{}, err
+	}
 	var version EventSourceVersion
-	err := s.db.QueryRowContext(ctx, `SELECT workspace_id,
+	err = s.db.QueryRowContext(ctx, `SELECT workspace_id,
 	 (SELECT COALESCE(SUM(revision),0) FROM workspace_cache_revisions WHERE workspace_key=? AND kind='metadata'),
 	 (SELECT COALESCE(SUM(revision),0) FROM workspace_cache_revisions WHERE workspace_key=? AND kind='issues')+
 	 (SELECT COALESCE(SUM(revision),0) FROM issue_count_revisions WHERE workspace_key=?)
@@ -35,16 +39,17 @@ func (s *SQLiteStore) RealtimeSourceVersion(ctx context.Context, workspace strin
 	return version, err
 }
 
-// EventAccess is resolved at delivery, never when an event enters a queue.
-// Its private version binds the immutable P03 policy to the source snapshot.
+// EventAccess binds immutable P03 policy to a source snapshot. Cached policy
+// must match live authority at delivery, never just when an event is queued.
 type EventAccess struct {
 	AccessContext
-	version EventSourceVersion
-	source  *EventPolicySource
+	version   EventSourceVersion
+	source    *EventPolicySource
+	expiresAt *time.Time
 }
 
 // EventPolicySource is the immutable workspace policy shared by an event's
-// viewers. Principal memberships remain live reads at the delivery boundary.
+// viewers. Principal contexts are validated by epoch at the delivery boundary.
 type EventPolicySource struct {
 	store     *SQLiteStore
 	workspace string
@@ -167,7 +172,12 @@ func (s *SQLiteStore) ResolveEventAccessFromSource(ctx context.Context, source *
 	if source == nil || source.store != s || principal == "" {
 		return EventAccess{}, ErrAuthForbidden
 	}
+	ctx, err := s.LiveEventContext(ctx)
+	if err != nil {
+		return EventAccess{}, err
+	}
 	workspace := source.workspace
+	var expiresAt *time.Time
 	if key != nil {
 		var raw []byte
 		if err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='apiKeys' AND record_key=?`, workspace, key.ID).Scan(&raw); err != nil {
@@ -179,6 +189,10 @@ func (s *SQLiteStore) ResolveEventAccessFromSource(ctx context.Context, source *
 		}
 		if live.RevokedAt != nil || live.ExpiresAt != nil && !live.ExpiresAt.After(time.Now()) || live.SubjectID() != principal || !reflect.DeepEqual(resourceAccessCredential(key), resourceAccessCredential(&live)) {
 			return EventAccess{}, ErrAuthForbidden
+		}
+		if live.ExpiresAt != nil {
+			deadline := *live.ExpiresAt
+			expiresAt = &deadline
 		}
 	}
 	ctx = context.WithValue(ctx, eventPolicySourceKey{}, source)
@@ -192,7 +206,7 @@ func (s *SQLiteStore) ResolveEventAccessFromSource(ctx context.Context, source *
 	if !access.policy.metadata.Viewer.Active || access.policy.metadata.Viewer.Deleted {
 		return EventAccess{}, ErrAuthForbidden
 	}
-	return EventAccess{AccessContext: access, version: source.version, source: source}, nil
+	return EventAccess{AccessContext: access, version: source.version, source: source, expiresAt: expiresAt}, nil
 }
 
 func (s *SQLiteStore) ValidateEventAccess(ctx context.Context, access EventAccess) error {
@@ -207,11 +221,21 @@ func (s *SQLiteStore) ValidateEventAccess(ctx context.Context, access EventAcces
 	if version != access.version {
 		return ErrAuthForbidden
 	}
-	current, err := s.ResolveEventAccessFromSource(ctx, access.source, p.principal, p.key)
+	if err := access.CheckCredential(); err != nil {
+		return err
+	}
+	epoch, err := s.AuthzEpoch(ctx, access.WorkspaceID)
+	if errors.Is(err, ErrRecordJournalUnavailable) {
+		current, resolveErr := s.ResolveEventAccessFromSource(ctx, access.source, p.principal, p.key)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		epoch, err = current.AuthzEpoch, nil
+	}
 	if err != nil {
 		return err
 	}
-	if current.AuthzEpoch != access.AuthzEpoch || current.version != access.version {
+	if epoch != access.AuthzEpoch {
 		return ErrAuthForbidden
 	}
 	return nil
