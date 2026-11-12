@@ -149,6 +149,9 @@ var workspacePurgeTables = []workspacePurgeTable{
 	// Uploads (their objects are deleted before the rows).
 	{"file_uploads", "workspace_key", false},
 	// Workspace content, metadata, search and caches.
+	{"metadata_catalog_collections", "workspace_key", false},
+	{"metadata_catalog_relations", "workspace_key", false},
+	{"metadata_catalog", "workspace_key", false},
 	{"metadata_search_documents", "workspace_key", false},
 	{"metadata_search_migration_checkpoints", "workspace_key", false},
 	{"metadata_search_migrations", "workspace_key", false},

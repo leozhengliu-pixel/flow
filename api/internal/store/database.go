@@ -369,6 +369,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureIssueStats", s.ensureIssueStats},
 		{"ensureSCIMSchema", s.ensureSCIMSchema},
 		{"ensureWorkspaceMetadataRecords", s.ensureWorkspaceMetadataRecords},
+		{"ensureMetadataCatalog", s.ensureMetadataCatalog},
 		{"ensureApplicationAgents", s.ensureApplicationAgents},
 		{"ensureAuditStreamSecrets", s.ensureAuditStreamSecrets},
 		{"ensureAuditEvents", s.ensureAuditEvents},
@@ -430,6 +431,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	if total := time.Since(opened); total >= time.Second {
 		slog.Info("workspace store opened", "driver", driver, "total_ms", total.Milliseconds(), "stages", strings.Join(timings, " "))
 	}
+	s.startMetadataCatalog()
 	return s, nil
 }
 
