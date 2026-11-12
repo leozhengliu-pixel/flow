@@ -137,7 +137,9 @@ func (s *server) agentRuntimeRun(allowToken bool, handler func(http.ResponseWrit
 		}
 		// Worker routes bypass session middleware and may beat the peer event
 		// for the reply they write. Apply the same freshness check here.
-		s.ensureCurrentWorkspace(r.Context(), run.WorkspaceKey)
+		if !s.requireCurrentWorkspace(w, r, run.WorkspaceKey) {
+			return
+		}
 		handler(w, r, caller, run)
 	}
 }

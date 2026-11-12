@@ -38,6 +38,7 @@ type SQLiteStore struct {
 	// at, when known (metadata_copy_revision.go). Guarded by mu.
 	copyRevisions     map[string]copyRevision
 	copyRevisionEpoch uint64
+	peerApplied       map[string]peerAppliedWorkspace // installed journal cursors; guarded by writeMu (scale_p11_peer_apply.go)
 	// metadataDecodes counts decodeWorkspaceMetadata calls
 	// (WorkspaceMetadataDecodes).
 	metadataDecodes atomic.Int64

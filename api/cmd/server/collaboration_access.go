@@ -304,7 +304,12 @@ func (s *server) runSocketAccessChecks(workspace string) {
 		}
 		// A peer's change may not be applied here yet when the check runs
 		// for another reason; read the committed state.
-		s.ensureCurrentWorkspace(context.Background(), workspace)
+		if err := s.ensureCurrentWorkspace(context.Background(), workspace); err != nil {
+			for _, item := range s.realtime.socketAccessWork(workspace, *scope) {
+				s.realtime.revokeSocketCredential(item.client)
+			}
+			continue
+		}
 		s.checkSocketAccess(workspace, *scope)
 	}
 }

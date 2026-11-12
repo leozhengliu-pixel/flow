@@ -476,7 +476,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		if r.URL.Path == "/api/oauth/authorization-request" {
 			return true
 		}
-		s.ensureCurrentWorkspace(r.Context(), workspaceKey(r))
+		if !s.requireCurrentWorkspace(w, r, workspaceKey(r)) {
+			return false
+		}
 		_, ok := s.oauthWorkspaceForRequest(w, r, workspaceKey(r), user)
 		return ok
 	}
@@ -509,7 +511,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	}
 	// The workspace may have changed (or been created) on another server a
 	// moment ago; authorize against, and serve, the committed state.
-	s.ensureCurrentWorkspace(r.Context(), key)
+	if !s.requireCurrentWorkspace(w, r, key) {
+		return false
+	}
 	// Issue routes accept identifiers, old ones included; authorization and
 	// handlers below see the issue's id.
 	s.resolveIssuePathReference(r)
