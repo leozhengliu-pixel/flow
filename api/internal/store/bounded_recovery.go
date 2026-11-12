@@ -22,6 +22,9 @@ func (s *SQLiteStore) validateResidentBackfill(ctx context.Context, tx *sqlTx, w
 	if !s.db.journalReady.Load() || recordJournalMode() != "on" {
 		return fmt.Errorf("%w: record journal is not authoritative", ErrBoundedMetadataCoverage)
 	}
+	if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {
+		return fmt.Errorf("%w: record journal authority: %w", ErrBoundedMetadataCoverage, err)
+	}
 	var incomplete int
 	err := tx.QueryRowContext(ctx, `SELECT
 		CASE WHEN EXISTS(SELECT 1 FROM record_journal_dirty WHERE workspace_key=?) THEN 1 ELSE 0 END +

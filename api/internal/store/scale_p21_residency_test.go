@@ -362,6 +362,34 @@ func TestScaleP21ResidentBackfillCoverageRejectsOldWriterGaps(t *testing.T) {
 	if err := check(); err != nil {
 		t.Fatalf("completed canonical backfill rejected: %v", err)
 	}
+	t.Run("live authority disabled", func(t *testing.T) {
+		tx, err := f.db.BeginTx(t.Context(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Roll back the mode change so other shared-database fixtures never
+		// observe it. The store's startup-ready bit deliberately stays true.
+		defer tx.Rollback()
+		if _, err := tx.ExecContext(t.Context(), `UPDATE record_journal_mode SET enabled=0 WHERE id=1`); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.validateResidentBackfill(t.Context(), tx, workspace); !errors.Is(err, ErrBoundedMetadataCoverage) {
+			t.Fatalf("disabled live journal authority was accepted: %v", err)
+		}
+	})
+	t.Run("journal repair pending", func(t *testing.T) {
+		tx, err := f.db.BeginTx(t.Context(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback()
+		if _, err := tx.ExecContext(t.Context(), `INSERT INTO record_journal_coverage(workspace_key,phase,last_field,last_key) VALUES(?,0,'','') ON CONFLICT(workspace_key) DO UPDATE SET phase=0`, workspace); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.validateResidentBackfill(t.Context(), tx, workspace); !errors.Is(err, ErrBoundedMetadataCoverage) {
+			t.Fatalf("pending journal repair was accepted: %v", err)
+		}
+	})
 	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET collection_order=collection_order+1 WHERE workspace_key=? AND field=?`, workspace, fields[0]); err != nil {
 		t.Fatal(err)
