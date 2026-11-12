@@ -541,7 +541,11 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			}
 		}
 		if ok && r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/trash/") {
-			data.Trash = s.store.TrashSnapshot(key)
+			if headers, selected := s.documentTrashAuthorizationHeaders(r, key); selected {
+				data.Trash = headers
+			} else {
+				data.Trash = s.store.TrashSnapshot(key)
+			}
 		}
 	}
 	if !ok {
@@ -989,6 +993,14 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 	if syncReadRequest(r) || s.notificationStateReadRequest(r) {
 		return true // Sync handlers resolve and validate AccessContext per batch.
 	}
+	if _, selected := s.documentTrashAuthorizationHeaders(r, workspace); selected {
+		data, ok := s.store.WorkspaceSettingsMetadata(workspace)
+		if !ok {
+			return false
+		}
+		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		return err == nil && status == "active"
+	}
 	if strings.HasSuffix(r.URL.Path, "/default-favorites") {
 		teamID := s.store.ResolveTeamID(workspace, teamIDFromWorkspacePath(r.URL.Path))
 		data, access, err := s.requestIssueQueryAccess(r)
@@ -1083,7 +1095,9 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 	var data domain.Bootstrap
 	var ok bool
 	var err error
-	if isIssueRecordsRequest(r) {
+	if selected, readErr, handled := s.documentAuthorizationMetadata(r, workspace, userID); handled {
+		data, err, ok = selected, readErr, readErr == nil
+	} else if isIssueRecordsRequest(r) {
 		data, err = s.issueRecordAuthorizationData(r)
 		ok = err == nil
 	} else {

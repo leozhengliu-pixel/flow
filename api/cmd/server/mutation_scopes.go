@@ -60,6 +60,7 @@ func releaseMutationScope(ctx context.Context, input releaseInput, match func(do
 // documentContentScope loads just a document's comment thread (comments are
 // content records owned by the document id; the route may use its slug).
 func documentContentScope(ctx context.Context, id string) context.Context {
+	ctx = documentRecordScope(ctx, id)
 	return store.WithMutationScope(ctx, store.MutationScope{Resolve: func(data domain.Bootstrap) store.MutationScope {
 		if document, err := documentByID(&data, id); err == nil {
 			return store.MutationScope{Resources: []string{document.ID}}

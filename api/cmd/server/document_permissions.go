@@ -11,7 +11,7 @@ import (
 )
 
 func (s *server) listDocumentPermissions(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data := s.documentWorkspaceData(r)
 	document, err := documentByID(&data, r.PathValue("id"))
 	if err != nil || documentRole(s, data, *document) == "none" {
 		writeError(w, http.StatusNotFound, "document not found")
@@ -50,7 +50,7 @@ func (s *server) replaceDocumentPermissions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	id := r.PathValue("id")
-	viewerData := s.workspaceData(r)
+	viewerData := s.documentWorkspaceData(r)
 	var updated []domain.DocumentPermission
 	changed := false
 	directory := s.documentMemberDirectory(r)
@@ -199,7 +199,7 @@ func (s *server) deleteDocumentPermission(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) listDocumentComments(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data := s.documentWorkspaceData(r)
 	document, err := documentByID(&data, r.PathValue("id"))
 	if err != nil || documentRole(s, data, *document) == "none" {
 		writeError(w, http.StatusNotFound, "document not found")

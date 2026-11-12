@@ -161,6 +161,9 @@ func canEditDocument(role string) bool    { return documentRoleRank(role) >= 3 }
 func canCommentDocument(role string) bool { return documentRoleRank(role) >= 2 }
 
 func (s *server) listDocuments(w http.ResponseWriter, r *http.Request) {
+	if s.serveDocumentRecordList(w, r) {
+		return
+	}
 	data := s.workspaceData(r)
 	query := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("q")))
 	teamID := strings.TrimSpace(r.URL.Query().Get("teamId"))
@@ -772,7 +775,7 @@ func (s *server) restoreDocumentRevision(w http.ResponseWriter, r *http.Request)
 	// Older versions' bodies are offloaded: load the one to restore before
 	// taking the write lock.
 	var loaded *domain.DocumentRevision
-	snapshot := s.workspaceData(r)
+	snapshot := s.documentWorkspaceData(r)
 	if document, err := documentByID(&snapshot, id); err == nil {
 		if index := slices.IndexFunc(document.Revisions, func(item domain.DocumentRevision) bool { return item.ID == revisionID }); index >= 0 && len(document.Revisions[index].Offloaded) > 0 {
 			revision := []domain.DocumentRevision{document.Revisions[index]}
@@ -3132,7 +3135,7 @@ func setDocumentSubscription(data *domain.Bootstrap, kind, id, userID string, su
 func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var restored any
-	err := s.store.MutateWorkspace(trashRestoreScope(r.Context(), id), workspaceKey(r), "trash.restored", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(trashRecordRestoreScope(r.Context(), id), workspaceKey(r), "trash.restored", id, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound

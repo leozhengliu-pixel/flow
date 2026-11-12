@@ -185,6 +185,7 @@ func documentLinkMutationScope(ctx context.Context, id string, issueIDs ...*stri
 }
 
 func documentScope(ctx context.Context, id string, linkedIssue bool, issueIDs ...*string) context.Context {
+	ctx = documentRecordScope(ctx, id)
 	return store.WithMutationScope(ctx, store.MutationScope{IssueIDs: scopeIDs(issueIDs...), Resolve: func(data domain.Bootstrap) store.MutationScope {
 		if document, err := documentByID(&data, id); err == nil {
 			scope := store.MutationScope{Resources: []string{document.ID}}
@@ -203,7 +204,7 @@ func documentScope(ctx context.Context, id string, linkedIssue bool, issueIDs ..
 // document in "Recently deleted" is returned with deletedAt set (to the
 // people who could open it), so links show the deleted state instead of 404.
 func (s *server) getDocument(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data := s.documentWorkspaceData(r)
 	id := r.PathValue("id")
 	if document, err := documentByID(&data, id); err == nil {
 		if documentRole(s, data, *document) == "none" {
@@ -312,7 +313,7 @@ type documentSubscriberInput struct {
 
 // listDocumentSubscribers returns the users subscribed to a document.
 func (s *server) listDocumentSubscribers(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data := s.documentWorkspaceData(r)
 	document, err := documentByID(&data, r.PathValue("id"))
 	if err != nil || documentRole(s, data, *document) == "none" {
 		writeError(w, http.StatusNotFound, "document not found")

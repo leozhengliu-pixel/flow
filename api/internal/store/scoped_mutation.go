@@ -189,10 +189,14 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		}
 		// writeMu holds the copy (and its revision) until the install.
 		ctx, copyWrite := s.watchMetadataWrite(ctx, workspaceKey)
+		ctx, callback, documentRecords := prepareDocumentRecordMutation(ctx, stored, eventType, payload, mutate)
 		discussionOnly := IsIssueDiscussionMutation(ctx)
 		var fields []string
 		var current domain.Bootstrap
-		if narrowMutationInputs() && discussionOnly && scope.Resolve == nil && scope.Expand == nil && !scope.StatusAutomation && !scope.CreateIssues {
+		if documentRecords {
+			selectedFields, _ := metadataFieldsFromContext(ctx)
+			current = metadataRecordFieldSnapshot(ctx, stored, selectedFields)
+		} else if narrowMutationInputs() && discussionOnly && scope.Resolve == nil && scope.Expand == nil && !scope.StatusAutomation && !scope.CreateIssues {
 			fields = discussionCallbackFields
 			current = metadataFieldSnapshot(stored, fields)
 		} else {
@@ -346,9 +350,12 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 			restoreUnlistedMetadata(&current, stored, fields)
 			fields = nil
 		} else {
-			aggregateID, err = mutate(&next)
+			aggregateID, err = callback(&next)
 		}
 		next.CollaborationUpdates = nil
+		if documentRecords {
+			restoreUnlistedMetadata(&current, stored, nil)
+		}
 		if len(fields) > 0 {
 			restoreUnlistedMetadata(&current, stored, fields)
 			restoreUnlistedMetadata(&next, stored, fields)
