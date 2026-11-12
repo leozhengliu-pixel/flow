@@ -43,7 +43,7 @@ for (const surface of [
         let unreadGets = 0
         page.on('request', req => {
           const url = new URL(req.url())
-          if (url.pathname === '/api/sync/notification-state' || url.pathname === '/api/notifications' && url.searchParams.get('limit') === '1') unreadGets++
+          if (url.pathname === '/api/notifications/state' || url.pathname === '/api/notifications' && url.searchParams.get('limit') === '1') unreadGets++
         })
         const update = await request.patch(`/api/notifications/${item!.id}`, { headers, data: { read: true } })
         expect(update.status()).toBe(200)

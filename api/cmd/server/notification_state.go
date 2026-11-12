@@ -16,7 +16,7 @@ import (
 
 type notificationStateRetryKey struct{}
 
-// P10 registers GET /api/sync/notification-state inside the authenticated
+// P10 registers GET /api/notifications/state inside the authenticated
 // workspace middleware and adds it to the internal route inventory.
 func (s *server) notificationState(w http.ResponseWriter, r *http.Request) {
 	data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))

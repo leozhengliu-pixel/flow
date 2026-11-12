@@ -136,7 +136,7 @@ export const inboxUnread = {
     const controller = scope ? new AbortController() : undefined
     recoveryAbort = controller
     const response = scope
-      ? request<InboxNotificationState>('/api/sync/notification-state', { headers: { 'X-Workspace-Key': workspaceKey }, signal: controller?.signal }).then(result => {
+      ? request<InboxNotificationState>('/api/notifications/state', { headers: { 'X-Workspace-Key': workspaceKey }, signal: controller?.signal }).then(result => {
         if (generation !== run || countVersion !== version || !validState(result)) return
         applyState(workspaceKey, scope.viewerId, result, true)
       })

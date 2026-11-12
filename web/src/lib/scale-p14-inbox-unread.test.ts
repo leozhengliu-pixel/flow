@@ -40,7 +40,7 @@ describe('P14 unread fan-out baseline', () => {
       await vi.advanceTimersByTimeAsync(1)
     }
     expect(request).toHaveBeenCalledTimes(5)
-    expect(request).toHaveBeenLastCalledWith('/api/sync/notification-state', expect.objectContaining({ headers: { 'X-Workspace-Key': 'acme' }, signal: expect.any(AbortSignal) }))
+    expect(request).toHaveBeenLastCalledWith('/api/notifications/state', expect.objectContaining({ headers: { 'X-Workspace-Key': 'acme' }, signal: expect.any(AbortSignal) }))
     console.info('P14 overlay: 0 GETs for normal push; 5 targeted recoveries/event = 0.5/s')
   })
 

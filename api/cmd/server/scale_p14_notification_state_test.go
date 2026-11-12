@@ -157,7 +157,7 @@ func TestScaleP14RecipientPermissionDifferential(t *testing.T) {
 				}
 			})
 			t.Run("credential-revocation", func(t *testing.T) {
-				r := httptest.NewRequest(http.MethodGet, "/api/sync/notification-state", nil)
+				r := httptest.NewRequest(http.MethodGet, "/api/notifications/state", nil)
 				r.Header.Set("Authorization", "Bearer "+selected)
 				r.Header.Set("X-Workspace-Key", workspace)
 				user, key, _ := f.service.authenticateAPIKey(r)
@@ -207,7 +207,7 @@ func scaleP14StateRequest(t *testing.T, f scaleP03PlatformFixture, client *http.
 
 func scaleP14StateRequestContext(t *testing.T, ctx context.Context, f scaleP03PlatformFixture, client *http.Client, bearer, workspace string) *httptest.ResponseRecorder {
 	t.Helper()
-	r := httptest.NewRequest(http.MethodGet, "/api/sync/notification-state?recipientId=someone-else", nil).WithContext(ctx)
+	r := httptest.NewRequest(http.MethodGet, "/api/notifications/state?recipientId=someone-else", nil).WithContext(ctx)
 	r.Header.Set("X-Workspace-Key", workspace)
 	if bearer != "" {
 		r.Header.Set("Authorization", "Bearer "+bearer)
@@ -219,7 +219,7 @@ func scaleP14StateRequestContext(t *testing.T, ctx context.Context, f scaleP03Pl
 		}
 	}
 	w := httptest.NewRecorder()
-	f.service.authenticate(http.HandlerFunc(f.service.notificationState)).ServeHTTP(w, r)
+	f.host.Config.Handler.ServeHTTP(w, r)
 	return w
 }
 
