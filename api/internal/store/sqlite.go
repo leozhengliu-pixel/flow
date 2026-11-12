@@ -39,10 +39,11 @@ type SQLiteStore struct {
 	copyRevisions     map[string]copyRevision
 	copyRevisionEpoch uint64
 	peerApplied       map[string]peerAppliedWorkspace // installed journal cursors; guarded by writeMu (scale_p11_peer_apply.go)
-	// metadataDecodes counts decodeWorkspaceMetadata calls
-	// (WorkspaceMetadataDecodes).
-	metadataDecodes atomic.Int64
-	viewer          domain.User
+	// metadataDecodes keeps the legacy decode-call diagnostic. Scoped bounded
+	// hydration does not count as a full workspace decode.
+	metadataDecodes   atomic.Int64
+	metadataResidency *metadataResidency
+	viewer            domain.User
 	// The sinks are read after every committed write; atomics keep that
 	// read from queueing behind a writer holding mu.
 	realtimeSink atomic.Pointer[func(string, domain.RealtimeEvent)]
@@ -280,6 +281,16 @@ func (s *SQLiteStore) SetWorkspaceCoordinator(coordinator WorkspaceCoordinator) 
 // A copy still at the stored metadata revision is kept without decoding the
 // workspace again (metadata_copy_revision.go).
 func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) error {
+	if s.metadataResidency != nil {
+		ctx, release, err := s.metadataResidency.work.acquire(ctx, metadataPolicyBytes+2<<20)
+		if err != nil {
+			return err
+		}
+		defer release()
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
+		return s.reloadResidentWorkspace(ctx, workspaceKey)
+	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	known, ok := s.copyRevisionOf(workspaceKey)
@@ -313,6 +324,16 @@ func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) 
 // writeMu for the reason ReloadWorkspace does. Copies still at the stored
 // metadata revision are kept without decoding them again.
 func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
+	if s.metadataResidency != nil {
+		ctx, release, err := s.metadataResidency.work.acquire(ctx, metadataPolicyBytes+2<<20)
+		if err != nil {
+			return err
+		}
+		defer release()
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
+		return s.loadResidentWorkspaces(ctx)
+	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
@@ -395,6 +416,9 @@ func (s *SQLiteStore) loadWorkspaceState(ctx context.Context, workspaceKey strin
 // loadWorkspaceStamped decodes the stored workspace metadata and reads, in
 // the same snapshot, the metadata revision the result is exact at.
 func (s *SQLiteStore) loadWorkspaceStamped(ctx context.Context, workspaceKey string) (domain.Bootstrap, copyStamp, error) {
+	if s.metadataResidency != nil {
+		return domain.Bootstrap{}, copyStamp{}, fmt.Errorf("%w: full workspace load %q", ErrBoundedMetadataCoverage, workspaceKey)
+	}
 	// This result can replace the canonical cache. A request's callback/read
 	// selection must never turn it into a partial workspace snapshot.
 	if _, scoped := ctx.Value(metadataRecordScopeKey{}).(MetadataRecordScope); scoped {
@@ -632,6 +656,9 @@ func (s *SQLiteStore) makeAuthEmailNullable(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) loadOrSeed(ctx context.Context) error {
+	if s.metadataResidency != nil {
+		return s.loadResidentWorkspaces(ctx)
+	}
 	s.workspaces = map[string]domain.Bootstrap{}
 	s.copyRevisions = nil
 	historyChanged := map[string]bool{}
@@ -1567,6 +1594,9 @@ func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventT
 // mutateFull runs a mutation against the workspace snapshot. Unless the event
 // is metadata-only it loads every issue and content record first.
 func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+	if s.metadataResidency != nil {
+		return fmt.Errorf("%w: full mutation %q must declare a migrated record writer", ErrBoundedMetadataCoverage, eventType)
+	}
 	if workspaceKey == "" {
 		s.mu.RLock()
 		workspaceKey = s.lastWorkspaceKey

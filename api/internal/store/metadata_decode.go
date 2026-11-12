@@ -17,9 +17,14 @@ import (
 // Decode split metadata records directly into their typed destinations. Do not
 // rebuild a second giant JSON blob just to parse it again during startup/reload.
 func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace string, raw []byte, reader metadataReader) (domain.Bootstrap, error) {
-	s.metadataDecodes.Add(1)
 	var data domain.Bootstrap
 	scope, scoped := metadataRecordScopeFromContext(ctx)
+	if s.metadataResidency != nil && !scoped {
+		return data, fmt.Errorf("%w: unscoped workspace decode", ErrBoundedMetadataCoverage)
+	}
+	if s.metadataResidency == nil || !scoped {
+		s.metadataDecodes.Add(1)
+	}
 	budget := newMetadataHydrationBudget()
 	if scoped {
 		var err error
@@ -198,6 +203,9 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 }
 
 func (s *SQLiteStore) loadMetadataRecordRows(ctx context.Context, workspace string, reader metadataReader, collections map[string]string) ([]metadataCacheRow, error) {
+	if s.metadataResidency != nil {
+		return nil, fmt.Errorf("%w: unscoped metadata records for %q", ErrBoundedMetadataCoverage, workspace)
+	}
 	// The copy must be the metadata reader sees: the stamp is read through
 	// reader, before the rows (see metadataGenerationKey).
 	stamp, stamped := s.metadataStamp(ctx, reader, workspace)

@@ -283,6 +283,12 @@ func (tx *sqlTx) noteNotificationRow(row contentRecordRow, previous []byte, exis
 }
 
 func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
+	bounded := boundedMetadataRequested()
+	if bounded {
+		if err := validateBoundedMetadataCoverage(); err != nil {
+			return nil, err
+		}
+	}
 	driver := strings.ToLower(strings.TrimSpace(config.Driver))
 	if driver == "" {
 		driver = "sqlite"
@@ -397,6 +403,9 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		maxTransactionBytes = 32 << 20
 	}
 	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes, content: newContentOffload(config), searchMaxChars: max(config.SearchIndexMaxChars, 0)}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
+	if bounded {
+		s.metadataResidency = newMetadataResidency()
+	}
 	s.changeLogMinRows.Store(DefaultChangeLogMinRows)
 	notify := s.publishNotificationSignals
 	s.db.notified.Store(&notify)

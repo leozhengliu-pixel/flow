@@ -20,8 +20,19 @@ type workspaceRead struct {
 // The caller must release it when writing finishes or the request is cancelled.
 func (s *SQLiteStore) BeginWorkspaceRead(ctx context.Context, workspace string) (context.Context, func(), error) {
 	scope, scoped := metadataRecordScopeFromContext(ctx)
+	if s.metadataResidency != nil && !scoped {
+		return ctx, nil, fmt.Errorf("%w: an unscoped workspace read must use the compatibility stream", ErrBoundedMetadataCoverage)
+	}
 	if scoped {
 		if err := validateMetadataRecordScope(scope); err != nil {
+			return ctx, nil, err
+		}
+	}
+	budgetRelease := func() {}
+	if s.metadataResidency != nil {
+		var err error
+		ctx, budgetRelease, err = s.metadataResidency.work.acquire(ctx, 2<<20)
+		if err != nil {
 			return ctx, nil, err
 		}
 	}
@@ -32,9 +43,13 @@ func (s *SQLiteStore) BeginWorkspaceRead(ctx context.Context, workspace string) 
 	}
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
+		budgetRelease()
 		return ctx, nil, err
 	}
-	release := func() { _ = tx.Rollback() }
+	release := func() {
+		_ = tx.Rollback()
+		budgetRelease()
+	}
 	// This server's copy, when it is exact at the snapshot's metadata
 	// revision, is the snapshot's metadata (metadata_copy_revision.go):
 	// copy it instead of decoding the workspace again. The copy is taken
@@ -49,7 +64,7 @@ func (s *SQLiteStore) BeginWorkspaceRead(ctx context.Context, workspace string) 
 	s.mu.RLock()
 	installed, installedOK := s.workspaces[workspace]
 	known, knownOK := s.copyRevisionLocked(workspace)
-	current := installedOK && knownOK && known.workspaceID == stamp.workspaceID && known.revision == stamp.revision
+	current := s.metadataResidency == nil && installedOK && knownOK && known.workspaceID == stamp.workspaceID && known.revision == stamp.revision
 	if current && !scoped {
 		installed = cloneBootstrap(installed)
 	}
@@ -92,6 +107,9 @@ func (s *SQLiteStore) workspaceReadSource(ctx context.Context, workspace string)
 		data := cloneBootstrap(snapshot.metadata)
 		stripTrashLinks(&data)
 		return snapshot.reader, data, true
+	}
+	if s.metadataResidency != nil {
+		return s.db, domain.Bootstrap{}, false
 	}
 	data, ok := s.WorkspaceMetadata(workspace)
 	stripTrashLinks(&data)
