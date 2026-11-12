@@ -34,6 +34,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
         await expect(title).toHaveText('Activation issue')
         expect((await request.patch(`/api/issues/${issue.id}`, { headers, data: { title: 'Activation issue updated' } })).ok()).toBe(true)
         await expect(title).toHaveText('Activation issue updated')
+        const cacheKey = `flow:navigation:${core.viewer.id}:${workspaceKey}`
+        await expect.poll(() => page.evaluate(key => Boolean(localStorage.getItem(key)), cacheKey)).toBe(true)
         await capture(page, `${prefix}-issues`)
 
         const projectResponse = await request.post('/api/projects', { headers, data: { name: 'Activation project', teamIds: [core.teams[0].id] } })
@@ -72,6 +74,21 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
         await capture(page, `${prefix}-agent`)
         await page.goto(`/${workspaceKey}/document/${document.slugId}`)
         await expect(page.locator('.document-page')).toContainText('Saved activation document body.')
+        await page.goto(`/${workspaceKey}/team/${core.teams[0].key}/all`)
+        await expect(page.locator('main')).toContainText('Activation issue updated')
+        await page.goto(`/${workspaceKey}/projects/all`)
+        await expect(page.locator('main')).toContainText('Activation project updated')
+        await page.goto(`/${workspaceKey}/team/${core.teams[0].key}/documents`)
+        await expect(page.locator('main')).toContainText('Activation document updated')
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+        let oldServerRequests = 0
+        await page.route('**/api/sync/manifest', async route => {
+          oldServerRequests++
+          await route.fulfill({ status: 404, json: {} })
+        })
+        await page.goto(`/${workspaceKey}/document/${document.slugId}`)
+        await expect(page.locator('.document-page')).toContainText('Saved activation document body.')
+        if (process.env.SCALE_ACTIVATE_A_MODE === 'on') expect(oldServerRequests).toBeGreaterThan(0)
       })
     })
   }

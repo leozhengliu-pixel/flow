@@ -22,6 +22,16 @@ const storagePrefix = 'flow:navigation:'
 const memory = new Map<string, NavigationCacheRecord>()
 const boundedMemory = new Map<string, string>()
 const navigationSchema = 2
+let invalidationGeneration = 0
+
+export function navigationCacheGeneration() {
+  return invalidationGeneration
+}
+
+/** A later revoke must not be undone by an older recovery request finishing. */
+export function writeRecoveredNavigationCache(viewerId: string, workspaceKey: string, data: BootstrapData, generation: number) {
+  if (boundedBrowserCacheEnabled() && generation === invalidationGeneration) writeNavigationCacheWhenIdle(viewerId, workspaceKey, data)
+}
 
 function trimNavigationStorage() {
   if (typeof localStorage === 'undefined') return
@@ -281,6 +291,7 @@ export function rememberWorkspace(viewerId: string, workspaceKey: string): void 
 }
 
 export function clearNavigationCache(viewerId?: string, workspaceKey?: string): void {
+  if (boundedBrowserCacheEnabled()) invalidationGeneration++
   clearSessionCaches(viewerId, workspaceKey)
   cancelPendingWrites(viewerId && workspaceKey ? storageKey(viewerId, workspaceKey) : viewerId ? `${storagePrefix}${viewerId}:` : storagePrefix, boundedBrowserCacheEnabled() && Boolean(viewerId && workspaceKey))
   const boundedPrefix = viewerId ? workspaceKey ? storageKey(viewerId, workspaceKey) : `${storagePrefix}${viewerId}:` : storagePrefix

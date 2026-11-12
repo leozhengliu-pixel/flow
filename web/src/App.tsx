@@ -171,7 +171,9 @@ import {
   carryNavigationHydration,
   clearNavigationCache,
   hydrateWorkspaceNavigation,
+  navigationCacheGeneration,
   readNavigationCache,
+  writeRecoveredNavigationCache,
   writeNavigationCacheWhenIdle,
   rememberWorkspace,
 } from "@/lib/navigation-cache";
@@ -1554,6 +1556,7 @@ function App() {
       const workspace = data?.workspace.urlKey;
       if (!workspace) return;
       const viewerId=data.viewer.id;
+      const cacheGeneration = navigationCacheGeneration();
       if (recipientInbox.receive?.(workspace, viewerId, event)) return;
       if (event.type === 'workspace_preferences.updated' || event.type === 'user_settings.updated' && event.aggregateId === viewerId || /^(workspace_member|team_member|membership)\./.test(event.type)) {
         window.dispatchEvent(new CustomEvent(COMMENT_ACTIONS_CHANGED));
@@ -1731,6 +1734,7 @@ function App() {
           const replacement=next.states.find(state=>state.id===deletedWorkflowState.replacementStateId);
           if(replacement)merged.issues=merged.issues.map(issue=>issue.team.id===deletedWorkflowState.teamId&&issue.state.id===deletedWorkflowState.stateId?{...issue,state:replacement,needsDetailRefresh:!issue.isSummary}:issue);
         }
+        if (!merged.sync) writeRecoveredNavigationCache(viewerId, workspace, merged, cacheGeneration);
         return merged;
       });
       if(deletedWorkflowState)window.dispatchEvent(new CustomEvent('flow-issue-query-invalidated',{detail:{workspaceKey:workspace}}));
