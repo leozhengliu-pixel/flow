@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -422,5 +423,46 @@ func TestScaleP15PointCallbacksRejectUnavailableRequirements(t *testing.T) {
 		if !errors.Is(err, ErrMetadataRecordQuery) || called {
 			t.Fatalf("point writer accepted unavailable callback requirements: event=%s error=%v", event, err)
 		}
+	}
+}
+
+func TestScaleP15DecodedContainersAreBudgeted(t *testing.T) {
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	repo, _ := scaleP04OwnedStore(t)
+	workspace := repo.Bootstrap().Workspace.URLKey
+	items := make([]map[string]any, 6000)
+	for i := range items {
+		items[i] = map[string]any{}
+	}
+	if err := repo.MutateWorkspace(t.Context(), workspace, "scale_p15.seed", "", nil, func(data *domain.Bootstrap) error {
+		data.Settings["p15-containers"] = items
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	key := RecordKey{"settings", "p15-containers"}
+	if _, err := repo.HydrateWorkspaceMetadata(t.Context(), workspace, MetadataRecordScope{Read: []RecordKey{key}}); !errors.Is(err, ErrMetadataPageBudget) {
+		t.Fatalf("small encoded JSON bypassed the decoded working budget: %v", err)
+	}
+	if repo.db.Stats().InUse != 0 {
+		t.Fatal("rejected hydration retained its SQL snapshot")
+	}
+	want, _ := json.Marshal(items)
+	var got bytes.Buffer
+	if err := repo.StreamCanonicalMetadataRecord(t.Context(), workspace, key, &got); err != nil || !bytes.Equal(got.Bytes(), want) {
+		t.Fatalf("budget rejection lost the complete streaming alternative: %v", err)
+	}
+	budget := newMetadataHydrationBudget()
+	quoted, _ := json.Marshal(strings.Repeat(`{}[],:\"`, 1000))
+	if err := budget.consume(quoted); err != nil {
+		t.Fatal("string punctuation was charged as decoded containers")
+	}
+	root := map[string]int{}
+	for i := range 300 {
+		root[fmt.Sprint(i)] = i
+	}
+	raw, _ := json.Marshal(root)
+	if metadataRootFieldsBounded(raw) {
+		t.Fatal("unbounded root field count was admitted")
 	}
 }

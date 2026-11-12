@@ -354,7 +354,7 @@ func (s *SQLiteStore) HydrateWorkspaceMetadata(ctx context.Context, workspace st
 // scopedMetadataRoot keeps the scalar identity and explicitly selected fields.
 // The canonical root is small; large unsplit roots retain the legacy path only.
 func scopedMetadataRoot(raw []byte, scope MetadataRecordScope) ([]byte, error) {
-	if len(raw) > MetadataRecordPageMaxBytes {
+	if len(raw) > MetadataRecordPageMaxBytes || !metadataRootFieldsBounded(raw) {
 		return nil, ErrMetadataPageBudget
 	}
 	var root map[string]json.RawMessage
@@ -369,12 +369,12 @@ func scopedMetadataRoot(raw []byte, scope MetadataRecordScope) ([]byte, error) {
 	return json.Marshal(root)
 }
 
-func (s *SQLiteStore) loadScopedMetadataRecordRows(ctx context.Context, workspace string, reader metadataReader, collections map[string]string, scope MetadataRecordScope) ([]metadataCacheRow, error) {
+func (s *SQLiteStore) loadScopedMetadataRecordRows(ctx context.Context, workspace string, reader metadataReader, collections map[string]string, scope MetadataRecordScope, budget *metadataHydrationBudget) ([]metadataCacheRow, error) {
 	if err := validateMetadataRecordScope(scope); err != nil {
 		return nil, err
 	}
 	result := []metadataCacheRow{}
-	remaining := MetadataRecordPageMaxBytes
+	remaining := budget.bytes
 	for _, field := range metadataRecordFields(scope) {
 		if _, split := collections[field]; !split {
 			continue
@@ -409,6 +409,10 @@ func (s *SQLiteStore) loadScopedMetadataRecordRows(ctx context.Context, workspac
 			if remaining < 0 || row.Data == nil || len(result) == MetadataRecordBatchMaxKeys {
 				rows.Close()
 				return nil, ErrMetadataPageBudget
+			}
+			if err := budget.consume(row.Data); err != nil {
+				rows.Close()
+				return nil, err
 			}
 			result = append(result, row)
 		}

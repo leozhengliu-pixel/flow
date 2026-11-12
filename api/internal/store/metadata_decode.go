@@ -20,10 +20,14 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 	s.metadataDecodes.Add(1)
 	var data domain.Bootstrap
 	scope, scoped := metadataRecordScopeFromContext(ctx)
+	budget := newMetadataHydrationBudget()
 	if scoped {
 		var err error
 		raw, err = scopedMetadataRoot(raw, scope)
 		if err != nil {
+			return data, err
+		}
+		if err := budget.consume(raw); err != nil {
 			return data, err
 		}
 	}
@@ -57,7 +61,7 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 	var recordRows []metadataCacheRow
 	var err error
 	if scoped {
-		recordRows, err = s.loadScopedMetadataRecordRows(ctx, workspace, reader, header.Collections, scope)
+		recordRows, err = s.loadScopedMetadataRecordRows(ctx, workspace, reader, header.Collections, scope, &budget)
 	} else {
 		recordRows, err = s.loadMetadataRecordRows(ctx, workspace, reader, header.Collections)
 	}
