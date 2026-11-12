@@ -19,6 +19,12 @@ type workspaceRead struct {
 // Keep metadata, outlines, and streamed bodies in the same SQL read snapshot.
 // The caller must release it when writing finishes or the request is cancelled.
 func (s *SQLiteStore) BeginWorkspaceRead(ctx context.Context, workspace string) (context.Context, func(), error) {
+	scope, scoped := metadataRecordScopeFromContext(ctx)
+	if scoped {
+		if err := validateMetadataRecordScope(scope); err != nil {
+			return ctx, nil, err
+		}
+	}
 	if workspace == "" {
 		s.mu.RLock()
 		workspace = s.lastWorkspaceKey
@@ -44,17 +50,27 @@ func (s *SQLiteStore) BeginWorkspaceRead(ctx context.Context, workspace string) 
 	installed, installedOK := s.workspaces[workspace]
 	known, knownOK := s.copyRevisionLocked(workspace)
 	current := installedOK && knownOK && known.workspaceID == stamp.workspaceID && known.revision == stamp.revision
-	if current {
+	if current && !scoped {
 		installed = cloneBootstrap(installed)
 	}
 	s.mu.RUnlock()
-	if current {
+	if current && !scoped {
 		return context.WithValue(ctx, workspaceReadKey{}, workspaceRead{s.db, workspace, tx, installed}), release, nil
 	}
 	var raw []byte
-	if err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&raw); err != nil {
+	var readErr error
+	if scoped {
+		var size int
+		readErr = tx.QueryRowContext(ctx, `SELECT LENGTH(data),CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?`, MetadataRecordPageMaxBytes, workspace).Scan(&size, &raw)
+		if readErr == nil && (size > MetadataRecordPageMaxBytes || raw == nil) {
+			readErr = ErrMetadataPageBudget
+		}
+	} else {
+		readErr = tx.QueryRowContext(ctx, `SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&raw)
+	}
+	if readErr != nil {
 		release()
-		return ctx, nil, err
+		return ctx, nil, readErr
 	}
 	if len(raw) > s.maxStateBytes {
 		release()
@@ -65,12 +81,14 @@ func (s *SQLiteStore) BeginWorkspaceRead(ctx context.Context, workspace string) 
 		release()
 		return ctx, nil, err
 	}
-	normalizeStoredMetadata(&data)
+	if !scoped {
+		normalizeStoredMetadata(&data)
+	}
 	return context.WithValue(ctx, workspaceReadKey{}, workspaceRead{s.db, workspace, tx, data}), release, nil
 }
 
 func (s *SQLiteStore) workspaceReadSource(ctx context.Context, workspace string) (metadataReader, domain.Bootstrap, bool) {
-	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && (workspace == "" || workspace == snapshot.workspace) {
+	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == s.db && (workspace == "" || workspace == snapshot.workspace) {
 		data := cloneBootstrap(snapshot.metadata)
 		stripTrashLinks(&data)
 		return snapshot.reader, data, true

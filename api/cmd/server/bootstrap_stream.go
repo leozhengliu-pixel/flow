@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"reflect"
 	"slices"
 	"time"
 
@@ -36,7 +37,11 @@ func serializeLegacyBootstrap(next http.Handler, shared ...chan struct{}) http.H
 		_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Minute))
 		defer controller.SetWriteDeadline(time.Time{})
 		if r.Context().Err() == nil {
-			next.ServeHTTP(w, r)
+			if store.RecordHydrationEnabled() {
+				serveDetachedLegacyJSON(w, r, next)
+			} else {
+				next.ServeHTTP(w, r)
+			}
 		}
 	})
 }
@@ -49,6 +54,10 @@ func writeBootstrapJSON(w http.ResponseWriter, data domain.Bootstrap) {
 }
 
 func writeBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stream func(string, *bufio.Writer, *json.Encoder) (bool, error), overrides ...map[string]json.RawMessage) {
+	if store.RecordHydrationEnabled() {
+		writeHydratedBootstrapWithFields(w, data, stream, overrides...)
+		return
+	}
 	metadata := data
 	metadata.Issues, metadata.Comments, metadata.Activities = nil, nil, nil
 	metadata.Notifications, metadata.NotificationDeliveries = nil, nil
@@ -230,7 +239,7 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 					if i > 0 {
 						buffer.WriteByte(',')
 					}
-					if err := encoder.Encode(leanIssueRecord(issue)); err != nil {
+					if err := encodeBootstrapValue(r.Context(), buffer, encoder, leanIssueRecord(issue)); err != nil {
 						return true, err
 					}
 				}
@@ -279,7 +288,7 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 				if count > 0 {
 					buffer.WriteByte(',')
 				}
-				if err := encoder.Encode(issue); err != nil {
+				if err := encodeBootstrapValue(r.Context(), buffer, encoder, issue); err != nil {
 					return err
 				}
 				count++
@@ -391,7 +400,7 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 				buffer.WriteByte(',')
 			}
 			count++
-			return encoder.Encode(value)
+			return encodeBootstrapValue(r.Context(), buffer, encoder, value)
 		})
 		if err != nil {
 			return true, err
@@ -422,12 +431,101 @@ func encodeBootstrapArray[T any](w io.Writer, encoder *json.Encoder, items []T) 
 				return err
 			}
 		}
-		if err := encoder.Encode(&items[i]); err != nil {
+		var err error
+		if buffer, ok := w.(*bufio.Writer); ok {
+			err = encodeBootstrapValue(context.Background(), buffer, encoder, &items[i])
+		} else {
+			err = encoder.Encode(&items[i])
+		}
+		if err != nil {
 			return err
 		}
 	}
 	_, err := io.WriteString(w, "]")
 	return err
+}
+
+func encodeBootstrapValue(ctx context.Context, buffer *bufio.Writer, encoder *json.Encoder, value any) error {
+	if !store.RecordHydrationEnabled() {
+		return encoder.Encode(value)
+	}
+	if err := encodeHydratedJSON(ctx, buffer, reflect.ValueOf(value), 0); err != nil {
+		return err
+	}
+	return buffer.WriteByte('\n')
+}
+
+// Preserve the legacy field ordering and newlines while visiting each field
+// directly. Marshaling metadata first duplicates every project and document.
+func writeHydratedBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stream func(string, *bufio.Writer, *json.Encoder) (bool, error), overrides ...map[string]json.RawMessage) {
+	value := reflect.ValueOf(data)
+	fields := map[string]streamField{}
+	keys := []string{}
+	for _, field := range streamPlanFor(value.Type()) {
+		item := value.Field(field.index)
+		if field.omitEmpty && isEmptyJSONValue(item) {
+			continue
+		}
+		var name string
+		_ = json.Unmarshal(field.key[:len(field.key)-1], &name)
+		keys = append(keys, name)
+		fields[name] = field
+	}
+	if len(overrides) > 0 {
+		keys = keys[:0]
+		for name := range overrides[0] {
+			keys = append(keys, name)
+		}
+	}
+	slices.Sort(keys)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	buffer := bufio.NewWriterSize(w, 64<<10)
+	encoder := json.NewEncoder(buffer)
+	buffer.WriteByte('{')
+	for i, key := range keys {
+		if i > 0 {
+			buffer.WriteByte(',')
+		}
+		if err := encoder.Encode(key); err != nil {
+			panic(http.ErrAbortHandler)
+		}
+		buffer.WriteByte(':')
+		if stream != nil {
+			handled, err := stream(key, buffer, encoder)
+			if err != nil {
+				panic(http.ErrAbortHandler)
+			}
+			if handled {
+				continue
+			}
+		}
+		var err error
+		switch key {
+		case "issues":
+			err = encodeBootstrapArray(buffer, encoder, data.Issues)
+		case "comments":
+			err = encodeBootstrapMap(buffer, encoder, data.Comments)
+		case "activities":
+			err = encodeBootstrapMap(buffer, encoder, data.Activities)
+		case "notifications":
+			err = encodeBootstrapArray(buffer, encoder, data.Notifications)
+		case "notificationDeliveries":
+			err = encodeBootstrapArray(buffer, encoder, data.NotificationDeliveries)
+		default:
+			if len(overrides) > 0 {
+				_, err = buffer.Write(overrides[0][key])
+			} else {
+				err = encodeHydratedJSON(context.Background(), buffer, value.Field(fields[key].index), 0)
+			}
+		}
+		if err != nil {
+			panic(http.ErrAbortHandler)
+		}
+	}
+	buffer.WriteString("}\n")
+	if err := buffer.Flush(); err != nil {
+		panic(http.ErrAbortHandler)
+	}
 }
 
 func encodeBootstrapMap[T any](w io.Writer, encoder *json.Encoder, items map[string][]T) error {

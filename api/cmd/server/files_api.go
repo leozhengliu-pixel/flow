@@ -473,9 +473,20 @@ var (
 // signed URLs when the client asks for them with the expire-in header.
 func (s *server) signedFileURLs(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if store.RecordHydrationEnabled() && s.realtime != nil {
+			r = r.WithContext(context.WithValue(r.Context(), legacyTransportBudgetKey{}, s.realtime.budget))
+		}
 		lifetime, requested := requestedFileURLLifetime(r)
+		if store.RecordHydrationEnabled() && !requested && r.Method == http.MethodGet && r.URL.Path == "/api/issue-records/bootstrap" {
+			serveDetachedLegacyJSON(w, r, next)
+			return
+		}
 		if !requested || !strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/api/files") || r.Header.Get("Upgrade") != "" {
 			next.ServeHTTP(w, r)
+			return
+		}
+		if store.RecordHydrationEnabled() {
+			s.signedFileURLsStream(w, r, next, lifetime)
 			return
 		}
 		writer := &bufferedJSONWriter{ResponseWriter: w, limit: 32 << 20}
@@ -493,6 +504,10 @@ func (s *server) signedFileURLs(next http.Handler) http.Handler {
 		w.WriteHeader(writer.status)
 		_, _ = w.Write(body)
 	})
+}
+
+func logSigningFailure(ctx context.Context, err error) {
+	slog.WarnContext(ctx, "file url signing unavailable", "error", err)
 }
 
 func rewriteUploadURLs(body, key []byte, baseURL string, expires time.Time) []byte {

@@ -19,6 +19,14 @@ import (
 func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace string, raw []byte, reader metadataReader) (domain.Bootstrap, error) {
 	s.metadataDecodes.Add(1)
 	var data domain.Bootstrap
+	scope, scoped := metadataRecordScopeFromContext(ctx)
+	if scoped {
+		var err error
+		raw, err = scopedMetadataRoot(raw, scope)
+		if err != nil {
+			return data, err
+		}
+	}
 	if err := json.Unmarshal(raw, &data); err != nil {
 		return data, err
 	}
@@ -29,6 +37,12 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 		return data, err
 	}
 	if len(header.Collections) == 0 {
+		if scoped {
+			if err := validateMetadataRecordSelection(data, scope); err != nil {
+				return data, err
+			}
+			data = metadataRecordSnapshot(data, scope, metadataRecordFields(scope))
+		}
 		return data, nil
 	}
 	root := reflect.ValueOf(&data).Elem()
@@ -40,7 +54,13 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 			fields[tag] = root.Field(i)
 		}
 	}
-	recordRows, err := s.loadMetadataRecordRows(ctx, workspace, reader, header.Collections)
+	var recordRows []metadataCacheRow
+	var err error
+	if scoped {
+		recordRows, err = s.loadScopedMetadataRecordRows(ctx, workspace, reader, header.Collections, scope)
+	} else {
+		recordRows, err = s.loadMetadataRecordRows(ctx, workspace, reader, header.Collections)
+	}
 	if err != nil {
 		return data, err
 	}
@@ -163,6 +183,12 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 			return data, err
 		}
 		fields[field].SetBytes(encoded)
+	}
+	if scoped {
+		if err := validateMetadataRecordSelection(data, scope); err != nil {
+			return data, err
+		}
+		data = metadataRecordSnapshot(data, scope, metadataRecordFields(scope))
 	}
 	return data, nil
 }

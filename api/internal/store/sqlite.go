@@ -1484,6 +1484,16 @@ func (s *SQLiteStore) MutateWithAggregate(ctx context.Context, eventType string,
 }
 
 func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) (err error) {
+	if scope, scoped := metadataRecordScopeFromContext(ctx); scoped {
+		if err := validateMetadataRecordScope(scope); err != nil {
+			return err
+		}
+		if metadataRecordPointMutation(ctx, eventType, payload) {
+			return fmt.Errorf("%w: record scope is not supported by the %s point callback", ErrMetadataRecordQuery, eventType)
+		}
+		ctx = WithMetadataFields(ctx, metadataRecordFields(scope)...)
+		mutate = metadataRecordMutationAdapter(ctx, mutate)
+	}
 	ctx, trace := startMutationTrace(ctx)
 	defer func() { trace.report(workspaceKey, eventType, err) }()
 	// Audit entries the callback stages are committed by the mutation's own
@@ -1584,7 +1594,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		fields, fieldScoped := metadataFieldsFromContext(ctx)
 		fieldScoped = fieldScoped && metadataOnly
 		if fieldScoped {
-			current = metadataFieldSnapshot(stored, fields)
+			current = metadataRecordFieldSnapshot(ctx, stored, fields)
 		} else {
 			current = cloneBootstrap(current)
 		}
@@ -1614,7 +1624,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		next := current
 		if webhookEnabled {
 			if fieldScoped {
-				next = metadataFieldSnapshot(current, fields)
+				next = metadataRecordFieldSnapshot(ctx, current, fields)
 			} else {
 				next = cloneBootstrap(current)
 			}
@@ -1656,8 +1666,8 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		if fieldScoped {
 			// Unlisted fields were hidden from the callback; keep the stored
 			// (shared, unchanged) values so the delta skips them.
-			restoreUnlistedMetadata(&current, stored, fields)
-			restoreUnlistedMetadata(&next, stored, fields)
+			restoreMetadataRecordFields(ctx, &current, stored, fields)
+			restoreMetadataRecordFields(ctx, &next, stored, fields)
 		}
 		previousValues := json.RawMessage(nil)
 		if webhookEnabled {

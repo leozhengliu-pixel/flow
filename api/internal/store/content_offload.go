@@ -648,6 +648,85 @@ func (s *SQLiteStore) LoadOffloadedJSON(ctx context.Context, workspace string, r
 	return inlineOffloadedJSON(raw, bodies), nil
 }
 
+// StreamOffloadedBody copies one immutable body without filling the body
+// cache or collecting a document's history. Callers authorize the owning
+// record first and reserve their transport budget before starting the copy.
+// A missing or corrupt object is an error, never an empty loaded body.
+func (s *SQLiteStore) StreamOffloadedBody(ctx context.Context, workspace string, ref domain.ContentRef, dst io.Writer) error {
+	workspace = s.offloadWorkspace(workspace)
+	if ref.Key == "" {
+		return ErrMetadataRecordQuery
+	}
+	var size sql.NullInt64
+	if err := s.db.QueryRowContext(ctx, `SELECT LENGTH(data) FROM metadata_blobs WHERE workspace_key=? AND blob_key=?`, workspace, ref.Key).Scan(&size); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errOffloadedObjectMissing
+		}
+		return err
+	}
+	var source io.Reader
+	if size.Valid {
+		s.db.content.databaseReads.Add(1)
+		source = &offloadedChunkReader{ctx: ctx, reader: s.db, workspace: workspace, key: ref.Key, size: size.Int64}
+	} else {
+		if s.db.content.objects == nil {
+			return errOffloadedObjectMissing
+		}
+		s.db.content.objectReads.Add(1)
+		body, _, _, err := s.db.content.objects.Open(ctx, offloadedObjectKey(workspace, ref.Key))
+		if err != nil {
+			return err
+		}
+		defer body.Close()
+		source = body
+	}
+	zipped, err := gzip.NewReader(offloadedContextReader{ctx, source})
+	if err != nil {
+		return err
+	}
+	defer zipped.Close()
+	_, err = io.CopyBuffer(dst, offloadedContextReader{ctx, zipped}, make([]byte, 32<<10))
+	return err
+}
+
+type offloadedContextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r offloadedContextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(p)
+}
+
+type offloadedChunkReader struct {
+	ctx            context.Context
+	reader         *sqlDatabase
+	workspace, key string
+	size, offset   int64
+	buffer         []byte
+}
+
+func (r *offloadedChunkReader) Read(p []byte) (int, error) {
+	if len(r.buffer) == 0 {
+		if r.offset >= r.size {
+			return 0, io.EOF
+		}
+		if err := r.reader.QueryRowContext(r.ctx, `SELECT SUBSTR(data,?,?) FROM metadata_blobs WHERE workspace_key=? AND blob_key=?`, r.offset+1, min(int64(16<<10), r.size-r.offset), r.workspace, r.key).Scan(&r.buffer); err != nil {
+			return 0, err
+		}
+		if len(r.buffer) == 0 {
+			return 0, io.ErrUnexpectedEOF
+		}
+		r.offset += int64(len(r.buffer))
+	}
+	n := copy(p, r.buffer)
+	r.buffer = r.buffer[n:]
+	return n, nil
+}
+
 func inlineOffloadedJSON(raw json.RawMessage, bodies map[string][]byte) json.RawMessage {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || !bytes.Contains(trimmed, offloadMarkerBytes) {

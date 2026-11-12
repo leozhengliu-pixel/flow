@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+
+	"flow/api/internal/store"
 )
 
 // writeStreamedJSON writes value (a struct) exactly as writeJSON would, but
@@ -131,6 +133,9 @@ func isEmptyJSONValue(v reflect.Value) bool {
 }
 
 func encodeStreamedStruct(ctx context.Context, buffer *bufio.Writer, v reflect.Value, plan []streamField) error {
+	if store.RecordHydrationEnabled() {
+		return encodeHydratedStruct(ctx, buffer, v, plan, 0)
+	}
 	buffer.WriteByte('{')
 	first := true
 	for _, field := range plan {
