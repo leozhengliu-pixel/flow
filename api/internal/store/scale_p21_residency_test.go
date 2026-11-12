@@ -237,6 +237,36 @@ func TestScaleP21RecoveryRejectsUnknownPolicySetting(t *testing.T) {
 	}
 }
 
+func TestScaleP21PolicyCopiesDoNotReplaceCanonicalDetails(t *testing.T) {
+	t.Setenv("FLOW_BOUNDED_METADATA", "off")
+	f := scaleP09Database(t)
+	workspace := f.data.Workspace.URLKey
+	if err := f.MutateWorkspace(t.Context(), workspace, "scale_p21.seed", "", nil, func(data *domain.Bootstrap) error {
+		data.Projects = append(data.Projects, domain.Project{ID: "p21-canonical-detail", Name: "Canonical project", Description: "canonical body", TeamIDs: []string{data.Teams[0].ID}})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	probe := scaleP21ResidentProbe(f.SQLiteStore)
+	if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, exact := probe.copyRevisionOf(workspace); exact {
+		t.Fatal("policy-only copy claimed a complete metadata revision")
+	}
+	access, err := probe.ResolveAccess(t.Context(), workspace, f.data.Viewer.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, allowed, err := probe.ResourceReadMetadata(t.Context(), access, "projects", "p21-canonical-detail")
+	if err != nil || !allowed || len(data.Projects) != 1 || data.Projects[0].Description != "canonical body" {
+		t.Fatalf("partial residency hid canonical detail: allowed=%v error=%v projects=%d", allowed, err, len(data.Projects))
+	}
+	if probe.WorkspaceMetadataDecodes() != 0 {
+		t.Fatal("native detail decoded the whole workspace")
+	}
+}
+
 func TestScaleP21InternalWorkAdmissionCancelsAndDoesNotLeak(t *testing.T) {
 	budget := newMetadataWorkBudget(100)
 	ctx, release, err := budget.acquire(t.Context(), 100)

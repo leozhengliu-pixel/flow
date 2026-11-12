@@ -350,7 +350,7 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 		return err
 	}
 	defer tx.Rollback()
-	workspaces, stamps, costs := map[string]domain.Bootstrap{}, map[string]copyStamp{}, map[string]int{}
+	workspaces, costs := map[string]domain.Bootstrap{}, map[string]int{}
 	s.mu.RLock()
 	lastWorkspace, viewer := s.lastWorkspaceKey, s.viewer
 	initial := len(s.workspaces) == 0
@@ -410,7 +410,7 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 			break
 		}
 		for _, key := range keys {
-			data, stamp, cost, err := s.readResidentWorkspace(ctx, tx, key)
+			data, _, cost, err := s.readResidentWorkspace(ctx, tx, key)
 			if err != nil {
 				return fmt.Errorf("recover resident workspace %q: %w", key, err)
 			}
@@ -418,7 +418,7 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 				return ErrMetadataWorkBudget
 			}
 			total += cost
-			workspaces[key], stamps[key], costs[key] = data, stamp, cost
+			workspaces[key], costs[key] = data, cost
 		}
 		last, started = keys[len(keys)-1], true
 	}
@@ -440,9 +440,8 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.workspaces, s.copyRevisions = workspaces, nil
-	for key, stamp := range stamps {
-		s.setCopyRevisionLocked(key, stamp)
-	}
+	// Legacy copy revisions certify complete metadata. Policy-only copies
+	// leave them unknown so native record readers use canonical SQL records.
 	if _, ok := workspaces[lastWorkspace]; !ok {
 		lastWorkspace = firstWorkspaceKey(workspaces)
 	}
@@ -467,7 +466,7 @@ func (s *SQLiteStore) reloadResidentWorkspace(ctx context.Context, workspace str
 		return err
 	}
 	defer tx.Rollback()
-	data, stamp, cost, err := s.readResidentWorkspace(ctx, tx, workspace)
+	data, _, cost, err := s.readResidentWorkspace(ctx, tx, workspace)
 	if err != nil {
 		return err
 	}
@@ -486,7 +485,7 @@ func (s *SQLiteStore) reloadResidentWorkspace(ctx context.Context, workspace str
 	}
 	s.mu.Lock()
 	s.workspaces[workspace] = data
-	s.setCopyRevisionLocked(workspace, stamp)
+	s.forgetCopyRevisionLocked(workspace)
 	s.mu.Unlock()
 	return nil
 }
