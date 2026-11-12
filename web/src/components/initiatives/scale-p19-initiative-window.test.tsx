@@ -13,7 +13,7 @@ afterEach(() => vi.unstubAllEnvs())
 const initiative = (id: string) => ({ id, name: id, parentInitiativeIds: [], projectIds: [], contributingTeamIds: [], labelIds: [] }) as unknown as Initiative
 function scope(catalog: Initiative[], complete = true) {
   vi.stubEnv('VITE_SYNC_V2', 'true'); vi.stubEnv('VITE_INITIATIVE_QUERY_WINDOWS', 'true')
-  const core = makeBootstrap({ initiatives: catalog, projects: [], favorites: [], savedViews: [], subscriptions: [], userSettings: {} })
+  const core = makeBootstrap({ initiatives: catalog, projects: [], favorites: [], savedViews: [], subscriptions: [], userSettings: {}, projectTemplates: [], projectRelations: [], favoriteFolders: [], agentSkills: [], invitations: [], customers: [], customerStatuses: [], customerTiers: [], customerRequests: [], teamSettings: {}, settings: {} })
   const manifest: SyncManifest = { schema: 2, workspaceId: core.workspace.id, viewerId: core.viewer.id, core, authzEpoch: 'epoch', head: '0', capabilities: ['sync-v2'], collections: Object.fromEntries(['user', 'team', 'label', 'savedView', 'favorite', 'initiative', 'project'].map(kind => [kind, { revision: '1', complete: kind === 'project' ? complete : true }])) }
   const client = new SyncClient(manifest, core.workspace.urlKey)
   client.surface = 'initiatives-page'

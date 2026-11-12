@@ -390,8 +390,8 @@ export function ProjectsPage({
     if (!projectWindow.enabled) return
     const display = view.state.display
     // These operations need query contracts beyond P10's collection-ordered directory.
-    if (display.layout === 'timeline' || sidebarOpen || display.ordering !== 'Manual' || display.grouping !== 'No grouping' || display.subGrouping !== 'No grouping' || display.showClosed !== 'All' || display.onlyLeadTeamProjects || activeFilters.some(filter => filter.field === 'milestones' || filter.field === 'dates' && filter.values.some(value => value.id === 'overdue'))) projectWindow.legacy()
-  }, [activeFilters, projectWindow, sidebarOpen, view.state.display])
+    if (display.layout === 'timeline' || sidebarOpen || insightFilter || display.ordering !== 'Manual' || display.grouping !== 'No grouping' || display.subGrouping !== 'No grouping' || display.showClosed !== 'All' || display.onlyLeadTeamProjects || activeFilters.some(filter => filter.field === 'milestones' || filter.field === 'dates' && filter.values.some(value => value.id === 'overdue'))) projectWindow.legacy()
+  }, [activeFilters, insightFilter, projectWindow, sidebarOpen, view.state.display])
   useEffect(() => {
     if (projectWindow.enabled) {
       try { projectWindow.select(view.state.selectedIds, projectCollection) }

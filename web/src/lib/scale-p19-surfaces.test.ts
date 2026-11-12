@@ -36,6 +36,16 @@ describe('scale-p19 surface gates and compatibility', () => {
     expect(scaleP19ProjectsEnabled(data)).toBe(true)
   })
 
+  it('requires explicit supporting catalogs so omitted templates, relations and customer choices stay on legacy', () => {
+    const core = makeBootstrap({ projectTemplates: [], projectRelations: [], favoriteFolders: [], subscriptions: [], savedViews: [], favorites: [], agentSkills: [], invitations: [], customers: [], customerStatuses: [], customerTiers: [], customerRequests: [], userSettings: {}, teamSettings: {}, settings: {} })
+    const collections = Object.fromEntries(['user', 'team', 'label', 'initiative', 'savedView', 'favorite'].map(kind => [kind, { revision: '1', complete: true }]))
+    expect(scaleP19CoreSupported(core, collections)).toBe(true)
+    for (const field of ['projectTemplates', 'projectRelations', 'customers', 'favoriteFolders'] as const) {
+      const omitted = { ...core, [field]: undefined }
+      expect(scaleP19CoreSupported(omitted, collections)).toBe(false)
+    }
+  })
+
   it('rejects cross-workspace, principal and epoch substitutions even when other fields match', () => {
     const manifest = { schema: 2, workspaceId: 'workspace', viewerId: 'member', authzEpoch: 'epoch' } as SyncManifest
     expect(scaleP19ManifestMatches(manifest, { ...manifest })).toBe(true)

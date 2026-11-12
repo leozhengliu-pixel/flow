@@ -112,4 +112,11 @@ describe('scale-p19 ProjectsPage integration', () => {
     render(page(makeBootstrap({ projects: [] })))
     await waitFor(() => expect(captured.surface!.sidebarOpen).toBe(true))
   })
+
+  it('keeps saved insight predicates on legacy instead of filtering only one server page', async () => {
+    const { data, client } = scope()
+    const savedView = { id: 'insight-view', name: 'At risk', filters: [{ kind: 'health', value: 'at-risk' }] } as unknown as NonNullable<ComponentProps<typeof ProjectsPage>['savedView']>
+    render(<I18nProvider><WorkspaceStoreProvider data={data} session={null} account={null}><ProjectsPage projects={[]} projectStatuses={data.projectStatuses} users={data.users} teams={data.teams} workspaceKey={data.workspace.urlKey} savedView={savedView}/></WorkspaceStoreProvider></I18nProvider>)
+    await waitFor(() => expect(client.legacyRequired).toBe(true))
+  })
 })

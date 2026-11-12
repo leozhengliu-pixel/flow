@@ -11,8 +11,10 @@ async function directory(page: Page, request: APIRequestContext, workspace: stri
   const source = await (await request.get('/api/bootstrap', { headers })).json()
   const changes = await (await request.get('/api/realtime/changes', { headers })).json()
   const head = String(changes.head)
-  for (const field of ['users', 'teams', 'labels', 'labelGroups', 'projectStatuses', 'initiatives', 'savedViews', 'favorites', 'subscriptions']) source[field] ??= []
+  for (const field of ['users', 'teams', 'labels', 'labelGroups', 'projectStatuses', 'projectTemplates', 'projectRelations', 'initiatives', 'savedViews', 'favorites', 'favoriteFolders', 'subscriptions', 'agentSkills', 'invitations', 'customers', 'customerStatuses', 'customerTiers', 'customerRequests']) source[field] ??= []
   source.userSettings ??= {}
+  source.teamSettings ??= {}
+  source.settings ??= {}
   const status = source.projectStatuses.find((item: { type: string }) => item.type === 'started') ?? source.projectStatuses[0]
   const calls: URL[] = []
   const row = (index: number) => ({

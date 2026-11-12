@@ -17,7 +17,8 @@ export function scaleP19Surface(kind: string) {
 }
 
 export function scaleP19CoreSupported(core: Partial<BootstrapData>, collections?: SyncManifest['collections']) {
-  return ['user', 'team', 'label', 'initiative', 'savedView', 'favorite'].every(kind => collections?.[kind]?.complete === true) && ['users', 'teams', 'labels', 'labelGroups', 'projectStatuses', 'initiatives', 'savedViews', 'favorites', 'subscriptions'].every(field => Array.isArray(core[field as keyof BootstrapData])) && Boolean(core.workspaceSettings && core.userSettings) && new TextEncoder().encode(JSON.stringify(core)).byteLength <= 256 * 1024
+  const arrays = ['users', 'teams', 'labels', 'labelGroups', 'projectStatuses', 'projectTemplates', 'projectRelations', 'initiatives', 'savedViews', 'favorites', 'favoriteFolders', 'subscriptions', 'agentSkills', 'invitations', 'customers', 'customerStatuses', 'customerTiers', 'customerRequests']
+  return ['user', 'team', 'label', 'initiative', 'savedView', 'favorite'].every(kind => collections?.[kind]?.complete === true) && arrays.every(field => Array.isArray(core[field as keyof BootstrapData])) && Boolean(core.workspaceSettings && core.userSettings && core.teamSettings && core.settings) && new TextEncoder().encode(JSON.stringify(core)).byteLength <= 256 * 1024
 }
 
 export function scaleP19InitiativeCatalogSupported(core: Partial<BootstrapData>, collections?: SyncManifest['collections']) {
