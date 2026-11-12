@@ -4,9 +4,11 @@ import { QueryWindowStore } from '@/lib/query-window-store'
 import { RecordLoader, recordKey } from '@/lib/record-loader'
 import { cacheStringBytes } from '@/lib/scale-p08'
 import { modelChanges, modelRecordKind, syncCollections, SyncWireVersionError } from '@/lib/scale-p13-wire'
+import { scaleP19CoreSupported, scaleP19InitiativeCatalogSupported } from '@/lib/scale-p19-surfaces'
+import { releaseScaleP19Bytes, retainScaleP19Core } from '@/lib/scale-p19-budget'
 import type { BootstrapData, FlowDocument, RecordKey, SyncChanges, SyncManifest, SyncPageRequest, SyncRecord, SyncRecordBatch, SyncRecordPage, WorkspaceSyncState } from '@/types/flow'
 
-export type SyncSurface = 'issue-detail' | 'document-detail' | 'document-directory' | 'people-directory' | 'trash-directory'
+export type SyncSurface = 'issue-detail' | 'document-detail' | 'document-directory' | 'people-directory' | 'trash-directory' | 'projects-page' | 'initiatives-page'
 
 export function syncV2Enabled() {
   return import.meta.env.VITE_SYNC_V2 === 'true'
@@ -42,7 +44,8 @@ type Transport = {
 }
 type CachedRecord = SyncRecord & { appliedRevision?: number; loadedDetail?: { version: string; value: Record<string, unknown> } }
 
-export function migratedSyncSignal(type: string) {
+export function migratedSyncSignal(type: string, surface?: SyncSurface) {
+  if ((surface === 'projects-page' || surface === 'initiatives-page') && (/^(?:project|initiative)\.(?:created|updated|deleted)$/.test(type) || type === 'pulse.summary_scheduled')) return true
   return /^(?:resync$|workspace\.resync_required$|issue\.(?:created|updated|deleted|batch_updated)$|document\.(?:created|updated|deleted)$)/.test(type)
 }
 
@@ -99,6 +102,21 @@ export class SyncClient {
   requestSignal(signal?: AbortSignal) { return signal ? AbortSignal.any([signal, this.controller.signal]) : this.controller.signal }
   get(key: RecordKey) { return this.records.get(recordKey({ ...key, kind: modelRecordKind(key.kind) })) }
   getDetail(key: RecordKey) { return this.get(key)?.loadedDetail?.value }
+  releaseSummaries(keys: RecordKey[]) {
+    if (this.closed) return
+    let released = false
+    for (const key of keys) {
+      const kind = modelRecordKind(key.kind), token = recordKey({ ...key, kind })
+      const record = this.records.get(token)
+      if (!record || this.pinned.has(token) || record.loadedDetail || !['summary', 'omitted'].includes(record.completeness)) continue
+      this.summaryBytes -= this.sizes.get(token) ?? 0
+      this.sizes.delete(token)
+      this.records.delete(token)
+      this.changed.set(kind, this.revision + 1)
+      released = true
+    }
+    if (released) { this.revision++; for (const listener of this.listeners) listener() }
+  }
   retainDetail(key: RecordKey) {
     const token = recordKey({ ...key, kind: modelRecordKind(key.kind) })
     this.pinned.set(token, (this.pinned.get(token) ?? 0) + 1)
@@ -190,7 +208,7 @@ export class SyncClient {
     this.checkEpoch(page.authzEpoch)
     if (page.resyncRequired) { this.requestReset(); throw new SyncResetRequired('Sync baseline expired') }
     if (compareSyncVersions(page.next, this.cursor) < 0 || compareSyncVersions(page.next, page.head) > 0 || page.hasMore && page.next === this.cursor) throw new Error('Invalid sync cursor')
-    const migratedKinds = this.surface === 'people-directory' ? ['issue', 'document', 'user'] : ['issue', 'document']
+    const migratedKinds = this.surface === 'initiatives-page' ? ['issue', 'document', 'project', 'initiative'] : this.surface === 'projects-page' ? ['issue', 'document', 'project'] : this.surface === 'people-directory' ? ['issue', 'document', 'user'] : ['issue', 'document']
     if (this.surface && page.transactions.some(transaction => [...transaction.upserts, ...transaction.removals].some(item => !migratedKinds.includes(modelRecordKind(item.key.kind))) || transaction.invalidations.some(kind => !migratedKinds.includes(modelRecordKind(kind))))) {
       this.requireLegacy('Change collection requires a legacy surface adapter')
     }
@@ -327,6 +345,7 @@ export class SyncClient {
   dispose() {
     if (this.closed) return
     this.closed = true
+    releaseScaleP19Bytes(this)
     this.controller.abort()
     this.loader.dispose()
     this.windows.clear()
@@ -362,9 +381,10 @@ export class SyncClient {
   }
 }
 
-/** Only record detail surfaces have migrated; all other routes retain the complete legacy bootstrap. */
+/** Unconverted surfaces retain their complete legacy bootstrap. */
 export async function fetchSurfaceBootstrap(workspaceKey: string, surface: SyncSurface | undefined, legacy: () => Promise<BootstrapData>, signal?: AbortSignal, quiet?: boolean): Promise<BootstrapData> {
   if (!syncV2Enabled() || !surface) return legacy()
+  if (surface === 'projects-page' && import.meta.env.VITE_PROJECT_QUERY_WINDOWS !== 'true' || surface === 'initiatives-page' && import.meta.env.VITE_INITIATIVE_QUERY_WINDOWS !== 'true') return legacy()
   let manifest: SyncManifest
   try { manifest = await fetchSyncManifest(workspaceKey, signal, quiet) }
   catch (error) {
@@ -372,8 +392,10 @@ export async function fetchSurfaceBootstrap(workspaceKey: string, surface: SyncS
     throw error
   }
   if (manifest.schema !== 2 || !manifest.capabilities?.includes('sync-v2')) return legacy()
+  if (surface === 'initiatives-page' && !scaleP19InitiativeCatalogSupported(manifest.core, manifest.collections) || surface === 'projects-page' && !scaleP19CoreSupported(manifest.core, manifest.collections)) return legacy()
   const client = new SyncClient(manifest, workspaceKey)
   client.surface = surface
+  if ((surface === 'projects-page' || surface === 'initiatives-page') && !retainScaleP19Core(client, manifest.core)) { client.dispose(); return legacy() }
   const abort = () => client.dispose()
   signal?.addEventListener('abort', abort, { once: true })
   try {

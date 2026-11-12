@@ -1,0 +1,42 @@
+.lp-projects__content:has(> .scale-p19-project-pager) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.lp-projects__content:has(> .scale-p19-project-pager) > .lp-projects__workspace {
+  flex: 1 1 auto;
+  height: auto;
+  overflow: hidden;
+}
+
+.scale-p19-project-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 12px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.scale-p19-project-pager button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+
+.scale-p19-project-pager button:hover:not(:disabled) { background: var(--bg-hover); }
+.scale-p19-project-pager button:active:not(:disabled) { background: var(--bg-active); }
+.scale-p19-project-pager button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.scale-p19-project-pager button:disabled { opacity: .4; }

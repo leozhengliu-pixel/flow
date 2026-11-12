@@ -11,7 +11,12 @@ import { ProjectStatusGlyph } from './project-property-picker'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
+import { matchesSearch } from '@/lib/search-match'
+import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import type { ProjectDependencyRelationInput } from '@/types/flow'
+import { useScaleP19ProjectWindow } from './scale-p19-project-window'
+import { ScaleP19ProjectPager } from './scale-p19-project-pager'
+import { scaleP19DependencyOption, useScaleP19DependencyOptions } from './scale-p19-dependency-options'
 
 import './project-dependency-picker.css'
 
@@ -78,13 +83,16 @@ export function ProjectDependencyPicker({
   triggerClassName,
 }: ProjectDependencyPickerProps) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
   const value = rawValue ?? []
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const [direction, setDirection] = useState<ProjectDependencyType>()
   const [rootQuery, setRootQuery] = useState('')
   const rootInputRef = useRef<HTMLInputElement>(null)
   const open = controlledOpen ?? uncontrolledOpen
-  const projectById = useMemo(() => new Map(projects.map(project => [project.id, project])), [projects])
+  const directory = useScaleP19DependencyOptions(projects, value)
+  const options = directory.options
+  const projectById = useMemo(() => new Map(options.map(project => [project.id, project])), [options])
 
   const setOpen = (next: boolean) => {
     if (controlledOpen === undefined) setUncontrolledOpen(next)
@@ -150,8 +158,8 @@ export function ProjectDependencyPicker({
           />
         </div>
         <div aria-label={t('Dependencies')} className="project-dependency-picker__root-list" role="listbox">
-          {selectedFor('blocked_by').length > 0 && <SelectedSection label="Blocked by" onToggle={project => toggle(project.id, 'blocked_by')} projects={selectedFor('blocked_by')} renderPreview={renderPreview}/>} 
-          {selectedFor('blocks').length > 0 && <SelectedSection label="Blocking" onToggle={project => toggle(project.id, 'blocks')} projects={selectedFor('blocks')} renderPreview={renderPreview}/>} 
+          {selectedFor('blocked_by').length > 0 && <SelectedSection label="Blocked by" onToggle={project => toggle(project.id, 'blocked_by')} projects={selectedFor('blocked_by')} renderPreview={renderPreview} previewSide={directory.enabled && phone ? 'bottom' : undefined}/>}
+          {selectedFor('blocks').length > 0 && <SelectedSection label="Blocking" onToggle={project => toggle(project.id, 'blocks')} projects={selectedFor('blocks')} renderPreview={renderPreview} previewSide={directory.enabled && phone ? 'bottom' : undefined}/>}
           <div className="project-dependency-picker__group-label" role="group">{t('Add dependency')}</div>
           {visibleDirections.map(item => <DirectionPicker
             active={direction === item.type}
@@ -164,7 +172,9 @@ export function ProjectDependencyPicker({
               if (closeOnSelect) close()
             }}
             onOpenChange={next => setDirection(next ? item.type : currentDirection(direction, item.type))}
-            projects={projects}
+            projects={options}
+            onRetain={directory.retain}
+            viewerId={directory.viewerId}
             renderPreview={renderPreview}
             value={value}
           />)}
@@ -189,25 +199,39 @@ export function ProjectDependencyPicker({
   </Tooltip.Root></Tooltip.Provider>
 }
 
-function DirectionPicker({ active, closeOnSelect, direction, label, onChange, onOpenChange, projects, renderPreview, value }: {
+function DirectionPicker({ active, closeOnSelect, direction, label, onChange, onOpenChange, onRetain, projects, renderPreview, value, viewerId }: {
   active: boolean
   closeOnSelect: boolean
   direction: ProjectDependencyType
   label: string
   onChange: (value: ProjectDependencyValue[]) => void
   onOpenChange: (open: boolean) => void
+  onRetain: (project: ProjectDependencyOption) => void
   projects: ProjectDependencyOption[]
   renderPreview?: (project: ProjectDependencyOption) => ReactNode
   value: ProjectDependencyValue[]
+  viewerId?: string
 }) {
   const { t } = useI18n()
+  const phone = usePhoneLayout()
+  const [search, setSearch] = useState('')
+  const workspace = location.pathname.split('/').filter(Boolean)[0] ?? ''
+  const window = useScaleP19ProjectWindow(workspace, { q: search, archived: 'false' }, active)
+  const [wasActive, setWasActive] = useState(active)
+  if (wasActive !== active) { setWasActive(active); if (active) setSearch('') }
+  const options = useMemo(() => {
+    if (!window.enabled) return projects
+    const selected = projects.filter(project => value.some(item => item.projectId === project.id) || Boolean(search) && matchesSearch(search, [project.label, project.keywords], t, { fuzzy: true }))
+    const remote = (window.page?.items ?? []).map(project => projects.find(option => option.id === project.id) ?? scaleP19DependencyOption(project, viewerId))
+    return [...selected, ...remote.filter(project => !selected.some(item => item.id === project.id))]
+  }, [projects, search, t, value, viewerId, window.enabled, window.page])
   const { inputRef, ...command } = usePropertyCommand({
     closeOnSelect,
     keepSelectedVisible: true,
     onOpenChange,
     onSelect: project => toggle(project),
     open: active,
-    options: projects,
+    options,
     resetKey: direction,
     selectedIds: value.filter(item => item.type === direction).map(item => item.projectId),
   })
@@ -219,6 +243,7 @@ function DirectionPicker({ active, closeOnSelect, direction, label, onChange, on
   const placeholder = direction === 'blocked_by' ? 'Mark as blocked by…' : 'Mark as blocking…'
   const toggle = (project: ProjectDependencyOption) => {
     if (project.disabled) return
+    if (window.enabled) onRetain(project)
     const selected = value.some(item => item.projectId === project.id && item.type === direction)
     const next = selected
       ? value.filter(item => item.projectId !== project.id)
@@ -237,8 +262,8 @@ function DirectionPicker({ active, closeOnSelect, direction, label, onChange, on
     </Popover.Anchor>
     <Popover.Portal>
       <Popover.Content data-flow-motion="floating"
-        align="start"
-        alignOffset={-30}
+        align={window.enabled && phone ? 'end' : 'start'}
+        alignOffset={window.enabled && phone ? 0 : -30}
         className="project-dependency-picker__projects"
         collisionPadding={10}
         onClick={event => event.stopPropagation()}
@@ -248,7 +273,7 @@ function DirectionPicker({ active, closeOnSelect, direction, label, onChange, on
           requestAnimationFrame(() => inputRef.current?.focus())
         }}
         role="dialog"
-        side="right"
+        side={window.enabled && phone ? 'bottom' : 'right'}
         sideOffset={3}
       >
         <div className="project-dependency-picker__project-search">
@@ -256,7 +281,7 @@ function DirectionPicker({ active, closeOnSelect, direction, label, onChange, on
             aria-activedescendant={command.activeId ? `project-dependency-${direction}-${command.activeId}` : undefined}
             aria-label={t(placeholder)}
             autoComplete="off"
-            onChange={event => command.onQueryChange(event.target.value)}
+            onChange={event => { command.onQueryChange(event.target.value); setSearch(event.target.value) }}
             onKeyDown={command.onKeyDown}
             placeholder={t(placeholder)}
             ref={inputRef}
@@ -276,25 +301,28 @@ function DirectionPicker({ active, closeOnSelect, direction, label, onChange, on
               onActive={() => command.setActiveId(project.id)}
               onChoose={() => command.choose(project)}
               project={project}
+              previewSide={window.enabled && phone ? 'bottom' : undefined}
               renderPreview={renderPreview}
             />)}
           </div>)}
-          {!filtered.length && <div className="project-dependency-picker__empty">{t('No projects found')}</div>}
+          {!filtered.length && <div className="project-dependency-picker__empty">{t(window.enabled && window.loading ? 'Loading…' : 'No projects found')}</div>}
+          {window.enabled && window.error && <button type="button" onClick={() => { void window.load(0) }}>{t('Retry')}</button>}
         </div>
+        {window.enabled && <ScaleP19ProjectPager page={window.page} loading={window.loading} onPage={index => { void window.load(index) }}/ >}
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>
 }
 
-function SelectedSection({ label, onToggle, projects, renderPreview }: { label: string; onToggle: (project: ProjectDependencyOption) => void; projects: ProjectDependencyOption[]; renderPreview?: (project: ProjectDependencyOption) => ReactNode }) {
+function SelectedSection({ label, onToggle, projects, renderPreview, previewSide }: { label: string; onToggle: (project: ProjectDependencyOption) => void; projects: ProjectDependencyOption[]; renderPreview?: (project: ProjectDependencyOption) => ReactNode; previewSide?: 'left' | 'bottom' }) {
   const { t } = useI18n()
   return <div role="group">
     <div className="project-dependency-picker__group-label">{t(label)}</div>
-    {projects.map(project => <ProjectOptionRow checked key={project.id} onChoose={() => onToggle(project)} project={project} renderPreview={renderPreview}/>)}
+    {projects.map(project => <ProjectOptionRow checked key={project.id} onChoose={() => onToggle(project)} project={project} renderPreview={renderPreview} previewSide={previewSide}/>)}
   </div>
 }
 
-function ProjectOptionRow({ active = false, checked, disabled = false, id, onActive, onChoose, project, renderPreview }: {
+function ProjectOptionRow({ active = false, checked, disabled = false, id, onActive, onChoose, project, renderPreview, previewSide }: {
   active?: boolean
   checked: boolean
   disabled?: boolean
@@ -303,6 +331,7 @@ function ProjectOptionRow({ active = false, checked, disabled = false, id, onAct
   onChoose: () => void
   project: ProjectDependencyOption
   renderPreview?: (project: ProjectDependencyOption) => ReactNode
+  previewSide?: 'left' | 'bottom'
 }) {
   const row = <button
     aria-checked={checked}
@@ -323,7 +352,7 @@ function ProjectOptionRow({ active = false, checked, disabled = false, id, onAct
   </button>
   const preview = renderPreview?.(project) ?? (project.previewData ? <ProjectDependencyPreview project={project}/> : undefined)
   if (!preview) return row
-  return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}><Tooltip.Root><Tooltip.Trigger asChild>{row}</Tooltip.Trigger><Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className="project-dependency-picker__preview" collisionPadding={8} side="left" sideOffset={6}>{preview}</Tooltip.Content></Tooltip.Portal></Tooltip.Root></Tooltip.Provider>
+  return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}><Tooltip.Root><Tooltip.Trigger asChild>{row}</Tooltip.Trigger><Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className="project-dependency-picker__preview" collisionPadding={8} side={previewSide ?? 'left'} sideOffset={6}>{preview}</Tooltip.Content></Tooltip.Portal></Tooltip.Root></Tooltip.Provider>
 }
 
 function ProjectDependencyIcon({ project, size }: { project?: ProjectDependencyOption; size: number }) {

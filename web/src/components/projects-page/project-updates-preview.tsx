@@ -14,13 +14,15 @@ import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import { useCommentComposer } from '@/hooks/use-comment-composer'
 import type { Project, ProjectUpdate, User } from '@/types/flow'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { useI18n } from '@/i18n/i18n'
+import { useScaleP19ProjectUpdates } from './scale-p19-project-updates'
 
 const HEALTHS: { id: Project['health']; label: string }[] = [{ id: 'onTrack', label: 'On track' }, { id: 'atRisk', label: 'At risk' }, { id: 'offTrack', label: 'Off track' }]
 
 /** The "@" menu is portaled to the page, outside the panel: choosing a mention must not count as a click outside it. */
 const mentionMenuRef: RefObject<Element | null> = { get current() { return document.querySelector('.description-mention-menu') } }
 
-export function ProjectUpdatesPreview({ onClose, onComment, onCreate, onDelete, onOpenProject, onReact, onUpdate, project, updates, viewer }: {
+export function ProjectUpdatesPreview({ onClose, onComment, onCreate, onDelete, onOpenProject, onReact, onUpdate, project, updates: legacyUpdates, viewer }: {
   onClose: () => void
   onComment?: (projectId: string, updateId: string, body: string) => Promise<ProjectUpdate>
   onCreate?: (projectId: string, input: { body: string; health?: Project['health'] }) => Promise<ProjectUpdate>
@@ -32,6 +34,9 @@ export function ProjectUpdatesPreview({ onClose, onComment, onCreate, onDelete, 
   updates: ProjectUpdate[]
   viewer?: User
 }) {
+  const { t } = useI18n()
+  const window = useScaleP19ProjectUpdates(project.id, legacyUpdates)
+  const updates = window.items
   const ref = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const reactionRef = useRef<HTMLDivElement>(null)
@@ -71,6 +76,7 @@ export function ProjectUpdatesPreview({ onClose, onComment, onCreate, onDelete, 
     try {
       if (mode === 'edit') await onUpdate!(project.id, editingId!, { body: body.trim(), health })
       else await onCreate!(project.id, { body: body.trim(), health })
+      await window.reload()
       setBody('')
       setMode('list')
     } catch (error) {
@@ -84,6 +90,7 @@ export function ProjectUpdatesPreview({ onClose, onComment, onCreate, onDelete, 
     setDeleting(true)
     try {
       await onDelete(project.id, deleteTarget.id)
+      await window.reload()
       setDeleteTarget(undefined)
     } catch (error) {
       toast.error('Could not delete project update', { description: error instanceof Error ? error.message : undefined })
@@ -108,8 +115,10 @@ export function ProjectUpdatesPreview({ onClose, onComment, onCreate, onDelete, 
       </header>
       <div className="lp-project-updates-preview__body">
         {mode !== 'list' && <ProjectUpdateComposer body={body} health={health} mode={mode} saving={saving} setBody={setBody} setHealth={setHealth} onCancel={() => setMode('list')} onSubmit={() => void submit()} viewer={viewer}/>} 
-        {mode === 'list' && updates.length === 0 && <ProjectUpdatesEmptyState onCreate={beginCreate}/>} 
-        {mode === 'list' && updates.map((update, index) => <ProjectUpdateArticle active={activeIndex === index} dataIndex={index} key={update.id} menuRef={menuRef} onComment={onComment} onDelete={() => setDeleteTarget(update)} onEdit={() => beginEdit(update)} onReact={onReact} project={project} reactionRef={reactionRef} update={update} viewer={viewer}/>)}
+        {mode === 'list' && window.loading && <div role="status">{t('Loading…')}</div>}
+        {mode === 'list' && window.error && <button type="button" onClick={() => { void window.reload() }}>{t('Retry')}</button>}
+        {mode === 'list' && !window.loading && !window.error && updates.length === 0 && <ProjectUpdatesEmptyState onCreate={beginCreate}/>}
+        {mode === 'list' && updates.map((update, index) => <ProjectUpdateArticle active={activeIndex === index} dataIndex={index} key={update.id} menuRef={menuRef} onComment={onComment ? async (...args) => { const result = await onComment(...args); await window.reload(); return result } : undefined} onDelete={() => setDeleteTarget(update)} onEdit={() => beginEdit(update)} onReact={onReact ? async (...args) => { const result = await onReact(...args); await window.reload(); return result } : undefined} project={project} reactionRef={reactionRef} update={update} viewer={viewer}/>)}
       </div>
       <footer className="lp-project-updates-preview__hint"><kbd>Shift</kbd><kbd>↑</kbd><span>or</span><kbd>↓</kbd><span>to navigate</span></footer>
     </div>

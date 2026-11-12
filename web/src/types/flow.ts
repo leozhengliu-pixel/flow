@@ -2676,7 +2676,7 @@ export interface SyncChanges {
 }
 export interface WorkspaceSyncState {
   schema: 2;
-  surface?: 'issue-detail' | 'document-detail' | 'document-directory' | 'people-directory' | 'trash-directory';
+  surface?: 'issue-detail' | 'document-detail' | 'document-directory' | 'people-directory' | 'trash-directory' | 'projects-page' | 'initiatives-page';
   authzEpoch: string;
   head: string;
   capabilities: string[];

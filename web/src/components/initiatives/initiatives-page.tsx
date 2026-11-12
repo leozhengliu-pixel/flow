@@ -43,6 +43,8 @@ import { labelsForResource } from '@/lib/labels'
 import type { TeamSettings } from '@/types/flow'
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
+import { ScaleP19ProjectPager } from '@/components/projects-page/scale-p19-project-pager'
+import { useScaleP19InitiativeWindow } from './scale-p19-initiative-window'
 
 type Props = {
   teamContext?: Team
@@ -151,6 +153,8 @@ export function InitiativesPage(props: Props) {
     ...(grouping !== 'none' ? [{ key: `group:${group.key}`, kind: 'group' as const, label: group.label, count: group.items.length, entityName: ['owner','leadTeam','contributingTeam','label'].includes(grouping) }] : []),
     ...(showNested ? initiativeTreeRows(group.items, graph, collapsed) : group.items.map(initiative => ({ initiative, depth: 0, childCount: 0 }))).map(row => ({ key: `initiative:${group.key}:${row.initiative.id}`, kind: 'initiative' as const, ...row })),
   ]), [grouped, grouping, graph, collapsed, showNested])
+  const listWindow = useScaleP19InitiativeWindow(listEntries, JSON.stringify([view, filters, filterMode, sort, grouping, showNested, showParents, showTeamInitiatives, showContributing, [...collapsed]]))
+  const pageEntries = listWindow.entries
   const displayDirty = showNested !== (displayDefault?.showNestedInitiatives ?? true) || showParents !== (displayDefault?.showParentInitiatives ?? true) || grouping !== defaultGrouping || sort !== defaultSort || showTeamInitiatives !== defaultShowTeam || !sameStringSet(properties, new Set(defaultProperties))
   const resetDisplay = () => { setShowNested(displayDefault?.showNestedInitiatives ?? true); setShowParents(displayDefault?.showParentInitiatives ?? true); setGrouping(defaultGrouping); setSort(defaultSort); setShowTeamInitiatives(defaultShowTeam); setProperties(new Set(defaultProperties)) }
   const toggleProperty = (property: Property) => setProperties(current => {
@@ -218,22 +222,23 @@ export function InitiativesPage(props: Props) {
     {advancedFilterEnabled ? <AdvancedFilterBar filters={filters} initiatives={initiatives} labels={labels} mode={filterMode} open={advancedFilterOpen} teams={teams} users={users} onChange={setFilters} onCreateLabel={onCreateLabel} onMode={setFilterMode} onOpenChange={setAdvancedFilterOpen} onRemove={() => { setFilters({}); setAdvancedFilterEnabled(false); setAdvancedFilterOpen(false) }}/> : Object.keys(filters).length > 0 && <div className="li-filter-chips">{Object.entries(filters).map(([key, value]) => <button key={key} onClick={() => setFilters(current => { const next = { ...current }; delete next[key as keyof FilterState]; return next })} type="button"><span>{filterLabel(key, value, users, teams, labels)}</span><X size={11}/></button>)}<button onClick={() => setFilters({})} type="button">Clear all</button></div>}
     <div className={`li-list-body${showDetails ? ' has-details' : ''}`}>
       <div className={`li-table${showDetails ? ' has-details' : ''}${listEntries.length > INITIATIVE_VIRTUALIZATION_THRESHOLD ? ' is-virtualized' : ''}`} style={{ '--li-extra-columns': columns.length } as React.CSSProperties}>
-        {listEntries.length <= INITIATIVE_VIRTUALIZATION_THRESHOLD && tableHeader}
+        {pageEntries.length <= INITIATIVE_VIRTUALIZATION_THRESHOLD && tableHeader}
         {creating && <InitiativeCreateRow initialLeadTeamId={props.teamContext?.id} labels={labels} teams={teams} users={users} viewer={viewer} view={view} onCancel={() => { setCreating(false); setCreatingParentId(undefined) }} onCreate={async input => { await onCreate(creatingParentId ? { ...input, parentInitiativeIds: [creatingParentId] } : input); setCreating(false); setCreatingParentId(undefined) }} onCreateLabel={onCreateLabel}/>}
-        {listEntries.length > INITIATIVE_VIRTUALIZATION_THRESHOLD ? <VirtualColumnList
+        {pageEntries.length > INITIATIVE_VIRTUALIZATION_THRESHOLD ? <VirtualColumnList
           header={tableHeader}
           scrollerClassName="li-virtual-list"
-          data={listEntries}
+          data={pageEntries}
           computeItemKey={(_index, entry) => entry.key}
           increaseViewportBy={{ top: 208, bottom: 520 }}
           itemContent={(_index, entry) => entry.kind === 'group'
             ? <div className="li-group-heading"><span data-i18n-ignore={entry.entityName || undefined}>{entry.label}</span><small>{entry.count}</small></div>
             : renderInitiative(entry.initiative, entry.depth, entry.childCount)}
-        /> : listEntries.map(entry => entry.kind === 'group' ? <div key={entry.key} className="li-group-heading"><span data-i18n-ignore={entry.entityName || undefined}>{entry.label}</span><small>{entry.count}</small></div> : <Fragment key={entry.key}>{renderInitiative(entry.initiative, entry.depth, entry.childCount)}</Fragment>)}
+        /> : pageEntries.map(entry => entry.kind === 'group' ? <div key={entry.key} className="li-group-heading"><span data-i18n-ignore={entry.entityName || undefined}>{entry.label}</span><small>{entry.count}</small></div> : <Fragment key={entry.key}>{renderInitiative(entry.initiative, entry.depth, entry.childCount)}</Fragment>)}
         {!creating && !visible.length && <InitiativesEmpty filtered={Object.keys(filters).length > 0} onCreate={() => setCreating(true)} view={view}/>} 
       </div>
       {showDetails && <InitiativesListSidebar initiatives={visible} teams={teams} users={users} view={view}/>}
     </div>
+    {listWindow.enabled && <ScaleP19ProjectPager label="Initiatives" page={listWindow.page} loading={false} onPage={listWindow.onPage}/ >}
     {selected.size > 0 && <InitiativesBulkBar initiatives={initiatives.filter(item => selected.has(item.id))} labels={labels} users={users} onClear={() => setSelected(new Set())} onDelete={async () => { await Promise.all([...selected].map(onDelete)); setSelected(new Set()) }} onUpdate={input => Promise.all([...selected].map(id => onUpdate(id, input)))}/>} 
     {updatesInitiative && <InitiativeUpdatesPanel composeOnOpen={composeUpdate} initiative={updatesInitiative} updates={initiativeUpdates[updatesInitiative.id] ?? []} viewer={viewer} onClose={() => setUpdatesInitiative(undefined)} onCreateUpdate={onCreateUpdate} onOpen={() => onOpen(updatesInitiative, 'activity')} onUpdate={input => onUpdate(updatesInitiative.id, input)}/>}
   </main>

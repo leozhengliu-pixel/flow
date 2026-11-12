@@ -367,6 +367,7 @@ import { migratedSyncSignal, syncBootstrapRequestKey, syncClientFor, syncScopeMa
 import { locallyCreatedAgentSession } from '@/lib/scale-activate-a-agent-echo'
 import { realtimeClientId } from '@/lib/api-client'
 import { documentBodyLoaded, fetchResourceSurfaceBootstrap, resourceSyncSurface, resourceTrashedDocument, resourceWindowEnabled, resourceWindowStale } from '@/lib/resource-window-adapters'
+import { scaleP19Surface } from '@/lib/scale-p19-surfaces'
 import type { RealtimeEvent } from '@/types/flow'
 import { applyLabelStateRename, applyRealtimePatch, canApplyRealtimePatch, isLabelStateRenameEvent } from '@/store/apply-realtime-patch'
 import { classifyRealtimeEvent } from '@/lib/realtime-dispatch'
@@ -660,7 +661,7 @@ function App() {
   const loadedWorkspaceKey = data?.workspace.urlKey;
   const projectListProjection = isProjectListRoute(route);
   const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : undefined;
-  const syncSurface = resourceSyncSurface(route);
+  const syncSurface = resourceSyncSurface(route) ?? scaleP19Surface(route.kind);
   const fetchRouteBootstrap = useCallback((workspaceKey: string, projection?: import('@/lib/api').BootstrapProjection, signal?: AbortSignal, quiet?: boolean) =>
     fetchResourceSurfaceBootstrap(workspaceKey, syncFallback === workspaceKey ? undefined : syncSurface, () => fetchBootstrap(workspaceKey, projection, signal, quiet), signal, quiet), [syncSurface, syncFallback]);
   const { t: translateTitle, locale } = useI18n();
@@ -1629,7 +1630,7 @@ function App() {
       if (await refreshTeamResourcesForEvent(data, event)) return;
       const activeSync = syncClientFor(dataRef.current);
       if (activeSync) {
-        if (!migratedSyncSignal(event.type) && event.type !== 'sync.delta' && !Array.isArray(event.payload?.transactions)) {
+        if (!migratedSyncSignal(event.type, activeSync.surface) && event.type !== 'sync.delta' && !Array.isArray(event.payload?.transactions)) {
           activeSync.requestReset(true);
           return;
         }
