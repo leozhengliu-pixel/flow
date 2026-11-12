@@ -241,7 +241,7 @@ func apiKeyAllowsRequest(r *http.Request, key domain.APIKey) bool {
 	has := func(scope string) bool {
 		return apiKeyHasScope(key, scope) || apiKeyHasScope(key, "write")
 	}
-	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions || r.Method == http.MethodPost && r.URL.Path == "/api/issue-records/visibility" {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions || r.Method == http.MethodPost && (r.URL.Path == "/api/issue-records/visibility" || r.URL.Path == "/api/sync/batch") {
 		return has("read")
 	}
 	// A nil scope slice is the legacy full-access representation. Route it
@@ -986,6 +986,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 }
 
 func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID string) bool {
+	if syncReadRequest(r) || s.notificationStateReadRequest(r) {
+		return true // Sync handlers resolve and validate AccessContext per batch.
+	}
 	if strings.HasSuffix(r.URL.Path, "/default-favorites") {
 		teamID := s.store.ResolveTeamID(workspace, teamIDFromWorkspacePath(r.URL.Path))
 		data, access, err := s.requestIssueQueryAccess(r)

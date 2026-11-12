@@ -90,9 +90,25 @@ func (s *server) listProjectRecords(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var page store.ProjectRecordPage
+	indexed := false
+	if projected == nil && syncFlagEnabled("FLOW_INDEXED_READS") && !s.authDisabled {
+		status, statusErr := s.store.MetadataCatalogStatus(r.Context(), query.Workspace, "projects")
+		indexed = statusErr == nil && status.Ready
+	}
 	if projected != nil {
 		query.Admin = true
 		page = store.QueryProjectedProjectDirectory(projected.Projects, query)
+	} else if indexed {
+		var credential *domain.APIKey
+		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			credential = &key
+		}
+		recordAccess, accessErr := s.store.ResolveAccess(r.Context(), query.Workspace, authUser(r).ID, credential)
+		if accessErr != nil {
+			issueRecordsError(w, accessErr)
+			return
+		}
+		page, err = s.store.QueryProjectDirectoryWithAccess(r.Context(), recordAccess, query)
 	} else {
 		page, err = s.store.QueryProjectDirectory(r.Context(), query)
 	}

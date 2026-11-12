@@ -265,6 +265,10 @@ func ProjectListBootstrapProjection(data *domain.Bootstrap) {
 }
 
 func (s *SQLiteStore) QueryProjectDirectory(ctx context.Context, query ProjectRecordQuery) (ProjectRecordPage, error) {
+	return s.queryProjectDirectoryAdapter(ctx, query)
+}
+
+func (s *SQLiteStore) queryProjectDirectoryLegacy(ctx context.Context, query ProjectRecordQuery) (ProjectRecordPage, error) {
 	page := ProjectRecordPage{Items: []domain.Project{}, Total: -1}
 	if strings.TrimSpace(query.Workspace) == "" {
 		return page, ErrIssueQuery

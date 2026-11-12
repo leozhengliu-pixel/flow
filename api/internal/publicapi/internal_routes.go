@@ -639,6 +639,11 @@ var InternalRoutes = []string{
 	"POST /api/sla-rules/reorder",
 	// /api/sla-settings
 	"PUT /api/sla-settings",
+	// /api/sync
+	"GET /api/sync/manifest",
+	"GET /api/sync/records",
+	"POST /api/sync/batch",
+	"GET /api/notifications/state",
 	// /api/subscriptions
 	"DELETE /api/subscriptions/{type}/{id}",
 	"PUT /api/subscriptions/{type}/{id}",

@@ -20386,6 +20386,31 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/notifications/state": {
+      "get": {
+        "operationId": "get_notifications_state",
+        "tags": [
+          "notifications"
+        ],
+        "summary": "GET /api/notifications/state",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "sync_manifest.go"
+      }
+    },
     "/api/notion/link-preview": {
       "get": {
         "operationId": "get_notion_link_preview",
@@ -27910,6 +27935,31 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/sync/batch": {
+      "post": {
+        "operationId": "post_sync_batch",
+        "tags": [
+          "sync"
+        ],
+        "summary": "POST /api/sync/batch",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "sync_manifest.go"
+      }
+    },
     "/api/sync/changes": {
       "get": {
         "operationId": "get_sync_changes",
@@ -27933,6 +27983,56 @@
         },
         "x-flow-internal": true,
         "x-flow-source": "main.go"
+      }
+    },
+    "/api/sync/manifest": {
+      "get": {
+        "operationId": "get_sync_manifest",
+        "tags": [
+          "sync"
+        ],
+        "summary": "GET /api/sync/manifest",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "sync_manifest.go"
+      }
+    },
+    "/api/sync/records": {
+      "get": {
+        "operationId": "get_sync_records",
+        "tags": [
+          "sync"
+        ],
+        "summary": "GET /api/sync/records",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "sync_manifest.go"
       }
     },
     "/api/target-branches": {
