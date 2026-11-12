@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { ApplicationStoreContext } from '@/store/application-store-contexts'
+import { ApplicationStoreContext, EntityStoreContext } from '@/store/application-store-contexts'
 import { scaleP19ManifestMatches, scaleP19ProjectsEnabled } from '@/lib/scale-p19-surfaces'
 import { ScaleP19ProjectWindow, type ScaleP19ProjectPage, type ScaleP19ProjectQuery } from '@/lib/scale-p19-project-window'
 import { ApiError } from '@/lib/api-client'
@@ -16,6 +16,7 @@ type VersionedPage = ProjectQueryPage & { [recordsForPage]?: SyncRecord[] }
 
 export function useScaleP19ProjectWindow(workspace: string, query: ScaleP19ProjectQuery, active = true) {
   const context = useContext(ApplicationStoreContext)
+  const entityStore = useContext(EntityStoreContext)
   const client = syncClientFor(context?.data)
   const enabled = active && Boolean(client) && scaleP19ProjectsEnabled(context?.data)
   const key = JSON.stringify(query)
@@ -115,7 +116,20 @@ export function useScaleP19ProjectWindow(workspace: string, query: ScaleP19Proje
     return () => releases.forEach(release => release())
   }, [client, enabled, favoriteIds])
   const current = state.owner === window && state.key === key && !client?.disposed
-  return { client, enabled, page: current ? state.page : undefined, error: current ? state.error : undefined, loading: enabled && (!current || state.loading), window, load, legacy: () => client?.requestReset(true), select: (ids: string[], projects: Project[]) => window.select(ids, projects) }
+  const page = useMemo(() => current && state.page ? { ...state.page, items: state.page.items.flatMap(project => {
+    const record = client?.get({ kind: 'project', id: project.id })
+    if (record?.completeness === 'deleted') return []
+    const value = entityStore?.getById('project', project.id) as Project | undefined
+    return [scaleP19ProjectSummary(value ?? (record?.value as unknown as Project | undefined) ?? project)]
+  }) } : undefined, [client, current, entityStore, state.page])
+  const selectedProjects = window.selectedProjects.flatMap(project => {
+    const record = client?.get({ kind: 'project', id: project.id })
+    if (record?.completeness === 'deleted') return []
+    const value = entityStore?.getById('project', project.id) as Project | undefined
+    const name = value?.name ?? record?.value?.name
+    return [{ id: project.id, name: typeof name === 'string' ? name : project.name }]
+  })
+  return { client, enabled, page, selectedProjects, error: current ? state.error : undefined, loading: enabled && (!current || state.loading), window, load, legacy: () => client?.requestReset(true), select: (ids: string[], projects: Project[]) => window.select(ids.filter(id => client?.get({ kind: 'project', id })?.completeness !== 'deleted'), [...selectedProjects, ...projects]) }
 }
 
 export function useScaleP19FilterCounts(enabled: boolean, workspace: string, query: ScaleP19ProjectQuery, options: Partial<Record<ProjectFilterField, ProjectFilterOption[]>>, active = true) {

@@ -41,6 +41,7 @@ async function directory(page: Page, request: APIRequestContext, workspace: stri
     return route.fulfill({ json: { items, total: hidden ? 0 : 23210, hasMore: !hidden && offset + limit < 23210, nextCursor: !hidden && offset + limit < 23210 ? String(offset + limit) : undefined } })
   })
   await page.route('**/api/projects/p19-project-*/updates', route => {
+    expect(route.request().headers()['x-workspace-key']).toBe(workspace)
     const projectId = new URL(route.request().url()).pathname.split('/')[3]
     return route.fulfill({ json: [{ id: `${projectId}-update`, projectId, user: { ...source.viewer, displayName: '林郑' }, body: 'Window-specific project update', health: 'onTrack', createdAt: '2026-11-12T00:00:00Z', comments: [], reactions: {} }] })
   })

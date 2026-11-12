@@ -4552,8 +4552,8 @@ export function fetchPulseCapabilities(signal?: AbortSignal): Promise<import("@/
   return request("/api/pulse/capabilities", { signal });
 }
 /** One project's updates, newest first, with comments and reactions (paged workspaces). */
-export function listProjectUpdates(projectId: string, signal?: AbortSignal): Promise<ProjectUpdate[]> {
-  return request(`/api/projects/${encodeURIComponent(projectId)}/updates`, { signal });
+export function listProjectUpdates(projectId: string, signal?: AbortSignal, workspaceKey?: string): Promise<ProjectUpdate[]> {
+  return request(`/api/projects/${encodeURIComponent(projectId)}/updates`, { signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}) });
 }
 /** One initiative's updates, newest first, with comments and reactions (paged workspaces). */
 export function listInitiativeUpdates(initiativeId: string, signal?: AbortSignal): Promise<InitiativeUpdate[]> {

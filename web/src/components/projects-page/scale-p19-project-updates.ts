@@ -4,6 +4,7 @@ import { fetchSyncManifest, listProjectUpdates } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
 import { scaleP19ManifestMatches, scaleP19ProjectsEnabled } from '@/lib/scale-p19-surfaces'
 import { cacheStringBytes } from '@/lib/scale-p08'
+import { releaseScaleP19Bytes, retainScaleP19Bytes } from '@/lib/scale-p19-budget'
 import { syncClientFor } from '@/lib/sync-client'
 import type { ProjectUpdate } from '@/types/flow'
 
@@ -13,19 +14,22 @@ export function useScaleP19ProjectUpdates(projectId: string, legacy: ProjectUpda
   const enabled = Boolean(client) && Boolean(projectId) && scaleP19ProjectsEnabled(context?.data)
   const [state, setState] = useState<{ client: typeof client; id: string; items: ProjectUpdate[]; loading: boolean; error?: string }>({ client, id: projectId, items: [], loading: enabled })
   const request = useRef<AbortController | undefined>(undefined)
+  const owner = useRef({})
+  useEffect(() => { const token = owner.current; return () => releaseScaleP19Bytes(token) }, [])
   const load = useCallback(async () => {
     if (!enabled) return
     request.current?.abort()
     const controller = request.current = new AbortController()
     try {
-      const items = await listProjectUpdates(projectId, client?.requestSignal(controller.signal) ?? controller.signal)
+      const items = await listProjectUpdates(projectId, client?.requestSignal(controller.signal) ?? controller.signal, client?.manifest.core.workspace.urlKey)
       if (controller.signal.aborted || client?.disposed) return
       if (client) {
         const manifest = await fetchSyncManifest(client.manifest.core.workspace.urlKey, client.requestSignal(controller.signal))
         if (!scaleP19ManifestMatches(client.manifest, manifest)) { client.requestReset(); return }
         if (!manifest.capabilities.includes('sync-v2')) { client.requestReset(true); return }
       }
-      if (!Array.isArray(items) || cacheStringBytes(JSON.stringify(items)) > 8 * 1024 * 1024) { client?.requestReset(true); return }
+      if (controller.signal.aborted || client?.disposed) return
+      if (!Array.isArray(items) || !retainScaleP19Bytes(owner.current, cacheStringBytes(JSON.stringify(items)))) { client?.requestReset(true); return }
       setState({ client, id: projectId, items, loading: false })
     } catch (error) {
       if (controller.signal.aborted || error instanceof DOMException && error.name === 'AbortError') return

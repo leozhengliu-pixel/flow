@@ -578,7 +578,7 @@ export function ProjectsPage({
   const creationProjects = projectWindow.enabled ? [...projectCollection, ...projects.filter(project => !projectCollection.some(item => item.id === project.id))] : projects
   const selectedProjects: ProjectPageItem[] = projectWindow.enabled ? view.state.selectedIds.flatMap<ProjectPageItem>(id => {
     const loaded = items.find(item => item.id === id)
-    const selected = projectWindow.window.selectedProjects.find(item => item.id === id)
+    const selected = projectWindow.selectedProjects.find(item => item.id === id)
     return loaded ? [loaded] : selected ? [{ ...selected, health: 'no-update' as const, priority: 'none' as const, issueCount: 0, progress: 0, status: '' }] : []
   }) : items.filter(item => view.state.selectedIds.includes(item.id))
   const bulkActionOptions = (action: ProjectBulkAction) => {

@@ -13,7 +13,7 @@ import { useI18n } from '@/i18n/i18n'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { matchesSearch } from '@/lib/search-match'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
-import type { ProjectDependencyRelationInput } from '@/types/flow'
+import type { BootstrapData, ProjectDependencyRelationInput } from '@/types/flow'
 import { useScaleP19ProjectWindow } from './scale-p19-project-window'
 import { ScaleP19ProjectPager } from './scale-p19-project-pager'
 import { scaleP19DependencyOption, useScaleP19DependencyOptions } from './scale-p19-dependency-options'
@@ -175,6 +175,7 @@ export function ProjectDependencyPicker({
             projects={options}
             onRetain={directory.retain}
             viewerId={directory.viewerId}
+            catalog={directory.catalog}
             renderPreview={renderPreview}
             value={value}
           />)}
@@ -199,7 +200,7 @@ export function ProjectDependencyPicker({
   </Tooltip.Root></Tooltip.Provider>
 }
 
-function DirectionPicker({ active, closeOnSelect, direction, label, onChange, onOpenChange, onRetain, projects, renderPreview, value, viewerId }: {
+function DirectionPicker({ active, catalog, closeOnSelect, direction, label, onChange, onOpenChange, onRetain, projects, renderPreview, value, viewerId }: {
   active: boolean
   closeOnSelect: boolean
   direction: ProjectDependencyType
@@ -211,6 +212,7 @@ function DirectionPicker({ active, closeOnSelect, direction, label, onChange, on
   renderPreview?: (project: ProjectDependencyOption) => ReactNode
   value: ProjectDependencyValue[]
   viewerId?: string
+  catalog?: Pick<BootstrapData, 'users' | 'teams'>
 }) {
   const { t } = useI18n()
   const phone = usePhoneLayout()
@@ -222,9 +224,9 @@ function DirectionPicker({ active, closeOnSelect, direction, label, onChange, on
   const options = useMemo(() => {
     if (!window.enabled) return projects
     const selected = projects.filter(project => value.some(item => item.projectId === project.id) || Boolean(search) && matchesSearch(search, [project.label, project.keywords], t, { fuzzy: true }))
-    const remote = (window.page?.items ?? []).map(project => projects.find(option => option.id === project.id) ?? scaleP19DependencyOption(project, viewerId))
+    const remote = (window.page?.items ?? []).map(project => projects.find(option => option.id === project.id) ?? scaleP19DependencyOption(project, viewerId, catalog))
     return [...selected, ...remote.filter(project => !selected.some(item => item.id === project.id))]
-  }, [projects, search, t, value, viewerId, window.enabled, window.page])
+  }, [catalog, projects, search, t, value, viewerId, window.enabled, window.page])
   const { inputRef, ...command } = usePropertyCommand({
     closeOnSelect,
     keepSelectedVisible: true,

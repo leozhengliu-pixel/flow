@@ -32,7 +32,8 @@ describe('scale-p19 dependency selection windows', () => {
     await waitFor(() => expect(hook.result.current.options[0]?.id).toBe('outside'))
     expect(hook.result.current.options[0].label).toBe(project.name)
     expect(hook.result.current.options[0]).not.toHaveProperty('description')
-    expect(hook.result.current.options[0]).not.toHaveProperty('previewData')
+    expect(hook.result.current.options[0].previewData).toMatchObject({ summary: project.summary, status: project.status.name, team: 'Test team', member: 'Viewer' })
+    expect(JSON.stringify(hook.result.current.options[0])).not.toContain('bodybodybody')
     expect(api.listProjectRecords.mock.calls[0][0]).toMatchObject({ limit: 100, filter: [{ field: 'project', operator: 'is', values: ['outside'] }] })
     expect(values).toEqual([{ projectId: 'outside', type: 'blocked_by' }])
   })
@@ -61,5 +62,13 @@ describe('scale-p19 dependency selection windows', () => {
     expect(scaleP19DependencyOption(project, project.lead!.id).group).toBe('your')
     expect(scaleP19DependencyOption({ ...project, lead: undefined, memberIds: ['viewer'] }, 'viewer').group).toBe('your')
     expect(scaleP19DependencyOption(project, 'outsider').group).toBe('other')
+  })
+
+  it('keeps milestone, team and member preview fields without retaining a project body', () => {
+    const catalog = makeBootstrap()
+    const option = scaleP19DependencyOption({ ...project, description: 'large body', milestones: [{ id: 'm1', name: 'Milestone', description: 'milestone body' } as never] }, catalog.viewer.id, catalog)
+    expect(option.previewData).toMatchObject({ milestone: 'Milestone', team: 'Test team', member: 'Viewer', memberId: catalog.viewer.id })
+    expect(JSON.stringify(option)).not.toContain('large body')
+    expect(JSON.stringify(option)).not.toContain('milestone body')
   })
 })

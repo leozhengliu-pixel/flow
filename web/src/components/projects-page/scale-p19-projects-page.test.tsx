@@ -1,4 +1,4 @@
-import { act, render, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
 import { I18nProvider } from '@/i18n/i18n'
@@ -36,6 +36,7 @@ function page(data: BootstrapData, projects = data.projects) {
 const ids = () => captured.data!.groups.flatMap(group => group.projects.map(project => project.id))
 beforeEach(() => {
   localStorage.clear()
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   vi.stubEnv('VITE_SYNC_V2', 'true')
   vi.stubEnv('VITE_PROJECT_QUERY_WINDOWS', 'true')
   api.listProjectRecords.mockImplementation(async (query: { cursor?: string; limit?: number }) => {
@@ -44,7 +45,7 @@ beforeEach(() => {
   })
   api.fetchSyncBatch.mockImplementation(async (_workspace: string, keys: Array<{ kind: string; id: string }>) => ({ authzEpoch: 'epoch-1', items: keys.map(key => ({ key, version: '1', completeness: 'summary', value: { ...project, id: key.id, name: `Project ${key.id.slice(2)}`, position: Number(key.id.slice(2)) } })) }))
 })
-afterEach(() => { vi.unstubAllEnvs(); vi.clearAllMocks() })
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.clearAllMocks() })
 
 describe('scale-p19 ProjectsPage integration', () => {
   it('keeps legacy seed and append behavior exactly when the page flag is off', async () => {
@@ -91,6 +92,42 @@ describe('scale-p19 ProjectsPage integration', () => {
     await waitFor(() => expect(ids()[0]).toBe('p-100'))
     expect(captured.data!.selectedIds).toEqual(['p-0'])
     expect(document.querySelector('[aria-label="1 selected projects"]')).not.toBeNull()
+  })
+
+  it('shows optimistic edits and current summaries without another directory read', async () => {
+    const { data, client } = scope()
+    const mounted = render(page(data))
+    await waitFor(() => expect(ids()[0]).toBe('p-0'))
+    const reads = api.listProjectRecords.mock.calls.length
+    const current = client.adapt(data)
+    mounted.rerender(page({ ...current, projects: current.projects.map(item => item.id === 'p-0' ? { ...item, name: 'Optimistic name' } : item) }))
+    expect(captured.data!.groups.flatMap(group => group.projects)[0].name).toBe('Optimistic name')
+    act(() => client.install([{ key: { kind: 'project', id: 'p-0' }, version: '2', completeness: 'summary', value: { ...project, id: 'p-0', name: 'Server name' } }]))
+    mounted.rerender(page(client.adapt(current)))
+    expect(captured.data!.groups.flatMap(group => group.projects)[0].name).toBe('Server name')
+    act(() => client.install([{ key: { kind: 'project', id: 'p-0' }, version: '3', completeness: 'deleted' }]))
+    mounted.rerender(page(client.adapt(current)))
+    expect(ids()).not.toContain('p-0')
+    expect(api.listProjectRecords).toHaveBeenCalledTimes(reads)
+  })
+
+  it('updates off-page bulk names and hides deleted selections without refetching the page', async () => {
+    const { data, client } = scope()
+    const mounted = render(page(data))
+    await waitFor(() => expect(ids()[0]).toBe('p-0'))
+    act(() => captured.data!.onSelectionChange!(['p-0']))
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="Next page"]')!.click() })
+    await waitFor(() => expect(ids()[0]).toBe('p-100'))
+    const reads = api.listProjectRecords.mock.calls.length
+    act(() => client.install([{ key: { kind: 'project', id: 'p-0' }, version: '2', completeness: 'summary', value: { ...project, id: 'p-0', name: 'Renamed off page' } }]))
+    mounted.rerender(page(client.adapt(data)))
+    act(() => document.querySelector<HTMLButtonElement>('[aria-label="Open project command menu"]')!.click())
+    expect(screen.getByRole('dialog').textContent).toContain('Renamed off page')
+    act(() => client.install([{ key: { kind: 'project', id: 'p-0' }, version: '3', completeness: 'deleted' }]))
+    mounted.rerender(page(client.adapt(data)))
+    await waitFor(() => expect(document.querySelector('[aria-label="1 selected projects"]')).toBeNull())
+    expect(captured.data!.selectedIds).toEqual(['p-0'])
+    expect(api.listProjectRecords).toHaveBeenCalledTimes(reads)
   })
 
   it('hides off-result selections after changing filters, as the legacy page does', async () => {

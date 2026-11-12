@@ -9,6 +9,7 @@ import { useScaleP19ProjectUpdates } from './scale-p19-project-updates'
 import type { SyncManifest, ProjectUpdate } from '@/types/flow'
 import { ApiError } from '@/lib/api-client'
 import { scaleP19ProjectSummary } from '@/lib/scale-p19-project-summary'
+import { releaseScaleP19Bytes, retainedScaleP19Bytes, retainScaleP19Bytes, SCALE_P19_DIRECTORY_BYTES } from '@/lib/scale-p19-budget'
 
 const api = vi.hoisted(() => ({ listProjectRecords: vi.fn(), fetchSyncManifest: vi.fn(), fetchSyncBatch: vi.fn(), listProjectUpdates: vi.fn() }))
 vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), ...api }))
@@ -74,6 +75,7 @@ describe('scale-p19 scope and authorization barriers', () => {
 
   it('loads only the open project updates and cancels the previous project on navigation', async () => {
     const { wrapper } = scope()
+    const before = retainedScaleP19Bytes()
     const update = { id: 'update-1', body: 'Only this project' } as ProjectUpdate
     api.listProjectUpdates.mockResolvedValue([update])
     const hook = renderHook(({ id }) => useScaleP19ProjectUpdates(id, []), { wrapper, initialProps: { id: 'p-1' } })
@@ -83,5 +85,37 @@ describe('scale-p19 scope and authorization barriers', () => {
     await waitFor(() => expect(api.listProjectUpdates).toHaveBeenCalledTimes(2))
     expect(previousSignal.aborted).toBe(true)
     expect(api.listProjectUpdates.mock.calls.map(([id]) => id)).toEqual(['p-1', 'p-2'])
+    expect(api.listProjectUpdates.mock.calls.every(([, , workspace]) => workspace === 'workspace')).toBe(true)
+    expect(retainedScaleP19Bytes()).toBeGreaterThan(before)
+    hook.unmount()
+    expect(retainedScaleP19Bytes()).toBe(before)
+  })
+
+  it('does not overwrite the new preview when an old manifest check ignores cancellation', async () => {
+    const { wrapper, manifest } = scope()
+    let finish!: (value: SyncManifest) => void
+    api.fetchSyncManifest.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    api.listProjectUpdates.mockImplementation(async (id: string) => [{ id, body: id }])
+    const hook = renderHook(({ id }) => useScaleP19ProjectUpdates(id, []), { wrapper, initialProps: { id: 'old' } })
+    await waitFor(() => expect(api.fetchSyncManifest).toHaveBeenCalled())
+    hook.rerender({ id: 'current' })
+    await waitFor(() => expect(hook.result.current.items).toEqual([{ id: 'current', body: 'current' }]))
+    await act(async () => finish(manifest))
+    expect(hook.result.current.items).toEqual([{ id: 'current', body: 'current' }])
+  })
+
+  it('uses legacy recovery when an update preview cannot fit beside other query windows', async () => {
+    const { wrapper, client } = scope()
+    const otherWindow = {}
+    expect(retainScaleP19Bytes(otherWindow, SCALE_P19_DIRECTORY_BYTES - retainedScaleP19Bytes())).toBe(true)
+    api.listProjectUpdates.mockResolvedValue([{ id: 'update', body: 'Preview' }])
+    try {
+      const hook = renderHook(() => useScaleP19ProjectUpdates('p-1', []), { wrapper })
+      await waitFor(() => expect(client.legacyRequired).toBe(true))
+      expect(hook.result.current.items).toEqual([])
+      hook.unmount()
+    } finally {
+      releaseScaleP19Bytes(otherWindow)
+    }
   })
 })

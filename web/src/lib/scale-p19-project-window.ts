@@ -41,7 +41,7 @@ export class ScaleP19ProjectWindow {
 
   cancel() { this.controller.abort(); this.generation++ }
 
-  select(ids: string[], projects: Project[]) {
+  select(ids: string[], projects: Pick<Project, 'id' | 'name'>[]) {
     const wanted = new Set(ids)
     const selected = new Map([...this.selected].filter(([id]) => wanted.has(id)))
     for (const project of projects) if (wanted.has(project.id)) selected.set(project.id, { id: project.id, name: project.name })
