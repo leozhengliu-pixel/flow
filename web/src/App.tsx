@@ -365,6 +365,8 @@ import { useExitPresence } from '@/components/ui/motion';
 import { PeopleProvider } from '@/components/property/people-provider'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
 import { fetchSurfaceBootstrap, migratedSyncSignal, syncBootstrapRequestKey, syncClientFor, syncScopeMatches, syncV2Enabled, SyncResetRequired } from '@/lib/sync-client'
+import { locallyCreatedAgentSession } from '@/lib/scale-activate-a-agent-echo'
+import { realtimeClientId } from '@/lib/api-client'
 import type { RealtimeEvent } from '@/types/flow'
 import { applyLabelStateRename, applyRealtimePatch, canApplyRealtimePatch, isLabelStateRenameEvent } from '@/store/apply-realtime-patch'
 import { classifyRealtimeEvent } from '@/lib/realtime-dispatch'
@@ -1601,6 +1603,8 @@ function App() {
         return;
       }
       if (event.type.startsWith('agent.')) {
+        const localSession = locallyCreatedAgentSession(event, realtimeClientId());
+        if (localSession) setClosedAgentSessionIds(current => new Set(current).add(localSession));
         await reloadAgentRecords(workspace, viewerId, event);
         return;
       }

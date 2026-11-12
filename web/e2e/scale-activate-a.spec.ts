@@ -51,6 +51,16 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
           await expect(page.locator('.project-details-sidebar')).toBeHidden()
         }
         await capture(page, `${prefix}-projects`)
+        await page.goto(`/${workspaceKey}/project/${project.slugId}/activity`)
+        await page.locator('.project-activity__composer div[role="tablist"] button').nth(1).click()
+        await page.getByRole('button', { name: 'Write with Agent', exact: true }).click()
+        const conversation = page.getByRole('log', { name: 'Agent conversation', exact: true })
+        await expect(conversation).toHaveCount(1)
+        await expect(conversation).toContainText('Verified', { timeout: 30_000 })
+        await expect(conversation).toHaveCount(1)
+        if (process.env.SCALE_ACTIVATE_A_ECHO_SHOTS) await page.screenshot({ path: `${process.env.SCALE_ACTIVATE_A_ECHO_SHOTS}/${prefix}-project-agent.png`, animations: 'disabled', scale: 'css' })
+        await page.getByRole('button', { name: 'Close chat', exact: true }).click()
+        await expect(conversation).toHaveCount(0)
 
         const documentResponse = await request.post('/api/documents', { headers, data: { title: 'Activation document', content: 'Saved activation document body.', teamIds: [core.teams[0].id] } })
         expect(documentResponse.status()).toBe(201)
