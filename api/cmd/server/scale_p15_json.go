@@ -47,6 +47,9 @@ func encodeHydratedJSON(ctx context.Context, buffer *bufio.Writer, value reflect
 		if err != nil {
 			return err
 		}
+		if handled, err := encodeHydratedSignedRaw(ctx, buffer, raw); handled {
+			return err
+		}
 		_, err = buffer.Write(raw)
 		return err
 	}
@@ -70,6 +73,9 @@ func encodeHydratedJSON(ctx context.Context, buffer *bufio.Writer, value reflect
 				return err
 			}
 			if value.Type().Elem().Kind() == reflect.Uint8 {
+				if handled, err := encodeHydratedSignedBase64(ctx, buffer, value.Bytes()); handled {
+					return err
+				}
 				buffer.WriteByte('"')
 				encoder := base64.NewEncoder(base64.StdEncoding, buffer)
 				body := value.Bytes()
@@ -130,6 +136,9 @@ func encodeHydratedJSON(ctx context.Context, buffer *bufio.Writer, value reflect
 	if err != nil {
 		return err
 	}
+	if handled, err := encodeHydratedSignedRaw(ctx, buffer, raw); handled {
+		return err
+	}
 	_, err = buffer.Write(raw)
 	return err
 }
@@ -156,6 +165,12 @@ func encodeHydratedAgentToolCall(ctx context.Context, buffer *bufio.Writer, call
 		first = false
 		buffer.Write(field.key)
 		if invalidResult && string(field.key) == `"result":` {
+			if handled, err := encodeHydratedSignedByteString(ctx, buffer, call.Result); handled {
+				if err != nil {
+					return err
+				}
+				continue
+			}
 			buffer.WriteByte('"')
 			for start := 0; start < len(call.Result); {
 				end := min(start+16<<10, len(call.Result))
@@ -186,6 +201,9 @@ func encodeHydratedRawJSON(ctx context.Context, buffer *bufio.Writer, raw []byte
 	}
 	if !json.Valid(raw) {
 		return fmt.Errorf("invalid raw JSON")
+	}
+	if handled, err := encodeHydratedSignedRaw(ctx, buffer, raw); handled {
+		return err
 	}
 	quoted, escaped := false, false
 	start := 0
@@ -269,6 +287,9 @@ func encodeHydratedStruct(ctx context.Context, buffer *bufio.Writer, value refle
 }
 
 func encodeHydratedString(ctx context.Context, buffer *bufio.Writer, value string) error {
+	if handled, err := encodeHydratedSignedString(ctx, buffer, value); handled {
+		return err
+	}
 	buffer.WriteByte('"')
 	if err := encodeHydratedStringContent(ctx, buffer, value); err != nil {
 		return err

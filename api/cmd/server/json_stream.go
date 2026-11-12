@@ -26,6 +26,9 @@ import (
 // status line was sent, the response is aborted rather than left as valid
 // but truncated JSON.
 func writeStreamedJSON(ctx context.Context, w http.ResponseWriter, status int, value any) {
+	if status == http.StatusOK || status == http.StatusCreated {
+		ctx = hydratedSigningContext(ctx, w)
+	}
 	v := reflect.ValueOf(value)
 	plan := streamPlanFor(v.Type())
 	if plan == nil {

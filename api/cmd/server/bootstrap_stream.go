@@ -417,7 +417,11 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 	}, overrides...)
 }
 
-func encodeBootstrapArray[T any](w io.Writer, encoder *json.Encoder, items []T) error {
+func encodeBootstrapArray[T any](w io.Writer, encoder *json.Encoder, items []T, contexts ...context.Context) error {
+	ctx := context.Background()
+	if len(contexts) > 0 {
+		ctx = contexts[0]
+	}
 	if items == nil {
 		_, err := io.WriteString(w, "null")
 		return err
@@ -433,7 +437,7 @@ func encodeBootstrapArray[T any](w io.Writer, encoder *json.Encoder, items []T) 
 		}
 		var err error
 		if buffer, ok := w.(*bufio.Writer); ok {
-			err = encodeBootstrapValue(context.Background(), buffer, encoder, &items[i])
+			err = encodeBootstrapValue(ctx, buffer, encoder, &items[i])
 		} else {
 			err = encoder.Encode(&items[i])
 		}
@@ -458,6 +462,7 @@ func encodeBootstrapValue(ctx context.Context, buffer *bufio.Writer, encoder *js
 // Preserve the legacy field ordering and newlines while visiting each field
 // directly. Marshaling metadata first duplicates every project and document.
 func writeHydratedBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stream func(string, *bufio.Writer, *json.Encoder) (bool, error), overrides ...map[string]json.RawMessage) {
+	ctx := hydratedSigningContext(context.Background(), w)
 	value := reflect.ValueOf(data)
 	fields := map[string]streamField{}
 	keys := []string{}
@@ -502,20 +507,20 @@ func writeHydratedBootstrapWithFields(w http.ResponseWriter, data domain.Bootstr
 		var err error
 		switch key {
 		case "issues":
-			err = encodeBootstrapArray(buffer, encoder, data.Issues)
+			err = encodeBootstrapArray(buffer, encoder, data.Issues, ctx)
 		case "comments":
-			err = encodeBootstrapMap(buffer, encoder, data.Comments)
+			err = encodeBootstrapMap(buffer, encoder, data.Comments, ctx)
 		case "activities":
-			err = encodeBootstrapMap(buffer, encoder, data.Activities)
+			err = encodeBootstrapMap(buffer, encoder, data.Activities, ctx)
 		case "notifications":
-			err = encodeBootstrapArray(buffer, encoder, data.Notifications)
+			err = encodeBootstrapArray(buffer, encoder, data.Notifications, ctx)
 		case "notificationDeliveries":
-			err = encodeBootstrapArray(buffer, encoder, data.NotificationDeliveries)
+			err = encodeBootstrapArray(buffer, encoder, data.NotificationDeliveries, ctx)
 		default:
 			if len(overrides) > 0 {
-				_, err = buffer.Write(overrides[0][key])
+				err = writeHydratedEncodedJSON(ctx, buffer, overrides[0][key])
 			} else {
-				err = encodeHydratedJSON(context.Background(), buffer, value.Field(fields[key].index), 0)
+				err = encodeHydratedJSON(ctx, buffer, value.Field(fields[key].index), 0)
 			}
 		}
 		if err != nil {
@@ -528,7 +533,7 @@ func writeHydratedBootstrapWithFields(w http.ResponseWriter, data domain.Bootstr
 	}
 }
 
-func encodeBootstrapMap[T any](w io.Writer, encoder *json.Encoder, items map[string][]T) error {
+func encodeBootstrapMap[T any](w io.Writer, encoder *json.Encoder, items map[string][]T, contexts ...context.Context) error {
 	if items == nil {
 		_, err := io.WriteString(w, "null")
 		return err
@@ -549,7 +554,7 @@ func encodeBootstrapMap[T any](w io.Writer, encoder *json.Encoder, items map[str
 		if _, err := io.WriteString(w, ":"); err != nil {
 			return err
 		}
-		if err := encodeBootstrapArray(w, encoder, values); err != nil {
+		if err := encodeBootstrapArray(w, encoder, values, contexts...); err != nil {
 			return err
 		}
 		i++

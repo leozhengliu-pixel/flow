@@ -2,20 +2,23 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"flow/api/internal/store"
 )
 
 type legacyTransportBudgetKey struct{}
@@ -25,18 +28,21 @@ func legacyStreamLease(ctx context.Context, size int64) (func(), error) {
 	return acquireRealtimeWork(ctx, budget, size)
 }
 
-// The producer finishes and releases its metadata/SQL snapshot before the
-// socket is written. Temporary files are private and removed on every exit.
-// Disk holds the compatibility response; a slow reader retains only a chunk.
+// Detach the producer before socket writes while the spool budget allows.
+// At the byte cap, drain the prefix and continue through the bounded encoder;
+// the producer then lives until encoding finishes.
 type legacyResponseSpool struct {
 	http.ResponseWriter
-	ctx         context.Context
-	file        *os.File
-	status      int
-	err         error
-	jsonOnly    bool
-	passthrough bool
-	reserve     func() error
+	ctx            context.Context
+	file           *store.RecordSpool
+	status         int
+	err            error
+	jsonOnly       bool
+	passthrough    bool
+	reserve        func() error
+	signing        *hydratedURLSigning
+	prepareSigning func()
+	bodyStarted    bool
 }
 
 func (w *legacyResponseSpool) Unwrap() http.ResponseWriter { return w.ResponseWriter }
@@ -51,8 +57,20 @@ func (w *legacyResponseSpool) WriteHeader(status int) {
 			w.passthrough = true
 			removeLegacySpool(w.file)
 			w.ResponseWriter.WriteHeader(status)
-		} else if w.reserve != nil {
-			w.err = w.reserve()
+		} else {
+			if w.jsonOnly {
+				w.Header().Del("Content-Length")
+			}
+			if w.prepareSigning != nil {
+				w.prepareSigning()
+			}
+			if w.reserve != nil {
+				w.err = w.reserve()
+			}
+			if w.file == nil && w.err == nil {
+				w.passthrough = true
+				w.ResponseWriter.WriteHeader(status)
+			}
 		}
 	}
 }
@@ -60,18 +78,59 @@ func (w *legacyResponseSpool) Write(p []byte) (int, error) {
 	if w.status == 0 {
 		w.WriteHeader(http.StatusOK)
 	}
-	if w.passthrough {
-		return w.ResponseWriter.Write(p)
-	}
 	if w.err == nil {
 		w.err = w.ctx.Err()
 	}
 	if w.err != nil {
 		return 0, w.err
 	}
-	n, err := w.file.Write(p)
-	w.err = err
-	return n, err
+	if !w.bodyStarted && len(p) > 0 {
+		w.bodyStarted = true
+		// json.Encoder and cached JSON handlers hand us an already complete
+		// value. Rewrite that resident source directly, with the same spool
+		// fallback as the structured P15 encoder and no response-sized copy.
+		if w.signing != nil && w.signing.key != nil && !w.signing.encoded && json.Valid(p) {
+			w.signing.encoded = true
+			ctx := context.WithValue(w.ctx, hydratedURLSigningKey{}, (*hydratedURLSigning)(nil))
+			if err := rewriteHydratedURLSource(ctx, bytes.NewReader(p), int64(len(p)), w, w.signing); err != nil {
+				w.err = err
+				return 0, err
+			}
+			return len(p), nil
+		}
+	}
+	if w.passthrough {
+		n, err := w.ResponseWriter.Write(p)
+		if err == nil && n != len(p) {
+			err = io.ErrShortWrite
+		}
+		w.err = err
+		return n, err
+	}
+	if w.file != nil {
+		n, err := w.file.Write(p)
+		if err == nil {
+			return n, nil
+		}
+		// A failed/short disk write is recoverable: the successful prefix
+		// remains in the file and the producer still owns the rest of p.
+		if err := sendLegacySpool(w.ctx, w.ResponseWriter, w.status, w.file); err != nil {
+			w.err = err
+			return n, err
+		}
+		removeLegacySpool(w.file)
+		w.file = nil
+		w.passthrough = true
+		written, err := w.ResponseWriter.Write(p[n:])
+		if err == nil && written != len(p)-n {
+			err = io.ErrShortWrite
+		}
+		w.err = err
+		return n + written, err
+	}
+	w.passthrough = true
+	w.ResponseWriter.WriteHeader(w.status)
+	return w.ResponseWriter.Write(p)
 }
 func (w *legacyResponseSpool) Flush() {
 	if w.status == 0 {
@@ -82,16 +141,12 @@ func (w *legacyResponseSpool) Flush() {
 	}
 }
 
-func newLegacySpool() (*os.File, error) {
-	return os.CreateTemp("", "flow-p15-response-*")
+func newLegacySpool() (*store.RecordSpool, error) {
+	return store.NewRecordSpool()
 }
 
-func removeLegacySpool(file *os.File) {
-	if file == nil {
-		return
-	}
+func removeLegacySpool(file *store.RecordSpool) {
 	_ = file.Close()
-	_ = os.Remove(file.Name())
 }
 
 func serveDetachedLegacyJSON(w http.ResponseWriter, r *http.Request, next http.Handler) {
@@ -101,16 +156,17 @@ func serveDetachedLegacyJSON(w http.ResponseWriter, r *http.Request, next http.H
 		return
 	}
 	defer release()
-	file, err := newLegacySpool()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Could not encode workspace")
-		return
-	}
+	// Creation failure and a zero/full budget both use the same bounded
+	// encoder, with cancellation/error handling still on the writer.
+	file, _ := newLegacySpool()
 	defer removeLegacySpool(file)
 	spool := &legacyResponseSpool{ResponseWriter: w, ctx: r.Context(), file: file}
 	next.ServeHTTP(spool, r)
 	if spool.err != nil || r.Context().Err() != nil {
 		panic(http.ErrAbortHandler)
+	}
+	if spool.passthrough || file == nil {
+		return
 	}
 	if err := sendLegacySpool(r.Context(), w, spool.status, file); err != nil {
 		panic(http.ErrAbortHandler)
@@ -129,7 +185,7 @@ func (r legacyContextReader) Read(p []byte) (int, error) {
 	return r.reader.Read(p)
 }
 
-func sendLegacySpool(ctx context.Context, w http.ResponseWriter, status int, file *os.File) error {
+func sendLegacySpool(ctx context.Context, w http.ResponseWriter, status int, file *store.RecordSpool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -152,47 +208,48 @@ func (s *server) signedFileURLsStream(w http.ResponseWriter, r *http.Request, ne
 			release()
 		}
 	}()
-	var file *os.File
+	var file *store.RecordSpool
 	defer func() { removeLegacySpool(file) }()
 	spool := &legacyResponseSpool{ResponseWriter: w, ctx: r.Context(), jsonOnly: true}
+	spool.signing = &hydratedURLSigning{base: externalBaseURL(r), expires: time.Now().Add(lifetime).Truncate(time.Second)}
+	r = r.WithContext(context.WithValue(r.Context(), hydratedURLSigningKey{}, spool.signing))
+	spool.prepareSigning = func() {
+		spool.prepareSigning = nil
+		if key, err := s.fileSigningKey(r.Context()); err == nil {
+			spool.signing.key = key
+		} else {
+			logSigningFailure(r.Context(), err)
+			spool.signing = nil
+		}
+	}
 	spool.reserve = func() (err error) {
 		release, err = legacyStreamLease(r.Context(), 512<<10)
 		if err == nil {
 			file, err = newLegacySpool()
 			spool.file = file
+			// An unavailable temporary volume is also a direct-stream fallback.
+			err = nil
 		}
 		return err
 	}
 	next.ServeHTTP(spool, r)
-	if spool.passthrough {
-		return
-	}
 	if spool.err != nil || r.Context().Err() != nil {
 		panic(http.ErrAbortHandler)
+	}
+	if spool.passthrough {
+		return
 	}
 	if file == nil {
 		return
 	}
 	if (spool.status == 0 || spool.status == http.StatusOK || spool.status == http.StatusCreated) && strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") {
 		w.Header().Del("Content-Length")
-		key, keyErr := s.fileSigningKey(r.Context())
-		if keyErr == nil {
-			rewritten, err := newLegacySpool()
-			if err != nil {
-				panic(http.ErrAbortHandler)
-			}
-			defer removeLegacySpool(rewritten)
-			if err := rewriteUploadURLFile(r.Context(), file, rewritten, key, externalBaseURL(r), time.Now().Add(lifetime).Truncate(time.Second)); err != nil {
-				panic(http.ErrAbortHandler)
-			}
-			// Keep the source variable for its cleanup defer.
-			if err := sendLegacySpool(r.Context(), w, spool.status, rewritten); err != nil {
+		if spool.signing != nil && !spool.signing.encoded {
+			w.WriteHeader(spool.status)
+			if err := rewriteHydratedJSONSource(r.Context(), file, w, spool.signing); err != nil {
 				panic(http.ErrAbortHandler)
 			}
 			return
-		} else {
-			// The old adapter serves the original bytes on signing failure.
-			logSigningFailure(r.Context(), keyErr)
 		}
 	}
 	if err := sendLegacySpool(r.Context(), w, spool.status, file); err != nil {
@@ -200,26 +257,21 @@ func (s *server) signedFileURLsStream(w http.ResponseWriter, r *http.Request, ne
 	}
 }
 
-// Apply the same two regex passes as rewriteUploadURLs. RE2 scans the file
-// through a fixed RuneReader; even one enormous JSON string/filename is never
-// accumulated. The intermediate pass also stays on disk.
-func rewriteUploadURLFile(ctx context.Context, source *os.File, dst io.Writer, key []byte, base string, expires time.Time) error {
-	intermediate, err := newLegacySpool()
-	if err != nil {
-		return err
-	}
-	defer removeLegacySpool(intermediate)
-	if err := rewriteUploadURLPass(ctx, source, intermediate, uploadURLValue, true, key, base, expires); err != nil {
-		return err
-	}
-	return rewriteUploadURLPass(ctx, intermediate, dst, uploadURLText, false, key, base, expires)
+// Apply the same two regex passes as rewriteUploadURLs without an intermediate
+// response file. RE2 and copying both use fixed-size buffers.
+func rewriteUploadURLFile(ctx context.Context, source *store.RecordSpool, dst io.Writer, key []byte, base string, expires time.Time) error {
+	return rewriteHydratedJSONSource(ctx, source, dst, &hydratedURLSigning{key: key, base: base, expires: expires})
 }
 
-func rewriteUploadURLPass(ctx context.Context, source *os.File, dst io.Writer, pattern *regexp.Regexp, quoted bool, key []byte, base string, expires time.Time) error {
+func rewriteUploadURLPass(ctx context.Context, source *store.RecordSpool, dst io.Writer, pattern *regexp.Regexp, quoted bool, key []byte, base string, expires time.Time) error {
 	info, err := source.Stat()
 	if err != nil {
 		return err
 	}
+	return rewriteUploadURLSourcePass(ctx, source, info.Size(), dst, pattern, quoted, key, base, expires)
+}
+
+func rewriteUploadURLSourcePass(ctx context.Context, source io.ReaderAt, size int64, dst io.Writer, pattern *regexp.Regexp, quoted bool, key []byte, base string, expires time.Time) error {
 	reader := bufio.NewReaderSize(nil, 32<<10)
 	output := bufio.NewWriterSize(dst, 32<<10)
 	scratch := make([]byte, 32<<10)
@@ -228,8 +280,8 @@ func rewriteUploadURLPass(ctx context.Context, source *os.File, dst io.Writer, p
 		return err
 	}
 	var offset, written int64
-	for offset < info.Size() {
-		reader.Reset(legacyContextReader{ctx, io.NewSectionReader(source, offset, info.Size()-offset)})
+	for offset < size {
+		reader.Reset(legacyContextReader{ctx, io.NewSectionReader(source, offset, size-offset)})
 		match := pattern.FindReaderSubmatchIndex(reader)
 		if err := ctx.Err(); err != nil {
 			return err
@@ -265,7 +317,7 @@ func rewriteUploadURLPass(ctx context.Context, source *os.File, dst io.Writer, p
 		}
 		offset, written = end, end
 	}
-	if err := copyRange(written, info.Size()); err != nil {
+	if err := copyRange(written, size); err != nil {
 		return err
 	}
 	return output.Flush()
@@ -306,7 +358,7 @@ func (r unescapePathReader) Read(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func writeSignedURLSection(ctx context.Context, output *bufio.Writer, file *os.File, start, end int64, key []byte, base string, expires time.Time, scratch []byte) error {
+func writeSignedURLSection(ctx context.Context, output *bufio.Writer, file io.ReaderAt, start, end int64, key []byte, base string, expires time.Time, scratch []byte) error {
 	reader := bufio.NewReaderSize(nil, 4096)
 	reset := func() io.Reader {
 		reader.Reset(legacyContextReader{ctx, io.NewSectionReader(file, start, end-start)})

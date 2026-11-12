@@ -7318,6 +7318,9 @@ func writeVersionConflict(w http.ResponseWriter, current any) {
 	writeJSON(w, http.StatusConflict, map[string]any{"error": "This item changed in another session", "code": "VERSION_CONFLICT", "current": current})
 }
 func writeJSON(w http.ResponseWriter, status int, value any) {
+	if writeHydratedSignedJSON(w, status, value) {
+		return
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(value); err != nil {
