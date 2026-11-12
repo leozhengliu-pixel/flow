@@ -354,7 +354,7 @@ func resourceReadMetadata(p *resourceAccessPolicy, source domain.Bootstrap, kind
 				return data, true, nil
 			}
 		}
-		project := cloneBootstrap(domain.Bootstrap{Projects: []domain.Project{source.Projects[index]}}).Projects[0]
+		project := cloneSnapshotValue(reflect.ValueOf(source.Projects[index])).Interface().(domain.Project)
 		project.TeamIDs = slices.DeleteFunc(project.TeamIDs, func(id string) bool { return !p.teams.Content[id] })
 		project.DependencyIDs = slices.DeleteFunc(project.DependencyIDs, func(id string) bool { return !p.projectByID(source, id, true) })
 		if p.selected() || p.key != nil && p.key.Actor == "app" {
@@ -413,7 +413,7 @@ func resourceReadMetadata(p *resourceAccessPolicy, source domain.Bootstrap, kind
 			}
 			item = source.Initiatives[index]
 		}
-		item = cloneBootstrap(domain.Bootstrap{Initiatives: []domain.Initiative{item}}).Initiatives[0]
+		item = cloneSnapshotValue(reflect.ValueOf(item)).Interface().(domain.Initiative)
 		item.ProjectIDs = slices.DeleteFunc(item.ProjectIDs, func(id string) bool { return !p.projectByID(source, id, true) })
 		item.ContributingTeamIDs = slices.DeleteFunc(item.ContributingTeamIDs, func(id string) bool { return !p.teamAllowed(id) })
 		if p.selected() {

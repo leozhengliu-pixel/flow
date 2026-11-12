@@ -19,6 +19,11 @@ func (s *SQLiteStore) QueryProjectDirectoryWithAccess(ctx context.Context, acces
 	if query.Workspace != access.policy.workspace {
 		return ProjectRecordPage{}, ErrAuthForbidden
 	}
+	if access.policy.selected() || access.policy.key != nil && access.policy.key.Actor == "app" {
+		// Credential directories must filter and count the server's verified
+		// projection; raw catalog rows cannot stand in for that projection.
+		return ProjectRecordPage{}, ErrMetadataCatalogGap
+	}
 	page, err := s.QueryProjectDirectory(ctx, query)
 	if err == nil {
 		err = s.ValidateAccess(ctx, access)

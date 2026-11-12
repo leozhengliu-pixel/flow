@@ -32,15 +32,19 @@ func TestScaleP10RecordPermissionDifferential(t *testing.T) {
 				data.TeamSettings["p10-public"] = domain.TeamSettings{TeamID: "p10-public", Access: "public"}
 				data.TeamSettings["p10-private"] = domain.TeamSettings{TeamID: "p10-private", Access: "private"}
 				data.TeamSettings["p10-child"] = domain.TeamSettings{TeamID: "p10-child", Access: "public", ParentTeamID: "p10-private"}
+				data.Labels = append(data.Labels, domain.IssueLabel{ID: "p10-workspace-label", Scope: "workspace"}, domain.IssueLabel{ID: "p10-private-label", Scope: "p10-private"})
+				actor := domain.User{ID: "p10-actor", App: true, AppTeamIDs: []string{"p10-public", "p10-private"}}
 				data.Projects = append(data.Projects,
-					domain.Project{ID: "p10-open", Name: "Open", SlugID: "open-000000000010", PreviousSlugIDs: []string{"old-p10"}, TeamIDs: []string{"p10-public", "p10-private"}, DependencyIDs: []string{"p10-hidden", "missing"}, Description: "Full body", IssueCount: 42},
+					domain.Project{ID: "p10-open", Name: "Open", SlugID: "open-000000000010", PreviousSlugIDs: []string{"old-p10"}, TeamIDs: []string{"p10-public", "p10-private"}, DependencyIDs: []string{"p10-hidden", "missing"}, Initiatives: []string{"p10-initiative", "p10-private-initiative"}, LabelIDs: []string{"p10-workspace-label", "p10-private-label"}, Description: "Full body", IssueCount: 42, Progress: .73,
+						Resources: []domain.ProjectResource{{ID: "p10-resource", PinnedTeamIDs: []string{"p10-public", "p10-private"}}}, Creator: &actor, Lead: &actor, Comments: []domain.Comment{{ID: "p10-comment", User: actor}}, DescriptionRevisions: []domain.ProjectDescriptionRevision{{ID: "p10-revision", Author: actor}},
+						IssueCountHistory: []domain.ProjectProgressHistoryPoint{{Value: 42}}, ProgressHistory: []domain.ProjectProgressHistoryPoint{{Value: .73}}},
 					domain.Project{ID: "p10-hidden", Name: "Hidden", TeamIDs: []string{"p10-private"}},
 					domain.Project{ID: "p10-child-project", TeamIDs: []string{"p10-child"}},
 					domain.Project{ID: "p10-nil", TeamIDs: nil, DependencyIDs: nil},
 					domain.Project{ID: "p10-empty", TeamIDs: []string{}, DependencyIDs: []string{}},
 				)
 				data.Initiatives = append(data.Initiatives,
-					domain.Initiative{ID: "p10-initiative", Name: "Visible", ProjectIDs: []string{"p10-open", "p10-hidden"}, ParentInitiativeIDs: []string{"p10-private-initiative"}, ContributingTeamIDs: []string{"p10-public", "p10-private"}, Creator: base.Viewer},
+					domain.Initiative{ID: "p10-initiative", Name: "Visible", ProjectIDs: []string{"p10-open", "p10-hidden"}, ParentInitiativeIDs: []string{"p10-private-initiative"}, ContributingTeamIDs: []string{"p10-public", "p10-private"}, LabelIDs: []string{"p10-workspace-label", "p10-private-label"}, Creator: actor, Owner: &actor, Comments: []domain.Comment{{ID: "p10-initiative-comment", User: actor}}, DescriptionHistory: []domain.InitiativeDescriptionRevision{{ID: "p10-history", Editor: actor}}},
 					domain.Initiative{ID: "p10-private-initiative", ProjectIDs: []string{"p10-hidden"}, LeadTeamID: "p10-private", Creator: base.Viewer},
 				)
 				data.Favorites = append(data.Favorites, domain.Favorite{ID: "p10-favorite", UserID: base.Viewer.ID, ResourceType: "initiative", ResourceID: "p10-initiative"})
@@ -76,8 +80,11 @@ func TestScaleP10RecordPermissionDifferential(t *testing.T) {
 			privateOutsider := join("member", []string{"p10-public"})
 			grantCtx := WithoutIssueRecordMutations(ContextWithActor(t.Context(), base.Viewer))
 			if err := s.MutateWorkspace(grantCtx, workspace, "scale_p10.fixture", "", nil, func(data *domain.Bootstrap) error {
-				data.Issues = append(data.Issues, domain.Issue{ID: "p10-granted-issue", Title: "Explicit grant", Team: domain.Team{ID: "p10-private", Key: "P10P"}, Project: &domain.ProjectSummary{ID: "p10-hidden"},
+				data.Issues = append(data.Issues, domain.Issue{ID: "p10-granted-issue", Identifier: "P10P-1", Number: 1, Title: "Explicit grant", Team: domain.Team{ID: "p10-private", Key: "P10P"}, Project: &domain.ProjectSummary{ID: "p10-hidden"},
 					Permissions: []domain.IssuePermission{{ID: idgen.New("p10-grant-"), IssueID: "p10-granted-issue", SubjectType: "user", SubjectID: guest.ID, Role: "viewer"}}})
+				data.Issues = append(data.Issues, domain.Issue{ID: "p10-private-demand", Identifier: "P10P-2", Number: 2, Title: "Private demand", Team: domain.Team{ID: "p10-private", Key: "P10P"}, Project: &domain.ProjectSummary{ID: "p10-open"}})
+				data.Customers = append(data.Customers, domain.Customer{ID: "p10-demand-customer", Name: "Demand"})
+				data.CustomerRequests = append(data.CustomerRequests, domain.CustomerRequest{ID: "p10-demand", CustomerID: "p10-demand-customer", IssueID: "p10-private-demand"})
 				return nil
 			}); err != nil {
 				t.Fatal(err)
@@ -118,6 +125,7 @@ func TestScaleP10RecordPermissionDifferential(t *testing.T) {
 				{"key-unrestricted", base.Viewer, &domain.APIKey{Scopes: []string{"read"}}},
 				{"key-selected-empty", base.Viewer, &domain.APIKey{Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{}}},
 				{"key-selected-set", base.Viewer, &domain.APIKey{Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{"p10-public"}}},
+				{"key-owner-outside-private", outsider, &domain.APIKey{Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{"p10-private"}}},
 			}
 			keys := []RecordKey{{"projects", "p10-open"}, {"projects", "p10-hidden"}, {"projects", "p10-child-project"}, {"projects", "p10-nil"}, {"projects", "p10-empty"}, {"initiatives", "p10-initiative"}, {"initiatives", "p10-private-initiative"}, {"projects", "missing"}}
 			for _, viewer := range viewers {
@@ -153,6 +161,15 @@ func TestScaleP10RecordPermissionDifferential(t *testing.T) {
 									want = ProjectListProjection(want)
 								}
 								scaleP10Equal(t, want, item.Data)
+								if viewer.key != nil && viewer.key.TeamRestriction == "selected" {
+									var actual domain.Project
+									if err := json.Unmarshal(item.Data, &actual); err != nil {
+										t.Fatal(err)
+									}
+									if actual.IssueCount != 0 || actual.Progress != 0 || slices.Contains(actual.DependencyIDs, "p10-hidden") || slices.Contains(actual.Initiatives, "p10-private-initiative") || slices.Contains(actual.LabelIDs, "p10-private-label") {
+										t.Fatal("selected key leaked references or stored aggregates")
+									}
+								}
 							} else {
 								want := oracle.Initiatives[0]
 								if projection == "summary" {
@@ -162,6 +179,29 @@ func TestScaleP10RecordPermissionDifferential(t *testing.T) {
 							}
 						}
 					}
+					for _, query := range []struct {
+						field, value string
+					}{
+						{"labels", "p10-private-label"}, {"teams", "p10-private"}, {"customers", "customer:p10-demand-customer"},
+					} {
+						filter, _ := json.Marshal(ProjectRecordQuery{Filters: []ProjectDirectoryFilter{{Field: query.field, Operator: "is", Values: []string{query.value}}}})
+						page, err := s.readAccessRecordPage(t.Context(), access, PageRequest{Kind: "projects", Filter: string(filter)})
+						if viewer.user.ID == guest.ID && query.field == "customers" {
+							if !errors.Is(err, ErrMetadataRecordQuery) {
+								t.Fatal("guest customer filter was allowed", err)
+							}
+							continue
+						}
+						if err != nil {
+							t.Fatal(err)
+						}
+						if viewer.key != nil && viewer.key.TeamRestriction == "selected" && len(page.Items) != 0 {
+							t.Fatal("a filter matched a hidden reference or private customer demand")
+						}
+						if viewer.name == "key-unrestricted" && !slices.ContainsFunc(page.Items, func(item MetadataRecord) bool { return item.Key.ID == "p10-open" }) {
+							t.Fatal("unrestricted key lost an owner-visible filtered record")
+						}
+					}
 					for _, order := range []string{"collection", "createdAt", "updatedAt"} {
 						q := PageRequest{Kind: "projects", Limit: 1, Order: order, Filter: `{"Archived":"all"}`}
 						seen := []string{}
@@ -169,6 +209,11 @@ func TestScaleP10RecordPermissionDifferential(t *testing.T) {
 							page, err := s.readAccessRecordPage(t.Context(), access, q)
 							if err != nil {
 								t.Fatal(err)
+							}
+							if viewer.name == "key-selected-empty" || viewer.name == "key-owner-outside-private" {
+								if len(page.Items) != 0 || page.HasMore || page.Next != "" {
+									t.Fatal("empty effective scope exposed a collection continuation")
+								}
 							}
 							raw, err := json.Marshal(page)
 							if err != nil || len(raw)+1 > MetadataRecordPageMaxBytes {
@@ -198,8 +243,19 @@ func TestScaleP10RecordPermissionDifferential(t *testing.T) {
 					if _, err := s.ReadRecordPage(t.Context(), access, PageRequest{Kind: "projects"}); !errors.Is(err, ErrMetadataCatalogGap) {
 						t.Fatal("shadow catalog served through public read contract", err)
 					}
+					if viewer.name == "key-selected-empty" || viewer.name == "key-owner-outside-private" {
+						page, err := s.readAccessRecordPage(t.Context(), access, PageRequest{Kind: "initiatives", Limit: 1})
+						if err != nil || len(page.Items) != 0 || page.HasMore || page.Next != "" {
+							t.Fatal("empty effective scope exposed an initiative continuation", err)
+						}
+					}
 					if _, err := s.ReadRecords(t.Context(), access, keys, "detail"); !errors.Is(err, ErrMetadataCatalogGap) {
 						t.Fatal("shadow catalog served through public batch contract", err)
+					}
+					if viewer.key != nil && viewer.key.TeamRestriction == "selected" {
+						if _, err := s.QueryProjectDirectoryWithAccess(t.Context(), access, ProjectRecordQuery{Workspace: workspace, Admin: true, IncludeTotal: true}); !errors.Is(err, ErrMetadataCatalogGap) {
+							t.Fatal("raw catalog directory bypassed the credential projection", err)
+						}
 					}
 				})
 			}

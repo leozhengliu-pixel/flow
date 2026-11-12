@@ -12,20 +12,20 @@ import (
 	"flow/api/internal/store"
 )
 
-type syncCollection struct {
+type syncManifestCollection struct {
 	Ready    bool   `json:"ready"`
 	Revision string `json:"revision"`
 }
 
 type syncManifestResponse struct {
-	Schema       int                       `json:"schema"`
-	WorkspaceID  string                    `json:"workspaceId"`
-	ViewerID     string                    `json:"viewerId"`
-	AuthzEpoch   string                    `json:"authzEpoch"`
-	Head         string                    `json:"head"`
-	Capabilities []string                  `json:"capabilities"`
-	Core         store.RecordReadCore      `json:"core"`
-	Collections  map[string]syncCollection `json:"collections"`
+	Schema       int                               `json:"schema"`
+	WorkspaceID  string                            `json:"workspaceId"`
+	ViewerID     string                            `json:"viewerId"`
+	AuthzEpoch   string                            `json:"authzEpoch"`
+	Head         string                            `json:"head"`
+	Capabilities []string                          `json:"capabilities"`
+	Core         store.RecordReadCore              `json:"core"`
+	Collections  map[string]syncManifestCollection `json:"collections"`
 }
 
 func syncFlagEnabled(name string) bool {
@@ -101,7 +101,7 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 	result := syncManifestResponse{
 		Schema: 2, WorkspaceID: access.WorkspaceID, ViewerID: access.PrincipalID,
 		AuthzEpoch: access.AuthzEpoch, Head: strconv.FormatInt(head, 10),
-		Capabilities: []string{}, Core: core, Collections: map[string]syncCollection{},
+		Capabilities: []string{}, Core: core, Collections: map[string]syncManifestCollection{},
 	}
 	for _, kind := range []string{"projects", "initiatives"} {
 		status, err := s.store.ReadRecordStatus(r.Context(), access, kind)
@@ -110,7 +110,7 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ready := status.Ready && syncFlagEnabled("FLOW_INDEXED_READS")
-		result.Collections[kind] = syncCollection{Ready: ready, Revision: status.Revision}
+		result.Collections[kind] = syncManifestCollection{Ready: ready, Revision: status.Revision}
 	}
 	// P09/P12/P15 and the remaining core surfaces must be integrated before
 	// advertising sync-v2. Its absence makes new clients use legacy bootstrap.

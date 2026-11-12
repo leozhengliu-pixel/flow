@@ -35,6 +35,9 @@ func (s *SQLiteStore) ReadRecordCore(ctx context.Context, access AccessContext) 
 	}
 	p := access.policy
 	viewer := cloneSnapshotValue(reflect.ValueOf(p.metadata.Viewer)).Interface().(domain.User)
+	if p.selected() {
+		RedactUserTeams(&viewer, p.teamAllowed)
+	}
 	return RecordReadCore{
 		Workspace: RecordReadWorkspace{ID: p.metadata.Workspace.ID, URLKey: p.metadata.Workspace.URLKey}, Viewer: viewer, ViewerRole: p.metadata.ViewerRole,
 		Omitted: []string{"teams", "favorites", "people", "settings"},
@@ -146,8 +149,8 @@ func (s *SQLiteStore) readAccessRecordPage(ctx context.Context, access AccessCon
 	query := q
 	query.Cursor = cursor
 	var page RecordPage
+	var filter ProjectRecordQuery
 	if q.Kind == "projects" {
-		filter := ProjectRecordQuery{}
 		if len(q.Filter) > 64<<10 || q.Filter != "" && json.Unmarshal([]byte(q.Filter), &filter) != nil {
 			return RecordPage{}, ErrMetadataRecordQuery
 		}
@@ -161,6 +164,10 @@ func (s *SQLiteStore) readAccessRecordPage(ctx context.Context, access AccessCon
 		}
 		slices.Sort(filter.AllowedTeamIDs)
 		if slices.ContainsFunc(filter.Filters, func(f ProjectDirectoryFilter) bool { return f.Field == "customers" }) {
+			p := access.policy
+			if p.key != nil && p.key.Actor == "app" && !resourceKeyHasScope(*p.key, "customer:read") && !resourceKeyHasScope(*p.key, "customer:write") {
+				return RecordPage{}, ErrMetadataRecordQuery
+			}
 			settings, ok := s.WorkspaceSettingsMetadata(filter.Workspace)
 			if !ok || access.policy.metadata.ViewerRole == "guest" {
 				return RecordPage{}, ErrMetadataRecordQuery
@@ -168,12 +175,22 @@ func (s *SQLiteStore) readAccessRecordPage(ctx context.Context, access AccessCon
 			if enabled, present := settings.WorkspaceSettings.FeatureFlags["customer-requests"]; present && !enabled {
 				return RecordPage{}, ErrMetadataRecordQuery
 			}
-			filter.CustomerSummaries, err = s.ProjectCustomerSummaries(ctx, filter.Workspace)
+			_, issueAccess, accessErr := s.IssueQueryAccess(ctx, p.workspace, p.principal)
+			if accessErr != nil {
+				return RecordPage{}, accessErr
+			}
+			var allowed []string
+			if p.selected() {
+				allowed = append([]string{}, p.key.TeamIDs...)
+			}
+			filter.CustomerSummaries, err = s.ScopedProjectCustomerSummaries(ctx, IssueRecordQuery{Workspace: p.workspace, Access: &issueAccess, AllowedTeamIDs: allowed})
 			if err != nil {
 				return RecordPage{}, err
 			}
 		}
-		page, err = s.ReadMetadataCatalogProjectPage(ctx, filter, query)
+		catalogFilter := filter
+		catalogFilter.Filters, catalogFilter.TeamIDs, catalogFilter.Search = nil, nil, ""
+		page, err = s.ReadMetadataCatalogProjectPage(ctx, catalogFilter, query)
 	} else if q.Filter != "" {
 		return RecordPage{}, ErrMetadataRecordQuery
 	} else {
@@ -196,6 +213,16 @@ func (s *SQLiteStore) readAccessRecordPage(ctx context.Context, access AccessCon
 		if !visible {
 			continue
 		}
+		if q.Kind == "projects" {
+			var project domain.Project
+			if err := json.Unmarshal(redacted.Data, &project); err != nil {
+				return RecordPage{}, err
+			}
+			filter.Cursor, filter.Limit, filter.IncludeTotal = "", 1, false
+			if len(filterProjectDirectory([]domain.Project{project}, filter).Items) == 0 {
+				continue
+			}
+		}
 		raw, err := json.Marshal(redacted)
 		if err != nil {
 			return RecordPage{}, err
@@ -211,6 +238,9 @@ func (s *SQLiteStore) readAccessRecordPage(ctx context.Context, access AccessCon
 		items = append(items, redacted)
 	}
 	page.Items, page.AuthzEpoch = items, access.AuthzEpoch
+	if p := access.policy; p.selected() && !slices.ContainsFunc(p.key.TeamIDs, p.teamAllowed) {
+		page.Items, page.Next, page.HasMore = []MetadataRecord{}, "", false
+	}
 	if page.HasMore {
 		page.Next, err = sealRecordCursor(access, q, page.Next)
 		if err != nil {
@@ -363,45 +393,20 @@ func (s *SQLiteStore) redactReadRecord(ctx context.Context, access AccessContext
 	if err := s.resourceReferenceRecords(ctx, p, &data); err != nil {
 		return item, false, err
 	}
-	// Decoding owns the row. Apply P03's policy predicates in place, avoiding
-	// the full Bootstrap struct clone performed by its legacy detail adapter.
-	var err error
+	projected, allowed, err := resourceReadMetadata(p, data, item.Key.Kind, item.Key.ID)
+	if err != nil || !allowed {
+		return item, false, err
+	}
 	if item.Key.Kind == "projects" {
-		project := &data.Projects[0]
-		if project.ID != item.Key.ID {
+		if len(projected.Projects) == 0 {
 			return item, false, nil
 		}
-		project.TeamIDs = slices.DeleteFunc(project.TeamIDs, func(id string) bool { return !p.teams.Content[id] })
-		project.DependencyIDs = slices.DeleteFunc(project.DependencyIDs, func(id string) bool { return !p.projectByID(data, id, false) })
-		project.IssueCount = 0
-		if p.selected() {
-			project.TeamIDs = slices.DeleteFunc(project.TeamIDs, func(id string) bool { return !p.teamAllowed(id) })
-		}
-		item.Data, err = json.Marshal(project)
+		item.Data, err = json.Marshal(projected.Projects[0])
 	} else {
-		initiative := &data.Initiatives[0]
-		if initiative.ID != item.Key.ID || !p.initiativeVisible(data, *initiative) || !p.initiativeAllowed(data, *initiative) {
+		if len(projected.Initiatives) == 0 {
 			return item, false, nil
 		}
-		if p.key != nil && p.key.Actor == "app" && !resourceKeyHasScope(*p.key, "initiative:read") && !resourceKeyHasScope(*p.key, "initiative:write") {
-			return item, false, nil
-		}
-		if p.selected() && !slices.ContainsFunc(initiative.ProjectIDs, func(id string) bool { return p.projectByID(data, id, true) }) {
-			return item, false, nil
-		}
-		initiative.ProjectIDs = slices.DeleteFunc(initiative.ProjectIDs, func(id string) bool { return !p.projectByID(data, id, false) })
-		initiative.ContributingTeamIDs = slices.DeleteFunc(initiative.ContributingTeamIDs, func(id string) bool { return !p.teams.Content[id] })
-		parents := append([]string(nil), initiative.ParentInitiativeIDs...)
-		for _, relation := range data.InitiativeRelations {
-			if relation.Type == "parent" && relation.InitiativeID == initiative.ID && !slices.Contains(parents, relation.RelatedInitiativeID) {
-				parents = append(parents, relation.RelatedInitiativeID)
-			}
-		}
-		initiative.ParentInitiativeIDs = slices.DeleteFunc(parents, func(id string) bool {
-			return !slices.ContainsFunc(data.Initiatives, func(parent domain.Initiative) bool {
-				return parent.ID == id && p.initiativeVisible(data, parent) && (!p.selected() || slices.ContainsFunc(parent.ProjectIDs, func(id string) bool { return p.projectByID(data, id, true) }))
-			})
-		})
+		initiative := &projected.Initiatives[0]
 		var favorite int
 		err = s.db.QueryRowContext(ctx, `SELECT CASE WHEN EXISTS (
 			SELECT 1 FROM workspace_metadata_records WHERE workspace_key=? AND field='favorites' AND `+s.jsonText("data", "userId")+`=? AND `+s.jsonText("data", "resourceType")+`='initiative' AND `+s.jsonText("data", "resourceId")+`=?
