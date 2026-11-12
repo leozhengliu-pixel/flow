@@ -91,6 +91,23 @@ func TestScaleP16OracleNormalizesGeneratedSlugsOnly(t *testing.T) {
 	}
 }
 
+func TestScaleP16RecordInputsPreserveOwnedAttribution(t *testing.T) {
+	for _, mode := range []string{"off", "on"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("FLOW_NARROW_MUTATION_INPUTS", mode)
+			data := domain.Bootstrap{Viewer: domain.User{ID: "viewer", Via: &domain.ActorBot{ID: "agent", Type: "agent", OnBehalfOfID: "viewer", OnBehalfOfName: "Original"}}}
+			selected := metadataRecordSnapshot(data, MetadataRecordScope{Write: []RecordKey{{Kind: "projects", ID: "target"}}}, []string{"projects"})
+			if selected.Viewer.Via == data.Viewer.Via || !reflect.DeepEqual(selected.Viewer.Via, data.Viewer.Via) {
+				t.Fatal("record callback lost attribution or shares the request's actor pointer")
+			}
+			selected.Viewer.Via.OnBehalfOfName = "Changed"
+			if data.Viewer.Via.OnBehalfOfName != "Original" {
+				t.Fatal("record callback changed request attribution")
+			}
+		})
+	}
+}
+
 func TestScaleP16RecordReloadScopeIsolation(t *testing.T) {
 	t.Setenv("FLOW_RECORD_HYDRATION", "on")
 	repo, _ := scaleP04OwnedStore(t)

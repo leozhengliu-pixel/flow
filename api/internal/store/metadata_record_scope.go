@@ -146,6 +146,10 @@ func metadataRecordFieldSnapshot(ctx context.Context, data domain.Bootstrap, fie
 
 func metadataRecordSnapshot(data domain.Bootstrap, scope MetadataRecordScope, fields []string) domain.Bootstrap {
 	result := metadataFieldSnapshot(data, nil)
+	// Persisted snapshot clones omit this request-only attribution.
+	if data.Viewer.Via != nil {
+		result.Viewer.Via = cloneSnapshotValue(reflect.ValueOf(data.Viewer.Via)).Interface().(*domain.ActorBot)
+	}
 	source, target := reflect.ValueOf(&data).Elem(), reflect.ValueOf(&result).Elem()
 	for _, field := range persistedMetadataFields() {
 		if slices.Contains(fields, field.name) {
