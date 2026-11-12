@@ -27910,6 +27910,31 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/sync/changes": {
+      "get": {
+        "operationId": "get_sync_changes",
+        "tags": [
+          "sync"
+        ],
+        "summary": "GET /api/sync/changes",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/target-branches": {
       "post": {
         "operationId": "post_target_branches",

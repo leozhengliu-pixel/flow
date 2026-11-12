@@ -51,6 +51,12 @@ func (s *server) setChangeCursor(w http.ResponseWriter, r *http.Request, workspa
 // older than retention: reload the snapshot (its cursor is in the bootstrap
 // X-Flow-Change-Cursor header) and resume from head.
 func (s *server) realtimeChanges(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Flow-Sync") == "delta" {
+		if journal, ok := s.syncV2Journal(); ok {
+			s.syncChangesWithJournal(w, r, journal)
+			return
+		}
+	}
 	data, _, err := s.pagedRealtimeMetadata(r)
 	if err != nil {
 		issueRecordsError(w, err)
@@ -118,5 +124,13 @@ const maxReplayPages = 20
 // filtered like live events. It returns the cursor it reached; a cursor that
 // is unknown, older than retention or too far behind gets a resync marker.
 func (s *server) replayChanges(w http.ResponseWriter, r *http.Request, workspaceID string, since int64, flusher http.Flusher) (int64, bool) {
+	if s.negotiatedSummaryRequest(r) {
+		journal, _ := s.syncV2Journal()
+		cursor, ok := s.replaySyncJournal(w, r, journal, since)
+		if state, exists := r.Context().Value(syncV2StreamKey{}).(*syncV2Stream); exists && ok {
+			state.cursor = cursor
+		}
+		return cursor, ok
+	}
 	return s.replayBudgetedChanges(w, r, workspaceID, since)
 }

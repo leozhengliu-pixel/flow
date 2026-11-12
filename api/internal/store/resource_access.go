@@ -54,6 +54,9 @@ func (s *SQLiteStore) ResolveAccess(ctx context.Context, workspace, principal st
 		data = resourcePolicyMetadata(data)
 	}
 	s.mu.RUnlock()
+	if shared, ok := eventPolicySourceFor(ctx, s, workspace, stamp); ok {
+		data, current = shared, true
+	}
 	if !current {
 		data, err = s.resourcePolicyRecords(ctx, workspace, stamp.workspaceID)
 		if err != nil {

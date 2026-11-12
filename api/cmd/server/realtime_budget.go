@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -189,8 +190,9 @@ type realtimeSubscriber struct {
 	managed  bool
 	closed   bool
 	// Only unmanaged callers receive directly without acknowledging a batch.
-	pending []realtimePendingEvent
-	held    map[realtimeEventKey]int
+	pending  []realtimePendingEvent
+	held     map[realtimeEventKey]int
+	maxBytes int64
 }
 
 func realtimeEventBytes(event domain.RealtimeEvent) int {
@@ -225,7 +227,11 @@ func (s *realtimeSubscriber) push(event domain.RealtimeEvent) bool {
 	defer s.mu.Unlock()
 	s.reconcileLocked()
 	size := int64(realtimeEventBytes(event))
-	if s.closed || s.retained+size > realtimeSubscriberQueueBytes || !s.budget.retainEvent(event) {
+	limit := int64(realtimeSubscriberQueueBytes)
+	if s.maxBytes > 0 {
+		limit = s.maxBytes
+	}
+	if s.closed || s.retained+size > limit || !s.budget.retainEvent(event) {
 		return false
 	}
 	select {
@@ -351,6 +357,9 @@ func (s *server) writeRealtimeBatch(w http.ResponseWriter, r *http.Request, subs
 			subscriber.releaseEvent(event)
 		}
 	}()
+	if state, ok := r.Context().Value(syncV2StreamKey{}).(*syncV2Stream); ok {
+		return s.writeSyncV2Batch(w, r, state, batch)
+	}
 	for index, event := range batch {
 		if durable && event.Seq > 0 && event.Seq <= replaySeq {
 			continue
@@ -372,6 +381,9 @@ func (s *server) writeRealtimeBatch(w http.ResponseWriter, r *http.Request, subs
 }
 
 func (s *server) writeProjectedRealtime(w http.ResponseWriter, r *http.Request, event domain.RealtimeEvent) bool {
+	if handled, ok := s.writeSharedEventFrame(w, r, event); handled {
+		return ok
+	}
 	release, err := acquireRealtimeWork(r.Context(), s.realtime.budget, 8<<10)
 	if err != nil {
 		return false
@@ -386,6 +398,17 @@ func (s *server) writeProjectedRealtime(w http.ResponseWriter, r *http.Request, 
 	}
 	if realtimeEventBytes(projected) > realtimeWorkBytes/2 {
 		projected = domain.RealtimeEvent{ID: event.ID, Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}
+	}
+	if sidechannel, _ := r.Context().Value(syncV2SidechannelKey{}).(bool); sidechannel {
+		if bounded, ok := w.(*realtimeBudgetWriter); ok && !bounded.reserveEncoding(int64(realtimeEventBytes(projected)*2+1024)) {
+			return false
+		}
+		raw, err := json.Marshal(projected)
+		if err != nil {
+			return false
+		}
+		frame := EventFrame{encoded: raw, id: projected.ID, visible: true, noCursor: true}
+		return frame.WriteSSE(w, s.realtime.node) && flushRealtime(w)
 	}
 	return writeSSE(w, projected, s.realtime.node) && flushRealtime(w)
 }

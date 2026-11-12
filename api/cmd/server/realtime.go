@@ -579,7 +579,19 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	// the replayed cursor are dropped as duplicates.
 	replaySeq, numeric := strconv.ParseInt(since, 10, 64)
 	durable := numeric == nil && replaySeq >= 0
+	negotiated := s.negotiatedSummaryRequest(r)
+	if negotiated {
+		cursor := head
+		if durable {
+			cursor = replaySeq
+		}
+		r = s.attachSyncStream(r, metadata.Workspace.ID, cursor)
+		w.Header().Set("X-Flow-Sync", "summary")
+	}
 	subscriber, unsubscribe := s.realtime.subscribeTransport(workspace, since, durable)
+	if negotiated {
+		subscriber.setSyncV2QueueLimit()
+	}
 	channel := subscriber.channel
 	defer unsubscribe()
 	presence, err = s.pagedPresence(r, presence)
@@ -589,7 +601,12 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	// cursor is the workspace's change-log head when the stream opened. A
 	// client advances its own cursor only from event.seq of events it applied.
-	initial, _ := json.Marshal(map[string]any{"presence": presence, "cursor": head})
+	initialPayload := map[string]any{"presence": presence, "cursor": head}
+	if negotiated {
+		initialPayload["cursor"] = strconv.FormatInt(head, 10)
+		initialPayload["schema"] = 2
+	}
+	initial, _ := json.Marshal(initialPayload)
 	if !writeSSE(w, domain.RealtimeEvent{ID: idgen.New("connected_"), Type: "connected", Payload: initial, CreatedAt: time.Now().UTC()}, "") {
 		return
 	}
@@ -598,6 +615,11 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	presence, initial = nil, nil
 	releaseInitial()
+	if negotiated && since != "" && !durable {
+		writeSSE(w, domain.RealtimeEvent{ID: idgen.New("resync_"), Type: "workspace.resync_required", CreatedAt: time.Now().UTC()}, s.realtime.node)
+		flushRealtime(w)
+		return
+	}
 	if durable {
 		cursor, ok := s.replayChanges(w, r, metadata.Workspace.ID, replaySeq, flusher)
 		if !ok {

@@ -291,7 +291,8 @@ type realtimePayloadEntry struct {
 
 const (
 	realtimePayloadCacheEntries = 256
-	realtimePayloadCacheBytes   = 32 << 20
+	// The remaining 8 MiB of P06's payload envelope holds event sources.
+	realtimePayloadCacheBytes = 24 << 20
 )
 
 // cachedPayload is load on the hub's cache; a server without a hub (tests) builds every time.

@@ -37,8 +37,10 @@ func pulseRulesKeyOf(snapshot *store.PulseFeedSnapshot) pulseRulesKey {
 // pulseRulesCache holds the latest index per workspace; concurrent streams
 // share one build.
 type pulseRulesCache struct {
-	mu      sync.Mutex
-	entries map[string]*pulseRulesEntry
+	mu       sync.Mutex
+	entries  map[string]*pulseRulesEntry
+	sources  eventSourceCache
+	policies eventSourceCache
 }
 
 type pulseRulesEntry struct {

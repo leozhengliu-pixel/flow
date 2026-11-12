@@ -453,6 +453,7 @@ func newHandler(s *server) http.Handler {
 	s.registerPersonalConnectionRoutes(mux)
 	mux.HandleFunc("GET /api/realtime/events", s.realtimeEvents)
 	mux.HandleFunc("GET /api/realtime/changes", s.realtimeChanges)
+	mux.HandleFunc("GET /api/sync/changes", s.syncChanges)
 	mux.HandleFunc("GET /api/realtime/socket", s.realtimeSocket)
 	mux.HandleFunc("GET /api/realtime/presence", s.listPresence)
 	mux.HandleFunc("POST /api/realtime/presence", s.updatePresence)

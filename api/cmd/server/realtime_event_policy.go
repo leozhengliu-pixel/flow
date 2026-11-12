@@ -108,6 +108,10 @@ var (
 )
 
 var realtimeRules = []realtimeRuleEntry{
+	// Viewer-projected transport frames are written directly. A peer or log
+	// cannot forward one viewer's projection through the shared event hub.
+	{"sync.frame", realtimeNobodyRule},
+	{"sync.delta", realtimeNobodyRule},
 	// Personal records.
 	{"user_settings.", realtimeRule{audience: realtimeSubject, keepAll: true}},
 	{"notification_preferences.", realtimeRule{audience: realtimeSubject, keepAll: true}},
@@ -238,12 +242,13 @@ func realtimeRuleFor(eventType string) (realtimeRule, bool) {
 // realtimeViewer is a stream's viewer as the read rules need it. Team sets
 // are computed on first use.
 type realtimeViewer struct {
-	s     *server
-	r     *http.Request
-	data  domain.Bootstrap
-	query store.IssueRecordQuery
-	event domain.RealtimeEvent
-	rows  map[string]bool
+	s      *server
+	r      *http.Request
+	data   domain.Bootstrap
+	query  store.IssueRecordQuery
+	event  domain.RealtimeEvent
+	rows   map[string]bool
+	source *EventSource
 }
 
 func (v *realtimeViewer) id() string { return v.data.Viewer.ID }
@@ -304,11 +309,21 @@ func (v *realtimeViewer) content(teamID string) bool {
 }
 
 func (v *realtimeViewer) projectVisible(id string) bool {
+	if v.source != nil {
+		if v.source.rules == nil || v.source.rules.projects[id] == nil {
+			return false
+		}
+		project := v.source.rules.projects[id]
+		return len(project.TeamIDs) == 0 || slices.ContainsFunc(project.TeamIDs, v.content)
+	}
 	project, ok := v.s.store.ProjectByID(workspaceKey(v.r), id)
 	return ok && (len(project.TeamIDs) == 0 || slices.ContainsFunc(project.TeamIDs, v.content))
 }
 
 func (v *realtimeViewer) anyIssueVisible(ids []string) bool {
+	if v.source != nil {
+		return v.source.issues != nil && slices.ContainsFunc(ids, func(id string) bool { return v.source.issues.Visible(v.query, id) })
+	}
 	visible, err := v.s.store.VisibleIssueRecordIDs(v.r.Context(), v.query, ids)
 	return err == nil && slices.ContainsFunc(ids, func(id string) bool { return visible[id] })
 }
@@ -474,6 +489,20 @@ func (s *server) pagedPolicyEvent(r *http.Request, data domain.Bootstrap, query 
 		return realtimeSignal(rule, event, realtimeRecord{}), true
 	}
 	record, found := s.realtimeRecordFor(r, data, rule, event)
+	return projectPolicyRecord(viewer, rule, record, found)
+}
+
+func projectPolicyRecord(viewer *realtimeViewer, rule realtimeRule, record realtimeRecord, found bool) (domain.RealtimeEvent, bool) {
+	event := viewer.event
+	if !viewer.inAudience(rule) {
+		return event, false
+	}
+	if rule.anonymous {
+		return anonymousRealtimeEvent(event), true
+	}
+	if rule.visible == nil {
+		return realtimeSignal(rule, event, realtimeRecord{}), true
+	}
 	if !found {
 		return anonymousRealtimeEvent(event), true
 	}

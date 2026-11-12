@@ -1024,6 +1024,9 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 	if r.URL.Path == "/api/bootstrap" {
 		return true
 	}
+	if r.URL.Path == "/api/sync/changes" {
+		return true
+	}
 	// Pulse handlers check visibility per update from the shared feed index
 	// and summaries are read by recipient; no workspace projection is needed.
 	if strings.HasPrefix(r.URL.Path, "/api/pulse/") {

@@ -66,6 +66,39 @@ func (s *server) pagedPresenceFor(r *http.Request, data domain.Bootstrap, query 
 }
 
 func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent) (domain.RealtimeEvent, bool, error) {
+	frame, handled, err := s.sharedEventFrame(r, event)
+	if handled {
+		defer frame.Close()
+		if err != nil || !frame.Visible() {
+			return event, false, err
+		}
+		projected, err := frame.Event()
+		return projected, err == nil, err
+	}
+	projected, visible, err := s.legacyPagedRealtimeEvent(r, event)
+	if err != nil || !visible || !s.negotiatedSummaryRequest(r) || ephemeralRealtimeEvent(event.Type) {
+		return projected, visible, err
+	}
+	access, err := s.resolveSyncAccess(r)
+	if err != nil {
+		return event, false, err
+	}
+	raw, err := json.Marshal(projected)
+	if err != nil {
+		return event, false, err
+	}
+	frame, err = summarizeEventFrame(EventFrame{encoded: raw, id: event.ID, visible: true}, access.AuthzEpoch)
+	if err != nil {
+		return event, false, err
+	}
+	if err = access.Validate(r.Context()); err != nil {
+		return event, false, err
+	}
+	projected, err = frame.Event()
+	return projected, err == nil, err
+}
+
+func (s *server) legacyPagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent) (domain.RealtimeEvent, bool, error) {
 	// Older nodes or replay buffers may still send credential telemetry. Reject
 	// it before any workspace permission/directory projection is attempted.
 	if domain.RoutineCredentialEvent(event.Type) {
