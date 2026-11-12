@@ -205,9 +205,17 @@ func normalizedMutationResult(result mutationCallbackResult, protected []byte) a
 		known[string(stamp)] = true
 	}
 	identifiers := map[string]string{}
+	protectedClocks := map[string]bool{}
 	text := func(s string) string {
-		if _, err := time.Parse(time.RFC3339Nano, s); err == nil && !bytes.Contains(protected, []byte(s)) {
-			return "<callback clock>"
+		if _, err := time.Parse(time.RFC3339Nano, s); err == nil {
+			present, checked := protectedClocks[s]
+			if !checked {
+				present = bytes.Contains(protected, []byte(s))
+				protectedClocks[s] = present
+			}
+			if !present {
+				return "<callback clock>"
+			}
 		}
 		return mutationVerifyStamp.ReplaceAllStringFunc(s, func(stamp string) string {
 			if known[stamp] {

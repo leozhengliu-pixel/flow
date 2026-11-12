@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
@@ -105,6 +106,32 @@ func TestScaleP16RecordInputsPreserveOwnedAttribution(t *testing.T) {
 				t.Fatal("record callback changed request attribution")
 			}
 		})
+	}
+}
+
+func TestScaleP16OracleRepeatedClocksRetainExactSemantics(t *testing.T) {
+	known := time.Date(2026, 11, 12, 8, 0, 0, 123, time.UTC)
+	generated := known.Add(time.Hour)
+	result := mutationCallbackResult{Data: domain.Bootstrap{Projects: make([]domain.Project, 128)}}
+	for i := range result.Data.Projects {
+		result.Data.Projects[i].CreatedAt = known
+		if i%2 == 1 {
+			result.Data.Projects[i].CreatedAt = generated
+		}
+	}
+	// A timestamp embedded inside an existing string was protected before
+	// caching, just like a complete timestamp field, and must remain exact.
+	protected := []byte("existing description: " + known.Format(time.RFC3339Nano) + " remains exact")
+	value := normalizedMutationResult(result, protected).(map[string]any)
+	projects := value["data"].(map[string]any)["projects"].([]any)
+	for i, project := range projects {
+		want := known.Format(time.RFC3339Nano)
+		if i%2 == 1 {
+			want = "<callback clock>"
+		}
+		if got := project.(map[string]any)["createdAt"]; got != want {
+			t.Fatalf("clock %d: got %v, want %s", i, got, want)
+		}
 	}
 }
 
