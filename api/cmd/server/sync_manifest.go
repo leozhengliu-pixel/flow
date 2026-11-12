@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -26,6 +27,10 @@ type syncManifestResponse struct {
 	Capabilities []string                          `json:"capabilities"`
 	Core         store.RecordReadCore              `json:"core"`
 	Collections  map[string]syncManifestCollection `json:"collections"`
+}
+
+type syncManifestJournalHeadReader interface {
+	RecordJournalHead(context.Context, string) (string, error)
 }
 
 func syncFlagEnabled(name string) bool {
@@ -93,6 +98,20 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 		writeSyncError(w, err)
 		return
 	}
+	_, journalReady := s.syncV2Journal()
+	journalHead := ""
+	if reader, ok := any(s.store).(syncManifestJournalHeadReader); ok && journalReady {
+		workspaceID, err := s.store.WorkspaceIDForKey(r.Context(), workspaceKey(r))
+		if err != nil {
+			writeSyncError(w, err)
+			return
+		}
+		journalHead, err = reader.RecordJournalHead(r.Context(), workspaceID)
+		if err != nil {
+			writeSyncError(w, err)
+			return
+		}
+	}
 	access, ok := s.syncAccess(w, r)
 	if !ok {
 		return
@@ -118,7 +137,8 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 		collectionsReady = collectionsReady && ready
 		result.Collections[kind] = syncManifestCollection{Ready: ready, Revision: status.Revision}
 	}
-	if _, ready := s.syncV2Journal(); collectionsReady && syncV2CapabilityAdvertised(ready, len(core.Omitted) == 0) {
+	if collectionsReady && syncV2CapabilityAdvertised(journalReady && journalHead != "", len(core.Omitted) == 0) {
+		result.Head = journalHead
 		result.Capabilities = []string{"sync-v2"}
 	}
 	// Incomplete core collections or an uncovered journal keep clients on the

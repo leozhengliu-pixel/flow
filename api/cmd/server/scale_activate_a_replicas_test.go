@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,8 +47,18 @@ func TestScaleActivateAOldAndNewBinariesShareCanonicalRecords(t *testing.T) {
 	t.Cleanup(func() { _ = coordinator.Close() })
 	repo.SetWorkspaceCoordinator(coordinator)
 	f := apiKeyScopeFixture(t, repo)
-	f.service.coordinator, f.service.coordinationContext = coordinator, ctx
-	f.service.startCoordination()
+	credentials := []string{}
+	for _, teams := range [][]string{{}, {"scope-public"}} {
+		token, _ := apiKeyScopeCredential(t, f, "user", "selected", teams, []string{"read"})
+		credentials = append(credentials, token)
+	}
+	service := &server{store: repo, uploadPath: t.TempDir(), coordinator: coordinator, coordinationContext: ctx}
+	host := httptest.NewServer(newHandler(service))
+	t.Cleanup(host.Close)
+	if err := service.stopDeliveryScheduler(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	f.service, f.host = service, host
 	workspace := f.data.Workspace.URLKey
 	directory := t.TempDir()
 	command := exec.Command(binary, "-test.run=^TestScaleActivateAReplicaProcess$", "-test.timeout=3m")
@@ -104,11 +115,7 @@ func TestScaleActivateAOldAndNewBinariesShareCanonicalRecords(t *testing.T) {
 		t.Fatal("mixed binary document edit lost the canonical body")
 	}
 	for _, base := range []string{oldURL, f.host.URL} {
-		for _, restriction := range []struct {
-			name  string
-			teams []string
-		}{{"selected-empty", []string{}}, {"selected-set", []string{"scope-public"}}} {
-			token, _ := apiKeyScopeCredential(t, f, "user", "selected", restriction.teams, []string{"read"})
+		for _, token := range credentials {
 			viewer := scaleP01PermissionViewer{client: f.admin, secret: token}
 			status, body := scaleP01PermissionRead(t, viewer, base, workspace, "/api/projects/scope-hidden-project")
 			if status != http.StatusForbidden || bytes.Contains(body, []byte("Hidden project")) {
