@@ -39,6 +39,7 @@ import type { BootstrapData, Invitation, WorkspaceMember } from "@/types/flow";
 import { SettingsPageTitle as PageTitle } from "./settings-primitives";
 import { SettingsSearchGlyph } from "./settings-nav-glyphs";
 import "./workspace-members-scim.css";
+import { resourceWindowEnabled } from '@/lib/resource-window-adapters';
 import {
   MEMBER_GROUPS,
   availableMemberFilters,
@@ -129,6 +130,7 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
   const { t } = useI18n();
   const navigate = useNavigate();
   const workspace = data.workspace.urlKey;
+  const selectionScope = resourceWindowEnabled('people') ? JSON.stringify([data.workspace.id, data.viewer.id, data.sync?.authzEpoch]) : '';
   const admin = isAdminRole(data.viewerRole);
   const viewerOwner = data.viewerRole === "owner";
   const [query, setQuery] = useState("");
@@ -143,6 +145,18 @@ export function WorkspaceMembersPage({ data, onReload }: { data: BootstrapData; 
   const [confirmTarget, setConfirmTarget] = useState<{ members: WorkspaceMember[]; action: ConfirmKind }>();
   const [eraseTarget, setEraseTarget] = useState<{ member: WorkspaceMember; value: string }>();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedScope, setSelectedScope] = useState(selectionScope);
+  if (selectedScope !== selectionScope) {
+    setSelectedScope(selectionScope);
+    setSelectedIds([]);
+    setIdentityTarget(undefined);
+    setRoleTarget(undefined);
+    setTeamsTarget(undefined);
+    setTeamDraft([]);
+    setConfirmTarget(undefined);
+    setEraseTarget(undefined);
+    setInviteOpen(false);
+  }
   const [busy, setBusy] = useState(false);
   const now = useCurrentTimeMs();
 

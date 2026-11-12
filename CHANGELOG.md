@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Add opt-in document and people summary windows, scoped picker/history reads, and safe document body hydration with legacy trash recovery.
 - Record hydration temporary files share a process-wide 256 MiB byte budget (`FLOW_RECORD_SPOOL_MAX_BYTES`, `0` streams directly). Compatibility responses and canonical records continue through bounded streaming when the budget or temporary volume is unavailable; signed bootstrap URLs are rewritten during encoding. The hydration flag remains off by default.
 - Team-restricted API keys now intersect their owner's access for resource references and counts across REST, bootstrap and MCP reads. Project dependencies, initiative and document links, issue hierarchy and cycle links, progress history, directory totals, cycle capacity and customer demand no longer expose other teams. Stored webhook deliveries are projected again for the reading key. Permission baseline tests enforce this by default.
 - Optional `FLOW_SYNC_V2=on` shares versioned realtime sources and validated frames across viewers. Negotiated summaries and bounded delta responses preserve legacy envelopes and require a covered transaction journal before rollout; transport budgets remain active when disabled.

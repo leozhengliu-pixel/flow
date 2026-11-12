@@ -47,7 +47,7 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
   const [previewEl, setPreviewEl] = useState<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const listId = useId()
-  const hasHistory = (document.revisions ?? []).length > 0
+  const hasHistory = (loaded.revisions ?? []).length > 0
 
   // Every time the dialog opens it starts on the current version with highlighting on.
   useEffect(() => {

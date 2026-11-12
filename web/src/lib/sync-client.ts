@@ -6,7 +6,7 @@ import { cacheStringBytes } from '@/lib/scale-p08'
 import { modelChanges, modelRecordKind, syncCollections, SyncWireVersionError } from '@/lib/scale-p13-wire'
 import type { BootstrapData, FlowDocument, RecordKey, SyncChanges, SyncManifest, SyncPageRequest, SyncRecord, SyncRecordBatch, SyncRecordPage, WorkspaceSyncState } from '@/types/flow'
 
-export type SyncSurface = 'issue-detail' | 'document-detail'
+export type SyncSurface = 'issue-detail' | 'document-detail' | 'document-directory' | 'people-directory' | 'trash-directory'
 
 export function syncV2Enabled() {
   return import.meta.env.VITE_SYNC_V2 === 'true'
@@ -109,7 +109,7 @@ export class SyncClient {
     }
   }
 
-  async readDetail(key: RecordKey, signal?: AbortSignal): Promise<SyncRecord | undefined> {
+  async readDetail(key: RecordKey, signal?: AbortSignal, preserveSummary = false): Promise<SyncRecord | undefined> {
     this.assertActive()
     key = { ...key, kind: modelRecordKind(key.kind) }
     const token = recordKey(key)
@@ -125,6 +125,7 @@ export class SyncClient {
     catch (error) { this.failRequest(error) }
     this.assertActive()
     if (!record) return undefined
+    if (preserveSummary && previous?.completeness === 'summary' && record.completeness === 'omitted') return record
     this.install([record])
     return this.records.get(token)
   }
@@ -189,7 +190,8 @@ export class SyncClient {
     this.checkEpoch(page.authzEpoch)
     if (page.resyncRequired) { this.requestReset(); throw new SyncResetRequired('Sync baseline expired') }
     if (compareSyncVersions(page.next, this.cursor) < 0 || compareSyncVersions(page.next, page.head) > 0 || page.hasMore && page.next === this.cursor) throw new Error('Invalid sync cursor')
-    if (this.surface && page.transactions.some(transaction => [...transaction.upserts, ...transaction.removals].some(item => !['issue', 'document'].includes(modelRecordKind(item.key.kind))) || transaction.invalidations.some(kind => !['issue', 'document'].includes(modelRecordKind(kind))))) {
+    const migratedKinds = this.surface === 'people-directory' ? ['issue', 'document', 'user'] : ['issue', 'document']
+    if (this.surface && page.transactions.some(transaction => [...transaction.upserts, ...transaction.removals].some(item => !migratedKinds.includes(modelRecordKind(item.key.kind))) || transaction.invalidations.some(kind => !migratedKinds.includes(modelRecordKind(kind))))) {
       this.requireLegacy('Change collection requires a legacy surface adapter')
     }
     const rows: SyncRecord[] = []
@@ -199,6 +201,8 @@ export class SyncClient {
       rows.push(...transaction.upserts, ...transaction.removals.map(item => ({ ...item, completeness: 'deleted' as const })))
       invalidations.push(...transaction.invalidations)
     }
+    const directoryKind = this.surface === 'document-directory' ? 'document' : this.surface === 'people-directory' ? 'user' : undefined
+    if (directoryKind && rows.some(row => modelRecordKind(row.key.kind) === directoryKind)) invalidations.push(directoryKind)
     this.install(rows, invalidations, page.next)
     if (compareSyncVersions(page.head, this.targetHead) > 0) this.targetHead = page.head
   }
@@ -262,7 +266,11 @@ export class SyncClient {
       this.detailBytes -= bytes
       cachedDetailBytes -= bytes
       this.summaryBytes -= this.sizes.get(token) ?? 0
-      const next = { key: previous.key, version: previous.version, completeness: 'omitted' as const }
+      let next: CachedRecord = { key: previous.key, version: previous.version, completeness: 'omitted' }
+      if (this.surface === 'document-directory' && previous.key.kind === 'document' && previous.value) {
+        const { content: _content, contentState: _state, contentData: _data, revisions: _revisions, ...value } = previous.value
+        next = { ...next, completeness: 'summary', value }
+      }
       this.records.set(token, next)
       const size = cacheStringBytes(JSON.stringify(next))
       this.sizes.set(token, size)

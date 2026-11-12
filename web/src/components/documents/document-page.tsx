@@ -11,6 +11,9 @@ import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { toast } from '@/lib/toast'
+import { documentBodyLoaded, loadResourceMembers, resourceWindowEnabled } from '@/lib/resource-window-adapters'
+import { useResourcePeople } from '@/hooks/scale-p20-resource-pickers'
+import { syncClientFor } from '@/lib/sync-client'
 
 import { DocumentGlyph, DocumentIconPicker } from '@/components/documents/document-icon'
 import { CollaborativeEditor } from '@/components/documents/collaborative-editor'
@@ -26,7 +29,7 @@ import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
 import { documentSelectionActions } from '@/components/documents/document-selection-actions'
 import { addSubscription, createDocument, listDocumentPermissions, removeSubscription, replaceDocumentPermissions, restoreDocumentRevision, updateDocument, uploadDocumentAttachment } from '@/lib/api'
-import type { BootstrapData, Comment, DocumentPermission, FlowDocument, TrashEntry, User } from '@/types/flow'
+import type { BootstrapData, Comment, DocumentPermission, FlowDocument, TrashEntry, User, WorkspaceMember } from '@/types/flow'
 
 import './document-page.css'
 import './document-print.css'
@@ -71,8 +74,10 @@ export interface DocumentPageProps {
 }
 
 function latestRevision(document: FlowDocument) {
-  let latest = document.revisions[0]
-  for (const revision of document.revisions) if (Date.parse(revision.createdAt) > Date.parse(latest.createdAt)) latest = revision
+  const revisions = document.revisions ?? []
+  if (!revisions.length) return undefined
+  let latest = revisions[0]
+  for (const revision of revisions) if (Date.parse(revision.createdAt) > Date.parse(latest.createdAt)) latest = revision
   return latest
 }
 
@@ -107,11 +112,15 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const [accessOpen, setAccessOpen] = useState(false)
   const [accessBusy, setAccessBusy] = useState(false)
   const [permissions, setPermissions] = useState<DocumentPermission[]>([])
+  const [accessMembers, setAccessMembers] = useState<{ scope: string; members: WorkspaceMember[] }>()
+  const peopleScope = JSON.stringify([data.workspace.id, data.viewer.id, data.sync?.authzEpoch])
+  const people = useResourcePeople(data.users, ownerOpen || subscribersOpen)
   const pending = useRef<number | undefined>(undefined)
+  const bodyLoaded = !resourceWindowEnabled('documents') || documentBodyLoaded(data, document)
   const [titleFocused, setTitleFocused] = useState(false)
 
   const navigate = useCallback((path: string) => { if (onNavigate) onNavigate(path); else window.location.assign(path) }, [onNavigate])
-  const ctx: DocumentActionContext = { data, reload: () => onReload(), navigate, t }
+  const ctx: DocumentActionContext = { data: people === data.users ? data : { ...data, users: people }, reload: () => onReload(), navigate, t }
   const favorite = data.favorites.some(item => item.resourceType === 'document' && item.resourceId === document.id) || document.favorite
   const subscribed = data.subscriptions.some(item => item.resourceType === 'document' && item.resourceId === document.id && isActiveSubscription(item)) || document.subscriberIds.includes(data.viewer.id)
   const collaborators = [...new Map(presence.filter(user => Boolean(user.id) && user.id !== data.viewer.id).map(user => [user.id, user])).values()]
@@ -125,6 +134,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   useEffect(() => () => window.clearTimeout(pending.current), [])
 
   const schedule = (input: Parameters<typeof updateDocument>[1]) => {
+    if (!bodyLoaded) return
     window.clearTimeout(pending.current)
     setSaveState('saving')
     pending.current = window.setTimeout(() => {
@@ -136,8 +146,8 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   // Viewers and commenters read the document (the collaboration socket
   // enforces the same); commenters can still start and answer threads.
   const role = documentViewerRole(data, document)
-  const canEdit = !deleted && canEditDocument(role)
-  const canComment = !deleted && canCommentOnDocument(role)
+  const canEdit = !deleted && bodyLoaded && canEditDocument(role)
+  const canComment = !deleted && bodyLoaded && canCommentOnDocument(role)
   const { resolved: resolvedThreads } = useInlineThreads(comments)
   const closeResolved = useCallback(() => setResolvedOpen(false), [])
   const startComment = (selection: { from: number; to: number; text: string }) => {
@@ -188,7 +198,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   }
   useRegisterCommandContext(deleted ? undefined : { kind: 'document', document, onMoveSelection: canEdit && hasTextSelection ? moveCurrentSelection : undefined })
   const defaultDocumentIcon = !document.icon
-  const lastRevision = document.revisions.length ? latestRevision(document) : undefined
+  const lastRevision = latestRevision(document)
   const lastEditor = lastRevision?.author ?? document.creator
   // The latest version's own attribution ("via Flow" when the agent wrote it); without versions, the creation's.
   const lastEditorBot = lastRevision ? lastRevision.botActor ?? null : document.botActor
@@ -241,12 +251,28 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
       toast.error(error instanceof Error ? error.message : t('Could not update document subscription'))
     } finally { setSubscriptionBusy(false) }
   }
-  const viewerOwnsDocument = documentOwner(document, data.users)?.id === data.viewer.id
+  const viewerOwnsDocument = documentOwner(document, people)?.id === data.viewer.id
   const canManageAccess = data.viewer.id === document.creator.id || data.viewerRole === 'admin' || String(data.viewerRole) === 'owner'
   const openAccess = async () => {
     if (accessBusy) return
     setAccessBusy(true)
-    try { setPermissions(await listDocumentPermissions(document.id)); setAccessOpen(true) }
+    try {
+      if (!resourceWindowEnabled('pickers')) {
+        setPermissions(await listDocumentPermissions(document.id))
+        setAccessOpen(true)
+        return
+      }
+      const client = syncClientFor(data)
+      const signal = client?.requestSignal() ?? new AbortController().signal
+      const [permissions, members] = await Promise.all([
+        listDocumentPermissions(document.id),
+        resourceWindowEnabled('pickers') ? loadResourceMembers(data, signal) : Promise.resolve(data.members),
+      ])
+      if (signal.aborted) return
+      setPermissions(permissions)
+      setAccessMembers({ scope: peopleScope, members })
+      setAccessOpen(true)
+    }
     catch (error) { toast.error(error instanceof Error ? error.message : t('Could not load document access')) }
     finally { setAccessBusy(false) }
   }
@@ -354,7 +380,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
       /></div>
       <div className="document-editor-shell" ref={setShell}>
         <DocumentAuthorLabels document={document} enabled={authorNamesOpen} lastEditor={lastEditor} shell={shell} state={body.state}/>
-        <DocumentContentProvider documentId={document.id} content={body.value} contentState={body.state} presence={presence}>
+        {!bodyLoaded ? <div role="status">{t('Loading document')}</div> : <DocumentContentProvider documentId={document.id} content={body.value} contentState={body.state} presence={presence}>
           {deleted
             ? <IssueDescriptionEditor ariaLabel={t('Document content')} className="document-editor" key={`deleted:${document.id}`} placeholder="" readOnly state={editorState} users={data.users} value={document.content}/>
             : <CollaborativeEditor data={data} document={document} value={body.value} state={body.state} editorKey={`${document.id}:${document.collaborationId ?? ''}:${editorVersion}`} className="document-editor" presence={presence} onPresence={setPresence} showPresence={false}
@@ -364,13 +390,13 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
               selectionActions={documentSelectionActions({ data, document, t, onAskAgent: askAgent, onComment: canComment ? startComment : undefined })}
               onChange={snapshot => { setBody({ value: snapshot.markdown, state: snapshot.documentJSON }); schedule({ content: snapshot.markdown, contentData: snapshot.document as Record<string, unknown> }) }}
               onPersist={async (snapshot, sync) => { const saved = await updateDocument(document.id, { content: snapshot.markdown, contentState: snapshot.contentState, contentData: snapshot.document as Record<string, unknown>, ...sync }); await onReload(saved); return saved }}/>}
-        </DocumentContentProvider>
+        </DocumentContentProvider>}
         {!deleted && <DocumentInlineComments data={data} document={document} comments={comments} editor={liveEditor} shell={shell} draft={commentDraft} onDraftChange={setCommentDraft} canComment={canComment} canEdit={canEdit} visible onReload={onReload} onGutterChange={setCommentGutter} onPersist={() => persistEditorRef.current?.() ?? Promise.resolve()}/>}
       </div>
     </article>
     {resolvedOpen && !deleted && <ResolvedCommentsPanel data={data} document={document} comments={comments} editor={liveEditor} canComment={canComment} canEdit={canEdit} onReload={onReload} onClose={closeResolved}/>}
     {!deleted && <DocumentHistoryDialog document={document} onOpenChange={setHistoryOpen} onRestore={restoreRevision} open={historyOpen}/>}
-    {!deleted && <DocumentAccessDialog data={data} document={document} onOpenChange={setAccessOpen} onSave={saveAccess} open={accessOpen} permissions={permissions}/>}
+    {!deleted && <DocumentAccessDialog data={accessMembers?.scope === peopleScope ? { ...data, members: accessMembers.members } : data} document={document} onOpenChange={setAccessOpen} onSave={saveAccess} open={accessOpen} permissions={permissions}/>}
     <DocumentCustomReminderDialog onOpenChange={reminder.setCustomOpen} onRemind={reminder.remind} open={reminder.customOpen}/>
   </main></IssueAgentTasksProvider></SelectionIssueProvider>
 }

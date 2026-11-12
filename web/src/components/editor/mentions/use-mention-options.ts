@@ -5,6 +5,7 @@ import { isAgentIdentifier } from '@/components/agent/agent-entity-refs'
 import { listIssueRecords } from '@/lib/api'
 import type { Issue, User } from '@/types/flow'
 import { mentionOptions, type MentionOption } from './mention-options'
+import { useResourceMentionDocuments, useResourcePeople } from '@/hooks/scale-p20-resource-pickers'
 
 const TYPED_IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*-\d+$/
 
@@ -14,6 +15,8 @@ const TYPED_IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*-\d+$/
  */
 export function useMentionOptions({ active, query, users }: { active: boolean; query: string; users: User[] }): MentionOption[] {
   const data = useAgentEntityData()
+  const people = useResourcePeople(users, active)
+  const documents = useResourceMentionDocuments(data, active, query)
   const workspace = data?.workspace.urlKey
   const [fetched, setFetched] = useState<Issue[]>([])
   useEffect(() => {
@@ -47,6 +50,6 @@ export function useMentionOptions({ active, query, users }: { active: boolean; q
     if (!active) return []
     const pool = new Map<string, Issue>()
     for (const issue of [...(data?.issues ?? []), ...fetched, ...(byIdentifier ? [byIdentifier] : [])]) pool.set(issue.id, issue)
-    return mentionOptions(data, query, { users, issues: [...pool.values()] })
-  }, [active, byIdentifier, data, fetched, query, users])
+    return mentionOptions(data ? { ...data, documents } : data, query, { users: people, issues: [...pool.values()] })
+  }, [active, byIdentifier, data, documents, fetched, people, query])
 }

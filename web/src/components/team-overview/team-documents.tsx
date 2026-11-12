@@ -10,6 +10,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSPr
 
 import { openCommandMenu, useRegisterCommandContext } from '@/components/command/command-context'
 import { useLatestRef } from '@/hooks/use-latest-ref'
+import { resourceWindowDocuments } from '@/lib/resource-window-adapters'
 import { usePhoneLayout } from '@/hooks/use-phone-layout'
 import { DocumentGlyph, DocumentIconPicker } from '@/components/documents/document-icon'
 import { documentDisplayTitle, documentOwner, setDocumentVisual, type DocumentActionContext } from '@/components/documents/document-actions'
@@ -98,6 +99,7 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
   team: Team
 }) {
   const { t, formatRelative, formatDate } = useI18n()
+  const windowDocuments = useMemo(() => resourceWindowDocuments(data, documents), [data, documents])
   const phone = usePhoneLayout()
   const initial = useMemo(() => readDocumentDirectoryState(), [])
   const [search, setSearch] = useState(initial.search)
@@ -135,14 +137,14 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
 
   const query = search.trim().toLocaleLowerCase()
   const visible = useMemo(() => {
-    const matching = documents.filter(document => {
+    const matching = windowDocuments.filter(document => {
       if (document.archivedAt) return false
       if (query && !documentDisplayTitle(document, t).toLocaleLowerCase().includes(query) && !document.title.toLocaleLowerCase().includes(query)) return false
       if (!documentMatchesFilters(document, filters, data)) return false
       return !projectHidden(documentProject(data, document), data, showInactive, onlyMyProjects)
     })
     return sortDocuments(matching, ordering, descending, data, t)
-  }, [data, descending, documents, filters, onlyMyProjects, ordering, query, showInactive, t])
+  }, [data, descending, windowDocuments, filters, onlyMyProjects, ordering, query, showInactive, t])
   const groups = useMemo(() => groupDocuments(visible, grouping, data, team), [data, grouping, team, visible])
 
   useEffect(() => persistDocumentDirectoryState({ filters, grouping, ordering, descending, showInactive, onlyMyProjects, properties, search }), [descending, filters, grouping, onlyMyProjects, ordering, properties, showInactive, search])
@@ -269,7 +271,7 @@ export function TeamDocuments({ creating, data, documents, onNavigate, onNew, on
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [data.workspace.urlKey, rowIdsRef, handlers, activeRef, selectionRef, visibleDocumentsRef])
   const visibleProperties = properties
-  const hasDocuments = documents.some(document => !document.archivedAt)
+  const hasDocuments = windowDocuments.some(document => !document.archivedAt)
   const sortIcon = (key: DocumentOrdering) => !phone || ordering === key ? <SortGlyph ascending={ordering === key && descending}/> : null
   const heading = (key: DocumentOrdering, label: string, className = '') => (
     <span className={`team-docs-heading-cell ${className}`}><button className={`team-docs-heading ${className}`} aria-label={`${t('Order by')} ${label}`} data-active={ordering === key || undefined} onClick={() => changeOrder(key)} type="button"><span className="team-docs-heading-label">{label}</span>{sortIcon(key)}</button></span>

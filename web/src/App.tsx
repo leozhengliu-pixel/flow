@@ -309,7 +309,6 @@ import {
 import { findDocumentBySlugSuffix } from "@/lib/document-slug";
 import { findBySlugRef, findLoopByRef } from "@/lib/resource-slug";
 import { rememberTeamHomeTab, teamHomeTab, teamHomeTabOf, teamHomeTabPath } from "@/lib/team-home-tab";
-import { findTrashedDocument } from "@/components/documents/document-trash";
 import { issueDeleteDescription } from "@/lib/issue-delete-confirmation";
 import { OPEN_COMMAND_MENU_EVENT } from "@/components/command/command-context";
 import type { CommandPage } from "@/components/command/context-commands";
@@ -364,9 +363,10 @@ import { useExitPresence } from '@/components/ui/motion';
 
 import { PeopleProvider } from '@/components/property/people-provider'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
-import { fetchSurfaceBootstrap, migratedSyncSignal, syncBootstrapRequestKey, syncClientFor, syncScopeMatches, syncV2Enabled, SyncResetRequired } from '@/lib/sync-client'
+import { migratedSyncSignal, syncBootstrapRequestKey, syncClientFor, syncScopeMatches, syncV2Enabled, SyncResetRequired } from '@/lib/sync-client'
 import { locallyCreatedAgentSession } from '@/lib/scale-activate-a-agent-echo'
 import { realtimeClientId } from '@/lib/api-client'
+import { documentBodyLoaded, fetchResourceSurfaceBootstrap, resourceSyncSurface, resourceTrashedDocument, resourceWindowEnabled, resourceWindowStale } from '@/lib/resource-window-adapters'
 import type { RealtimeEvent } from '@/types/flow'
 import { applyLabelStateRename, applyRealtimePatch, canApplyRealtimePatch, isLabelStateRenameEvent } from '@/store/apply-realtime-patch'
 import { classifyRealtimeEvent } from '@/lib/realtime-dispatch'
@@ -426,6 +426,7 @@ function App() {
   useEffect(() => {
     if (!syncClient) return;
     const unsubscribe = syncClient.subscribe(() => {
+      if (!syncClient.disposed && resourceWindowStale(syncClient)) { syncClient.requestReset(true); return; }
       if (syncClient.disposed) {
         if (syncClient.legacyRequired) setSyncFallback(syncClient.manifest.core.workspace.urlKey);
         clearNavigationCache(syncClient.manifest.viewerId, syncClient.manifest.core.workspace.urlKey);
@@ -659,9 +660,9 @@ function App() {
   const loadedWorkspaceKey = data?.workspace.urlKey;
   const projectListProjection = isProjectListRoute(route);
   const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : undefined;
-  const syncSurface = route.kind === 'document' ? 'document-detail' : route.kind === 'issue' ? 'issue-detail' : undefined;
+  const syncSurface = resourceSyncSurface(route);
   const fetchRouteBootstrap = useCallback((workspaceKey: string, projection?: import('@/lib/api').BootstrapProjection, signal?: AbortSignal, quiet?: boolean) =>
-    fetchSurfaceBootstrap(workspaceKey, syncFallback === workspaceKey ? undefined : syncSurface, () => fetchBootstrap(workspaceKey, projection, signal, quiet), signal, quiet), [syncSurface, syncFallback]);
+    fetchResourceSurfaceBootstrap(workspaceKey, syncFallback === workspaceKey ? undefined : syncSurface, () => fetchBootstrap(workspaceKey, projection, signal, quiet), signal, quiet), [syncSurface, syncFallback]);
   const { t: translateTitle, locale } = useI18n();
   useEffect(() => {
     // Search sets its own title (it includes the query); the OAuth consent page is titled "Flow" (the reference app: "the reference app").
@@ -972,7 +973,15 @@ function App() {
         if (cancelled) return;
         // A definite refusal is not transient; only retry a cancelled/partial
         // stream. Exhausting the retries surfaces the usual error state.
-        if (error instanceof ApiError && error.status >= 400 && error.status < 500) { setError(true); return }
+        if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+          if (syncV2Enabled() && [401, 403].includes(error.status)) {
+            clearNavigationCache(account.viewer.id, requestedWorkspaceKey);
+            const rejected = syncClientFor(dataRef.current);
+            if (rejected?.manifest.core.workspace.urlKey === requestedWorkspaceKey && rejected.manifest.viewerId === account.viewer.id) rejected.requestReset();
+            setData(current => current?.workspace.urlKey === requestedWorkspaceKey && current.viewer.id === account.viewer.id ? null : current);
+          }
+          setError(true); return;
+        }
         const count = bootstrapFailures.current.key === requestKey ? bootstrapFailures.current.count : 0;
         if (count < 2) {
           bootstrapFailures.current = { key: requestKey, count: count + 1 };
@@ -1383,7 +1392,7 @@ function App() {
     return () => window.removeEventListener(COMMENT_ACTION_RESOLVED, resolved);
   }, []);
   const documentCandidate =
-    !data?.resourceDetailsOmitted && route.kind === "document"
+    (!data?.resourceDetailsOmitted || syncClient && resourceWindowEnabled('documents')) && route.kind === "document"
       ? (data?.documents.find(
           (document) =>
             document.slugId === route.documentSlugId ||
@@ -1398,8 +1407,9 @@ function App() {
   const selectedDocumentId = selectedDocument?.id;
   useEffect(() => selectedDocumentId && syncClient ? syncClient.retainDetail({ kind: 'document', id: selectedDocumentId }) : undefined, [selectedDocumentId, syncClient]);
   // A deleted document stays on its URL (read-only, restorable) while it is in the trash.
-  const trashedDocument = !selectedDocument && !data?.resourceDetailsOmitted && route.kind === "document" ? findTrashedDocument(data?.trash, route.documentSlugId) : undefined;
-  const pageDocument = selectedDocument ?? trashedDocument?.document ?? null;
+  const trashedDocument = !selectedDocument && (!data?.resourceDetailsOmitted || syncClient && resourceWindowEnabled('trash')) && route.kind === "document" ? resourceTrashedDocument(data?.trash, route.documentSlugId) : undefined;
+  const trashBodyLoaded = !resourceWindowEnabled('documents') && !resourceWindowEnabled('trash') || data && trashedDocument && documentBodyLoaded(data, trashedDocument.document);
+  const pageDocument = selectedDocument ?? (trashBodyLoaded ? trashedDocument?.document : undefined) ?? null;
   // A document the loaded data does not hold yet (one an Agent reply just wrote) is fetched instead of left blank.
   const routeDocument = useRouteDocument({ data, slugId: route.kind === "document" ? route.documentSlugId : undefined, found: Boolean(pageDocument) && documentCompleteness !== 'stale', setData });
   const selectedCustomer =
@@ -5030,7 +5040,7 @@ function App() {
       </Suspense>
     );
   }
-  if (data?.sync && data.sync.surface !== syncSurface) return withStore(<AppStartup />);
+  if (data?.sync && data.sync.surface !== syncSurface) return withStore(error ? <ErrorState retry={load} /> : <AppStartup />);
   if (!data && !error && route.kind !== "issue" && (!previewIssue || previewIssue.isSummary)) return withStore(<AppStartup />);
   if (!data)
     return withStore(
@@ -5880,15 +5890,18 @@ function App() {
               // Other document actions refetch just this document and its thread (comments are content records
               // the metadata projection omits); a document the viewer can no longer open is dropped.
               const workspaceKey = data.workspace.urlKey, viewerId = data.viewer.id, documentId = pageDocument.id;
-              const mine = (current: BootstrapData | null): current is BootstrapData => current?.workspace.urlKey === workspaceKey && current.viewer.id === viewerId;
+              const mine = (current: BootstrapData | null): current is BootstrapData => current?.workspace.urlKey === workspaceKey && current.viewer.id === viewerId && syncScopeMatches(current, syncClient) && syncClient?.get({ kind: 'document', id: documentId })?.completeness !== 'deleted';
               if (saved) {
                 setData(current => mine(current) ? upsertDocument(current, saved) : current);
                 return;
               }
+              if (trashedDocument && syncClient && (resourceWindowEnabled('documents') || resourceWindowEnabled('trash'))) { syncClient.requestReset(true); return; }
               const [document, comments] = await Promise.all([
                 getDocument(documentId).catch(error => { if (inaccessibleResource(error)) return null; throw error; }),
                 listDocumentComments(documentId).catch(() => undefined),
               ]);
+              if (!mine(dataRef.current)) return;
+              if (syncClient && (!document || document.deletedAt)) { syncClient.requestReset(Boolean(document?.deletedAt)); return; }
               setData(current => {
                 if (!mine(current)) return current;
                 // A deleted document still answers (from "Recently deleted"), with deletedAt.

@@ -8,6 +8,7 @@
  * links, so "Move to" replaces all of them with the chosen parent.
  */
 import { toast } from '@/lib/toast'
+import { resourceDocumentForAction, resourceWindowEnabled } from '@/lib/resource-window-adapters'
 
 import { confirmAction, promptAction, promptDateAction } from '@/components/ui/action-dialog-service'
 import {
@@ -151,8 +152,12 @@ export const copyDocumentTitle = (ctx: DocumentActionContext, document: FlowDocu
   copy(ctx, documentDisplayTitle(document, ctx.t), 'Copied document title to clipboard')
 export const copyDocumentTitleAsLink = (ctx: DocumentActionContext, document: FlowDocument) =>
   copy(ctx, `[${documentDisplayTitle(document, ctx.t)}](${documentAbsoluteUrl(ctx.data.workspace.urlKey, document)})`, 'Copied document title as link to clipboard')
-export const copyDocumentMarkdown = (ctx: DocumentActionContext, document: FlowDocument) =>
-  copy(ctx, document.content ?? '', 'Copied document content as Markdown to clipboard')
+export const copyDocumentMarkdown = (ctx: DocumentActionContext, document: FlowDocument) => {
+  if (!resourceWindowEnabled('documents')) return copy(ctx, document.content ?? '', 'Copied document content as Markdown to clipboard')
+  return resourceDocumentForAction(ctx.data, document)
+    .then(loaded => copy(ctx, loaded.content, 'Copied document content as Markdown to clipboard'))
+    .catch(error => toast.error(message(error, ctx.t('Could not copy to clipboard'))))
+}
 
 export function toggleDocumentFavorite(ctx: DocumentActionContext, document: FlowDocument) {
   const favorited = ctx.data.favorites.some(item => item.userId === ctx.data.viewer.id && item.resourceType === 'document' && item.resourceId === document.id) || document.favorite
@@ -203,6 +208,7 @@ export async function restoreDeletedDocument(ctx: DocumentActionContext, trashEn
 export async function duplicateDocument(ctx: DocumentActionContext, document: FlowDocument) {
   const title = documentDisplayTitle(document, ctx.t)
   try {
+    if (resourceWindowEnabled('documents')) document = await resourceDocumentForAction(ctx.data, document)
     const created = await createDocument({
       title: document.title.trim() ? `${title} (${ctx.t('copy')})` : '',
       icon: document.icon, color: document.color, content: document.content, contentState: document.contentState, contentData: document.contentData,
@@ -220,7 +226,11 @@ export async function duplicateDocument(ctx: DocumentActionContext, document: Fl
 /** `teamId: ''` creates a workspace-wide template. */
 export async function createTemplateFromDocument(ctx: DocumentActionContext, document: FlowDocument, teamId: string) {
   const title = documentDisplayTitle(document, ctx.t)
-  return guarded(ctx, () => createDocumentTemplate({ teamId, name: title, title: document.title.trim(), icon: document.icon, content: document.content, contentState: document.contentState, contentData: document.contentData }), ctx.t('Template created'), 'Could not create template')
+  if (!resourceWindowEnabled('documents')) return guarded(ctx, () => createDocumentTemplate({ teamId, name: title, title: document.title.trim(), icon: document.icon, content: document.content, contentState: document.contentState, contentData: document.contentData }), ctx.t('Template created'), 'Could not create template')
+  return guarded(ctx, async () => {
+    const loaded = await resourceDocumentForAction(ctx.data, document)
+    return createDocumentTemplate({ teamId, name: title, title: loaded.title.trim(), icon: loaded.icon, content: loaded.content, contentState: loaded.contentState, contentData: loaded.contentData })
+  }, ctx.t('Template created'), 'Could not create template')
 }
 
 /**
