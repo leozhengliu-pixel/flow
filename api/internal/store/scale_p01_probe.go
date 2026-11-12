@@ -182,6 +182,13 @@ func (s *SQLiteStore) EnableScaleP01Probe(config DatabaseConfig) (*ScaleP01Probe
 	if err := old.Close(); err != nil {
 		return nil, err
 	}
+	// Prepared journal statements belong to the pool that created them.
+	if s.db.journalSQLFlush != nil {
+		s.db.journalSQLFlush, s.db.journalWrites = nil, nil
+		if err := s.ensureSQLiteRecordJournalCommit(context.Background()); err != nil {
+			return nil, err
+		}
+	}
 	return probe, nil
 }
 
