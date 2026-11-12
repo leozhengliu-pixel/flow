@@ -572,6 +572,10 @@ func (s *server) getWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "delivery not found")
 		return
 	}
+	if err := s.projectAPIKeyWebhookDelivery(r, &delivery); err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
 	writeJSON(w, http.StatusOK, delivery)
 }
 

@@ -115,10 +115,52 @@ func writeBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stre
 	_ = buffer.Flush()
 }
 
+type bootstrapCredentialVisibilityKey struct{}
+type bootstrapCredentialVisibility map[string]map[string]bool
+
+func captureBootstrapCredentialVisibility(r *http.Request, data domain.Bootstrap) *http.Request {
+	key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	if !ok || !apiKeyTeamRestrictionSelected(key) {
+		return r
+	}
+	visible := bootstrapCredentialVisibility{}
+	add := func(kind, id string) {
+		if visible[kind] == nil {
+			visible[kind] = map[string]bool{}
+		}
+		visible[kind][id] = true
+	}
+	for _, item := range data.Issues {
+		add("issue", item.ID)
+	}
+	for _, item := range data.Projects {
+		add("project", item.ID)
+	}
+	for _, item := range data.Documents {
+		add("document", item.ID)
+	}
+	for _, item := range data.Initiatives {
+		add("initiative", item.ID)
+	}
+	for _, item := range data.Cycles {
+		add("cycle", item.ID)
+	}
+	for _, item := range data.Teams {
+		add("team", item.ID)
+	}
+	for _, item := range data.Reviews {
+		add("review", item.ID)
+		add("review", item.SlugID)
+	}
+	return r.WithContext(context.WithValue(r.Context(), bootstrapCredentialVisibilityKey{}, visible))
+}
+
 func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, data domain.Bootstrap, overrides ...map[string]json.RawMessage) {
 	visible := map[string]bool{}
+	visibleIssues := map[string]bool{}
 	for _, issue := range data.Issues {
 		visible[issue.ID] = true
+		visibleIssues[issue.ID] = true
 	}
 	for _, document := range data.Documents {
 		visible[document.ID] = true
@@ -132,6 +174,50 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 	users := map[string]domain.User{}
 	for _, user := range data.Users {
 		users[user.ID] = user
+	}
+	key, credential := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	scoped := credential && apiKeyTeamRestrictionSelected(key)
+	captured, hasCaptured := r.Context().Value(bootstrapCredentialVisibilityKey{}).(bootstrapCredentialVisibility)
+	resourceVisible := func(kind, id string) bool {
+		if hasCaptured {
+			return captured[kind][id]
+		}
+		if kind == "issue" {
+			return visibleIssues[id]
+		}
+		return credentialResourceExists(&data, kind, id)
+	}
+	visibleNotification := func(item domain.Notification) bool {
+		if item.IssueID != "" {
+			return resourceVisible("issue", item.IssueID)
+		}
+		if item.ProjectID != "" {
+			return resourceVisible("project", item.ProjectID)
+		}
+		if item.ReviewID != "" {
+			return resourceVisible("review", item.ReviewID)
+		}
+		switch item.SourceType {
+		case "issue", "project", "initiative", "document", "cycle", "team":
+			return resourceVisible(item.SourceType, item.SourceID)
+		}
+		return true
+	}
+	visibleNotifications := map[string]bool{}
+	if scoped {
+		if err := s.store.WalkContentRecords(r.Context(), data.Workspace.URLKey, "notification", func(_ string, raw json.RawMessage) error {
+			var item domain.Notification
+			if err := json.Unmarshal(raw, &item); err != nil {
+				return err
+			}
+			if item.RecipientID == data.Viewer.ID && item.DeletedAt == nil && item.ArchivedAt == nil && visibleNotification(item) {
+				visibleNotifications[item.ID] = true
+			}
+			return nil
+		}); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
 	}
 	lean := leanBootstrapRequested(r)
 	writeBootstrapWithFields(w, data, func(field string, buffer *bufio.Writer, encoder *json.Encoder) (bool, error) {
@@ -178,6 +264,15 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 				issue.SubIssueIDs = outline.SubIssueIDs
 				issue.Relations = outline.Relations
 				issue.Labels = outline.Labels
+				if scoped {
+					issue.CycleID = outline.CycleID
+					issue.ProjectMilestoneID = outline.ProjectMilestoneID
+					issue.SuggestedLabelIDs = outline.SuggestedLabelIDs
+					issue.SuggestedProjectIDs = outline.SuggestedProjectIDs
+					issue.SuggestedTeamIDs = outline.SuggestedTeamIDs
+					issue.SuggestedDuplicateIDs = outline.SuggestedDuplicateIDs
+					issue.SuggestedRelatedIDs = outline.SuggestedRelatedIDs
+				}
 				// The outline carries the decorated agent task state (issue records store it empty).
 				issue.AgentSessionState = outline.AgentSessionState
 				issue.IsSummary = false
@@ -260,6 +355,9 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 				if !s.authDisabled && item.RecipientID != data.Viewer.ID {
 					return nil
 				}
+				if scoped && !visibleNotifications[item.ID] {
+					return nil
+				}
 				if user, ok := users[item.Actor.ID]; ok {
 					item.Actor = user
 				}
@@ -270,6 +368,9 @@ func (s *server) writeStoredBootstrap(w http.ResponseWriter, r *http.Request, da
 					return err
 				}
 				if !s.authDisabled && item.RecipientID != data.Viewer.ID {
+					return nil
+				}
+				if scoped && !visibleNotifications[item.NotificationID] {
 					return nil
 				}
 				value = item

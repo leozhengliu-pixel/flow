@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -12,6 +13,8 @@ import (
 
 	"flow/api/internal/domain"
 )
+
+var ErrResourceAccessChanged = errors.New("resource access metadata changed during read")
 
 // AccessContext owns an immutable policy. Exported identity fields are also
 // checked against that policy, so copying or editing them cannot widen access.
@@ -253,6 +256,23 @@ func (p *resourceAccessPolicy) initiativeAllowed(data domain.Bootstrap, item dom
 	})
 }
 
+func (p *resourceAccessPolicy) initiativeReadable(data domain.Bootstrap, item domain.Initiative) bool {
+	if !p.initiativeVisible(data, item) || !p.initiativeAllowed(data, item) {
+		return false
+	}
+	if p.key != nil && p.key.Actor == "app" && !resourceKeyHasScope(*p.key, "initiative:read") && !resourceKeyHasScope(*p.key, "initiative:write") {
+		return false
+	}
+	return !p.selected() || slices.ContainsFunc(item.ProjectIDs, func(id string) bool { return p.projectByID(data, id, true) })
+}
+
+func (p *resourceAccessPolicy) labelAllowed(data domain.Bootstrap, id string) bool {
+	return slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool {
+		scope := strings.ToLower(strings.TrimSpace(label.Scope))
+		return label.ID == id && (scope == "" || scope == "workspace" || p.teamAllowed(label.Scope))
+	})
+}
+
 func resourceSlugIndex[T any](items []T, ref string, key func(T) (string, string, []string), visible func(T) bool) int {
 	best, rank := -1, domain.SlugNoMatch
 	for index, item := range items {
@@ -310,7 +330,7 @@ func (s *SQLiteStore) ResourceReadMetadata(ctx context.Context, access AccessCon
 			return domain.Bootstrap{}, false, stampErr
 		}
 		if stamp != p.stamp {
-			return domain.Bootstrap{}, false, ErrAuthForbidden
+			return domain.Bootstrap{}, false, errors.Join(ErrAuthForbidden, ErrResourceAccessChanged)
 		}
 	}
 	return data, allowed, err
@@ -333,12 +353,40 @@ func resourceReadMetadata(p *resourceAccessPolicy, source domain.Bootstrap, kind
 		}
 		project := cloneBootstrap(domain.Bootstrap{Projects: []domain.Project{source.Projects[index]}}).Projects[0]
 		project.TeamIDs = slices.DeleteFunc(project.TeamIDs, func(id string) bool { return !p.teams.Content[id] })
-		project.DependencyIDs = slices.DeleteFunc(project.DependencyIDs, func(id string) bool { return !p.projectByID(source, id, false) })
+		project.DependencyIDs = slices.DeleteFunc(project.DependencyIDs, func(id string) bool { return !p.projectByID(source, id, true) })
+		if p.selected() || p.key != nil && p.key.Actor == "app" {
+			project.Initiatives = slices.DeleteFunc(project.Initiatives, func(id string) bool {
+				return !slices.ContainsFunc(source.Initiatives, func(item domain.Initiative) bool {
+					return item.ID == id && p.initiativeReadable(source, item)
+				})
+			})
+		}
+		if p.key != nil && p.key.Actor == "app" && !resourceKeyHasScope(*p.key, "customer:read") && !resourceKeyHasScope(*p.key, "customer:write") {
+			project.Customers = slices.DeleteFunc(project.Customers, func(string) bool { return true })
+		}
 		// PagedWorkspaceMetadata deliberately contains no issues, so its
 		// final refreshResourceCounts sets this count to zero as well.
 		project.IssueCount = 0
 		if p.selected() {
+			if slices.ContainsFunc(project.TeamIDs, func(id string) bool { return !p.teamAllowed(id) }) {
+				RedactProjectProgress(&project)
+			}
 			project.TeamIDs = slices.DeleteFunc(project.TeamIDs, func(id string) bool { return !p.teamAllowed(id) })
+			project.LabelIDs = slices.DeleteFunc(project.LabelIDs, func(id string) bool { return !p.labelAllowed(source, id) })
+			for i := range project.Resources {
+				project.Resources[i].PinnedTeamIDs = slices.DeleteFunc(project.Resources[i].PinnedTeamIDs, func(id string) bool { return !p.teamAllowed(id) })
+			}
+			for _, user := range []*domain.User{project.Creator, project.Lead} {
+				if user != nil {
+					RedactUserTeams(user, p.teamAllowed)
+				}
+			}
+			for i := range project.Comments {
+				RedactUserTeams(&project.Comments[i].User, p.teamAllowed)
+			}
+			for i := range project.DescriptionRevisions {
+				RedactUserTeams(&project.DescriptionRevisions[i].Author, p.teamAllowed)
+			}
 		}
 		data.Projects = []domain.Project{project}
 	case "initiatives":
@@ -363,8 +411,21 @@ func resourceReadMetadata(p *resourceAccessPolicy, source domain.Bootstrap, kind
 			item = source.Initiatives[index]
 		}
 		item = cloneBootstrap(domain.Bootstrap{Initiatives: []domain.Initiative{item}}).Initiatives[0]
-		item.ProjectIDs = slices.DeleteFunc(item.ProjectIDs, func(id string) bool { return !p.projectByID(source, id, false) })
-		item.ContributingTeamIDs = slices.DeleteFunc(item.ContributingTeamIDs, func(id string) bool { return !p.teams.Content[id] })
+		item.ProjectIDs = slices.DeleteFunc(item.ProjectIDs, func(id string) bool { return !p.projectByID(source, id, true) })
+		item.ContributingTeamIDs = slices.DeleteFunc(item.ContributingTeamIDs, func(id string) bool { return !p.teamAllowed(id) })
+		if p.selected() {
+			item.LabelIDs = slices.DeleteFunc(item.LabelIDs, func(id string) bool { return !p.labelAllowed(source, id) })
+			RedactUserTeams(&item.Creator, p.teamAllowed)
+			if item.Owner != nil {
+				RedactUserTeams(item.Owner, p.teamAllowed)
+			}
+			for i := range item.Comments {
+				RedactUserTeams(&item.Comments[i].User, p.teamAllowed)
+			}
+			for i := range item.DescriptionHistory {
+				RedactUserTeams(&item.DescriptionHistory[i].Editor, p.teamAllowed)
+			}
+		}
 		parents := append([]string(nil), item.ParentInitiativeIDs...)
 		for _, relation := range source.InitiativeRelations {
 			if relation.Type == "parent" && relation.InitiativeID == item.ID && !slices.Contains(parents, relation.RelatedInitiativeID) {
@@ -373,7 +434,7 @@ func resourceReadMetadata(p *resourceAccessPolicy, source domain.Bootstrap, kind
 		}
 		item.ParentInitiativeIDs = slices.DeleteFunc(parents, func(id string) bool {
 			return !slices.ContainsFunc(source.Initiatives, func(parent domain.Initiative) bool {
-				return parent.ID == id && p.initiativeVisible(source, parent) && (!p.selected() || slices.ContainsFunc(parent.ProjectIDs, func(id string) bool { return p.projectByID(source, id, true) }))
+				return parent.ID == id && p.initiativeVisible(source, parent) && (!p.selected() || p.initiativeReadable(source, parent))
 			})
 		})
 		item.Favorite = slices.ContainsFunc(source.Favorites, func(f domain.Favorite) bool {

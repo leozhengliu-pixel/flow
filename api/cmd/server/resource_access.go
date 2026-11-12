@@ -2,13 +2,16 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func recordAccessMode() string {
@@ -43,9 +46,23 @@ func (s *server) requestResourceRead(r *http.Request, workspace, userID string) 
 		return cached
 	}
 	result := &resourceReadHandoff{workspace: workspace, userID: userID, kind: kind, ref: ref}
-	result.access, result.err = s.store.ResolveAccess(r.Context(), workspace, userID, key)
-	if result.err == nil {
-		result.data, result.allowed, result.err = s.store.ResourceReadMetadata(r.Context(), result.access, kind, ref)
+	for attempt := 0; attempt < 3; attempt++ {
+		result.access, result.err = s.store.ResolveAccess(r.Context(), workspace, userID, key)
+		if result.err == nil {
+			result.data, result.allowed, result.err = s.store.ResourceReadMetadata(r.Context(), result.access, kind, ref)
+		}
+		if !errors.Is(result.err, store.ErrResourceAccessChanged) || attempt == 2 {
+			break
+		}
+		if key != nil {
+			user, current, currentWorkspace := s.authenticateAPIKey(r)
+			if current == nil || user.ID != userID || currentWorkspace != workspace || !apiKeyAllowsRequest(r, *current) {
+				result.data, result.allowed, result.err = domain.Bootstrap{}, false, store.ErrAuthForbidden
+				break
+			}
+			key = current
+			*r = *r.WithContext(context.WithValue(r.Context(), apiKeyContextKey{}, *current))
+		}
 	}
 	handOffResourceRead(r, result)
 	return result

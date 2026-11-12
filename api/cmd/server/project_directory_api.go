@@ -55,6 +55,14 @@ func (s *server) listProjectRecords(w http.ResponseWriter, r *http.Request) {
 		Admin:        s.authDisabled || access.Admin,
 		Filters:      filters,
 	}
+	var projected *domain.Bootstrap
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && (apiKeyTeamRestrictionSelected(key) || key.Actor == "app") {
+		data, ok := s.publicMetadata(w, r)
+		if !ok {
+			return
+		}
+		projected = &data
+	}
 	if !query.Admin {
 		query.AllowedTeamIDs = access.VisibleTeamIDs
 		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
@@ -63,8 +71,15 @@ func (s *server) listProjectRecords(w http.ResponseWriter, r *http.Request) {
 	}
 	// An absent flag counts as enabled, like the web client.
 	customersEnabled, flagged := metadata.WorkspaceSettings.FeatureFlags["customer-requests"]
-	if (customersEnabled || !flagged) && metadata.ViewerRole != "guest" {
-		summaries, err := s.store.ProjectCustomerSummaries(r.Context(), metadata.Workspace.URLKey)
+	key, credential := r.Context().Value(apiKeyContextKey{}).(domain.APIKey)
+	customerScope := !credential || key.Actor != "app" || apiKeyHasScope(key, "customer:read") || apiKeyHasScope(key, "customer:write")
+	if (customersEnabled || !flagged) && metadata.ViewerRole != "guest" && customerScope {
+		var summaries map[string]*store.ProjectCustomerSummary
+		if credential && apiKeyTeamRestrictionSelected(key) {
+			summaries, err = s.store.ScopedProjectCustomerSummaries(r.Context(), store.IssueRecordQuery{Workspace: metadata.Workspace.URLKey, Access: &access, AllowedTeamIDs: append([]string{}, key.TeamIDs...)})
+		} else {
+			summaries, err = s.store.ProjectCustomerSummaries(r.Context(), metadata.Workspace.URLKey)
+		}
 		if err != nil {
 			issueRecordsError(w, err)
 			return
@@ -74,7 +89,13 @@ func (s *server) listProjectRecords(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid project filter")
 		return
 	}
-	page, err := s.store.QueryProjectDirectory(r.Context(), query)
+	var page store.ProjectRecordPage
+	if projected != nil {
+		query.Admin = true
+		page = store.QueryProjectedProjectDirectory(projected.Projects, query)
+	} else {
+		page, err = s.store.QueryProjectDirectory(r.Context(), query)
+	}
 	if err != nil {
 		issueRecordsError(w, err)
 		return

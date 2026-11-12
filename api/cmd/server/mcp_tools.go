@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
+	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
@@ -68,6 +70,8 @@ func mcpArgumentSummary(args map[string]any) string {
 }
 
 func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
+	ctx = context.WithValue(ctx, apiKeyContextKey{}, actor.APIKey)
+	ctx = context.WithValue(ctx, credentialReadPrincipalKey{}, firstNonEmpty(actor.AuthorizationUserID, actor.User.ID))
 	data, err := s.mcpWorkspaceDataForTool(ctx, actor, name, args)
 	if err != nil {
 		return nil, err
@@ -441,6 +445,7 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 // that genuinely operate on a whole workspace, but issue and directory tools
 // only need the small catalogs below plus point reads from issue_records.
 func (s *server) mcpWorkspaceDataForTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (domain.Bootstrap, error) {
+	ctx = context.WithValue(ctx, credentialReadPrincipalKey{}, firstNonEmpty(actor.AuthorizationUserID, actor.User.ID))
 	common := map[string]bool{
 		"get_issue": true, "list_issues": true, "count_issues": true, "search_issues": true,
 		"list_cycles": true, "list_projects": true, "get_team": true, "list_users": true,
@@ -472,7 +477,7 @@ func (s *server) mcpWorkspaceDataForTool(ctx context.Context, actor mcpActor, na
 		fields = []string{"users", "members", "cycles", "cycleSettings"}
 	}
 	if name == "list_projects" {
-		fields = []string{"users", "members", "projects"}
+		fields = []string{"users", "members", "projects", "initiatives", "labels"}
 	}
 	if len(fields) > 0 {
 		catalog, ok := s.store.WorkspaceMetadataFields(actor.WorkspaceKey, fields...)
@@ -486,6 +491,7 @@ func (s *server) mcpWorkspaceDataForTool(ctx context.Context, actor mcpActor, na
 		}
 		data.Cycles, data.CycleSettings = catalog.Cycles, catalog.CycleSettings
 		data.Projects, data.Releases = catalog.Projects, catalog.Releases
+		data.Initiatives = catalog.Initiatives
 		data.IssueSuggestions = catalog.IssueSuggestions
 	}
 	data.Viewer, data.ViewerRole = actor.User, accessRole(data, userID)
@@ -493,6 +499,7 @@ func (s *server) mcpWorkspaceDataForTool(ctx context.Context, actor mcpActor, na
 		data.ViewerRole = "app"
 	}
 	data.Issues = []domain.Issue{}
+	data.IssueCollectionPaged = true
 	data.Comments = map[string][]domain.Comment{}
 	allowed := map[string]bool{}
 	for _, id := range access.VisibleTeamIDs {
@@ -527,6 +534,11 @@ func (s *server) mcpWorkspaceDataForTool(ctx context.Context, actor mcpActor, na
 			return !labelScopeIsWorkspace(item.Scope) && !keyAllowed(item.Scope)
 		})
 	}
+	request := (&http.Request{}).WithContext(context.WithValue(ctx, apiKeyContextKey{}, actor.APIKey))
+	filterBootstrapForAPIKey(&data, request)
+	if err := s.filterPreferenceIssueTeams(request, &data); err != nil {
+		return domain.Bootstrap{}, err
+	}
 	return data, nil
 }
 
@@ -543,6 +555,7 @@ func accessRole(data domain.Bootstrap, userID string) string {
 }
 
 func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.Bootstrap, error) {
+	ctx = context.WithValue(ctx, credentialReadPrincipalKey{}, firstNonEmpty(actor.AuthorizationUserID, actor.User.ID))
 	userID := actor.User.ID
 	if actor.AuthorizationUserID != "" {
 		userID = actor.AuthorizationUserID
@@ -573,6 +586,42 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 		data.Passkeys[index].CredentialJSON = ""
 	}
 	data.PasskeyRegistrationChallenges = nil
+	reviews := data.Reviews
+	documents := slices.Clone(data.Documents)
+	initiatives := slices.Clone(data.Initiatives)
+	initiativeUpdates := maps.Clone(data.InitiativeUpdates)
+	for i := range initiatives {
+		initiatives[i].ProjectIDs = slices.Clone(initiatives[i].ProjectIDs)
+		initiatives[i].ContributingTeamIDs = slices.Clone(initiatives[i].ContributingTeamIDs)
+		initiatives[i].ParentInitiativeIDs = slices.Clone(initiatives[i].ParentInitiativeIDs)
+		initiatives[i].LabelIDs = slices.Clone(initiatives[i].LabelIDs)
+	}
+	request := (&http.Request{}).WithContext(context.WithValue(ctx, apiKeyContextKey{}, actor.APIKey))
+	filterBootstrapForAPIKey(&data, request)
+	if apiKeyTeamRestrictionSelected(actor.APIKey) {
+		allowed := func(id string) bool { return slices.Contains(actor.APIKey.TeamIDs, id) }
+		data.Initiatives = slices.DeleteFunc(initiatives, func(item domain.Initiative) bool {
+			return !initiativeInTeams(item, data.ViewerRole, allowed, func(id string) bool { return resourceExists(&data, "project", id) })
+		})
+		data.InitiativeUpdates = initiativeUpdates
+		visible := make(map[string]domain.Document, len(data.Documents))
+		for _, item := range data.Documents {
+			visible[item.ID] = item
+		}
+		data.Documents = []domain.Document{}
+		for _, item := range documents {
+			if projected, ok := visible[item.ID]; ok {
+				data.Documents = append(data.Documents, projected)
+			} else if len(item.TeamIDs) == 0 && len(item.InheritedTeamIDs) == 0 {
+				// MCP workspace documents retain their workspace access.
+				data.Documents = append(data.Documents, item)
+			}
+		}
+		redactAPIKeyReferences(&data, actor.APIKey)
+	}
+	if err := s.filterPreferenceIssueTeams(request, &data); err != nil {
+		return domain.Bootstrap{}, err
+	}
 	if !apiKeyTeamRestrictionSelected(actor.APIKey) {
 		return data, nil
 	}
@@ -616,13 +665,14 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 		return data, err
 	}
 	var linkedIDs []string
-	for _, review := range data.Reviews {
+	for _, review := range reviews {
 		linkedIDs = append(linkedIDs, review.IssueIDs...)
 	}
 	visibleIssues, err := s.store.VisibleIssueRecordIDs(ctx, query, linkedIDs)
 	if err != nil {
 		return data, err
 	}
+	data.Reviews = reviews
 	data.Reviews = slices.DeleteFunc(data.Reviews, func(review domain.CodeReview) bool {
 		if len(review.IssueIDs) == 0 {
 			return true
@@ -633,6 +683,7 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 		data.Reviews[index].IssueIDs = slices.DeleteFunc(data.Reviews[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
 		data.Reviews[index].TeamReviewers = slices.DeleteFunc(data.Reviews[index].TeamReviewers, func(id string) bool { return !allowed(id) })
 	}
+	redactAPIKeyReferences(&data, actor.APIKey)
 	return data, nil
 }
 
@@ -728,7 +779,9 @@ func (s *server) hydrateMCPIssueArguments(ctx context.Context, actor mcpActor, d
 			data.Issues = append(data.Issues, issue)
 		}
 	}
-	return nil
+	request := (&http.Request{}).WithContext(ctx)
+	data.Issues, err = s.projectIssueRecordReferences(request, *data, q, data.Issues)
+	return err
 }
 
 func (s *server) pagedMCPIssues(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
@@ -759,6 +812,10 @@ func (s *server) pagedMCPIssues(ctx context.Context, actor mcpActor, data domain
 		return nil, err
 	}
 	page, err := s.store.QueryIssueRecords(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	page.Items, err = s.projectIssueRecordReferences((&http.Request{}).WithContext(ctx), data, q, page.Items)
 	if err != nil {
 		return nil, err
 	}

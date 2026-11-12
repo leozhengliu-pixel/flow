@@ -35,7 +35,20 @@ type ProjectCustomerSummary struct {
 // customer request index: one range over the workspace's request rows with a
 // primary-key probe per issue request, never the issue payloads.
 func (s *SQLiteStore) ProjectCustomerSummaries(ctx context.Context, workspace string) (map[string]*ProjectCustomerSummary, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT CASE WHEN r.issue_id='' THEN r.project_id ELSE COALESCE(i.project_id,'') END,r.customer_id,r.important,c.customer_id IS NOT NULL,COALESCE(c.owner_id,''),COALESCE(c.status_value,''),COALESCE(c.tier_value,''),COALESCE(c.revenue,0),COALESCE(c.customer_size,0) FROM customer_request_filter_records r LEFT JOIN issue_records i ON r.issue_id<>'' AND i.workspace_key=r.workspace_key AND i.id=r.issue_id LEFT JOIN customer_filter_records c ON c.workspace_key=r.workspace_key AND c.customer_id=r.customer_id WHERE r.workspace_key=?`, workspace)
+	return s.ScopedProjectCustomerSummaries(ctx, IssueRecordQuery{Workspace: workspace})
+}
+
+// ScopedProjectCustomerSummaries excludes demand originating in issues the
+// credential cannot read. Direct project demand follows the directory rows.
+func (s *SQLiteStore) ScopedProjectCustomerSummaries(ctx context.Context, query IssueRecordQuery) (map[string]*ProjectCustomerSummary, error) {
+	prefix, args := issueAccessCTE(query)
+	args = append(args, query.Workspace)
+	where := "r.workspace_key=?"
+	if visibility, values := issueRecordVisibilityClause(query, "i"); visibility != "" {
+		where += " AND (r.issue_id='' OR (" + visibility + "))"
+		args = append(args, values...)
+	}
+	rows, err := s.db.QueryContext(ctx, prefix+`SELECT CASE WHEN r.issue_id='' THEN r.project_id ELSE COALESCE(i.project_id,'') END,r.customer_id,r.important,c.customer_id IS NOT NULL,COALESCE(c.owner_id,''),COALESCE(c.status_value,''),COALESCE(c.tier_value,''),COALESCE(c.revenue,0),COALESCE(c.customer_size,0) FROM customer_request_filter_records r LEFT JOIN issue_records i ON r.issue_id<>'' AND i.workspace_key=r.workspace_key AND i.id=r.issue_id LEFT JOIN customer_filter_records c ON c.workspace_key=r.workspace_key AND c.customer_id=r.customer_id WHERE `+where, args...)
 	if err != nil {
 		return nil, err
 	}

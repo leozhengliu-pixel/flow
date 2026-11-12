@@ -71,6 +71,11 @@ func (s *server) getMCPIssue(ctx context.Context, actor mcpActor, data domain.Bo
 	if err != nil {
 		return nil, err
 	}
+	projected, err := s.projectIssueRecordReferences((&http.Request{}).WithContext(ctx), data, q, []domain.Issue{issue})
+	if err != nil {
+		return nil, err
+	}
+	issue = projected[0]
 	// Related issues are only named when the viewer can see them.
 	ids := slices.Clone(issue.SubIssueIDs)
 	if issue.ParentID != nil {
@@ -504,8 +509,17 @@ func (s *server) searchMCPIssues(ctx context.Context, actor mcpActor, data domai
 		return ranked[i].issue.UpdatedAt.After(ranked[j].issue.UpdatedAt)
 	})
 	items := []map[string]any{}
-	for _, item := range ranked[:min(limit, len(ranked))] {
-		issue := item.issue
+	selected := ranked[:min(limit, len(ranked))]
+	issues := make([]domain.Issue, len(selected))
+	for i, item := range selected {
+		issues[i] = item.issue
+	}
+	issues, err = s.projectIssueRecordReferences((&http.Request{}).WithContext(ctx), data, q, issues)
+	if err != nil {
+		return nil, err
+	}
+	for i, item := range selected {
+		issue := issues[i]
 		result := map[string]any{"id": issue.ID, "identifier": issue.Identifier, "title": issue.Title, "status": issue.State.Name, "statusType": issue.State.Type, "priority": issue.Priority, "priorityLabel": issue.PriorityLabel, "team": issue.Team.Key, "assignee": mcpUserRef(issue.Assignee), "url": mcpIssueURL(data.Workspace.URLKey, issue.Identifier, args), "score": item.score, "matchedQueries": item.queries, "updatedAt": issue.UpdatedAt}
 		if issue.Project != nil {
 			result["project"] = issue.Project.Name
@@ -516,12 +530,19 @@ func (s *server) searchMCPIssues(ctx context.Context, actor mcpActor, data domai
 }
 
 func (s *server) listMCPNotifications(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
+	ctx = context.WithValue(ctx, credentialReadPrincipalKey{}, firstNonEmpty(actor.AuthorizationUserID, actor.User.ID))
 	query := store.NotificationQuery{Workspace: data.Workspace.URLKey, UserID: actor.User.ID, IncludeArchived: boolArg(args, "includeArchived"), IncludeSnoozed: boolArg(args, "includeSnoozed"), Cursor: stringArg(args, "cursor"), Limit: min(max(intArg(args, "limit", 50), 1), 100)}
 	if boolArg(args, "unreadOnly") {
 		unread := false
 		query.Read = &unread
 	}
-	page, err := s.store.QueryNotifications(ctx, query)
+	var page store.NotificationPage
+	var err error
+	if apiKeyTeamRestrictionSelected(actor.APIKey) {
+		page, err = s.queryAPIKeyNotifications(ctx, actor.APIKey, data, query)
+	} else {
+		page, err = s.store.QueryNotifications(ctx, query)
+	}
 	if err != nil {
 		return nil, err
 	}

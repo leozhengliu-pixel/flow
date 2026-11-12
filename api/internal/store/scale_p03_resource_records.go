@@ -237,13 +237,19 @@ func resourceWireEqual(a, b any) bool {
 func (s *SQLiteStore) resourceReferenceRecords(ctx context.Context, p *resourceAccessPolicy, data *domain.Bootstrap) error {
 	projects, initiatives := map[string]bool{}, map[string]bool{}
 	projectIDs, parentIDs := []string{}, []string{}
+	labelIDs := []string{}
 	for _, item := range data.Projects {
 		projects[item.ID] = true
 		projectIDs = append(projectIDs, item.DependencyIDs...)
+		labelIDs = append(labelIDs, item.LabelIDs...)
+		if p.selected() || p.key != nil && p.key.Actor == "app" {
+			parentIDs = append(parentIDs, item.Initiatives...)
+		}
 	}
 	for _, item := range data.Initiatives {
 		initiatives[item.ID] = true
 		projectIDs = append(projectIDs, item.ProjectIDs...)
+		labelIDs = append(labelIDs, item.LabelIDs...)
 		parentIDs = append(parentIDs, item.ParentInitiativeIDs...)
 		rows, err := s.db.QueryContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='initiativeRelations' AND `+s.jsonText("data", "initiativeId")+`=? ORDER BY collection_order,record_key`, p.workspace, item.ID)
 		if err != nil {
@@ -297,6 +303,19 @@ func (s *SQLiteStore) resourceReferenceRecords(ctx context.Context, p *resourceA
 		}
 		projectIDs = append(projectIDs, item.ProjectIDs...)
 		data.Initiatives = append(data.Initiatives, item)
+	}
+	if p.selected() {
+		for _, id := range labelIDs {
+			var scope sql.NullString
+			err := s.db.QueryRowContext(ctx, "SELECT "+s.jsonText("data", "scope")+` FROM workspace_metadata_records WHERE workspace_key=? AND field='labels' AND `+s.metadataRecordKeyEquals("record_key", "?"), p.workspace, id).Scan(&scope)
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			data.Labels = append(data.Labels, domain.IssueLabel{ID: id, Scope: scope.String})
+		}
 	}
 	for _, id := range projectIDs {
 		if projects[id] {

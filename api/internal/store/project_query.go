@@ -49,6 +49,12 @@ type projectDirectoryCursor struct {
 	Offset int `json:"offset"`
 }
 
+// QueryProjectedProjectDirectory pages an already authorized projection,
+// including its references and counts, using the directory's usual filters.
+func QueryProjectedProjectDirectory(projects []domain.Project, query ProjectRecordQuery) ProjectRecordPage {
+	return filterProjectDirectory(projects, query)
+}
+
 func encodeProjectCursor(offset int) string {
 	raw, _ := json.Marshal(projectDirectoryCursor{Offset: offset})
 	return base64.RawURLEncoding.EncodeToString(raw)

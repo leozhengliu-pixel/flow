@@ -675,7 +675,7 @@ func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.B
 		}
 		ids = append(ids, issue.SubIssueIDs...)
 		for _, relation := range issue.Relations {
-			ids = append(ids, relation.RelatedIssueID)
+			ids = append(ids, relation.IssueID, relation.RelatedIssueID)
 		}
 		ids = append(ids, issue.SuggestedDuplicateIDs...)
 		ids = append(ids, issue.SuggestedRelatedIDs...)
@@ -684,7 +684,7 @@ func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.B
 	if err != nil {
 		return nil, err
 	}
-	projects, labels, teams := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	projects, labels, teams, cycles := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, project := range metadata.Projects {
 		projects[project.ID] = true
 	}
@@ -694,14 +694,40 @@ func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.B
 	for _, label := range metadata.Labels {
 		labels[label.ID] = true
 	}
+	for _, cycle := range metadata.Cycles {
+		cycles[cycle.ID] = true
+	}
 	for index := range issues {
 		issue := &issues[index]
+		if query.AllowedTeamIDs != nil {
+			allowed := func(id string) bool { return slices.Contains(query.AllowedTeamIDs, id) }
+			for _, user := range []*domain.User{&issue.Creator, issue.Assignee, issue.Delegate} {
+				if user != nil {
+					store.RedactUserTeams(user, allowed)
+				}
+			}
+		}
+		if query.AllowedTeamIDs != nil && issue.CycleID != nil && !cycles[*issue.CycleID] {
+			issue.CycleID = nil
+		}
 		if issue.ParentID != nil && !visible[*issue.ParentID] {
 			issue.ParentID = nil
 		}
 		issue.SubIssueIDs = slices.DeleteFunc(issue.SubIssueIDs, func(id string) bool { return !visible[id] })
-		issue.Relations = slices.DeleteFunc(issue.Relations, func(relation domain.IssueRelation) bool { return !visible[relation.RelatedIssueID] })
+		issue.Relations = slices.DeleteFunc(issue.Relations, func(relation domain.IssueRelation) bool {
+			if query.AllowedTeamIDs == nil {
+				return !visible[relation.RelatedIssueID]
+			}
+			return relation.IssueID != "" && relation.IssueID != issue.ID && !visible[relation.IssueID] || relation.RelatedIssueID != issue.ID && !visible[relation.RelatedIssueID]
+		})
 		issue.Labels = slices.DeleteFunc(issue.Labels, func(label domain.IssueLabel) bool { return !labels[label.ID] })
+		if query.AllowedTeamIDs != nil {
+			// Embedded label counters come from the owner's workspace, not
+			// this credential's issue projection.
+			for i := range issue.Labels {
+				issue.Labels[i].IssueCount = 0
+			}
+		}
 		// Suggestion targets the viewer cannot see are not disclosed.
 		issue.SuggestedLabelIDs = slices.DeleteFunc(issue.SuggestedLabelIDs, func(id string) bool { return !labels[id] })
 		issue.SuggestedProjectIDs = slices.DeleteFunc(issue.SuggestedProjectIDs, func(id string) bool { return !projects[id] })

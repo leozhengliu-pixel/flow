@@ -329,6 +329,17 @@ func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
 		return !slices.ContainsFunc(project.TeamIDs, func(id string) bool { return allowed[id] })
 	})
 	for index := range data.Projects {
+		if slices.ContainsFunc(data.Projects[index].TeamIDs, func(id string) bool { return !allowed[id] }) {
+			store.RedactProjectProgress(&data.Projects[index])
+			id := data.Projects[index].ID
+			updates := slices.Clone(data.ProjectUpdates[id])
+			for i := range updates {
+				updates[i].Diff = redactPulseReferences(updates[i].Diff, func(string) bool { return true }, func(string) bool { return true }, true)
+			}
+			if updates != nil {
+				data.ProjectUpdates[id] = updates
+			}
+		}
 		data.Projects[index].TeamIDs = slices.DeleteFunc(data.Projects[index].TeamIDs, func(id string) bool { return !allowed[id] })
 	}
 	data.ReleasePipelines = slices.DeleteFunc(data.ReleasePipelines, func(pipeline domain.ReleasePipeline) bool {
@@ -349,14 +360,16 @@ func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
 	})
 	for index := range data.Releases {
 		data.Releases[index].ProjectIDs = slices.DeleteFunc(data.Releases[index].ProjectIDs, func(id string) bool { return !visibleProjects[id] })
-		data.Releases[index].IssueIDs = slices.DeleteFunc(data.Releases[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
+		if !data.IssueCollectionPaged {
+			data.Releases[index].IssueIDs = slices.DeleteFunc(data.Releases[index].IssueIDs, func(id string) bool { return !visibleIssues[id] })
+		}
 	}
 	// A document scoped by a private team of its issue or project follows the
 	// key's teams like its own teams do.
 	linkScope := store.NewDocumentLinkScope(data.Teams, data.TeamSettings)
 	data.Documents = slices.DeleteFunc(data.Documents, func(document domain.Document) bool {
-		if len(document.TeamIDs) > 0 && !slices.ContainsFunc(document.TeamIDs, func(id string) bool { return allowed[id] }) {
-			return true
+		if len(document.TeamIDs) > 0 {
+			return !slices.ContainsFunc(document.TeamIDs, func(id string) bool { return allowed[id] })
 		}
 		closed := linkScope.ClosedTeams(document)
 		return len(closed) > 0 && !slices.ContainsFunc(closed, func(id string) bool { return allowed[id] })
@@ -382,6 +395,7 @@ func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
 		})
 		saveSettingCollection(data, meetingsSettingsKey, meetings)
 	}
+	redactAPIKeyReferences(data, key)
 }
 
 // A member may join or leave their own public/open team. Changes involving a

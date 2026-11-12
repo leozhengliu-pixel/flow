@@ -34,7 +34,14 @@ Scopes: `read`, `write`, `admin`, `create_issues` (`issues:create`),
 `create_comments` (`comments:create`) and the application scopes
 `customer:read|write`, `initiative:read|write`, `release:read|create`,
 `releaseStage:update`, `app:assignable`, `app:mentionable`. Team-restricted
-keys and application team access narrow every list below.
+keys and application team access intersect the owner's access with the selected
+teams for records, referenced IDs and counts. A selected policy with no teams
+grants no team content; an unrestricted key keeps the owner's access. App
+scopes also apply to references. These rules apply to REST, bootstrap and MCP.
+Restricted keys see webhook subscriptions only when all their selected teams
+are within the key's teams; delivery snapshots and previous values are projected
+again when read through a key. Outbound webhook delivery uses the subscription's
+own authorization.
 
 ```bash
 curl --fail-with-body "$FLOW_BASE_URL/api/viewer" -H "Authorization: Bearer $FLOW_TOKEN"

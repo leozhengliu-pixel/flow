@@ -250,6 +250,17 @@ func (s *server) listProjectUpdates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updates := append([]domain.ProjectUpdate{}, snapshot.ProjectUpdates[id]...)
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
+		data, ok := s.publicMetadata(w, r)
+		if !ok {
+			return
+		}
+		partial := slices.ContainsFunc(pulseProjectIn(snapshot, id).TeamIDs, func(id string) bool { return !slices.Contains(key.TeamIDs, id) })
+		for i := range updates {
+			updates[i].Diff = redactPulseReferences(updates[i].Diff, func(id string) bool { return resourceExists(&data, "project", id) }, func(id string) bool { return resourceExists(&data, "initiative", id) }, partial)
+			store.RedactUserTeams(&updates[i].User, func(id string) bool { return slices.Contains(key.TeamIDs, id) })
+		}
+	}
 	for index := range updates {
 		updates[index].Snapshot = nil
 	}
@@ -268,6 +279,16 @@ func (s *server) listInitiativeUpdates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updates := append([]domain.InitiativeUpdate{}, snapshot.InitiativeUpdates[id]...)
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
+		data, ok := s.publicMetadata(w, r)
+		if !ok {
+			return
+		}
+		for i := range updates {
+			updates[i].Diff = redactPulseReferences(updates[i].Diff, func(id string) bool { return resourceExists(&data, "project", id) }, func(id string) bool { return resourceExists(&data, "initiative", id) }, true)
+			store.RedactUserTeams(&updates[i].User, func(id string) bool { return slices.Contains(key.TeamIDs, id) })
+		}
+	}
 	for index := range updates {
 		updates[index].Snapshot = nil
 	}

@@ -138,10 +138,13 @@ func TeamContentVisible(data domain.Bootstrap, teamID, userID, role string) bool
 // Only identifiers referenced by this page are returned; never copy project
 // descriptions or label catalogs just to redact a shared issue's references.
 func (s *SQLiteStore) IssueReferenceMetadata(ctx context.Context, query IssueRecordQuery, issues []domain.Issue) (domain.Bootstrap, error) {
-	projectIDs, labelIDs := map[string]bool{}, map[string]bool{}
+	projectIDs, labelIDs, cycleIDs := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, issue := range issues {
 		if issue.Project != nil {
 			projectIDs[issue.Project.ID] = true
+		}
+		if query.AllowedTeamIDs != nil && issue.CycleID != nil {
+			cycleIDs[*issue.CycleID] = true
 		}
 		for _, label := range issue.Labels {
 			labelIDs[label.ID] = true
@@ -176,10 +179,13 @@ func (s *SQLiteStore) IssueReferenceMetadata(ctx context.Context, query IssueRec
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && (query.Workspace == "" || query.Workspace == snapshot.workspace) {
 		reader = snapshot.reader
 	}
-	for _, field := range []string{"projects", "labels"} {
+	for _, field := range []string{"projects", "labels", "cycles"} {
 		ids, property := projectIDs, "teamIds"
 		if field == "labels" {
 			ids, property = labelIDs, "scope"
+		}
+		if field == "cycles" {
+			ids, property = cycleIDs, "teamId"
 		}
 		keys := make([]string, 0, len(ids))
 		for id := range ids {
@@ -209,6 +215,10 @@ func (s *SQLiteStore) IssueReferenceMetadata(ctx context.Context, query IssueRec
 					}
 					if projectAllowed(teams) {
 						result.Projects = append(result.Projects, domain.Project{ID: id})
+					}
+				} else if field == "cycles" {
+					if allowed(value.String) {
+						result.Cycles = append(result.Cycles, domain.Cycle{ID: id})
 					}
 				} else {
 					scope := strings.ToLower(strings.TrimSpace(value.String))

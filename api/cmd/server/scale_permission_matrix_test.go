@@ -84,8 +84,8 @@ func scaleP01TestDatabaseConfig(t *testing.T, config store.DatabaseConfig, exter
 	config.MaxOpenConns = externalConnections
 	if driver == "sqlite" {
 		config.Path = filepath.Clean(config.URL)
-		if !filepath.IsAbs(config.Path) || (!strings.HasPrefix(config.Path, "/tmp/codex-scale-p01/") && !strings.HasPrefix(config.Path, "/private/tmp/codex-scale-p01/")) {
-			t.Fatal("explicit SQLite test paths must be inside /tmp/codex-scale-p01")
+		if !filepath.IsAbs(config.Path) || (!strings.HasPrefix(config.Path, "/tmp/codex-scale-p01/") && !strings.HasPrefix(config.Path, "/private/tmp/codex-scale-p01/") && !strings.HasPrefix(config.Path, "/tmp/codex-scale-key-leak/") && !strings.HasPrefix(config.Path, "/private/tmp/codex-scale-key-leak/")) {
+			t.Fatal("explicit SQLite test paths must be inside a P01 or scale-key-leak scratch directory")
 		}
 		config.MaxOpenConns = 1
 	}
@@ -265,12 +265,7 @@ func scaleP01PermissionMatrix(t *testing.T, config store.DatabaseConfig) {
 						t.Fatal("hidden-count fixture has no nonzero control")
 					}
 					leaks := !viewer.private && (slices.Contains(actual.TeamIDs, private.ID) || slices.Contains(actual.DependencyIDs, hiddenID) || actual.IssueCount > visibleCount || bootstrapCountLeak)
-					if leaks && viewer.name == "key-selected-set" {
-						t.Logf("BASELINE DEFECT: selected-set key retains owner projection: hiddenDependency=%v hiddenBootstrapCount=%v hiddenTeam=%v", slices.Contains(actual.DependencyIDs, hiddenID), bootstrapCountLeak, slices.Contains(actual.TeamIDs, private.ID))
-						if os.Getenv("FLOW_LOAD_STRICT_PERMISSIONS") == "1" {
-							t.Error("selected-set key leaks hidden references/counts")
-						}
-					} else if leaks {
+					if leaks {
 						t.Fatal("hidden reference or count leaked")
 					}
 				}

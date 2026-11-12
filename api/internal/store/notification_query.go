@@ -16,6 +16,7 @@ type NotificationQuery struct {
 	IncludeArchived, IncludeDeleted, IncludeSnoozed bool
 	Read                                            *bool
 	Limit                                           int
+	SkipUnreadCount                                 bool
 }
 type NotificationPage struct {
 	Notifications []domain.Notification `json:"notifications"`
@@ -24,6 +25,13 @@ type NotificationPage struct {
 	HasMore       bool                  `json:"hasMore"`
 }
 type contentCursor struct{ Date, ID string }
+
+// NotificationCursor resumes after a visible row without disclosing the ID
+// of a notification removed by credential projection.
+func NotificationCursor(notification domain.Notification) string {
+	raw, _ := json.Marshal(contentCursor{Date: notification.CreatedAt.UTC().Format(issueRecordTimestamp), ID: notification.ID})
+	return base64.RawURLEncoding.EncodeToString(raw)
+}
 
 func (s *SQLiteStore) jsonText(column, field string) string {
 	switch s.dialect {
@@ -53,8 +61,10 @@ func (s *SQLiteStore) QueryNotifications(ctx context.Context, q NotificationQuer
 		where += " AND (next_attempt_at='' OR next_attempt_at<=?)"
 		args = append(args, time.Now().UTC().Format(issueRecordTimestamp))
 	}
-	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workspace_content_records WHERE "+where+" AND "+s.jsonText("data", "readAt")+" IS NULL", args...).Scan(&result.UnreadCount); err != nil {
-		return result, err
+	if !q.SkipUnreadCount {
+		if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workspace_content_records WHERE "+where+" AND "+s.jsonText("data", "readAt")+" IS NULL", args...).Scan(&result.UnreadCount); err != nil {
+			return result, err
+		}
 	}
 	if q.Read != nil {
 		where += " AND " + s.jsonText("data", "readAt")

@@ -1239,6 +1239,7 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if projectListBootstrapRequested(r) {
+		r = captureBootstrapCredentialVisibility(r, data)
 		store.ProjectListBootstrapProjection(&data)
 	} else if err := s.store.PopulateReleaseProgress(r.Context(), &data); err != nil {
 		issueRecordsError(w, err)
@@ -1478,6 +1479,9 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 		data.Issues[index].Labels = slices.DeleteFunc(data.Issues[index].Labels, func(label domain.IssueLabel) bool { return !visibleLabel(label.ID) })
 	}
 	visibleIssue := func(id string) bool {
+		if data.IssueCollectionPaged && len(data.Issues) == 0 {
+			return true
+		}
 		return slices.ContainsFunc(data.Issues, func(item domain.Issue) bool { return item.ID == id })
 	}
 	data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool {
@@ -1526,7 +1530,9 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 			issue.ParentID = nil
 		}
 		issue.SubIssueIDs = slices.DeleteFunc(issue.SubIssueIDs, func(id string) bool { return !visibleIssue(id) })
-		issue.Relations = slices.DeleteFunc(issue.Relations, func(relation domain.IssueRelation) bool { return !visibleIssue(relation.RelatedIssueID) })
+		issue.Relations = slices.DeleteFunc(issue.Relations, func(relation domain.IssueRelation) bool {
+			return relation.IssueID != "" && !visibleIssue(relation.IssueID) || !visibleIssue(relation.RelatedIssueID)
+		})
 		if issue.Project != nil && !visibleProject(issue.Project.ID) {
 			issue.Project = nil
 		}
@@ -1632,11 +1638,9 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool { return !visibleResource(item.ResourceType, item.ResourceID) })
 	data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool { return !visibleResource(item.ResourceType, item.ResourceID) })
 	data.Webhooks = slices.DeleteFunc(data.Webhooks, func(item domain.Webhook) bool {
-		if item.TeamRestriction == "" || item.TeamRestriction == "all" {
-			return false
-		}
-		return !slices.ContainsFunc(item.TeamIDs, allowed)
+		return !webhookWithinKeyTeams(item, key)
 	})
+	applyAPIKeyProjection(data, key)
 }
 
 func (s *server) updateWorkspaceSettings(w http.ResponseWriter, r *http.Request) {
@@ -2545,9 +2549,7 @@ func (s *server) workspaceData(r *http.Request) domain.Bootstrap {
 	}
 	if !s.authDisabled {
 		data, _, _ := s.store.BootstrapForUser(r.Context(), workspaceKey(r), authUser(r).ID)
-		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
-			applyAPIKeyProjection(&data, key)
-		}
+		filterBootstrapForAPIKey(&data, r)
 		return data
 	}
 	data, _ := s.store.BootstrapFor(workspaceKey(r))
@@ -2618,7 +2620,18 @@ func (s *server) listNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	result, err := s.store.QueryNotifications(r.Context(), store.NotificationQuery{Workspace: data.Workspace.URLKey, UserID: requestActor(s, r).ID, IncludeArchived: includeArchived, IncludeDeleted: includeDeleted, IncludeSnoozed: includeSnoozed, Read: read, Cursor: r.URL.Query().Get("cursor"), Limit: limit})
+	query := store.NotificationQuery{Workspace: data.Workspace.URLKey, UserID: requestActor(s, r).ID, IncludeArchived: includeArchived, IncludeDeleted: includeDeleted, IncludeSnoozed: includeSnoozed, Read: read, Cursor: r.URL.Query().Get("cursor"), Limit: limit}
+	var result store.NotificationPage
+	var err error
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
+		projected, ok := s.publicMetadata(w, r)
+		if !ok {
+			return
+		}
+		result, err = s.queryAPIKeyNotifications(r.Context(), key, projected, query)
+	} else {
+		result, err = s.store.QueryNotifications(r.Context(), query)
+	}
 	if err != nil {
 		issueRecordsError(w, err)
 		return

@@ -19,9 +19,20 @@ type CycleCompletedIssue struct {
 // not narrowed to the issues the viewer can open; only the cycle, the estimate
 // and nothing else of an issue leaves the store.
 func (s *SQLiteStore) CycleCompletedIssues(ctx context.Context, workspace string, cycleIDs []string) ([]CycleCompletedIssue, error) {
+	return s.cycleCompletedIssues(ctx, IssueRecordQuery{Workspace: workspace}, cycleIDs)
+}
+
+// ScopedCycleCompletedIssues derives velocity from the same owner and
+// credential intersection as issue reads, including explicit issue grants.
+func (s *SQLiteStore) ScopedCycleCompletedIssues(ctx context.Context, query IssueRecordQuery, cycleIDs []string) ([]CycleCompletedIssue, error) {
+	return s.cycleCompletedIssues(ctx, query, cycleIDs)
+}
+
+func (s *SQLiteStore) cycleCompletedIssues(ctx context.Context, query IssueRecordQuery, cycleIDs []string) ([]CycleCompletedIssue, error) {
 	result := []CycleCompletedIssue{}
 	for chunk := range slices.Chunk(cycleIDs, 500) {
-		args := []any{workspace}
+		prefix, args := issueAccessCTE(query)
+		args = append(args, query.Workspace)
 		marks := make([]string, len(chunk))
 		for index, id := range chunk {
 			marks[index] = "?"
@@ -29,13 +40,18 @@ func (s *SQLiteStore) CycleCompletedIssues(ctx context.Context, workspace string
 		}
 		// list_data carries the estimate and is much smaller than the full
 		// issue record, so velocity does not load every completed body.
-		from := "issue_records"
+		from := "issue_records i"
 		if s.dialect == "mysql" {
 			// MySQL misestimates a workspace-sized table after a bulk import
 			// and scans the clustered index instead of this composite one.
-			from = "issue_records FORCE INDEX (issue_records_cycle_state_idx)"
+			from = "issue_records i FORCE INDEX (issue_records_cycle_state_idx)"
 		}
-		rows, err := s.db.QueryContext(ctx, "SELECT cycle_id,COALESCE(list_data,data) FROM "+from+" WHERE workspace_key=? AND archived=0 AND state_type='completed' AND cycle_id IN ("+strings.Join(marks, ",")+")", args...)
+		where := "i.workspace_key=? AND i.archived=0 AND i.state_type='completed' AND i.cycle_id IN (" + strings.Join(marks, ",") + ")"
+		if visibility, values := issueRecordVisibilityClause(query, "i"); visibility != "" {
+			where += " AND " + visibility
+			args = append(args, values...)
+		}
+		rows, err := s.db.QueryContext(ctx, prefix+"SELECT i.cycle_id,COALESCE(i.list_data,i.data) FROM "+from+" WHERE "+where, args...)
 		if err != nil {
 			return nil, err
 		}

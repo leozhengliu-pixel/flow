@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Team-restricted API keys now intersect their owner's access for resource references and counts across REST, bootstrap and MCP reads. Project dependencies, initiative and document links, issue hierarchy and cycle links, progress history, directory totals, cycle capacity and customer demand no longer expose other teams. Stored webhook deliveries are projected again for the reading key. Permission baseline tests enforce this by default.
 - Added opt-in API scale baselines with distinct principals, separate metadata count/body growth, an external two-process generator, commit/apply delivery accounting, SQL/CPU measurements, and permission differential coverage with isolated accounts and workspaces on shared test databases.
 - Session activity timestamps now default to one refresh per minute across API replicas, while authentication, expiry and revocation are checked on every request. Set `FLOW_SESSION_TOUCH_INTERVAL=0` to restore an activity write on every request; a positive Go duration up to `60s` allows a shorter interval.
 - Optional `FLOW_NARROW_MUTATION_INPUTS=on` reduces metadata copied for issue edits, comments and team edits while retaining the existing transactions and side effects. It defaults to off.

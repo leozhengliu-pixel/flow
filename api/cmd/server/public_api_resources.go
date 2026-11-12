@@ -59,8 +59,9 @@ func (s *server) publicMetadata(w http.ResponseWriter, r *http.Request) (domain.
 		return data, false
 	}
 	filterBootstrapForAPIKey(&data, r)
-	if apiKey, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
-		applyAPIKeyProjection(&data, apiKey)
+	if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
+		issueRecordsError(w, err)
+		return domain.Bootstrap{}, false
 	}
 	return data, true
 }
@@ -125,6 +126,9 @@ func (s *server) getViewer(w http.ResponseWriter, r *http.Request) {
 		response.Actor = "app"
 	}
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+		if apiKeyTeamRestrictionSelected(key) {
+			store.RedactUserTeams(&response.User, func(id string) bool { return slices.Contains(key.TeamIDs, id) })
+		}
 		response.Authentication = "apiKey"
 		if key.OAuthClientID != "" || key.AuthorizationID != "" || key.GrantType != "" || key.Actor == "app" {
 			response.Authentication = "oauth"

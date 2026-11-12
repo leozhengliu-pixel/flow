@@ -144,6 +144,7 @@ const document = {
       'Flow\'s HTTP API. Typed operations (with request and response schemas reflected from the server\'s Go types) form the public contract; every other route is listed as an inventory entry that may change.',
       '',
       'Authenticate with a personal API key or an OAuth access token in `Authorization: Bearer <token>`; tokens select their workspace. Browser sessions send the `X-Workspace-Key` header.',
+      'Team-restricted credentials intersect the owner\'s access with the selected teams for records, referenced IDs and counts. A selected policy with no teams grants no team content. Application scopes also narrow references; unrestricted credentials keep their owner\'s access.',
       'Lists return connections (`nodes`, `pageInfo`) paged with `first`/`after` or `last`/`before`, ordered newest first by `orderBy` (createdAt or updatedAt), filtered with a `filter` object.',
       'Routes marked `x-flow-internal` serve the web app and are not part of the contract. Payloads Flow sends to webhook endpoints are described in the `webhooks` section.',
       'Errors use one envelope (`error`, `code`, `type`, `requestId`). Requests are rate limited per user or application (X-RateLimit-* headers, HTTP 429 with type RATELIMITED).',
