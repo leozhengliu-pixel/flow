@@ -160,7 +160,7 @@ func (s *server) internalAgentConversation(ctx context.Context, workspace, userI
 	if err != nil {
 		return domain.AgentSession{}, err
 	}
-	return s.store.AgentConversationRecord(ctx, access, ref, bodies)
+	return s.store.AgentConversationByID(ctx, access, ref, bodies)
 }
 
 func (s *server) internalRequestConversation(r *http.Request, ref string) (domain.AgentSession, error) {
@@ -176,10 +176,11 @@ func (s *server) internalRequestConversation(r *http.Request, ref string) (domai
 			userID = data.Viewer.ID
 		}
 	}
-	session, err := s.internalAgentConversation(r.Context(), workspace, userID, ref, false)
-	if session.DeletedAt != nil {
-		return domain.AgentSession{}, errNotFound
+	access, err := s.store.ResolveAccess(r.Context(), workspace, userID, nil)
+	if err != nil {
+		return domain.AgentSession{}, err
 	}
+	session, err := s.store.AgentConversationRecord(r.Context(), access, ref, false)
 	if err != nil {
 		return domain.AgentSession{}, err
 	}
