@@ -287,6 +287,7 @@ type realtimePayloadCache struct {
 type realtimePayloadEntry struct {
 	ready   chan struct{}
 	payload json.RawMessage
+	err     error
 }
 
 const (
@@ -304,11 +305,16 @@ func (h *realtimeHub) cachedPayload(key string, build func() json.RawMessage) js
 }
 
 func (c *realtimePayloadCache) load(key string, build func() json.RawMessage) json.RawMessage {
+	payload, _ := c.loadResult(key, func() (json.RawMessage, error) { return build(), nil })
+	return payload
+}
+
+func (c *realtimePayloadCache) loadResult(key string, build func() (json.RawMessage, error)) (json.RawMessage, error) {
 	c.mu.Lock()
 	if entry, ok := c.entries[key]; ok {
 		c.mu.Unlock()
 		<-entry.ready
-		return entry.payload
+		return entry.payload, entry.err
 	}
 	if c.entries == nil {
 		c.entries = map[string]*realtimePayloadEntry{}
@@ -318,10 +324,12 @@ func (c *realtimePayloadCache) load(key string, build func() json.RawMessage) js
 	c.order = append(c.order, key)
 	c.mu.Unlock()
 	var payload json.RawMessage
+	var err error
 	defer func() {
 		// Also on a panic in build: the waiters get nil and build for themselves next time.
 		c.mu.Lock()
 		entry.payload = payload
+		entry.err = err
 		if c.entries[key] == entry {
 			if payload == nil {
 				delete(c.entries, key)
@@ -339,6 +347,6 @@ func (c *realtimePayloadCache) load(key string, build func() json.RawMessage) js
 		c.mu.Unlock()
 		close(entry.ready)
 	}()
-	payload = build()
-	return payload
+	payload, err = build()
+	return payload, err
 }

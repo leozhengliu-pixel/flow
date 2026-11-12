@@ -291,7 +291,14 @@ func ProjectEvent(source *EventSource, access store.EventAccess) (EventFrame, er
 	if source == nil || source.version != access.SourceVersion() || source.version.WorkspaceID != access.WorkspaceID || source.authzEpoch != "" && source.authzEpoch != access.AuthzEpoch {
 		return EventFrame{}, store.ErrAuthForbidden
 	}
-	work := int64(source.bytes*4 + 16<<10)
+	// Cache waiters retain principal scratch; only the builder reserves encoding.
+	work := int64(4 << 10)
+	if source.policy != nil {
+		work += int64(source.policy.Bytes())
+		if source.kind == "document" || source.kind == "pulse" || source.kind == "policy" {
+			work += int64(source.policy.Bytes() * 2)
+		}
+	}
 	if source.budget != nil && !source.budget.acquire(work) {
 		return EventFrame{}, store.ErrEventSourceBudget
 	}
@@ -454,10 +461,26 @@ func ProjectEvent(source *EventSource, access store.EventAccess) (EventFrame, er
 		cacheKey += "|" + access.AuthzEpoch + "|" + access.PrincipalID + "|" + access.CredentialScope + "|" + access.PermissionFingerprint()
 	}
 	var raw json.RawMessage
+	encode := func() (json.RawMessage, error) {
+		if source.budget != nil {
+			encodingWork := int64(source.bytes*4 + 16<<10)
+			if encodingWork > source.budget.limit {
+				return nil, store.ErrEventSourceBudget
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := source.budget.wait(ctx, encodingWork); err != nil {
+				return nil, store.ErrEventSourceBudget
+			}
+			defer source.budget.release(encodingWork)
+		}
+		raw := build()
+		return raw, buildErr
+	}
 	if source.frames != nil {
-		raw = source.frames.load(cacheKey, build)
+		raw, buildErr = source.frames.loadResult(cacheKey, encode)
 	} else {
-		raw = build()
+		raw, buildErr = encode()
 	}
 	if buildErr != nil {
 		return EventFrame{}, buildErr
