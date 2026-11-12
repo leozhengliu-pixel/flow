@@ -126,6 +126,18 @@ func scaleP02StoreAt(t *testing.T, config DatabaseConfig) (*SQLiteStore, *scaleP
 		_ = repo.Close()
 		_ = base.Close()
 	})
+	if repo.db.journalWrites != nil {
+		// Prepared journal statements belong to the pool that created them.
+		for _, statement := range repo.db.journalWrites {
+			_ = statement.Close()
+		}
+		repo.db.journalWrites = nil
+		_ = repo.db.journalSQLFlush.Close()
+		repo.db.journalSQLFlush = nil
+		if err := repo.ensureSQLiteRecordJournalCommit(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
 	return repo, stats
 }
 
