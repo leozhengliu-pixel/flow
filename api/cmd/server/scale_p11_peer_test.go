@@ -336,3 +336,23 @@ func TestScaleP11ClientHintsAreBounded(t *testing.T) {
 		t.Fatal("client correlation retained an event payload queue")
 	}
 }
+
+func TestScaleP11RoutineCredentialEventsStaySilent(t *testing.T) {
+	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
+	f := scaleP11NewFixture(t, 1)
+	channel, stop := f.service.realtime.subscribe(f.workspace)
+	defer stop()
+	if err := f.writer.MutateWorkspace(t.Context(), f.workspace, "api_key.used", "p11-key", nil, func(*domain.Bootstrap) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	head, err := f.writer.WorkspaceChangeHead(t.Context(), f.workspace)
+	if err != nil || head <= f.service.remoteEvents.consumer(f.workspace).eventCursor {
+		t.Fatalf("credential fixture did not append a legacy event: head=%d error=%v", head, err)
+	}
+	if err := f.service.syncPeerWorkspace(t.Context(), f.workspace); err != nil {
+		t.Fatal(err)
+	}
+	if len(channel) != 0 {
+		t.Fatal("a deliberately silent credential event triggered peer traffic")
+	}
+}

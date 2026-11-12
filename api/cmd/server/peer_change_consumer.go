@@ -184,6 +184,10 @@ func (s *server) syncPeerWorkspace(ctx context.Context, workspace string) error 
 			return nil
 		}
 		for _, record := range events.Records {
+			if domain.RoutineCredentialEvent(record.Event.Type) {
+				c.eventCursor = record.Seq
+				continue
+			}
 			event := domain.RealtimeEvent{ID: record.Event.ID, Seq: record.Seq, Type: record.Event.Type, AggregateID: record.Event.AggregateID, ActorID: record.ActorID, Payload: record.Event.Payload, CreatedAt: record.Event.CreatedAt}
 			client, signaled := s.remoteEvents.takeClient(workspace, event.ID)
 			if !signaled && !s.peerEventPublished(workspace, event.ID) {
