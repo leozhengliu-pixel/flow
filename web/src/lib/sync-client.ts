@@ -7,8 +7,13 @@ import { modelChanges, modelRecordKind, syncCollections, SyncWireVersionError } 
 import type { BootstrapData, FlowDocument, RecordKey, SyncChanges, SyncManifest, SyncPageRequest, SyncRecord, SyncRecordBatch, SyncRecordPage, WorkspaceSyncState } from '@/types/flow'
 
 export type SyncSurface = 'issue-detail' | 'document-detail'
+
+export function syncV2Enabled() {
+  return import.meta.env.VITE_SYNC_V2 === 'true'
+}
+
 export function syncBootstrapRequestKey(base: string, surface?: SyncSurface) {
-  return import.meta.env.VITE_SYNC_V2 === 'true' && surface ? `${base}:sync:${surface}` : base
+  return syncV2Enabled() && surface ? `${base}:sync:${surface}` : base
 }
 export const SYNC_DETAIL_MAX_BYTES = 32 * 1024 * 1024
 export const SYNC_SUMMARY_MAX_BYTES = 16 * 1024 * 1024
@@ -351,7 +356,7 @@ export class SyncClient {
 
 /** Only record detail surfaces have migrated; all other routes retain the complete legacy bootstrap. */
 export async function fetchSurfaceBootstrap(workspaceKey: string, surface: SyncSurface | undefined, legacy: () => Promise<BootstrapData>, signal?: AbortSignal, quiet?: boolean): Promise<BootstrapData> {
-  if (import.meta.env.VITE_SYNC_V2 !== 'true' || !surface) return legacy()
+  if (!syncV2Enabled() || !surface) return legacy()
   let manifest: SyncManifest
   try { manifest = await fetchSyncManifest(workspaceKey, signal, quiet) }
   catch (error) {

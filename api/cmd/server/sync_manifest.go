@@ -37,6 +37,10 @@ func syncFlagEnabled(name string) bool {
 	}
 }
 
+func syncV2CapabilityAdvertised(journalReady, coreReady bool) bool {
+	return journalReady && coreReady && syncV2Enabled() && syncFlagEnabled("FLOW_SYNC_MANIFEST") && syncFlagEnabled("FLOW_INDEXED_READS")
+}
+
 func syncReadRequest(r *http.Request) bool {
 	return (r.Method == http.MethodGet || r.Method == http.MethodHead) && (r.URL.Path == "/api/sync/manifest" || r.URL.Path == "/api/sync/records" || r.URL.Path == "/api/sync/changes") ||
 		r.Method == http.MethodPost && r.URL.Path == "/api/sync/batch"
@@ -103,6 +107,7 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 		AuthzEpoch: access.AuthzEpoch, Head: strconv.FormatInt(head, 10),
 		Capabilities: []string{}, Core: core, Collections: map[string]syncManifestCollection{},
 	}
+	collectionsReady := true
 	for _, kind := range []string{"projects", "initiatives"} {
 		status, err := s.store.ReadRecordStatus(r.Context(), access, kind)
 		if err != nil {
@@ -110,10 +115,14 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ready := status.Ready && syncFlagEnabled("FLOW_INDEXED_READS")
+		collectionsReady = collectionsReady && ready
 		result.Collections[kind] = syncManifestCollection{Ready: ready, Revision: status.Revision}
 	}
-	// P09/P12/P15 and the remaining core surfaces must be integrated before
-	// advertising sync-v2. Its absence makes new clients use legacy bootstrap.
+	if _, ready := s.syncV2Journal(); collectionsReady && syncV2CapabilityAdvertised(ready, len(core.Omitted) == 0) {
+		result.Capabilities = []string{"sync-v2"}
+	}
+	// Incomplete core collections or an uncovered journal keep clients on the
+	// legacy bootstrap, including during rolling upgrades and explicit rollback.
 	if err := s.store.ValidateAccess(r.Context(), access); err != nil {
 		writeSyncError(w, err)
 		return

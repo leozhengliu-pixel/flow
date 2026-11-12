@@ -362,7 +362,7 @@ import { useExitPresence } from '@/components/ui/motion';
 
 import { PeopleProvider } from '@/components/property/people-provider'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
-import { fetchSurfaceBootstrap, migratedSyncSignal, syncBootstrapRequestKey, syncClientFor, syncScopeMatches, SyncResetRequired } from '@/lib/sync-client'
+import { fetchSurfaceBootstrap, migratedSyncSignal, syncBootstrapRequestKey, syncClientFor, syncScopeMatches, syncV2Enabled, SyncResetRequired } from '@/lib/sync-client'
 import type { RealtimeEvent } from '@/types/flow'
 import { applyLabelStateRename, applyRealtimePatch, canApplyRealtimePatch, isLabelStateRenameEvent } from '@/store/apply-realtime-patch'
 import { classifyRealtimeEvent } from '@/lib/realtime-dispatch'
@@ -917,7 +917,7 @@ function App() {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     if (loadedWorkspaceKey !== requestedWorkspaceKey || loadedBootstrapRequestKey.current && loadedBootstrapRequestKey.current !== requestKey) {
-      const cachedNavigation = import.meta.env.VITE_SYNC_V2 === 'true' && syncSurface ? undefined : readNavigationCache(account.viewer.id, requestedWorkspaceKey);
+      const cachedNavigation = syncV2Enabled() && syncSurface ? undefined : readNavigationCache(account.viewer.id, requestedWorkspaceKey);
       setData((current) => {
         if (loadedWorkspaceKey === requestedWorkspaceKey) {
           if (!projectListProjection || !current) return current;
