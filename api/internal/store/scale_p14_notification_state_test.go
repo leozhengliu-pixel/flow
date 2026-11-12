@@ -295,6 +295,28 @@ func TestScaleP14RecordChangesRetainRemovedOwners(t *testing.T) {
 	}
 }
 
+func TestScaleP14NotificationCredentialBinding(t *testing.T) {
+	repo, data := scaleP14Store(t)
+	key := &domain.APIKey{ID: "p14-key", Actor: "user", SecretHash: "not-exported", Scopes: []string{"read"}, TeamRestriction: "selected", TeamIDs: []string{data.Teams[0].ID}}
+	access, err := repo.ResolveAccess(t.Context(), data.Workspace.URLKey, data.Viewer.ID, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, credential, err := repo.NotificationStateCredential(access)
+	if err != nil || workspace != data.Workspace.URLKey || credential.SecretHash != "" {
+		t.Fatalf("invalid notification credential binding: %v", err)
+	}
+	credential.TeamIDs[0], credential.Scopes[0] = "other-team", "admin"
+	_, again, err := repo.NotificationStateCredential(access)
+	if err != nil || again.TeamIDs[0] != data.Teams[0].ID || again.Scopes[0] != "read" {
+		t.Fatal("notification credential exposed mutable policy")
+	}
+	access.PrincipalID = "another-recipient"
+	if _, _, err := repo.NotificationStateCredential(access); err == nil {
+		t.Fatal("notification credential accepted a forged principal")
+	}
+}
+
 // Enumerate every canonical SQL notification writer, including generic writers
 // and lifecycle operations. Business producers below all reach these writers.
 func TestScaleP14WriterCoverage(t *testing.T) {

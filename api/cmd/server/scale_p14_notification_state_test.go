@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"go/ast"
 	"go/parser"
@@ -99,7 +100,11 @@ func TestScaleP14RecipientPermissionDifferential(t *testing.T) {
 					if err := json.Unmarshal(next.Body.Bytes(), &state); err != nil {
 						t.Fatal(err)
 					}
-					if state.UnreadCount != page.UnreadCount || state.UnreadCount != 1 {
+					want := 1
+					if p.name == "key-selected-empty" || p.name == "key-selected-set" {
+						want = 0
+					}
+					if state.UnreadCount != page.UnreadCount || state.UnreadCount != want {
 						t.Fatalf("legacy=%d state=%+v", page.UnreadCount, state)
 					}
 					if bytes.Contains(next.Body.Bytes(), []byte("hidden")) || bytes.Contains(next.Body.Bytes(), []byte("old-private-slug")) || len(state.ChangedIDs) > 0 {
@@ -197,8 +202,12 @@ func TestScaleP14RecipientPermissionDifferential(t *testing.T) {
 }
 
 func scaleP14StateRequest(t *testing.T, f scaleP03PlatformFixture, client *http.Client, bearer, workspace string) *httptest.ResponseRecorder {
+	return scaleP14StateRequestContext(t, t.Context(), f, client, bearer, workspace)
+}
+
+func scaleP14StateRequestContext(t *testing.T, ctx context.Context, f scaleP03PlatformFixture, client *http.Client, bearer, workspace string) *httptest.ResponseRecorder {
 	t.Helper()
-	r := httptest.NewRequest(http.MethodGet, "/api/sync/notification-state?recipientId=someone-else", nil)
+	r := httptest.NewRequest(http.MethodGet, "/api/sync/notification-state?recipientId=someone-else", nil).WithContext(ctx)
 	r.Header.Set("X-Workspace-Key", workspace)
 	if bearer != "" {
 		r.Header.Set("Authorization", "Bearer "+bearer)
@@ -225,6 +234,11 @@ func TestScaleP14BusinessWriterInventory(t *testing.T) {
 		"appendIssueNotifications", "aggregatableNotification", "preparePulseSummaries", "createInitiativeReminder", "createProjectUpdate", "createIssueReminder", "createProjectReminder",
 	}
 	var found []string
+	readProjections := map[string]string{
+		"captureIssueLinks":          "trash_links.go",
+		"filterPreferenceIssueTeams": "preference_records.go",
+		"redactAPIKeyReferences":     "api_key_projection.go",
+	}
 	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
@@ -244,7 +258,12 @@ func TestScaleP14BusinessWriterInventory(t *testing.T) {
 		}
 		for _, decl := range parsed.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil || fn.Name.Name == "captureIssueLinks" {
+			if !ok || fn.Body == nil {
+				continue
+			}
+			// These functions filter returned copies; they do not persist or
+			// produce notifications. Keep exemptions tied to exact files.
+			if readProjections[fn.Name.Name] == file {
 				continue
 			}
 			body := string(raw[set.Position(fn.Body.Pos()).Offset:set.Position(fn.Body.End()).Offset])

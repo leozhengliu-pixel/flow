@@ -25,8 +25,8 @@ func TestScaleP01ReadProjectionBaseline(t *testing.T) {
 		if dialect == "sqlite" {
 			config := configs[dialect]
 			config.Path = filepath.Clean(config.URL)
-			if !filepath.IsAbs(config.Path) || (!strings.HasPrefix(config.Path, "/tmp/codex-scale-p01/") && !strings.HasPrefix(config.Path, "/private/tmp/codex-scale-p01/") && !strings.HasPrefix(config.Path, "/tmp/codex-scale-key-leak/") && !strings.HasPrefix(config.Path, "/private/tmp/codex-scale-key-leak/")) {
-				t.Fatal("explicit SQLite test paths must be inside a P01 or scale-key-leak scratch directory")
+			if !filepath.IsAbs(config.Path) || (!strings.HasPrefix(config.Path, "/tmp/codex-scale-p01/") && !strings.HasPrefix(config.Path, "/private/tmp/codex-scale-p01/") && !strings.HasPrefix(config.Path, "/tmp/codex-scale-key-leak/") && !strings.HasPrefix(config.Path, "/private/tmp/codex-scale-key-leak/") && !strings.HasPrefix(config.Path, "/tmp/codex-scale-p14/") && !strings.HasPrefix(config.Path, "/private/tmp/codex-scale-p14/")) {
+				t.Fatal("explicit SQLite test paths must be inside a P01, P14 or scale-key-leak scratch directory")
 			}
 			config.MaxOpenConns = 1
 			configs[dialect] = config

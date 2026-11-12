@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"flow/api/internal/domain"
 )
 
 const NotificationStateCapability = "recipient-inbox-v1"
@@ -71,6 +73,26 @@ func notificationStateKind(recipient string) string {
 
 func (s *SQLiteStore) NotificationState(ctx context.Context, workspace, recipient string) (NotificationState, error) {
 	return readNotificationState(ctx, s.db, workspace, recipient)
+}
+
+// NotificationStateCredential returns only the immutable scope retained by a
+// bound access context. The caller owns the returned credential's slices.
+func (s *SQLiteStore) NotificationStateCredential(access AccessContext) (string, *domain.APIKey, error) {
+	if err := access.checkBinding(s); err != nil {
+		return "", nil, err
+	}
+	return access.policy.workspace, resourceAccessCredential(access.policy.key), nil
+}
+
+// NotificationStateRevision lets credential projections pair the counter with
+// their own scoped count without first reading the recipient-wide unread count.
+func (s *SQLiteStore) NotificationStateRevision(ctx context.Context, workspace, recipient string) (string, error) {
+	if workspace == "" || recipient == "" {
+		return "", ErrAuthForbidden
+	}
+	var revision int64
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(revision),0) FROM workspace_cache_revisions WHERE workspace_key=? AND kind=? AND shard=0`, workspace, notificationStateKind(recipient)).Scan(&revision)
+	return strconv.FormatInt(revision, 10), err
 }
 
 func readNotificationState(ctx context.Context, db *sqlDatabase, workspace, recipient string) (NotificationState, error) {
