@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -48,6 +49,21 @@ type scaleP03PlatformFixture struct {
 	resources *scaleP03FixtureResources
 }
 
+func scaleP03RetryWrite(ctx context.Context, write func() error) error {
+	// Credential telemetry can write while a fixture installs or removes apps.
+	for attempt := 0; ; attempt++ {
+		err := write()
+		if !errors.Is(err, store.ErrConcurrentWrite) || attempt == 4 {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
 func scaleP03TrackResources(t *testing.T, repo *store.SQLiteStore) *scaleP03FixtureResources {
 	t.Helper()
 	resources := &scaleP03FixtureResources{repo: repo}
@@ -55,7 +71,7 @@ func scaleP03TrackResources(t *testing.T, repo *store.SQLiteStore) *scaleP03Fixt
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		for _, app := range resources.appUsers {
-			if err := repo.ErasePersonFromWorkspace(ctx, app.workspace, app.id); err != nil {
+			if err := scaleP03RetryWrite(ctx, func() error { return repo.ErasePersonFromWorkspace(ctx, app.workspace, app.id) }); err != nil {
 				t.Errorf("clean up owned application membership: %v", err)
 			}
 			if err := repo.EraseAccount(ctx, app.id); err != nil {

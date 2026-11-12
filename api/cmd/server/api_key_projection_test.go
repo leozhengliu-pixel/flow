@@ -90,7 +90,13 @@ func apiKeyScopeCredential(t *testing.T, f scaleP03PlatformFixture, actor, restr
 	secret := idgen.New("scope-test-token-")
 	key := domain.APIKey{ID: idgen.New("scope-key-"), Name: "Scope test", CreatorID: f.data.Viewer.ID, Actor: actor, SecretHash: secretHash(secret), TeamRestriction: restriction, TeamIDs: teams, Scopes: scopes}
 	if actor == "app" {
-		app, err := f.repository.InstallApplication(t.Context(), f.data.Workspace.URLKey, domain.ApplicationInstallation{ClientID: idgen.New("scope-app-"), Name: "Scope app", Active: true, InstalledBy: f.data.Viewer.ID, TeamIDs: []string{"scope-public", "scope-private"}, Scopes: scopes}, "")
+		installation := domain.ApplicationInstallation{ClientID: idgen.New("scope-app-"), Name: "Scope app", Active: true, InstalledBy: f.data.Viewer.ID, TeamIDs: []string{"scope-public", "scope-private"}, Scopes: scopes}
+		var app domain.ApplicationInstallation
+		err := scaleP03RetryWrite(t.Context(), func() error {
+			var err error
+			app, err = f.repository.InstallApplication(t.Context(), f.data.Workspace.URLKey, installation, "")
+			return err
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
