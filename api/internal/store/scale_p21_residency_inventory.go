@@ -6,6 +6,7 @@ package store
 type metadataFullWorkspaceConsumer struct{ owner string }
 
 var metadataFullWorkspaceConsumers = map[string]metadataFullWorkspaceConsumer{
+	"server/notification_state.go:scopedNotificationState":                      {"P21"},
 	"server/admin_settings.go:createWebhook":                                    {"P21"},
 	"server/admin_settings.go:deleteWebhook":                                    {"P21"},
 	"server/admin_settings.go:listWebhookFailures":                              {"P21"},

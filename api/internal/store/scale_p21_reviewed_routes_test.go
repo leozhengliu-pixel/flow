@@ -13,6 +13,10 @@ store/bounded_recovery.go:reloadResidentWorkspace
 `
 
 var scaleP21ReviewedRoutes = []string{
+	"GET /api/sync/manifest\ts.syncManifest",
+	"GET /api/sync/records\ts.syncRecords",
+	"POST /api/sync/batch\ts.syncBatch",
+	"GET /api/notifications/state\thandler.notificationState",
 	"MCP mcp_tools.go:runFlowTool\tcount_issues",
 	"MCP mcp_tools.go:runFlowTool\textract_images",
 	"MCP mcp_tools.go:runFlowTool\tget_agent_session",
