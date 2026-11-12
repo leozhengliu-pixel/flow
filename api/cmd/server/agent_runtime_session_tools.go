@@ -175,6 +175,10 @@ func (s *server) workerChatSession(run store.AgentRun) (domain.AgentSession, boo
 	if err != nil {
 		return domain.AgentSession{}, false
 	}
+	if internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") {
+		session, err := s.internalAgentConversation(context.Background(), run.WorkspaceKey, principal.UserID, run.SessionID, false)
+		return session, err == nil
+	}
 	data, ok := s.store.WorkspaceMetadataFields(run.WorkspaceKey, "agentSessions")
 	if !ok {
 		return domain.AgentSession{}, false

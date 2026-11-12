@@ -387,6 +387,15 @@ func (s *server) listAgentSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getAgentSession(w http.ResponseWriter, r *http.Request) {
+	if internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") {
+		session, err := s.internalRequestConversation(r, r.PathValue("id"))
+		if err != nil {
+			writeError(w, http.StatusNotFound, "agent chat not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, session)
+		return
+	}
 	data := s.workspaceData(r)
 	session, err := ownedAgentSession(&data, r.PathValue("id"))
 	if err != nil {

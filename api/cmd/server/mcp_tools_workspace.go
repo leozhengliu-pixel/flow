@@ -43,6 +43,9 @@ func (s *server) invokeMCPRoute(ctx context.Context, actor mcpActor, method, pat
 	for key, value := range pathValues {
 		request.SetPathValue(key, value)
 	}
+	if err := s.internalAuthorizeRequester(request, actor); err != nil {
+		return nil, err
+	}
 	// Keys minted by users carry an ID; the in-app agent's session actor uses
 	// a synthetic read/write key whose scopes were already checked upstream.
 	if actor.APIKey.ID != "" && !apiKeyAllowsRequest(request, actor.APIKey) {

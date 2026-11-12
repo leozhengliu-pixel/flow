@@ -70,8 +70,30 @@ func mcpArgumentSummary(args map[string]any) string {
 }
 
 func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
+	if internalRecordsEnabled(internalToolRecordFamily(name)) {
+		var err error
+		if actor.APIKey.ID != "" && actor.APIKey.SecretHash != "" {
+			authentication, authErr := s.store.AuthenticateAPIKeyRecord(ctx, actor.WorkspaceKey, actor.APIKey.SecretHash, applicationApproved)
+			if authErr != nil {
+				return nil, fmt.Errorf("credential access was revoked")
+			}
+			authentication.User.Via = actor.User.Via
+			actor.User, actor.APIKey = authentication.User, authentication.Key
+			if tool, known := flowToolByName(name); known && !mcpToolAllowed(tool, actor.APIKey, false, args) {
+				return nil, fmt.Errorf("this API key's scopes do not allow this action")
+			}
+		}
+		actor, err = s.internalToolActor(ctx, actor)
+		if err != nil {
+			return nil, err
+		}
+		ctx = context.WithValue(ctx, internalRequesterAuthorizationKey{}, internalRequesterAuthorization{service: s, actor: actor})
+	}
 	ctx = context.WithValue(ctx, apiKeyContextKey{}, actor.APIKey)
 	ctx = context.WithValue(ctx, credentialReadPrincipalKey{}, firstNonEmpty(actor.AuthorizationUserID, actor.User.ID))
+	if result, handled, err := s.internalProjectTool(ctx, actor, name, args); handled {
+		return result, err
+	}
 	data, err := s.mcpWorkspaceDataForTool(ctx, actor, name, args)
 	if err != nil {
 		return nil, err
@@ -451,6 +473,9 @@ func (s *server) mcpWorkspaceDataForTool(ctx context.Context, actor mcpActor, na
 		"list_cycles": true, "list_projects": true, "get_team": true, "list_users": true,
 		"save_issue": true, "save_comment": true,
 	}
+	if internalRecordsEnabled("FLOW_MCP_AGENT_RECORDS") && internalToolRecordFamily(name) == "FLOW_MCP_AGENT_RECORDS" {
+		common[name] = true
+	}
 	if !common[name] {
 		return s.mcpWorkspaceData(ctx, actor)
 	}
@@ -479,6 +504,10 @@ func (s *server) mcpWorkspaceDataForTool(ctx context.Context, actor mcpActor, na
 	if name == "list_projects" {
 		fields = []string{"users", "members", "projects", "initiatives", "labels"}
 	}
+	if internalToolRecordFamily(name) == "FLOW_MCP_AGENT_RECORDS" {
+		fields = []string{"users", "members"}
+	}
+	fields = internalIssueToolFields(name, args, fields)
 	if len(fields) > 0 {
 		catalog, ok := s.store.WorkspaceMetadataFields(actor.WorkspaceKey, fields...)
 		if !ok {
@@ -494,7 +523,22 @@ func (s *server) mcpWorkspaceDataForTool(ctx context.Context, actor mcpActor, na
 		data.Initiatives = catalog.Initiatives
 		data.IssueSuggestions = catalog.IssueSuggestions
 	}
-	data.Viewer, data.ViewerRole = actor.User, accessRole(data, userID)
+	if internalToolRecordFamily(name) == "FLOW_MCP_AGENT_RECORDS" {
+		data.Members, err = s.store.ListMembers(ctx, data.Workspace.ID)
+		if err != nil {
+			return domain.Bootstrap{}, err
+		}
+		data.Users = make([]domain.User, 0, len(data.Members))
+		for _, member := range data.Members {
+			data.Users = append(data.Users, member.User)
+		}
+		data.TeamMembers, err = s.store.ListTeamMembers(ctx, data.Workspace.ID)
+		if err != nil {
+			return domain.Bootstrap{}, err
+		}
+	}
+	principalRole := accessRole(data, userID)
+	data.Viewer, data.ViewerRole = actor.User, principalRole
 	if actor.AuthorizationUserID != "" {
 		data.ViewerRole = "app"
 	}
@@ -512,8 +556,19 @@ func (s *server) mcpWorkspaceDataForTool(ctx context.Context, actor mcpActor, na
 	data.Projects = slices.DeleteFunc(data.Projects, func(item domain.Project) bool {
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, func(id string) bool { return allowed[id] })
 	})
+	visibleProjects := make(map[string]bool, len(data.Projects))
+	for _, project := range data.Projects {
+		visibleProjects[project.ID] = true
+	}
+	// Keep the compatibility adapter on the HTTP permission baseline too.
+	// A visible mixed-team project must not name private teams/dependencies.
+	for i := range data.Projects {
+		data.Projects[i].TeamIDs = slices.DeleteFunc(data.Projects[i].TeamIDs, func(id string) bool { return !allowed[id] })
+		data.Projects[i].DependencyIDs = slices.DeleteFunc(data.Projects[i].DependencyIDs, func(id string) bool { return !visibleProjects[id] })
+	}
 	data.Labels = slices.DeleteFunc(data.Labels, func(item domain.IssueLabel) bool { return !labelScopeIsWorkspace(item.Scope) && !allowed[item.Scope] })
-	if data.ViewerRole == "guest" {
+	if principalRole == "guest" {
+		data.Initiatives = []domain.Initiative{}
 		visibleUsers := map[string]bool{actor.User.ID: true}
 		for _, member := range data.TeamMembers {
 			visibleUsers[member.UserID] = true

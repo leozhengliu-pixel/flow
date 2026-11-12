@@ -320,6 +320,18 @@ func (s *server) runAgentSessionOnWorker(r *http.Request, data domain.Bootstrap,
 
 // workerChatStoredReply reads the saved reply and whether it is still streaming.
 func (s *server) workerChatStoredReply(ctx context.Context, workspace, sessionID, owner, messageID string) (domain.AgentMessage, bool) {
+	if internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS") {
+		session, err := s.internalAgentConversation(ctx, workspace, owner, sessionID, false)
+		if err != nil {
+			return domain.AgentMessage{}, false
+		}
+		for _, message := range session.Messages {
+			if message.ID == messageID {
+				return message, message.Status == agentMessageStreaming
+			}
+		}
+		return domain.AgentMessage{}, false
+	}
 	data, ok := s.store.WorkspaceMetadataFields(workspace, "agentSessions")
 	if !ok {
 		return domain.AgentMessage{}, false

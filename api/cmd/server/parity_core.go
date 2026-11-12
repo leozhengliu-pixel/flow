@@ -912,7 +912,7 @@ func (s *server) updateAIConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var item domain.AIConversation
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "ai.conversation_updated", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
+	err := s.mutateInternalConversation(r, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.AIConversations, func(value domain.AIConversation) bool {
 			return value.ID == r.PathValue("id") && value.UserID == data.Viewer.ID
 		})

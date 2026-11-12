@@ -1347,6 +1347,9 @@ func mcpReviewEvent(data domain.Bootstrap, id string) (string, domain.ReviewEven
 }
 
 func invokeJSONHandler(ctx context.Context, method string, pathValues map[string]string, input any, handler http.HandlerFunc) (any, error) {
+	if err := authorizeInternalJSONHandler(ctx, method, pathValues, input, handler); err != nil {
+		return nil, err
+	}
 	var body io.Reader
 	if input != nil {
 		raw, err := json.Marshal(input)
