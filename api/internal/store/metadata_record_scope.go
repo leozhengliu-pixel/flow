@@ -134,6 +134,9 @@ func selectMetadataRecordValue(value reflect.Value, field string, scope Metadata
 }
 
 func metadataRecordFieldSnapshot(ctx context.Context, data domain.Bootstrap, fields []string) domain.Bootstrap {
+	if metadataRecordVerificationEnabled(ctx) {
+		return metadataFieldSnapshot(data, fields)
+	}
 	scope, ok := metadataRecordScopeFromContext(ctx)
 	if !ok {
 		return metadataFieldSnapshot(data, fields)
@@ -203,6 +206,10 @@ func validateMetadataRecordSelection(data domain.Bootstrap, scope MetadataRecord
 // Merge only declared writes into the full stored value. Unloaded/read-only
 // records keep their original storage; no nil/empty inference is involved.
 func restoreMetadataRecordFields(ctx context.Context, data *domain.Bootstrap, stored domain.Bootstrap, fields []string) {
+	if metadataRecordVerificationEnabled(ctx) {
+		restoreUnlistedMetadata(data, stored, fields)
+		return
+	}
 	scope, ok := metadataRecordScopeFromContext(ctx)
 	if !ok {
 		restoreUnlistedMetadata(data, stored, fields)

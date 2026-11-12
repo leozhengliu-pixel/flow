@@ -73,6 +73,11 @@ func projectIssueScope(ctx context.Context, projectID string) context.Context {
 	return store.WithMutationScope(ctx, store.MutationScope{ProjectIssues: []string{projectID}})
 }
 
+// Project updates archive reminder notifications owned by their parent.
+func projectContentScope(ctx context.Context, resourceID string) context.Context {
+	return store.WithMutationScope(ctx, store.MutationScope{Resources: []string{resourceID}})
+}
+
 // projectTemplateScope loads the issues a project template names (template
 // edits validate them; creating a project from the template moves them) and,
 // when creating a project from a template with template issues, lets the

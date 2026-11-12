@@ -60,7 +60,7 @@ func (s *server) createProjectRelation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.ProjectRelation
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.relation_created", input.ProjectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "relation", input.ProjectID, input, &created, &input), workspaceKey(r), "project.relation_created", input.ProjectID, input, func(data *domain.Bootstrap) error {
 		if _, err := fullProjectByID(data, input.ProjectID); err != nil {
 			return err
 		}
@@ -95,7 +95,7 @@ func (s *server) updateProjectRelation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.ProjectRelation
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.relation_updated", r.PathValue("relationId"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "relation", r.PathValue("id"), input, &updated), workspaceKey(r), "project.relation_updated", r.PathValue("relationId"), input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ProjectRelations, func(item domain.ProjectRelation) bool {
 			return item.ID == r.PathValue("relationId") && item.ProjectID == r.PathValue("id")
 		})
@@ -114,7 +114,7 @@ func (s *server) updateProjectRelation(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, updated)
 }
 func (s *server) deleteProjectRelation(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.relation_deleted", r.PathValue("relationId"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "relation", r.PathValue("id"), nil), workspaceKey(r), "project.relation_deleted", r.PathValue("relationId"), nil, func(data *domain.Bootstrap) error {
 		before := len(data.ProjectRelations)
 		data.ProjectRelations = slices.DeleteFunc(data.ProjectRelations, func(item domain.ProjectRelation) bool {
 			return item.ID == r.PathValue("relationId") && item.ProjectID == r.PathValue("id")
@@ -156,7 +156,7 @@ func (s *server) createInitiativeRelation(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var created domain.InitiativeRelation
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.relation_created", input.InitiativeID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "relation", input.InitiativeID, input, &created, &input), workspaceKey(r), "initiative.relation_created", input.InitiativeID, input, func(data *domain.Bootstrap) error {
 		if _, err := initiativeByID(data, input.InitiativeID); err != nil {
 			return err
 		}
@@ -193,7 +193,7 @@ func (s *server) updateInitiativeRelation(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var updated domain.InitiativeRelation
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.relation_updated", r.PathValue("relationId"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "relation", r.PathValue("id"), input, &updated), workspaceKey(r), "initiative.relation_updated", r.PathValue("relationId"), input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.InitiativeRelations, func(item domain.InitiativeRelation) bool {
 			return item.ID == r.PathValue("relationId") && item.InitiativeID == r.PathValue("id")
 		})
@@ -227,7 +227,7 @@ func (s *server) updateInitiativeRelation(w http.ResponseWriter, r *http.Request
 	respondMutation(w, err, http.StatusOK, updated)
 }
 func (s *server) deleteInitiativeRelation(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.relation_deleted", r.PathValue("relationId"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "relation", r.PathValue("id"), nil), workspaceKey(r), "initiative.relation_deleted", r.PathValue("relationId"), nil, func(data *domain.Bootstrap) error {
 		for _, relation := range data.InitiativeRelations {
 			if relation.ID == r.PathValue("relationId") && relation.InitiativeID == r.PathValue("id") && relation.Type == "parent" {
 				if err := changeInitiativeParent(data, relation.InitiativeID, relation.RelatedInitiativeID, false); err != nil {

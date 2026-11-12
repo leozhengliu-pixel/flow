@@ -394,6 +394,11 @@ func (s *SQLiteStore) loadWorkspaceState(ctx context.Context, workspaceKey strin
 // loadWorkspaceStamped decodes the stored workspace metadata and reads, in
 // the same snapshot, the metadata revision the result is exact at.
 func (s *SQLiteStore) loadWorkspaceStamped(ctx context.Context, workspaceKey string) (domain.Bootstrap, copyStamp, error) {
+	// This result can replace the canonical cache. A request's callback/read
+	// selection must never turn it into a partial workspace snapshot.
+	if _, scoped := ctx.Value(metadataRecordScopeKey{}).(MetadataRecordScope); scoped {
+		ctx = context.WithValue(ctx, metadataRecordScopeKey{}, nil)
+	}
 	var stamp copyStamp
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
@@ -1492,7 +1497,12 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 			return fmt.Errorf("%w: record scope is not supported by the %s point callback", ErrMetadataRecordQuery, eventType)
 		}
 		ctx = WithMetadataFields(ctx, metadataRecordFields(scope)...)
-		mutate = metadataRecordMutationAdapter(ctx, mutate)
+		if metadataRecordVerificationEnabled(ctx) {
+			ctx = WithMetadataFields(ctx, metadataRecordOracleFields()...)
+			mutate = verifiedMetadataRecordMutationAdapter(ctx, eventType, payload, mutate)
+		} else {
+			mutate = metadataRecordMutationAdapter(ctx, mutate)
+		}
 	}
 	ctx, trace := startMutationTrace(ctx)
 	defer func() { trace.report(workspaceKey, eventType, err) }()

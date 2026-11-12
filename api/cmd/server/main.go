@@ -1015,10 +1015,10 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/projects/{id}/comments/{commentId}", s.updateProjectComment)
 	mux.HandleFunc("DELETE /api/projects/{id}/comments/{commentId}", s.deleteProjectComment)
 	mux.HandleFunc("POST /api/projects/{id}/comments/{commentId}/reactions", s.toggleProjectCommentReaction)
-	mux.HandleFunc("PUT /api/projects/{id}/comments/{commentId}/subscription", s.setProjectThreadSubscription)
-	mux.HandleFunc("DELETE /api/projects/{id}/comments/{commentId}/subscription", s.clearProjectThreadSubscription)
-	mux.HandleFunc("POST /api/projects/{id}/comment-attachments", s.createProjectCommentAttachment)
-	mux.HandleFunc("POST /api/initiatives/{id}/comment-attachments", s.createInitiativeCommentAttachment)
+	mux.HandleFunc("PUT /api/projects/{id}/comments/{commentId}/subscription", projectRecordHandler("project", "comment", s.setProjectThreadSubscription))
+	mux.HandleFunc("DELETE /api/projects/{id}/comments/{commentId}/subscription", projectRecordHandler("project", "comment", s.clearProjectThreadSubscription))
+	mux.HandleFunc("POST /api/projects/{id}/comment-attachments", projectRecordHandler("project", "comment", s.createProjectCommentAttachment))
+	mux.HandleFunc("POST /api/initiatives/{id}/comment-attachments", projectRecordHandler("initiative", "comment", s.createInitiativeCommentAttachment))
 	mux.HandleFunc("POST /api/documents/{id}/attachments", s.createDocumentAttachment)
 	mux.HandleFunc("GET /api/pulse/feed", s.getPulseFeed)
 	mux.HandleFunc("GET /api/pulse/unread", s.getPulseUnread)
@@ -1042,8 +1042,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/projects/{id}/updates/{updateId}", s.deleteProjectUpdate)
 	mux.HandleFunc("POST /api/projects/{id}/updates/{updateId}/comments", s.createProjectUpdateComment)
 	mux.HandleFunc("POST /api/projects/{id}/updates/{updateId}/reactions", s.toggleProjectUpdateReaction)
-	mux.HandleFunc("POST /api/projects/{id}/updates/{updateId}/attachments", s.createPulseUpdateAttachment("project"))
-	mux.HandleFunc("DELETE /api/projects/{id}/updates/{updateId}/attachments/{attachmentId}", s.deletePulseUpdateAttachment("project"))
+	mux.HandleFunc("POST /api/projects/{id}/updates/{updateId}/attachments", projectRecordHandler("project", "update", s.createPulseUpdateAttachment("project")))
+	mux.HandleFunc("DELETE /api/projects/{id}/updates/{updateId}/attachments/{attachmentId}", projectRecordHandler("project", "update", s.deletePulseUpdateAttachment("project")))
 	mux.HandleFunc("POST /api/initiatives", s.createInitiative)
 	mux.HandleFunc("PATCH /api/initiatives/{id}", s.updateInitiative)
 	mux.HandleFunc("DELETE /api/initiatives/{id}", s.deleteInitiative)
@@ -1055,15 +1055,15 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/initiatives/{id}/comments/{commentId}", s.updateInitiativeComment)
 	mux.HandleFunc("DELETE /api/initiatives/{id}/comments/{commentId}", s.deleteInitiativeComment)
 	mux.HandleFunc("POST /api/initiatives/{id}/comments/{commentId}/reactions", s.toggleInitiativeCommentReaction)
-	mux.HandleFunc("PUT /api/initiatives/{id}/comments/{commentId}/subscription", s.setInitiativeThreadSubscription)
-	mux.HandleFunc("DELETE /api/initiatives/{id}/comments/{commentId}/subscription", s.clearInitiativeThreadSubscription)
+	mux.HandleFunc("PUT /api/initiatives/{id}/comments/{commentId}/subscription", projectRecordHandler("initiative", "comment", s.setInitiativeThreadSubscription))
+	mux.HandleFunc("DELETE /api/initiatives/{id}/comments/{commentId}/subscription", projectRecordHandler("initiative", "comment", s.clearInitiativeThreadSubscription))
 	mux.HandleFunc("POST /api/initiatives/{id}/updates", s.createInitiativeUpdate)
 	mux.HandleFunc("PATCH /api/initiatives/{id}/updates/{updateId}", s.updateInitiativeUpdate)
 	mux.HandleFunc("DELETE /api/initiatives/{id}/updates/{updateId}", s.deleteInitiativeUpdate)
 	mux.HandleFunc("POST /api/initiatives/{id}/updates/{updateId}/comments", s.createInitiativeUpdateComment)
 	mux.HandleFunc("POST /api/initiatives/{id}/updates/{updateId}/reactions", s.toggleInitiativeUpdateReaction)
-	mux.HandleFunc("POST /api/initiatives/{id}/updates/{updateId}/attachments", s.createPulseUpdateAttachment("initiative"))
-	mux.HandleFunc("DELETE /api/initiatives/{id}/updates/{updateId}/attachments/{attachmentId}", s.deletePulseUpdateAttachment("initiative"))
+	mux.HandleFunc("POST /api/initiatives/{id}/updates/{updateId}/attachments", projectRecordHandler("initiative", "update", s.createPulseUpdateAttachment("initiative")))
+	mux.HandleFunc("DELETE /api/initiatives/{id}/updates/{updateId}/attachments/{attachmentId}", projectRecordHandler("initiative", "update", s.deletePulseUpdateAttachment("initiative")))
 	mux.HandleFunc("PATCH /api/issues/{id}", s.updateIssue)
 	mux.HandleFunc("PUT /api/issues/{id}/releases", s.setIssueReleases)
 	mux.HandleFunc("DELETE /api/issues/{id}", s.deleteIssue)
@@ -3281,6 +3281,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		// its template issues are created there.
 		ctx = projectTemplateScope(ctx, nil, input.TemplateID)
 	}
+	ctx = projectRecordScope(ctx, "project", "create", "", input, &created, &input)
 	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "project.created", input, func(data *domain.Bootstrap) (string, error) {
 		var template *domain.ProjectTemplate
 		if input.TemplateID != "" {
@@ -3436,6 +3437,7 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 		// metadata-only.
 		ctx = store.WithMutationScope(ctx, store.MutationScope{Resources: []string{id}})
 	}
+	ctx = projectRecordScope(ctx, "project", "edit", id, input, &updated, &input)
 	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.updated", id, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, id)
 		if err != nil {
@@ -3468,7 +3470,7 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(projectIssueScope(r.Context(), id), workspaceKey(r), "project.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(projectIssueScope(r.Context(), id), "project", "delete", id, nil), workspaceKey(r), "project.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -3518,7 +3520,7 @@ func (s *server) createInitiative(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.Initiative
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "initiative.created", input, func(data *domain.Bootstrap) (string, error) {
+	err := s.store.MutateWorkspaceWithAggregate(projectRecordScope(r.Context(), "initiative", "create", "", input, &created, &input), workspaceKey(r), "initiative.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		created = domain.Initiative{ID: idgen.New("initiative_"), Name: strings.TrimSpace(*input.Name), SlugID: domain.SlugWithSuffix(*input.Name, domain.NewSlugSuffix()), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Position: nextInitiativePosition(data.Initiatives), Health: "noUpdate", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now, UpdatedAt: now}
 		if err := applyInitiativeUpdate(data, &created, input); err != nil {
@@ -3543,7 +3545,7 @@ func (s *server) updateInitiative(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Initiative
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), favoriteMutationEvent("initiative.updated", input), id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "edit", id, input, &updated, &input), workspaceKey(r), favoriteMutationEvent("initiative.updated", input), id, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3569,7 +3571,7 @@ func (s *server) updateInitiative(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteInitiative(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "delete", id, nil), workspaceKey(r), "initiative.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -3614,7 +3616,7 @@ func (s *server) createInitiativeReminder(w http.ResponseWriter, r *http.Request
 	}
 	id := r.PathValue("id")
 	var reminder domain.Notification
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.reminder_created", id, input, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "reminder", id, input, &reminder, &input), workspaceKey(r), "initiative.reminder_created", id, input, func(data *domain.Bootstrap) error {
 		initiative, initiativeErr := initiativeByID(data, id)
 		if initiativeErr != nil {
 			return initiativeErr
@@ -3635,7 +3637,7 @@ func (s *server) createInitiativeResource(w http.ResponseWriter, r *http.Request
 	}
 	id := r.PathValue("id")
 	var created domain.InitiativeResource
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.resource_created", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "resource", id, input, &created, &input), workspaceKey(r), "initiative.resource_created", id, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3693,7 +3695,7 @@ func (s *server) updateInitiativeResource(w http.ResponseWriter, r *http.Request
 	}
 	initiativeID, resourceID := r.PathValue("id"), r.PathValue("resourceId")
 	var updated domain.InitiativeResource
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.resource_updated", initiativeID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "resource", initiativeID, input, &updated, &input), workspaceKey(r), "initiative.resource_updated", initiativeID, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, initiativeID)
 		if err != nil {
 			return err
@@ -3743,7 +3745,7 @@ func (s *server) updateInitiativeResource(w http.ResponseWriter, r *http.Request
 
 func (s *server) deleteInitiativeResource(w http.ResponseWriter, r *http.Request) {
 	initiativeID, resourceID := r.PathValue("id"), r.PathValue("resourceId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.resource_deleted", initiativeID, map[string]string{"id": resourceID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "resource", initiativeID, nil), workspaceKey(r), "initiative.resource_deleted", initiativeID, map[string]string{"id": resourceID}, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, initiativeID)
 		if err != nil {
 			return err
@@ -3775,7 +3777,7 @@ func (s *server) createInitiativeComment(w http.ResponseWriter, r *http.Request)
 	}
 	id := r.PathValue("id")
 	var created domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.commented", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "comment", id, input, &created, &input), workspaceKey(r), "initiative.commented", id, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3824,7 +3826,7 @@ func (s *server) updateInitiativeComment(w http.ResponseWriter, r *http.Request)
 			eventType = "initiative.comment_unresolved"
 		}
 	}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), eventType, id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "comment", id, input, &updated, &current, &input), workspaceKey(r), eventType, id, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3873,7 +3875,7 @@ func (s *server) updateInitiativeComment(w http.ResponseWriter, r *http.Request)
 // may delete it.
 func (s *server) deleteInitiativeComment(w http.ResponseWriter, r *http.Request) {
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.comment_deleted", id, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "comment", id, nil), workspaceKey(r), "initiative.comment_deleted", id, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3905,7 +3907,7 @@ func (s *server) toggleInitiativeCommentReaction(w http.ResponseWriter, r *http.
 	}
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.comment_reaction_toggled", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "comment", id, input, &updated, &input), workspaceKey(r), "initiative.comment_reaction_toggled", id, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3949,7 +3951,7 @@ func (s *server) createInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 	id := r.PathValue("id")
 	var created domain.InitiativeUpdate
 	payload := childEventPayload{Input: input, Child: &webhookChild{}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_created", id, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "update-create", id, input, &created, &payload), workspaceKey(r), "initiative.update_created", id, payload, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3988,7 +3990,7 @@ func (s *server) updateInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 	id, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.InitiativeUpdate
 	payload := childEventPayload{Input: input, Child: &webhookChild{ID: updateID}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_updated", id, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "update", id, input, &updated, &payload), workspaceKey(r), "initiative.update_updated", id, payload, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -4042,7 +4044,7 @@ func (s *server) deleteInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 	id, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var objectKeys []string
 	payload := childEventPayload{Input: map[string]string{"id": updateID}, Child: &webhookChild{ID: updateID}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_deleted", id, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "initiative", "update", id, nil, &objectKeys, &payload), workspaceKey(r), "initiative.update_deleted", id, payload, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -4091,7 +4093,7 @@ func (s *server) createInitiativeUpdateComment(w http.ResponseWriter, r *http.Re
 	initiativeID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.InitiativeUpdate
 	ctx := store.WithMutationScope(r.Context(), pulseUpdateScope(updateID))
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "initiative.update_commented", initiativeID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(ctx, "initiative", "update", initiativeID, input, &updated, &input), workspaceKey(r), "initiative.update_commented", initiativeID, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, initiativeID)
 		if err != nil {
 			return err
@@ -4125,7 +4127,7 @@ func (s *server) toggleInitiativeUpdateReaction(w http.ResponseWriter, r *http.R
 	initiativeID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.InitiativeUpdate
 	ctx := store.WithMutationScope(r.Context(), pulseUpdateScope(updateID))
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "initiative.update_reaction_toggled", initiativeID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(ctx, "initiative", "update", initiativeID, input, &updated, &input), workspaceKey(r), "initiative.update_reaction_toggled", initiativeID, input, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, initiativeID)
 		if err != nil {
 			return err
@@ -4168,7 +4170,7 @@ func (s *server) createProjectResource(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	actor := requestActor(s, r)
 	var created domain.ProjectResource
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.resource_created", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "resource", projectID, input, &created, &input), workspaceKey(r), "project.resource_created", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4202,7 +4204,7 @@ func (s *server) updateProjectResource(w http.ResponseWriter, r *http.Request) {
 	}
 	projectID, resourceID := r.PathValue("id"), r.PathValue("resourceId")
 	var updated domain.ProjectResource
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.resource_updated", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "resource", projectID, input, &updated, &input), workspaceKey(r), "project.resource_updated", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4249,7 +4251,7 @@ func (s *server) updateProjectResource(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteProjectResource(w http.ResponseWriter, r *http.Request) {
 	projectID, resourceID := r.PathValue("id"), r.PathValue("resourceId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.resource_deleted", projectID, map[string]string{"id": resourceID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "resource", projectID, nil), workspaceKey(r), "project.resource_deleted", projectID, map[string]string{"id": resourceID}, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4278,7 +4280,7 @@ func (s *server) createProjectMilestone(w http.ResponseWriter, r *http.Request) 
 	projectID := r.PathValue("id")
 	var created domain.ProjectMilestone
 	payload := childEventPayload{Input: input, Child: &webhookChild{}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.milestone_created", projectID, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "milestone", projectID, input, &created, &payload), workspaceKey(r), "project.milestone_created", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4308,7 +4310,7 @@ func (s *server) updateProjectMilestone(w http.ResponseWriter, r *http.Request) 
 	projectID, milestoneID := r.PathValue("id"), r.PathValue("milestoneId")
 	var updated domain.ProjectMilestone
 	payload := childEventPayload{Input: input, Child: &webhookChild{ID: milestoneID}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.milestone_updated", projectID, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "milestone", projectID, input, &updated, &payload), workspaceKey(r), "project.milestone_updated", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4354,7 +4356,7 @@ func (s *server) reorderProjectMilestones(w http.ResponseWriter, r *http.Request
 	}
 	projectID := r.PathValue("id")
 	var updated []domain.ProjectMilestone
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.milestones_reordered", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "milestone", projectID, input, &updated), workspaceKey(r), "project.milestones_reordered", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4390,7 +4392,7 @@ func (s *server) deleteProjectMilestone(w http.ResponseWriter, r *http.Request) 
 		return issue.ProjectMilestoneID != nil && *issue.ProjectMilestoneID == milestoneID
 	}})
 	payload := childEventPayload{Input: map[string]string{"id": milestoneID}, Child: &webhookChild{ID: milestoneID}}
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.milestone_deleted", projectID, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(ctx, "project", "milestone", projectID, nil, &payload), workspaceKey(r), "project.milestone_deleted", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4440,7 +4442,7 @@ func (s *server) createProjectComment(w http.ResponseWriter, r *http.Request) {
 	}
 	projectID := r.PathValue("id")
 	var created domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.commented", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "comment", projectID, input, &created, &input), workspaceKey(r), "project.commented", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4497,7 +4499,7 @@ func (s *server) updateProjectComment(w http.ResponseWriter, r *http.Request) {
 			eventType = "project.comment_unresolved"
 		}
 	}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), eventType, projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "comment", projectID, input, &updated, &current, &input), workspaceKey(r), eventType, projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4545,7 +4547,7 @@ func (s *server) updateProjectComment(w http.ResponseWriter, r *http.Request) {
 // workspace admin may delete it.
 func (s *server) deleteProjectComment(w http.ResponseWriter, r *http.Request) {
 	projectID, commentID := r.PathValue("id"), r.PathValue("commentId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.comment_deleted", projectID, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "comment", projectID, nil), workspaceKey(r), "project.comment_deleted", projectID, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4579,7 +4581,7 @@ func (s *server) toggleProjectCommentReaction(w http.ResponseWriter, r *http.Req
 	}
 	projectID, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.comment_reaction_toggled", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "comment", projectID, input, &updated, &input), workspaceKey(r), "project.comment_reaction_toggled", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4630,9 +4632,9 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	// Posting an update archives the project's pending update reminders,
 	// which are notifications owned by the project.
-	ctx := store.WithMutationScope(r.Context(), store.MutationScope{Resources: []string{id}})
+	ctx := projectContentScope(r.Context(), id)
 	payload := childEventPayload{Input: input, Child: &webhookChild{}}
-	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "project.update_created", payload, func(data *domain.Bootstrap) (string, error) {
+	err := s.store.MutateWorkspaceWithAggregate(projectRecordScope(ctx, "project", "update-create", id, input, &created, &payload), workspaceKey(r), "project.update_created", payload, func(data *domain.Bootstrap) (string, error) {
 		project, err := fullProjectByID(data, id)
 		if err != nil {
 			return "", err
@@ -4690,7 +4692,7 @@ func (s *server) deleteProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var objectKeys []string
 	payload := childEventPayload{Input: map[string]string{"id": updateID}, Child: &webhookChild{ID: updateID}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.update_deleted", projectID, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "update", projectID, nil, &objectKeys, &payload), workspaceKey(r), "project.update_deleted", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4750,7 +4752,7 @@ func (s *server) updateProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.ProjectUpdate
 	payload := childEventPayload{Input: input, Child: &webhookChild{ID: updateID}}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.update_updated", projectID, payload, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "update", projectID, input, &updated, &payload), workspaceKey(r), "project.update_updated", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4803,7 +4805,7 @@ func (s *server) createProjectUpdateComment(w http.ResponseWriter, r *http.Reque
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.ProjectUpdate
 	ctx := store.WithMutationScope(r.Context(), pulseUpdateScope(updateID))
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.update_commented", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(ctx, "project", "update", projectID, input, &updated, &input), workspaceKey(r), "project.update_commented", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4837,7 +4839,7 @@ func (s *server) toggleProjectUpdateReaction(w http.ResponseWriter, r *http.Requ
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.ProjectUpdate
 	ctx := store.WithMutationScope(r.Context(), pulseUpdateScope(updateID))
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.update_reaction_toggled", projectID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectRecordScope(ctx, "project", "update", projectID, input, &updated, &input), workspaceKey(r), "project.update_reaction_toggled", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -5580,7 +5582,7 @@ func (s *server) createProjectReminder(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var reminder domain.Notification
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.reminder_created", id, input, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "reminder", id, input, &reminder, &input), workspaceKey(r), "project.reminder_created", id, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, id)
 		if err != nil {
 			return err
