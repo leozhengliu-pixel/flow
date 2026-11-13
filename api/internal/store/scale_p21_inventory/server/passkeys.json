@@ -13,6 +13,7 @@
     "deletePasskey": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Blocked by legacy aggregate enrichment: an earlier Document.ContentData object with id equal to a normal passkey ID remains the realtime entity after deletion. A target-only scoped writer emits no entity. SW18 reproduced the wire difference and restored the original writer; shared bounded aggregate compatibility is required.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -30,6 +31,7 @@
     "updatePasskey": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Blocked by legacy aggregate enrichment: an earlier Document.ContentData object with id equal to a normal passkey ID wins the reflective lookup. A target-only scoped writer emits the passkey instead. SW18 reproduced the wire difference and restored the original writer; shared bounded aggregate compatibility is required.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

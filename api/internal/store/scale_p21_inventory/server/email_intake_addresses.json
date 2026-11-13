@@ -13,6 +13,7 @@
     "deleteEmailIntakeAddress": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Target write alone is not equivalent: the unknown email_intake_ aggregate prefix permits an earlier Document.ContentData id collision, so legacy realtime publishes that nested object while a scoped writer publishes the address. SW18 reproduced this and restored the original writer pending bounded aggregate compatibility.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -28,6 +29,7 @@
     "rotateEmailIntakeAddress": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Target write alone is not equivalent: the unknown email_intake_ aggregate prefix permits an earlier Document.ContentData id collision, so legacy realtime publishes that nested object while a scoped writer publishes the rotated address. SW18 reproduced this and restored the original writer pending bounded aggregate compatibility.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

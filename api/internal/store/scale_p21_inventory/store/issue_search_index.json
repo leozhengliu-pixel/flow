@@ -1,10 +1,11 @@
 {
   "source": "store/issue_search_index.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "migrateIssueSearchIndex": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Off representation retains the original resident-workspace backfill. Bounded startup scans at most 64 issue-ID headers per transaction and copies canonical identifier/title/description directly into the search index with SQL; no issue body enters the application working set. The 2 MiB work lease is released after completion/errors, output bytes retain transaction-budget accounting, and checkpoints preserve restart/atomic batch behavior. TestScaleP21SW18IssueSearchMigrationDifferential compares full index text under Unicode caps 1/9/128 and uncapped mode, legal oversized bodies, canonical NUL normalization, case-only repair, checkpoints/idempotence, cancellation, budget rollback/recovery, unchanged canonical rows, no publication and zero metadata decodes. It passed twice on one persistent SQLite database; external-driver aware fixtures retain MySQL/PostgreSQL CI coverage.",
       "accessors": [
         "resident-state"
       ]
