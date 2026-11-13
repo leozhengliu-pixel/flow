@@ -1,6 +1,6 @@
 {
   "source": "server/enterprise_identity_integrations.go",
-  "unmigrated": 14,
+  "unmigrated": 12,
   "consumers": {
     "createIdentityProvider": {
       "owner": "P21",
@@ -29,7 +29,8 @@
     },
     "deleteIdentityProvider": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Deletes only identityProviders/id, retaining the original missing-ID check and route authorization. TestScaleP21M3IdentityProviderDifferential compares responses, canonical state and event/audit effects across principal/credential classes; an oversized unrelated identity-provider record remains outside the callback. Discovery, creation and generic projected reads remain separate blockers.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -82,7 +83,8 @@
     },
     "updateIdentityProvider": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Loads and writes identityProviders/id only. Provider URL/type/client/domain/role-mapping validation, defaults, no-op comparison and timestamp remain unchanged; all metadata inputs used by this callback are in the target record. TestScaleP21M3IdentityProviderDifferential compares responses, canonical state and event/audit effects across principal/credential classes with oversized unrelated provider and project bodies. HTTP authorization remains independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

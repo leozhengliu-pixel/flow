@@ -112,7 +112,7 @@ func (s *server) updateIdentityProvider(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var result domain.IdentityProvider
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "identity_provider.updated", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "identity_provider.updated", r.PathValue("id"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "identityProviders", ID: r.PathValue("id")}}}, func(data *domain.Bootstrap) error {
 		i := slices.IndexFunc(data.IdentityProviders, func(v domain.IdentityProvider) bool { return v.ID == r.PathValue("id") })
 		if i < 0 {
 			return errNotFound
@@ -180,7 +180,7 @@ func (s *server) updateIdentityProvider(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) deleteIdentityProvider(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "identity_provider.deleted", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "identity_provider.deleted", r.PathValue("id"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "identityProviders", ID: r.PathValue("id")}}}, func(data *domain.Bootstrap) error {
 		before := len(data.IdentityProviders)
 		data.IdentityProviders = slices.DeleteFunc(data.IdentityProviders, func(v domain.IdentityProvider) bool { return v.ID == r.PathValue("id") })
 		if before == len(data.IdentityProviders) {
