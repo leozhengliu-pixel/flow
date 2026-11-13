@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react'
+import { CheckCircle2, ChevronsDownUp, ChevronsUpDown, RotateCcw } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import type { Comment, CommentThreadSummary } from '@/types/flow'
 import { useI18n } from '@/i18n/i18n'
@@ -50,7 +50,7 @@ export function ResolvedComment({
 
   return (
     <div className={`resolved-comment${resolved ? ' resolved-comment--resolved' : ''}`} data-comment-id={comment.id} data-resolved={resolved ? 'true' : 'false'}>
-      {resolved && activitySummary ? <button type="button" className="resolved-comment__activity-toggle" aria-expanded={isExpanded} disabled={busy} onClick={() => setExpanded(!isExpanded)}><CheckCircle2 size={14}/><span>{activitySummary}</span>{isExpanded ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}</button> : resolved && (
+      {resolved && activitySummary ? <button type="button" className="resolved-comment__activity-toggle" aria-expanded={isExpanded} disabled={busy} onClick={() => setExpanded(!isExpanded)}><CheckCircle2 size={14}/><span>{activitySummary}</span>{isExpanded ? <ChevronsDownUp size={14}/> : <ChevronsUpDown size={14}/>}</button> : resolved && (
         <div className="resolved-comment__bar" role="group" aria-label={t('Comment thread')}>
           <span className="resolved-comment__bar-label">
             {resolved ? <CheckCircle2 size={14} aria-hidden /> : null}

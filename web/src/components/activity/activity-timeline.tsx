@@ -196,7 +196,7 @@ export function ActivityTimeline({
             ) : (
               <ResolvedComment
                 comment={item}
-                activitySummary={t('{count} resolved comment from {name}').replace('{count}', '1').replace('{name}', attributedActorName(item.user, item.botActor))}
+                activitySummary={resolvedSummary(item, replies.get(item.id) ?? [], t)}
                 threadSummariesEnabled={threadSummariesEnabled}
                 busy={busy === item.id}
                 onResolve={
@@ -370,15 +370,25 @@ export function ActivityTimeline({
   )
 }
 
+/** "1 resolved comment from leo", "3 resolved comments from leo and Dev". */
+function resolvedSummary(root: Comment, replies: Comment[], t: (text: string) => string) {
+  const thread = [root, ...replies]
+  const names = [...new Set(thread.map(comment => attributedActorName(comment.user, comment.botActor)))]
+  const list = names.length > 1 ? `${names.slice(0, -1).join(t('{changes}, {next}').replace('{changes}', '').replace('{next}', ''))}${t('{changes} and {last}').replace('{changes}', '').replace('{last}', '')}${names.at(-1)}` : names[0]
+  return t(thread.length === 1 ? '{count} resolved comment from {name}' : '{count} resolved comments from {name}').replace('{count}', String(thread.length)).replace('{name}', list)
+}
+
 /** Rows whose sentence names no actor ("Session with Flow archived"). */
 const ACTORLESS_ACTIVITY = new Set(['issue.coding_session_archived'])
 const SYSTEM_AUTOMATIONS = new Set(['autoArchive', 'autoClose', 'autoCloseStale', 'autoCycle'])
 
 function ActivityRow({ event, description, context, now, longTime = false }: { event: ActivityEvent & Partial<IssueActivityEntry>; description: ActivityPart[]; context?: ActivityContext; now: number; longTime?: boolean }) {
-  const { t, locale } = useI18n()
+  const { t, locale, formatDate } = useI18n()
   const phone = usePhoneLayout()
   const desktop = useDesktopLayout()
   const inlineRelation = phone && event.type === 'issue.relation_added'
+  // "Tue Nov 10, 2026, 5:51:31 PM"; zh-CN "2026年11月10日周二 17:51:31".
+  const absoluteTime = locale === 'zh-CN' ? formatDate(event.createdAt, { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : format(new Date(event.createdAt), 'EEE MMM d, yyyy, h:mm:ss a')
   const actor = activityActor(event.actor, event.botActor, context?.users)
   if (!actor.name || SYSTEM_AUTOMATIONS.has(event.metadata?.automation)) actor.name = 'Flow'
   const actorName = actor.name !== 'Flow' && !event.botActor && context?.workspace && event.actor?.id ? <PersonCardHover user={event.actor}><a href={memberProfilePath(context.workspace.urlKey, memberProfileHandle(event.actor))}>{actor.name}</a></PersonCardHover> : undefined
@@ -403,7 +413,7 @@ function ActivityRow({ event, description, context, now, longTime = false }: { e
       {event.tooltip && <span className="activity-info" title={event.tooltip}><Info size={10}/></span>}
       <span className="activity-time">
         <span className="activity-dot">·</span>
-        <FlowTooltip side="top" label={format(new Date(event.createdAt), 'EEE MMM d, yyyy, h:mm:ss a')}><a href={`#activity-${event.id}`} aria-label={format(new Date(event.createdAt), 'EEE MMM d, yyyy, h:mm:ss a')} onClick={async click => {
+        <FlowTooltip side="top" label={absoluteTime}><a href={`#activity-${event.id}`} aria-label={absoluteTime} onClick={async click => {
           click.preventDefault(); click.stopPropagation()
           await navigator.clipboard.writeText(`${location.href.split('#')[0]}#activity-${event.id}`)
           toast.success(t('Link to activity item copied to clipboard'))
