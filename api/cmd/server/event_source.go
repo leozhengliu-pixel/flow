@@ -137,9 +137,13 @@ func (s *server) BuildEventSource(ctx context.Context, workspace string, event d
 		return nil, err
 	}
 	epoch, _ := ctx.Value(eventSourceEpochKey{}).(string)
-	if epoch == "" {
+	if !s.store.RealtimeEpochsReady() {
+		epoch = ""
+	} else if epoch == "" {
 		epoch, err = s.store.AuthzEpoch(ctx, version.WorkspaceID)
-		if err != nil {
+		if errors.Is(err, store.ErrRecordJournalUnavailable) {
+			epoch = ""
+		} else if err != nil {
 			return nil, err
 		}
 	}
@@ -567,7 +571,7 @@ func (cache *eventSourceCache) load(ctx context.Context, key string, build func(
 }
 
 func (s *server) sharedEventFrame(r *http.Request, event domain.RealtimeEvent) (EventFrame, bool, error) {
-	if syncV2Enabled() && !s.authDisabled {
+	if syncV2Enabled() && !s.authDisabled && s.store.RealtimeEpochsReady() {
 		ctx, err := s.store.LiveEventContext(r.Context())
 		if err != nil {
 			return EventFrame{}, true, err
@@ -630,7 +634,9 @@ func (s *server) sharedEventFrameOnce(r *http.Request, event domain.RealtimeEven
 	if err != nil {
 		return EventFrame{}, true, err
 	}
-	authority.epoch = access.AuthzEpoch
+	if s.store.RealtimeEpochsReady() {
+		authority.epoch = access.AuthzEpoch
+	}
 	source, err := s.eventSourceForAuthority(r.Context(), workspaceKey(r), event, authority)
 	if errors.Is(err, store.ErrEventSourceBudget) && s.negotiatedSummaryRequest(r) {
 		raw, encodeErr := json.Marshal(anonymousRealtimeEvent(event))
@@ -678,17 +684,27 @@ func (s *server) validateEventProjection(ctx context.Context, source *EventSourc
 	if err != nil {
 		return err
 	}
-	if authority.epoch != access.AuthzEpoch || source.authzEpoch != "" && source.authzEpoch != authority.epoch {
+	if authority.epoch == "" {
+		// Without journal authority, retain the original per-delivery policy
+		// checks, including queued frames whose source revision has changed.
+		if authority.version == source.version {
+			return access.Validate(ctx)
+		}
+	} else if authority.epoch != access.AuthzEpoch || source.authzEpoch != "" && source.authzEpoch != authority.epoch {
 		return errRealtimeProjectionStale
-	}
-	if authority.version == source.version && authority.epoch == access.AuthzEpoch {
+	} else if authority.version == source.version {
 		return access.CheckCredential()
 	}
 	current, err := s.eventSourceForAuthority(ctx, access.WorkspaceKey(), source.event, authority)
 	if err != nil {
 		return err
 	}
-	fresh, err := access.ForSource(current.policy, authority.epoch)
+	var fresh store.EventAccess
+	if authority.epoch == "" {
+		fresh, err = s.store.RefreshEventAccess(ctx, current.policy, access)
+	} else {
+		fresh, err = access.ForSource(current.policy, authority.epoch)
+	}
 	if err != nil {
 		return err
 	}
@@ -724,6 +740,9 @@ func (s *server) writeSharedEventFrame(w http.ResponseWriter, r *http.Request, e
 }
 
 func (s *server) eventSourceForAuthority(ctx context.Context, workspace string, event domain.RealtimeEvent, authority eventAuthority) (*EventSource, error) {
+	if !s.store.RealtimeEpochsReady() {
+		authority.epoch = ""
+	}
 	identity := &EventSource{event: event, version: authority.version, authzEpoch: authority.epoch}
 	build := func() (*EventSource, error) {
 		source, err := s.BuildEventSource(context.WithValue(ctx, eventSourceEpochKey{}, authority.epoch), workspace, event)

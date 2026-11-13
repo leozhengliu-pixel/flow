@@ -21,6 +21,7 @@ func TestScaleP12EpochFanoutMeasurements(t *testing.T) {
 	if os.Getenv("FLOW_SCALE_P12_MEASURE") != "1" {
 		t.Skip("set FLOW_SCALE_P12_MEASURE=1 to measure delivery")
 	}
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := scaleP03Fixture(t, repo)
 		_, user := scaleP03Join(t, f, "P12 epoch measurement", fmt.Sprintf("p12-epoch-%d@example.test", time.Now().UnixNano()), "member", f.data.Teams[0].ID)
@@ -65,6 +66,7 @@ func TestScaleP12LiveFanoutMeasurements(t *testing.T) {
 	if os.Getenv("FLOW_SCALE_P12_MEASURE") != "1" {
 		t.Skip("set FLOW_SCALE_P12_MEASURE=1 to measure registered live fan-out")
 	}
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := scaleP03Fixture(t, repo)
 		_, user := scaleP03Join(t, f, "P12 live measurement", fmt.Sprintf("p12-live-%d@example.test", time.Now().UnixNano()), "member", f.data.Teams[0].ID)

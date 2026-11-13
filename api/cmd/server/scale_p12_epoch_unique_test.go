@@ -16,6 +16,7 @@ import (
 
 func TestScaleP12EpochTwoThousandCredentialContextsRemainReusable(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := newScaleP12Fixture(t, repo)
 		teams := make([]string, 11)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -100,33 +101,32 @@ type eventAuthorityReads struct {
 }
 
 func (s *server) readEventAuthority(ctx context.Context, workspace string) (eventAuthority, error) {
-	read := func(readCtx context.Context) (eventAuthority, error) {
-		version, err := s.store.RealtimeSourceVersion(readCtx, workspace)
-		if err != nil {
-			return eventAuthority{}, err
-		}
-		epoch, err := s.store.AuthzEpoch(readCtx, version.WorkspaceID)
-		return eventAuthority{version, epoch}, err
-	}
-	if s.realtime == nil {
-		return read(ctx)
-	}
-	return s.realtime.rules.authority.load(ctx, eventAuthorityKey(ctx, workspace, "validate"), read)
+	return s.readEventAuthorityForPhase(ctx, workspace, "validate")
 }
 
 func (s *server) readEventProjectionAuthority(ctx context.Context, workspace string) (eventAuthority, error) {
+	return s.readEventAuthorityForPhase(ctx, workspace, "refresh")
+}
+
+func (s *server) readEventAuthorityForPhase(ctx context.Context, workspace, phase string) (eventAuthority, error) {
 	read := func(readCtx context.Context) (eventAuthority, error) {
 		version, err := s.store.RealtimeSourceVersion(readCtx, workspace)
 		if err != nil {
 			return eventAuthority{}, err
 		}
+		if !s.store.RealtimeEpochsReady() {
+			return eventAuthority{version: version}, nil
+		}
 		epoch, err := s.store.AuthzEpoch(readCtx, version.WorkspaceID)
+		if errors.Is(err, store.ErrRecordJournalUnavailable) {
+			return eventAuthority{version: version}, nil
+		}
 		return eventAuthority{version, epoch}, err
 	}
-	if s.realtime == nil {
+	if s.realtime == nil || !s.store.RealtimeEpochsReady() {
 		return read(ctx)
 	}
-	return s.realtime.rules.authority.load(ctx, eventAuthorityKey(ctx, workspace, "refresh"), read)
+	return s.realtime.rules.authority.load(ctx, eventAuthorityKey(ctx, workspace, phase), read)
 }
 
 func (s *server) readEventSourceVersion(ctx context.Context, workspace string) (eventAuthority, error) {
@@ -134,7 +134,7 @@ func (s *server) readEventSourceVersion(ctx context.Context, workspace string) (
 		version, err := s.store.RealtimeSourceVersion(readCtx, workspace)
 		return eventAuthority{version: version}, err
 	}
-	if s.realtime == nil {
+	if s.realtime == nil || !s.store.RealtimeEpochsReady() {
 		return read(ctx)
 	}
 	return s.realtime.rules.authority.load(ctx, eventAuthorityKey(ctx, workspace, "source"), read)
@@ -256,7 +256,7 @@ func eventAccessCacheKey(workspace, principal string, key *domain.APIKey) eventA
 }
 
 func (s *server) cachedEventAccess(ctx context.Context, source *store.EventPolicySource, authority eventAuthority, principal string, key *domain.APIKey) (store.EventAccess, error) {
-	if s.realtime == nil {
+	if s.realtime == nil || !s.store.RealtimeEpochsReady() {
 		return s.store.ResolveEventAccessFromSource(ctx, source, principal, key)
 	}
 	cache := &s.realtime.rules.accesses

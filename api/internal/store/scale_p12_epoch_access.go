@@ -8,10 +8,19 @@ import (
 	"flow/api/internal/domain"
 )
 
+// RealtimeEpochsReady enables epoch reuse only after journal initialization.
+// Delivery must still check the live epoch before using cached access.
+func (s *SQLiteStore) RealtimeEpochsReady() bool {
+	return s.db.journalReady.Load() && recordJournalMode() != "off"
+}
+
 // LiveEventContext keeps a request's older page snapshot out of shared
 // delivery proofs and source caches. A sole held connection cannot confirm
 // live authority, so that case must stop instead of waiting on itself.
 func (s *SQLiteStore) LiveEventContext(ctx context.Context) (context.Context, error) {
+	if !s.RealtimeEpochsReady() {
+		return ctx, nil
+	}
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == s.db {
 		if s.db.Stats().MaxOpenConnections == 1 {
 			return ctx, ErrRecordJournalUnavailable

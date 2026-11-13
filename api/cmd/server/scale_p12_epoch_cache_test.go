@@ -18,6 +18,7 @@ import (
 
 func TestScaleP12EpochContextsReuseAcrossEvents(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := newScaleP12Fixture(t, repo)
 		principal := f.principals[4]
@@ -64,6 +65,7 @@ func TestScaleP12EpochContextsReuseAcrossEvents(t *testing.T) {
 }
 
 func TestScaleP12EpochReadSealsBeforeReadingAuthority(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := newScaleP12Fixture(t, repo)
 		workspace := f.data.Workspace.URLKey
@@ -123,6 +125,7 @@ func TestScaleP12EpochReadSealsBeforeReadingAuthority(t *testing.T) {
 
 func TestScaleP12EpochCacheStillRejectsQueuedTeamMoves(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := newScaleP12Fixture(t, repo)
 		request := f.principals[2].request(f.data.Workspace.URLKey)
@@ -143,6 +146,7 @@ func TestScaleP12EpochCacheStillRejectsQueuedTeamMoves(t *testing.T) {
 
 func TestScaleP12EpochCacheRetainsKeyExpiry(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := newScaleP12Fixture(t, repo)
 		principal := f.principals[5]
@@ -187,6 +191,7 @@ func TestScaleP12EpochCacheRetainsKeyExpiry(t *testing.T) {
 
 func TestScaleP12EpochLiveCohortDoesNotReadAuthorityPerViewer(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := newScaleP12Fixture(t, repo)
 		principal := f.principals[2]
@@ -240,7 +245,7 @@ func TestScaleP12EpochLiveCohortDoesNotReadAuthorityPerViewer(t *testing.T) {
 
 func TestScaleP12EpochCacheRejectsPeerRevocationWithoutAnInvalidation(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
-	t.Setenv("FLOW_RECORD_JOURNAL", "off")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	config := scaleP03DatabaseConfig(t)
 	writer, err := store.OpenDatabase(config)
 	if err != nil {
@@ -277,6 +282,7 @@ func TestScaleP12EpochCacheRejectsPeerRevocationWithoutAnInvalidation(t *testing
 
 func TestScaleP12EpochCacheRejectsCredentialScopeEdits(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := newScaleP12Fixture(t, repo)
 		principal := f.principals[5]
@@ -314,6 +320,7 @@ func TestScaleP12EpochCacheRejectsCredentialScopeEdits(t *testing.T) {
 
 func TestScaleP12EpochDeliveryIgnoresAnOlderPageSnapshot(t *testing.T) {
 	t.Setenv("FLOW_SYNC_V2", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	for _, repo := range scaleP03ServerTestStores(t) {
 		f := newScaleP12Fixture(t, repo)
 		request := f.principals[4].request(f.data.Workspace.URLKey)
