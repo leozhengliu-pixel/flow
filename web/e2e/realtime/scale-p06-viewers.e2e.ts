@@ -76,7 +76,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
           }
         })
         const capture = async (state: string) => {
-          if (test.info().repeatEachIndex === 0) await page.screenshot({ path: `/tmp/codex-scale-p06/r2-clean-${viewport.width}-${state}.png` })
+          const directory = process.env.SCALE_ACTIVATE_B1_SHOTS ?? '/tmp/codex-scale-p06'
+          if (test.info().repeatEachIndex === 0) await page.screenshot({ path: `${directory}/r2-clean-${viewport.width}-${state}.png` })
         }
         const issueURL = `${api.origin}${issuePath(workspaceKey, issue)}`
         await page.goto(issueURL)

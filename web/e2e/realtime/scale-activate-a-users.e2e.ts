@@ -48,7 +48,9 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
           const documentResponse = await apiFetch(page, 'POST', '/api/documents', { title: 'Two-user document', content: 'Shared document content.', teamIds: [team.id] }, owner.workspaceKey)
           expect(documentResponse.status).toBe(201)
           const document = documentResponse.json as { id: string; slugId: string }
+          const documentSubscribed = viewer.waitForResponse(response => new URL(response.url()).pathname === '/api/realtime/events' && response.status() === 200)
           await viewer.goto(`${api.origin}/${owner.workspaceKey}/document/${document.slugId}`)
+          await documentSubscribed
           await expect(viewer.locator('.document-page')).toContainText('Shared document content.')
           expect((await apiFetch(page, 'PATCH', `/api/documents/${document.id}`, { title: 'Two-user document updated' }, owner.workspaceKey)).status).toBe(200)
           await expect(viewer.getByRole('textbox', { name: 'Document title' })).toHaveValue('Two-user document updated')
