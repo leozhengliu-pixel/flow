@@ -518,7 +518,9 @@ func (s *SQLiteStore) ImportIssues(ctx context.Context, workspace string, issues
 		}
 		encoded[issue.ID] = raw
 	}
-	if _, ok := s.WorkspaceMetadata(workspace); !ok {
+	if _, ok, err := s.WorkspaceMetadataScoped(ctx, workspace, MetadataRecordScope{}); err != nil {
+		return err
+	} else if !ok {
 		return fmt.Errorf("workspace not found")
 	}
 	s.lockWorkspaceWrites()

@@ -37,11 +37,16 @@ type applicationWebhookInput = publicapi.ApplicationWebhookInput
 
 type applicationWebhookSettings = publicapi.ApplicationWebhookSettings
 
-func (s *server) applicationWebhookSettings(ctx context.Context, app domain.OAuthApplication) applicationWebhookSettings {
+func (s *server) applicationWebhookSettings(ctx context.Context, app domain.OAuthApplication) (applicationWebhookSettings, error) {
 	_, signing, _ := s.store.WebhookSigningSecret(ctx, store.ApplicationWebhookSecretRef(app.ClientID))
 	settings := applicationWebhookSettings{ApplicationID: app.ID, ClientID: app.ClientID, Enabled: app.WebhookEnabled, URL: app.WebhookURL, ResourceTypes: app.WebhookResourceTypes, SecretPrefix: app.WebhookSecretPrefix, SigningEnabled: signing}
 	if settings.ResourceTypes == nil {
 		settings.ResourceTypes = []string{}
+	}
+	if s.store.BoundedMetadataEnabled() {
+		count, err := s.store.ApplicationWebhookWorkspaceCount(ctx, app.ClientID)
+		settings.Installations = count
+		return settings, err
 	}
 	for _, key := range s.store.WorkspaceKeys() {
 		hooks, _ := s.store.WorkspaceMetadataFields(key, "webhooks")
@@ -51,17 +56,75 @@ func (s *server) applicationWebhookSettings(ctx context.Context, app domain.OAut
 			settings.Installations++
 		}
 	}
-	return settings
+	return settings, nil
+}
+
+func (s *server) applicationWebhookDataScoped(w http.ResponseWriter, r *http.Request) (domain.Bootstrap, bool) {
+	if !s.store.BoundedMetadataEnabled() {
+		return s.workspaceData(r), true
+	}
+	scope := store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "oauthApplications", ID: r.PathValue("id")}}}
+	if id := r.PathValue("id"); id == "" || len(id) > 191 || strings.ContainsRune(id, '\x00') {
+		scope.Read = nil
+	}
+	var access store.AccessContext
+	var core store.RecordReadCore
+	if !s.authDisabled {
+		var key *domain.APIKey
+		if credential, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			key = &credential
+			if !apiKeyHasScope(credential, "admin") {
+				scope.Read = nil
+			}
+		}
+		var err error
+		access, err = s.store.ResolveAccess(r.Context(), workspaceKey(r), authUser(r).ID, key)
+		if err == nil {
+			core, err = s.store.ReadRecordCore(r.Context(), access)
+		}
+		if err != nil {
+			issueRecordsError(w, err)
+			return domain.Bootstrap{}, false
+		}
+	}
+	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), scope)
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return domain.Bootstrap{}, false
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "application not found")
+		return domain.Bootstrap{}, false
+	}
+	if s.authDisabled {
+		data.ViewerRole = "admin"
+	} else {
+		data.Viewer, data.ViewerRole = core.Viewer, core.ViewerRole
+		if err := s.store.ValidateAccess(r.Context(), access); err != nil {
+			issueRecordsError(w, err)
+			return domain.Bootstrap{}, false
+		}
+		filterBootstrapForAPIKey(&data, r)
+	}
+	return data, true
 }
 
 func (s *server) getApplicationWebhook(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data, ok := s.applicationWebhookDataScoped(w, r)
+	if !ok {
+		return
+	}
 	index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == r.PathValue("id") })
 	if index < 0 {
 		writeError(w, http.StatusNotFound, "application not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.applicationWebhookSettings(r.Context(), data.OAuthApplications[index]))
+	settings, err := s.applicationWebhookSettings(r.Context(), data.OAuthApplications[index])
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, settings)
 }
 
 // updateApplicationWebhook saves the developer's webhook settings. The first
@@ -130,14 +193,22 @@ func (s *server) updateApplicationWebhook(w http.ResponseWriter, r *http.Request
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	settings := s.applicationWebhookSettings(r.Context(), updated)
+	settings, err := s.applicationWebhookSettings(r.Context(), updated)
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
 	if updated.WebhookEnabled && !settings.SigningEnabled {
 		secret, err := s.storeApplicationWebhookSecret(r, updated, "")
 		if err != nil {
 			respondMutation(w, err, http.StatusOK, nil)
 			return
 		}
-		settings = s.applicationWebhookSettings(r.Context(), updated)
+		settings, err = s.applicationWebhookSettings(r.Context(), updated)
+		if err != nil {
+			respondMutation(w, err, http.StatusOK, nil)
+			return
+		}
 		settings.SecretPrefix, settings.Secret = secret[:min(len(secret), 17)], secret
 		s.auditAPIKeyCredential(r, "webhook_secret_issued", updated)
 		w.Header().Set("Cache-Control", "no-store")
@@ -163,7 +234,11 @@ func (s *server) rotateApplicationWebhookSecret(w http.ResponseWriter, r *http.R
 	}
 	app := data.OAuthApplications[index]
 	app.WebhookSecretPrefix = secret[:min(len(secret), 17)]
-	settings := s.applicationWebhookSettings(r.Context(), app)
+	settings, err := s.applicationWebhookSettings(r.Context(), app)
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
 	settings.Secret = secret
 	s.auditAPIKeyCredential(r, "webhook_secret_rotated", app)
 	w.Header().Set("Cache-Control", "no-store")

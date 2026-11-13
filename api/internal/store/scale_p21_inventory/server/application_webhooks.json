@@ -1,10 +1,20 @@
 {
   "source": "server/application_webhooks.go",
-  "unmigrated": 10,
+  "unmigrated": 8,
   "consumers": {
+    "applicationWebhookDataScoped": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Off mode retains workspaceData exactly. Bounded mode resolves live access, selects oauthApplications/pathID or identity only for credentials without admin, validates access after the read and retains original API-key projection and auth-disabled bypass. TestScaleP21SW22ApplicationWebhookDifferential compares the full principal/key matrix, malformed/name/missing references, hidden oversized provider concealment, cross-workspace/revocation, owned output, cancellation/recovery and unchanged canonical application/hook bytes with zero full decodes.",
+      "accessors": [
+        "workspaceData",
+        "WorkspaceMetadataScoped"
+      ]
+    },
     "applicationWebhookSettings": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Off mode retains the original per-workspace webhook accessor. Bounded mode counts distinct matching catalog workspaces with scalar managedBy/clientID predicates in fixed50-key SQL groups and an8MiB work reservation; duplicate, disabled and empty-client behavior is retained without body reads. TestScaleP21SW22ApplicationWebhookCount and ApplicationWebhookDifferential compare exact case and catalog semantics, >50 and oversized hooks, null/empty resource types, cancellation/recovery, unchanged canonical state and zero full decodes.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
@@ -18,7 +28,8 @@
     },
     "getApplicationWebhook": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Selects only the live credential-projected oauthApplications/pathID through applicationWebhookDataScoped, followed by scalar applicationWebhookSettings installation counts. Independent admin-route authorization remains unchanged. TestScaleP21SW22ApplicationWebhookDifferential compares full principal/key matrix, missing/name/malformed IDs, auth-disabled behavior, non-admin-key concealment of oversized targets, cross-workspace/queued/replay revocation, ownership, cancellation, canonical rows and no publication.",
       "accessors": [
         "workspaceData"
       ]
@@ -42,6 +53,7 @@
     "rotateApplicationWebhookSecret": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Retains original accessors pending aggregate compatibility: its storeApplicationWebhookSecret writer can resolve an earlier Document.ContentData value with the application ID; a scoped application-only writer publishes a different realtime/webhook entity. SW22 reproduced the mismatch in sw22-collision.log and reverted the attempted migration.",
       "accessors": [
         "workspaceData"
       ]
@@ -49,6 +61,7 @@
     "storeApplicationWebhookSecret": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Retains original writer pending bounded aggregate compatibility: Document.ContentData with id=app.ID can precede OAuthApplications in legacy aggregate lookup. SW22 verified that a target-only scoped writer changes Snapshot/realtime entity despite identical canonical application state; failed fixture and log are retained under the task scratch directory.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

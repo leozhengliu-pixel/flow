@@ -1,10 +1,11 @@
 {
   "source": "server/coding_artifacts_api.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "codingArtifactSession": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Trusted identity-only WorkspaceMetadataScoped read preserves the exact old WorkspaceMetadata off accessor; native coding-session lookup and anchor authorization remain unchanged. TestScaleP21SW22CodingArtifactWorkspaceDifferential compares principal/key matrix, owned/foreign/missing session, missing workspace, disabled/unready runtime ordering, authorization callback calls and queued/replay revocation with zero full decodes. Downstream anchor helpers remain independently inventoried.",
       "accessors": [
         "WorkspaceMetadata"
       ]

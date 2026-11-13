@@ -553,7 +553,11 @@ func (s *server) codingArtifactSession(w http.ResponseWriter, r *http.Request) (
 		return "", "", false
 	}
 	workspace := workspaceKey(r)
-	metadata, ok := s.store.WorkspaceMetadata(workspace)
+	metadata, ok, readErr := s.store.WorkspaceMetadataScoped(r.Context(), workspace, store.MetadataRecordScope{})
+	if readErr != nil {
+		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not read workspace")
+		return "", "", false
+	}
 	if !ok {
 		writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "Workspace not found")
 		return "", "", false

@@ -1,10 +1,11 @@
 {
   "source": "store/issue_records.go",
-  "unmigrated": 5,
+  "unmigrated": 3,
   "consumers": {
     "ImportIssues": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The workspace existence check selects identity only with exact WorkspaceMetadata off dispatch; existing1000-record/16MiB transaction limits, native issue/history/index/count/sequence writes and no-publication behavior are unchanged. TestScaleP21SW22ImportIssuesIdentityDifferential compares final SQL detail/list/version/order, labels/count/number sequence, idempotence, missing workspace, duplicate/empty IDs, oversized input and cancellation rollback with zero full metadata decodes.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -32,7 +33,8 @@
     },
     "migrateIssueSequences": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Genuine native scalar migration enumerates only resident workspace keys charged to the process policy budget, then uses SQL COUNT/MAX(number) without transferring issue bodies. TestScaleP21SW22IssueSequenceMigrationDifferential isolates an owned external-database-aware catalog, compares legacy/bounded modes over120 issues with a high maximum, cancellation/recovery and idempotent preservation of an existing higher sequence; no full metadata decode.",
       "accessors": [
         "resident-state"
       ]
