@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -112,6 +113,23 @@ func apiKeyScopeCredential(t *testing.T, f scaleP03PlatformFixture, actor, restr
 	auth, err := f.repository.AuthenticateAPIKeyRecord(t.Context(), f.data.Workspace.URLKey, secretHash(secret), nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Settle the first usage write before comparing credential-bound reads.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	for {
+		if err := f.repository.RecordAPIKeyUse(ctx, f.data.Workspace.URLKey, key.ID, ""); err != nil {
+			t.Fatal(err)
+		}
+		data, ok := f.repository.BootstrapForContext(ctx, f.data.Workspace.URLKey)
+		if ok && slices.ContainsFunc(data.APIKeys, func(item domain.APIKey) bool { return item.ID == key.ID && item.LastUsedAt != nil }) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("credential usage did not settle", ctx.Err())
+		case <-time.After(time.Millisecond):
+		}
 	}
 	return secret, auth.Key
 }

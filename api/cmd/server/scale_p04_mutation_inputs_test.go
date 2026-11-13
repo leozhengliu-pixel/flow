@@ -149,7 +149,7 @@ func scaleP04HotWriteScript(t *testing.T) mutationScriptResult {
 		"issueSQL":    "SELECT id,data FROM issue_records WHERE workspace_key=? ORDER BY id",
 		"contentSQL":  "SELECT kind,resource_id,id,data FROM workspace_content_records WHERE workspace_key=? ORDER BY kind,resource_id,created_at,id",
 		"searchSQL":   "SELECT issue_id,content FROM issue_search_documents WHERE workspace_key=? ORDER BY issue_id",
-		"eventsSQL":   "SELECT event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=? ORDER BY created_at,id",
+		"eventsSQL":   "SELECT event_type,aggregate_id,payload,previous_values FROM domain_events WHERE workspace_id=? ORDER BY seq,id",
 	} {
 		var arg any = database.key
 		if name == "eventsSQL" {
