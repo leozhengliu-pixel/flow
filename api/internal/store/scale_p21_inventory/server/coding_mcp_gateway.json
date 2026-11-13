@@ -1,10 +1,11 @@
 {
   "source": "server/coding_mcp_gateway.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "auditCodingMCPToolCall": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The callback stages one coding-session MCP audit and reads only root actor identity; an empty metadata record scope avoids loading audit history. Outcome classification, background context, elapsed time, caller IDs and logging are unchanged. TestScaleP21M3AuditDifferential compares persisted audits and webhook/realtime effects across principal/credential classes with unrelated body fingerprints. Gateway policy reads remain separate blockers.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
