@@ -1,6 +1,6 @@
 {
   "source": "server/parity_core.go",
-  "unmigrated": 24,
+  "unmigrated": 23,
   "consumers": {
     "archiveCustomerNeed": {
       "owner": "P21",
@@ -216,7 +216,8 @@
     },
     "updateAgentActivity": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes only agentActivities/id plus the shared writer's legacy implicit actor point; status/body/metadata edits, target attribution, no-op detection and timestamps retain the original callback and exact off-mode accessor. Route authorization remains an independent boundary. TestScaleP21SW6AgentActivityDifferential compares canonical target/actor rows, responses, webhook previous values and realtime actor/client payloads across the principal/key matrix, missing/old-reference IDs, foreign-workspace IDs and cancellation. Over 50 unrelated activities and oversized unrelated bodies remain byte-identical; an oversized output rolls back without publication, a subsequent write succeeds, and bounded full-decode count stays zero. The coordinator passed the targeted test and repeated it twice against one persistent SQLite file.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

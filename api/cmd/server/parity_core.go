@@ -861,7 +861,7 @@ func (s *server) updateAgentActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var item domain.AgentActivity
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.activity_updated", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "agent.activity_updated", r.PathValue("id"), input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "agentActivities", ID: r.PathValue("id")}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.AgentActivities, func(value domain.AgentActivity) bool { return value.ID == r.PathValue("id") })
 		if index < 0 {
 			return errNotFound
