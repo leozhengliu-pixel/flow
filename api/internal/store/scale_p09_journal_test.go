@@ -629,6 +629,7 @@ func TestScaleP09RetentionWorkerStops(t *testing.T) {
 }
 
 func TestScaleP09JournalPreservesLegacyWriteBudget(t *testing.T) {
+	t.Setenv("FLOW_RECORD_JOURNAL", "shadow")
 	for _, phase := range []string{"journal", "audit"} {
 		t.Run(phase, func(t *testing.T) {
 			f := scaleP09Database(t)

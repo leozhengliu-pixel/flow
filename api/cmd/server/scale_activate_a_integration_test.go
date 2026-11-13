@@ -73,6 +73,12 @@ func TestScaleActivateALegacyReadRollback(t *testing.T) {
 				token, _ := apiKeyScopeCredential(t, f, "user", spec.restriction, spec.teams, []string{"read", "initiative:read"})
 				credentials = append(credentials, struct{ name, token string }{spec.name, token})
 			}
+			// Drain first-use telemetry before fixing the comparison timestamps.
+			for _, credential := range credentials {
+				if credential.token != "" {
+					scaleP11WarmCredential(t, repo, workspace, credential.token)
+				}
+			}
 			// The shared credential fixture includes a pre-migration document and
 			// unused keys. Materialize stable defaults before exact HTTP comparison.
 			now := time.Now().UTC()

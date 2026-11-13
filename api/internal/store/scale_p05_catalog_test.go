@@ -38,6 +38,7 @@ func scaleP05Database(t *testing.T) (*SQLiteStore, string) {
 
 func scaleP05Connect(t *testing.T, dialect, dsn string) *SQLiteStore {
 	t.Helper()
+	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	driver := dialect
 	if dialect == "postgres" {
 		driver = "pgx"

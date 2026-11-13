@@ -102,6 +102,7 @@ func scaleP02Config(t *testing.T) DatabaseConfig {
 
 func scaleP02StoreAt(t *testing.T, config DatabaseConfig) (*SQLiteStore, *scaleP02SQL) {
 	t.Helper()
+	t.Setenv("FLOW_RECORD_JOURNAL", "off")
 	repo, err := OpenDatabase(config)
 	if err != nil {
 		t.Fatal(err)

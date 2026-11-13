@@ -43,6 +43,7 @@ func TestScaleP10SyncAPIKeyTeamScopeRoutes(t *testing.T) {
 			} {
 				t.Run(spec.name, func(t *testing.T) {
 					secret, key := apiKeyScopeCredential(t, f, spec.actor, spec.restriction, spec.teams, []string{"read", "initiative:read"})
+					scaleP11WarmCredential(t, repo, workspace, secret)
 					read := func(method, path, body string) *httptest.ResponseRecorder {
 						t.Helper()
 						var response *httptest.ResponseRecorder
