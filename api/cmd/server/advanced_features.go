@@ -2361,7 +2361,7 @@ func (s *server) updateProjectUpdateSettings(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var result map[string]any
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project_update_settings.updated", "project_update_settings", input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "project_update_settings.updated", "project_update_settings", input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "settings", ID: "projectUpdates"}}}, func(data *domain.Bootstrap) error {
 		current, _ := data.Settings["projectUpdates"].(map[string]any)
 		if current == nil {
 			current = map[string]any{}
@@ -2395,7 +2395,7 @@ func (s *server) updateSLASettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result map[string]any
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "sla_settings.updated", "workspace", input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "sla_settings.updated", "workspace", input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "settings", ID: "sla"}}}, func(data *domain.Bootstrap) error {
 		if data.Settings == nil {
 			data.Settings = map[string]any{}
 		}
@@ -2950,7 +2950,7 @@ func (s *server) updateFavoriteFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.FavoriteFolder
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite_folder.updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "favorite_folder.updated", id, input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "favoriteFolders", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.FavoriteFolders, func(folder domain.FavoriteFolder) bool { return folder.ID == id && folder.UserID == data.Viewer.ID })
 		if index < 0 {
 			return errNotFound
@@ -3854,7 +3854,7 @@ func (s *server) createExport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) completeExport(workspaceKey, id string) {
-	_ = s.store.MutateWorkspace(s.store.WorkerContext(), workspaceKey, "export.completed", id, nil, func(data *domain.Bootstrap) error {
+	_ = s.store.MutateWorkspaceScoped(s.store.WorkerContext(), workspaceKey, "export.completed", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "exportJobs", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ExportJobs, func(item domain.ExportJob) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound

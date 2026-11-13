@@ -1,6 +1,6 @@
 {
   "source": "server/advanced_features.go",
-  "unmigrated": 52,
+  "unmigrated": 48,
   "consumers": {
     "addFavorite": {
       "owner": "P21",
@@ -36,7 +36,8 @@
     },
     "completeExport": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The completion callback writes only exportJobs/id using root workspace identity for its filename; no exported entity/content collections are loaded. Original worker context, ignored error, completion timestamp and staged audit remain unchanged. TestScaleP21M3AdvancedPointDifferential compares the point writer's canonical record, missing ID, audit and event effects across principal/credential fixtures; actual export assembly stays blocked separately.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -371,7 +372,8 @@
     },
     "updateFavoriteFolder": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes only canonical favoriteFolders/id; the existing viewer ownership predicate, name/position validation, no-op and timestamp remain unchanged. TestScaleP21M3AdvancedPointDifferential compares principal/credential combinations, missing IDs, canonical state and audit/webhook/realtime effects while hashing oversized unrelated bodies. Route authorization is independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -387,7 +389,8 @@
     },
     "updateProjectUpdateSettings": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads and writes only settings/projectUpdates; merges retain unknown keys and appendAudit remains transaction-staged without loading audit history. TestScaleP21M3AdvancedPointDifferential compares responses, canonical records, audits, webhook previous values and realtime across the principal/credential matrix with oversized unrelated records; route authorization remains a separate blocker.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -411,7 +414,8 @@
     },
     "updateSLASettings": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads and writes settings/sla only, including slaEnabled/slaWorkWeek defaults, work-week validation and unchanged-value behavior. Existing audit staging is retained. TestScaleP21M3AdvancedPointDifferential compares responses, canonical state and audit/webhook/realtime effects across principal/credential classes, with unrelated body fingerprints. No issue/SLA recalculation is performed by this callback; middleware is independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

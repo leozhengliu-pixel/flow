@@ -277,7 +277,7 @@ func (s *server) updateCodingSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.WorkspaceSettings
-	err := s.store.MutateWorkspace(r.Context(), viewer.workspace, "workspace_preferences.updated", "workspace", patch, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), viewer.workspace, "workspace_preferences.updated", "workspace", patch, store.MetadataRecordScope{Fields: []string{"workspaceSettings"}}, func(data *domain.Bootstrap) error {
 		before := jsonSnapshot(data.WorkspaceSettings)
 		settings := data.WorkspaceSettings.CodingAgentSettings
 		set := func(target *string, value *string) {
