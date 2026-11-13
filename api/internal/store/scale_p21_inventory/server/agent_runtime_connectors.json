@@ -1,6 +1,6 @@
 {
   "source": "server/agent_runtime_connectors.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "auditAgentRunConnectorCall": {
       "owner": "P18",
@@ -13,7 +13,8 @@
     },
     "discoverAgentRunConnectors": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Declares workspace settings and only settings/applicationPolicies; disabled tools, empty loop selections and disabled unselected discovery skip unused policy input. Selected connections still load entries to preserve missing-versus-unavailable notices, and the final settings/policy read is one SQL snapshot. Grant authorization and per-call credential checks remain upstream/downstream responsibilities. TestScaleP21M1ConnectorDiscoveryDifferential compares principal/key classes, owned/shared/rejected and selected policies, queued/replayed MCP revocation, unused oversized policy and explicit active-policy budget errors with unrelated oversized metadata. Off mode retains WorkspaceMetadata exactly.",
       "accessors": [
         "WorkspaceMetadata"
       ]

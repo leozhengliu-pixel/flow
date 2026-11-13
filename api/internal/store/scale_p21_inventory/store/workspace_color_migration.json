@@ -1,10 +1,11 @@
 {
   "source": "store/workspace_color_migration.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "migrateWorkspaceInitialsColor": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Startup's unchanged callback reads/writes only the complete workspace identity scalar; its original metadata-fields context and no-issue mode are preserved off mode. The scoped writer retains canonical hooks, policy installation, publication, retries and no-op behavior without loading any body collection. TestScaleP21M1WorkspaceColorDifferential isolates owned catalogs and compares resulting identity, exact webhook/realtime effects, byte-identical unrelated rows, intentional colors, case/whitespace matching and repeated execution with zero complete decodes/admission leaks.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
