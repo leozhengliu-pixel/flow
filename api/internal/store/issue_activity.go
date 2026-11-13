@@ -47,6 +47,29 @@ func RecordIssueActivity(data *domain.Bootstrap, issueID string, event domain.Ac
 		}
 	}
 	items := data.Activities[issueID]
+	_, loaded := data.ActivityHistoryHeads[issueID]
+	if !loaded && len(items) == 0 && data.ActivityHistoryLoader != nil {
+		snapshot, err := data.ActivityHistoryLoader(issueID)
+		if err != nil {
+			data.ActivityHistoryError = err
+			return domain.ActivityEvent{}
+		}
+		if data.ActivityHistoryHeads == nil {
+			data.ActivityHistoryHeads = map[string]domain.ActivityEvent{}
+		}
+		data.ActivityHistoryHeads[issueID] = domain.ActivityEvent{}
+		if snapshot.Activity != nil {
+			items = append(items, *snapshot.Activity)
+			data.Activities[issueID] = items
+			data.ActivityHistoryHeads[issueID] = *snapshot.Activity
+		}
+		if snapshot.Comment != nil {
+			if data.Comments == nil {
+				data.Comments = map[string][]domain.Comment{}
+			}
+			data.Comments[issueID] = []domain.Comment{*snapshot.Comment}
+		}
+	}
 	latest := -1
 	for i := range items {
 		if latest < 0 || !items[i].CreatedAt.Before(items[latest].CreatedAt) {

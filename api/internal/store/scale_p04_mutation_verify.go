@@ -65,6 +65,11 @@ type mutationCallbackResult struct {
 func cloneCallbackInput(data domain.Bootstrap) domain.Bootstrap {
 	owned := cloneBootstrap(data)
 	owned.NextIssueNumber = data.NextIssueNumber
+	owned.ActivityHistoryLoader = data.ActivityHistoryLoader
+	owned.ActivityHistoryError = data.ActivityHistoryError
+	if data.ActivityHistoryHeads != nil {
+		owned.ActivityHistoryHeads = cloneSnapshotValue(reflect.ValueOf(data.ActivityHistoryHeads)).Interface().(map[string]domain.ActivityEvent)
+	}
 	owned.Viewer = mutationInputActor(data.Viewer)
 	owned.ViewerTeamIDs = slices.Clone(data.ViewerTeamIDs)
 	for i := range owned.Users {
@@ -95,6 +100,7 @@ func fullCallbackInput(stored, input domain.Bootstrap, fields []string) domain.B
 	}
 	full.Issues, full.Comments, full.Activities = loaded.Issues, loaded.Comments, loaded.Activities
 	full.Notifications, full.NotificationDeliveries = loaded.Notifications, loaded.NotificationDeliveries
+	full.ActivityHistoryLoader, full.ActivityHistoryHeads, full.ActivityHistoryError = loaded.ActivityHistoryLoader, loaded.ActivityHistoryHeads, loaded.ActivityHistoryError
 	full.Viewer, full.ViewerRole = loaded.Viewer, loaded.ViewerRole
 	full.NextIssueNumber, full.ViewerTeamIDs = loaded.NextIssueNumber, loaded.ViewerTeamIDs
 	return full

@@ -2866,6 +2866,18 @@ type ActivityEvent struct {
 	Metadata  ActivityMetadata `json:"metadata"`
 }
 
+// ActivityHistorySnapshot is an internal mutation input used to merge the
+// latest activity for one issue without hydrating a workspace timeline.
+type ActivityHistorySnapshot struct {
+	Activity *ActivityEvent
+	Comment  *Comment
+}
+
+// ActivityHistoryLoader is installed only while an issue mutation holds its
+// record transaction. It is deliberately excluded from all API and snapshot
+// JSON; callers fetch only the issue whose activity is actually appended.
+type ActivityHistoryLoader func(string) (ActivityHistorySnapshot, error)
+
 // Notification is an Inbox aggregate. Source IDs retain a stable link to the
 // Issue collaboration record while the Issue itself remains the source of
 // title, description, and property data.
@@ -2953,12 +2965,15 @@ type Bootstrap struct {
 	// ViewerTeamIDs are the acting viewer's teams read from the membership
 	// records while a mutation's authorization callback runs; the stored
 	// snapshot's TeamMembers can lag those records. Not serialized.
-	ViewerTeamIDs        []string  `json:"-"`
-	IssueCollectionPaged bool      `json:"issueCollectionPaged,omitempty"`
-	Workspace            Workspace `json:"workspace"`
-	Viewer               User      `json:"viewer"`
-	Users                []User    `json:"users"`
-	Teams                []Team    `json:"teams"`
+	ViewerTeamIDs         []string                 `json:"-"`
+	ActivityHistoryLoader ActivityHistoryLoader    `json:"-"`
+	ActivityHistoryHeads  map[string]ActivityEvent `json:"-"`
+	ActivityHistoryError  error                    `json:"-"`
+	IssueCollectionPaged  bool                     `json:"issueCollectionPaged,omitempty"`
+	Workspace             Workspace                `json:"workspace"`
+	Viewer                User                     `json:"viewer"`
+	Users                 []User                   `json:"users"`
+	Teams                 []Team                   `json:"teams"`
 	// TeamByID/TeamByKey/TeamChildren/LabelIndex are in-memory lookup tables
 	// rebuilt on load. They are not serialized.
 	TeamByID          map[string]int           `json:"-"`

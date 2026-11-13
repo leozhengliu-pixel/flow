@@ -246,9 +246,14 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if target == nil {
 			return sql.ErrNoRows
 		}
-		activityHeads, err := loadIssueHistoryHeads(ctx, tx, workspace, metadata.Issues, &metadata)
-		if err != nil {
-			return err
+		metadata.Activities = map[string][]domain.ActivityEvent{}
+		metadata.Comments = map[string][]domain.Comment{}
+		metadata.ActivityHistoryHeads = map[string]domain.ActivityEvent{}
+		// Activity heads are read lazily, only for the issues whose timeline
+		// the callback appends to (two bounded index lookups per issue), never
+		// for the rest of the loaded family.
+		metadata.ActivityHistoryLoader = func(issueID string) (domain.ActivityHistorySnapshot, error) {
+			return loadIssueHistoryHead(ctx, tx, workspace, issueID)
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='notification' AND resource_id=? ORDER BY created_at DESC LIMIT 1000`, workspace, id)
 		if err != nil {
@@ -302,6 +307,9 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		metadata.CollaborationUpdates = nil
 		metadata.FormerMembers = nil
+		if metadata.ActivityHistoryError != nil {
+			return metadata.ActivityHistoryError
+		}
 		if len(fields) > 0 {
 			restoreUnlistedMetadata(&metadata, storedMetadata, fields)
 		}
@@ -341,8 +349,8 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		}
 		for resource, items := range metadata.Activities {
 			for _, item := range items {
-				if head, exists := activityHeads[resource]; exists && item.ID == head.ID {
-					delete(activityHeads, resource)
+				if head, exists := metadata.ActivityHistoryHeads[resource]; exists && item.ID == head.ID {
+					delete(metadata.ActivityHistoryHeads, resource)
 					if reflect.DeepEqual(head, item) {
 						continue
 					}
@@ -352,7 +360,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 				}
 			}
 		}
-		for resource, head := range activityHeads {
+		for resource, head := range metadata.ActivityHistoryHeads {
 			if head.Type != "issue.updated" || !hasIssueActivityChanges(head.Metadata) {
 				continue
 			}
@@ -360,6 +368,9 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 				return err
 			}
 		}
+		metadata.ActivityHistoryLoader = nil
+		metadata.ActivityHistoryError = nil
+		metadata.ActivityHistoryHeads = nil
 		for resource, items := range notificationRecords(metadata.Notifications) {
 			for _, item := range items {
 				if err := writeContentRecord(ctx, tx, workspace, "notification", resource, item); err != nil {
