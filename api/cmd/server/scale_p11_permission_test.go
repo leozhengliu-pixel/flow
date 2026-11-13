@@ -221,6 +221,16 @@ func scaleP11WarmCredential(t *testing.T, repo *store.SQLiteStore, workspace, se
 		t.Fatal(err)
 	}
 	started := time.Now()
+	// A use recorded under a minute ago (for example by the fixture) makes the
+	// next RecordAPIKeyUse a throttled no-op, so there is no write to wait for.
+	var settled *time.Time
+	if data, ok := repo.WorkspaceMetadata(workspace); ok {
+		for _, key := range data.APIKeys {
+			if key.ID == auth.Key.ID && key.LastUsedAt != nil && started.Sub(*key.LastUsedAt) < 50*time.Second {
+				settled = key.LastUsedAt
+			}
+		}
+	}
 	if err := repo.RecordAPIKeyUse(t.Context(), workspace, auth.Key.ID, auth.Key.AuthorizationID); err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +238,7 @@ func scaleP11WarmCredential(t *testing.T, repo *store.SQLiteStore, workspace, se
 	for time.Now().Before(deadline) {
 		data, ok := repo.WorkspaceMetadata(workspace)
 		if ok && slices.ContainsFunc(data.APIKeys, func(key domain.APIKey) bool {
-			return key.ID == auth.Key.ID && key.LastUsedAt != nil && !key.LastUsedAt.Before(started)
+			return key.ID == auth.Key.ID && key.LastUsedAt != nil && (settled != nil || !key.LastUsedAt.Before(started))
 		}) {
 			return
 		}
