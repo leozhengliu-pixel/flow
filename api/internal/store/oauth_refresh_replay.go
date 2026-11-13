@@ -159,6 +159,11 @@ func (s *SQLiteStore) OAuthRefreshToken(ctx context.Context, token string) (OAut
 // application. confidential is false for unknown and dynamically registered
 // public clients; ok reports whether secret matched.
 func (s *SQLiteStore) OAuthClientSecret(clientID, secret string) (confidential, ok bool) {
+	if s.metadataResidency != nil {
+		stored, found, release := s.residentOAuthIdentityValue("", clientID, residentOAuthConfidentialSecret)
+		defer release()
+		return found, found && secret != "" && subtle.ConstantTimeCompare([]byte(secret), []byte(stored)) == 1
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, data := range s.workspaces {

@@ -212,10 +212,10 @@ func TestScaleP21MigratePolicyPermissionDifferential(t *testing.T) {
 }
 
 func TestScaleP21MigrateInventoryCount(t *testing.T) {
-	if count := len(metadataFullWorkspaceConsumers()); count != 912 {
-		t.Fatalf("unmigrated consumers=%d, want 912", count)
+	if count := len(metadataFullWorkspaceConsumers()); count != 909 {
+		t.Fatalf("unmigrated consumers=%d, want 909", count)
 	}
-	if count := len(scaleP21MigrateReviewedConsumers()); count != 7 {
-		t.Fatalf("reviewed migration consumers=%d, want 7", count)
+	if count := len(scaleP21MigrateReviewedConsumers()); count != 10 {
+		t.Fatalf("reviewed migration consumers=%d, want 10", count)
 	}
 }

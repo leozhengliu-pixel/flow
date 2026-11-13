@@ -185,6 +185,11 @@ func (s *SQLiteStore) IssueApplicationCredential(ctx context.Context, workspace,
 }
 
 func (s *SQLiteStore) OAuthApplicationHome(clientID string) (string, bool) {
+	if s.metadataResidency != nil {
+		value, found, release := s.residentOAuthIdentityValue("", clientID, residentOAuthHome)
+		defer release()
+		return value, found
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for workspace, data := range s.workspaces {
