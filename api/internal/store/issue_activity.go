@@ -21,7 +21,8 @@ var issueActivityFields = []string{
 
 // RecordIssueActivity edits only the issue's timeline. The enclosing workspace
 // transaction persists updates/deletions through the usual content-record path.
-// The return value describes this edit, so notifications do not replay a burst.
+// The return value describes this edit, so notifications do not replay a burst;
+// it is empty only when the edit cancels out or changes nothing tracked.
 func RecordIssueActivity(data *domain.Bootstrap, issueID string, event domain.ActivityEvent) domain.ActivityEvent {
 	if data.Activities == nil {
 		data.Activities = map[string][]domain.ActivityEvent{}
@@ -43,7 +44,10 @@ func RecordIssueActivity(data *domain.Bootstrap, issueID string, event domain.Ac
 	for _, issue := range data.Issues {
 		age := event.CreatedAt.Sub(issue.CreatedAt)
 		if issue.ID == issueID && issue.Creator.ID != "" && issue.Creator.ID == event.Actor.ID && age >= 0 && age < 3*time.Minute {
-			return domain.ActivityEvent{}
+			// The creation record stands for the final state, so the edit
+			// adds no history; it still describes this edit, so the people
+			// it assigns or subscribes are notified as before.
+			return event
 		}
 	}
 	items := data.Activities[issueID]

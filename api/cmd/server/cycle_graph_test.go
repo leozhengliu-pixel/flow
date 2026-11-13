@@ -180,6 +180,9 @@ func TestCycleGraphEndpointTracksRemovedIssues(t *testing.T) {
 	if added.Summary.Scope != before.Summary.Scope+1 || added.Today == "" {
 		t.Fatalf("before=%#v added=%#v", before.Summary, added.Summary)
 	}
+	// A comment ends the edit burst, so the removal is its own record
+	// instead of cancelling the addition.
+	requestJSON[domain.Comment](t, handler, http.MethodPost, "/api/issues/"+issue.ID+"/comments", map[string]any{"body": "Moving this out of the cycle"}, http.StatusCreated)
 	requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issue-records/"+issue.ID, map[string]any{"cycleId": ""}, http.StatusOK)
 	_, events, err := repository.IssueContent(t.Context(), bootstrap.Workspace.URLKey, issue.ID)
 	if err != nil {

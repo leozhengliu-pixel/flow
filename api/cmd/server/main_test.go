@@ -535,6 +535,8 @@ func TestIssueLifecycle(t *testing.T) {
 		t.Fatalf("create did not persist properties: %#v", created)
 	}
 	requestJSON[any](t, handler, http.MethodPatch, "/api/issues/"+created.ID, map[string]any{"labelIds": []string{"label_type_requirement", "label_type_defect"}}, http.StatusBadRequest)
+	// Past the creator's grace window, so the status changes are recorded.
+	ageIssueForActivityTest(t, repository, repository.Bootstrap().Workspace.URLKey, created)
 	for _, stateID := range []string{"state_canceled", "state_duplicate"} {
 		updatedState := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+created.ID, map[string]any{"stateId": stateID}, http.StatusOK)
 		if updatedState.State.ID != stateID {
@@ -545,11 +547,13 @@ func TestIssueLifecycle(t *testing.T) {
 			t.Fatalf("persisted status = %q, want %q", got, stateID)
 		}
 	}
+	// The two changes by one actor merge into one record that keeps the
+	// status it started from; marking a duplicate adds no status row.
 	bootstrapAfterStateChanges := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	if !slices.ContainsFunc(bootstrapAfterStateChanges.Activities[created.ID], func(item domain.ActivityEvent) bool {
 		return item.Metadata["state"] == "Canceled" && item.Metadata["stateBefore"] == "Todo"
-	}) || !slices.ContainsFunc(bootstrapAfterStateChanges.Activities[created.ID], func(item domain.ActivityEvent) bool {
-		return item.Metadata["state"] == "Duplicate" && item.Metadata["stateBefore"] == "Canceled"
+	}) || slices.ContainsFunc(bootstrapAfterStateChanges.Activities[created.ID], func(item domain.ActivityEvent) bool {
+		return item.Metadata["state"] == "Duplicate"
 	}) {
 		t.Fatalf("state history did not retain previous states: %#v", bootstrapAfterStateChanges.Activities[created.ID])
 	}
