@@ -4,6 +4,7 @@ import { SyncClient, SyncProtocolUnavailable, SyncResetRequired, type SyncSurfac
 import type { BootstrapData, FlowDocument, SyncChanges, SyncManifest, SyncRecordBatch, SyncRecordPage } from '@/types/flow'
 
 export const resourceEndpointUnavailable = (error: unknown) => error instanceof ApiError && [404, 405, 501].includes(error.status)
+export const resourceEndpointUnready = (error: unknown) => error instanceof ApiError && error.status === 503 && error.message === 'Sync records are not ready; use the legacy read endpoint'
 
 export function fetchResourceDocument(workspace: string, ref: string, signal: AbortSignal): Promise<FlowDocument> {
   return request(`/api/documents/${encodeURIComponent(ref)}?history=summary`, { headers: { 'X-Workspace-Key': workspace }, signal })

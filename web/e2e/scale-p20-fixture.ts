@@ -39,7 +39,7 @@ export const test = workspaceTest.extend<{ scaleP20Flags: boolean; scaleP20URL: 
   scaleP20URL: [async ({ scaleP20Flags }, provide) => {
     const web = path.resolve(import.meta.dirname, '..')
     const root = artifacts
-    mkdirSync(root, { recursive: true })
+    mkdirSync(path.join(root, 'shots'), { recursive: true })
     const scratch = mkdtempSync(path.join(root, 'browser-'))
     const binary = process.env.FLOW_E2E_API_BIN ?? path.join(scratch, 'flow-api')
     if (!process.env.FLOW_E2E_API_BIN) {

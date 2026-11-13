@@ -10,7 +10,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-const recordJournalSchemaVersion = 29
+const recordJournalSchemaVersion = 30
 
 // Triggers capture keys, never canonical bodies. The transaction token is
 // connection-local on external databases. SQLite has one writer, so its
@@ -173,7 +173,10 @@ func (s *SQLiteStore) recordJournalMigration(ctx context.Context) error {
 		_, err = s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?) ON CONFLICT(version) DO NOTHING`, 28, "bounded SQLite journal transaction input", time.Now().UTC().Format(time.RFC3339Nano))
 	}
 	if err == nil {
-		_, err = s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?) ON CONFLICT(version) DO NOTHING`, recordJournalSchemaVersion, "record journal identity comparisons across MySQL collations", time.Now().UTC().Format(time.RFC3339Nano))
+		_, err = s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?) ON CONFLICT(version) DO NOTHING`, 29, "record journal identity comparisons across MySQL collations", time.Now().UTC().Format(time.RFC3339Nano))
+	}
+	if err == nil {
+		_, err = s.db.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?) ON CONFLICT(version) DO NOTHING`, recordJournalSchemaVersion, "preserve authorization epochs for pulse delivery cursors", time.Now().UTC().Format(time.RFC3339Nano))
 	}
 	return err
 }
@@ -347,6 +350,9 @@ func recordJournalTriggerSpecs(dialect string) []recordJournalTrigger {
 					// Changes to policy-bearing records conservatively revoke
 					// cached contexts. Other records do not advance the epoch.
 					condition := row + `.field IN ('teams','teamSettings','documents','projects','initiatives','apiKeys','oauthApplications','oauthAuthorizations','users','workspaceSettings','settings')`
+					// Delivery timestamps do not grant access; policy-bearing
+					// settings keep the same conservative epoch invalidation.
+					condition += ` AND (` + recordJournalIdentitySQL(dialect, row+".field") + `<>'settings' OR ` + recordJournalIdentitySQL(dialect, row+".record_key") + `<>'pulseDeliveryCursors')`
 					if event == "UPDATE" {
 						without := func(row, field string) string { return `json_remove(` + row + `.data,'$.` + field + `')` }
 						if dialect == "postgres" {
