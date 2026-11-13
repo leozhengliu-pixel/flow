@@ -1,11 +1,11 @@
 {
   "source": "server/oauth_platform.go",
-  "unmigrated": 3,
+  "unmigrated": 4,
   "consumers": {
     "auditAPIKeyCredential": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Reads oauthApplications/app.ID for legacy realtime aggregate enrichment while retaining captured credential/application audit metadata and actor. Session requests remain no-ops. TestScaleP21M2IntegrationDifferential and TestScaleP21SW12SecretRotationDifferential compare the credential matrix, canonical state, audit metadata and complete webhook/realtime effects.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Reads oauthApplications/app.ID for legacy realtime aggregate enrichment while retaining captured credential/application audit metadata and actor. Session requests remain no-ops. TestScaleP21M2IntegrationDifferential and TestScaleP21SW12SecretRotationDifferential compare the credential matrix, canonical state, audit metadata and complete webhook/realtime effects.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

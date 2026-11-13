@@ -1,6 +1,6 @@
 {
   "source": "server/advanced_features.go",
-  "unmigrated": 44,
+  "unmigrated": 52,
   "consumers": {
     "addFavorite": {
       "owner": "P21",
@@ -36,8 +36,8 @@
     },
     "completeExport": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "The completion callback writes only exportJobs/id using root workspace identity for its filename; no exported entity/content collections are loaded. Original worker context, ignored error, completion timestamp and staged audit remain unchanged. TestScaleP21M3AdvancedPointDifferential compares the point writer's canonical record, missing ID, audit and event effects across principal/credential fixtures; actual export assembly stays blocked separately.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: The completion callback writes only exportJobs/id using root workspace identity for its filename; no exported entity/content collections are loaded. Original worker context, ignored error, completion timestamp and staged audit remain unchanged. TestScaleP21M3AdvancedPointDifferential compares the point writer's canonical record, missing ID, audit and event effects across principal/credential fixtures; actual export assembly stays blocked separately.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -61,8 +61,8 @@
     },
     "createCustomerRequestAttachment": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Writes only customerRequests/requestID, retaining attachment creator attribution, timestamp, audit and existing upload policy. Storage Put remains before the transaction and failed/missing/cancelled mutations retain upload cleanup. TestScaleP21SW4AttachmentCreationDifferential compares response, canonical requests, audit/webhook/realtime and actual object bytes across the principal/credential matrix with oversized unrelated metadata; no full decode occurs. Route authorization and upload-policy access remain independently registered.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes only customerRequests/requestID, retaining attachment creator attribution, timestamp, audit and existing upload policy. Storage Put remains before the transaction and failed/missing/cancelled mutations retain upload cleanup. TestScaleP21SW4AttachmentCreationDifferential compares response, canonical requests, audit/webhook/realtime and actual object bytes across the principal/credential matrix with oversized unrelated metadata; no full decode occurs. Route authorization and upload-policy access remain independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -167,8 +167,8 @@
     },
     "deleteCustomerRequestAttachment": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Writes customerRequests/requestID only, preserving nested attachment lookup, target timestamp, audit and post-commit object deletion. TestScaleP21SW4PointDeletesDifferential compares canonical rows, responses and audit/webhook/realtime across principal/key classes, missing request IDs and live membership revocation, and verifies failed deletes retain owned objects. TestScaleP21SW4ForeignDraftAndPointBudgets proves explicit oversized-target rejection without canonical mutation; unrelated rows remain unchanged. Middleware is independently registered.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes customerRequests/requestID only, preserving nested attachment lookup, target timestamp, audit and post-commit object deletion. TestScaleP21SW4PointDeletesDifferential compares canonical rows, responses and audit/webhook/realtime across principal/key classes, missing request IDs and live membership revocation, and verifies failed deletes retain owned objects. TestScaleP21SW4ForeignDraftAndPointBudgets proves explicit oversized-target rejection without canonical mutation; unrelated rows remain unchanged. Middleware is independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -192,8 +192,8 @@
     },
     "deleteDraft": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Writes/deletes drafts/id only; the original item.UserID == data.Viewer.ID ownership predicate and missing-record response are unchanged. TestScaleP21SW4PointDeletesDifferential compares responses, canonical state and event effects across principal/credential classes and revoked/cross-workspace membership; TestScaleP21SW4ForeignDraftAndPointBudgets verifies foreign-owner drafts stay unchanged and oversized targets fail explicitly. Unrelated draft records and large metadata remain byte-identical; full HTTP authorization remains independently registered.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes/deletes drafts/id only; the original item.UserID == data.Viewer.ID ownership predicate and missing-record response are unchanged. TestScaleP21SW4PointDeletesDifferential compares responses, canonical state and event effects across principal/credential classes and revoked/cross-workspace membership; TestScaleP21SW4ForeignDraftAndPointBudgets verifies foreign-owner drafts stay unchanged and oversized targets fail explicitly. Unrelated draft records and large metadata remain byte-identical; full HTTP authorization remains independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -209,8 +209,8 @@
     },
     "deleteProjectTemplate": {
       "owner": "P16",
-      "status": "reviewed",
-      "reason": "Writes/deletes projectTemplates/id only; existing missing semantics and transaction-staged deletion audit remain unchanged. TestScaleP21SW4PointDeletesDifferential compares response, canonical target/other records, audit/webhook/realtime across the helper principal/key matrix, missing IDs and live cross-workspace/revocation boundaries. TestScaleP21SW4ForeignDraftAndPointBudgets checks explicit oversized-target rejection with no canonical change. Route authorization is independently registered and no complete template collection is loaded.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. After deleting the selected template, legacy lookup can fall through to a matching Document.ContentData object. Previous review: Writes/deletes projectTemplates/id only; existing missing semantics and transaction-staged deletion audit remain unchanged. TestScaleP21SW4PointDeletesDifferential compares response, canonical target/other records, audit/webhook/realtime across the helper principal/key matrix, missing IDs and live cross-workspace/revocation boundaries. TestScaleP21SW4ForeignDraftAndPointBudgets checks explicit oversized-target rejection with no canonical change. Route authorization is independently registered and no complete template collection is loaded.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -376,8 +376,8 @@
     },
     "updateFavoriteFolder": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Writes only canonical favoriteFolders/id; the existing viewer ownership predicate, name/position validation, no-op and timestamp remain unchanged. TestScaleP21M3AdvancedPointDifferential compares principal/credential combinations, missing IDs, canonical state and audit/webhook/realtime effects while hashing oversized unrelated bodies. Route authorization is independently registered.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes only canonical favoriteFolders/id; the existing viewer ownership predicate, name/position validation, no-op and timestamp remain unchanged. TestScaleP21M3AdvancedPointDifferential compares principal/credential combinations, missing IDs, canonical state and audit/webhook/realtime effects while hashing oversized unrelated bodies. Route authorization is independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -393,8 +393,8 @@
     },
     "updateProjectUpdateSettings": {
       "owner": "P16",
-      "status": "reviewed",
-      "reason": "Reads and writes only settings/projectUpdates; merges retain unknown keys and appendAudit remains transaction-staged without loading audit history. TestScaleP21M3AdvancedPointDifferential compares responses, canonical records, audits, webhook previous values and realtime across the principal/credential matrix with oversized unrelated records; route authorization remains a separate blocker.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Reads and writes only settings/projectUpdates; merges retain unknown keys and appendAudit remains transaction-staged without loading audit history. TestScaleP21M3AdvancedPointDifferential compares responses, canonical records, audits, webhook previous values and realtime across the principal/credential matrix with oversized unrelated records; route authorization remains a separate blocker.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -418,8 +418,8 @@
     },
     "updateSLASettings": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Reads and writes settings/sla only, including slaEnabled/slaWorkWeek defaults, work-week validation and unchanged-value behavior. Existing audit staging is retained. TestScaleP21M3AdvancedPointDifferential compares responses, canonical state and audit/webhook/realtime effects across principal/credential classes, with unrelated body fingerprints. No issue/SLA recalculation is performed by this callback; middleware is independently registered.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Reads and writes settings/sla only, including slaEnabled/slaWorkWeek defaults, work-week validation and unchanged-value behavior. Existing audit staging is retained. TestScaleP21M3AdvancedPointDifferential compares responses, canonical state and audit/webhook/realtime effects across principal/credential classes, with unrelated body fingerprints. No issue/SLA recalculation is performed by this callback; middleware is independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

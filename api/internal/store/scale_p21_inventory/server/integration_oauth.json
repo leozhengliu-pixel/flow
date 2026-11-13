@@ -1,11 +1,11 @@
 {
   "source": "server/integration_oauth.go",
-  "unmigrated": 0,
+  "unmigrated": 1,
   "consumers": {
     "persistOAuthIntegrationError": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Writes only integrationConnections/id after the original provider and ID check; preserves LastError, timestamps, event payload and the original caller's ignored-error behavior. TestScaleP21M3IntegrationErrorDifferential compares canonical records, unrelated body fingerprints, missing IDs and webhook/realtime/audit effects across principal and credential classes.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes only integrationConnections/id after the original provider and ID check; preserves LastError, timestamps, event payload and the original caller's ignored-error behavior. TestScaleP21M3IntegrationErrorDifferential compares canonical records, unrelated body fingerprints, missing IDs and webhook/realtime/audit effects across principal and credential classes.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

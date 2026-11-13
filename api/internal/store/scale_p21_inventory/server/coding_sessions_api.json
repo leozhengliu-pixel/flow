@@ -1,11 +1,11 @@
 {
   "source": "server/coding_sessions_api.go",
-  "unmigrated": 0,
+  "unmigrated": 1,
   "consumers": {
     "updateCodingSettings": {
       "owner": "P18",
-      "status": "reviewed",
-      "reason": "Scopes the unchanged coding-settings callback to complete workspaceSettings, including feature flags, normalized coding policy, no-op and update timestamp. codingViewerFor retains its live membership/admin checks. TestScaleP21M3CodingSettingsDifferential compares settings, responses and event/audit effects across the principal/credential matrix, validation failures and cross-workspace/queued/replay revocation; requestActor remains independently registered.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Scopes the unchanged coding-settings callback to complete workspaceSettings, including feature flags, normalized coding policy, no-op and update timestamp. codingViewerFor retains its live membership/admin checks. TestScaleP21M3CodingSettingsDifferential compares settings, responses and event/audit effects across the principal/credential matrix, validation failures and cross-workspace/queued/replay revocation; requestActor remains independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

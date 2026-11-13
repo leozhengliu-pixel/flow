@@ -1,6 +1,6 @@
 {
   "source": "server/gitlab_integration.go",
-  "unmigrated": 3,
+  "unmigrated": 4,
   "consumers": {
     "connectGitLabToken": {
       "owner": "P21",
@@ -28,8 +28,8 @@
     },
     "saveGitLabConnection": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Writes only integrationConnections/id; provider guard, owned config snapshot, unchanged-edit no-event behavior and timestamp retained. TestScaleP21M2IntegrationDifferential compares state and hooks across the principal/key matrix.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes only integrationConnections/id; provider guard, owned config snapshot, unchanged-edit no-event behavior and timestamp retained. TestScaleP21M2IntegrationDifferential compares state and hooks across the principal/key matrix.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

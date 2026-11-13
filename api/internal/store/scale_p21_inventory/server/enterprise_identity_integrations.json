@@ -1,6 +1,6 @@
 {
   "source": "server/enterprise_identity_integrations.go",
-  "unmigrated": 10,
+  "unmigrated": 13,
   "consumers": {
     "createIdentityProvider": {
       "owner": "P21",
@@ -29,8 +29,8 @@
     },
     "deleteIdentityProvider": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Deletes only identityProviders/id, retaining the original missing-ID check and route authorization. TestScaleP21M3IdentityProviderDifferential compares responses, canonical state and event/audit effects across principal/credential classes; an oversized unrelated identity-provider record remains outside the callback. Discovery, creation and generic projected reads remain separate blockers.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Deletes only identityProviders/id, retaining the original missing-ID check and route authorization. TestScaleP21M3IdentityProviderDifferential compares responses, canonical state and event/audit effects across principal/credential classes; an oversized unrelated identity-provider record remains outside the callback. Discovery, creation and generic projected reads remain separate blockers.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -84,8 +84,8 @@
     },
     "updateIdentityProvider": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Loads and writes identityProviders/id only. Provider URL/type/client/domain/role-mapping validation, defaults, no-op comparison and timestamp remain unchanged; all metadata inputs used by this callback are in the target record. TestScaleP21M3IdentityProviderDifferential compares responses, canonical state and event/audit effects across principal/credential classes with oversized unrelated provider and project bodies. HTTP authorization remains independently registered.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Loads and writes identityProviders/id only. Provider URL/type/client/domain/role-mapping validation, defaults, no-op comparison and timestamp remain unchanged; all metadata inputs used by this callback are in the target record. TestScaleP21M3IdentityProviderDifferential compares responses, canonical state and event/audit effects across principal/credential classes with oversized unrelated provider and project bodies. HTTP authorization remains independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -109,8 +109,8 @@
     },
     "verifyIdentityProvider": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Projected provider point read and matching point writer; keys without admin scope select identity only so hidden providers cannot leak size through input-budget errors. Retains outbound validation, live route boundary, issuer/UpdatedAt CAS and canonical audit/event hooks. TestScaleP21SW9ProviderVerificationDifferential and RacesAndBoundaries compare principal/key matrix, held outbound races, queued/replay and in-flight revocation, cancellation, cross-workspace, ownership, explicit budgets/recovery and complete canonical/sink effects with zero full decodes.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Projected provider point read and matching point writer; keys without admin scope select identity only so hidden providers cannot leak size through input-budget errors. Retains outbound validation, live route boundary, issuer/UpdatedAt CAS and canonical audit/event hooks. TestScaleP21SW9ProviderVerificationDifferential and RacesAndBoundaries compare principal/key matrix, held outbound races, queued/replay and in-flight revocation, cancellation, cross-workspace, ownership, explicit budgets/recovery and complete canonical/sink effects with zero full decodes.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",

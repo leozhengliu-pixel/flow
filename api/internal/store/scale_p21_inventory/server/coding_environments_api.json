@@ -1,11 +1,11 @@
 {
   "source": "server/coding_environments_api.go",
-  "unmigrated": 0,
+  "unmigrated": 1,
   "consumers": {
     "auditCodingEnvironment": {
       "owner": "P18",
-      "status": "reviewed",
-      "reason": "Empty metadata scope retains the original detached audit-only context, actor and credential attribution after native environment commit or membership revocation. Callback only stages the supplied audit metadata. TestScaleP21SW7DeferredAuditsDifferential compares audits, canonical root Viewer, webhook/realtime output, cancellation and missing paths across principal/key classes and repeated persistent SQLite runs; native operation authorization stays independent.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The native audit resource ID can match an unrelated Document.ContentData object omitted by the empty scope. Previous review: Empty metadata scope retains the original detached audit-only context, actor and credential attribution after native environment commit or membership revocation. Callback only stages the supplied audit metadata. TestScaleP21SW7DeferredAuditsDifferential compares audits, canonical root Viewer, webhook/realtime output, cancellation and missing paths across principal/key classes and repeated persistent SQLite runs; native operation authorization stays independent.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

@@ -1,11 +1,11 @@
 {
   "source": "server/code_host_accounts.go",
-  "unmigrated": 0,
+  "unmigrated": 1,
   "consumers": {
     "auditCodeHostAccount": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Empty metadata scope preserves detached audit-only request-versus-explicit-context precedence, actor/BotActor attribution and supplied native account metadata. TestScaleP21SW7DeferredAuditsDifferential compares both context branches, canonical root Viewer, complete audit/webhook/realtime effects, revocation/cancellation/missing paths and repeated persistent SQLite runs across principal/key classes. Account linking authorization remains independent.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The native audit resource ID can match an unrelated Document.ContentData object omitted by the empty scope. Previous review: Empty metadata scope preserves detached audit-only request-versus-explicit-context precedence, actor/BotActor attribution and supplied native account metadata. TestScaleP21SW7DeferredAuditsDifferential compares both context branches, canonical root Viewer, complete audit/webhook/realtime effects, revocation/cancellation/missing paths and repeated persistent SQLite runs across principal/key classes. Account linking authorization remains independent.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

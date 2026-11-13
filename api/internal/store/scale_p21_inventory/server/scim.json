@@ -1,6 +1,6 @@
 {
   "source": "server/scim.go",
-  "unmigrated": 3,
+  "unmigrated": 5,
   "consumers": {
     "authenticateSCIMRequest": {
       "owner": "P21",
@@ -12,8 +12,8 @@
     },
     "createSCIMToken": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Identity-only projected read plus complete workspaceSettings mutation; existing admin boundary, token issuance order and transactional audit staging retained. TestScaleP21M2CredentialsAndUploadDifferential compares issuance/rotation/revocation and TestScaleP21M2PolicyDifferential covers admin permission matrix.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Identity-only projected read plus complete workspaceSettings mutation; existing admin boundary, token issuance order and transactional audit staging retained. TestScaleP21M2CredentialsAndUploadDifferential compares issuance/rotation/revocation and TestScaleP21M2PolicyDifferential covers admin permission matrix.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -38,8 +38,8 @@
     },
     "revokeSCIMToken": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Identity-only projection and empty metadata audit scope; SQL credential revocation, admin check, audit staging and failure logging retain their order. TestScaleP21M2CredentialsAndUploadDifferential covers create/rotate/revoke and TestScaleP21M2SCIMProfileAndAudit compares staged audits.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Identity-only projection and empty metadata audit scope; SQL credential revocation, admin check, audit staging and failure logging retain their order. TestScaleP21M2CredentialsAndUploadDifferential covers create/rotate/revoke and TestScaleP21M2SCIMProfileAndAudit compares staged audits.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",

@@ -1,16 +1,16 @@
 {
   "source": "server/application_policies.go",
-  "unmigrated": 0,
+  "unmigrated": 2,
   "consumers": {
     "deleteApplicationPolicy": {
       "owner": "P21",
-      "status": "reviewed",
+      "status": "unmigrated",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
       ],
-      "reason": "Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential."
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential."
     },
     "listApplicationPolicies": {
       "owner": "P21",
@@ -22,13 +22,13 @@
     },
     "saveApplicationPolicy": {
       "owner": "P21",
-      "status": "reviewed",
+      "status": "unmigrated",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
       ],
-      "reason": "Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential."
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential."
     }
   }
 }

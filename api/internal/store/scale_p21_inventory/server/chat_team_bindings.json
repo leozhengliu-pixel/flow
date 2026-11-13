@@ -1,11 +1,11 @@
 {
   "source": "server/chat_team_bindings.go",
-  "unmigrated": 4,
+  "unmigrated": 5,
   "consumers": {
     "auditChatIntegrationContext": {
       "owner": "P18",
-      "status": "reviewed",
-      "reason": "Empty metadata scope retains captured audit actor/action/metadata and transaction staging; no audit history input. TestScaleP21M2IdentityDifferential compares persisted chat audits including actor and metadata.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The native audit resource ID can match an unrelated Document.ContentData object omitted by the empty scope. Previous review: Empty metadata scope retains captured audit actor/action/metadata and transaction staging; no audit history input. TestScaleP21M2IdentityDifferential compares persisted chat audits including actor and metadata.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

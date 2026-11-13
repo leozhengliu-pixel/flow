@@ -1,6 +1,6 @@
 {
   "source": "server/notifications_workflow.go",
-  "unmigrated": 16,
+  "unmigrated": 19,
   "consumers": {
     "acknowledgeDesktopNotifications": {
       "owner": "P18",
@@ -37,8 +37,8 @@
     },
     "deleteIssueTemplate": {
       "owner": "P18",
-      "status": "reviewed",
-      "reason": "Writes issueTemplates/templateId with original team/visibility ownership predicate and unchanged off accessor. TestScaleP21SW10IssueTemplateDeletionDifferential compares principal/key matrix, ownership and missing cases, canonical rows, audit and complete sinks, cross-workspace and queued/replay revocation, unrelated oversized bodies, budget/cancellation rollback and recovery.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. After deleting the selected template, legacy lookup can fall through to a matching Document.ContentData object. Previous review: Writes issueTemplates/templateId with original team/visibility ownership predicate and unchanged off accessor. TestScaleP21SW10IssueTemplateDeletionDifferential compares principal/key matrix, ownership and missing cases, canonical rows, audit and complete sinks, cross-workspace and queued/replay revocation, unrelated oversized bodies, budget/cancellation rollback and recovery.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -123,8 +123,8 @@
     },
     "updateNotificationPreferences": {
       "owner": "P18",
-      "status": "reviewed",
-      "reason": "Writes only notificationPreferences/viewerID; auth-disabled identity uses an empty scoped projection, while the original personal merge/default/validation/no-op rules remain unchanged. No notification or delivery bodies are read or written. TestScaleP21M3NotificationPreferencesDifferential compares responses, own and unrelated canonical preferences and audit/webhook/realtime effects across principal/credential classes; route authorization remains independently blocked.",
+      "status": "unmigrated",
+      "reason": "Pending complete aggregate-reference closure for accepted legacy IDs or missing subjects. Ordinary authenticated request adds/refreshes actor users row and aggregate viewerID, so actual usr_ match wins. Auth-disabled custom Viewer IDs and legacy non-usr canonical IDs need separate invariant/fixture proof.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -141,8 +141,8 @@
     },
     "updateTeamLabel": {
       "owner": "P18",
-      "status": "reviewed",
-      "reason": "Writes labels/labelId with existing scope/validation/no-op rules; metadata-only legacy semantics do not persist issue label copies. TestScaleP21SW10TeamLabelDifferential compares principal/key matrix, canonical label/actor rows and complete sinks, byte-identical issue SQL/version/order and link indexes, rendered label resolution, revocation, cross-workspace, cancellation/budget rollback and recovery.",
+      "status": "unmigrated",
+      "reason": "Pending complete aggregate-reference closure for accepted legacy IDs or missing subjects. Success requires actual Labels target. label_ positive shortcut wins; missing targets return error before publication. No persisted namespace constraint forces a pre-existing label ID to start label_, so imported/legacy IDs require additional differential.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

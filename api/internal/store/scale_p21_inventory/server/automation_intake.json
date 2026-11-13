@@ -1,6 +1,6 @@
 {
   "source": "server/automation_intake.go",
-  "unmigrated": 19,
+  "unmigrated": 20,
   "consumers": {
     "createPushSubscription": {
       "owner": "P21",
@@ -37,8 +37,8 @@
     },
     "deletePushSubscription": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Uses the identity-only scoped projection and deletes pushSubscriptions/id only, preserving the original viewer ownership and missing-ID predicates. TestScaleP21M3PushSubscriptionDifferential compares own/other subscriptions across principal/credential classes, canonical rows, untouched subscriptions, missing IDs and event/audit effects. Creation ordering and list projection remain separate blockers.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Uses the identity-only scoped projection and deletes pushSubscriptions/id only, preserving the original viewer ownership and missing-ID predicates. TestScaleP21M3PushSubscriptionDifferential compares own/other subscriptions across principal/credential classes, canonical rows, untouched subscriptions, missing IDs and event/audit effects. Creation ordering and list projection remain separate blockers.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",

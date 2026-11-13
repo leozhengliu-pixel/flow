@@ -1,24 +1,24 @@
 {
   "source": "server/audit_stream.go",
-  "unmigrated": 0,
+  "unmigrated": 4,
   "consumers": {
     "createAuditStream": {
       "owner": "P21",
-      "status": "reviewed",
+      "status": "unmigrated",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
       ],
-      "reason": "Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. A representable pre-existing object can match the generated webhook ID before Webhooks; random allocation is not a compatibility invariant. Previous review: Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
     },
     "deleteAuditStream": {
       "owner": "P21",
-      "status": "reviewed",
+      "status": "unmigrated",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
       ],
-      "reason": "Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
     },
     "getAuditStream": {
       "owner": "P21",
@@ -30,12 +30,12 @@
     },
     "mutateAuditStream": {
       "owner": "P21",
-      "status": "reviewed",
+      "status": "unmigrated",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
       ],
-      "reason": "Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
     },
     "streamAuditLog": {
       "owner": "P21",
@@ -47,12 +47,12 @@
     },
     "updateAuditStream": {
       "owner": "P21",
-      "status": "reviewed",
+      "status": "unmigrated",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
       ],
-      "reason": "Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
     }
   }
 }

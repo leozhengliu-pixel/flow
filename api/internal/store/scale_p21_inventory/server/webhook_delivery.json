@@ -1,6 +1,6 @@
 {
   "source": "server/webhook_delivery.go",
-  "unmigrated": 5,
+  "unmigrated": 6,
   "consumers": {
     "attemptWebhookDelivery": {
       "owner": "P21",
@@ -51,8 +51,8 @@
     },
     "updateWebhookHealth": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Writes webhooks/webhookID only; health callback, original metadata-fields context and ErrNoMutation retained. No principal or network side effect in this trusted callback. TestScaleP21M2RecordWritesDifferential compares canonical hook state with zero full decodes; delivery business regressions retained.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes webhooks/webhookID only; health callback, original metadata-fields context and ErrNoMutation retained. No principal or network side effect in this trusted callback. TestScaleP21M2RecordWritesDifferential compares canonical hook state with zero full decodes; delivery business regressions retained.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

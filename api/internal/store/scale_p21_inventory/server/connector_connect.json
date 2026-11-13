@@ -1,11 +1,11 @@
 {
   "source": "server/connector_connect.go",
-  "unmigrated": 0,
+  "unmigrated": 1,
   "consumers": {
     "connectConnector": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Writes only settings/applicationPolicies with existing ID/URL race check; connector discovery and credential operations remain outside the callback. TestScaleP21M2ConnectorDifferential compares policy ownership/admin matrix and scripted MCP connect/tool inventory and rename results with zero full decodes.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes only settings/applicationPolicies with existing ID/URL race check; connector discovery and credential operations remain outside the callback. TestScaleP21M2ConnectorDifferential compares policy ownership/admin matrix and scripted MCP connect/tool inventory and rename results with zero full decodes.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

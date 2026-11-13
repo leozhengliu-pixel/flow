@@ -1,11 +1,11 @@
 {
   "source": "server/scim_audit.go",
-  "unmigrated": 0,
+  "unmigrated": 2,
   "consumers": {
     "applySCIMProfileSettings": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Writes only userSettings/userID and reads users/userID for the existing user aggregate/realtime envelope, preserving job-title ownership rules, timezone validation, map creation and original context. TestScaleP21M2SCIMProfileAndAudit compares canonical settings, webhook previous values and realtime with oversized unrelated records and cancellation.",
+      "status": "unmigrated",
+      "reason": "Pending complete aggregate-reference closure for accepted legacy IDs or missing subjects. Callback can create userSettings even with absent Users/subjectID. Positive user read is safe; absent user falls through to arbitrary omitted matching ContentData.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -13,8 +13,8 @@
     },
     "recordSCIMAudit": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Empty metadata scope; entries and actor are already captured and appendAuditEntries is consumed by the existing transactional audit collector. No audit history is loaded. TestScaleP21M2SCIMProfileAndAudit compares both persisted audit entries including actor and metadata.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The empty scope also omits the ordinary users/subjectID winner for member audit entries. Previous review: Empty metadata scope; entries and actor are already captured and appendAuditEntries is consumed by the existing transactional audit collector. No audit history is loaded. TestScaleP21M2SCIMProfileAndAudit compares both persisted audit entries including actor and metadata.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

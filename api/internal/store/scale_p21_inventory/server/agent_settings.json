@@ -1,11 +1,11 @@
 {
   "source": "server/agent_settings.go",
-  "unmigrated": 0,
+  "unmigrated": 1,
   "consumers": {
     "updateWorkspaceAgentGuidance": {
       "owner": "P18",
-      "status": "reviewed",
-      "reason": "Writes only workspaceSettings properties agentInstructions, agentInstructionsEditedById and agentInstructionsEditedAt, preserving validation, no-op detection and live actor attribution. TestScaleP21M3GuidanceDifferential covers responses, persisted settings, sinks, principal/credential restrictions, forbidden authority, revocation, cancellation and ownership. TestScaleP21SW0GuidanceProperties additionally compares large unrelated settings beyond the complete-field budget. Shared HTTP middleware remains independently blocked.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Writes only workspaceSettings properties agentInstructions, agentInstructionsEditedById and agentInstructionsEditedAt, preserving validation, no-op detection and live actor attribution. TestScaleP21M3GuidanceDifferential covers responses, persisted settings, sinks, principal/credential restrictions, forbidden authority, revocation, cancellation and ownership. TestScaleP21SW0GuidanceProperties additionally compares large unrelated settings beyond the complete-field budget. Shared HTTP middleware remains independently blocked.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

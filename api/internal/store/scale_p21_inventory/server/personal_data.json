@@ -1,11 +1,11 @@
 {
   "source": "server/personal_data.go",
-  "unmigrated": 3,
+  "unmigrated": 4,
   "consumers": {
     "auditPersonalData": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Each audit reads only users/subjectID to retain legacy user aggregate enrichment and stages the supplied audit fields in the original audit-only context. Existing AccountForUser workspace selection and caller cancellation remain unchanged. TestScaleP21SW7DeferredAuditsDifferential covers self/other subjects, active/revoked actors, credentials, cancellation/missing paths, canonical Viewer and complete audit/webhook/realtime effects, with persistent SQLite repetition. Account enumeration and archive/erase consumers remain independently blocked.",
+      "status": "unmigrated",
+      "reason": "Pending complete aggregate-reference closure for accepted legacy IDs or missing subjects. Account membership selects workspace, but users/subjectID canonical presence is not enforced by the record schema. Missing subject plus matching omitted ContentData changes audit enrichment.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

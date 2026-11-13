@@ -1,6 +1,6 @@
 {
   "source": "server/main.go",
-  "unmigrated": 76,
+  "unmigrated": 77,
   "consumers": {
     "attachmentVisible": {
       "owner": "P21",
@@ -540,8 +540,8 @@
     },
     "updateProjectDisplayDefault": {
       "owner": "P16",
-      "status": "reviewed",
-      "reason": "Complete projectDisplayDefault configuration field only; unchanged JSON object validation, response ownership and ErrNoMutation behavior. TestScaleP21M2IntegrationDifferential compares full principal/key matrix, persisted config and webhook/realtime effects without unrelated metadata.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The fixed aggregate literal can match an unrelated Document.ContentData object outside the selected settings/configuration. Previous review: Complete projectDisplayDefault configuration field only; unchanged JSON object validation, response ownership and ErrNoMutation behavior. TestScaleP21M2IntegrationDifferential compares full principal/key matrix, persisted config and webhook/realtime effects without unrelated metadata.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

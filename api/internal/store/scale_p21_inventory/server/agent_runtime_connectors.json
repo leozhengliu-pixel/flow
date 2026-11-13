@@ -1,11 +1,11 @@
 {
   "source": "server/agent_runtime_connectors.go",
-  "unmigrated": 0,
+  "unmigrated": 1,
   "consumers": {
     "auditAgentRunConnectorCall": {
       "owner": "P18",
-      "status": "reviewed",
-      "reason": "Empty metadata scope preserves the original background audit-only context and canonical stored Viewer attribution; run/principal/tool/outcome fields come from native inputs. The prior external call is unchanged. TestScaleP21SW7DeferredAuditsDifferential compares success/tool-error/transport-failure audits, canonical Viewer, webhook Snapshot/previous values and realtime across principal/key classes, revocation/cancellation/missing paths and repeated persistent SQLite runs; grant authorization remains separately registered.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The native audit resource ID can match an unrelated Document.ContentData object omitted by the empty scope. Previous review: Empty metadata scope preserves the original background audit-only context and canonical stored Viewer attribution; run/principal/tool/outcome fields come from native inputs. The prior external call is unchanged. TestScaleP21SW7DeferredAuditsDifferential compares success/tool-error/transport-failure audits, canonical Viewer, webhook Snapshot/previous values and realtime across principal/key classes, revocation/cancellation/missing paths and repeated persistent SQLite runs; grant authorization remains separately registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

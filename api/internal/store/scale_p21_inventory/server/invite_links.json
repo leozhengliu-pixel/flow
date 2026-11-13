@@ -1,6 +1,6 @@
 {
   "source": "server/invite_links.go",
-  "unmigrated": 4,
+  "unmigrated": 6,
   "consumers": {
     "createOrRotateWorkspaceInviteLink": {
       "owner": "P21",
@@ -14,8 +14,8 @@
     },
     "decideOAuthSyncGroupRequest": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Loads and writes only oauthSyncGroupRequests/requestID, retaining application ID binding, status validation and reviewer attribution. TestScaleP21M2PolicyDifferential compares matrix, unrelated request, canonical state and event hooks.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Loads and writes only oauthSyncGroupRequests/requestID, retaining application ID binding, status validation and reviewer attribution. TestScaleP21M2PolicyDifferential compares matrix, unrelated request, canonical state and event hooks.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -70,8 +70,8 @@
     },
     "rotateSCIMToken": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Identity-only projection and complete workspaceSettings mutation; live admin check, SQL token rotation sequence and staged audit preserved. TestScaleP21M2CredentialsAndUploadDifferential compares rotation and subsequent revocation; policy test covers admin matrix.",
+      "status": "unmigrated",
+      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Identity-only projection and complete workspaceSettings mutation; live admin check, SQL token rotation sequence and staged audit preserved. TestScaleP21M2CredentialsAndUploadDifferential compares rotation and subsequent revocation; policy test covers admin matrix.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
