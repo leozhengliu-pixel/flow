@@ -501,7 +501,14 @@ func (s *server) createReleaseNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result domain.ReleaseNote
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release.note_created", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
+	if s.store.BoundedMetadataEnabled() && (len(r.PathValue("id")) > 191 || strings.ContainsRune(r.PathValue("id"), '\x00')) {
+		respondMutation(w, errNotFound, http.StatusCreated, result)
+		return
+	}
+	err := s.store.MutateWorkspaceAppending(r.Context(), workspaceKey(r), "release.note_created", r.PathValue("id"), input, store.MetadataAppendScope{
+		MetadataRecordScope: store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "releases", ID: r.PathValue("id")}}},
+		AppendKinds:         []string{"releaseNotes", "releaseHistory"},
+	}, func(data *domain.Bootstrap) error {
 		if !slices.ContainsFunc(data.Releases, func(item domain.Release) bool { return item.ID == r.PathValue("id") }) {
 			return errNotFound
 		}
@@ -955,7 +962,14 @@ func (s *server) createAIPromptProgress(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var item domain.AIPromptProgress
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "ai.prompt_progress_created", input.ConversationID, input, func(data *domain.Bootstrap) error {
+	if s.store.BoundedMetadataEnabled() && (len(input.ConversationID) > 191 || strings.ContainsRune(input.ConversationID, '\x00')) {
+		respondMutation(w, errNotFound, http.StatusCreated, item)
+		return
+	}
+	err := s.store.MutateWorkspaceAppending(r.Context(), workspaceKey(r), "ai.prompt_progress_created", input.ConversationID, input, store.MetadataAppendScope{
+		MetadataRecordScope: store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "aiConversations", ID: input.ConversationID}}},
+		AppendKinds:         []string{"aiPromptProgress"},
+	}, func(data *domain.Bootstrap) error {
 		if !slices.ContainsFunc(data.AIConversations, func(value domain.AIConversation) bool {
 			return value.ID == input.ConversationID && value.UserID == data.Viewer.ID
 		}) {

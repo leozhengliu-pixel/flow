@@ -1,6 +1,6 @@
 {
   "source": "server/parity_core.go",
-  "unmigrated": 23,
+  "unmigrated": 21,
   "consumers": {
     "archiveCustomerNeed": {
       "owner": "P21",
@@ -14,6 +14,7 @@
     "createAIConversation": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Needs shared aggregate compatibility: the original event's literal aggregate ID ai can match an existing unrelated record or nested settings object through aggregateJSONValue. A bare append scope would omit that realtime entity; retain the original writer until the bounded reference closure is covered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -21,7 +22,8 @@
     },
     "createAIPromptProgress": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads aiConversations/conversationID for ownership and aggregate enrichment; appends aiPromptProgress with indexed global ordering. Callback and off accessor unchanged. TestScaleP21SW6CreatorDifferential compares principal/key matrix, two ordered creations, canonical rows and generated references, complete sinks, ownership/missing/foreign/malformed references, unrelated oversized bodies, cancellation, output-budget rollback and recovery with zero full decodes.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -30,6 +32,7 @@
     "createAgentActivity": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Needs shared aggregate compatibility: the original SessionID aggregate can include an existing session or another legacy aggregate match in realtime. The callback also accepts arbitrary nonempty session strings, so a mandatory canonical-key read would introduce new key-validation failures. Retain the original writer until those effects are covered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -61,7 +64,8 @@
     },
     "createReleaseNote": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads releases/pathID for existence and aggregate enrichment; appends releaseNotes and releaseHistory with indexed global ordering. Callback and off accessor unchanged. TestScaleP21SW6CreatorDifferential compares principal/key matrix, two ordered creations, canonical history references, sinks, missing/foreign/malformed references, oversized unrelated collections, cancellation, output-budget rollback and recovery with zero full decodes.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
