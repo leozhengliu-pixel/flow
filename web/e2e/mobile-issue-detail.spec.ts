@@ -237,6 +237,43 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
   })
 }
 
+for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }]) {
+  test(`comment card spans the activity column with a two-line reply row at ${viewport.width}`, async ({ page, request }) => {
+    const comment = await request.post(`/api/issues/${parent.id}/comments`, { headers: { 'X-Workspace-Key': workspaceKey }, data: { body: '[mobile] comment' } })
+    expect(comment.ok()).toBe(true)
+    await page.setViewportSize(viewport)
+    await openIssue(page)
+    const box = async (locator: Locator) => (await locator.boundingBox())!
+    const card = page.locator('.comment-thread')
+    const rows = page.locator('.timeline-item.event')
+    // History rows keep a 10px end inset inside the 14px page gutter; the card spans the column plus 8px each side.
+    expect((await box(card)).x).toBe(6)
+    expect((await box(card)).width).toBe(viewport.width - 12)
+    expect((await box(rows.first())).width).toBe(viewport.width - 37.5)
+    expect((await box(rows.first().locator('.activity-row'))).width).toBe(viewport.width - 65.5)
+    const header = await box(card.locator('.comment-card > header'))
+    expect(header.height).toBe(18)
+    const actions = card.locator('.comment-card__actions button')
+    expect((await box(actions.first())).y).toBeCloseTo(header.y - 7, 3)
+    expect((await box(card.locator('.comment-body p'))).y).toBeCloseTo(header.y + 26, 3)
+    const reply = card.locator('.comment-thread__reply')
+    const placeholder = await box(reply.locator('.comment-thread__reply-open'))
+    const avatar = await box(reply.locator('.avatar'))
+    const attach = await box(reply.locator('.comment-thread__reply-tool'))
+    const send = await box(reply.locator('.comment-thread__reply-send'))
+    const row = await box(reply)
+    expect(avatar.y).toBeCloseTo(placeholder.y + 3, 3)
+    expect(placeholder.x).toBeCloseTo(avatar.x + 27, 3)
+    expect([attach.width, attach.height, send.width, send.height]).toEqual([28, 28, 24, 24])
+    expect(attach.y).toBeCloseTo(placeholder.y + 32, 3)
+    expect(send.y).toBeCloseTo(attach.y + 2, 3)
+    expect(send.x + send.width).toBeCloseTo(row.x + row.width - 18, 3)
+    expect(attach.x + attach.width).toBeCloseTo(send.x - 12, 3)
+    expect(row.y + row.height).toBeCloseTo(attach.y + attach.height + 11, 3)
+    await noOverflow(page)
+  })
+}
+
 test('issue actions are touch-sized and nested actions can return', async ({ page }) => {
   await openIssue(page)
   await page.getByRole('button', { name: 'Issue options', exact: true }).click()

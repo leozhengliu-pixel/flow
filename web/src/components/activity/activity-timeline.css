@@ -314,12 +314,14 @@
 .comment-thread__reply[data-reply-idle] .comment-thread__reply-send { background: var(--issue-reply-send-bg); }
 .comment-thread__reply[data-reply-idle] button:hover:not(:disabled) { background: var(--theme-soft-overlay); }
 .comment-thread__reply[data-reply-idle] button:focus-visible { outline: 2px solid var(--focus-ring); }
+/* Phone: the placeholder fills the first line; a 28px Attach and the 24px Send sit 8px below it, 12px apart, 18px from
+   the card's end (11px top and bottom padding, 159.5px for a one-line comment card). */
 @media (max-width: 767px) {
-  .issue-activity-timeline .comment-thread__reply[data-reply-idle] { display: grid; grid-template-columns: 18px minmax(0, 1fr) 24px 24px; padding: 11px 16px; }
-  .comment-thread__reply[data-reply-idle] > .avatar { grid-row: 1; }
-  .comment-thread__reply[data-reply-idle] .comment-thread__reply-open { grid-column: 2 / 5; }
-  .comment-thread__reply[data-reply-idle] .comment-thread__reply-tool { grid-column: 3; }
-  .comment-thread__reply[data-reply-idle] .comment-thread__reply-send { grid-column: 4; }
+  .issue-activity-timeline .comment-thread__reply[data-reply-idle] { display: grid; grid-template-columns: 18px minmax(0, 1fr) 28px 12px 24px; grid-template-rows: 24px 28px; gap: 8px 0; padding: 11px 18px 11px 16px; }
+  .comment-thread__reply[data-reply-idle] > .avatar { grid-row: 1; align-self: start; margin-top: 3px; }
+  .comment-thread__reply[data-reply-idle] .comment-thread__reply-open { grid-column: 2 / 6; margin-left: 9px; }
+  .comment-thread__reply[data-reply-idle] .comment-thread__reply-tool { grid-column: 3; grid-row: 2; width: 28px; height: 28px; }
+  .comment-thread__reply[data-reply-idle] .comment-thread__reply-send { grid-column: 5; grid-row: 2; align-self: center; }
 }
 .issue-activity-timeline .comment-thread__composer .composer { margin: 0; }
 .issue-activity-timeline .resolved-comment { gap: 0; }
