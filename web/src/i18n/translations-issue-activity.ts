@@ -11,6 +11,7 @@ export const issueActivityZhCN: Record<string, string> = {
   'deleted issue': '删除了事项',
   'Copy previous title': '复制旧标题',
   'Unsubscribe from issue': '取消订阅事项',
+  'Assignees are subscribed automatically': '负责人会自动订阅',
   ' and moved to {cycle}': '，并移至 {cycle}',
   ' and then removed it from {cycle}': '，然后将其从 {cycle} 中移除',
   '{issue} added and then removed from related issues': '{issue} 添加后从关联事项中移除',

@@ -271,9 +271,11 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--theme-text-tertiary);
+  color: var(--activity-reply-tool);
   opacity: 1;
 }
+/* Reaction and options icons are drawn in the muted ink; the button keeps the tool ink. */
+.issue-activity-timeline .comment-card__actions button > svg { color: var(--activity-send-icon); }
 .issue-activity-timeline .comment-card__actions button:hover,
 .issue-activity-timeline .comment-card__actions button[data-state=open] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 .issue-activity-timeline .comment-thread .comment-body {
@@ -331,6 +333,10 @@
   box-shadow: var(--activity-card-shadow);
 }
 :root[data-theme="light"] .issue-activity-timeline .comment-thread .comment-body { border: 0; background: transparent; }
+:root[data-theme="light"] .issue-activity-timeline .comment-thread .comment-card > header > a { color: var(--agent-thread-muted); }
+/* Idle reply row: the buttons keep the tool ink; the icons are drawn lighter (attach) and muted (send). */
+.issue-activity-timeline .comment-thread__reply[data-reply-idle] .comment-thread__reply-tool > svg { color: var(--activity-attach-icon); }
+.issue-activity-timeline .comment-thread__reply[data-reply-idle] .comment-thread__reply-send:disabled > svg { color: var(--activity-send-icon); }
 .issue-activity-timeline .comment-thread .reaction-pills:empty { display: none; }
 .issue-activity-timeline .comment-thread .comment-reply {
   display: block;

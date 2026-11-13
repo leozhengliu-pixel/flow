@@ -229,7 +229,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
     expect(await events.last().evaluate(element => getComputedStyle(element, '::before').content)).toBe('none')
     await noOverflow(page)
     if (shots) await page.screenshot({ path: `${shots}/flow-activity-${viewport.width}.png`, scale: 'css' })
-    await expect(page.locator('.issue-subscribe-toggle')).toHaveCSS('opacity', '0.6')
+    await expect(page.locator('.issue-subscribe-toggle')).toHaveCSS('opacity', '1')
     await page.getByRole('button', { name: 'Unsubscribe from issue', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Subscribe to issue', exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Subscribe to issue', exact: true }).click()

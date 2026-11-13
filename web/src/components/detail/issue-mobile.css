@@ -133,8 +133,10 @@
   .issue-view .composer-toolbar { height: auto; padding: 0 2px 2px 0; }
   .issue-view .composer-tools > button { width: 28px; height: 28px; flex-basis: 28px; border: .5px solid transparent; font-size: 12px; font-weight: 500; line-height: normal; }
   .issue-view .composer-submit .composer-send { border: .5px solid transparent; line-height: normal; }
-  .issue-view .issue-comment-form .composer-send:disabled > svg { opacity: .6; }
-  .issue-view .issue-comment-form .composer-tools > button > svg { opacity: .35; }
+  .issue-view .issue-comment-form .composer-tools > button,
+  .issue-view .issue-comment-form .composer .composer-submit .composer-send:disabled { color: var(--activity-reply-tool); }
+  .issue-view .issue-comment-form .composer-send:disabled > svg { color: var(--activity-send-icon); }
+  .issue-view .issue-comment-form .composer-tools > button > svg { color: var(--activity-attach-icon); }
   .issue-view .composer { overflow-wrap: anywhere; }
   .issue-view .comment-card__actions { opacity: 1; padding-left: 4px; gap: 0; }
   .issue-view .comment-card__actions button { width: 32px; height: 32px; }

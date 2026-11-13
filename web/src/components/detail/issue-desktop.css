@@ -47,7 +47,9 @@
   .issue-view .composer-toolbar { height: 26px; padding: 0 2px 2px 0; }
   .issue-view .issue-document > .composer .comment-prosemirror p.is-editor-empty:first-child::before { color: var(--issue-desktop-comment-placeholder); }
   .issue-view .issue-document > .composer .composer-tools > button,
-  .issue-view .issue-document > .composer .composer-send:disabled { color: var(--issue-muted); }
+  .issue-view .issue-document > .composer .composer-send:disabled { color: var(--activity-reply-tool); }
+  .issue-view .issue-document > .composer .composer-tools > button > svg { color: var(--activity-attach-icon); }
+  .issue-view .issue-document > .composer .composer-send:disabled > svg { color: var(--activity-send-icon); }
   .issue-view .issue-activity-timeline .comment-thread .comment-card { padding: 16px; }
   .issue-view .issue-activity-timeline .comment-thread .comment-body { margin-top: 6px; }
   .issue-view .issue-activity-timeline .comment-thread .comment-card > header { height: 18px; min-height: 18px; }

@@ -135,7 +135,27 @@ test('expands event groups without losing comments and posts a reply with deskto
   expect((await page.locator('.comment-thread').boundingBox())!.height).toBe(127.5)
   expect((await page.locator('.timeline-item.event').first().boundingBox())!.height).toBe(28.796875)
   await expect(page.locator('.timeline-item.event').first().locator('.activity-row')).toHaveCSS('margin', '-3px -4px')
+  // The viewer is the assignee: assignees are subscribed automatically, so the toggle is disabled and dimmed.
+  await expect(page.locator('.issue-subscribe-toggle')).toBeDisabled()
   await expect(page.locator('.issue-subscribe-toggle')).toHaveCSS('opacity', '0.6')
+  await expect(page.locator('.issue-subscribe-toggle')).toHaveAttribute('title', 'Assignees are subscribed automatically')
+  // Idle composers keep the tool ink on the buttons and draw the icons lighter (attach) and muted (send).
+  const composer = page.locator('.issue-document > .composer')
+  const idleColors = async (expected: { time: string; tool: string; attach: string; send: string }) => {
+    await expect(page.locator('.comment-thread .comment-card > header > a').first()).toHaveCSS('color', expected.time)
+    for (const scope of [reply, composer]) {
+      await expect(scope.getByRole('button', { name: 'Attach images, files, or videos' })).toHaveCSS('color', expected.tool)
+      await expect(scope.getByRole('button', { name: 'Attach images, files, or videos' }).locator('svg')).toHaveCSS('color', expected.attach)
+      await expect(scope.getByRole('button', { name: 'Submit comment' })).toHaveCSS('color', expected.tool)
+      await expect(scope.getByRole('button', { name: 'Submit comment' }).locator('svg')).toHaveCSS('color', expected.send)
+    }
+  }
+  await idleColors({ time: 'lch(63.304 1.425 272)', tool: 'lch(90.826 1.425 272)', attach: 'lch(39.452 1.425 272)', send: 'lch(63.304 1.425 272)' })
+  await page.emulateMedia({ colorScheme: 'light' })
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await idleColors({ time: 'lch(40 1 282)', tool: 'lch(20 1 282)', attach: 'lch(66 1 282)', send: 'lch(40 1 282)' })
+  await expect(page.locator('.issue-subscribe-toggle')).toHaveCSS('color', 'lch(39.176 1.25 282)')
+  await page.emulateMedia({ colorScheme: 'dark' })
   await expect(reply.locator('span').last()).toHaveCSS('letter-spacing', '-0.1px')
   await reply.click()
   await page.getByRole('textbox', { name: 'Leave a reply…' }).fill('[audit] Posted reply')
