@@ -69,6 +69,7 @@
     "updateMigrationMappings": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "The callback only edits migrationJobs/id, but legacy event enrichment can select an earlier Draft.ContentData object whose id matches the migration ID. TestScaleP21SW25AggregateCollisionEvidence preserves this existing wire behavior. A target-only scope cannot be reviewed until a bounded aggregate closure also preserves it.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

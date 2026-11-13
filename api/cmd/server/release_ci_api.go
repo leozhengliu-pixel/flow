@@ -71,12 +71,22 @@ func releaseAccessKeySecret(r *http.Request) string {
 
 // pipelineForAccessKey finds the workspace and pipeline an access key belongs
 // to; pipelineID narrows the lookup when the URL names the pipeline.
-func (s *server) pipelineForAccessKey(secret, pipelineID string) (string, string, bool) {
+func (s *server) pipelineForAccessKey(ctx context.Context, secret, pipelineID string) (string, string, bool, error) {
 	if secret == "" {
-		return "", "", false
+		return "", "", false, nil
 	}
 	now := time.Now().UTC()
 	for _, key := range s.store.WorkspaceKeys() {
+		if s.store.BoundedMetadataEnabled() {
+			id, ok, err := s.store.ReleasePipelineForKeyHash(ctx, key, secretHash(secret), pipelineID, now)
+			if err != nil {
+				return "", "", false, err
+			}
+			if ok {
+				return key, id, true, nil
+			}
+			continue
+		}
 		data, ok := s.store.WorkspaceMetadata(key)
 		if !ok {
 			continue
@@ -84,11 +94,11 @@ func (s *server) pipelineForAccessKey(secret, pipelineID string) (string, string
 		for index := range data.ReleasePipelines {
 			pipeline := &data.ReleasePipelines[index]
 			if (pipelineID == "" || pipeline.ID == pipelineID) && releasePipelineKeyMatches(pipeline, secret, now) {
-				return key, pipeline.ID, true
+				return key, pipeline.ID, true, nil
 			}
 		}
 	}
-	return "", "", false
+	return "", "", false, nil
 }
 
 // readOptionalJSON decodes a request body that may be empty.
@@ -314,7 +324,13 @@ func releaseCIStages(pipeline *domain.ReleasePipeline) []releaseCIStage {
 // writes the error response itself.
 func (s *server) authenticateReleaseCI(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	w.Header().Set("Cache-Control", "no-store")
-	workspace, pipelineID, ok := s.pipelineForAccessKey(releaseAccessKeySecret(r), r.PathValue("id"))
+	workspace, pipelineID, ok, err := s.pipelineForAccessKey(r.Context(), releaseAccessKeySecret(r), r.PathValue("id"))
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			writeError(w, http.StatusServiceUnavailable, "release pipeline access check unavailable")
+		}
+		return "", "", false
+	}
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "invalid release pipeline access key")
 		return "", "", false

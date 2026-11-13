@@ -36,6 +36,7 @@
     "resolveMCPDiffThread": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "The parent review key is known before the callback, but its thread aggregate can match an earlier Draft.ContentData object through legacy reflective lookup. TestScaleP21SW25AggregateCollisionEvidence preserves that complete event entity. A reviews/reviewID scope alone changes effects and remains pending a bounded aggregate resolver.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

@@ -1,6 +1,6 @@
 {
   "source": "server/release_ci_api.go",
-  "unmigrated": 7,
+  "unmigrated": 6,
   "consumers": {
     "applyReleaseCIOperation": {
       "owner": "P21",
@@ -12,7 +12,8 @@
     },
     "pipelineForAccessKey": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Off mode retains the original workspace/canonical-pipeline iteration and constant-time hash checks. Bounded mode reads only matching hash decisions and expiry scalars through ReleasePipelineForKeyHash, paging candidates in canonical order under one SQL snapshot without transferring pipeline bodies; request errors propagate explicitly. TestScaleP21SW25ReleaseKeyScalars and ReleaseKeyDifferential cover large targets, over 50 expired candidates, current/previous/grace/revoked keys, exact IDs and case, malformed/missing/foreign references, the principal/key matrix, independent CI authority, queued/replayed key revocation, cancellation/recovery, unchanged canonical bytes and zero full decodes. The targeted set passed twice on one persistent SQLite database.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -50,6 +51,7 @@
     "touchReleaseAccessKey": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "A pipeline point read/write covers the callback but misses legacy aggregate enrichment from an earlier document ContentData object carrying the pipeline ID. TestScaleP21SW25AggregateCollisionEvidence records this accepted wire behavior. Keep the original writer until the bounded aggregate reference closure is implemented.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",

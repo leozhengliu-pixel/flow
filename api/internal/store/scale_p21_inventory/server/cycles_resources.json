@@ -13,6 +13,7 @@
     "cycleCalendarToken": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "A cycles/id point scope matches generated cycle_ IDs but changes legacy aggregate enrichment for accepted nonprefix stored IDs: an earlier cycle resource with the same ID wins reflective lookup. TestScaleP21SW25AggregateCollisionEvidence records that legacy behavior; the attempted scope and failing differential are held outside the verified batch pending a bounded aggregate resolver.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -21,6 +22,7 @@
     "deleteCycleResource": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Retain the original writer until aggregate closure is covered for accepted nonprefix stored cycle IDs: earlier cycle resources or typed records can win legacy enrichment despite editing only the requested cycle. Prefix-only differentials are insufficient; TestScaleP21SW25AggregateCollisionEvidence records the independent blocker.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
