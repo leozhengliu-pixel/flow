@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Run in a fresh process per mode. The fixture remains resident; blocked
@@ -57,6 +58,7 @@ func TestScaleP15HeapConcurrent10x(t *testing.T) {
 	runtime.GC()
 	var before runtime.MemStats
 	runtime.ReadMemStats(&before)
+	reservation := store.HydratedSnapshotReservation(data)
 	var peakHeap, peakRetained, peakSpool atomic.Uint64
 	peakHeap.Store(before.HeapAlloc)
 	peakRetained.Store(before.HeapAlloc)
@@ -133,12 +135,17 @@ func TestScaleP15HeapConcurrent10x(t *testing.T) {
 				}
 				return nil
 			}}
-			r := httptest.NewRequest(http.MethodGet, "/api/issue-records/bootstrap", nil)
+			ctx := context.WithValue(t.Context(), hydratedLegacyEstimateKey{}, reservation)
+			r := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/issue-records/bootstrap", nil)
 			service.signedFileURLs(http.HandlerFunc(func(out http.ResponseWriter, r *http.Request) {
 				owned := data
 				var snapshots [][]domain.Project
 				for range copies {
-					owned.Projects = slices.Clone(owned.Projects)
+					if os.Getenv("FLOW_RECORD_HYDRATION") == "on" {
+						owned = store.CloneHydratedReadSnapshot(r.Context(), owned)
+					} else {
+						owned.Projects = slices.Clone(owned.Projects)
+					}
 					snapshots = append(snapshots, owned.Projects)
 				}
 				writeStreamedJSON(r.Context(), out, http.StatusOK, owned)
@@ -171,6 +178,9 @@ func TestScaleP15HeapConcurrent10x(t *testing.T) {
 	t.Logf("P15_HEAP hydration=%s records=%d copies_per_reader=%d readers=4 response_bytes=%d resident_heap_bytes=%d retained_heap_bytes=%d peak_heap_bytes=%d peak_spool_bytes=%d max_latency_ms=%d sha256=%s", os.Getenv("FLOW_RECORD_HYDRATION"), records, copies, outputs[0], before.HeapAlloc, peakRetained.Load(), peakHeap.Load(), peakSpool.Load(), latencies[3].Milliseconds(), digests[0])
 	if os.Getenv("FLOW_RECORD_HYDRATION") == "on" && peakRetained.Load() > 1<<30 {
 		t.Fatalf("retained heap exceeds the 1 GiB live-heap target: %d", peakRetained.Load())
+	}
+	if os.Getenv("FLOW_RECORD_HYDRATION") == "on" && peakHeap.Load() > 13*(1<<30)/10 {
+		t.Fatalf("peak heap exceeds the 1.3 GiB target: %d", peakHeap.Load())
 	}
 }
 
@@ -312,6 +322,62 @@ func TestScaleP15HeapAdmissionReleasesAfterPanic(t *testing.T) {
 	}
 }
 
+func TestScaleP15HeapAdmissionSharesAByteBudget(t *testing.T) {
+	gate := hydratedLegacyAdmission{changed: make(chan struct{})}
+	var releases []func()
+	for range 4 {
+		release, err := gate.acquire(t.Context(), store.HydratedSnapshotReservationMaxBytes/4)
+		if err != nil {
+			t.Fatal(err)
+		}
+		releases = append(releases, release)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	if release, err := gate.acquire(ctx, 1<<20); err == nil {
+		release()
+		t.Fatal("the fifth download exceeded the byte or CPU allowance")
+	}
+	for _, release := range releases {
+		release()
+	}
+	release, err := gate.acquire(t.Context(), store.HydratedSnapshotReservationMaxBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel = context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	if smallRelease, err := gate.acquire(ctx, 1<<20); err == nil {
+		smallRelease()
+		t.Fatal("a large snapshot did not reserve the whole allowance")
+	}
+	release()
+	if gate.bytes != 0 || gate.readers != 0 {
+		t.Fatal("download byte admission leaked its reservation")
+	}
+}
+
+func TestScaleP15HeapDetachedStreamReleasesSnapshotBuffers(t *testing.T) {
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	t.Setenv("TMPDIR", t.TempDir())
+	data := domain.Bootstrap{Projects: make([]domain.Project, 2048)}
+	data.Projects[0].ID = "owned-before-encoding"
+	var owned domain.Bootstrap
+	w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+		if owned.Projects[0].ID != "" {
+			t.Error("a detached socket write retained the producer's snapshot references")
+		}
+		return nil
+	}}
+	(&server{}).signedFileURLs(http.HandlerFunc(func(out http.ResponseWriter, r *http.Request) {
+		owned = store.CloneHydratedReadSnapshot(r.Context(), data)
+		writeStreamedJSON(r.Context(), out, http.StatusOK, owned)
+	})).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/issue-records/bootstrap", nil))
+	if data.Projects[0].ID != "owned-before-encoding" {
+		t.Fatal("returning request buffers changed installed metadata")
+	}
+}
+
 type scaleP15HeapCustomInt int64
 
 func (scaleP15HeapCustomInt) MarshalJSON() ([]byte, error) { return []byte(`"custom"`), nil }
@@ -357,5 +423,56 @@ func TestScaleP15HeapScalarJSONDifferential(t *testing.T) {
 		if wantErr == nil || gotErr == nil || wantErr.Error() != gotErr.Error() {
 			t.Fatalf("time error differs: got %v want %v", gotErr, wantErr)
 		}
+	}
+}
+
+func TestScaleP15ParallelProjectEncodingDifferential(t *testing.T) {
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	admitted := context.WithValue(t.Context(), hydratedLegacyDownloadKey{}, true)
+	data := domain.Bootstrap{Projects: make([]domain.Project, 129)}
+	for i := range data.Projects {
+		data.Projects[i] = domain.Project{ID: fmt.Sprint(i), Description: strings.Repeat("text <>& ", 100), TeamIDs: []string{}, CreatedAt: time.Unix(int64(i), 123).UTC()}
+	}
+	// Force one page past its cap; it must stream directly without losing or
+	// duplicating the prefix that was encoded in the speculative page.
+	data.Projects[64].Description = strings.Repeat("large <>& ", 100000)
+	want, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	writeStreamedJSON(admitted, w, http.StatusOK, data)
+	if !bytes.Equal(w.Body.Bytes(), append(want, '\n')) {
+		t.Fatal("ordered project pages or large-page fallback changed the wire bytes")
+	}
+	counted := &scaleP15CountingWriter{header: make(http.Header)}
+	writeStreamedJSON(admitted, counted, http.StatusOK, data)
+	if counted.max > 64<<10 || counted.bytes != len(want)+1 {
+		t.Fatalf("project page chunks=%d bytes=%d want=%d", counted.max, counted.bytes, len(want)+1)
+	}
+	t.Setenv("FLOW_RECORD_HYDRATION", "off")
+	legacy := httptest.NewRecorder()
+	writeBootstrapJSON(legacy, data)
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	current := httptest.NewRecorder()
+	(&server{}).signedFileURLs(http.HandlerFunc(func(out http.ResponseWriter, _ *http.Request) {
+		writeBootstrapJSON(out, data)
+	})).ServeHTTP(current, httptest.NewRequest(http.MethodGet, "/api/bootstrap", nil))
+	if !bytes.Equal(current.Body.Bytes(), legacy.Body.Bytes()) {
+		t.Fatal("ordered project encoding changed legacy bootstrap bytes")
+	}
+	ctx, cancel := context.WithCancel(admitted)
+	cancel()
+	scaleP15ExpectAbort(t, func() { writeStreamedJSON(ctx, httptest.NewRecorder(), http.StatusOK, data) })
+	ctx, cancel = context.WithCancel(admitted)
+	defer cancel()
+	interrupted := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
+		cancel()
+		return ctx.Err()
+	}}
+	scaleP15ExpectAbort(t, func() { writeStreamedJSON(ctx, interrupted, http.StatusOK, data) })
+	page := &hydratedEncodingPage{}
+	if _, err := page.WriteString(strings.Repeat("x", 256<<10+1)); err != errHydratedEncodingPage || page.Len() != 0 {
+		t.Fatal("page string writes exceeded the encoding budget")
 	}
 }

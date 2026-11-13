@@ -26,7 +26,13 @@ type hydratedURLSigningKey struct{}
 
 func hydratedSigningContext(ctx context.Context, w http.ResponseWriter) context.Context {
 	for w != nil {
-		if spool, ok := w.(*legacyResponseSpool); ok && spool.signing != nil {
+		spool, isSpool := w.(*legacyResponseSpool)
+		if isSpool && spool.ctx != nil {
+			if admitted, _ := spool.ctx.Value(hydratedLegacyDownloadKey{}).(bool); admitted {
+				ctx = context.WithValue(ctx, hydratedLegacyDownloadKey{}, true)
+			}
+		}
+		if isSpool && spool.signing != nil {
 			if spool.prepareSigning != nil {
 				spool.prepareSigning()
 			}

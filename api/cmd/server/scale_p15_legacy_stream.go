@@ -162,6 +162,7 @@ func serveDetachedLegacyJSON(w http.ResponseWriter, r *http.Request, next http.H
 	defer removeLegacySpool(file)
 	spool := &legacyResponseSpool{ResponseWriter: w, ctx: r.Context(), file: file}
 	next.ServeHTTP(spool, r)
+	releaseHydratedProducer(r.Context())
 	if spool.err != nil || r.Context().Err() != nil {
 		panic(http.ErrAbortHandler)
 	}
@@ -233,6 +234,7 @@ func (s *server) signedFileURLsStream(w http.ResponseWriter, r *http.Request, ne
 		return err
 	}
 	next.ServeHTTP(spool, r)
+	releaseHydratedProducer(r.Context())
 	if spool.err != nil || r.Context().Err() != nil {
 		panic(http.ErrAbortHandler)
 	}

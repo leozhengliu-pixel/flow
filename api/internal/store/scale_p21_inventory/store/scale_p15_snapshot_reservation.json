@@ -1,0 +1,13 @@
+{
+  "source": "store/scale_p15_snapshot_reservation.go",
+  "unmigrated": 1,
+  "consumers": {
+    "WorkspaceReadSnapshotReservation": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

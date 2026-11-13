@@ -66,7 +66,7 @@ func (s *SQLiteStore) BeginWorkspaceRead(ctx context.Context, workspace string) 
 	known, knownOK := s.copyRevisionLocked(workspace)
 	current := s.metadataResidency == nil && installedOK && knownOK && known.workspaceID == stamp.workspaceID && known.revision == stamp.revision
 	if current && !scoped {
-		installed = cloneBootstrap(installed)
+		installed = CloneHydratedReadSnapshot(ctx, installed)
 	}
 	s.mu.RUnlock()
 	if current && !scoped {
@@ -104,14 +104,14 @@ func (s *SQLiteStore) BeginWorkspaceRead(ctx context.Context, workspace string) 
 
 func (s *SQLiteStore) workspaceReadSource(ctx context.Context, workspace string) (metadataReader, domain.Bootstrap, bool) {
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && snapshot.database == s.db && (workspace == "" || workspace == snapshot.workspace) {
-		data := cloneBootstrap(snapshot.metadata)
+		data := CloneHydratedReadSnapshot(ctx, snapshot.metadata)
 		stripTrashLinks(&data)
 		return snapshot.reader, data, true
 	}
 	if s.metadataResidency != nil {
 		return s.db, domain.Bootstrap{}, false
 	}
-	data, ok := s.WorkspaceMetadata(workspace)
+	data, ok := s.WorkspaceMetadataForRead(ctx, workspace)
 	stripTrashLinks(&data)
 	return s.db, data, ok
 }

@@ -1,6 +1,6 @@
 {
   "source": "store/issue_records.go",
-  "unmigrated": 4,
+  "unmigrated": 5,
   "consumers": {
     "ImportIssues": {
       "owner": "P21",
@@ -13,7 +13,14 @@
       "owner": "P21",
       "status": "unmigrated",
       "accessors": [
-        "Bootstrap"
+        "WorkspaceMetadataForRead"
+      ]
+    },
+    "WorkspaceMetadataForRead": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
       ]
     },
     "migrateIssueCollections": {

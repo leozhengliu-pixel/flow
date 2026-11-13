@@ -503,7 +503,7 @@ func (s *server) signedFileURLs(next http.Handler) http.Handler {
 		w.Header().Del("Content-Length")
 		w.WriteHeader(writer.status)
 		_, _ = w.Write(body)
-	}))
+	}), s.hydratedLegacySnapshotReservation)
 }
 
 func logSigningFailure(ctx context.Context, err error) {

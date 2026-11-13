@@ -94,6 +94,9 @@ func encodeHydratedJSON(ctx context.Context, buffer *bufio.Writer, value reflect
 			return encodeHydratedStruct(ctx, buffer, value, plan, depth+1)
 		}
 	case reflect.Slice, reflect.Array:
+		if admitted, _ := ctx.Value(hydratedLegacyDownloadKey{}).(bool); admitted && value.Kind() == reflect.Slice && value.Type() == reflect.TypeFor[[]domain.Project]() && value.Len() >= 128 {
+			return encodeHydratedProjectArray(ctx, buffer, value, depth)
+		}
 		if value.Kind() == reflect.Slice {
 			if value.IsNil() {
 				_, err := buffer.WriteString("null")

@@ -1,0 +1,13 @@
+{
+  "source": "server/scale_p15_heap.go",
+  "unmigrated": 1,
+  "consumers": {
+    "hydratedLegacySnapshotReservation": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceReadSnapshotReservation"
+      ]
+    }
+  }
+}

@@ -203,7 +203,7 @@ func (s *server) issueRecordsBootstrapData(w http.ResponseWriter, r *http.Reques
 	var data domain.Bootstrap
 	if s.authDisabled {
 		var ok bool
-		data, ok = s.store.WorkspaceMetadata(key)
+		data, ok = s.store.WorkspaceMetadataForRead(r.Context(), key)
 		if !ok {
 			writeError(w, 404, "workspace not found")
 			return data, false

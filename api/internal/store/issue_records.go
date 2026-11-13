@@ -714,6 +714,12 @@ func (s *SQLiteStore) issueCollectionCounts(ctx context.Context) (map[string]int
 // WorkspaceMetadata does not load the issue collection. Query endpoints must use
 // this projection instead of the compatibility full-bootstrap API.
 func (s *SQLiteStore) WorkspaceMetadata(workspace string) (domain.Bootstrap, bool) {
+	return s.WorkspaceMetadataForRead(context.Background(), workspace)
+}
+
+// WorkspaceMetadataForRead uses the caller's explicit snapshot-buffer lifetime.
+// Callers without one retain the ordinary owned-snapshot behavior.
+func (s *SQLiteStore) WorkspaceMetadataForRead(ctx context.Context, workspace string) (domain.Bootstrap, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if workspace == "" {
@@ -730,7 +736,7 @@ func (s *SQLiteStore) WorkspaceMetadata(workspace string) (domain.Bootstrap, boo
 	data.Comments = nil
 	data.Notifications = nil
 	data.NotificationDeliveries = nil
-	clone := cloneBootstrap(data)
+	clone := CloneHydratedReadSnapshot(ctx, data)
 	clone.Issues = []domain.Issue{}
 	clone.Activities = map[string][]domain.ActivityEvent{}
 	clone.Comments = map[string][]domain.Comment{}
