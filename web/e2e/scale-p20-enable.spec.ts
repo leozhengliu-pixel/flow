@@ -1,8 +1,11 @@
 import { expect, type Page, type Locator } from '@playwright/test'
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import pixelmatch from 'pixelmatch'
 import { PNG } from 'pngjs'
 import { test } from './scale-p20-fixture'
+
+const artifacts = process.env.FLOW_SCALE_P20_ARTIFACTS ?? '/tmp/codex-scale-p20-enable'
+mkdirSync(`${artifacts}/shots`, { recursive: true })
 
 test.use({ launchOptions: { args: ['--disable-gpu', '--num-raster-threads=1', '--disable-partial-raster'] } })
 
@@ -50,9 +53,9 @@ for (const width of [1440, 390]) {
             const style = getComputedStyle(element)
             return [selector, { rect: element.getBoundingClientRect().toJSON(), styles: Object.fromEntries(['padding', 'border', 'outline', 'transform', 'translate', 'scale', 'zoom', 'font', 'background', 'border-radius'].map(property => [property, style.getPropertyValue(property)])), parent: element.parentElement?.getAttribute('style') }]
           })))
-          writeFileSync(`/tmp/codex-scale-p20-enable/shots/enable-${width}-${name}-${entry.mode}.json`, JSON.stringify(metrics, null, 2))
+          writeFileSync(`${artifacts}/shots/enable-${width}-${name}-${entry.mode}.json`, JSON.stringify(metrics, null, 2))
           states.push(metrics)
-          const options = { path: `/tmp/codex-scale-p20-enable/shots/enable-${width}-${name}-${entry.mode}.png`, animations: 'allow', caret: 'hide', scale: 'css' } as const
+          const options = { path: `${artifacts}/shots/enable-${width}-${name}-${entry.mode}.png`, animations: 'allow', caret: 'hide', scale: 'css' } as const
           shots.push(crop ? await crop.screenshot(options) : await entry.page.screenshot(options))
         }
         expect(states[1], `${name}: flag-on geometry or styles differ from flag-off`).toEqual(states[0])
@@ -60,7 +63,7 @@ for (const width of [1440, 390]) {
         expect([on.width, on.height]).toEqual([off.width, off.height])
         const changed = pixelmatch(off.data, on.data, null, off.width, off.height, { threshold: 0 })
         const raw = pixelmatch(off.data, on.data, null, off.width, off.height, { threshold: 0, includeAA: true })
-        writeFileSync(`/tmp/codex-scale-p20-enable/shots/enable-${width}-${name}-comparison.json`, JSON.stringify({ changedPixels: changed, rawPixels: raw, antialiasPixels: raw - changed }))
+        writeFileSync(`${artifacts}/shots/enable-${width}-${name}-comparison.json`, JSON.stringify({ changedPixels: changed, rawPixels: raw, antialiasPixels: raw - changed }))
         expect(changed, `${name}: flag-on pixels differ from flag-off`).toBe(0)
         expect(raw, `${name}: flag-on raw pixels differ from flag-off`).toBe(0)
       }

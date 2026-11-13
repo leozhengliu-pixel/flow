@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+- Activation browser checks can isolate P20 scratch servers, caches and screenshots per run. Scale flag defaults are unchanged.
 - Realtime epoch batching retains its legacy fallback when the record journal store is uninitialized.
 - SQLite journal commits use indexed lookups for a single metadata record and its event, retaining the bounded generic path for other transactions. Scale activation defaults remain unchanged after the 300/800-user load gates failed.
 - Bounded metadata checks now keep legacy aggregate-event compatibility gaps as activation blockers. Additional native scalar readers and startup migrations avoid unrelated bodies, and permission-policy reads project required fields before transfer. Bounded metadata remains off by default.

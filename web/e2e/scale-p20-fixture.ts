@@ -6,6 +6,8 @@ import { createServer, type ViteDevServer } from 'vite'
 import type { Socket } from 'node:net'
 import { test as workspaceTest } from './workspace-fixture'
 
+const artifacts = process.env.FLOW_SCALE_P20_ARTIFACTS ?? '/tmp/codex-scale-p20-enable'
+
 async function freePort() {
   const server = net.createServer()
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
@@ -36,7 +38,7 @@ export const test = workspaceTest.extend<{ scaleP20Flags: boolean; scaleP20URL: 
   scaleP20Flags: [false, { option: true }],
   scaleP20URL: [async ({ scaleP20Flags }, provide) => {
     const web = path.resolve(import.meta.dirname, '..')
-    const root = '/tmp/codex-scale-p20-enable'
+    const root = artifacts
     mkdirSync(root, { recursive: true })
     const scratch = mkdtempSync(path.join(root, 'browser-'))
     const binary = process.env.FLOW_E2E_API_BIN ?? path.join(scratch, 'flow-api')
@@ -76,7 +78,7 @@ export const test = workspaceTest.extend<{ scaleP20Flags: boolean; scaleP20URL: 
   scaleP20LegacyURL: async ({ scaleP20URL }, provide) => {
     const web = path.resolve(import.meta.dirname, '..')
     const define = Object.fromEntries(['VITE_SYNC_V2', 'VITE_DOCUMENT_WINDOWS', 'VITE_TRASH_WINDOWS', 'VITE_PEOPLE_WINDOWS', 'VITE_PICKER_WINDOWS'].map(flag => [`import.meta.env.${flag}`, '"false"']))
-    const cacheDir = mkdtempSync('/tmp/codex-scale-p20-enable/legacy-cache-')
+    const cacheDir = mkdtempSync(path.join(artifacts, 'legacy-cache-'))
     const vite = await createServer({ root: web, cacheDir, configFile: path.join(web, 'vite.config.ts'), logLevel: 'error', define, server: { host: '127.0.0.1', port: 0, hmr: false, watch: null, proxy: { '/api': { target: scaleP20URL, ws: true } } } })
     const closeVite = trackSockets(vite)
     try {
