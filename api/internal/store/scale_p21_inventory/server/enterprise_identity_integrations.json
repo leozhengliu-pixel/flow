@@ -1,6 +1,6 @@
 {
   "source": "server/enterprise_identity_integrations.go",
-  "unmigrated": 12,
+  "unmigrated": 10,
   "consumers": {
     "createIdentityProvider": {
       "owner": "P21",
@@ -53,7 +53,8 @@
     },
     "enterpriseOIDCClient": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads identityProviders/providerID, retaining exact off-mode WorkspaceMetadata dispatch, type/enabled/verified/error precedence, outbound issuer checks and secret-env behavior. TestScaleP21SW9EnterpriseOIDCClientDifferential covers trusted provider reads, principal/credential matrix, discovery, cross-workspace, cancellation, ownership, large unrelated providers and explicit selected-record budgets with zero full decodes.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -108,7 +109,8 @@
     },
     "verifyIdentityProvider": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Projected provider point read and matching point writer; keys without admin scope select identity only so hidden providers cannot leak size through input-budget errors. Retains outbound validation, live route boundary, issuer/UpdatedAt CAS and canonical audit/event hooks. TestScaleP21SW9ProviderVerificationDifferential and RacesAndBoundaries compare principal/key matrix, held outbound races, queued/replay and in-flight revocation, cancellation, cross-workspace, ownership, explicit budgets/recovery and complete canonical/sink effects with zero full decodes.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",

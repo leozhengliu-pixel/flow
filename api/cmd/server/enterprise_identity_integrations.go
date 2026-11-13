@@ -192,7 +192,17 @@ func (s *server) deleteIdentityProvider(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) verifyIdentityProvider(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	scope := store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "identityProviders", ID: r.PathValue("id")}}}
+	if s.store.BoundedMetadataEnabled() {
+		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && !apiKeyHasScope(key, "admin") {
+			// Invisible providers must not disclose their size through a budget error.
+			scope.Read = nil
+		}
+	}
+	data, ok := s.workspaceDataScoped(w, r, scope)
+	if !ok {
+		return
+	}
 	index := slices.IndexFunc(data.IdentityProviders, func(v domain.IdentityProvider) bool { return v.ID == r.PathValue("id") })
 	if index < 0 {
 		writeError(w, http.StatusNotFound, "identity provider not found")
@@ -249,7 +259,7 @@ func (s *server) verifyIdentityProvider(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	var result domain.IdentityProvider
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "identity_provider.verified", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "identity_provider.verified", r.PathValue("id"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "identityProviders", ID: r.PathValue("id")}}}, func(data *domain.Bootstrap) error {
 		i := slices.IndexFunc(data.IdentityProviders, func(v domain.IdentityProvider) bool { return v.ID == snapshot.ID })
 		if i < 0 {
 			return errNotFound
@@ -310,7 +320,10 @@ func parseEnterpriseProviderKey(value string) (string, string, bool) {
 }
 
 func (s *server) enterpriseOIDCClient(ctx context.Context, workspaceKey, providerID string) (*oidcClient, domain.IdentityProvider, error) {
-	data, ok := s.store.WorkspaceMetadata(workspaceKey)
+	data, ok, err := s.store.WorkspaceMetadataScoped(ctx, workspaceKey, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "identityProviders", ID: providerID}}})
+	if err != nil {
+		return nil, domain.IdentityProvider{}, err
+	}
 	if !ok {
 		return nil, domain.IdentityProvider{}, errNotFound
 	}
