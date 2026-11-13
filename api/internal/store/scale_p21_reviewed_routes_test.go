@@ -6,6 +6,9 @@ var scaleP21ReviewedMCPTools = map[string]string{
 }
 
 var scaleP21ReviewedRoutes = []string{
+	"GET /api/documents/{id}/history/{revisionId}\ts.scaleP20Revision",
+	"GET /api/resource-windows/members\ts.scaleP20Members",
+	"GET /api/resource-windows/trash\ts.scaleP20Trash",
 	"GET /api/sync/manifest\ts.syncManifest",
 	"GET /api/sync/records\ts.syncRecords",
 	"POST /api/sync/batch\ts.syncBatch",

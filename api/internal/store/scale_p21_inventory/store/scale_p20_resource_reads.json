@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p20_resource_reads.go",
+  "unmigrated": 1,
+  "consumers": {
+    "ResourceWindowMetadata": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "reason": "Complete summary and identity sets are projected before response paging; residency and CPU remain to migrate.",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}
