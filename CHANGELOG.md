@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Realtime epoch batching retains its legacy fallback when the record journal store is uninitialized.
 - SQLite journal commits use indexed lookups for a single metadata record and its event, retaining the bounded generic path for other transactions. Scale activation defaults remain unchanged after the 300/800-user load gates failed.
 - Bounded metadata migrations can declare record/field inputs through shared scoped read and mutation adapters, with canonical streaming scans for background work. Consumer reviews are partitioned by source file for independent migrations; bounded metadata remains off by default.
 - An issue edit reads the newest activity and comment only of the issues whose activity it records (two indexed lookups each) instead of every issue it loads, so its query count no longer grows with the issue family. Adding or removing an issue relation loads the two issues, and for parent relations their parent chains, instead of the whole workspace.

@@ -11,7 +11,7 @@ import (
 // RealtimeEpochsReady enables epoch reuse only after journal initialization.
 // Delivery must still check the live epoch before using cached access.
 func (s *SQLiteStore) RealtimeEpochsReady() bool {
-	return s.db.journalReady.Load() && recordJournalMode() != "off"
+	return s.RecordJournalReady()
 }
 
 // LiveEventContext keeps a request's older page snapshot out of shared
