@@ -56,7 +56,7 @@ for (const flags of [false, true]) {
         if (flags) {
           await page.goto(`/${workspaceKey}/document/${doc.slugId}`)
           await expect(page.locator('.document-page')).toContainText('P20 current body survives metadata edits.')
-          await capture(page, `compatibility-${suffix}`)
+          await capture(page, `compatibility-${suffix}`, page.locator('.document-page'))
           await syncReads(page)
         }
         await page.goto(`/${workspaceKey}/document/${doc.slugId}`)

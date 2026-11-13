@@ -4,7 +4,7 @@ import pixelmatch from 'pixelmatch'
 import { PNG } from 'pngjs'
 import { test } from './scale-p20-fixture'
 
-test.use({ launchOptions: { args: ['--disable-gpu'] } })
+test.use({ launchOptions: { args: ['--disable-gpu', '--num-raster-threads=1', '--disable-partial-raster'] } })
 
 for (const width of [1440, 390]) {
   test.describe(`scale-p20 enable ${width}`, () => {
@@ -44,7 +44,7 @@ for (const width of [1440, 390]) {
           await crop?.evaluate(element => element.scrollTo(0, 0))
           await entry.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
           expect(await entry.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-          const metrics = await entry.page.evaluate(() => Object.fromEntries(['.workspace-avatar', '.document-subscribers', '.document-subscribers__document', '.document-subscribers__search', '.document-subscribers__row', '.document-history-title'].map(selector => {
+          const metrics = await entry.page.evaluate(() => Object.fromEntries(['.workspace-avatar', '.document-subscribers', '.document-subscribers__document', '.document-subscribers__search', '.document-subscribers__row', '.document-history-title', '.document-history-shell-panel', '.document-history-panel', '.document-history-main', '.document-history-scroll', '.document-history-pill'].map(selector => {
             const element = document.querySelector(selector)
             if (!element) return [selector, null]
             const style = getComputedStyle(element)
@@ -62,6 +62,7 @@ for (const width of [1440, 390]) {
         const raw = pixelmatch(off.data, on.data, null, off.width, off.height, { threshold: 0, includeAA: true })
         writeFileSync(`/tmp/codex-scale-p20-enable/shots/enable-${width}-${name}-comparison.json`, JSON.stringify({ changedPixels: changed, rawPixels: raw, antialiasPixels: raw - changed }))
         expect(changed, `${name}: flag-on pixels differ from flag-off`).toBe(0)
+        expect(raw, `${name}: flag-on raw pixels differ from flag-off`).toBe(0)
       }
       try {
         await pair('document', `document/${doc.slugId}`, async page => {
