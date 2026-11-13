@@ -39,6 +39,7 @@ export class SyncResetRequired extends Error {}
 export class SyncProtocolUnavailable extends SyncResetRequired {}
 
 type Transport = {
+  document?: (ref: string, signal: AbortSignal) => Promise<FlowDocument>
   batch: (keys: RecordKey[], signal: AbortSignal) => Promise<SyncRecordBatch>
   page: (query: SyncPageRequest, signal: AbortSignal) => Promise<SyncRecordPage>
   changes: (after: string, signal: AbortSignal) => Promise<SyncChanges>
@@ -170,7 +171,7 @@ export class SyncClient {
     const known = [...this.records.values()].find(item => item.key.kind === 'document' && (item.key.id === slug || item.value?.slugId === slug))
     // The existing endpoint resolves earlier slugs. Batch reads then supply the authoritative record version.
     const activeSignal = signal ? AbortSignal.any([signal, this.controller.signal]) : this.controller.signal
-    const resolved = known ? undefined : await getDocument(slug, activeSignal, this.manifest.core.workspace.urlKey)
+    const resolved = known ? undefined : await (this.transport.document ? this.transport.document(slug, activeSignal) : getDocument(slug, activeSignal, this.manifest.core.workspace.urlKey))
     this.assertActive()
     if (resolved?.deletedAt) throw new SyncResetRequired('Deleted document requires the legacy trash adapter')
     const key = known?.key ?? { kind: 'document', id: resolved!.id }

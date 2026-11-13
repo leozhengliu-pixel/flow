@@ -3,7 +3,7 @@ import { getDocument } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
 import { findDocumentBySlugSuffix } from '@/lib/document-slug'
 import { syncClientFor, SyncResetRequired } from '@/lib/sync-client'
-import { loadResourceDocument, resourceTrashedDocument, resourceWindowEnabled } from '@/lib/resource-window-adapters'
+import { loadResourceComments, loadResourceDocument, resourceTrashedDocument, resourceWindowEnabled } from '@/lib/resource-window-adapters'
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import type { BootstrapData } from '@/types/flow'
 
@@ -30,6 +30,21 @@ export function useRouteDocument({ data, slugId, found, setData }: {
   const candidateId = candidate?.id
   const record = candidate && client?.get({ kind: 'document', id: candidate.id })
   const windows = resourceWindowEnabled('documents') || resourceWindowEnabled('trash')
+  const commentScope = windows && candidateId && !candidate?.deletedAt ? JSON.stringify([data?.workspace.id, data?.viewer.id, data?.sync?.authzEpoch, candidateId]) : undefined
+  useEffect(() => {
+    if (!commentScope || !workspaceKey || !candidateId) return
+    const snapshot = latestData.current!
+    const controller = new AbortController()
+    const signal = client?.requestSignal(controller.signal) ?? controller.signal
+    void loadResourceComments(workspaceKey, candidateId, signal).then(comments => {
+      if (signal.aborted) return
+      setData(current => current?.workspace.id === snapshot.workspace.id && current.viewer.id === snapshot.viewer.id && (!client || !client.disposed && syncClientFor(current) === client)
+        ? { ...current, comments: { ...current.comments, [candidateId]: comments } } : current)
+    }).catch(error => {
+      if (!signal.aborted && client && !client.disposed) client.requestReset(!(error instanceof ApiError && [401, 403, 404].includes(error.status)))
+    })
+    return () => controller.abort()
+  }, [candidateId, client, commentScope, latestData, setData, workspaceKey])
   const wanted = slugId && workspaceKey && data && (!data.resourceDetailsOmitted || client) && !found ? JSON.stringify([data.workspace.id, data.viewer.id, data.sync?.authzEpoch, slugId, record?.version, record?.completeness]) : undefined
   const [result, setResult] = useState<{ key: string; state: 'missing' }>()
   useEffect(() => {

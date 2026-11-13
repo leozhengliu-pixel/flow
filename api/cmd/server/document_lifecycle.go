@@ -204,6 +204,9 @@ func documentScope(ctx context.Context, id string, linkedIssue bool, issueIDs ..
 // document in "Recently deleted" is returned with deletedAt set (to the
 // people who could open it), so links show the deleted state instead of 404.
 func (s *server) getDocument(w http.ResponseWriter, r *http.Request) {
+	if s.scaleP20DocumentRead(w, r) {
+		return
+	}
 	data := s.documentWorkspaceData(r)
 	id := r.PathValue("id")
 	if document, err := documentByID(&data, id); err == nil {

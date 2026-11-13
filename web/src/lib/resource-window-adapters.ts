@@ -3,10 +3,11 @@ import { ApiError, request } from '@/lib/api-client'
 import { findTrashedDocument } from '@/components/documents/document-trash'
 import { fetchSurfaceBootstrap, syncClientFor, syncV2Enabled, SyncProtocolUnavailable, type SyncClient, type SyncSurface } from '@/lib/sync-client'
 import type { AppRoute } from '@/lib/app-routes'
-import type { BootstrapData, DocumentRevision, FlowDocument, SyncPageRequest, TrashEntry, User, WorkspaceMember } from '@/types/flow'
+import type { BootstrapData, Comment, DocumentRevision, FlowDocument, SyncPageRequest, TrashEntry, User, WorkspaceMember } from '@/types/flow'
 import type { QueryWindow } from '@/lib/query-window-store'
 import { findDocumentBySlugSuffix } from '@/lib/document-slug'
 import { modelRecordKind } from '@/lib/scale-p13-wire'
+import { createResourceClient, fetchResourceDocument, readResourceCollection, readResourceDirectory, resourceEndpointUnavailable } from '@/lib/scale-p20-transport'
 
 export type ResourceSurface = 'documents' | 'trash' | 'people' | 'pickers'
 
@@ -73,8 +74,28 @@ export async function loadResourceSummaries(data: BootstrapData, query: SyncPage
 }
 
 export async function fetchResourceSurfaceBootstrap(workspaceKey: string, surface: SyncSurface | undefined, legacy: () => Promise<BootstrapData>, signal?: AbortSignal, quiet?: boolean): Promise<BootstrapData> {
-  // This base has no trash page endpoint. Keep payloads, counts and restore links
-  // authoritative until the server supplies that read, rather than paging a partial local array.
+  const enabled = surface === 'document-detail' && (resourceWindowEnabled('documents') || resourceWindowEnabled('trash')) || surface === 'document-directory' && resourceWindowEnabled('documents') || surface === 'trash-directory' && resourceWindowEnabled('trash') || surface === 'people-directory' && resourceWindowEnabled('people')
+  if (enabled) {
+    let client: SyncClient | undefined
+    try {
+      client = await createResourceClient(workspaceKey, surface!, signal, quiet)
+      const activeSignal = client.requestSignal(signal)
+      let data = client.adapt()
+      const directory = await readResourceDirectory(data, activeSignal)
+      data = { ...data, ...directory }
+      // Users include presentation fields not carried by membership records.
+      for (const kind of ['user', 'project', 'initiative', 'cycle']) data = await loadResourceSummaries(data, { kind }, activeSignal)
+      if (surface === 'document-directory') data = await loadResourceSummaries(data, { kind: 'document' }, activeSignal)
+      if (surface === 'trash-directory') data = { ...data, trash: await readResourceCollection<TrashEntry>(workspaceKey, 'trash', activeSignal, '', client.manifest.authzEpoch) }
+      await client.catchUp()
+      return client.adapt(data)
+    } catch (error) {
+      client?.dispose()
+      if (signal?.aborted || error instanceof ApiError && [401, 403].includes(error.status)) throw error
+      if (!(error instanceof SyncProtocolUnavailable) && !resourceEndpointUnavailable(error)) throw error
+      return legacy()
+    }
+  }
   if (surface === 'trash-directory') return legacy()
   const data = await fetchSurfaceBootstrap(workspaceKey, surface, legacy, signal, quiet)
   const client = syncClientFor(data)
@@ -138,11 +159,12 @@ export function resourceTrashedDocument(trash: TrashEntry[] | undefined, slug: s
 }
 
 export async function resourceDocumentForAction(data: BootstrapData, document: FlowDocument): Promise<FlowDocument> {
-  if (!resourceWindowEnabled('documents') || documentBodyLoaded(data, document)) return document
+  if (!(resourceWindowEnabled('documents') || resourceWindowEnabled('trash')) || documentBodyLoaded(data, document)) return document
   const controller = new AbortController()
   const client = syncClientFor(data)
   const signal = client?.requestSignal(controller.signal) ?? controller.signal
   try {
+    if (document.deletedAt) return (await loadResourceDocument(data, document.id, signal)).document
     const record = client ? await client.readDetail({ kind: 'document', id: document.id }, signal, true) : undefined
     if (client && (!record || record.completeness === 'deleted')) throw new ApiError('Document not found', 404)
     // A legal body can exceed the batch budget; its existing detail endpoint remains complete.
@@ -162,16 +184,16 @@ export async function loadResourceDocument(data: BootstrapData, slug: string, si
   const client = syncClientFor(data)
   let document: FlowDocument
   try {
-    document = client ? await client.loadDocument(slug, signal) : await getDocument(slug, signal, data.workspace.urlKey)
+    document = client ? await client.loadDocument(slug, signal) : await fetchResourceDocument(data.workspace.urlKey, slug, signal)
   } catch (error) {
     if (!resourceWindowEnabled('trash') || client?.disposed || !(error instanceof Error) || error instanceof ApiError && error.status !== 404) throw error
-    document = await getDocument(slug, signal, data.workspace.urlKey)
+    document = await fetchResourceDocument(data.workspace.urlKey, slug, signal)
     if (!document.deletedAt) throw error
   }
   if (document.deletedAt && resourceWindowEnabled('trash')) {
     const candidate = resourceTrashedDocument(data.trash, document.id)
     const known = candidate && documentBodyLoaded(data, candidate.document) ? candidate : undefined
-    const trash = known ? undefined : await loadResourceTrash(data.workspace.urlKey, signal)
+    const trash = known ? undefined : await loadResourceTrash(data.workspace.urlKey, signal, document.id)
     const trashed = known ?? resourceTrashedDocument(trash, document.id)
     if (!trashed) throw new ApiError('Document not found', 404)
     if (!documentBodyLoaded({ ...data, trash: [trashed.entry] }, trashed.document)) throw new ApiError('Document not found', 404)
@@ -180,18 +202,33 @@ export async function loadResourceDocument(data: BootstrapData, slug: string, si
   return { document, entry: undefined }
 }
 
-export async function loadResourceTrash(workspaceKey: string, signal: AbortSignal): Promise<TrashEntry[]> {
-  return (await fetchBootstrap(workspaceKey, undefined, signal)).trash
+export function loadResourceComments(workspaceKey: string, documentId: string, signal: AbortSignal): Promise<Comment[]> {
+  return request(`/api/documents/${encodeURIComponent(documentId)}/comments`, { signal, headers: { 'X-Workspace-Key': workspaceKey } })
+}
+
+export async function loadResourceTrash(workspaceKey: string, signal: AbortSignal, resourceId?: string): Promise<TrashEntry[]> {
+  try {
+    if (resourceId) return [await request<TrashEntry>(`/api/resource-windows/trash?resourceId=${encodeURIComponent(resourceId)}`, { signal, headers: { 'X-Workspace-Key': workspaceKey } })]
+    return await readResourceCollection<TrashEntry>(workspaceKey, 'trash', signal)
+  } catch (error) {
+    if (!resourceEndpointUnavailable(error)) throw error
+    return (await fetchBootstrap(workspaceKey, undefined, signal)).trash
+  }
 }
 
 export async function loadResourceMembers(data: BootstrapData, signal: AbortSignal): Promise<WorkspaceMember[]> {
   const client = syncClientFor(data)
-  if (!client || Array.isArray(client.manifest.core.members)) return data.members
-  return (await fetchBootstrap(data.workspace.urlKey, undefined, signal)).members
+  if (client?.manifest.capabilities.includes('resource-windows') || client && Array.isArray(client.manifest.core.members)) return data.members
+  try { return await readResourceCollection<WorkspaceMember>(data.workspace.urlKey, 'members', signal, '', data.sync?.authzEpoch) }
+  catch (error) { if (!resourceEndpointUnavailable(error)) throw error; return (await fetchBootstrap(data.workspace.urlKey, undefined, signal)).members }
 }
 
 export function loadResourceRevisions(workspaceKey: string, documentId: string, signal: AbortSignal): Promise<DocumentRevision[]> {
-  return request<{ nodes: DocumentRevision[] }>(`/api/documents/${encodeURIComponent(documentId)}/history?limit=200`, { signal, headers: { 'X-Workspace-Key': workspaceKey } }).then(page => page.nodes ?? [])
+  return request<{ nodes: DocumentRevision[] }>(`/api/documents/${encodeURIComponent(documentId)}/history?projection=summary&limit=200`, { signal, headers: { 'X-Workspace-Key': workspaceKey } }).then(page => page.nodes ?? [])
+}
+
+export function loadResourceRevision(workspaceKey: string, documentId: string, revisionId: string, signal: AbortSignal): Promise<DocumentRevision> {
+  return request(`/api/documents/${encodeURIComponent(documentId)}/history/${encodeURIComponent(revisionId)}`, { signal, headers: { 'X-Workspace-Key': workspaceKey } })
 }
 
 export type PeopleWindow = { nodes: User[]; pageInfo: { hasNextPage: boolean; endCursor?: string | null } }
@@ -205,7 +242,8 @@ export function searchResourcePeople(workspaceKey: string, query: string, signal
 }
 
 export async function loadResourcePeople(workspaceKey: string, signal: AbortSignal, client?: SyncClient): Promise<User[]> {
-  if (client && !Array.isArray(client.manifest.core.members)) return (await fetchBootstrap(workspaceKey, undefined, signal)).users
+  try { return await readResourceCollection<User>(workspaceKey, 'users', signal, '', client?.manifest.authzEpoch) }
+  catch (error) { if (!resourceEndpointUnavailable(error)) throw error }
   if (client?.manifest.collections.user) return (await loadResourceSummaries(client.adapt(), { kind: 'user' }, signal)).users
   const people = new Map<string, User>()
   let after: string | undefined

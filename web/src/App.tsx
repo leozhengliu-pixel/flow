@@ -367,6 +367,7 @@ import { migratedSyncSignal, syncBootstrapRequestKey, syncClientFor, syncScopeMa
 import { locallyCreatedAgentSession } from '@/lib/scale-activate-a-agent-echo'
 import { realtimeClientId } from '@/lib/api-client'
 import { documentBodyLoaded, fetchResourceSurfaceBootstrap, resourceSyncSurface, resourceTrashedDocument, resourceWindowEnabled, resourceWindowStale } from '@/lib/resource-window-adapters'
+import { fetchResourceDocument } from '@/lib/scale-p20-transport'
 import { scaleP19Surface } from '@/lib/scale-p19-surfaces'
 import type { RealtimeEvent } from '@/types/flow'
 import { applyLabelStateRename, applyRealtimePatch, canApplyRealtimePatch, isLabelStateRenameEvent } from '@/store/apply-realtime-patch'
@@ -427,7 +428,7 @@ function App() {
   useEffect(() => {
     if (!syncClient) return;
     const unsubscribe = syncClient.subscribe(() => {
-      if (!syncClient.disposed && resourceWindowStale(syncClient)) { syncClient.requestReset(true); return; }
+      if (!syncClient.disposed && resourceWindowStale(syncClient)) { syncClient.requestReset(!syncClient.manifest.capabilities.includes('resource-windows')); return; }
       if (syncClient.disposed) {
         if (syncClient.legacyRequired) setSyncFallback(syncClient.manifest.core.workspace.urlKey);
         clearNavigationCache(syncClient.manifest.viewerId, syncClient.manifest.core.workspace.urlKey);
@@ -1630,6 +1631,10 @@ function App() {
       if (await refreshTeamResourcesForEvent(data, event)) return;
       const activeSync = syncClientFor(dataRef.current);
       if (activeSync) {
+        if (activeSync.manifest.capabilities.includes('resource-windows')) {
+          activeSync.requestReset();
+          return;
+        }
         if (!migratedSyncSignal(event.type, activeSync.surface) && event.type !== 'sync.delta' && !Array.isArray(event.payload?.transactions)) {
           activeSync.requestReset(true);
           return;
@@ -5896,13 +5901,13 @@ function App() {
                 setData(current => mine(current) ? upsertDocument(current, saved) : current);
                 return;
               }
-              if (trashedDocument && syncClient && (resourceWindowEnabled('documents') || resourceWindowEnabled('trash'))) { syncClient.requestReset(true); return; }
+              if (trashedDocument && syncClient && (resourceWindowEnabled('documents') || resourceWindowEnabled('trash'))) { syncClient.requestReset(!syncClient.manifest.capabilities.includes('resource-windows')); return; }
               const [document, comments] = await Promise.all([
-                getDocument(documentId).catch(error => { if (inaccessibleResource(error)) return null; throw error; }),
+                (resourceWindowEnabled('documents') || resourceWindowEnabled('trash') ? fetchResourceDocument(workspaceKey, documentId, syncClient?.requestSignal() ?? new AbortController().signal) : getDocument(documentId)).catch(error => { if (inaccessibleResource(error)) return null; throw error; }),
                 listDocumentComments(documentId).catch(() => undefined),
               ]);
               if (!mine(dataRef.current)) return;
-              if (syncClient && (!document || document.deletedAt)) { syncClient.requestReset(Boolean(document?.deletedAt)); return; }
+              if (syncClient && (!document || document.deletedAt)) { syncClient.requestReset(Boolean(document?.deletedAt) && !syncClient.manifest.capabilities.includes('resource-windows')); return; }
               setData(current => {
                 if (!mine(current)) return current;
                 // A deleted document still answers (from "Recently deleted"), with deletedAt.

@@ -5,8 +5,9 @@ import { SyncClient } from '@/lib/sync-client'
 import { documentBodyLoaded, fetchResourceSurfaceBootstrap, loadResourceDocument, loadResourceSummaries, resourceDocumentForAction, resourceSelection, resourceSyncSurface, resourceTrashedDocument, resourceWindowDocuments, resourceWindowEnabled, resourceWindowStale } from '@/lib/resource-window-adapters'
 import type { FlowDocument, SyncManifest, SyncRecord } from '@/types/flow'
 
-const api = vi.hoisted(() => ({ fetchSyncManifest: vi.fn(), fetchSyncChanges: vi.fn(), fetchSyncRecords: vi.fn(), fetchSyncBatch: vi.fn(), fetchBootstrap: vi.fn(), getDocument: vi.fn() }))
+const api = vi.hoisted(() => ({ fetchSyncManifest: vi.fn(), fetchSyncChanges: vi.fn(), fetchSyncRecords: vi.fn(), fetchSyncBatch: vi.fn(), fetchBootstrap: vi.fn(), getDocument: vi.fn(), request: vi.fn() }))
 vi.mock('@/lib/api', () => api)
+vi.mock('@/lib/api-client', async importOriginal => ({ ...await importOriginal<object>(), request: api.request }))
 afterEach(() => { vi.unstubAllEnvs(); vi.resetAllMocks() })
 
 const document = { id: 'doc', slugId: 'current-0123456789ab', title: 'Document', content: 'Saved body', contentState: '{"type":"doc"}', creator: makeBootstrap().viewer, revisions: [], projectIds: [], teamIds: [], subscriberIds: [], favorite: false, createdAt: '2026-11-12', updatedAt: '2026-11-12' } satisfies FlowDocument
@@ -159,16 +160,18 @@ describe('scale-p20 resource windows', () => {
     expect(api.fetchSyncRecords).not.toHaveBeenCalled()
   })
 
-  it('recovers the full legacy trash entry for a deleted document without clearing its body or restore links', async () => {
+  it('reads only the targeted trash entry for a deleted document without clearing its body', async () => {
     vi.stubEnv('VITE_SYNC_V2', 'true'); vi.stubEnv('VITE_TRASH_WINDOWS', 'true')
     const { client } = fixture()
     const deleted = { ...document, deletedAt: '2026-11-12' }
     const entry = { id: 'trash', resourceType: 'document', resourceId: document.id, title: document.title, payload: deleted, deletedBy: document.creator, deletedAt: '2026-11-12', expiresAt: '2026-12-12', links: { favorites: ['keep'] } }
     api.getDocument.mockResolvedValue(deleted)
-    api.fetchBootstrap.mockResolvedValue(makeBootstrap({ trash: [entry] }))
+    api.request.mockResolvedValueOnce(deleted).mockResolvedValueOnce(entry)
     const result = await loadResourceDocument(client.adapt(), 'old-0123456789ab', new AbortController().signal)
     expect(result.document.content).toBe('Saved body')
     expect(result.entry).toEqual(entry)
+    expect(api.fetchBootstrap).not.toHaveBeenCalled()
+    expect(api.request.mock.calls[1][0]).toBe('/api/resource-windows/trash?resourceId=doc')
     expect(client.disposed).toBe(false)
     client.dispose()
   })
@@ -190,10 +193,10 @@ describe('scale-p20 resource windows', () => {
     const { client } = fixture()
     const entry = { id: 'trash', resourceType: 'document', resourceId: document.id, title: document.title, payload: { id: document.id, slugId: document.slugId }, deletedBy: document.creator, deletedAt: '2026-11-12', expiresAt: '2026-12-12' }
     api.getDocument.mockResolvedValue({ ...document, deletedAt: entry.deletedAt })
-    api.fetchBootstrap.mockResolvedValue(makeBootstrap({ trash: [{ ...entry, payload: document }] }))
+    api.request.mockResolvedValueOnce({ ...document, deletedAt: entry.deletedAt }).mockResolvedValueOnce({ ...entry, payload: document })
     const result = await loadResourceDocument({ ...client.adapt(), trash: [entry] }, document.slugId, new AbortController().signal)
     expect(result.document.content).toBe(document.content)
-    expect(api.fetchBootstrap).toHaveBeenCalledTimes(1)
+    expect(api.fetchBootstrap).not.toHaveBeenCalled()
     client.dispose()
   })
 

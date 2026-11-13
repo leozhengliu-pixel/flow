@@ -752,7 +752,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		s.dispatchNotificationEmails(r.Context(), workspace)
 	}
-	respondMutation(w, err, http.StatusOK, s.withDocumentVersions(r, updated))
+	respondMutation(w, err, http.StatusOK, s.scaleP20DocumentResult(r, updated))
 }
 
 // jsonEqual compares two decoded JSON values.

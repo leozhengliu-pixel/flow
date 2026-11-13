@@ -258,6 +258,8 @@ export interface DocumentContent {
   updatedAt: string;
 }
 export interface DocumentRevision {
+  _bodyOmitted?: boolean;
+  _current?: boolean;
   id: UUID;
   documentId: UUID;
   title: string;

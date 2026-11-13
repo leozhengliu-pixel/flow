@@ -10,6 +10,9 @@ import (
 )
 
 func (s *server) syncRecords(w http.ResponseWriter, r *http.Request) {
+	if s.scaleP20Records(w, r) {
+		return
+	}
 	if !syncFlagEnabled("FLOW_INDEXED_READS") {
 		writeError(w, http.StatusNotFound, "not found")
 		return
@@ -75,6 +78,9 @@ func (s *server) syncBatch(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.Projection == "" {
 		input.Projection = "detail"
+	}
+	if s.scaleP20Batch(w, r, input.Keys, input.Projection) {
+		return
 	}
 	batch, err := s.store.ReadRecords(r.Context(), access, input.Keys, input.Projection)
 	if err != nil {

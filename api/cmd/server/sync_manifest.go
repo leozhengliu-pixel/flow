@@ -87,6 +87,9 @@ func (s *server) syncAccess(w http.ResponseWriter, r *http.Request) (store.Acces
 }
 
 func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
+	if s.scaleP20Manifest(w, r) {
+		return
+	}
 	if !syncFlagEnabled("FLOW_SYNC_MANIFEST") {
 		writeError(w, http.StatusNotFound, "not found")
 		return

@@ -1842,7 +1842,8 @@ export function updateDocument(
     documentUpdateIds?: string[];
   },
 ): Promise<FlowDocument> {
-  return request(`/api/documents/${id}`, jsonRequest("PATCH", input));
+  const summaries = import.meta.env.VITE_SYNC_V2 === 'true' && (import.meta.env.VITE_DOCUMENT_WINDOWS === 'true' || import.meta.env.VITE_TRASH_WINDOWS === 'true');
+  return request(`/api/documents/${id}${summaries ? '?history=summary' : ''}`, jsonRequest("PATCH", input));
 }
 /** One document by id, slug or an earlier slug; a deleted document comes back with `deletedAt`. */
 export function getDocument(id: string, signal?: AbortSignal, workspaceKey?: string): Promise<FlowDocument> {

@@ -9,6 +9,7 @@ import { loadResourcePeople } from '@/lib/resource-window-adapters'
 const api = vi.hoisted(() => ({ request: vi.fn() }))
 vi.mock('@/lib/api-client', async importOriginal => ({ ...await importOriginal<object>(), request: api.request }))
 afterEach(() => { vi.unstubAllEnvs(); vi.resetAllMocks() })
+const peoplePage = (users: typeof viewer[], hasMore = false, next = '') => ({ items: users.map(user => ({ key: { kind: 'users', id: user.id }, version: '1', data: user })), revision: '1', authzEpoch: 'epoch', hasMore, next })
 
 describe('scale-p20 people picker scope and completeness', () => {
   it('does not search with flags off', () => {
@@ -17,15 +18,15 @@ describe('scale-p20 people picker scope and completeness', () => {
   })
 
   it('follows every page, retaining the complete set for fuzzy search and explicit selection', async () => {
-    api.request.mockResolvedValueOnce({ nodes: [viewer], pageInfo: { hasNextPage: true, endCursor: 'next' } })
-      .mockResolvedValueOnce({ nodes: [teammate], pageInfo: { hasNextPage: false } })
+    api.request.mockResolvedValueOnce(peoplePage([viewer], true, 'next'))
+      .mockResolvedValueOnce(peoplePage([teammate]))
     expect(await loadResourcePeople('workspace', new AbortController().signal)).toEqual([viewer, teammate])
-    expect(api.request.mock.calls[1][0]).toContain('after=next')
+    expect(api.request.mock.calls[1][0]).toContain('cursor=next')
     expect(api.request.mock.calls[1][1].headers).toEqual({ 'X-Workspace-Key': 'workspace' })
   })
 
   it('rejects a nonadvancing page instead of declaring a partial set complete', async () => {
-    api.request.mockResolvedValue({ nodes: [viewer], pageInfo: { hasNextPage: true } })
+    api.request.mockResolvedValue(peoplePage([viewer], true))
     await expect(loadResourcePeople('workspace', new AbortController().signal)).rejects.toThrow('did not advance')
   })
 
@@ -33,7 +34,7 @@ describe('scale-p20 people picker scope and completeness', () => {
     vi.stubEnv('VITE_SYNC_V2', 'true'); vi.stubEnv('VITE_PICKER_WINDOWS', 'true')
     let data = makeBootstrap()
     let finish!: (value: unknown) => void
-    api.request.mockResolvedValueOnce({ nodes: [viewer], pageInfo: { hasNextPage: false } })
+    api.request.mockResolvedValueOnce(peoplePage([viewer]))
     const wrapper = ({ children }: { children: ReactNode }) => <WorkspaceStoreProvider data={data} session={null} account={null}>{children}</WorkspaceStoreProvider>
     const view = renderHook(() => useResourcePeople(data.users), { wrapper })
     await waitFor(() => expect(view.result.current.find(user => user.id === teammate.id)?.active).toBe(false))
@@ -42,12 +43,12 @@ describe('scale-p20 people picker scope and completeness', () => {
     view.rerender()
     await waitFor(() => expect(api.request).toHaveBeenCalledTimes(2))
     const oldSignal = api.request.mock.calls[1][1].signal as AbortSignal
-    api.request.mockResolvedValueOnce({ nodes: [teammate], pageInfo: { hasNextPage: false } })
+    api.request.mockResolvedValueOnce(peoplePage([teammate]))
     data = makeBootstrap({ workspace: { ...data.workspace, id: 'other-workspace', urlKey: 'other-workspace' } })
     view.rerender()
     expect(oldSignal.aborted).toBe(true)
     await waitFor(() => expect(view.result.current.find(user => user.id === viewer.id)?.active).toBe(false))
-    await act(async () => { finish({ nodes: [viewer], pageInfo: { hasNextPage: false } }) })
+    await act(async () => { finish(peoplePage([viewer])) })
     expect(view.result.current.find(user => user.id === viewer.id)?.active).toBe(false)
     view.unmount()
   })

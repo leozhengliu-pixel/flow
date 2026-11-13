@@ -1,18 +1,16 @@
-import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 import { test } from './scale-p20-fixture'
 
 async function capture(page: Page, name: string, crop?: Locator) {
   await page.evaluate(() => document.fonts.ready)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-  const options = { path: `/tmp/codex-scale-p20/shots/${name}.png`, animations: 'disabled', scale: 'css' } as const
+  const options = { path: `/tmp/codex-scale-p20-enable/shots/${name}.png`, animations: 'disabled', scale: 'css' } as const
   if (crop) await crop.screenshot(options)
   else await page.screenshot(options)
 }
 
-// The base predates server document/trash sync reads. The wire adapter uses real,
-// authorized REST responses to exercise the pending capability without inventing record bodies.
-async function syncReads(page: Page, request: APIRequestContext, workspace: string) {
-  const headers = { 'X-Workspace-Key': workspace }
+// A controllable disconnect exercises recovery; every read uses the real API.
+async function syncReads(page: Page) {
   await page.addInitScript(() => {
     const streams: WireStream[] = []
     class WireStream {
@@ -29,36 +27,6 @@ async function syncReads(page: Page, request: APIRequestContext, workspace: stri
     }
     Object.defineProperty(window, 'EventSource', { value: WireStream, configurable: true })
     Object.assign(window, { scaleP20Disconnect: () => { for (const stream of streams) stream.onerror?.(new Event('error')) } })
-  })
-  await page.route('**/api/sync/**', async route => {
-    const url = new URL(route.request().url())
-    const core = await (await request.get('/api/bootstrap', { headers })).json()
-    const source = await (await request.get('/api/realtime/changes', { headers })).json()
-    const version = String(source.head)
-    if (url.pathname.endsWith('/manifest')) return route.fulfill({ json: {
-      schema: 2, workspaceId: core.workspace.id, viewerId: core.viewer.id, authzEpoch: 'epoch-1', head: version,
-      capabilities: ['sync-v2'], core: { ...core, documents: undefined, users: core.users ?? [], projects: core.projects ?? [], initiatives: core.initiatives ?? [], cycles: core.cycles ?? [], members: core.members ?? [], teamMembers: core.teamMembers ?? [], favorites: core.favorites ?? [], subscriptions: core.subscriptions ?? [], invitations: core.invitations ?? [], departedMembers: core.departedMembers ?? [] },
-      collections: { document: { revision: version, complete: false }, user: { revision: version, complete: false } },
-    } })
-    if (url.pathname.endsWith('/records')) {
-      const kind = url.searchParams.get('kind')
-      const nodes = (kind === 'documents' ? core.documents : core.users) ?? []
-      return route.fulfill({ json: { items: nodes.map((item: Record<string, unknown>) => {
-        const { content: _body, contentData: _data, contentState: _state, revisions: _history, ...summary } = item
-        return { key: { kind, id: item.id }, version, data: summary }
-      }), next: '', hasMore: false, revision: version, authzEpoch: 'epoch-1' } })
-    }
-    if (url.pathname.endsWith('/batch')) {
-      const { keys } = route.request().postDataJSON() as { keys: Array<{ kind: string; id: string }> }
-      const items = []
-      for (const key of keys) {
-        const response = await request.get(`/api/${key.kind}/${key.id}`, { headers })
-        if (response.ok()) items.push({ key, version, data: await response.json() })
-      }
-      return route.fulfill({ json: { items, authzEpoch: 'epoch-1' } })
-    }
-    if (url.pathname.endsWith('/changes')) return route.fulfill({ json: { next: version, head: version, authzEpoch: 'epoch-1', transactions: [], hasMore: false, resyncRequired: false } })
-    return route.fulfill({ status: 404, json: {} })
   })
 }
 
@@ -89,7 +57,7 @@ for (const flags of [false, true]) {
           await page.goto(`/${workspaceKey}/document/${doc.slugId}`)
           await expect(page.locator('.document-page')).toContainText('P20 current body survives metadata edits.')
           await capture(page, `compatibility-${suffix}`)
-          await syncReads(page, request, workspaceKey)
+          await syncReads(page)
         }
         await page.goto(`/${workspaceKey}/document/${doc.slugId}`)
         await expect(page.locator('.document-page')).toContainText('P20 current body survives metadata edits.')
@@ -204,7 +172,7 @@ for (const flags of [false, true]) {
         const created = await request.post('/api/documents', { headers, data: { title: 'Queued save', content: 'Body kept in trash', teamIds: [core.teams[0].id] } })
         expect(created.status()).toBe(201)
         const doc = await created.json()
-        await syncReads(page, request, workspaceKey)
+        await syncReads(page)
         let oldReplica = false
         await page.route('**/api/sync/changes**', route => oldReplica ? route.fulfill({ status: 501, json: {} }) : route.fallback())
         let ready!: () => void, release!: () => void
@@ -240,7 +208,7 @@ for (const flags of [false, true]) {
         const created = await request.post('/api/documents', { headers, data: { title: 'Retry document', content: 'Retry body', teamIds: [core.teams[0].id] } })
         expect(created.status()).toBe(201)
         const doc = await created.json()
-        await syncReads(page, request, workspaceKey)
+        await syncReads(page)
         let fail = false
         await page.route('**/api/sync/manifest', route => fail ? route.fulfill({ status: 503, json: {} }) : route.fallback())
         await page.goto(`/${workspaceKey}/document/${doc.slugId}`)

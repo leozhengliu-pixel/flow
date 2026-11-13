@@ -438,6 +438,9 @@ func (s *server) deleteDocumentDraft(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 func (s *server) documentContentHistory(w http.ResponseWriter, r *http.Request) {
+	if s.scaleP20History(w, r) {
+		return
+	}
 	data := s.workspaceData(r)
 	var revisions []domain.DocumentRevision
 	if document, err := documentByID(&data, r.PathValue("id")); err == nil && documentRole(s, data, *document) != "none" {

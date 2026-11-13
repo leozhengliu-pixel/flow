@@ -35,12 +35,11 @@ const authorName = (entry: HistoryEntry) => entry.author?.displayName || entry.a
 
 export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore }: DocumentHistoryDialogProps) {
   const { t, formatDate } = useI18n()
-  // Older versions' bodies are fetched when the dialog opens.
-  const loaded = useLoadedRevisions(document, open)
+  const [selectedId, setSelectedId] = useState('current')
+  const [highlight, setHighlight] = useState(true)
+  const loaded = useLoadedRevisions(document, open, { selectedId, highlight })
   const entries = useMemo(() => buildHistoryEntries(loaded), [loaded])
   const days = useMemo(() => groupEntriesByDay(entries), [entries])
-  const [selectedId, setSelectedId] = useState(entries[0]?.id ?? '')
-  const [highlight, setHighlight] = useState(true)
   const [activeChange, setActiveChange] = useState(1)
   const [busy, setBusy] = useState(false)
   const [phoneLayout, setPhoneLayout] = useState(false)

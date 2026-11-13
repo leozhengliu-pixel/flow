@@ -215,6 +215,9 @@ func summarizeEventFrame(frame EventFrame, epoch string) (EventFrame, error) {
 // syncChanges is registered by the HTTP route owner. A mixed deployment with
 // no complete journal returns 404, allowing clients to use legacy changes.
 func (s *server) syncChanges(w http.ResponseWriter, r *http.Request) {
+	if s.scaleP20Changes(w, r) {
+		return
+	}
 	journal, ok := s.syncV2Journal()
 	if !ok {
 		http.NotFound(w, r)

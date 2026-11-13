@@ -8859,6 +8859,49 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/documents/{id}/history/{revisionId}": {
+      "get": {
+        "operationId": "get_documents_id_history_revisionId",
+        "tags": [
+          "documents"
+        ],
+        "summary": "GET /api/documents/{id}/history/{revisionId}",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "scale_p20_resource_reads.go"
+      }
+    },
     "/api/documents/{id}/permissions": {
       "get": {
         "operationId": "get_documents_id_permissions",
@@ -26931,6 +26974,56 @@
         },
         "x-flow-internal": true,
         "x-flow-source": "main.go"
+      }
+    },
+    "/api/resource-windows/members": {
+      "get": {
+        "operationId": "get_resource_windows_members",
+        "tags": [
+          "resource-windows"
+        ],
+        "summary": "GET /api/resource-windows/members",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "scale_p20_resource_reads.go"
+      }
+    },
+    "/api/resource-windows/trash": {
+      "get": {
+        "operationId": "get_resource_windows_trash",
+        "tags": [
+          "resource-windows"
+        ],
+        "summary": "GET /api/resource-windows/trash",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "scale_p20_resource_reads.go"
       }
     },
     "/api/reviews": {

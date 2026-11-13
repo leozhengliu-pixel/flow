@@ -994,7 +994,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 }
 
 func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID string) bool {
-	if syncReadRequest(r) || s.notificationStateReadRequest(r) {
+	if syncReadRequest(r) || scaleP20ReadRequest(r) || s.notificationStateReadRequest(r) {
 		return true // Sync handlers resolve and validate AccessContext per batch.
 	}
 	if _, selected := s.documentTrashAuthorizationHeaders(r, workspace); selected {
