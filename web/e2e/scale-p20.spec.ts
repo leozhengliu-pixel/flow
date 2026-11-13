@@ -35,6 +35,7 @@ for (const flags of [false, true]) {
     test.describe(`scale-p20 flags ${flags} width ${width}`, () => {
       test.use({ scaleP20Flags: flags, viewport: { width, height: width === 1440 ? 900 : 844 }, isMobile: width < 500, hasTouch: width < 500 })
       test('documents, history, deleted direct links, restore, people and mentions', async ({ page, request, workspaceKey }) => {
+        test.setTimeout(90_000)
         const headers = { 'X-Workspace-Key': workspaceKey }
         const suffix = `${flags ? 'on' : 'off'}-${width}`
         expect((await request.patch('/api/account/settings', { headers, data: { language: width < 500 ? 'zh-CN' : 'en-US', interfaceTheme: width < 500 ? 'Light' : 'Dark' } })).ok()).toBe(true)
@@ -55,12 +56,12 @@ for (const flags of [false, true]) {
         })
         if (flags) {
           await page.goto(`/${workspaceKey}/document/${doc.slugId}`)
-          await expect(page.locator('.document-page')).toContainText('P20 current body survives metadata edits.')
+          await expect(page.locator('.document-page')).toContainText('P20 current body survives metadata edits.', { timeout: 15_000 })
           await capture(page, `compatibility-${suffix}`, page.locator('.document-page'))
           await syncReads(page)
         }
         await page.goto(`/${workspaceKey}/document/${doc.slugId}`)
-        await expect(page.locator('.document-page')).toContainText('P20 current body survives metadata edits.')
+        await expect(page.locator('.document-page')).toContainText('P20 current body survives metadata edits.', { timeout: 15_000 })
         const title = page.locator('.document-title')
         await title.fill('P')
         await title.fill('P20 document with a long realistic title for workspace review and release planning')

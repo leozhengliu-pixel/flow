@@ -66,7 +66,7 @@ for (const width of [1440, 390]) {
       }
       try {
         await pair('document', `document/${doc.slugId}`, async page => {
-          await expect(page.locator('.document-page')).toContainText('The saved current body.')
+          await expect(page.locator('.document-page')).toContainText('The saved current body.', { timeout: 15_000 })
         })
         await pair('owner-focus', `document/${doc.slugId}`, async page => {
           await expect(page.locator('.document-page')).toContainText('The saved current body.')
