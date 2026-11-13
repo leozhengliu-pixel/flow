@@ -1,6 +1,6 @@
 {
   "source": "server/github_app.go",
-  "unmigrated": 7,
+  "unmigrated": 1,
   "consumers": {
     "checkGitHubAppMember": {
       "owner": "P21",
@@ -19,42 +19,48 @@
     },
     "getGitHubApp": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only workspaceDataScoped selection retains exact legacy accessor off mode; native installation/account SQL, host filtering and response remain unchanged. TestScaleP21SW24GitHubIdentityDifferential compares full principal/key matrix, linked account and installation rows, oversized unrelated loops, cross-workspace isolation, queued/replayed revocation, cancellation and recovery with zero full decodes.",
       "accessors": [
         "workspaceData"
       ]
     },
     "linkExistingGitHubAppInstallation": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only scoped workspace read supplies installation.WorkspaceKey; original admin check, personal account API authorization, GitHub installation fetch and native installation upsert remain intact. TestScaleP21SW24GitHubIdentityDifferential compares full principal/key matrix, positive remote responses and native rows, foreign workspace isolation, queued/replayed revocation, cancellation and unrelated large metadata without full decodes.",
       "accessors": [
         "workspaceData"
       ]
     },
     "listAvailableGitHubAppInstallations": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only scoped read binds native linked-installation SQL; original personal account remote authorization and omission of already-linked installations remain intact. TestScaleP21SW24GitHubIdentityDifferential compares positive remote results, full principal/key matrix, native rows, foreign workspace isolation, queued/replayed revocation and oversized unrelated metadata with zero full decodes.",
       "accessors": [
         "workspaceData"
       ]
     },
     "removeGitHubAppInstallation": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only scoped read supplies native installation SQL workspace; original admin boundary, row-ID/installation-ID match, unlink and host cache invalidation remain intact. TestScaleP21SW24GitHubIdentityDifferential compares full principal/key matrix, positive native unlink rows and responses, foreign-workspace rejection, queued/replayed revocation, cancellation/recovery and unchanged oversized unrelated metadata.",
       "accessors": [
         "workspaceData"
       ]
     },
     "startGitHubAppAuthorization": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only scoped read supplies workspace binding to the unchanged one-time code-host account authorization state. TestScaleP21SW24GitHubIdentityDifferential compares full principal/key matrix, stored state principal/workspace/purpose and PKCE verification, positive URL parameters with only generated nonce/verifier normalized, revocation/cancellation and recovery; unrelated large metadata is never decoded.",
       "accessors": [
         "workspaceData"
       ]
     },
     "startGitHubAppInstall": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only scoped read supplies signed state workspace; original configured-host and admin checks, state signature/lifetime and installation URL remain unchanged. TestScaleP21SW24GitHubIdentityDifferential compares full principal/key matrix, positive signed state bindings and native installation rows, queued/replayed revocation, cancellation and unrelated oversized metadata with zero full decodes.",
       "accessors": [
         "workspaceData"
       ]

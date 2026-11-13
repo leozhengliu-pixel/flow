@@ -1,10 +1,11 @@
 {
   "source": "server/loop_run_reliability.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "listLoopRunEvents": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only WorkspaceMetadataFieldsScoped retains original loops-field read off mode; native LoopRun ID/loop binding and ordered event-log query do not use current loop bodies. TestScaleP21SW24LoopReadsDifferential compares full principal/key matrix, after cursors, exact native events/hidden references, wrong-loop/missing-run and foreign-workspace cases, queued/replayed revocation, unchanged canonical state and zero full decodes; legal oversized current/unrelated loops never enter this read.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

@@ -105,7 +105,11 @@ func (s *server) getGitHubApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status.Configured, status.HostName, status.Slug, status.CanLinkAccount = host.Configured(), host.HostName(), host.Slug(), host.CanAuthorizeUsers()
-	workspace := s.workspaceData(r).Workspace.URLKey
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
+	workspace := data.Workspace.URLKey
 	installations, err := s.store.CodeHostInstallations(r.Context(), workspace, domain.CodeHostGitHub)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not read GitHub App installations")
@@ -203,7 +207,11 @@ func (s *server) startGitHubAppInstall(w http.ResponseWriter, r *http.Request) {
 	if !s.requireWorkspaceAdmin(w, r) {
 		return
 	}
-	state, err := s.signGitHubAppState(gitHubAppState{Workspace: s.workspaceData(r).Workspace.URLKey, User: authUser(r).ID, Purpose: "install"})
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
+	state, err := s.signGitHubAppState(gitHubAppState{Workspace: data.Workspace.URLKey, User: authUser(r).ID, Purpose: "install"})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not start the GitHub App installation")
 		return
@@ -230,7 +238,11 @@ func (s *server) startGitHubAppAuthorization(w http.ResponseWriter, r *http.Requ
 	}
 	// The member account flow (one-time state with PKCE), returning to the
 	// GitHub integration page.
-	state, challenge, err := s.newCodeHostLinkState(r.Context(), codeHostLinkState{UserID: user.ID, Workspace: s.workspaceData(r).Workspace.URLKey, CodeHost: domain.CodeHostGitHub, Method: domain.CodeHostAuthGitHubApp, ReturnTo: "integration"})
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
+	state, challenge, err := s.newCodeHostLinkState(r.Context(), codeHostLinkState{UserID: user.ID, Workspace: data.Workspace.URLKey, CodeHost: domain.CodeHostGitHub, Method: domain.CodeHostAuthGitHubApp, ReturnTo: "integration"})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not start GitHub authorization")
 		return
@@ -393,7 +405,11 @@ func (s *server) removeGitHubAppInstallation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	id := strings.TrimSpace(r.PathValue("id"))
-	workspace := s.workspaceData(r).Workspace.URLKey
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
+	workspace := data.Workspace.URLKey
 	installations, err := s.store.CodeHostInstallations(r.Context(), workspace, domain.CodeHostGitHub)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not read GitHub App installations")
@@ -460,7 +476,11 @@ func (s *server) listAvailableGitHubAppInstallations(w http.ResponseWriter, r *h
 	if !ok {
 		return
 	}
-	linked, err := s.store.CodeHostInstallations(r.Context(), s.workspaceData(r).Workspace.URLKey, domain.CodeHostGitHub)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
+	linked, err := s.store.CodeHostInstallations(r.Context(), data.Workspace.URLKey, domain.CodeHostGitHub)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not read GitHub App installations")
 		return
@@ -501,7 +521,11 @@ func (s *server) linkExistingGitHubAppInstallation(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusBadGateway, "Could not read the GitHub App installation")
 		return
 	}
-	installation.WorkspaceKey = s.workspaceData(r).Workspace.URLKey
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
+	installation.WorkspaceKey = data.Workspace.URLKey
 	if err := s.store.UpsertCodeHostInstallation(r.Context(), installation); err != nil {
 		writeError(w, http.StatusInternalServerError, "Could not save the GitHub App installation")
 		return

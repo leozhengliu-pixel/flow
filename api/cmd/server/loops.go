@@ -14,6 +14,7 @@ import (
 
 	"flow/api/internal/domain"
 	"flow/api/internal/idgen"
+	"flow/api/internal/store"
 )
 
 type loopInput struct {
@@ -393,7 +394,19 @@ func (s *server) listLoops(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getLoop(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "loops")
+	scope := store.MetadataRecordScope{}
+	if ref := r.PathValue("id"); len(ref) <= 191 && !strings.ContainsRune(ref, '\x00') {
+		scope.Read = []store.RecordKey{{Kind: "loops", ID: ref}}
+	}
+	data, ok, err := s.store.WorkspaceMetadataFieldsScoped(r.Context(), workspaceKey(r), scope, "loops")
+	if err != nil {
+		if errors.Is(err, store.ErrMetadataPageBudget) {
+			writeError(w, http.StatusServiceUnavailable, err.Error())
+			return
+		}
+		issueRecordsError(w, err)
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return

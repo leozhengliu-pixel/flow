@@ -1,6 +1,6 @@
 {
   "source": "server/loops.go",
-  "unmigrated": 8,
+  "unmigrated": 7,
   "consumers": {
     "createLoop": {
       "owner": "P18",
@@ -36,7 +36,8 @@
     },
     "getLoop": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads loops/pathID only while retaining the exact loops-field accessor off mode; unchanged presentation and native 30-day run-count SQL preserve the original trusted route boundary. Slug middleware remains independently inventoried. TestScaleP21SW24LoopReadsDifferential compares full principal/key matrix, canonical-ID/missing/slug/malformed references, creator/team/connector references and counts, >70 unrelated loops including oversized bodies, explicit selected-budget errors, cancellation/recovery, cross-workspace and queued/replayed revocation with unchanged canonical bytes and zero full decodes.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

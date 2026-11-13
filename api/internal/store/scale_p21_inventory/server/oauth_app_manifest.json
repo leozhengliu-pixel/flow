@@ -1,6 +1,6 @@
 {
   "source": "server/oauth_app_manifest.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "createOAuthApplicationFromManifest": {
       "owner": "P21",
@@ -12,7 +12,8 @@
     },
     "exportOAuthApplicationManifest": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Exact original workspaceData branch off mode; bounded mode resolves and revalidates live access around oauthApplications/pathID trusted point read, preserving the original API-key filter and auth-disabled behavior. Keys without admin skip application bodies before filtering, concealing oversized hidden applications. TestScaleP21SW24ManifestExportDifferential compares complete manifest fields/nil shapes and credential exclusion across full principal/key matrix, missing/creator-independent/old-name/malformed IDs, cross-workspace, queued/replayed revocation, >70 unrelated applications and oversized bodies, selected-budget errors/cancellation and recovery, unchanged canonical rows and zero full decodes.",
       "accessors": [
         "workspaceData"
       ]

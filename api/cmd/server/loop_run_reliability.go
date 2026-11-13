@@ -592,7 +592,11 @@ func (s *server) finishOrphanedLoopRun(ctx context.Context, workspace, runID, us
 // listLoopRunEvents returns a run's append-only event log after a sequence
 // number (?after=), oldest first.
 func (s *server) listLoopRunEvents(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "loops")
+	data, ok, err := s.store.WorkspaceMetadataFieldsScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{}, "loops")
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return

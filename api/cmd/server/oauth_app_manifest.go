@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -508,7 +509,47 @@ func (s *server) updateOAuthApplicationFromManifest(w http.ResponseWriter, r *ht
 
 // GET /api/oauth-applications/{id}/manifest
 func (s *server) exportOAuthApplicationManifest(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	var data domain.Bootstrap
+	if !s.store.BoundedMetadataEnabled() {
+		data = s.workspaceData(r)
+	} else {
+		scope := store.MetadataRecordScope{}
+		if ref := r.PathValue("id"); len(ref) <= 191 && !strings.ContainsRune(ref, '\x00') {
+			scope.Read = []store.RecordKey{{Kind: "oauthApplications", ID: ref}}
+		}
+		var access store.AccessContext
+		var err error
+		if !s.authDisabled {
+			var key *domain.APIKey
+			if credential, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+				key = &credential
+				if !apiKeyHasScope(credential, "admin") {
+					scope.Read = nil
+				}
+			}
+			access, err = s.store.ResolveAccess(r.Context(), workspaceKey(r), authUser(r).ID, key)
+			if err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+		}
+		data, _, err = s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), scope)
+		if err != nil {
+			if errors.Is(err, store.ErrMetadataPageBudget) {
+				writeError(w, http.StatusServiceUnavailable, err.Error())
+				return
+			}
+			issueRecordsError(w, err)
+			return
+		}
+		if !s.authDisabled {
+			if err := s.store.ValidateAccess(r.Context(), access); err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+			filterBootstrapForAPIKey(&data, r)
+		}
+	}
 	index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == r.PathValue("id") })
 	if index < 0 {
 		writeError(w, http.StatusNotFound, "Application not found")
