@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -66,6 +67,23 @@ func TestScaleP18MCPHTTPVisibility(t *testing.T) {
 						return nil
 					}); err != nil {
 						t.Fatal(err)
+					}
+					// Settle usage telemetry before comparing revision-bound reads.
+					usage, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+					defer cancel()
+					for {
+						if err := repo.RecordAPIKeyUse(usage, workspace, key.ID, ""); err != nil {
+							t.Fatal(err)
+						}
+						data, ok := repo.WorkspaceMetadataFields(workspace, "apiKeys")
+						if ok && slices.ContainsFunc(data.APIKeys, func(item domain.APIKey) bool { return item.ID == key.ID && item.LastUsedAt != nil }) {
+							break
+						}
+						select {
+						case <-usage.Done():
+							t.Fatal("credential usage did not settle", usage.Err())
+						case <-time.After(time.Millisecond):
+						}
 					}
 					actor := mcpActor{WorkspaceKey: workspace, User: user, APIKey: key}
 					ctx := context.WithValue(t.Context(), authUserContextKey{}, user)
