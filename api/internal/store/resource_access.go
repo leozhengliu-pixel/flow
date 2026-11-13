@@ -37,6 +37,14 @@ type resourceAccessPolicy struct {
 // ResolveAccess reads policy and a ready journal's authoritative epoch in one
 // small snapshot. Credential scope stays bound separately from the epoch.
 func (s *SQLiteStore) ResolveAccess(ctx context.Context, workspace, principal string, key *domain.APIKey) (AccessContext, error) {
+	if s.metadataResidency != nil {
+		admitted, release, err := s.admitMetadataWork(ctx, 2<<20)
+		if err != nil {
+			return AccessContext{}, err
+		}
+		defer release()
+		ctx = admitted
+	}
 	if workspace == "" || principal == "" {
 		return AccessContext{}, ErrAuthForbidden
 	}

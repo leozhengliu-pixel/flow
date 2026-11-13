@@ -97,6 +97,14 @@ func metadataFingerprint(raw []byte) string {
 // boundary. P03/P10 must authorize, redact and check epochs around it. It never
 // consults the shadow catalog, even when that catalog has finished a pass.
 func (s *SQLiteStore) ReadCanonicalRecords(ctx context.Context, workspace string, keys []RecordKey, projection string) (RecordBatch, error) {
+	if s.metadataResidency != nil {
+		admitted, release, err := s.admitMetadataWork(ctx, 2<<20)
+		if err != nil {
+			return RecordBatch{}, err
+		}
+		defer release()
+		ctx = admitted
+	}
 	result := RecordBatch{Items: []MetadataRecord{}}
 	if workspace == "" || len(keys) > MetadataRecordBatchMaxKeys || projection != "detail" && projection != "summary" {
 		return result, ErrMetadataRecordQuery

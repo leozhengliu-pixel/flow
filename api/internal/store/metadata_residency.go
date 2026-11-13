@@ -26,9 +26,8 @@ const (
 
 // Fields are classified explicitly. Adding a Bootstrap field requires a
 // residency decision, even if it is derived or stored in a different table.
-var metadataResidencyFields = map[string]string{}
-
-func init() {
+var metadataResidencyFields = sync.OnceValue(func() map[string]string {
+	fields := map[string]string{}
 	for mode, names := range map[string]string{
 		"core":     `workspace viewer viewerRole`,
 		"policy":   `teams teamSettings workspaceSettings teamParents`,
@@ -37,10 +36,11 @@ func init() {
 		"derived":  `resourceDetailsOmitted providerJobs issueCollectionPaged inboxUnreadCount reviewCount trashRetentionDays chatPlatform`,
 	} {
 		for _, name := range strings.Fields(names) {
-			metadataResidencyFields[name] = mode
+			fields[name] = mode
 		}
 	}
-}
+	return fields
+})
 
 func boundedMetadataRequested() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("FLOW_BOUNDED_METADATA"))) {
@@ -51,15 +51,16 @@ func boundedMetadataRequested() bool {
 }
 
 func validateBoundedMetadataCoverage() error {
-	if len(metadataFullWorkspaceConsumers) != 0 {
+	consumers := metadataFullWorkspaceConsumers()
+	if len(consumers) != 0 {
 		owners := []string{}
-		for _, consumer := range metadataFullWorkspaceConsumers {
+		for _, consumer := range consumers {
 			if !slices.Contains(owners, consumer.owner) {
 				owners = append(owners, consumer.owner)
 			}
 		}
 		slices.Sort(owners)
-		return fmt.Errorf("%w: %d registered full-workspace consumers (%s); keep FLOW_BOUNDED_METADATA off", ErrBoundedMetadataCoverage, len(metadataFullWorkspaceConsumers), strings.Join(owners, ", "))
+		return fmt.Errorf("%w: %d registered full-workspace consumers (%s); keep FLOW_BOUNDED_METADATA off", ErrBoundedMetadataCoverage, len(consumers), strings.Join(owners, ", "))
 	}
 	if !RecordHydrationEnabled() || recordJournalMode() != "on" {
 		return fmt.Errorf("%w: record hydration and the record journal must both be on", ErrBoundedMetadataCoverage)
@@ -92,6 +93,13 @@ type metadataResidentCacheEntry struct {
 
 func newMetadataResidency() *metadataResidency {
 	return &metadataResidency{requireCoverage: true, cache: map[metadataResidentCacheKey]*list.Element{}, cacheLimit: metadataBodyCacheBytes, policy: map[string]int{}, policyLimit: metadataPolicyBytes, work: newMetadataWorkBudget(metadataWorkBytes)}
+}
+
+func (s *SQLiteStore) admitMetadataWork(ctx context.Context, bytes int) (context.Context, func(), error) {
+	if s.metadataResidency == nil {
+		return ctx, func() {}, nil
+	}
+	return s.metadataResidency.work.acquire(ctx, bytes)
 }
 
 func (r *metadataResidency) cached(key metadataResidentCacheKey) (metadataCacheRow, bool) {

@@ -16,6 +16,9 @@ import (
 // and the target's reference closure. In particular, team guidance, unrelated
 // resource bodies and trash restore payloads never enter this fallback.
 func (s *SQLiteStore) resourcePolicyRecords(ctx context.Context, workspace, workspaceID string) (domain.Bootstrap, error) {
+	if s.metadataResidency != nil {
+		return s.readResidentResourcePolicy(ctx, workspace, workspaceID)
+	}
 	data := domain.Bootstrap{Workspace: domain.Workspace{ID: workspaceID, URLKey: workspace}, TeamSettings: map[string]domain.TeamSettings{}}
 	rows, err := s.db.QueryContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='teams' ORDER BY collection_order,record_key`, workspace)
 	if err != nil {

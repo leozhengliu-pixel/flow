@@ -77,6 +77,14 @@ func (s *SQLiteStore) recordReadStatus(ctx context.Context, access AccessContext
 // ReadRecordPage serves only a catalog certified by its transactional writer.
 // A completed P05 shadow pass alone is never sufficient coverage.
 func (s *SQLiteStore) ReadRecordPage(ctx context.Context, access AccessContext, q PageRequest) (RecordPage, error) {
+	if s.metadataResidency != nil {
+		admitted, release, err := s.admitMetadataWork(ctx, 2<<20)
+		if err != nil {
+			return RecordPage{}, err
+		}
+		defer release()
+		ctx = admitted
+	}
 	status, err := s.recordReadStatus(ctx, access, q.Kind)
 	if err != nil {
 		return RecordPage{}, err
@@ -256,6 +264,14 @@ func (s *SQLiteStore) readAccessRecordPage(ctx context.Context, access AccessCon
 // ReadRecords authorizes bounded summaries before fetching any requested body.
 // Hidden and absent keys have the same missing shape, with no version/actor.
 func (s *SQLiteStore) ReadRecords(ctx context.Context, access AccessContext, keys []RecordKey, projection string) (RecordBatch, error) {
+	if s.metadataResidency != nil {
+		admitted, release, err := s.admitMetadataWork(ctx, 2<<20)
+		if err != nil {
+			return RecordBatch{}, err
+		}
+		defer release()
+		ctx = admitted
+	}
 	if len(keys) > MetadataRecordBatchMaxKeys || projection != "summary" && projection != "detail" {
 		return RecordBatch{}, ErrMetadataRecordQuery
 	}

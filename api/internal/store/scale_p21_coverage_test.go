@@ -150,7 +150,7 @@ func TestScaleP21FullWorkspaceConsumerInventory(t *testing.T) {
 		}
 	}
 	expected := map[string]bool{}
-	for name, review := range metadataFullWorkspaceConsumers {
+	for name, review := range metadataFullWorkspaceConsumers() {
 		if review.owner != "P16" && review.owner != "P17" && review.owner != "P18" && review.owner != "P21" {
 			t.Errorf("missing removal owner: %s", name)
 		}
@@ -183,7 +183,7 @@ func TestScaleP21FullWorkspaceConsumerInventory(t *testing.T) {
 			t.Errorf("stale handler binding: %s", route)
 		}
 	}
-	t.Logf("registered snapshot consumers=%d; handler bindings=%d", len(actual), len(routes))
+	t.Logf("registered snapshot consumers=%d; handler bindings=%d; activation blockers=%d", len(actual), len(routes), len(metadataFullWorkspaceConsumers()))
 }
 
 func TestScaleP21EveryMetadataFieldHasResidencyDecision(t *testing.T) {
@@ -208,12 +208,12 @@ func TestScaleP21EveryMetadataFieldHasResidencyDecision(t *testing.T) {
 			t.Errorf("duplicate Bootstrap JSON field: %s", name)
 		}
 		fields[name] = true
-		mode := metadataResidencyFields[name]
+		mode := metadataResidencyFields()[name]
 		if mode != "core" && mode != "policy" && mode != "records" && mode != "external" && mode != "derived" {
 			t.Errorf("unregistered Bootstrap field: %s", name)
 		}
 	}
-	for name := range metadataResidencyFields {
+	for name := range metadataResidencyFields() {
 		if !fields[name] {
 			t.Errorf("stale field residency registration: %s", name)
 		}

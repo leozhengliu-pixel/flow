@@ -7,6 +7,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 - Catalog and canonical record reads retain legacy versions until the record journal is ready, including when `FLOW_RECORD_JOURNAL=on` is set before initialization. Journal catalog continuation pages keep using ordered indexes.
+- Bounded metadata remains off by default; gated point edits and native conversation reads now share store work admission, while unported selectors and collection-wide mutations reject activation. Residency inventories allocate only when used.
 - Added staged bounded metadata residency with paged policy recovery, an evictable byte cache and internal work budgets. `FLOW_BOUNDED_METADATA` defaults off and rejects activation until the explicit workspace-consumer inventory and canonical backfill coverage are complete.
 - Add opt-in document and people summary windows, scoped picker/history reads, and safe document body hydration with legacy trash recovery.
 - Record hydration temporary files share a process-wide 256 MiB byte budget (`FLOW_RECORD_SPOOL_MAX_BYTES`, `0` streams directly). Compatibility responses and canonical records continue through bounded streaming when the budget or temporary volume is unavailable; signed bootstrap URLs are rewritten during encoding. The hydration flag remains off by default.

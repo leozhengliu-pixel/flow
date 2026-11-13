@@ -22,6 +22,17 @@ func (s *SQLiteStore) AgentConversationByID(ctx context.Context, access AccessCo
 }
 
 func (s *SQLiteStore) agentConversationRecord(ctx context.Context, access AccessContext, ref string, bodies, exact bool) (domain.AgentSession, error) {
+	if s.metadataResidency != nil {
+		admitted, release, err := s.admitMetadataWork(ctx, 2<<20)
+		if err != nil {
+			return domain.AgentSession{}, err
+		}
+		defer release()
+		ctx = admitted
+	}
+	if s.metadataResidency != nil && bodies {
+		return domain.AgentSession{}, ErrBoundedMetadataCoverage
+	}
 	if err := s.ValidateAccess(ctx, access); err != nil {
 		return domain.AgentSession{}, err
 	}
@@ -34,8 +45,11 @@ func (s *SQLiteStore) agentConversationRecord(ctx context.Context, access Access
 	}
 	args = append(args, access.PrincipalID)
 	var raw []byte
-	err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='agentSessions' AND `+where+` AND `+s.jsonText("data", "userId")+`=? ORDER BY collection_order,record_key LIMIT 1`, args...).Scan(&raw)
+	err := s.db.QueryRowContext(ctx, `SELECT `+s.residentRecordBodyColumn()+` FROM workspace_metadata_records WHERE workspace_key=? AND field='agentSessions' AND `+where+` AND `+s.jsonText("data", "userId")+`=? ORDER BY collection_order,record_key LIMIT 1`, args...).Scan(&raw)
 	if err != nil {
+		return domain.AgentSession{}, err
+	}
+	if err := s.validateResidentRecordBody(raw); err != nil {
 		return domain.AgentSession{}, err
 	}
 	var session domain.AgentSession
@@ -60,12 +74,23 @@ func (s *SQLiteStore) agentConversationRecord(ctx context.Context, access Access
 // AIConversationRecord keeps a long context local to the requested record.
 // A workspace admin cannot read another member's private conversation.
 func (s *SQLiteStore) AIConversationRecord(ctx context.Context, access AccessContext, id string) (domain.AIConversation, error) {
+	if s.metadataResidency != nil {
+		admitted, release, err := s.admitMetadataWork(ctx, 2<<20)
+		if err != nil {
+			return domain.AIConversation{}, err
+		}
+		defer release()
+		ctx = admitted
+	}
 	if err := s.ValidateAccess(ctx, access); err != nil {
 		return domain.AIConversation{}, err
 	}
 	var raw []byte
-	err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='aiConversations' AND `+s.metadataRecordKeyEquals("record_key", "?")+` AND `+s.jsonText("data", "userId")+`=?`, access.policy.workspace, id, access.PrincipalID).Scan(&raw)
+	err := s.db.QueryRowContext(ctx, `SELECT `+s.residentRecordBodyColumn()+` FROM workspace_metadata_records WHERE workspace_key=? AND field='aiConversations' AND `+s.metadataRecordKeyEquals("record_key", "?")+` AND `+s.jsonText("data", "userId")+`=?`, access.policy.workspace, id, access.PrincipalID).Scan(&raw)
 	if err != nil {
+		return domain.AIConversation{}, err
+	}
+	if err := s.validateResidentRecordBody(raw); err != nil {
 		return domain.AIConversation{}, err
 	}
 	var conversation domain.AIConversation

@@ -1564,6 +1564,9 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 }
 
 func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+	if s.metadataResidency != nil {
+		return s.mutateResidentRecords(ctx, workspaceKey, eventType, payload, mutate)
+	}
 	if eventType == "loop.output_contract" && !fullMutationsForced.Load() {
 		return s.mutateLoopContract(ctx, workspaceKey, payload, mutate)
 	}
@@ -1595,7 +1598,7 @@ func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventT
 // is metadata-only it loads every issue and content record first.
 func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	if s.metadataResidency != nil {
-		return fmt.Errorf("%w: full mutation %q must declare a migrated record writer", ErrBoundedMetadataCoverage, eventType)
+		return s.mutateResidentRecords(ctx, workspaceKey, eventType, payload, mutate)
 	}
 	if workspaceKey == "" {
 		s.mu.RLock()

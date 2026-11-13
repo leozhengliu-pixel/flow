@@ -6,6 +6,10 @@ var scaleP21ReviewedMCPTools = map[string]string{
 }
 
 const scaleP21ReviewedBoundedConsumers = `
+store/scale_p21_record_mutation.go:mutateResidentRecords
+store/resource_access.go:ResolveAccess
+store/sqlite.go:WorkspaceKeys
+store/sqlite.go:dispatchMutation
 store/read_snapshot.go:BeginWorkspaceRead
 store/read_snapshot.go:workspaceReadSource
 store/sqlite.go:ReloadWorkspace
@@ -164,11 +168,11 @@ var scaleP21ReviewedRoutes = []string{
 	"DELETE /api/identity-providers/{id}\ts.deleteIdentityProvider",
 	"DELETE /api/initiatives/{id}\ts.deleteInitiative",
 	"DELETE /api/initiatives/{id}/comments/{commentId}\ts.deleteInitiativeComment",
-	"DELETE /api/initiatives/{id}/comments/{commentId}/subscription\ts.clearInitiativeThreadSubscription",
+	"DELETE /api/initiatives/{id}/comments/{commentId}/subscription\tprojectRecordHandler(\"initiative\", \"comment\", s.clearInitiativeThreadSubscription)",
 	"DELETE /api/initiatives/{id}/relations/{relationId}\ts.deleteInitiativeRelation",
 	"DELETE /api/initiatives/{id}/resources/{resourceId}\ts.deleteInitiativeResource",
 	"DELETE /api/initiatives/{id}/updates/{updateId}\ts.deleteInitiativeUpdate",
-	"DELETE /api/initiatives/{id}/updates/{updateId}/attachments/{attachmentId}\ts.deletePulseUpdateAttachment(\"initiative\")",
+	"DELETE /api/initiatives/{id}/updates/{updateId}/attachments/{attachmentId}\tprojectRecordHandler(\"initiative\", \"update\", s.deletePulseUpdateAttachment(\"initiative\"))",
 	"DELETE /api/integrations/github-app/authorization\ts.removeGitHubAppAuthorization",
 	"DELETE /api/integrations/github-app/installations/{id}\ts.removeGitHubAppInstallation",
 	"DELETE /api/integrations/gitlab/{id}/oauth-application\ts.deleteGitLabMemberOAuthApplication",
@@ -207,12 +211,12 @@ var scaleP21ReviewedRoutes = []string{
 	"DELETE /api/project-templates/{id}\ts.deleteProjectTemplate",
 	"DELETE /api/projects/{id}\ts.deleteProject",
 	"DELETE /api/projects/{id}/comments/{commentId}\ts.deleteProjectComment",
-	"DELETE /api/projects/{id}/comments/{commentId}/subscription\ts.clearProjectThreadSubscription",
+	"DELETE /api/projects/{id}/comments/{commentId}/subscription\tprojectRecordHandler(\"project\", \"comment\", s.clearProjectThreadSubscription)",
 	"DELETE /api/projects/{id}/milestones/{milestoneId}\ts.deleteProjectMilestone",
 	"DELETE /api/projects/{id}/relations/{relationId}\ts.deleteProjectRelation",
 	"DELETE /api/projects/{id}/resources/{resourceId}\ts.deleteProjectResource",
 	"DELETE /api/projects/{id}/updates/{updateId}\ts.deleteProjectUpdate",
-	"DELETE /api/projects/{id}/updates/{updateId}/attachments/{attachmentId}\ts.deletePulseUpdateAttachment(\"project\")",
+	"DELETE /api/projects/{id}/updates/{updateId}/attachments/{attachmentId}\tprojectRecordHandler(\"project\", \"update\", s.deletePulseUpdateAttachment(\"project\"))",
 	"DELETE /api/pulse/subscriptions/initiative/{id}/project-updates\ts.setInitiativeProjectUpdatesSubscription(false)",
 	"DELETE /api/pulse/subscriptions/{type}/{id}\ts.setPulseSubscription(false)",
 	"DELETE /api/push-subscriptions/{id}\ts.deletePushSubscription",
@@ -732,14 +736,14 @@ var scaleP21ReviewedRoutes = []string{
 	"POST /api/imports/{id}/resume\ts.resumeImport",
 	"POST /api/imports/{id}/retry\ts.retryImport",
 	"POST /api/initiatives\ts.createInitiative",
-	"POST /api/initiatives/{id}/comment-attachments\ts.createInitiativeCommentAttachment",
+	"POST /api/initiatives/{id}/comment-attachments\tprojectRecordHandler(\"initiative\", \"comment\", s.createInitiativeCommentAttachment)",
 	"POST /api/initiatives/{id}/comments\ts.createInitiativeComment",
 	"POST /api/initiatives/{id}/comments/{commentId}/reactions\ts.toggleInitiativeCommentReaction",
 	"POST /api/initiatives/{id}/relations\ts.createInitiativeRelation",
 	"POST /api/initiatives/{id}/reminders\ts.createInitiativeReminder",
 	"POST /api/initiatives/{id}/resources\ts.createInitiativeResource",
 	"POST /api/initiatives/{id}/updates\ts.createInitiativeUpdate",
-	"POST /api/initiatives/{id}/updates/{updateId}/attachments\ts.createPulseUpdateAttachment(\"initiative\")",
+	"POST /api/initiatives/{id}/updates/{updateId}/attachments\tprojectRecordHandler(\"initiative\", \"update\", s.createPulseUpdateAttachment(\"initiative\"))",
 	"POST /api/initiatives/{id}/updates/{updateId}/comments\ts.createInitiativeUpdateComment",
 	"POST /api/initiatives/{id}/updates/{updateId}/reactions\ts.toggleInitiativeUpdateReaction",
 	"POST /api/integration-deliveries\ts.createIntegrationDelivery",
@@ -841,7 +845,7 @@ var scaleP21ReviewedRoutes = []string{
 	"POST /api/project-statuses/reorder\ts.reorderProjectStatuses",
 	"POST /api/project-templates\ts.createProjectTemplate",
 	"POST /api/projects\ts.createProject",
-	"POST /api/projects/{id}/comment-attachments\ts.createProjectCommentAttachment",
+	"POST /api/projects/{id}/comment-attachments\tprojectRecordHandler(\"project\", \"comment\", s.createProjectCommentAttachment)",
 	"POST /api/projects/{id}/comments\ts.createProjectComment",
 	"POST /api/projects/{id}/comments/{commentId}/reactions\ts.toggleProjectCommentReaction",
 	"POST /api/projects/{id}/milestones\ts.createProjectMilestone",
@@ -850,7 +854,7 @@ var scaleP21ReviewedRoutes = []string{
 	"POST /api/projects/{id}/reminders\ts.createProjectReminder",
 	"POST /api/projects/{id}/resources\ts.createProjectResource",
 	"POST /api/projects/{id}/updates\ts.createProjectUpdate",
-	"POST /api/projects/{id}/updates/{updateId}/attachments\ts.createPulseUpdateAttachment(\"project\")",
+	"POST /api/projects/{id}/updates/{updateId}/attachments\tprojectRecordHandler(\"project\", \"update\", s.createPulseUpdateAttachment(\"project\"))",
 	"POST /api/projects/{id}/updates/{updateId}/comments\ts.createProjectUpdateComment",
 	"POST /api/projects/{id}/updates/{updateId}/reactions\ts.toggleProjectUpdateReaction",
 	"POST /api/pulse/seen\ts.postPulseSeen",
@@ -967,7 +971,7 @@ var scaleP21ReviewedRoutes = []string{
 	"PUT /api/favorites/{type}/{id}\ts.addFavorite",
 	"PUT /api/files/uploads/{token}\ts.putFileUpload",
 	"PUT /api/git-automations/{id}\ts.upsertGitAutomation",
-	"PUT /api/initiatives/{id}/comments/{commentId}/subscription\ts.setInitiativeThreadSubscription",
+	"PUT /api/initiatives/{id}/comments/{commentId}/subscription\tprojectRecordHandler(\"initiative\", \"comment\", s.setInitiativeThreadSubscription)",
 	"PUT /api/integrations/gitlab/{id}/oauth-application\ts.putGitLabMemberOAuthApplication",
 	"PUT /api/integrations/gitlab/{id}/token/rotation\ts.setGitLabRotation",
 	"PUT /api/integrations/{provider}\tsupportedIntegrationHandler(s.connectIntegration)",
@@ -982,7 +986,7 @@ var scaleP21ReviewedRoutes = []string{
 	"PUT /api/oauth-applications/{id}/manifest\ts.updateOAuthApplicationFromManifest",
 	"PUT /api/oauth-applications/{id}/webhook\ts.updateApplicationWebhook",
 	"PUT /api/project-update-settings\ts.updateProjectUpdateSettings",
-	"PUT /api/projects/{id}/comments/{commentId}/subscription\ts.setProjectThreadSubscription",
+	"PUT /api/projects/{id}/comments/{commentId}/subscription\tprojectRecordHandler(\"project\", \"comment\", s.setProjectThreadSubscription)",
 	"PUT /api/pulse/subscriptions/initiative/{id}/project-updates\ts.setInitiativeProjectUpdatesSubscription(true)",
 	"PUT /api/pulse/subscriptions/{type}/{id}\ts.setPulseSubscription(true)",
 	"PUT /api/reviews/{id}/previews\ts.putReviewPreview",

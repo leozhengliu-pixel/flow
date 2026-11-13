@@ -46,7 +46,7 @@ func (s *SQLiteStore) validateResidentBackfill(ctx context.Context, tx *sqlTx, w
 // The caller supplies a repeatable-read transaction. Header pages never carry
 // bodies; only the rows fitting the next byte-bounded page are fetched.
 func (s *SQLiteStore) scanResidentMetadataField(ctx context.Context, reader metadataReader, workspace, field string, stamp copyStamp, visit func([]metadataCacheRow) error) error {
-	if metadataResidencyFields[field] != "policy" {
+	if metadataResidencyFields()[field] != "policy" {
 		return fmt.Errorf("%w: unregistered resident field %q", ErrBoundedMetadataCoverage, field)
 	}
 	last, started := "", false
@@ -175,7 +175,7 @@ func residentMetadataRoot(raw []byte) ([]byte, map[string]string, error) {
 		return nil, nil, fmt.Errorf("%w: split metadata backfill is required", ErrBoundedMetadataCoverage)
 	}
 	for name, shape := range shapes {
-		if _, ok := metadataResidencyFields[name]; !ok {
+		if _, ok := metadataResidencyFields()[name]; !ok {
 			return nil, nil, fmt.Errorf("%w: unknown collection %q", ErrBoundedMetadataCoverage, name)
 		}
 		if shape != "array" && shape != "map" && shape != "updates" {
@@ -187,7 +187,7 @@ func residentMetadataRoot(raw []byte) ([]byte, map[string]string, error) {
 			delete(root, name)
 			continue
 		}
-		mode, known := metadataResidencyFields[name]
+		mode, known := metadataResidencyFields()[name]
 		if !known {
 			return nil, nil, fmt.Errorf("%w: unknown field %q", ErrBoundedMetadataCoverage, name)
 		}
@@ -248,7 +248,7 @@ func (s *SQLiteStore) readResidentWorkspace(ctx context.Context, tx *sqlTx, work
 		return data, stamp, 0, ErrMetadataRecordQuery
 	}
 	fields := []string{}
-	for name, mode := range metadataResidencyFields {
+	for name, mode := range metadataResidencyFields() {
 		if mode == "policy" && shapes[name] != "" {
 			fields = append(fields, name)
 		}

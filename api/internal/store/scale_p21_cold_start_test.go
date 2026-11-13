@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"testing"
 	"time"
@@ -89,9 +90,21 @@ func TestScaleP21ColdStartMeasurement(t *testing.T) {
 	elapsed := time.Since(began)
 	runtime.GC()
 	runtime.ReadMemStats(&after)
-	measurement := map[string]any{"elapsed_ms": elapsed.Milliseconds(), "allocated_bytes": after.TotalAlloc - before.TotalAlloc, "retained_heap_bytes": after.HeapAlloc - min(after.HeapAlloc, before.HeapAlloc), "heap_bytes": after.HeapAlloc, "full_metadata_decodes": repo.WorkspaceMetadataDecodes(), "workspaces": len(repo.WorkspaceKeys())}
+	measurement := map[string]any{"elapsed_ms": elapsed.Milliseconds(), "allocated_bytes": after.TotalAlloc - before.TotalAlloc, "retained_heap_bytes": after.HeapAlloc - min(after.HeapAlloc, before.HeapAlloc), "heap_bytes": after.HeapAlloc, "heap_inuse": after.HeapInuse, "heap_sys": after.HeapSys, "heap_idle": after.HeapIdle, "heap_released": after.HeapReleased, "full_metadata_decodes": repo.WorkspaceMetadataDecodes(), "workspaces": len(repo.WorkspaceKeys())}
 	encoded, _ := json.Marshal(measurement)
 	t.Logf("P21_COLD_START %s", encoded)
+	if path := os.Getenv("FLOW_P21_HEAP_PROFILE"); path != "" {
+		file, err := os.Create(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := pprof.WriteHeapProfile(file); err != nil {
+			t.Fatal(err)
+		}
+		if err := file.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
 	runtime.KeepAlive(repo)
 	if err := repo.Close(); err != nil {
 		t.Fatal(err)
