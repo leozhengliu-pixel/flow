@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeBootstrap } from '@/test/fixtures'
 import { QueryWindowStore } from '@/lib/query-window-store'
 import { SyncClient } from '@/lib/sync-client'
+import { ApiError } from '@/lib/api-client'
 import { documentBodyLoaded, fetchResourceSurfaceBootstrap, loadResourceDocument, loadResourceSummaries, resourceDocumentForAction, resourceSelection, resourceSyncSurface, resourceTrashedDocument, resourceWindowDocuments, resourceWindowEnabled, resourceWindowStale } from '@/lib/resource-window-adapters'
 import type { FlowDocument, SyncManifest, SyncRecord } from '@/types/flow'
 
@@ -20,6 +21,36 @@ function fixture(core = makeBootstrap()) {
 const row = (id: string, completeness: SyncRecord['completeness'] = 'summary'): SyncRecord => ({ key: { kind: 'document', id }, version: '1', completeness, value: { ...document, id, ...(completeness === 'summary' ? { content: undefined } : {}) } })
 
 describe('scale-p20 resource windows', () => {
+  it('restarts initialization with fresh authority after a directory epoch changes', async () => {
+    vi.stubEnv('VITE_SYNC_V2', 'true'); vi.stubEnv('VITE_DOCUMENT_WINDOWS', 'true')
+    let manifests = 0
+    let staleSignal: AbortSignal | undefined
+    api.request.mockImplementation(async (path: string, options: { signal?: AbortSignal }) => {
+      if (path.startsWith('/api/sync/manifest')) return { ...fixture().manifest, authzEpoch: `epoch-${++manifests}`, capabilities: ['resource-windows'] }
+      if (path.startsWith('/api/resource-windows/') && manifests === 1) {
+        staleSignal = options.signal
+        throw new ApiError('Sync access changed; reload the manifest', 403)
+      }
+      if (path.startsWith('/api/sync/changes')) return { next: '1', head: '1', authzEpoch: `epoch-${manifests}`, transactions: [], hasMore: false, resyncRequired: false }
+      return { items: [], next: '', hasMore: false, revision: '1', authzEpoch: `epoch-${manifests}` }
+    })
+    const legacy = vi.fn()
+    const data = await fetchResourceSurfaceBootstrap('workspace', 'document-detail', legacy)
+    expect(manifests).toBe(2)
+    expect(staleSignal?.aborted).toBe(true)
+    expect(data.sync?.authzEpoch).toBe('epoch-2')
+    expect(legacy).not.toHaveBeenCalled()
+  })
+
+  it.each([401, 403])('never falls back to legacy data after persistent authority denial %s', async status => {
+    vi.stubEnv('VITE_SYNC_V2', 'true'); vi.stubEnv('VITE_DOCUMENT_WINDOWS', 'true')
+    api.request.mockRejectedValue(new ApiError('Sync access changed; reload the manifest', status))
+    const legacy = vi.fn()
+    await expect(fetchResourceSurfaceBootstrap('workspace', 'document-detail', legacy)).rejects.toMatchObject({ status })
+    expect(api.request).toHaveBeenCalledTimes(status === 401 ? 1 : 3)
+    expect(legacy).not.toHaveBeenCalled()
+  })
+
   it('keeps every new surface off unless both its own flag and sync are enabled', () => {
     for (const surface of ['documents', 'trash', 'people', 'pickers'] as const) expect(resourceWindowEnabled(surface)).toBe(false)
     vi.stubEnv('VITE_DOCUMENT_WINDOWS', 'true')

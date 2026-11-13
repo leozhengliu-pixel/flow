@@ -97,8 +97,10 @@ export async function fetchResourceSurfaceBootstrap(workspaceKey: string, surfac
         return client.adapt(data)
       } catch (error) {
         client?.dispose()
-        if (signal?.aborted || error instanceof ApiError && [401, 403].includes(error.status)) throw error
-        if (attempt < 2 && (error instanceof SyncResetRequired && !(error instanceof SyncProtocolUnavailable) || error instanceof ApiError && error.status === 409)) continue
+        if (signal?.aborted || error instanceof ApiError && error.status === 401) throw error
+        // Compatibility epochs also change on ordinary metadata writes.
+        // Restart with fresh authority; a denied read never uses legacy data.
+        if (attempt < 2 && (error instanceof SyncResetRequired && !(error instanceof SyncProtocolUnavailable) || error instanceof ApiError && [403, 409].includes(error.status))) continue
         if (!(error instanceof SyncProtocolUnavailable) && !resourceEndpointUnavailable(error)) throw error
         return legacy()
       }
