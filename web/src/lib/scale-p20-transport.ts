@@ -1,6 +1,6 @@
 import { request, ApiError } from '@/lib/api-client'
 import { modelChanges, modelManifest, modelRecordBatch, modelRecordPage, wireRecordKind, type SyncWireRecord } from '@/lib/scale-p13-wire'
-import { SyncClient, SyncProtocolUnavailable, type SyncSurface } from '@/lib/sync-client'
+import { SyncClient, SyncProtocolUnavailable, SyncResetRequired, type SyncSurface } from '@/lib/sync-client'
 import type { BootstrapData, FlowDocument, SyncChanges, SyncManifest, SyncRecordBatch, SyncRecordPage } from '@/types/flow'
 
 export const resourceEndpointUnavailable = (error: unknown) => error instanceof ApiError && [404, 405, 501].includes(error.status)
@@ -43,7 +43,7 @@ export async function readResourceCollection<T>(workspace: string, collection: s
     signal.throwIfAborted()
     revision ??= page.revision
     epoch ??= page.authzEpoch
-    if (revision !== page.revision || epoch !== page.authzEpoch) throw new SyncProtocolUnavailable('Resource directory changed during read')
+    if (revision !== page.revision || epoch !== page.authzEpoch) throw new SyncResetRequired('Resource directory changed during read')
     for (const item of page.items) {
       if (item.omitted || !item.data) throw new SyncProtocolUnavailable('Incomplete resource directory')
       items.push(item.data as T)

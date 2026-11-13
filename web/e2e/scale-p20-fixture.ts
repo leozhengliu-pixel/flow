@@ -46,7 +46,7 @@ export const test = workspaceTest.extend<{ scaleP20Flags: boolean; scaleP20URL: 
     }
     const apiPort = await freePort()
     const log = createWriteStream(path.join(scratch, 'api.log'))
-    const api = spawn(binary, [], { cwd: path.join(web, '../api'), env: { ...process.env, GOMAXPROCS: '4', GOMEMLIMIT: '1536MiB', FLOW_AUTH_DISABLED: 'true', FLOW_DATABASE_PATH: path.join(scratch, 'flow.db'), FLOW_HTTP_ADDR: `127.0.0.1:${apiPort}`, FLOW_RECORD_HYDRATION: 'on', FLOW_DOCUMENT_RECORDS: 'on', FLOW_TRASH_RECORDS: 'on', FLOW_INDEXED_READS: 'on', FLOW_CONNECTOR_SECRET_KEY: Buffer.alloc(32, 'p').toString('base64') }, stdio: ['ignore', 'pipe', 'pipe'] })
+    const api = spawn(binary, [], { cwd: path.join(web, '../api'), env: { ...process.env, GOMAXPROCS: '4', GOMEMLIMIT: '1536MiB', FLOW_AUTH_DISABLED: 'true', FLOW_DATABASE_PATH: path.join(scratch, 'flow.db'), FLOW_HTTP_ADDR: `127.0.0.1:${apiPort}`, FLOW_RECORD_HYDRATION: 'on', FLOW_DOCUMENT_RECORDS: 'on', FLOW_TRASH_RECORDS: 'on', FLOW_INDEXED_READS: 'on', FLOW_SYNC_MANIFEST: 'on', FLOW_RECORD_JOURNAL: 'off', FLOW_CONNECTOR_SECRET_KEY: Buffer.alloc(32, 'p').toString('base64') }, stdio: ['ignore', 'pipe', 'pipe'] })
     api.stdout!.pipe(log); api.stderr!.pipe(log)
     const flags = scaleP20Flags ? '"true"' : '"false"'
     const vite = await createServer({ root: web, configFile: path.join(web, 'vite.config.ts'), logLevel: 'error', define: {

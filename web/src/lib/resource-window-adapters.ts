@@ -1,7 +1,7 @@
 import { fetchBootstrap, getDocument } from '@/lib/api'
 import { ApiError, request } from '@/lib/api-client'
 import { findTrashedDocument } from '@/components/documents/document-trash'
-import { fetchSurfaceBootstrap, syncClientFor, syncV2Enabled, SyncProtocolUnavailable, type SyncClient, type SyncSurface } from '@/lib/sync-client'
+import { fetchSurfaceBootstrap, syncClientFor, syncV2Enabled, SyncProtocolUnavailable, SyncResetRequired, type SyncClient, type SyncSurface } from '@/lib/sync-client'
 import type { AppRoute } from '@/lib/app-routes'
 import type { BootstrapData, Comment, DocumentRevision, FlowDocument, SyncPageRequest, TrashEntry, User, WorkspaceMember } from '@/types/flow'
 import type { QueryWindow } from '@/lib/query-window-store'
@@ -10,6 +10,11 @@ import { modelRecordKind } from '@/lib/scale-p13-wire'
 import { createResourceClient, fetchResourceDocument, readResourceCollection, readResourceDirectory, resourceEndpointUnavailable } from '@/lib/scale-p20-transport'
 
 export type ResourceSurface = 'documents' | 'trash' | 'people' | 'pickers'
+const documentRefreshes = new WeakMap<SyncClient, Promise<BootstrapData>>()
+
+export function resourceRefreshPending(client?: SyncClient): boolean {
+  return Boolean(client && documentRefreshes.has(client))
+}
 
 export function resourceWindowEnabled(surface: ResourceSurface): boolean {
   if (!syncV2Enabled()) return false
@@ -76,24 +81,27 @@ export async function loadResourceSummaries(data: BootstrapData, query: SyncPage
 export async function fetchResourceSurfaceBootstrap(workspaceKey: string, surface: SyncSurface | undefined, legacy: () => Promise<BootstrapData>, signal?: AbortSignal, quiet?: boolean): Promise<BootstrapData> {
   const enabled = surface === 'document-detail' && (resourceWindowEnabled('documents') || resourceWindowEnabled('trash')) || surface === 'document-directory' && resourceWindowEnabled('documents') || surface === 'trash-directory' && resourceWindowEnabled('trash') || surface === 'people-directory' && resourceWindowEnabled('people')
   if (enabled) {
-    let client: SyncClient | undefined
-    try {
-      client = await createResourceClient(workspaceKey, surface!, signal, quiet)
-      const activeSignal = client.requestSignal(signal)
-      let data = client.adapt()
-      const directory = await readResourceDirectory(data, activeSignal)
-      data = { ...data, ...directory }
-      // Users include presentation fields not carried by membership records.
-      for (const kind of ['user', 'project', 'initiative', 'cycle']) data = await loadResourceSummaries(data, { kind }, activeSignal)
-      if (surface === 'document-directory') data = await loadResourceSummaries(data, { kind: 'document' }, activeSignal)
-      if (surface === 'trash-directory') data = { ...data, trash: await readResourceCollection<TrashEntry>(workspaceKey, 'trash', activeSignal, '', client.manifest.authzEpoch) }
-      await client.catchUp()
-      return client.adapt(data)
-    } catch (error) {
-      client?.dispose()
-      if (signal?.aborted || error instanceof ApiError && [401, 403].includes(error.status)) throw error
-      if (!(error instanceof SyncProtocolUnavailable) && !resourceEndpointUnavailable(error)) throw error
-      return legacy()
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let client: SyncClient | undefined
+      try {
+        client = await createResourceClient(workspaceKey, surface!, signal, quiet)
+        const activeSignal = client.requestSignal(signal)
+        let data = client.adapt()
+        const directory = await readResourceDirectory(data, activeSignal)
+        data = { ...data, ...directory }
+        // Users include presentation fields not carried by membership records.
+        for (const kind of ['user', 'project', 'initiative', 'cycle']) data = await loadResourceSummaries(data, { kind }, activeSignal)
+        if (surface === 'document-directory') data = await loadResourceSummaries(data, { kind: 'document' }, activeSignal)
+        if (surface === 'trash-directory') data = { ...data, trash: await readResourceCollection<TrashEntry>(workspaceKey, 'trash', activeSignal, '', client.manifest.authzEpoch) }
+        await client.catchUp()
+        return client.adapt(data)
+      } catch (error) {
+        client?.dispose()
+        if (signal?.aborted || error instanceof ApiError && [401, 403].includes(error.status)) throw error
+        if (attempt < 2 && (error instanceof SyncResetRequired && !(error instanceof SyncProtocolUnavailable) || error instanceof ApiError && error.status === 409)) continue
+        if (!(error instanceof SyncProtocolUnavailable) && !resourceEndpointUnavailable(error)) throw error
+        return legacy()
+      }
     }
   }
   if (surface === 'trash-directory') return legacy()
@@ -121,6 +129,30 @@ export async function fetchResourceSurfaceBootstrap(workspaceKey: string, surfac
     if (signal?.aborted || error instanceof ApiError && [401, 403].includes(error.status)) throw error
     return legacy()
   }
+}
+
+/** Replace an expired scope atomically, keeping the mounted editor until its authorized replacement is ready. */
+export function refreshResourceDocument(data: BootstrapData, documentId: string, signal: AbortSignal): Promise<BootstrapData> {
+  const previous = syncClientFor(data)
+  const existing = previous && documentRefreshes.get(previous)
+  if (existing) return existing
+  const pending = refreshResourceDocumentScope(data, documentId, signal).finally(() => { if (previous && documentRefreshes.get(previous) === pending) documentRefreshes.delete(previous) })
+  if (previous) documentRefreshes.set(previous, pending)
+  return pending
+}
+
+async function refreshResourceDocumentScope(data: BootstrapData, documentId: string, signal: AbortSignal): Promise<BootstrapData> {
+  const next = await fetchResourceSurfaceBootstrap(data.workspace.urlKey, 'document-detail', () => fetchBootstrap(data.workspace.urlKey, undefined, signal), signal, true)
+  const client = syncClientFor(next)
+  try {
+    if (next.viewer.id !== data.viewer.id || next.workspace.id !== data.workspace.id) throw new SyncResetRequired('Document scope changed during refresh')
+    const loaded = await loadResourceDocument(next, documentId, signal)
+    signal.throwIfAborted()
+    if (loaded.entry) return { ...next, trash: [loaded.entry, ...next.trash.filter(entry => entry.id !== loaded.entry!.id)] }
+    const comments = await loadResourceComments(data.workspace.urlKey, documentId, signal)
+    signal.throwIfAborted()
+    return client ? { ...client.adapt(next), comments: { ...next.comments, [documentId]: comments } } : { ...next, documents: [loaded.document, ...next.documents.filter(document => document.id !== documentId)], comments: { ...next.comments, [documentId]: comments } }
+  } catch (error) { client?.dispose(); throw error }
 }
 
 export function resourceWindowStale(client: SyncClient): boolean {

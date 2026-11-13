@@ -14,7 +14,7 @@ import (
 	jsoniter "github.com/json-iterator/go"
 )
 
-var resourceWindowCoreFields = []string{"teams", "teamSettings", "teamParents", "workspaceSettings", "userSettings", "settings", "favorites", "favoriteFolders", "subscriptions", "states", "labels", "cycleSettings", "projectStatuses", "teamResourceSections", "teamPinnedResources", "users", "members", "teamMembers", "invitations", "departedMembers"}
+var resourceWindowCoreFields = []string{"teams", "teamSettings", "teamParents", "workspaceSettings", "userSettings", "settings", "favorites", "favoriteFolders", "subscriptions", "threadSubscriptions", "documentTemplates", "states", "labels", "cycleSettings", "projectStatuses", "teamResourceSections", "teamPinnedResources", "users", "members", "teamMembers", "invitations", "departedMembers"}
 
 func (s *SQLiteStore) ResourceWindowRevision(ctx context.Context, workspace string) (string, error) {
 	stamp, err := readMetadataStamp(ctx, s.db, workspace)

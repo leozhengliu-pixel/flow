@@ -1,5 +1,7 @@
 import { expect, type Page, type Locator } from '@playwright/test'
 import { writeFileSync } from 'node:fs'
+import pixelmatch from 'pixelmatch'
+import { PNG } from 'pngjs'
 import { test } from './scale-p20-fixture'
 
 test.use({ launchOptions: { args: ['--disable-gpu'] } })
@@ -7,7 +9,7 @@ test.use({ launchOptions: { args: ['--disable-gpu'] } })
 for (const width of [1440, 390]) {
   test.describe(`scale-p20 enable ${width}`, () => {
     const height = width === 1440 ? 900 : 844
-    test.use({ scaleP20Flags: true, viewport: { width, height }, isMobile: width < 500, hasTouch: width < 500 })
+    test.use({ scaleP20Flags: true, viewport: { width, height }, screen: { width, height }, deviceScaleFactor: 1, isMobile: width < 500, hasTouch: width < 500 })
     test('real record transports preserve screens and document, trash, people and picker behavior', async ({ page, request, workspaceKey, scaleP20URL, scaleP20LegacyURL }) => {
       test.setTimeout(180_000)
       const headers = { 'X-Workspace-Key': workspaceKey }
@@ -30,7 +32,7 @@ for (const width of [1440, 390]) {
       page.on('request', req => { if (new URL(req.url()).pathname.startsWith('/api/')) requests.push(req.url()) })
       for (const entry of pages) await entry.page.clock.setFixedTime(new Date('2026-11-12T18:00:00Z'))
       const pair = async (name: string, path: string, prepare?: (page: Page) => Promise<Locator | void>) => {
-        const shots: Buffer[] = []
+        const shots: Buffer[] = [], states: unknown[] = []
         for (const entry of pages) {
           await entry.page.bringToFront()
           await entry.page.goto(`${entry.url}/${workspaceKey}/${path}`)
@@ -49,10 +51,17 @@ for (const width of [1440, 390]) {
             return [selector, { rect: element.getBoundingClientRect().toJSON(), styles: Object.fromEntries(['padding', 'border', 'outline', 'transform', 'translate', 'scale', 'zoom', 'font', 'background', 'border-radius'].map(property => [property, style.getPropertyValue(property)])), parent: element.parentElement?.getAttribute('style') }]
           })))
           writeFileSync(`/tmp/codex-scale-p20-enable/shots/enable-${width}-${name}-${entry.mode}.json`, JSON.stringify(metrics, null, 2))
+          states.push(metrics)
           const options = { path: `/tmp/codex-scale-p20-enable/shots/enable-${width}-${name}-${entry.mode}.png`, animations: 'allow', caret: 'hide', scale: 'css' } as const
           shots.push(crop ? await crop.screenshot(options) : await entry.page.screenshot(options))
         }
-        expect(shots[1].equals(shots[0]), `${name}: flag-on pixels differ from flag-off`).toBe(true)
+        expect(states[1], `${name}: flag-on geometry or styles differ from flag-off`).toEqual(states[0])
+        const off = PNG.sync.read(shots[0]), on = PNG.sync.read(shots[1])
+        expect([on.width, on.height]).toEqual([off.width, off.height])
+        const changed = pixelmatch(off.data, on.data, null, off.width, off.height, { threshold: 0 })
+        const raw = pixelmatch(off.data, on.data, null, off.width, off.height, { threshold: 0, includeAA: true })
+        writeFileSync(`/tmp/codex-scale-p20-enable/shots/enable-${width}-${name}-comparison.json`, JSON.stringify({ changedPixels: changed, rawPixels: raw, antialiasPixels: raw - changed }))
+        expect(changed, `${name}: flag-on pixels differ from flag-off`).toBe(0)
       }
       try {
         await pair('document', `document/${doc.slugId}`, async page => {
@@ -96,6 +105,7 @@ for (const width of [1440, 390]) {
             await page.locator('.document-history-version').first().click()
           }
           await expect(page.locator('.document-history-doc')).toContainText('earlier')
+          await page.locator('.document-history-doc').click()
           return page.locator('.document-history-dialog')
         })
         await pair('history-selected', `document/${doc.slugId}?history`, async page => {
@@ -104,6 +114,7 @@ for (const width of [1440, 390]) {
           else await page.locator('.document-history-version').last().click()
           await expect(page.locator('.document-history-doc')).toContainText('An earlier saved body.')
           await expect(page.locator('.document-history-restore')).toBeEnabled()
+          await page.locator('.document-history-doc').click()
           return page.locator('.document-history-dialog')
         })
         await pair('directory', `team/${core.teams[0].key}/documents`, async page => {

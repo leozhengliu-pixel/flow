@@ -21,6 +21,8 @@ func TestScaleP20CanonicalDirectoryAndCursorBindings(t *testing.T) {
 				at := time.Now().UTC()
 				doc := domain.Document{ID: "p20-doc", Title: "P20 header", Creator: data.Viewer, CreatedAt: at, UpdatedAt: at, Content: strings.Repeat("body", 1<<18), Revisions: []domain.DocumentRevision{{ID: "p20-history", Content: strings.Repeat("history", 1<<17)}}}
 				data.Documents = append(data.Documents, doc)
+				data.DocumentTemplates = append(data.DocumentTemplates, domain.DocumentTemplate{ID: "p20-template", Name: "P20 template", Content: "Template body"})
+				data.ThreadSubscriptions = append(data.ThreadSubscriptions, domain.ThreadSubscription{ID: "p20-thread-subscription", UserID: principal, IssueID: doc.ID, CommentID: "p20-comment", State: "muted", CreatedAt: at, UpdatedAt: at})
 				raw, _ := json.Marshal(doc)
 				data.Trash = append(data.Trash, domain.TrashEntry{ID: "p20-trash", ResourceType: "document", ResourceID: doc.ID, Title: doc.Title, DeletedBy: data.Viewer, DeletedAt: time.Now().UTC(), Payload: raw})
 				return nil
@@ -54,6 +56,9 @@ func TestScaleP20CanonicalDirectoryAndCursorBindings(t *testing.T) {
 				}
 				if kind == "users" && !reflect.DeepEqual(installed.Users, canonical.Users) {
 					t.Fatal("canonical directory differs")
+				}
+				if len(installed.DocumentTemplates) != 1 || installed.DocumentTemplates[0].Content != "Template body" || !reflect.DeepEqual(installed.DocumentTemplates, canonical.DocumentTemplates) || !reflect.DeepEqual(installed.ThreadSubscriptions, canonical.ThreadSubscriptions) || len(canonical.ThreadSubscriptions) != 1 {
+					t.Fatal("document actions lost templates or thread preferences")
 				}
 				if kind == "trash" && (len(canonical.Trash) != len(installed.Trash) || len(canonical.Trash[len(canonical.Trash)-1].Payload) > 4096) {
 					t.Fatal("trash headers include a restore body")

@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from 'react'
 import { ApplicationStoreContext } from '@/store/application-store-contexts'
-import { loadResourcePeople, resourceWindowEnabled } from '@/lib/resource-window-adapters'
-import { syncClientFor } from '@/lib/sync-client'
+import { loadResourcePeople, resourceRefreshPending, resourceWindowEnabled } from '@/lib/resource-window-adapters'
+import { syncClientFor, SyncResetRequired } from '@/lib/sync-client'
 import { markSuspendedMembersInactive } from '@/lib/people'
 import { searchDocuments } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
@@ -18,13 +18,13 @@ export function useResourcePeople(users: User[], active = true): User[] {
   const epoch = data?.sync?.authzEpoch
   const [loaded, setLoaded] = useState<{ workspace: string; viewer: string; epoch?: string; users: User[] }>()
   useEffect(() => {
-    if (!active || !workspace || !viewer || !enabled) return
+    if (!active || !workspace || !viewer || !enabled || resourceRefreshPending(client)) return
     const controller = new AbortController()
     const signal = client?.requestSignal(controller.signal) ?? controller.signal
     void loadResourcePeople(workspace, signal, client).then(people => {
       if (!signal.aborted) setLoaded({ workspace, viewer, epoch, users: people })
     }).catch(error => {
-      if (!signal.aborted && client && !client.disposed) client.requestReset(!(error instanceof ApiError && [401, 403].includes(error.status)))
+      if (!signal.aborted && client && !client.disposed && !resourceRefreshPending(client)) client.requestReset(!(error instanceof SyncResetRequired || error instanceof ApiError && [401, 403].includes(error.status)))
     })
     return () => controller.abort()
   }, [active, client, enabled, epoch, viewer, workspace])

@@ -79,7 +79,7 @@ func (s *server) scaleP20Manifest(w http.ResponseWriter, r *http.Request) bool {
 	if !scaleP20SyncRequest(r) {
 		return false
 	}
-	if !syncFlagEnabled("FLOW_INDEXED_READS") || !store.RecordHydrationEnabled() {
+	if !syncFlagEnabled("FLOW_SYNC_MANIFEST") || !syncFlagEnabled("FLOW_INDEXED_READS") || !store.RecordHydrationEnabled() {
 		writeError(w, http.StatusNotFound, "not found")
 		return true
 	}
@@ -112,7 +112,7 @@ func (s *server) scaleP20Manifest(w http.ResponseWriter, r *http.Request) bool {
 		writeSyncError(w, err)
 		return true
 	}
-	result := map[string]any{"schema": 2, "workspaceId": data.Workspace.ID, "viewerId": data.Viewer.ID, "authzEpoch": access.AuthzEpoch, "head": strconv.FormatInt(head, 10), "capabilities": []string{"sync-v2", "resource-windows"}, "core": core, "collections": collections}
+	result := map[string]any{"schema": 2, "workspaceId": data.Workspace.ID, "viewerId": data.Viewer.ID, "authzEpoch": access.AuthzEpoch, "head": strconv.FormatInt(head, 10), "capabilities": []string{"resource-windows"}, "core": core, "collections": collections}
 	encoded, _ := json.Marshal(result)
 	if len(encoded)+1 > store.MetadataRecordPageMaxBytes {
 		scaleP20ReadError(w, store.ErrMetadataPageBudget)
@@ -255,7 +255,7 @@ func (s *server) scaleP20DocumentMetadata(w http.ResponseWriter, r *http.Request
 	data, err := s.store.SelectedDocumentMetadata(r.Context(), workspaceKey(r), userID, documentRecordCredential(r), func(source domain.Bootstrap) (store.MetadataRecordScope, bool) {
 		scope := store.MetadataRecordScope{Fields: documentRecordReadFields}
 		if !trashOnly {
-			if doc, err := documentByID(&source, ref); err == nil {
+			if doc, err := scaleP20DocumentByRef(&source, ref); err == nil {
 				scope = documentRecordRequirements(source, *doc, nil)
 				scope.Fields = documentRecordReadFields
 			}
@@ -274,7 +274,7 @@ func (s *server) scaleP20DocumentMetadata(w http.ResponseWriter, r *http.Request
 					PreviousSlugIDs []string
 				}
 				if json.Unmarshal(entry.Payload, &header) == nil {
-					match = header.ID == ref || header.SlugID == ref || slices.Contains(header.PreviousSlugIDs, ref)
+					match = header.ID == ref || header.SlugID == ref || slices.Contains(header.PreviousSlugIDs, ref) || scaleP20SameDocumentSuffix(header.SlugID, ref)
 				}
 			}
 			if match {
@@ -288,7 +288,7 @@ func (s *server) scaleP20DocumentMetadata(w http.ResponseWriter, r *http.Request
 		return data, domain.Document{}, nil, false
 	}
 	filterBootstrapForAPIKey(&data, r)
-	if doc, err := documentByID(&data, ref); !trashOnly && err == nil && documentRole(s, data, *doc) != "none" {
+	if doc, err := scaleP20DocumentByRef(&data, ref); !trashOnly && err == nil && documentRole(s, data, *doc) != "none" {
 		return data, *doc, nil, true
 	}
 	for _, entry := range data.Trash {
@@ -301,6 +301,23 @@ func (s *server) scaleP20DocumentMetadata(w http.ResponseWriter, r *http.Request
 	}
 	writeError(w, http.StatusNotFound, "document not found")
 	return data, domain.Document{}, nil, false
+}
+
+func scaleP20SameDocumentSuffix(slug, ref string) bool {
+	suffix := domain.SlugSuffix(ref)
+	return suffix != "" && suffix == domain.SlugSuffix(slug)
+}
+
+func scaleP20DocumentByRef(data *domain.Bootstrap, ref string) (*domain.Document, error) {
+	if document, err := documentByID(data, ref); err == nil {
+		return document, nil
+	}
+	for index := range data.Documents {
+		if scaleP20SameDocumentSuffix(data.Documents[index].SlugID, ref) {
+			return &data.Documents[index], nil
+		}
+	}
+	return nil, errNotFound
 }
 
 func scaleP20RevisionHeaders(doc domain.Document) []map[string]any {

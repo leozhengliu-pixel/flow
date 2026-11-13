@@ -178,7 +178,7 @@ for (const flags of [false, true]) {
         let ready!: () => void, release!: () => void
         const sent = new Promise<void>(resolve => { ready = resolve })
         const held = new Promise<void>(resolve => { release = resolve })
-        await page.route(`**/api/documents/${doc.id}`, async route => {
+        await page.route(url => url.pathname === `/api/documents/${doc.id}`, async route => {
           if (route.request().method() !== 'PATCH') return route.continue()
           const response = await route.fetch()
           ready()
@@ -210,7 +210,7 @@ for (const flags of [false, true]) {
         const doc = await created.json()
         await syncReads(page)
         let fail = false
-        await page.route('**/api/sync/manifest', route => fail ? route.fulfill({ status: 503, json: {} }) : route.fallback())
+        await page.route('**/api/sync/manifest**', route => fail ? route.fulfill({ status: 503, json: {} }) : route.fallback())
         await page.goto(`/${workspaceKey}/document/${doc.slugId}`)
         await expect(page.locator('.document-page')).toContainText('Retry body')
         fail = true

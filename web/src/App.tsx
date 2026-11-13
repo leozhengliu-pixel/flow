@@ -366,7 +366,7 @@ import { WorkspaceStoreProvider } from '@/store/application-store-context'
 import { migratedSyncSignal, syncBootstrapRequestKey, syncClientFor, syncScopeMatches, syncV2Enabled, SyncResetRequired } from '@/lib/sync-client'
 import { locallyCreatedAgentSession } from '@/lib/scale-activate-a-agent-echo'
 import { realtimeClientId } from '@/lib/api-client'
-import { documentBodyLoaded, fetchResourceSurfaceBootstrap, resourceSyncSurface, resourceTrashedDocument, resourceWindowEnabled, resourceWindowStale } from '@/lib/resource-window-adapters'
+import { documentBodyLoaded, fetchResourceSurfaceBootstrap, refreshResourceDocument, resourceSyncSurface, resourceTrashedDocument, resourceWindowEnabled, resourceWindowStale } from '@/lib/resource-window-adapters'
 import { fetchResourceDocument } from '@/lib/scale-p20-transport'
 import { scaleP19Surface } from '@/lib/scale-p19-surfaces'
 import type { RealtimeEvent } from '@/types/flow'
@@ -5898,6 +5898,14 @@ function App() {
               const workspaceKey = data.workspace.urlKey, viewerId = data.viewer.id, documentId = pageDocument.id;
               const mine = (current: BootstrapData | null): current is BootstrapData => current?.workspace.urlKey === workspaceKey && current.viewer.id === viewerId && syncScopeMatches(current, syncClient) && syncClient?.get({ kind: 'document', id: documentId })?.completeness !== 'deleted';
               if (saved) {
+                if (syncClient?.manifest.capabilities.includes('resource-windows')) {
+                  if (!mine(dataRef.current)) return;
+                  try {
+                    const next = await refreshResourceDocument(data, documentId, syncClient.requestSignal());
+                    setData(current => { if (mine(current)) return next; syncClientFor(next)?.dispose(); return current; });
+                  } catch { if (mine(dataRef.current)) syncClient.requestReset(); }
+                  return;
+                }
                 setData(current => mine(current) ? upsertDocument(current, saved) : current);
                 return;
               }
