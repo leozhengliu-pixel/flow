@@ -230,10 +230,13 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 375, height: 667 }
     await noOverflow(page)
     if (shots) await page.screenshot({ path: `${shots}/flow-activity-${viewport.width}.png`, scale: 'css' })
     await expect(page.locator('.issue-subscribe-toggle')).toHaveCSS('opacity', '1')
-    await page.getByRole('button', { name: 'Unsubscribe from issue', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Subscribe to issue', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Subscribe to issue', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Unsubscribe from issue', exact: true })).toBeVisible()
+    // The activity heading's toggle is named by its visible label (the inbox detail's icon button owns "Unsubscribe from issue").
+    const toggle = page.locator('.issue-subscribe-toggle')
+    await expect(toggle).toHaveText('Unsubscribe')
+    await toggle.click()
+    await expect(toggle).toHaveText('Subscribe')
+    await toggle.click()
+    await expect(toggle).toHaveText('Unsubscribe')
   })
 }
 
