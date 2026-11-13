@@ -30,6 +30,30 @@ func documentRecordMode(name string) string {
 var documentRecordPolicyFields = []string{"users", "teams", "teamSettings", "teamParents", "members", "teamMembers", "states", "labels", "workspaceSettings", "userSettings", "favorites", "favoriteFolders", "subscriptions", "drafts", "threadSubscriptions", "notificationPreferences", "pushSubscriptions"}
 var documentRecordReadFields = []string{"teams", "teamSettings", "teamParents", "workspaceSettings", "favorites"}
 
+type documentPermissionSubjectsKey struct{}
+
+// The body is already decoded when permission validation reads metadata.
+// Carry its named users without loading an unrelated member directory.
+func documentPermissionReadRequest(r *http.Request, permissions []domain.DocumentPermission) *http.Request {
+	if documentRecordMode("FLOW_DOCUMENT_RECORDS") == "off" {
+		return r
+	}
+	subjects := []store.RecordKey{}
+	seen := map[store.RecordKey]bool{}
+	for _, permission := range permissions {
+		if strings.EqualFold(strings.TrimSpace(permission.SubjectType), "user") {
+			if id := strings.TrimSpace(permission.SubjectID); id != "" {
+				key := store.RecordKey{Kind: "users", ID: id}
+				if !seen[key] {
+					subjects = append(subjects, key)
+					seen[key] = true
+				}
+			}
+		}
+	}
+	return r.WithContext(context.WithValue(r.Context(), documentPermissionSubjectsKey{}, subjects))
+}
+
 func documentRecordScope(ctx context.Context, id string) context.Context {
 	mode := documentRecordMode("FLOW_DOCUMENT_RECORDS")
 	if mode == "off" {
@@ -106,6 +130,9 @@ func documentReadRequirements(data domain.Bootstrap, r *http.Request) (store.Met
 			}
 		}
 		scope.Fields = slices.Clone(documentRecordReadFields)
+		if subjects, ok := r.Context().Value(documentPermissionSubjectsKey{}).([]store.RecordKey); ok {
+			scope.Read = append(scope.Read, subjects...)
+		}
 		return scope, true
 	}
 	// Exact trash ids avoid decoding unrelated restore payloads. Legacy trash

@@ -258,6 +258,11 @@ func (s *server) scaleP20DocumentMetadata(w http.ResponseWriter, r *http.Request
 			if doc, err := scaleP20DocumentByRef(&source, ref); err == nil {
 				scope = documentRecordRequirements(source, *doc, nil)
 				scope.Fields = documentRecordReadFields
+				// Match P17's active point-read identity before filtering.
+				// Off/shadow keep their complete legacy trash resolver.
+				if documentRecordMode("FLOW_DOCUMENT_RECORDS") == "on" {
+					return scope, true
+				}
 			}
 		}
 		exact := slices.ContainsFunc(source.Trash, func(entry domain.TrashEntry) bool {

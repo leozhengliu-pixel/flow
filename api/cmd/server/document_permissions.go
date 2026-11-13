@@ -49,6 +49,7 @@ func (s *server) replaceDocumentPermissions(w http.ResponseWriter, r *http.Reque
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	r = documentPermissionReadRequest(r, input.Permissions)
 	id := r.PathValue("id")
 	viewerData := s.documentWorkspaceData(r)
 	var updated []domain.DocumentPermission
