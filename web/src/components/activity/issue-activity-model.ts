@@ -63,7 +63,7 @@ export function issueActivityEntries(event: ActivityEvent, context?: ActivityCon
     const small: { type: string; parts: ActivityPart[] }[] = []
     const add = (type: string, parts: ActivityPart[]) => small.push({ type, parts })
     if (has('delegate')) add('delegate', !m.delegate ? phrase('unassigned {name}', { name: value(person(m.delegateBefore || m.previousDelegate)) }) : m.delegate === event.actor?.id ? [t('self-delegated the issue')] : phrase('delegated to {name}', { name: value(person(m.delegate)) }))
-    if (has('assignee')) add('assign', !m.assignee ? [t('removed assignee')] : m.assignee === event.actor?.id && !isAgentBot(event.botActor) ? [t('self-assigned the issue')] : phrase(m.assigneeBefore ? 're-assigned to {name}' : 'assigned to {name}', { name: value(person(m.assignee)) }))
+    if (has('assignee')) add('assign', !m.assignee ? [t('removed assignee')] : m.assignee === event.actor?.id && !isAgentBot(event.botActor) ? [t('self-assigned the issue')] : phrase(m.assigneeBefore || m.previousAssignee ? 're-assigned to {name}' : 'assigned to {name}', { name: value(person(m.assignee)) }))
     if (has('project')) {
       const from = ref('project', m.projectBefore), to = ref('project', m.project)
       add('project', !m.project ? m.projectBefore ? phrase('removed from {word}{name}', { word: projectWord(from.label), name: from }) : [t('removed the issue from its project')] : m.projectBefore ? phrase('changed project from {from} to {to}', { from, to }) : phrase('added to {word}{name}', { word: projectWord(to.label), name: to }))
@@ -76,7 +76,7 @@ export function issueActivityEntries(event: ActivityEvent, context?: ActivityCon
     }
     if (has('estimate')) {
       const points = (input: string) => value(/^\d+(\.\d+)?$/.test(input) ? t(Number(input) === 1 ? '{count} point' : '{count} points').replace('{count}', input) : input)
-      add('estimate', !m.estimate || m.estimate === '0' ? [t('removed estimate')] : phrase(Number(m.estimateBefore) > 0 ? Number(m.estimate) > Number(m.estimateBefore) ? 'increased estimate from {from} to {to}' : 'lowered estimate from {from} to {to}' : 'estimated complexity as {to}', { from: points(m.estimateBefore ?? ''), to: points(m.estimate) }))
+      add('estimate', !m.estimate || Number(m.estimate) <= 0 ?[t('removed estimate')] : phrase(Number(m.estimateBefore) > 0 ? Number(m.estimate) > Number(m.estimateBefore) ? 'increased estimate from {from} to {to}' : 'lowered estimate from {from} to {to}' : 'estimated complexity as {to}', { from: points(m.estimateBefore ?? ''), to: points(m.estimate) }))
     }
     const added = activityIds(m.addedLabelIds), removed = activityIds(m.removedLabelIds)
     for (const [type, ids, limit] of [['label-added', added.filter(id => !removed.includes(id)), 5], ['label-removed', removed.filter(id => !added.includes(id)), 3]] as const) {
@@ -122,10 +122,14 @@ export function issueActivityEntries(event: ActivityEvent, context?: ActivityCon
   else if (event.type === 'issue.loop_run_created') emit('loop', phrase('{loop} is waiting to run…', { loop: value(m.loopName || t('Loop')) }), { actorless: true })
   else if (event.type.startsWith('comment.') || event.type.includes('reaction') || event.type === 'issue.reacted') return []
   else if (event.type.startsWith('issue.relation_')) {
+    // The relation type is stored as this issue sees it (the other issue's event carries the inverse type and
+    // direction "inverse"); only a duplicate keeps its name on both sides.
     let type = m.relationType || m.type || 'related'
-    if (m.direction === 'inverse') type = ({ blocks: 'blocked_by', blocked_by: 'blocks', duplicate: 'has_duplicate', parent_of: 'sub_issue_of', sub_issue_of: 'parent_of' } as Record<string, string>)[type] || type
+    if (m.direction === 'inverse' && type === 'duplicate') type = 'has_duplicate'
     if (type === 'parent_of') return []
     const adding = event.type === 'issue.relation_added'
+    // Older removal events name only the relation id.
+    if (!adding && !m.relatedIssueId) { emit('relationship', [t('removed an issue relation')]); return rows }
     const templates: Record<string, [string, string]> = {
       blocks: ['marked this issue as blocking {issue}', 'unmarked this issue as blocking {issue}'],
       blocked_by: ['marked this issue as blocked by {issue}', 'unmarked this issue as being blocked by {issue}'],

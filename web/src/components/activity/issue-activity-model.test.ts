@@ -3,7 +3,7 @@ import type { ActivityEvent } from '@/types/flow'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import { loadChineseDictionary, translateToChinese } from '@/i18n/translate'
 import { activityExpandedTimeLabel, activityIds, activityPartsText, activityTimeLabel, describeIssueActivity, issueActivityEntries, withoutSessionDelegations } from './issue-activity-model'
-import { groupIssueActivityEntries, orderIssueActivityEntries, summarizeIssueActivity, partitionIssueActivity, activityBlockExpanded, expandActivityBlock } from './issue-event-groups'
+import { activityCollapseReasons, groupIssueActivityEntries, orderIssueActivityEntries, summarizeIssueActivity, partitionIssueActivity, activityBlockExpanded, expandActivityBlock } from './issue-event-groups'
 
 const now = Date.parse('2026-11-10T20:00:00Z')
 const event = (metadata: Record<string, string>, type = 'issue.updated', id = 'event'): ActivityEvent => ({ id, type, actor: viewer, createdAt: '2026-11-01T06:00:00Z', metadata })
@@ -24,6 +24,8 @@ describe('record sentence templates', () => {
     [{ assignee: '' }, 'removed assignee'],
     [{ assignee: 'missing' }, 'assigned to another user'],
     [{ assignee: 'missing', assigneeBefore: viewer.id }, 're-assigned to another user'],
+    [{ assignee: 'missing', previousAssignee: viewer.id }, 're-assigned to another user'],
+    [{ estimate: '-1', estimateBefore: '2' }, 'removed estimate'],
     [{ delegate: viewer.id }, 'self-delegated the issue'],
     [{ delegate: 'missing' }, 'delegated to another user'],
     [{ delegate: '', delegateBefore: viewer.id }, `unassigned ${viewer.displayName}`],
@@ -84,8 +86,12 @@ describe('record sentence templates', () => {
     expect(text({ relationType, direction: 'outgoing', relatedIssueId: target.id }, 'issue.relation_removed')).toBe(`${removed} ${target.identifier}`)
   })
   it('renders inverse relations and hides parent-side and duplicate status audit rows', () => {
-    expect(text({ relationType: 'blocks', direction: 'inverse', relatedIssueId: target.id }, 'issue.relation_added')).toBe(`marked this issue as blocked by ${target.identifier}`)
+    // The other issue's event stores the type as that issue sees it ("blocked_by" for a "blocks" relation).
+    expect(text({ type: 'blocked_by', relationType: 'blocked_by', direction: 'inverse', relatedIssueId: target.id }, 'issue.relation_added')).toBe(`marked this issue as blocked by ${target.identifier}`)
+    expect(text({ type: 'blocks', relationType: 'blocks', direction: 'inverse', relatedIssueId: target.id }, 'issue.relation_removed')).toBe(`unmarked this issue as blocking ${target.identifier}`)
     expect(text({ relationType: 'duplicate', direction: 'inverse', relatedIssueId: target.id }, 'issue.relation_added')).toBe(`marked ${target.identifier} as a duplicate of this issue`)
+    expect(text({ type: 'parent_of', relationType: 'parent_of', direction: 'inverse', relatedIssueId: target.id }, 'issue.relation_added')).toBeNull()
+    expect(text({ relationId: 'relation' }, 'issue.relation_removed')).toBe('removed an issue relation')
     expect(text({ type: 'parent_of' }, 'issue.relation_added')).toBeNull()
     expect(text({ state: 'Duplicate', viaDuplicate: 'true' })).toBeNull()
   })
@@ -166,6 +172,13 @@ describe('families and age collapse', () => {
     const grouped = groupIssueActivityEntries([titles[0], middle, titles[1]], { now, last: false })
     expect(grouped).toHaveLength(2)
     expect(activityPartsText(grouped[1].description)).toBe('changed title twice')
+  })
+  it('summarizes hidden events by weight, then by first appearance, grouped by action', () => {
+    const rows = (changes: [string, Record<string, string>][]) => changes.flatMap(([type, metadata], i) => issueActivityEntries(event(metadata, type, `reason-${i}`), context))
+    expect(activityCollapseReasons(rows([['issue.updated', { priority: 'High' }], ['issue.updated', { state: 'Done' }], ['issue.updated', { addedLabelIds: JSON.stringify([label.id]) }], ['attachment.created', { linkTitle: 'Doc' }]]))).toBe(': changed priority, status and labels, added links…')
+    expect(activityCollapseReasons(rows([['issue.updated', { dueDate: '2026-11-11' }], ['issue.relation_added', { relationType: 'related', relatedIssueId: target.id }], ['issue.updated', { title: 'A' }], ['issue.updated', { estimate: '2' }], ['issue.updated', { assignee: viewer.id, priority: 'High' }], ['issue.sla_breached', {}]]))).toBe(': breached SLA, changed assignee, priority, due date and title…')
+    expect(activityCollapseReasons(rows([['issue.updated', { archived: 'true' }], ['issue.updated', { state: 'Done' }]]))).toBe(': changed status, archived issue…')
+    expect(activityCollapseReasons(rows([['issue.created', {}], ['issue.created', {}]]))).toBe('')
   })
   it('remembers expanded blocks for fifteen minutes', () => {
     expandActivityBlock('block', now)

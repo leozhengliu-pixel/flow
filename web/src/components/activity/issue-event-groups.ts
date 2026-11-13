@@ -101,20 +101,47 @@ export function partitionIssueActivity(entries: IssueActivityEntry[], position: 
   const end = Math.max(before, entries.length - after)
   return entries.length >= minimum && end - before >= 2 ? { before: entries.slice(0, before), hidden: entries.slice(before, end), after: entries.slice(end) } : { before: entries, hidden: [], after: [] }
 }
-export function activityCollapseReasons(entries: IssueActivityEntry[], t: (text: string) => string = text => text) {
-  const reasons: Record<string, [string, number, string]> = {
-    'sla-breached': ['breached', 0, 'SLA'],
-    'state-change': ['changed', 0, 'status'], assign: ['changed', 1, 'assignee'], priority: ['changed', 2, 'priority'], project: ['changed', 3, 'project'], delegate: ['changed', 4, 'agent'],
-    estimate: ['changed', 5, 'estimate'], team: ['changed', 6, 'team'], 'title-change': ['changed', 7, 'title'], 'due-date': ['changed', 10, 'due date'], sla: ['changed', 9, 'SLA'], milestone: ['changed', 12, 'milestone'], cycle: ['changed', 13, 'cycles'],
-    'label-added': ['added', 8, 'labels'], 'label-removed': ['removed', 8, 'labels'], attachment: ['added', 9, 'links'], 'related-issue': ['changed', 14, 'related issues'], 'duplicate-issue': ['changed', 14, 'related issues'],
+type CollapseReason = { action?: 'breached' | 'changed' | 'added'; weight: 1 | 2 | 3; value: string }
+const HIGH = 1, MEDIUM = 2, LOW = 3
+const RELATED_ISSUES: CollapseReason = { action: 'changed', weight: LOW, value: 'related issues' }
+function collapseReasons(entry: IssueActivityEntry, type = entry.entryType): CollapseReason[] {
+  switch (type) {
+    case 'sla-breached': return [{ action: 'breached', weight: HIGH, value: 'SLA' }]
+    case 'state-change': return [{ action: 'changed', weight: HIGH, value: 'status' }]
+    case 'assign': return [{ action: 'changed', weight: HIGH, value: 'assignee' }]
+    case 'delegate': return [{ action: 'changed', weight: HIGH, value: 'agent' }]
+    case 'project': return [{ action: 'changed', weight: HIGH, value: 'project' }]
+    case 'priority': return [{ action: 'changed', weight: HIGH, value: 'priority' }]
+    case 'estimate': return [{ action: 'changed', weight: MEDIUM, value: 'estimate' }]
+    case 'team': return [{ action: 'changed', weight: MEDIUM, value: 'team' }]
+    case 'title-change': return [{ action: 'changed', weight: MEDIUM, value: 'title' }]
+    case 'labels': case 'label-added': case 'label-removed': return [{ action: 'changed', weight: MEDIUM, value: 'labels' }]
+    case 'milestone': return [{ action: 'changed', weight: LOW, value: 'milestone' }]
+    case 'cycle': return [{ action: 'changed', weight: LOW, value: 'cycles' }]
+    case 'attachment': case 'review': return [{ action: 'added', weight: MEDIUM, value: 'links' }]
+    case 'related-issue': case 'duplicate-issue': case 'blocks': case 'blocked_by': case 'sub_issue_of': case 'parent': case 'relationship': return [RELATED_ISSUES]
+    case 'sla': return [{ action: 'changed', weight: MEDIUM, value: 'SLA' }]
+    case 'due-date': return [{ action: 'changed', weight: MEDIUM, value: 'due date' }]
+    case 'release': return [{ action: 'changed', weight: MEDIUM, value: 'releases' }]
+    case 'archive': return [{ weight: HIGH, value: entry.type === 'issue.restored' || entry.metadata?.archived === 'false' ? 'restored issue' : 'archived issue' }]
+    case 'trash': return [{ weight: HIGH, value: entry.metadata?.trashed === 'true' ? 'deleted issue' : 'restored issue' }]
+    case 'aggregate': return (entry.fields ?? []).flatMap(field => collapseReasons(entry, field))
+    default: return []
   }
-  const present = [...new Set(entries.flatMap(entry => entry.fields ?? [entry.entryType]))].flatMap(field => reasons[field] ? [reasons[field]] : [])
-  const order = ['breached', 'changed', 'added', 'removed']
-  present.sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]) || a[1] - b[1])
-  const groups = new Map<string, string[]>()
-  for (const [verb, , noun] of present.slice(0, 5)) groups.set(verb, [...(groups.get(verb) ?? []), t(noun)])
-  const summary = [...groups].map(([verb, nouns]) => activityPhrase(`${verb} {fields}`, { fields: joinActivityParts(nouns.map(noun => [noun]), t) }, t)).flatMap((parts, index) => index ? [changeSeparator(t), ...parts] : parts)
-  return summary.length ? activityPhrase(': {summary}…', { summary }, t).join('') : '…'
+}
+/** "changed status, assignee and priority, added links": the five heaviest reasons, grouped by action. */
+export function activityCollapseReasons(entries: IssueActivityEntry[], t: (text: string) => string = text => text) {
+  const actions = ['breached', 'changed', 'added', undefined] as const
+  const reasons = entries.flatMap(entry => collapseReasons(entry))
+  const byAction = actions.flatMap(action => reasons.filter(reason => reason.action === action).filter((reason, index, list) => list.findIndex(other => other.value === reason.value) === index).sort((a, b) => a.weight - b.weight))
+  const top = byAction.map((reason, index) => ({ reason, index })).sort((a, b) => (a.reason.action === 'breached' ? -1 : a.reason.weight) - (b.reason.action === 'breached' ? -1 : b.reason.weight) || a.index - b.index).slice(0, 5).map(item => item.reason)
+  const summary = actions.flatMap(action => {
+    const values = top.filter(reason => reason.action === action).map(reason => [t(reason.value)])
+    if (!values.length) return []
+    const list = joinActivityParts(values, t)
+    return [action ? activityPhrase(`${action} {fields}`, { fields: list }, t) : list]
+  }).flatMap((parts, index) => index ? [changeSeparator(t), ...parts] : parts)
+  return summary.length ? activityPhrase(': {summary}…', { summary }, t).join('') : ''
 }
 const expandedBlocks = new Map<string, number>()
 export function activityBlockExpanded(key: string, now: number) { const until = expandedBlocks.get(key); return until !== undefined && until >= now }
