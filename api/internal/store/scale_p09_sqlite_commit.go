@@ -50,8 +50,9 @@ func init() {
 
 // Functions occur only in application SQL against the new input view. Old
 // replicas never prepare them, including when they execute canonical triggers.
-const recordJournalSQLCommit = `INSERT INTO record_journal_commit_v3(tx_id,data)
-	WITH guard AS MATERIALIZED (SELECT flow_rj_small((SELECT COUNT(*) FROM record_journal_dirty WHERE tx_id=(SELECT tx_id FROM record_journal_context WHERE id=1))+(SELECT COUNT(*) FROM record_journal_event_pending WHERE tx_id=(SELECT tx_id FROM record_journal_context WHERE id=1))+` + recordJournalInlineCount + `>16) ok), dirty AS MATERIALIZED (
+const recordJournalSQLCommit = `INSERT INTO record_journal_commit_v3(tx_id,data) ` + recordJournalSQLCommitData
+
+const recordJournalSQLCommitData = `WITH guard AS MATERIALIZED (SELECT flow_rj_small((SELECT COUNT(*) FROM record_journal_dirty WHERE tx_id=(SELECT tx_id FROM record_journal_context WHERE id=1))+(SELECT COUNT(*) FROM record_journal_event_pending WHERE tx_id=(SELECT tx_id FROM record_journal_context WHERE id=1))+` + recordJournalInlineCount + `>16) ok), dirty AS MATERIALIZED (
 		SELECT workspace_key,field,record_key,source FROM record_journal_dirty WHERE tx_id=(SELECT tx_id FROM record_journal_context WHERE id=1) AND (SELECT ok FROM guard)=1
 		UNION SELECT json_extract(k.value,'$.workspace'),json_extract(k.value,'$.field'),json_extract(k.value,'$.id'),json_extract(k.value,'$.source') FROM record_journal_context i,json_each(i.keys) k WHERE i.id=1 AND (SELECT ok FROM guard)=1
 	), events AS MATERIALIZED (
@@ -74,18 +75,18 @@ const recordJournalSQLCommit = `INSERT INTO record_journal_commit_v3(tx_id,data)
 			CASE WHEN (SELECT COUNT(*) FROM events p WHERE p.workspace_id=w.workspace_id)=1
 				AND LENGTH(CAST((SELECT event_id FROM events p WHERE p.workspace_id=w.workspace_id LIMIT 1) AS BLOB))<=60
 				THEN 'rje:'||(SELECT event_id FROM events p WHERE p.workspace_id=w.workspace_id LIMIT 1) ELSE 'rj'||lower(hex(randomblob(16))) END journal_id,
-			m.generation||':'||COALESCE(a.epoch,0) epoch,
+			journal_mode.generation||':'||COALESCE(a.epoch,0) epoch,
 			(SELECT json_group_array(json_object('key',json_object('Kind',r.field,'ID',r.record_key),'version',CAST(r.version AS TEXT),'deleted',json(CASE WHEN r.deleted<>0 THEN 'true' ELSE 'false' END))) FROM records r WHERE r.workspace_key=w.workspace_key AND r.field<>'@authz') deltas,
 			(SELECT json_group_array(json(r.projection)) FROM records r WHERE r.workspace_key=w.workspace_key AND r.projection IS NOT NULL) catalog,
 			(SELECT json_group_array(p.event_id) FROM events p WHERE p.workspace_id=w.workspace_id) events,
 			EXISTS(SELECT 1 FROM records r WHERE r.workspace_key=w.workspace_key AND r.field='@authz') authz
-		FROM affected w CROSS JOIN record_journal_mode m LEFT JOIN workspace_authz_epochs a ON a.workspace_id=w.workspace_id WHERE m.id=1 AND m.enabled=1
+		FROM affected w CROSS JOIN record_journal_mode journal_mode LEFT JOIN workspace_authz_epochs a ON a.workspace_id=w.workspace_id WHERE journal_mode.id=1 AND journal_mode.enabled=1
 	)
-	SELECT ?1,jsonb_object('Created',?2,'CacheRevisions',1,'QueuedRevisions',json(?3),'Workspaces',json_group_array(json_object(
+	SELECT ?1 AS tx_id,jsonb_object('Created',?2,'CacheRevisions',1,'QueuedRevisions',json(?3),'Workspaces',json_group_array(json_object(
 		'Key',workspace_key,'ID',workspace_id,'Catalog',json(catalog),'Events',json(events),
 		'Change',json_object('txId',journal_id,'seq','','authzEpoch',epoch,
 			'records',json(CASE WHEN LENGTH(CAST(deltas AS BLOB))>64512 THEN '[]' ELSE deltas END),
-			'invalidations',json(CASE WHEN LENGTH(CAST(deltas AS BLOB))>64512 OR (deltas='[]' AND authz=0) THEN '["workspace"]' WHEN authz<>0 THEN '["authz"]' ELSE '[]' END)))))
+			'invalidations',json(CASE WHEN LENGTH(CAST(deltas AS BLOB))>64512 OR (deltas='[]' AND authz=0) THEN '["workspace"]' WHEN authz<>0 THEN '["authz"]' ELSE '[]' END))))) AS data
 	FROM work
 	WHERE (SELECT ok FROM guard)=1
 	AND flow_rj_small(COALESCE((SELECT SUM(json_extract(projection,'$.Cost')) FROM records),0)>262144)=1
@@ -94,7 +95,7 @@ const recordJournalSQLCommit = `INSERT INTO record_journal_commit_v3(tx_id,data)
 func (s *SQLiteStore) ensureSQLiteRecordJournalCommit(ctx context.Context) error {
 	var err error
 	if s.db.journalSQLFlush == nil {
-		s.db.journalSQLFlush, err = s.db.DB.PrepareContext(ctx, recordJournalSQLCommit)
+		s.db.journalSQLFlush, err = s.db.DB.PrepareContext(ctx, recordJournalPointCommitSQL)
 	}
 	if err == nil {
 		err = s.ensureSQLiteRecordJournalWrites(ctx)
@@ -117,7 +118,7 @@ func (tx *sqlTx) flushSQLRecordJournal() (bool, error) {
 		tx.journalBudget = &recordJournalBudgetState{tx.writtenBytes, len(tx.sequencing), len(tx.signals), tx.issueCounts}
 	}
 	writer := tx.Tx.StmtContext(ctx, tx.database.journalSQLFlush)
-	observeSQLStatement(ctx, recordJournalSQLCommit)
+	observeSQLStatement(ctx, recordJournalPointCommitSQL)
 	type revision struct {
 		Workspace, Kind string
 		Flush           bool
