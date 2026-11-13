@@ -1,6 +1,6 @@
 {
   "source": "server/advanced_features.go",
-  "unmigrated": 48,
+  "unmigrated": 44,
   "consumers": {
     "addFavorite": {
       "owner": "P21",
@@ -61,7 +61,8 @@
     },
     "createCustomerRequestAttachment": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes only customerRequests/requestID, retaining attachment creator attribution, timestamp, audit and existing upload policy. Storage Put remains before the transaction and failed/missing/cancelled mutations retain upload cleanup. TestScaleP21SW4AttachmentCreationDifferential compares response, canonical requests, audit/webhook/realtime and actual object bytes across the principal/credential matrix with oversized unrelated metadata; no full decode occurs. Route authorization and upload-policy access remain independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -166,7 +167,8 @@
     },
     "deleteCustomerRequestAttachment": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes customerRequests/requestID only, preserving nested attachment lookup, target timestamp, audit and post-commit object deletion. TestScaleP21SW4PointDeletesDifferential compares canonical rows, responses and audit/webhook/realtime across principal/key classes, missing request IDs and live membership revocation, and verifies failed deletes retain owned objects. TestScaleP21SW4ForeignDraftAndPointBudgets proves explicit oversized-target rejection without canonical mutation; unrelated rows remain unchanged. Middleware is independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -190,7 +192,8 @@
     },
     "deleteDraft": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes/deletes drafts/id only; the original item.UserID == data.Viewer.ID ownership predicate and missing-record response are unchanged. TestScaleP21SW4PointDeletesDifferential compares responses, canonical state and event effects across principal/credential classes and revoked/cross-workspace membership; TestScaleP21SW4ForeignDraftAndPointBudgets verifies foreign-owner drafts stay unchanged and oversized targets fail explicitly. Unrelated draft records and large metadata remain byte-identical; full HTTP authorization remains independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -206,7 +209,8 @@
     },
     "deleteProjectTemplate": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes/deletes projectTemplates/id only; existing missing semantics and transaction-staged deletion audit remain unchanged. TestScaleP21SW4PointDeletesDifferential compares response, canonical target/other records, audit/webhook/realtime across the helper principal/key matrix, missing IDs and live cross-workspace/revocation boundaries. TestScaleP21SW4ForeignDraftAndPointBudgets checks explicit oversized-target rejection with no canonical change. Route authorization is independently registered and no complete template collection is loaded.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

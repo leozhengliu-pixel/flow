@@ -1338,7 +1338,7 @@ func (s *server) createCustomerRequestAttachment(w http.ResponseWriter, r *http.
 		return
 	}
 	var attachment domain.Attachment
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer_request.attachment_created", requestID, map[string]string{"name": header.Filename}, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "customer_request.attachment_created", requestID, map[string]string{"name": header.Filename}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "customerRequests", ID: requestID}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.ID == requestID })
 		if index < 0 {
 			return errNotFound
@@ -1358,7 +1358,7 @@ func (s *server) createCustomerRequestAttachment(w http.ResponseWriter, r *http.
 func (s *server) deleteCustomerRequestAttachment(w http.ResponseWriter, r *http.Request) {
 	requestID, attachmentID := r.PathValue("id"), r.PathValue("attachmentId")
 	var objectKey string
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer_request.attachment_deleted", requestID, map[string]string{"attachmentId": attachmentID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "customer_request.attachment_deleted", requestID, map[string]string{"attachmentId": attachmentID}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "customerRequests", ID: requestID}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.ID == requestID })
 		if index < 0 {
 			return errNotFound
@@ -2061,7 +2061,7 @@ func (s *server) updateProjectTemplate(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteProjectTemplate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project_template.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "project_template.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "projectTemplates", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.ProjectTemplates)
 		data.ProjectTemplates = slices.DeleteFunc(data.ProjectTemplates, func(item domain.ProjectTemplate) bool { return item.ID == id })
 		if before == len(data.ProjectTemplates) {
@@ -2599,7 +2599,7 @@ func validateDraftResource(data *domain.Bootstrap, item domain.Draft, exists fun
 
 func (s *server) deleteDraft(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "draft.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "draft.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "drafts", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.Drafts)
 		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return item.ID == id && item.UserID == data.Viewer.ID })
 		if before == len(data.Drafts) {
