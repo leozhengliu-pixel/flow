@@ -60,6 +60,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		}
 	}
 	metadataWritten := false
+	relationOnly := eventType == "issue.relation_added" || eventType == "issue.relation_removed"
 	needsFamily := eventType == "issue.deleted" || eventType == "issue.batch_updated" && (batch.Update.StateID != nil || batch.Update.ParentID != nil)
 	traceStart(ctx, "issue")
 	// A metadata record the callback changed was changed on another server
@@ -121,6 +122,66 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		}
 		for id, record := range records {
 			loaded[id], stored[id] = record.issue, record.raw
+		}
+		if relationOnly {
+			var input struct {
+				RelatedIssueID string `json:"relatedIssueId"`
+				RelationID     string `json:"relationId"`
+				Type           string `json:"type"`
+			}
+			raw, err := json.Marshal(payload)
+			if err != nil {
+				return err
+			}
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return err
+			}
+			if eventType == "issue.relation_removed" {
+				for _, issue := range loaded {
+					for _, relation := range issue.Relations {
+						if relation.ID == input.RelationID {
+							input.RelatedIssueID, input.Type = relation.RelatedIssueID, relation.Type
+						}
+					}
+				}
+			}
+			related, err := s.loadIssueRecordsByID(ctx, tx, workspace, []string{input.RelatedIssueID}, true)
+			if err != nil {
+				return err
+			}
+			for id, record := range related {
+				loaded[id], stored[id] = record.issue, record.raw
+			}
+			// Parent changes validate cycles and detach from the previous
+			// parent. Load only those ancestor chains, never workspace issues.
+			if input.Type == "parent_of" || input.Type == "sub_issue_of" {
+				for depth := 0; ; depth++ {
+					parents := []string{}
+					for _, issue := range loaded {
+						if issue.ParentID != nil && *issue.ParentID != "" {
+							if _, exists := loaded[*issue.ParentID]; !exists {
+								parents = append(parents, *issue.ParentID)
+							}
+						}
+					}
+					if len(parents) == 0 {
+						break
+					}
+					if depth == 64 {
+						return fmt.Errorf("issue ancestor limit exceeded")
+					}
+					ancestors, err := s.loadIssueRecordsByID(ctx, tx, workspace, parents, true)
+					if err != nil {
+						return err
+					}
+					if len(ancestors) == 0 {
+						break
+					}
+					for id, record := range ancestors {
+						loaded[id], stored[id] = record.issue, record.raw
+					}
+				}
+			}
 		}
 		if needsFamily {
 			related := []string{}
@@ -219,7 +280,11 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			data.Issues = append(data.Issues, issue)
 		}
 		var notifications map[string][]domain.Notification
-		if discussionOnly {
+		if relationOnly {
+			data.Comments = map[string][]domain.Comment{}
+			data.Activities = map[string][]domain.ActivityEvent{}
+			notifications = map[string][]domain.Notification{}
+		} else if discussionOnly {
 			data.Comments, err = loadDiscussionComment(ctx, tx, workspace, ids[0], discussion.CommentID)
 			if err != nil {
 				return err
@@ -317,7 +382,27 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 				return err
 			}
 		}
-		if discussionOnly {
+		if relationOnly {
+			// The callback starts from empty timelines, so only what it
+			// appended is written; existing history is never replaced.
+			if len(data.Comments) > 0 {
+				return fmt.Errorf("relation mutations cannot write comments")
+			}
+			for resource, items := range data.Activities {
+				for _, item := range items {
+					if err := writeContentRecord(ctx, tx, workspace, "activity", resource, item); err != nil {
+						return err
+					}
+				}
+			}
+			for resource, items := range notificationRecords(data.Notifications) {
+				for _, item := range items {
+					if err := writeContentRecord(ctx, tx, workspace, "notification", resource, item); err != nil {
+						return err
+					}
+				}
+			}
+		} else if discussionOnly {
 			if err := persistDiscussion(ctx, tx, workspace, ids[0], discussion.CommentID, data); err != nil {
 				return err
 			}

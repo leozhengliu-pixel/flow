@@ -1,9 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,6 +28,33 @@ func ageIssueForActivityTest(t *testing.T, repo *store.SQLiteStore, workspace st
 }
 
 func TestIssueActivityPATCHBurstAndGrace(t *testing.T) {
+	for _, mode := range []string{"on", "off", "verify", "records"} {
+		t.Run(mode, func(t *testing.T) {
+			setActivityMutationMode(t, mode)
+			testIssueActivityPATCHBurstAndGrace(t)
+		})
+	}
+}
+
+func setActivityMutationMode(t *testing.T, mode string) {
+	t.Helper()
+	t.Setenv("FLOW_NARROW_MUTATION_INPUTS", mode)
+	switch mode {
+	case "verify":
+		t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
+		t.Setenv("FLOW_NARROW_MUTATION_VERIFY", "1")
+	case "records":
+		// The opt-in record paths: journal, hydration and the project and
+		// initiative record mutations, with main's narrow inputs.
+		t.Setenv("FLOW_NARROW_MUTATION_INPUTS", "on")
+		t.Setenv("FLOW_RECORD_JOURNAL", "on")
+		t.Setenv("FLOW_RECORD_HYDRATION", "on")
+		t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", "on")
+		t.Setenv("FLOW_INITIATIVE_RECORD_MUTATIONS", "on")
+	}
+}
+
+func testIssueActivityPATCHBurstAndGrace(t *testing.T) {
 	repo, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "activity.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -121,6 +152,15 @@ func TestIssueActivityPATCHBurstAndGrace(t *testing.T) {
 }
 
 func TestIssueActivityRelationsAndLinks(t *testing.T) {
+	for _, mode := range []string{"on", "off", "verify", "records"} {
+		t.Run(mode, func(t *testing.T) {
+			setActivityMutationMode(t, mode)
+			testIssueActivityRelationsAndLinks(t)
+		})
+	}
+}
+
+func testIssueActivityRelationsAndLinks(t *testing.T) {
 	repo, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "relations.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -132,6 +172,15 @@ func TestIssueActivityRelationsAndLinks(t *testing.T) {
 		return requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": title, "teamId": data.Teams[0].ID}, http.StatusCreated)
 	}
 	issue, target := create("Activity source"), create("Activity target")
+	if err := repo.MutateWorkspace(store.WithIssueRecordMutations(t.Context(), target.ID), data.Workspace.URLKey, "issue.activity_seeded", target.ID, nil, func(current *domain.Bootstrap) error {
+		current.Activities[target.ID] = append(current.Activities[target.ID], domain.ActivityEvent{
+			ID: "preserved-cycle-head", Type: "issue.updated", Actor: current.Viewer, CreatedAt: time.Now().UTC(),
+			Metadata: domain.ActivityMetadata{"cycleBefore": "previous-history-cycle", "cycle": "current-history-cycle"},
+		})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	history := func(id string) []domain.ActivityEvent {
 		return requestJSON[store.IssueHistory](t, handler, http.MethodGet, "/api/issue-records/"+id+"/history", nil, http.StatusOK).Activities
 	}
@@ -145,6 +194,17 @@ func TestIssueActivityRelationsAndLinks(t *testing.T) {
 					if event.Type != eventType || event.Metadata["relationType"] != side.kind || event.Metadata["direction"] != side.direction || event.Metadata["relatedIssueId"] != side.related || event.Metadata["relationId"] != relation.ID {
 						t.Fatalf("missing relation side: %+v", event)
 					}
+				}
+				for _, cycle := range []string{"previous-history-cycle", "current-history-cycle"} {
+					ids, err := repo.CycleHistoryIssueIDs(t.Context(), data.Workspace.URLKey, cycle)
+					if err != nil || !slices.Contains(ids, target.ID) {
+						t.Fatalf("relation changed a preserved activity cycle index: %v %v", ids, err)
+					}
+				}
+				if !slices.ContainsFunc(history(target.ID), func(event domain.ActivityEvent) bool {
+					return event.ID == "preserved-cycle-head" && event.Metadata["cycle"] == "current-history-cycle"
+				}) {
+					t.Fatal("relation erased the related issue's previous activity")
 				}
 			}
 			check("issue.relation_added")
@@ -168,6 +228,94 @@ func TestIssueActivityRelationsAndLinks(t *testing.T) {
 	}
 	if got := len(history(issue.ID)); got != before+6 {
 		t.Fatalf("links merged: got %d events, want %d", got, before+6)
+	}
+}
+
+func TestIssueActivityPrivateRelationDelivery(t *testing.T) {
+	for _, mode := range []string{"on", "off", "verify", "records"} {
+		t.Run(mode, func(t *testing.T) {
+			setActivityMutationMode(t, mode)
+			// The fixture's cleanup needs the store open: it closes last.
+			var repo *store.SQLiteStore
+			for _, opened := range scaleP03ServerTestStores(t) {
+				repo = opened
+			}
+			f := newScaleP12Fixture(t, repo)
+			workspace := f.data.Workspace.URLKey
+			insider := f.principals[4]
+			ageIssueForActivityTest(t, repo, workspace, f.secret)
+			authRequest[domain.Issue](t, f.admin, http.MethodPatch, f.host.URL+"/api/issue-records/"+f.secret.ID, map[string]any{"subscriberIds": []string{insider.user.ID}}, workspace, http.StatusOK)
+			var mu sync.Mutex
+			var published []domain.RealtimeEvent
+			repo.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) {
+				mu.Lock()
+				published = append(published, event)
+				mu.Unlock()
+			})
+			relation := authRequest[domain.IssueRelation](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records/"+f.secret.ID+"/relations", map[string]any{"type": "blocks", "relatedIssueId": f.open.ID}, workspace, http.StatusCreated)
+			for _, id := range []string{f.secret.ID, f.open.ID} {
+				history, err := repo.IssueHistoryPage(t.Context(), workspace, id, "", "")
+				if err != nil || !slices.ContainsFunc(history.Activities, func(event domain.ActivityEvent) bool { return event.Metadata["relationId"] == relation.ID }) {
+					t.Fatalf("missing relation side for %s: %+v %v", id, history.Activities, err)
+				}
+			}
+			authRequest[any](t, f.admin, http.MethodDelete, f.host.URL+"/api/issue-records/"+f.secret.ID+"/relations/"+relation.ID, nil, workspace, http.StatusNoContent)
+			authRequest[domain.Issue](t, f.admin, http.MethodPatch, f.host.URL+"/api/issue-records/"+f.secret.ID, map[string]any{"title": "Private activity first"}, workspace, http.StatusOK)
+			authRequest[domain.Issue](t, f.admin, http.MethodPatch, f.host.URL+"/api/issue-records/"+f.secret.ID, map[string]any{"title": "Private activity final"}, workspace, http.StatusOK)
+			mu.Lock()
+			events := slices.Clone(published)
+			mu.Unlock()
+			notifications := 0
+			for _, event := range events {
+				if !strings.HasPrefix(event.Type, "issue.") && event.Type != "notification.created" {
+					continue
+				}
+				if event.Type == "notification.created" {
+					notifications++
+				}
+				for _, outsider := range f.principals[1:3] {
+					_, visible, err := f.service.pagedRealtimeEvent(outsider.request(workspace), event)
+					if err != nil || visible {
+						t.Fatalf("%s received private %s: visible=%t err=%v", outsider.name, event.Type, visible, err)
+					}
+				}
+				_, visible, err := f.service.pagedRealtimeEvent(insider.request(workspace), event)
+				if err != nil || !visible {
+					t.Fatalf("authorized viewer lost %s: visible=%t err=%v", event.Type, visible, err)
+				}
+			}
+			if notifications == 0 {
+				t.Fatal("private issue did not produce its subscriber notification")
+			}
+			// Starting from the public side must not place the private
+			// inverse activity in its authorized realtime envelope.
+			authRequest[domain.IssueRelation](t, f.admin, http.MethodPost, f.host.URL+"/api/issue-records/"+f.open.ID+"/relations", map[string]any{"type": "blocks", "relatedIssueId": f.secret.ID}, workspace, http.StatusCreated)
+			mu.Lock()
+			publicEvent := published[len(published)-1]
+			mu.Unlock()
+			for _, outsider := range f.principals[1:3] {
+				projected, visible, err := f.service.pagedRealtimeEvent(outsider.request(workspace), publicEvent)
+				if err != nil || !visible {
+					t.Fatalf("public relation visibility=%t err=%v", visible, err)
+				}
+				var payload map[string]json.RawMessage
+				if err := json.Unmarshal(projected.Payload, &payload); err != nil {
+					t.Fatal(err)
+				}
+				if _, exists := payload["activities"]; exists {
+					t.Fatal("public event included private inverse activity")
+				}
+			}
+			for _, outsider := range f.principals[1:3] {
+				r := outsider.request(workspace)
+				r.SetPathValue("id", f.secret.ID)
+				w := httptest.NewRecorder()
+				f.service.getIssueRecordHistory(w, r)
+				if w.Code == http.StatusOK {
+					t.Fatal("private activity history was returned to an outsider")
+				}
+			}
+		})
 	}
 }
 

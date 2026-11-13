@@ -5380,7 +5380,7 @@ func (s *server) createRelation(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var relation domain.IssueRelation
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.relation_added", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), id), workspaceKey(r), "issue.relation_added", id, input, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
@@ -5412,7 +5412,7 @@ func (s *server) createRelation(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteRelation(w http.ResponseWriter, r *http.Request) {
 	id, relationID := r.PathValue("id"), r.PathValue("relationId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.relation_removed", id, map[string]string{"relationId": relationID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), id), workspaceKey(r), "issue.relation_removed", id, map[string]string{"relationId": relationID}, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
