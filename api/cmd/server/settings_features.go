@@ -1586,7 +1586,7 @@ func (s *server) rotateAPIKeySecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var rotated domain.APIKey
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "api_key.secret_rotated", id, nil, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "api_key.secret_rotated", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "apiKeys", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool {
 			return key.ID == id && key.RevokedAt == nil && (key.CreatorID == actor.ID || strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner"))
 		})
@@ -1608,8 +1608,22 @@ func (s *server) rotateAPIKeySecret(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) revokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	id, actor := r.PathValue("id"), requestActor(s, r)
-	viewerRole := s.workspaceData(r).ViewerRole
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "api_key.revoked", id, nil, func(data *domain.Bootstrap) error {
+	viewerRole := "admin"
+	if !s.store.BoundedMetadataEnabled() {
+		viewerRole = s.workspaceData(r).ViewerRole
+	} else if !s.authDisabled {
+		var key *domain.APIKey
+		if credential, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+			key = &credential
+		}
+		viewer, err := s.store.ProjectScopedMetadata(r.Context(), workspaceKey(r), authUser(r).ID, key, store.MetadataRecordScope{})
+		if err != nil {
+			respondMutation(w, err, http.StatusNoContent, nil)
+			return
+		}
+		viewerRole = viewer.ViewerRole
+	}
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "api_key.revoked", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "apiKeys", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.APIKeys, func(key domain.APIKey) bool {
 			return key.ID == id && (key.CreatorID == actor.ID || workspaceAdminRole(viewerRole))
 		})
