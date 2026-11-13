@@ -723,7 +723,17 @@ func (s *server) scimGroupOrTeam(ctx context.Context, workspaceKey, workspaceID,
 	if err == nil || !errors.Is(err, sql.ErrNoRows) {
 		return group, nil, err
 	}
-	data, ok := s.store.WorkspaceMetadata(workspaceKey)
+	scope := store.MetadataRecordScope{}
+	if len(id) <= 191 && !strings.ContainsRune(id, '\x00') {
+		scope.Read = append(scope.Read, store.RecordKey{Kind: "teams", ID: id})
+	}
+	if link {
+		scope.Read = append(scope.Read, store.RecordKey{Kind: "workspaceSettings", ID: "scimRoleGroups"})
+	}
+	data, ok, readErr := s.store.WorkspaceMetadataScoped(ctx, workspaceKey, scope)
+	if readErr != nil {
+		return store.SCIMGroup{}, nil, readErr
+	}
 	if !ok {
 		return store.SCIMGroup{}, nil, err
 	}

@@ -1,10 +1,11 @@
 {
   "source": "store/issue_stats.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "migrateIssueStats": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Already-native startup migration reads only workspace identities from the bounded resident catalog, then computes exact counts with indexed issue_records SQL GROUP BY in one transaction per workspace. No metadata or issue bodies are loaded and no full-scan exemption is needed. TestScaleP21SW19NativeIssueStatsMigration compares off and bounded-view counters over 120 records including a legal oversized body, active/archived/status/priority/assignee groups, idempotence, cancellation, no publication and zero full decodes; owned fixtures remain safe on persistent external databases.",
       "accessors": [
         "resident-state"
       ]

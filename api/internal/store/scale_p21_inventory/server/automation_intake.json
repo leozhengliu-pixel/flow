@@ -56,6 +56,7 @@
     "deleteTriageRule": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Point-only deletion changes legacy global aggregate enrichment when an earlier Document.ContentData object has the same target ID. SW19 collision differential proved the realtime entity disappears; retain original writer pending compatible bounded aggregate resolution.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -64,6 +65,7 @@
     "deleteWorkflowDefinition": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Point-only deletion changes legacy global aggregate enrichment when an earlier Document.ContentData object has the same target ID. SW19 collision differential proved the realtime entity disappears; retain original writer pending compatible bounded aggregate resolution.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -146,6 +148,7 @@
     "updateTriageRule": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Target/responsibility/label scopes cover callback validation, but not legacy global aggregate lookup: an earlier Document.ContentData object sharing the target ID wins. SW19 collision differential proved the scoped writer publishes the routing rule instead. Original writer retained pending compatible aggregate resolution.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

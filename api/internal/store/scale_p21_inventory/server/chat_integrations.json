@@ -45,6 +45,7 @@
     "syncChatConnection": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Ordered append plus target Write covers callback inputs but not legacy global aggregate enrichment. SW19 collision differential with earlier Document.ContentData sharing the connection ID proved realtime entity changes from the nested document object to the connection. Original writer retained pending compatible aggregate resolution.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

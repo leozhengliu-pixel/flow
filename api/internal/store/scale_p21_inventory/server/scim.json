@@ -1,6 +1,6 @@
 {
   "source": "server/scim.go",
-  "unmigrated": 5,
+  "unmigrated": 4,
   "consumers": {
     "authenticateSCIMRequest": {
       "owner": "P21",
@@ -48,7 +48,8 @@
     },
     "scimGroupOrTeam": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Existing SQL SCIM-group lookup retains precedence. Team fallback reads only teams/id and, only for linking, workspaceSettings/scimRoleGroups; exact original WorkspaceMetadata dispatch remains off mode. TestScaleP21SW19SCIMGroupOrTeamDifferential compares full principal/key matrix, team fields and existing SQL groups, persisted link role/name, SCIM HTTP/ETag shape, token revocation during queued/replayed requests, exact/missing/case/long/NUL/key references, cross-workspace binding, ownership, explicit selected budgets/cancellation and recovery, byte-identical unrelated team rows, and zero full decodes.",
       "accessors": [
         "WorkspaceMetadata"
       ]
