@@ -262,10 +262,15 @@
   .document-history-scroll > .phone-native-select-wrap { max-width: 100%; }
   .document-history-doc { margin: 24px 16px 0; }
   .document-history-doc p { color: var(--phone-project-panel-text); letter-spacing: -.1px; }
-  .document-history-pill { position: static; flex: none; flex-wrap: nowrap; width: fit-content; max-width: calc(100% - 24px); margin: 10px auto 20px; box-sizing: border-box; border-radius: 9999px; }
-  .document-history-pill { background: var(--document-history-pill-bg); border-color: var(--document-history-pill-border); box-shadow: var(--dialog-shadow); }
-  .document-history-pill.is-restore-only { height: 40px; }
-  .document-history-restore { min-height: 28px; height: auto; padding: 0 8px; box-sizing: border-box; line-height: normal; white-space: normal; box-shadow: var(--dialog-primary-shadow); }
+  .document-history-pill { position: static; flex: none; flex-wrap: wrap; width: fit-content; max-width: calc(100% - 24px); margin: 10px auto 20px; box-sizing: border-box; border-radius: 9999px; }
+  .document-history-pill { background: var(--document-history-pill-bg); border-color: var(--document-history-pill-border); box-shadow: var(--document-history-pill-shadow); color: var(--document-history-pill-fg); }
+  .document-history-highlight,
+  .document-history-navigator,
+  .document-history-actions { flex: none; }
+  .document-history-navigator > button:hover:not(:disabled) { background: var(--document-history-pill-hover-bg); }
+  .document-history-pill.is-restore-only { height: 40px; flex-wrap: nowrap; }
+  .document-history-restore { flex: none; height: 28px; padding: 0 8px; box-sizing: border-box; background: var(--document-history-restore-bg); color: var(--document-history-restore-fg); line-height: normal; white-space: nowrap; box-shadow: var(--document-history-restore-shadow); }
+  .document-history-restore:hover:not(:disabled) { background: var(--document-history-restore-hover-bg); }
   .document-history-day h3 { padding-top: 0; }
   .document-history-actions { margin-right: 1px; padding-left: 0; border-left: 0; }
 }
