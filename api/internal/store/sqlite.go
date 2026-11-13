@@ -1517,7 +1517,7 @@ func (s *SQLiteStore) MutateWithAggregate(ctx context.Context, eventType string,
 }
 
 func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) (err error) {
-	if scope, scoped := metadataRecordScopeFromContext(ctx); scoped {
+	if scope, scoped := metadataRecordScopeFromContext(ctx); scoped && (s.metadataResidency != nil || !projectRecordSelectionEnabled(ctx)) {
 		if err := validateMetadataRecordScope(scope); err != nil {
 			return err
 		}
@@ -1566,6 +1566,9 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	if s.metadataResidency != nil {
 		return s.mutateResidentRecords(ctx, workspaceKey, eventType, payload, mutate)
+	}
+	if projectRecordSelectionEnabled(ctx) {
+		return s.mutateProjectRecordSelection(ctx, workspaceKey, eventType, payload, mutate)
 	}
 	if eventType == "loop.output_contract" && !fullMutationsForced.Load() {
 		return s.mutateLoopContract(ctx, workspaceKey, payload, mutate)

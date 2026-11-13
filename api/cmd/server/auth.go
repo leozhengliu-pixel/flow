@@ -1099,7 +1099,9 @@ func (s *server) resourceAllowedLegacy(r *http.Request, workspace string, userID
 	var data domain.Bootstrap
 	var ok bool
 	var err error
-	if selected, readErr, handled := s.documentAuthorizationMetadata(r, workspace, userID); handled {
+	if selected, readErr, handled := s.projectRecordAuthorizationMetadata(r, workspace, userID); handled {
+		data, err, ok = selected, readErr, readErr == nil
+	} else if selected, readErr, handled := s.documentAuthorizationMetadata(r, workspace, userID); handled {
 		data, err, ok = selected, readErr, readErr == nil
 	} else if isIssueRecordsRequest(r) {
 		data, err = s.issueRecordAuthorizationData(r)

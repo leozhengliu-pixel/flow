@@ -3462,9 +3462,7 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err == nil && input.Archived != nil && *input.Archived {
-		s.pruneIssueSuggestionTargets(r.Context(), workspaceKey(r), func(item domain.IssueSuggestion) bool {
-			return item.Type == "project" && item.SuggestedProjectID == id
-		})
+		s.pruneProjectRecordSuggestions(r.Context(), workspaceKey(r), id)
 	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
@@ -3508,9 +3506,7 @@ func (s *server) deleteProject(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	s.pruneIssueSuggestionTargets(r.Context(), workspaceKey(r), func(item domain.IssueSuggestion) bool {
-		return item.Type == "project" && item.SuggestedProjectID == id
-	})
+	s.pruneProjectRecordSuggestions(r.Context(), workspaceKey(r), id)
 	w.WriteHeader(http.StatusNoContent)
 }
 

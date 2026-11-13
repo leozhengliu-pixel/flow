@@ -29,6 +29,8 @@ func TestScaleP16MutationSideEffectsDifferential(t *testing.T) {
 			t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", "on")
 			t.Setenv("FLOW_INITIATIVE_RECORD_MUTATIONS", "on")
 			got := scaleP16MutationScript(t)
+			scaleP16SaveDifferential(t, journal+"-old", old)
+			scaleP16SaveDifferential(t, journal+"-new", got)
 			for name, value := range old {
 				if got[name] != value {
 					i := 0

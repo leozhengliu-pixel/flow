@@ -14,6 +14,10 @@ import (
 )
 
 func TestScaleP16PermissionDifferential(t *testing.T) {
+	scaleP16PermissionMatrix(t, false)
+}
+
+func scaleP16PermissionMatrix(t *testing.T, mutations bool) {
 	for driver, repo := range scaleP03ServerTestStores(t) {
 		t.Run(driver, func(t *testing.T) {
 			f := scaleP03Fixture(t, repo)
@@ -24,12 +28,12 @@ func TestScaleP16PermissionDifferential(t *testing.T) {
 				data.TeamSettings["p16-private"] = domain.TeamSettings{TeamID: "p16-private", Access: "private"}
 				data.TeamSettings["p16-child"] = domain.TeamSettings{TeamID: "p16-child", ParentTeamID: "p16-private", Access: "public"}
 				data.Projects = append(data.Projects,
-					domain.Project{ID: "p16-public-project", Name: "Public", PreviousSlugIDs: []string{"p16-old-slug"}, TeamIDs: []string{"p16-open"}, DependencyIDs: []string{"p16-secret-project"}},
-					domain.Project{ID: "p16-secret-project", Name: "Secret", TeamIDs: []string{"p16-private"}},
+					domain.Project{ID: "p16-public-project", Name: "Public", PreviousSlugIDs: []string{"p16-old-slug", "collision-012345abcdef"}, TeamIDs: []string{"p16-open"}, DependencyIDs: []string{"p16-secret-project"}},
+					domain.Project{ID: "p16-secret-project", SlugID: "collision-012345abcdef", Name: "Secret", TeamIDs: []string{"p16-private"}},
 					domain.Project{ID: "p16-child-project", Name: "Inherited", TeamIDs: []string{"p16-child"}})
 				data.Initiatives = append(data.Initiatives,
-					domain.Initiative{ID: "p16-public-initiative", Name: "Public", PreviousSlugIDs: []string{"p16-old-initiative"}, ProjectIDs: []string{"p16-public-project"}, LeadTeamID: "p16-open"},
-					domain.Initiative{ID: "p16-secret-initiative", Name: "Secret", ProjectIDs: []string{"p16-secret-project"}, LeadTeamID: "p16-private"},
+					domain.Initiative{ID: "p16-public-initiative", Name: "Public", PreviousSlugIDs: []string{"p16-old-initiative", "collision-abcdef012345"}, ProjectIDs: []string{"p16-public-project"}, LeadTeamID: "p16-open"},
+					domain.Initiative{ID: "p16-secret-initiative", SlugID: "collision-abcdef012345", Name: "Secret", ProjectIDs: []string{"p16-secret-project"}, LeadTeamID: "p16-private"},
 					domain.Initiative{ID: "p16-child-initiative", Name: "Inherited", ProjectIDs: []string{"p16-child-project"}, LeadTeamID: "p16-child"})
 				return nil
 			}); err != nil {
@@ -58,6 +62,7 @@ func TestScaleP16PermissionDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 			f.resources.workspaces = append(f.resources.workspaces, other.Workspace.URLKey)
+			probe := newScaleP16PermissionProbe(t, repo, workspace, mutations)
 			for _, principal := range []struct {
 				name, token string
 				client      *http.Client
@@ -68,14 +73,21 @@ func TestScaleP16PermissionDifferential(t *testing.T) {
 			} {
 				t.Run(principal.name, func(t *testing.T) {
 					for _, key := range []string{workspace, other.Workspace.URLKey} {
-						for _, path := range []string{"projects/p16-public-project", "projects/p16-old-slug", "projects/p16-secret-project", "projects/p16-child-project", "initiatives/p16-public-initiative", "initiatives/p16-old-initiative", "initiatives/p16-secret-initiative", "initiatives/p16-child-initiative"} {
+						for _, path := range []string{"projects/p16-public-project", "projects/p16-old-slug", "projects/collision-012345abcdef", "projects/p16-secret-project", "projects/p16-child-project", "initiatives/p16-public-initiative", "initiatives/p16-old-initiative", "initiatives/collision-abcdef012345", "initiatives/p16-secret-initiative", "initiatives/p16-child-initiative"} {
 							var oldStatus int
 							var old any
+							var oldEffects string
 							for _, mode := range []string{"off", "on"} {
 								t.Setenv("FLOW_RECORD_HYDRATION", "on")
 								t.Setenv("FLOW_PROJECT_RECORD_MUTATIONS", mode)
 								t.Setenv("FLOW_INITIATIVE_RECORD_MUTATIONS", mode)
-								request, _ := http.NewRequest("PATCH", f.host.URL+"/api/"+path, bytes.NewBufferString(`{"summary":""}`))
+								body := `{"summary":""}`
+								if mutations {
+									probe.reset(t)
+									encoded, _ := json.Marshal(map[string]string{"summary": "P16 " + principal.name + " " + path})
+									body = string(encoded)
+								}
+								request, _ := http.NewRequest("PATCH", f.host.URL+"/api/"+path, bytes.NewBufferString(body))
 								request.Header.Set("X-Workspace-Key", key)
 								request.Header.Set("X-Request-ID", "scale-p16-permission")
 								request.Header.Set("Content-Type", "application/json")
@@ -99,6 +111,15 @@ func TestScaleP16PermissionDifferential(t *testing.T) {
 								}
 								if principal.name == "admin" && key == workspace && path == "projects/p16-public-project" && response.StatusCode != http.StatusOK {
 									t.Fatalf("owner mutation did not reach the callback: status=%d", response.StatusCode)
+								}
+								if mutations {
+									effects := probe.result(t)
+									value = scaleP04Normalize(raw)
+									if mode == "off" {
+										oldEffects = effects
+									} else if oldEffects != effects {
+										t.Fatalf("%s workspace=%s: committed state, audit, events or webhooks differ", path, key)
+									}
 								}
 								if mode == "off" {
 									oldStatus, old = response.StatusCode, value

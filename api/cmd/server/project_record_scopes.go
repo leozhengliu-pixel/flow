@@ -25,8 +25,8 @@ func projectRecordMutationsEnabled(kind string) bool {
 
 // These requirements describe callback inputs, including validation and
 // reciprocal links. Persistence, authorization and side effects stay in the
-// existing mutation adapter. Complete fields are deliberate for cascades
-// whose linked keys cannot yet be resolved by the hydration contract.
+// existing mutation adapter. Complete fields serve the legacy fallback and
+// full-input oracle; the point writer resolves selections and cascade pages.
 func projectRecordRequirements(kind, operation, id string, input any) store.MetadataRecordScope {
 	scope := store.MetadataRecordScope{Fields: []string{"users"}}
 	field := kind + "s"
@@ -150,7 +150,75 @@ func projectRecordScope(ctx context.Context, kind, operation, id string, input a
 	// Reminders keep the full issue/content path: it refreshes counts used
 	// in the legacy realtime entity, even though the callback only appends.
 	ctx = store.WithMetadataRecords(ctx, projectRecordRequirements(kind, operation, id, input))
-	return store.WithMetadataRecordVerification(ctx, results...)
+	ctx = store.WithMetadataRecordVerification(ctx, results...)
+	if slices.Contains([]string{"edit", "delete", "resource", "comment", "milestone", "update", "relation"}, operation) {
+		ctx = store.WithProjectRecordSelection(ctx, func(data domain.Bootstrap) (store.MetadataRecordScope, bool) {
+			scope := projectRecordRequirements(kind, operation, id, input)
+			scope.Fields = slices.DeleteFunc(scope.Fields, func(field string) bool {
+				return slices.Contains([]string{"projects", "initiatives", "documents", "projectRelations", "initiativeRelations", "trash", "drafts", "favorites", "subscriptions", "threadSubscriptions"}, field)
+			})
+			if operation == "delete" {
+				return scope, true
+			}
+			if operation == "comment" {
+				for _, item := range data.ThreadSubscriptions {
+					if kind == "project" && item.ProjectID == id || kind == "initiative" && item.InitiativeID == id {
+						scope.Write = append(scope.Write, store.RecordKey{Kind: "threadSubscriptions", ID: item.ID})
+					}
+				}
+			}
+			if operation == "resource" {
+				if value, ok := input.(domain.ProjectResourceMutationInput); ok && kind == "initiative" && value.DocumentID != nil {
+					if document, err := documentByID(&data, strings.TrimSpace(*value.DocumentID)); err == nil {
+						scope.Read = append(scope.Read, store.RecordKey{Kind: "documents", ID: document.ID})
+					}
+				}
+			}
+			if operation == "relation" {
+				if kind == "initiative" {
+					return scope, false
+				}
+				for _, item := range data.ProjectRelations {
+					if item.ProjectID == id {
+						scope.Write = append(scope.Write, store.RecordKey{Kind: "projectRelations", ID: item.ID})
+					}
+				}
+			}
+			if operation != "edit" {
+				return scope, len(scope.Read)+len(scope.Write) <= store.MetadataRecordBatchMaxKeys
+			}
+			if value, ok := input.(domain.ProjectMutationInput); ok {
+				if value.StartDate != nil {
+					scope.Fields = append(scope.Fields, "states", "teamSettings")
+				}
+				if value.DependencyIDs != nil || value.DependencyRelations != nil {
+					for _, relation := range data.ProjectRelations {
+						if relation.ProjectID == id {
+							scope.Write = append(scope.Write, store.RecordKey{Kind: "projectRelations", ID: relation.ID})
+						}
+					}
+				}
+				return scope, len(scope.Read)+len(scope.Write) <= store.MetadataRecordBatchMaxKeys
+			}
+			if value, ok := input.(domain.InitiativeMutationInput); ok {
+				if value.ParentInitiativeIDs != nil {
+					return scope, false
+				}
+				if value.ProjectIDs != nil {
+					for _, projectID := range *value.ProjectIDs {
+						scope.Read = append(scope.Read, store.RecordKey{Kind: "projects", ID: projectID})
+					}
+				}
+				if value.Favorite != nil {
+					scope.Fields = append(scope.Fields, "favorites")
+				}
+				return scope, len(scope.Read)+len(scope.Write) <= store.MetadataRecordBatchMaxKeys
+			}
+			return scope, false
+		})
+		ctx = store.WithProjectRecordCascades(ctx, projectRecordCascades(kind, operation, id, input))
+	}
+	return ctx
 }
 
 // Route-owned callbacks outside main.go use the same family gate. Their
