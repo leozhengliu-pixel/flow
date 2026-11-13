@@ -13,6 +13,7 @@
     "deleteWebhook": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Requires target authorization against projected team policy plus deletion of every linked webhookFailureEvent in the same transaction. A target-only callback omits that cascade; a complete failure collection may exceed the batch bounds.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -42,6 +43,7 @@
     "revokeWebhookSecret": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Target edits are local, but legacy webhook aggregate IDs use reflective Bootstrap search. An earlier document ContentData object with the same id can supply the actual webhook/realtime entity, so a bare target scope omits effect inputs. Needs the shared bounded aggregate resolver.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -50,6 +52,7 @@
     "rotateWebhookSecret": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Target edits are local, but legacy webhook aggregate IDs use reflective Bootstrap search. An earlier document ContentData object with the same id can supply the actual webhook/realtime entity, so a bare target scope omits effect inputs. Needs the shared bounded aggregate resolver; encrypted secret ordering must also remain unchanged.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

@@ -5,6 +5,7 @@
     "toggleReviewReaction": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "reviewIndex accepts the first canonical-order ID or SlugID match. Scoping the raw route value as an ID changes slug and collision precedence; resolving outside the transaction introduces a race. Needs an in-transaction native alias resolver and the complete legacy aggregate enrichment inputs.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

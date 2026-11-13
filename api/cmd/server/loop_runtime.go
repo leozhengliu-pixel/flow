@@ -111,13 +111,25 @@ func (s *server) loopRunnable(data domain.Bootstrap, loop domain.Loop) error {
 }
 
 func (s *server) listLoopRuns(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "loops", "viewer")
+	data, ok, err := s.store.WorkspaceMetadataFieldsScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{}, "loops", "viewer")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not load loop runs")
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
 	id := r.PathValue("id")
-	if loopByID(&data, id) == nil {
+	found := loopByID(&data, id) != nil
+	if s.store.BoundedMetadataEnabled() {
+		found, err = s.store.LoopRecordExists(r.Context(), data.Workspace.URLKey, id)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "Could not load loop runs")
+			return
+		}
+	}
+	if !found {
 		writeError(w, http.StatusNotFound, "loop not found")
 		return
 	}
@@ -134,7 +146,11 @@ func (s *server) listLoopRuns(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getLoopRun(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "viewer")
+	data, ok, err := s.store.WorkspaceMetadataFieldsScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{}, "viewer")
+	if err != nil {
+		writeError(w, http.StatusNotFound, "loop run not found")
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return

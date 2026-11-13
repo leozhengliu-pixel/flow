@@ -1,6 +1,6 @@
 {
   "source": "server/loop_runtime.go",
-  "unmigrated": 8,
+  "unmigrated": 6,
   "consumers": {
     "check": {
       "owner": "P18",
@@ -11,14 +11,16 @@
     },
     "getLoopRun": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only selection preserves the original viewer-only accessor off mode; existing SQL run lookup, exact loop binding, trigger label and viewer feedback remain unchanged. TestScaleP21SW23LoopRunReadsDifferential compares all principal/key forms, complete feedback/count/actor output, missing and foreign-workspace run IDs, cancellation, live queued/replay membership rejection, unchanged canonical loops and zero full decodes. Route authorization remains independently inventoried.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
     },
     "listLoopRuns": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only selection plus trusted exact-ID LoopRecordExists avoids loading loop bodies; off mode retains the original loops/viewer accessor. Existing SQL newest-first run list and viewer feedback are unchanged. TestScaleP21SW23LoopRunReadsDifferential covers full principal/key matrix, legal target over 256 KiB and over 60 unrelated loops, missing/slug/long/NUL and foreign-workspace references, cancellation, unchanged canonical state and zero full decodes. TestScaleP21SW23LoopRecordExists additionally covers case-sensitive and inline legacy duplicate/long IDs, missing/default workspace and admission release.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
@@ -40,6 +42,7 @@
     "setLoopNextRun": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Point edit needs only loops/loopID, but the legacy loop aggregate has no typed-prefix shortcut: reflective Bootstrap search can match a preceding nested document object. A point-only writer changes webhook/realtime enrichment in that valid state; retain it until the bounded aggregate resolver covers it.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

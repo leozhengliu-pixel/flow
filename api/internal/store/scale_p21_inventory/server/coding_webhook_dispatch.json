@@ -1,6 +1,6 @@
 {
   "source": "server/coding_webhook_dispatch.go",
-  "unmigrated": 7,
+  "unmigrated": 4,
   "consumers": {
     "ApprovalResolved": {
       "owner": "P18",
@@ -26,21 +26,24 @@
     },
     "codingTriggers": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads only workspaceSettings/codingAgentSettings; exact original workspaceSettings accessor runs off mode. Starter/service/approver wiring and legacy harness normalization are unchanged; bounded input errors cannot silently choose defaults. TestScaleP21SW23CodingSettingsDifferential compares all principal/key contexts, harness/model settings, whole-settings record/byte budget overflow from unrelated properties, selected-budget rejection/recovery, unchanged canonical settings and zero full decodes.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
     },
     "codingWebhookDispatcher": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Dispatcher Settings callback reads workspaceSettings/codingAgentSettings with its supplied context while preserving exact off accessor and existing dispatch/service wiring. TestScaleP21SW23CodingSettingsDifferential compares complete returned settings across all principal/key contexts, oversized unrelated settings, missing workspace, cancellation, selected-property budget rejection/recovery, canonical immutability and zero full decodes. Other dispatcher callbacks remain separately inventoried.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
     },
     "dispatchCodingWebhook": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded workspace participation reads only workspaceSettings/featureFlags; original slices.DeleteFunc and accessor run unchanged off mode. Installation mapping, workspace order and downstream dispatch/error handling remain intact. TestScaleP21SW23CodingSettingsDifferential compares enabled/disabled installation dispatch and call counts across the full principal/key matrix with unrelated whole-settings overflow, unchanged canonical settings and zero full decodes. Other dispatch helper consumers retain independent blockers.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

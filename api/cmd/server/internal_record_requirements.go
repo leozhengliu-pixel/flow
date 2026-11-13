@@ -167,7 +167,10 @@ func (s *server) internalRequestConversation(r *http.Request, ref string) (domai
 	userID := authUser(r).ID
 	workspace := workspaceKey(r)
 	if s.authDisabled && (userID == "" || workspace == "") {
-		data, ok := s.store.WorkspaceMetadataFields(workspace, "viewer")
+		data, ok, err := s.store.WorkspaceMetadataFieldsScoped(r.Context(), workspace, store.MetadataRecordScope{}, "viewer")
+		if err != nil {
+			return domain.AgentSession{}, err
+		}
 		if !ok {
 			return domain.AgentSession{}, errNotFound
 		}

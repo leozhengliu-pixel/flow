@@ -1,10 +1,11 @@
 {
   "source": "server/internal_record_requirements.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "internalRequestConversation": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Auth-disabled fallback selects only stored workspace/viewer identity and keeps the exact viewer-only accessor off mode; live ResolveAccess and existing authorized conversation/body reader remain unchanged. TestScaleP21SW23InternalConversationIdentityDifferential compares the full principal/key matrix, ID/old slug/missing results, stored-viewer fallback, foreign-workspace binding, prebuilt queued/replay requests after revocation, cancellation and zero full metadata decodes with an oversized unrelated conversation.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
