@@ -1,6 +1,6 @@
 {
   "source": "server/notifications_workflow.go",
-  "unmigrated": 20,
+  "unmigrated": 19,
   "consumers": {
     "acknowledgeDesktopNotifications": {
       "owner": "P18",
@@ -121,7 +121,8 @@
     },
     "updateNotificationPreferences": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes only notificationPreferences/viewerID; auth-disabled identity uses an empty scoped projection, while the original personal merge/default/validation/no-op rules remain unchanged. No notification or delivery bodies are read or written. TestScaleP21M3NotificationPreferencesDifferential compares responses, own and unrelated canonical preferences and audit/webhook/realtime effects across principal/credential classes; route authorization remains independently blocked.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",

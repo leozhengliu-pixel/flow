@@ -62,10 +62,22 @@ func (s *server) updateNotificationPreferences(w http.ResponseWriter, r *http.Re
 	}
 	viewerID := authUser(r).ID
 	if s.authDisabled {
-		viewerID = s.workspaceData(r).Viewer.ID
+		if !s.store.BoundedMetadataEnabled() {
+			viewerID = s.workspaceData(r).Viewer.ID
+		} else {
+			viewer, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{})
+			if err != nil || !ok {
+				if err == nil {
+					err = store.ErrAuthForbidden
+				}
+				respondMutation(w, err, http.StatusOK, nil)
+				return
+			}
+			viewerID = viewer.Viewer.ID
+		}
 	}
 	var updated domain.NotificationPreferences
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "notification_preferences.updated", viewerID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "notification_preferences.updated", viewerID, input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "notificationPreferences", ID: viewerID}}}, func(data *domain.Bootstrap) error {
 		current, ok := data.NotificationPreferences[viewerID]
 		if !ok {
 			current = defaultPreferences(viewerID)

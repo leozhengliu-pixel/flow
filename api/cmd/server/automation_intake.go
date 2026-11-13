@@ -1096,9 +1096,22 @@ func (s *server) createPushSubscription(w http.ResponseWriter, r *http.Request) 
 	respondMutation(w, err, http.StatusCreated, created)
 }
 func (s *server) deletePushSubscription(w http.ResponseWriter, r *http.Request) {
-	viewerID := s.workspaceData(r).Viewer.ID
+	viewerID := authUser(r).ID
+	if !s.store.BoundedMetadataEnabled() {
+		viewerID = s.workspaceData(r).Viewer.ID
+	} else if s.authDisabled {
+		viewer, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{})
+		if err != nil || !ok {
+			if err == nil {
+				err = store.ErrAuthForbidden
+			}
+			respondMutation(w, err, http.StatusNoContent, nil)
+			return
+		}
+		viewerID = viewer.Viewer.ID
+	}
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "push_subscription.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "push_subscription.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "pushSubscriptions", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.PushSubscriptions)
 		data.PushSubscriptions = slices.DeleteFunc(data.PushSubscriptions, func(item domain.PushSubscription) bool { return item.ID == id && item.UserID == viewerID })
 		if before == len(data.PushSubscriptions) {

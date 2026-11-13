@@ -1,6 +1,6 @@
 {
   "source": "server/settings_features.go",
-  "unmigrated": 40,
+  "unmigrated": 38,
   "consumers": {
     "connectIntegration": {
       "owner": "P21",
@@ -201,7 +201,8 @@
     },
     "revokeAPIKey": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Uses the live identity-only workspace projection and writes apiKeys/id; retains creator/admin predicate, revocation timestamp and transaction-staged audit. TestScaleP21M3CredentialRevocationDifferential compares own/other keys across principal/credential classes, missing IDs, canonical records, audits and event effects. requestActor and HTTP authorization remain independently registered blockers.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -219,7 +220,8 @@
     },
     "rotateAPIKeySecret": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes only apiKeys/id; preserves the creator/admin and revoked-key checks, cryptographic generation, public response stripping and staged audit. TestScaleP21M3CredentialRotationDifferential compares own/other keys across principal/credential classes and verifies live authentication accepts each generated replacement and rejects its predecessor without changing scopes or team restrictions. requestActor and HTTP authorization remain independently registered blockers.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
