@@ -1,10 +1,11 @@
 {
   "source": "server/agent_worker_loop.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "finishWorkerLoopRun": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Finalization needs workspace existence only: terminal status, acceptance, output and effects come from the persisted native run; finishLoopRun does not read its loop argument. Empty scoped input avoids every current loop body while off mode forwards the original loops-field read. TestScaleP21M1LoopFinishDifferential compares failure/cancel/interruption/completion, cancelled-request continuation, exact native run/event effects, idempotence and legal oversized unused loop bodies. Worker setup/authorization remains separately blocked.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

@@ -123,9 +123,38 @@ func sweepAgentRunConnectorCache() {
 
 // discoverAgentRunConnectors discovers a run's connector tools as its principal user.
 func (s *server) discoverAgentRunConnectors(ctx context.Context, grant *agentRunGrant) ([]connectorTool, error) {
-	data, ok := s.store.WorkspaceMetadata(grant.run.WorkspaceKey)
+	scope := store.MetadataRecordScope{
+		Fields: []string{"workspaceSettings"},
+		Read:   []store.RecordKey{{Kind: "settings", ID: "applicationPolicies"}},
+	}
+	selected := grant.run.Kind == store.AgentRunKindLoop || len(grant.principal.Connectors) > 0
+	needsPolicies := s.agent.ToolsEnabled && s.agent.WriteTools && (!selected || len(grant.principal.Connectors) > 0)
+	if s.store.BoundedMetadataEnabled() {
+		scope.Read = nil
+		if !needsPolicies {
+			scope.Fields = nil
+		}
+	}
+	data, ok, err := s.store.WorkspaceMetadataScoped(ctx, grant.run.WorkspaceKey, scope)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, errNotFound
+	}
+	// Selected runs need entries even when connectors are disabled, to retain
+	// the distinction between a missing connection and an unavailable one.
+	if s.store.BoundedMetadataEnabled() && needsPolicies && (selected || data.WorkspaceSettings.MCPConnectorsActive()) {
+		data, ok, err = s.store.WorkspaceMetadataScoped(ctx, grant.run.WorkspaceKey, store.MetadataRecordScope{
+			Fields: []string{"workspaceSettings"},
+			Read:   []store.RecordKey{{Kind: "settings", ID: "applicationPolicies"}},
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, errNotFound
+		}
 	}
 	request := connectorRequestContext{Workspace: grant.run.WorkspaceKey, UserID: grant.principal.UserID}
 	if grant.run.Kind == store.AgentRunKindLoop || len(grant.principal.Connectors) > 0 {

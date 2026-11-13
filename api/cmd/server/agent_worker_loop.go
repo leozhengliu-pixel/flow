@@ -478,7 +478,13 @@ func (s *server) finishWorkerLoopRun(ctx context.Context, run store.AgentRun, in
 	if err != nil || !workerLoopRecorderRunning(rec) {
 		return
 	}
-	data, ok := s.store.WorkspaceMetadataFields(run.WorkspaceKey, "loops")
+	// Finalization uses the persisted run; finishLoopRun does not read loop
+	// fields. Keep the old loop read off mode and only workspace existence on.
+	data, ok, err := s.store.WorkspaceMetadataFieldsScoped(ctx, run.WorkspaceKey, store.MetadataRecordScope{}, "loops")
+	if err != nil {
+		log.Printf("Loop run finish workspace=%s run=%s: read loop: %v", run.WorkspaceKey, run.ID, err)
+		return
+	}
 	if !ok {
 		return
 	}
