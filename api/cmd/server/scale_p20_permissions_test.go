@@ -76,6 +76,9 @@ func TestScaleP20PermissionDifferential(t *testing.T) {
 			}
 			for _, principal := range principals {
 				t.Run(principal.name, func(t *testing.T) {
+					if principal.token != "" {
+						scaleP11WarmCredential(t, repo, workspace, principal.token)
+					}
 					read := func(path, key string) (int, []byte) {
 						response := scaleP03Read(t, f, principal.client, principal.token, "GET", path, key)
 						return response.Code, response.Body.Bytes()
