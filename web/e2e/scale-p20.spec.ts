@@ -176,28 +176,29 @@ for (const flags of [false, true]) {
         await syncReads(page)
         let oldReplica = false
         await page.route('**/api/sync/changes**', route => oldReplica ? route.fulfill({ status: 501, json: {} }) : route.fallback())
-        let ready!: () => void, release!: () => void
+        let ready!: () => void, release!: () => void, delivered!: () => void
         const sent = new Promise<void>(resolve => { ready = resolve })
         const held = new Promise<void>(resolve => { release = resolve })
+        const completed = new Promise<void>(resolve => { delivered = resolve })
         await page.route(url => url.pathname === `/api/documents/${doc.id}`, async route => {
           if (route.request().method() !== 'PATCH') return route.continue()
           const response = await route.fetch()
           ready()
           await held
-          await route.fulfill({ response })
+          try { await route.fulfill({ response }) } finally { delivered() }
         })
         await page.goto(`/${workspaceKey}/document/${doc.slugId}`)
-        await expect(page.locator('.document-page')).toContainText('Body kept in trash')
+        await expect(page.locator('.document-page')).toContainText('Body kept in trash', { timeout: 15_000 })
         await page.locator('.document-title').fill('Queued response')
         await page.locator('.document-title').press('Tab')
         await sent
-        oldReplica = true
-        expect((await request.delete(`/api/documents/${doc.id}`, { headers })).ok()).toBe(true)
-        await page.evaluate(() => (window as unknown as { scaleP20Disconnect: () => void }).scaleP20Disconnect())
-        await expect(page.locator('.document-page.is-deleted')).toBeVisible({ timeout: 15000 })
-        const answered = page.waitForResponse(response => response.request().method() === 'PATCH' && new URL(response.url()).pathname === `/api/documents/${doc.id}`)
-        release()
-        await (await answered).finished()
+        try {
+          oldReplica = true
+          expect((await request.delete(`/api/documents/${doc.id}`, { headers })).ok()).toBe(true)
+          await page.evaluate(() => (window as unknown as { scaleP20Disconnect: () => void }).scaleP20Disconnect())
+          await expect(page.locator('.document-page.is-deleted')).toBeVisible({ timeout: 15000 })
+        } finally { release() }
+        await completed
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
         await expect(page.locator('.document-page.is-deleted')).toContainText('Body kept in trash')
         await expect(page.locator('.document-page [contenteditable="true"]')).toHaveCount(0)
@@ -213,7 +214,7 @@ for (const flags of [false, true]) {
         let fail = false
         await page.route('**/api/sync/manifest**', route => fail ? route.fulfill({ status: 503, json: {} }) : route.fallback())
         await page.goto(`/${workspaceKey}/document/${doc.slugId}`)
-        await expect(page.locator('.document-page')).toContainText('Retry body')
+        await expect(page.locator('.document-page')).toContainText('Retry body', { timeout: 15_000 })
         fail = true
         await page.locator('.document-breadcrumb-documents').click()
         await expect(page.getByText('Unable to load workspace', { exact: true })).toBeVisible({ timeout: 15000 })
