@@ -1,17 +1,19 @@
 {
   "source": "server/oauth_application_icon.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "checkOAuthAppLogoInput": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Trusted workspace identity plus current oauthApplications/appID point read; creation selects identity only. File ownership checks and current-logo exception unchanged. TestScaleP21SW12LogoInputDifferential and OAuthAuthorityAndWorkspaceIsolation compare credential/principal matrix, owned/foreign/wrong-purpose/no-owner cases, current-logo exception, cross-workspace isolation, cancellation, budgets and unchanged unrelated applications.",
       "accessors": [
         "WorkspaceMetadata"
       ]
     },
     "uploadOAuthApplicationIcon": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Trusted workspace-identity read only retains route authorization, validation, storage, owned-upload write and failure cleanup. TestScaleP21SW12IconUploadDifferential and OAuthAuthorityAndWorkspaceIsolation compare credential/principal matrix, actual PNG bytes and owned-upload rows, invalid input, missing workspace, cancellation, cross-workspace/revocation and unchanged canonical application state.",
       "accessors": [
         "WorkspaceMetadata"
       ]

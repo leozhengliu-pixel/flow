@@ -81,7 +81,11 @@ func (s *server) uploadOAuthApplicationIcon(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, "icon must be PNG, JPEG, WebP, or a safe SVG")
 		return
 	}
-	workspace, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	workspace, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{})
+	if err != nil {
+		respondMutation(w, err, http.StatusCreated, nil)
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -134,7 +138,14 @@ func (s *server) checkOAuthAppLogoInput(r *http.Request, logo *string, appID str
 	if logo == nil {
 		return nil
 	}
-	data, _ := s.store.WorkspaceMetadata(workspaceKey(r))
+	scope := store.MetadataRecordScope{}
+	if appID != "" {
+		scope.Read = []store.RecordKey{{Kind: "oauthApplications", ID: appID}}
+	}
+	data, _, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), scope)
+	if err != nil {
+		return err
+	}
 	current := ""
 	for _, app := range data.OAuthApplications {
 		if appID != "" && app.ID == appID {

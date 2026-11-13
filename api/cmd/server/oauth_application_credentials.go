@@ -260,7 +260,7 @@ func (s *server) rotateOAuthApplicationSecret(w http.ResponseWriter, r *http.Req
 	}
 	id := r.PathValue("id")
 	var rotated domain.OAuthApplication
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_application.secret_rotated", id, nil, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "oauth_application.secret_rotated", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "oauthApplications", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == id })
 		if index < 0 {
 			return errNotFound
