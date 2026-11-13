@@ -405,7 +405,11 @@ func (s *SQLiteStore) loadScopedMetadataRecordRows(ctx context.Context, workspac
 		// Check size in SQL before the driver transfers a large body. Both
 		// count and bytes are bounded even for a complete-field declaration.
 		args = append([]any{remaining}, args...)
-		rows, err := reader.QueryContext(ctx, `SELECT record_key,collection_order,LENGTH(data),CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END FROM workspace_metadata_records WHERE `+where+` ORDER BY collection_order,record_key LIMIT 51`, args...)
+		lock := ""
+		if writing, _ := ctx.Value(scopedMetadataWriteKey{}).(bool); writing && s.dialect != "sqlite" {
+			lock = " FOR UPDATE"
+		}
+		rows, err := reader.QueryContext(ctx, `SELECT record_key,collection_order,LENGTH(data),CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END FROM workspace_metadata_records WHERE `+where+` ORDER BY collection_order,record_key LIMIT 51`+lock, args...)
 		if err != nil {
 			return nil, err
 		}

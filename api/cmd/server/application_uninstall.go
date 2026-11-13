@@ -14,7 +14,10 @@ import (
 // canceled, its app user leaves the workspace and its managed webhooks are
 // removed.
 func (s *server) uninstallApplicationInstallation(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	if !s.authDisabled && !workspaceAdminRole(data.ViewerRole) {
 		writeError(w, http.StatusForbidden, "Workspace admin access required")
 		return

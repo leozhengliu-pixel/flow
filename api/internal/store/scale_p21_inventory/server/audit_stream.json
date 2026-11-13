@@ -1,52 +1,58 @@
 {
   "source": "server/audit_stream.go",
-  "unmigrated": 6,
+  "unmigrated": 0,
   "consumers": {
     "createAuditStream": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"
-      ]
+      ],
+      "reason": "Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
     },
     "deleteAuditStream": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
-      ]
+      ],
+      "reason": "Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
     },
     "getAuditStream": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "WorkspaceMetadata"
-      ]
+      ],
+      "reason": "Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
     },
     "mutateAuditStream": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
-      ]
+      ],
+      "reason": "Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
     },
     "streamAuditLog": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "WorkspaceMetadataFields"
-      ]
+      ],
+      "reason": "Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
     },
     "updateAuditStream": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
-      ]
+      ],
+      "reason": "Declares webhook/failure fields for configuration and one webhook key for background cursor updates; canonical persistence retains audits, events and secret storage outside the transaction. Off mode forwards to the original accessor. The worked examples cover creation, read, deletion and cursor writes."
     }
   }
 }

@@ -1,13 +1,14 @@
 {
   "source": "server/application_uninstall.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "uninstallApplicationInstallation": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "workspaceData"
-      ]
+      ],
+      "reason": "Its direct workspace read needs only identity and live viewer role, now supplied by workspaceDataScoped. Existing uninstall and webhook helpers retain their separate inventory blockers; this review does not certify those downstream operations."
     }
   }
 }

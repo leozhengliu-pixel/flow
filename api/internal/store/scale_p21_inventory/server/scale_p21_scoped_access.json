@@ -1,0 +1,14 @@
+{
+  "source": "server/scale_p21_scoped_access.go",
+  "unmigrated": 0,
+  "consumers": {
+    "workspaceDataScoped": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "workspaceData"
+      ],
+      "reason": "Shared scoped adapter: exact legacy dispatch when residency is off; explicit P15 selection, bounded admission, canonical writes and rejection before commit for undeclared or oversized work in bounded mode. P21 scoped accessor and permission differential tests cover this boundary."
+    }
+  }
+}

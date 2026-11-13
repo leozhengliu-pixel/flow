@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Bounded metadata migrations can declare record/field inputs through shared scoped read and mutation adapters, with canonical streaming scans for background work. Consumer reviews are partitioned by source file for independent migrations; bounded metadata remains off by default.
 - Bounded metadata OAuth identity checks read canonical workspace/secret scalars without application descriptions or manifests, and observe secret rotation and removal without waiting for a peer refresh. Legacy off-mode lookups are unchanged.
 - Bounded metadata policy readers now have explicit coverage reviews; SCIM workspace identity reads avoid metadata cloning in bounded mode. `FLOW_BOUNDED_METADATA` remains off and activation still requires complete consumer coverage.
 - Catalog and canonical record reads retain legacy versions until the record journal is ready, including when `FLOW_RECORD_JOURNAL=on` is set before initialization. Journal catalog continuation pages keep using ordered indexes.

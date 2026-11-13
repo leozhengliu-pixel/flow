@@ -1,0 +1,524 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"reflect"
+	"slices"
+	"testing"
+	"time"
+
+	"flow/api/internal/domain"
+	"flow/api/internal/idgen"
+)
+
+// BoundedMetadataEnabled describes this store, not a process environment
+// variable that could change after OpenDatabase selected its representation.
+func (s *SQLiteStore) BoundedMetadataEnabled() bool { return s.metadataResidency != nil }
+
+// BoundedMetadataViewForTesting shares canonical SQL with a test fixture while
+// loading only resident policy. It cannot activate a production application.
+// The caller must keep the owning store alive and must not Close this view.
+func (s *SQLiteStore) BoundedMetadataViewForTesting(ctx context.Context) (*SQLiteStore, error) {
+	if !testing.Testing() {
+		return nil, ErrBoundedMetadataCoverage
+	}
+	view := &SQLiteStore{db: s.db, dialect: s.dialect, maxStateBytes: s.maxStateBytes, viewer: s.viewer, workspaces: map[string]domain.Bootstrap{}, metadataResidency: newMetadataResidency()}
+	view.metadataResidency.requireCoverage = false
+	if err := view.loadResidentWorkspaces(ctx); err != nil {
+		return nil, err
+	}
+	return view, nil
+}
+
+// WorkspaceMetadataScoped is a trusted internal read. The off branch is the
+// exact legacy accessor. In bounded mode omitted data is unavailable, not empty
+// canonical state; callers must declare their complete reference closure.
+func (s *SQLiteStore) WorkspaceMetadataScoped(ctx context.Context, workspace string, scope MetadataRecordScope) (domain.Bootstrap, bool, error) {
+	if !s.BoundedMetadataEnabled() {
+		data, ok := s.WorkspaceMetadata(workspace)
+		return data, ok, nil
+	}
+	data, err := s.readScopedMetadata(ctx, workspace, scope)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Bootstrap{}, false, nil
+	}
+	return data, err == nil, err
+}
+
+// WorkspaceMetadataFieldsScoped preserves the field-only legacy accessor.
+func (s *SQLiteStore) WorkspaceMetadataFieldsScoped(ctx context.Context, workspace string, scope MetadataRecordScope, legacyFields ...string) (domain.Bootstrap, bool, error) {
+	if !s.BoundedMetadataEnabled() {
+		data, ok := s.WorkspaceMetadataFields(workspace, legacyFields...)
+		return data, ok, nil
+	}
+	return s.WorkspaceMetadataScoped(ctx, workspace, scope)
+}
+
+func (s *SQLiteStore) readScopedMetadata(ctx context.Context, workspace string, scope MetadataRecordScope) (domain.Bootstrap, error) {
+	if !RecordHydrationEnabled() {
+		return domain.Bootstrap{}, ErrBoundedMetadataCoverage
+	}
+	if workspace == "" {
+		s.mu.RLock()
+		workspace = s.lastWorkspaceKey
+		s.mu.RUnlock()
+	}
+	ctx = WithMetadataRecords(ctx, scope)
+	read, release, err := s.BeginWorkspaceRead(ctx, workspace)
+	if err != nil {
+		return domain.Bootstrap{}, err
+	}
+	defer release()
+	snapshot, ok := read.Value(workspaceReadKey{}).(workspaceRead)
+	if !ok || snapshot.database != s.db || snapshot.workspace != workspace {
+		return domain.Bootstrap{}, ErrMetadataRecordQuery
+	}
+	// This is a trusted read, like WorkspaceMetadata. In particular, preserve
+	// trash restore links; only viewer projections may strip those fields.
+	return cloneBootstrap(snapshot.metadata), nil
+}
+
+// ProjectScopedMetadata projects declared inputs using live principal policy.
+// It does not load directory or body collections implicitly. Fields requiring a
+// wider reference graph must use their dedicated authorized record/page API.
+func (s *SQLiteStore) ProjectScopedMetadata(ctx context.Context, workspace, principal string, key *domain.APIKey, scope MetadataRecordScope) (domain.Bootstrap, error) {
+	access, err := s.ResolveAccess(ctx, workspace, principal, key)
+	if err != nil {
+		return domain.Bootstrap{}, err
+	}
+	// The generic settings projection is deliberately narrow. Entity families
+	// have dedicated authorization, reference redaction and count contracts.
+	for _, field := range metadataRecordFields(scope) {
+		if !slices.Contains([]string{"settings", "workspaceSettings", "identityProviders", "integrationConnections", "customEmojis"}, field) {
+			return domain.Bootstrap{}, fmt.Errorf("%w: %s needs its authorized record/page adapter", ErrMetadataRecordQuery, field)
+		}
+	}
+	// Settings also contains private posts, meetings and dashboards whose
+	// projection needs entity references. Admit only explicitly reviewed keys.
+	if slices.Contains(scope.Fields, "settings") {
+		return domain.Bootstrap{}, fmt.Errorf("%w: settings requires reviewed point keys", ErrMetadataRecordQuery)
+	}
+	for _, record := range append(slices.Clone(scope.Read), scope.Write...) {
+		if record.Kind == "settings" && record.ID != "applicationPolicies" {
+			return domain.Bootstrap{}, fmt.Errorf("%w: settings/%s needs its authorized adapter", ErrMetadataRecordQuery, record.ID)
+		}
+	}
+	data, err := s.readScopedMetadata(ctx, workspace, scope)
+	if err != nil {
+		return domain.Bootstrap{}, err
+	}
+	data.Viewer, data.ViewerRole = access.policy.metadata.Viewer, access.policy.metadata.ViewerRole
+	if err := s.ValidateAccess(ctx, access); err != nil {
+		return domain.Bootstrap{}, err
+	}
+	return data, nil
+}
+
+// MutateWorkspaceScoped and its aggregate variant declare metadata inputs.
+// Authorization remains in the existing middleware/callback. Off mode forwards
+// the original context unchanged; no scope, verification, or flag is injected.
+func (s *SQLiteStore) MutateWorkspaceScoped(ctx context.Context, workspace, event, aggregate string, payload any, scope MetadataRecordScope, mutate func(*domain.Bootstrap) error) error {
+	if !s.BoundedMetadataEnabled() {
+		return s.MutateWorkspace(ctx, workspace, event, aggregate, payload, mutate)
+	}
+	return s.MutateWorkspaceScopedWithAggregate(ctx, workspace, event, payload, scope, func(data *domain.Bootstrap) (string, error) {
+		return aggregate, mutate(data)
+	})
+}
+
+func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, workspace, event string, payload any, scope MetadataRecordScope, mutate func(*domain.Bootstrap) (string, error)) error {
+	if !s.BoundedMetadataEnabled() {
+		return s.MutateWorkspaceWithAggregate(ctx, workspace, event, payload, mutate)
+	}
+	if !RecordHydrationEnabled() {
+		return ErrBoundedMetadataCoverage
+	}
+	if err := validateMetadataRecordScope(scope); err != nil {
+		return err
+	}
+	if _, content := mutationScopeFromContext(ctx); content || UsesIssueRecordMutations(ctx) {
+		return fmt.Errorf("%w: scoped metadata callback declares issue/content side effects", ErrMetadataRecordQuery)
+	}
+	policyWrite := slices.ContainsFunc(metadataRecordFields(scope), func(field string) bool {
+		mode := metadataResidencyFields()[field]
+		return mode == "policy" || mode == "core"
+	})
+	reservation := 8 << 20
+	if policyWrite {
+		reservation += metadataPolicyBytes
+	}
+	ctx, release, err := s.admitMetadataWork(ctx, reservation)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if workspace == "" {
+		s.mu.RLock()
+		workspace = s.lastWorkspaceKey
+		s.mu.RUnlock()
+	}
+	ctx = WithMetadataRecords(ctx, scope)
+	ctx = context.WithValue(ctx, scopedMetadataWriteKey{}, true)
+	ctx, collector, callback := collectMutationAudit(ctx, workspace, mutate)
+	var committed domain.DomainEvent
+	var realtime json.RawMessage
+	apply := func(ctx context.Context) error {
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
+		actor, hasActor := actorFromContext(ctx)
+		actor = mutationInputActor(actor)
+		workspaceID, err := s.WorkspaceIDForKey(ctx, workspace)
+		if err != nil {
+			return err
+		}
+		role, teams := "", []string(nil)
+		if hasActor {
+			var status string
+			role, status, err = s.WorkspaceRole(ctx, workspaceID, actor.ID)
+			if err != nil || status != "active" {
+				return ErrAuthForbidden
+			}
+			teams = s.actorTeamIDs(ctx, workspaceID, actor.ID)
+		}
+		hooks, err := s.residentWebhookNeeded(ctx, workspace)
+		if err != nil {
+			return err
+		}
+		tx, err := s.db.BeginTx(ctx, s.recordTxOptions())
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		// Serialize collection membership as well as existing rows. This is
+		// required for callbacks that allocate IDs or validate uniqueness.
+		lock := ""
+		if tx.dialect != "sqlite" {
+			lock = " FOR UPDATE"
+		}
+		var raw []byte
+		if err := tx.QueryRowContext(ctx, `SELECT CASE WHEN LENGTH(data)<=? THEN data ELSE NULL END FROM workspace_states WHERE workspace_key=?`+lock, MetadataRecordPageMaxBytes, workspace).Scan(&raw); err != nil {
+			return err
+		}
+		if raw == nil {
+			return ErrMetadataPageBudget
+		}
+		if _, _, err := residentMetadataRoot(raw); err != nil {
+			return err
+		}
+		if s.metadataResidency.requireCoverage {
+			if err := checkRecordJournalCoverage(ctx, tx, workspace); err != nil {
+				return err
+			}
+		}
+		before, err := s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
+		if err != nil {
+			return err
+		}
+		if before.Workspace.ID != workspaceID {
+			return ErrResourceAccessChanged
+		}
+		next := cloneBootstrap(before)
+		originalRole := next.ViewerRole
+		refreshDisplayReferences(&next)
+		if hasActor {
+			next.Viewer, next.ViewerRole, next.ViewerTeamIDs = actor, role, teams
+		}
+		next.FormerMembers = s.formerMemberLookup(ctx, tx, &next)
+		next.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
+		aggregate, err := callback(&next)
+		next.ViewerRole, next.ViewerTeamIDs, next.FormerMembers, next.CollaborationUpdates = originalRole, nil, nil, nil
+		if err != nil {
+			return err
+		}
+		if err := validateScopedMetadataChanges(before, next, scope); err != nil {
+			return err
+		}
+		encoded, err := json.Marshal(next)
+		if err != nil {
+			return err
+		}
+		budget := newMetadataHydrationBudget()
+		if err := budget.consume(encoded); err != nil {
+			return err
+		}
+		root, shapes, _, err := splitWorkspaceMetadata(encoded)
+		if err != nil {
+			return err
+		}
+		for _, field := range metadataRecordFields(scope) {
+			value := root[field]
+			if shapes[field] == "" && len(value) > 2 && (value[0] == '[' || value[0] == '{') && metadataResidencyFields()[field] != "core" {
+				return fmt.Errorf("%w: unsplittable callback output %s", ErrMetadataRecordQuery, field)
+			}
+		}
+		payloadRaw, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		committed = domain.DomainEvent{ID: idgen.New("evt_"), Type: event, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
+		if hooks && s.webhookConfigured() {
+			committed.PreviousValues = aggregatePreviousValues(before, next, aggregate)
+		}
+		realtime = enrichRealtimePayload(payloadRaw, aggregateJSONValue(next, aggregate), event)
+		if len(realtime) > MetadataRecordPageMaxBytes {
+			return ErrMetadataPageBudget
+		}
+		// Complete fields use the proven delta writer. Point records are
+		// written separately so a deletion never scans the whole collection.
+		complete := cloneBootstrap(next)
+		left, right := reflect.ValueOf(&before).Elem(), reflect.ValueOf(&complete).Elem()
+		for _, field := range persistedMetadataFields() {
+			if field.name != "viewer" && !slices.Contains(scope.Fields, field.name) {
+				right.Field(field.index).Set(left.Field(field.index))
+			}
+		}
+		if err := s.persistWorkspaceTx(ctx, tx, workspace, &before, &complete, nil, &committed, nil); err != nil {
+			return err
+		}
+		changes, _, err := scaleP16RecordChanges(before, next)
+		if err != nil {
+			return err
+		}
+		changes = slices.DeleteFunc(changes, func(change metadataRecordChange) bool { return slices.Contains(scope.Fields, change.field) })
+		for _, change := range changes {
+			field, _, typed := metadataRecordType(change.field)
+			isMap := typed && reflect.TypeFor[domain.Bootstrap]().Field(field.index).Type.Kind() == reflect.Map
+			if change.insert && !isMap {
+				return fmt.Errorf("%w: point creation requires a complete field or a dedicated creation writer", ErrMetadataRecordQuery)
+			}
+			if change.insert && isMap {
+				if err := ensureOAuthMetadataShape(ctx, tx, workspace, change.field, "map", lock); err != nil {
+					return err
+				}
+			}
+		}
+		if err := scaleP16WriteChanges(ctx, tx, workspace, newIssueReferences(next), changes); err != nil {
+			return err
+		}
+		var policy domain.Bootstrap
+		var stamp copyStamp
+		var cost int
+		if policyWrite {
+			// Check the candidate policy before commit, without asking the
+			// transaction's not-yet-flushed journal to certify itself.
+			probe := &SQLiteStore{db: s.db, dialect: s.dialect, metadataResidency: newMetadataResidency()}
+			probe.metadataResidency.requireCoverage = false
+			policy, stamp, cost, err = probe.readResidentWorkspace(ctx, tx, workspace)
+			if err != nil {
+				return err
+			}
+			s.metadataResidency.mu.Lock()
+			total := cost
+			for key, bytes := range s.metadataResidency.policy {
+				if key != workspace {
+					total += bytes
+				}
+			}
+			limit := s.metadataResidency.policyLimit
+			s.metadataResidency.mu.Unlock()
+			if total > limit {
+				return ErrMetadataWorkBudget
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		if policyWrite {
+			// The writeMu serializes policy cost changes in this store. The
+			// precommit check guarantees installation fits after commit too.
+			return s.installResidentPolicy(workspace, policy, stamp, 0, cost)
+		}
+		s.mu.Lock()
+		s.forgetCopyRevisionLocked(workspace)
+		s.mu.Unlock()
+		return nil
+	}
+	err = mutationAttempts(ctx, fullMutationAttempts, func(ctx context.Context) error {
+		if s.coordinator != nil {
+			return s.coordinator.WithWorkspaceLock(ctx, workspace, func() error { return apply(ctx) })
+		}
+		return apply(ctx)
+	}, nil)
+	if errors.Is(err, ErrNoMutation) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if len(collector.pending) != 0 {
+		return fmt.Errorf("scoped mutation left uncommitted audit entries")
+	}
+	s.dropMetadataCache(ctx, workspace)
+	s.publishMutation(ctx, workspace, committed, realtime)
+	return nil
+}
+
+type scopedMetadataWriteKey struct{}
+
+func validateScopedMetadataChanges(before, after domain.Bootstrap, scope MetadataRecordScope) error {
+	if after.Issues != nil || after.Comments != nil || after.Activities != nil || after.Notifications != nil || after.NotificationDeliveries != nil {
+		return ErrMetadataRecordQuery
+	}
+	left, right := reflect.ValueOf(&before).Elem(), reflect.ValueOf(&after).Elem()
+	for _, field := range changedMetadataFields(before, after) {
+		if field.name == "viewer" || slices.Contains(scope.Fields, field.name) {
+			continue
+		}
+		a, b := left.Field(field.index), right.Field(field.index)
+		if !rebaseableMetadataField(field, a.Type()) {
+			return fmt.Errorf("%w: undeclared field %s", ErrMetadataRecordQuery, field.name)
+		}
+		old, next := newMetadataCollection(field, a), newMetadataCollection(field, b)
+		keys := append(scopedCollectionKeys(old), scopedCollectionKeys(next)...)
+		for _, id := range keys {
+			x, xOK := old.record(id)
+			y, yOK := next.record(id)
+			if xOK == yOK && (!xOK || metadataValueEqual(x, y)) {
+				continue
+			}
+			if !metadataRecordSelected(scope, field.name, id, true) {
+				return fmt.Errorf("%w: undeclared write %s/%s", ErrMetadataRecordQuery, field.name, id)
+			}
+		}
+		if a.Kind() == reflect.Slice {
+			// A point selection cannot express collection reordering.
+			previous := []string{}
+			current := []string{}
+			for _, id := range scopedCollectionKeys(old) {
+				if _, exists := next.record(id); exists {
+					previous = append(previous, id)
+				}
+			}
+			for _, id := range scopedCollectionKeys(next) {
+				if _, exists := old.record(id); exists {
+					current = append(current, id)
+				}
+			}
+			if !slices.Equal(previous, current) {
+				return ErrMetadataRecordQuery
+			}
+		}
+	}
+	return nil
+}
+
+func scopedCollectionKeys(collection metadataCollection) []string {
+	keys := make([]string, 0, len(collection.ids))
+	for key := range collection.ids {
+		keys = append(keys, key)
+	}
+	if collection.isMap() {
+		slices.Sort(keys)
+	} else {
+		slices.SortFunc(keys, func(a, b string) int { return collection.ids[a] - collection.ids[b] })
+	}
+	return keys
+}
+
+// ScanMetadataRecords is a trusted, snapshot-consistent reader for exports and
+// background jobs. Each callback owns at most one P15 page; retaining pages
+// defeats the contract. It never accumulates records between callbacks.
+func (s *SQLiteStore) ScanMetadataRecords(ctx context.Context, workspace, kind string, visit func(RecordBatch) error) error {
+	if workspace == "" || !validMetadataKey(RecordKey{Kind: kind}) || visit == nil {
+		return ErrMetadataRecordQuery
+	}
+	if _, ok := metadataFieldByName(kind); !ok {
+		return ErrMetadataRecordQuery
+	}
+	ctx, release, err := s.admitMetadataWork(ctx, 2<<20)
+	if err != nil {
+		return err
+	}
+	defer release()
+	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	return scanMetadataHeaders(ctx, tx, workspace, kind, func(key RecordKey, _ int64) error {
+		batch, err := s.readCanonicalRecords(ctx, tx, workspace, []RecordKey{key}, "detail")
+		if err != nil {
+			return err
+		}
+		return visit(batch)
+	})
+}
+
+// StreamMetadataRecords visits complete canonical JSON through fixed-size SQL
+// chunks in one read snapshot. It preserves collection order and null/empty
+// values. Readers are valid only during their callback; callers authorize and
+// redact before exposing records, and must not retain or accumulate bodies.
+func (s *SQLiteStore) StreamMetadataRecords(ctx context.Context, workspace, kind string, visit func(RecordKey, io.Reader) error) error {
+	if workspace == "" || !validMetadataKey(RecordKey{Kind: kind}) || visit == nil {
+		return ErrMetadataRecordQuery
+	}
+	if _, ok := metadataFieldByName(kind); !ok {
+		return ErrMetadataRecordQuery
+	}
+	ctx, release, err := s.admitMetadataWork(ctx, 2<<20)
+	if err != nil {
+		return err
+	}
+	defer release()
+	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	return scanMetadataHeaders(ctx, tx, workspace, kind, func(key RecordKey, size int64) error {
+		reader := &canonicalMetadataReader{ctx: ctx, tx: tx, workspace: workspace, key: key, size: size}
+		return visit(key, reader)
+	})
+}
+
+func scanMetadataHeaders(ctx context.Context, tx *sqlTx, workspace, kind string, visit func(RecordKey, int64) error) error {
+	last, started, ordinal := "", false, int64(0)
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		where, args := "workspace_key=? AND field=?", []any{workspace, kind}
+		if started {
+			where += " AND (collection_order>? OR (collection_order=? AND record_key>?))"
+			args = append(args, ordinal, ordinal, last)
+		}
+		rows, err := tx.QueryContext(ctx, "SELECT record_key,collection_order,LENGTH(data) FROM workspace_metadata_records WHERE "+where+" ORDER BY collection_order,record_key LIMIT 50", args...)
+		if err != nil {
+			return err
+		}
+		type header struct {
+			id          string
+			order, size int64
+		}
+		page := []header{}
+		for rows.Next() {
+			var item header
+			if err := rows.Scan(&item.id, &item.order, &item.size); err != nil {
+				rows.Close()
+				return err
+			}
+			page = append(page, item)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		if len(page) == 0 {
+			return nil
+		}
+		// One detail per batch preserves large-row omission semantics without
+		// letting a 50-key page pin fifty maximum-size bodies.
+		for _, item := range page {
+			if err := visit(RecordKey{Kind: kind, ID: item.id}, item.size); err != nil {
+				return err
+			}
+		}
+		last, started, ordinal = page[len(page)-1].id, true, page[len(page)-1].order
+	}
+}

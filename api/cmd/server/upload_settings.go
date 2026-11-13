@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func allowedWorkspaceFile(settings domain.WorkspaceSettings, filename, detectedType string) bool {
@@ -26,7 +28,10 @@ func allowedWorkspaceFile(settings domain.WorkspaceSettings, filename, detectedT
 }
 
 func (s *server) checkUploadPolicy(workspace, filename string, input io.Reader) (io.Reader, error) {
-	metadata, ok := s.store.WorkspaceMetadata(workspace)
+	metadata, ok, readErr := s.store.WorkspaceMetadataScoped(context.Background(), workspace, store.MetadataRecordScope{Fields: []string{"workspaceSettings"}})
+	if readErr != nil {
+		return nil, readErr
+	}
 	if !ok {
 		return nil, fmt.Errorf("workspace not found")
 	}

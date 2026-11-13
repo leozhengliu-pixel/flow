@@ -1,31 +1,34 @@
 {
   "source": "server/application_policies.go",
-  "unmigrated": 3,
+  "unmigrated": 0,
   "consumers": {
     "deleteApplicationPolicy": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
-      ]
+      ],
+      "reason": "Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential."
     },
     "listApplicationPolicies": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "workspaceData"
-      ]
+      ],
+      "reason": "Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential."
     },
     "saveApplicationPolicy": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
         "workspaceData"
-      ]
+      ],
+      "reason": "Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential."
     }
   }
 }

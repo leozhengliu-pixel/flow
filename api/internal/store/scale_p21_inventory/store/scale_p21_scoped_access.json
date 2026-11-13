@@ -1,0 +1,44 @@
+{
+  "source": "store/scale_p21_scoped_access.go",
+  "unmigrated": 0,
+  "consumers": {
+    "readScopedMetadata": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginWorkspaceRead"],
+      "reason": "Uses an explicit bounded P15 read scope and releases its SQL snapshot; copies the trusted selected data without stripping server-only restore links. Covered by scoped read preservation and budget tests."
+    },
+    "WorkspaceMetadataScoped": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "WorkspaceMetadata"
+      ],
+      "reason": "Shared scoped adapter: exact legacy dispatch when residency is off; explicit P15 selection, bounded admission, canonical writes and rejection before commit for undeclared or oversized work in bounded mode. P21 scoped accessor and permission differential tests cover this boundary."
+    },
+    "WorkspaceMetadataFieldsScoped": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ],
+      "reason": "Shared scoped adapter: exact legacy dispatch when residency is off; explicit P15 selection, bounded admission, canonical writes and rejection before commit for undeclared or oversized work in bounded mode. P21 scoped accessor and permission differential tests cover this boundary."
+    },
+    "MutateWorkspaceScoped": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "MutateWorkspace"
+      ],
+      "reason": "Shared scoped adapter: exact legacy dispatch when residency is off; explicit P15 selection, bounded admission, canonical writes and rejection before commit for undeclared or oversized work in bounded mode. P21 scoped accessor and permission differential tests cover this boundary."
+    },
+    "MutateWorkspaceScopedWithAggregate": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "MutateWorkspaceWithAggregate"
+      ],
+      "reason": "Shared scoped adapter: exact legacy dispatch when residency is off; explicit P15 selection, bounded admission, canonical writes and rejection before commit for undeclared or oversized work in bounded mode. P21 scoped accessor and permission differential tests cover this boundary."
+    }
+  }
+}
