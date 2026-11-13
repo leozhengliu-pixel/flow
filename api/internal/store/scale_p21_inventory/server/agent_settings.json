@@ -1,10 +1,11 @@
 {
   "source": "server/agent_settings.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "updateWorkspaceAgentGuidance": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Scoped workspaceSettings input preserves guidance validation, no-op detection and live mutation actor attribution; no entity content or team filtering is used. TestScaleP21M3GuidanceDifferential compares responses, persisted settings, webhook/realtime effects across principals and credential restrictions, forbidden authority, queued/replay revocation, cancellation, ownership and oversized output. Shared HTTP middleware remains independently blocked.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
