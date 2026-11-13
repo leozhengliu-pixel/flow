@@ -480,10 +480,11 @@ function ActivityHistoryEntry({ row, context, now, targetId, nested = false }: {
   const [expanded, setExpanded] = useState(false)
   const open = expanded || Boolean(row.members?.some(member => member.id === targetId || member.recordId === targetId))
   const body = <><span className="activity-event-icon"><ActivityEventIcon event={row} context={context}/></span><span><ActivityRow event={row} description={row.description} context={context} now={now} longTime={nested}/></span></>
-  return <div className="activity-history-entry">
+  // Rows stay direct siblings in their block (an expanded family adds its sub-rows right after its header).
+  return <>
     {row.members ? <div className="timeline-item event activity-family-header" role="button" tabIndex={0} aria-expanded={open} onClick={event => { if (!(event.target as Element).closest('a')) setExpanded(!open) }} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setExpanded(!open) } }}>{body}</div> : <div className="timeline-item event" id={`activity-${row.id}`} data-activity-anchor={`activity-${row.id}`}>{body}</div>}
     {open && row.members && <div className="activity-history-block activity-family-entries" data-connected={row.members.length >= 2 || undefined}>{row.members.map(member => <ActivityHistoryEntry key={member.id} row={member} context={context} now={now} nested/>)}</div>}
-  </div>
+  </>
 }
 
 function ActivityIssueLink({ id, label, context }: { id: string; label: string; context: ActivityContext }) {

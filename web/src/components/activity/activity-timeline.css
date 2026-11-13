@@ -26,8 +26,7 @@
 .activity-history-block { position: relative; display: flex; flex-direction: column; }
 .issue-activity-timeline > .activity-history-block { padding: 0 10px 8px 0; }
 .activity-history-block[data-connected]::before { content: ''; position: absolute; left: 17px; top: 14px; bottom: 20px; width: 1px; background: var(--issue-activity-connector); pointer-events: none; }
-.activity-history-entry { display: contents; }
-.activity-history-block > .activity-history-entry:last-child > .timeline-item .activity-event-icon::after { content: ''; position: absolute; width: 36px; height: 16px; top: 18px; left: 0; background: var(--bg-panel); pointer-events: none; }
+.activity-history-block > :nth-last-child(1 of .timeline-item) .activity-event-icon::after { content: ''; position: absolute; width: 36px; height: 16px; top: 18px; left: 0; background: var(--bg-panel); pointer-events: none; }
 .activity-family-entries { margin-left: 25px; }
 .activity-family-header { cursor: pointer; border-radius: 4px; }
 .activity-family-header:hover { background: var(--theme-soft-overlay); }
