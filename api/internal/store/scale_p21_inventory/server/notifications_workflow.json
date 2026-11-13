@@ -1,6 +1,6 @@
 {
   "source": "server/notifications_workflow.go",
-  "unmigrated": 19,
+  "unmigrated": 16,
   "consumers": {
     "acknowledgeDesktopNotifications": {
       "owner": "P18",
@@ -37,7 +37,8 @@
     },
     "deleteIssueTemplate": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes issueTemplates/templateId with original team/visibility ownership predicate and unchanged off accessor. TestScaleP21SW10IssueTemplateDeletionDifferential compares principal/key matrix, ownership and missing cases, canonical rows, audit and complete sinks, cross-workspace and queued/replay revocation, unrelated oversized bodies, budget/cancellation rollback and recovery.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -45,7 +46,8 @@
     },
     "getNotificationPreferences": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Live ResolveAccess, owned notificationPreferences/viewerID read and post-read ValidateAccess preserve exact off accessor and auth-disabled stored Viewer. TestScaleP21SW10PreferencesDifferential compares principal/key matrix, stored/default preferences and nil/empty values, canonical rows, cross-workspace/revocation, ownership, cancellation and explicit budgets while unrelated oversized preferences remain unchanged and full decodes remain zero.",
       "accessors": [
         "workspaceData"
       ]
@@ -139,7 +141,8 @@
     },
     "updateTeamLabel": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes labels/labelId with existing scope/validation/no-op rules; metadata-only legacy semantics do not persist issue label copies. TestScaleP21SW10TeamLabelDifferential compares principal/key matrix, canonical label/actor rows and complete sinks, byte-identical issue SQL/version/order and link indexes, rendered label resolution, revocation, cross-workspace, cancellation/budget rollback and recovery.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

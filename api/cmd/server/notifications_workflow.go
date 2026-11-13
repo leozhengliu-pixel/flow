@@ -47,7 +47,55 @@ func defaultPreferences(userID string) domain.NotificationPreferences {
 }
 
 func (s *server) getNotificationPreferences(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	var data domain.Bootstrap
+	if !s.store.BoundedMetadataEnabled() {
+		data = s.workspaceData(r)
+	} else {
+		var access store.AccessContext
+		var err error
+		viewerID := ""
+		if s.authDisabled {
+			var ok bool
+			data, ok, err = s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{})
+			if err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+			if !ok {
+				writeError(w, http.StatusNotFound, "workspace not found")
+				return
+			}
+			viewerID = data.Viewer.ID
+		} else {
+			var key *domain.APIKey
+			if credential, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+				key = &credential
+			}
+			access, err = s.store.ResolveAccess(r.Context(), workspaceKey(r), authUser(r).ID, key)
+			if err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+			viewerID = access.PrincipalID
+		}
+		var ok bool
+		data, ok, err = s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "notificationPreferences", ID: viewerID}}})
+		if err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+		if !ok {
+			writeError(w, http.StatusNotFound, "workspace not found")
+			return
+		}
+		if !s.authDisabled {
+			if err := s.store.ValidateAccess(r.Context(), access); err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+		}
+		data.Viewer.ID = viewerID
+	}
 	preferences, ok := data.NotificationPreferences[data.Viewer.ID]
 	if !ok {
 		preferences = defaultPreferences(data.Viewer.ID)
@@ -1092,7 +1140,7 @@ func (s *server) updateIssueTemplate(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteIssueTemplate(w http.ResponseWriter, r *http.Request) {
 	teamID, templateID := r.PathValue("id"), r.PathValue("templateId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_template.deleted", templateID, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "issue_template.deleted", templateID, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "issueTemplates", ID: templateID}}}, func(data *domain.Bootstrap) error {
 		before := len(data.IssueTemplates)
 		data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool {
 			return item.ID == templateID && issueTemplateOwnedByTeam(item, teamID)
@@ -1171,7 +1219,7 @@ func (s *server) updateTeamLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	teamID, labelID := r.PathValue("id"), r.PathValue("labelId")
 	var updated domain.IssueLabel
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_label.updated", labelID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "issue_label.updated", labelID, input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "labels", ID: labelID}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Labels, func(item domain.IssueLabel) bool { return item.ID == labelID && item.Scope == teamID })
 		if index < 0 {
 			return errNotFound
