@@ -91,6 +91,10 @@ func (s *server) syncManifest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
+	if r.URL.Query().Has("surface") {
+		s.scaleP19Manifest(w, r)
+		return
+	}
 	// H0 must precede every snapshot/page read. Never replace it with a later
 	// head: callers must replay all changes committed while initialization ran.
 	head, err := s.store.WorkspaceChangeHead(r.Context(), workspaceKey(r))

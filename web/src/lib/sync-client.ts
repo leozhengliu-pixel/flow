@@ -4,7 +4,8 @@ import { QueryWindowStore } from '@/lib/query-window-store'
 import { RecordLoader, recordKey } from '@/lib/record-loader'
 import { cacheStringBytes } from '@/lib/scale-p08'
 import { modelChanges, modelRecordKind, syncCollections, SyncWireVersionError } from '@/lib/scale-p13-wire'
-import { scaleP19CoreSupported, scaleP19InitiativeCatalogSupported } from '@/lib/scale-p19-surfaces'
+import { scaleP19CoreSupported, scaleP19InitiativeCatalogSupported, scaleP19ManifestMatches, scaleP19WindowCoreSupported } from '@/lib/scale-p19-surfaces'
+import { scaleP19NeedsCore, scaleP19WindowChanges } from '@/lib/scale-p19-sync'
 import { releaseScaleP19Bytes, retainScaleP19Core } from '@/lib/scale-p19-budget'
 import type { BootstrapData, FlowDocument, RecordKey, SyncChanges, SyncManifest, SyncPageRequest, SyncRecord, SyncRecordBatch, SyncRecordPage, WorkspaceSyncState } from '@/types/flow'
 
@@ -45,7 +46,7 @@ type Transport = {
 type CachedRecord = SyncRecord & { appliedRevision?: number; loadedDetail?: { version: string; value: Record<string, unknown> } }
 
 export function migratedSyncSignal(type: string, surface?: SyncSurface) {
-  if ((surface === 'projects-page' || surface === 'initiatives-page') && (/^(?:project|initiative)\.(?:created|updated|deleted)$/.test(type) || type === 'pulse.summary_scheduled')) return true
+  if ((surface === 'projects-page' || surface === 'initiatives-page') && (/^(?:project|initiative|project_update|initiative_update|project_relation|initiative_relation|user_settings|workspace_preferences|project_status|project_template|team|label|label_group|favorite|subscription)\./.test(type) || type === 'pulse.summary_scheduled')) return true
   return /^(?:resync$|workspace\.resync_required$|issue\.(?:created|updated|deleted|batch_updated)$|document\.(?:created|updated|deleted)$)/.test(type)
 }
 
@@ -68,6 +69,8 @@ export class SyncClient {
   private detailBytes = 0
   private summaryBytes = 0
   private revision = 0
+  private coreRevision = 0
+  private pendingCore?: SyncManifest
   private changed = new Map<string, number>()
   private listeners = new Set<() => void>()
   private cursor: string
@@ -194,12 +197,15 @@ export class SyncClient {
     const frame = payload as { schema?: number; authzEpoch?: string; transaction?: import('@/types/flow').SyncTransaction }
     if (frame.schema === 2 && typeof frame.authzEpoch === 'string' && frame.transaction && typeof frame.transaction.seq === 'string' && typeof frame.transaction.txId === 'string' && Array.isArray(frame.transaction.upserts) && Array.isArray(frame.transaction.removals) && Array.isArray(frame.transaction.invalidations)) {
       if (compareSyncVersions(frame.transaction.seq, this.cursor) <= 0) return true
-      try { this.applyChanges(modelChanges({ next: frame.transaction.seq, head: frame.transaction.seq, authzEpoch: frame.authzEpoch, transactions: [frame.transaction], hasMore: false, resyncRequired: false })) }
+      const page = modelChanges({ next: frame.transaction.seq, head: frame.transaction.seq, authzEpoch: frame.authzEpoch, transactions: [frame.transaction], hasMore: false, resyncRequired: false })
+      if (this.p19Windows && scaleP19NeedsCore(page)) return false
+      try { this.applyChanges(page) }
       catch (error) { this.failRequest(error) }
       return true
     }
     const page = payload as SyncChanges
     if (!Array.isArray(page.transactions) || typeof page.next !== 'string' || typeof page.head !== 'string' || typeof page.authzEpoch !== 'string' || typeof page.hasMore !== 'boolean' || typeof page.resyncRequired !== 'boolean') return false
+    if (this.p19Windows && scaleP19NeedsCore(modelChanges(page))) return false
     this.applyChanges(modelChanges(page))
     return true
   }
@@ -208,7 +214,11 @@ export class SyncClient {
     this.checkEpoch(page.authzEpoch)
     if (page.resyncRequired) { this.requestReset(); throw new SyncResetRequired('Sync baseline expired') }
     if (compareSyncVersions(page.next, this.cursor) < 0 || compareSyncVersions(page.next, page.head) > 0 || page.hasMore && page.next === this.cursor) throw new Error('Invalid sync cursor')
-    const migratedKinds = this.surface === 'initiatives-page' ? ['issue', 'document', 'project', 'initiative'] : this.surface === 'projects-page' ? ['issue', 'document', 'project'] : this.surface === 'people-directory' ? ['issue', 'document', 'user'] : ['issue', 'document']
+    if (this.p19Windows) {
+      if (scaleP19NeedsCore(page) && !this.pendingCore) { this.requestReset(); throw new SyncResetRequired('Core refresh required') }
+      page = scaleP19WindowChanges(page)
+    }
+    const migratedKinds = this.surface === 'initiatives-page' || this.surface === 'projects-page' && this.manifest.capabilities.includes('query-windows-v1') ? ['issue', 'document', 'project', 'initiative'] : this.surface === 'projects-page' ? ['issue', 'document', 'project'] : this.surface === 'people-directory' ? ['issue', 'document', 'user'] : ['issue', 'document']
     if (this.surface && page.transactions.some(transaction => [...transaction.upserts, ...transaction.removals].some(item => !migratedKinds.includes(modelRecordKind(item.key.kind))) || transaction.invalidations.some(kind => !migratedKinds.includes(modelRecordKind(kind))))) {
       this.requireLegacy('Change collection requires a legacy surface adapter')
     }
@@ -221,6 +231,14 @@ export class SyncClient {
     }
     const directoryKind = this.surface === 'document-directory' ? 'document' : this.surface === 'people-directory' ? 'user' : undefined
     if (directoryKind && rows.some(row => modelRecordKind(row.key.kind) === directoryKind)) invalidations.push(directoryKind)
+    if (this.pendingCore) {
+      const next = this.pendingCore
+      this.pendingCore = undefined
+      for (const [kind, field] of Object.entries(syncCollections)) if (JSON.stringify(this.manifest.core[field]) !== JSON.stringify(next.core[field])) this.changed.set(kind, this.revision + 1)
+      this.manifest.core = next.core
+      this.coreRevision = this.revision + 1
+      this.collections = { ...this.collections, ...next.collections }
+    }
     this.install(rows, invalidations, page.next)
     if (compareSyncVersions(page.head, this.targetHead) > 0) this.targetHead = page.head
   }
@@ -230,6 +248,14 @@ export class SyncClient {
     for (let pages = 0; ; pages++) {
       if (pages >= 100) throw new SyncResetRequired('Sync catch-up exceeds page budget')
       const page = await this.transport.changes(this.cursor, this.controller.signal)
+      this.checkEpoch(page.authzEpoch)
+      if (this.p19Windows && scaleP19NeedsCore(page)) {
+        const manifest = await fetchSyncManifest(this.manifest.core.workspace.urlKey, this.controller.signal, undefined, this.surface as 'projects-page' | 'initiatives-page')
+        this.checkEpoch(manifest.authzEpoch)
+        if (!scaleP19ManifestMatches(this.manifest, manifest) || !scaleP19WindowCoreSupported(manifest) || !retainScaleP19Core(this, manifest.core)) this.requireLegacy('Core refresh unavailable')
+        if (compareSyncVersions(page.next, this.cursor) < 0) continue
+        this.pendingCore = manifest
+      }
       this.applyChanges(page)
       if (!page.hasMore) return
     }
@@ -310,6 +336,7 @@ export class SyncClient {
       resourceDetailsOmitted: false,
       issueCollectionPaged: true,
     } as BootstrapData
+    if (same && this.coreRevision > (current.sync?.revision ?? -1)) for (const [field, value] of Object.entries(this.manifest.core)) if (!(Object.values(syncCollections) as string[]).includes(field)) Object.assign(data, { [field]: value })
     for (const [kind, field] of Object.entries(syncCollections)) {
       if (same && (this.changed.get(kind) ?? 0) <= (current.sync?.revision ?? -1)) continue
       const core = this.manifest.core[field] as { id: string }[] | undefined
@@ -330,7 +357,8 @@ export class SyncClient {
         // Keep the mounted editor's full model while its newer body loads, including any acknowledged local save.
         const documentDetail = item.completeness === 'stale' && kind === 'document' ? previousDocument && Object.hasOwn(previousDocument, 'content') ? previousDocument : item.loadedDetail?.value : undefined
         const value = documentDetail ?? (kind === 'issue' && item.completeness !== 'detail' ? { ...item.value, isSummary: item.completeness === 'summary', needsDetailRefresh: true } : item.value)
-        valuesById.set(item.key.id, value as { id: string })
+        const header = this.p19Windows && kind === 'initiative' ? core?.find(header => header.id === item.key.id) : undefined
+        valuesById.set(item.key.id, (header ? { ...value, ...header } : value) as { id: string })
       }
       const values = [...valuesById.values()]
       // Complete core arrays retain their server projection until a record/window for that collection arrives.
@@ -362,6 +390,7 @@ export class SyncClient {
   }
 
   private assertActive() { if (this.closed) throw new SyncResetRequired('Sync context expired') }
+  private get p19Windows() { return (this.surface === 'projects-page' || this.surface === 'initiatives-page') && this.manifest.capabilities.includes('query-windows-v1') }
   private requireLegacy(message: string): never { this.requestReset(true); throw new SyncProtocolUnavailable(message) }
   private failRequest(error: unknown): never {
     if (error instanceof SyncWireVersionError) this.requireLegacy(error.message)
@@ -386,13 +415,13 @@ export async function fetchSurfaceBootstrap(workspaceKey: string, surface: SyncS
   if (!syncV2Enabled() || !surface) return legacy()
   if (surface === 'projects-page' && import.meta.env.VITE_PROJECT_QUERY_WINDOWS !== 'true' || surface === 'initiatives-page' && import.meta.env.VITE_INITIATIVE_QUERY_WINDOWS !== 'true') return legacy()
   let manifest: SyncManifest
-  try { manifest = await fetchSyncManifest(workspaceKey, signal, quiet) }
+  try { manifest = await fetchSyncManifest(workspaceKey, signal, quiet, surface === 'projects-page' || surface === 'initiatives-page' ? surface : undefined) }
   catch (error) {
     if (error instanceof ApiError && [404, 405, 501].includes(error.status)) return legacy()
     throw error
   }
   if (manifest.schema !== 2 || !manifest.capabilities?.includes('sync-v2')) return legacy()
-  if (surface === 'initiatives-page' && !scaleP19InitiativeCatalogSupported(manifest.core, manifest.collections) || surface === 'projects-page' && !scaleP19CoreSupported(manifest.core, manifest.collections)) return legacy()
+  if (!scaleP19WindowCoreSupported(manifest) && (surface === 'initiatives-page' && !scaleP19InitiativeCatalogSupported(manifest.core, manifest.collections) || surface === 'projects-page' && !scaleP19CoreSupported(manifest.core, manifest.collections))) return legacy()
   const client = new SyncClient(manifest, workspaceKey)
   client.surface = surface
   if ((surface === 'projects-page' || surface === 'initiatives-page') && !retainScaleP19Core(client, manifest.core)) { client.dispose(); return legacy() }

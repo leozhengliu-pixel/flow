@@ -3,7 +3,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronDown } from 'lucide-react'
 import { useDesktopSettings } from '@/hooks/use-desktop-settings'
 import { useI18n } from '@/i18n/i18n'
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { memo, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { useCurrentTime } from '@/hooks/use-current-time'
 import { useLatestRef } from '@/hooks/use-latest-ref'
 import { MILESTONE_SHAPE_PATH } from '@/components/issue/milestone-progress'
@@ -37,6 +37,7 @@ import {
 } from './project-timeline-model'
 import './project-timeline.css'
 import './project-timeline-desktop.css'
+import { ScaleP19TimelineContext } from './scale-p19-view'
 
 export const TIMELINE_LABEL_WIDTH = 240
 const ROW_HEIGHT = 36
@@ -75,6 +76,7 @@ type Row =
   | { kind: 'project'; key: string; y: number; project: ProjectPageItem; span?: TimelineSpan }
 
 export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange, onOpenProject, onOpenMilestone, onProjectVisualChange, onUpdateProject, onUpdateMilestone, onCreateDependency, renderCells, renderGroupIcon, groupCount, today: todayProp }: ProjectTimelineProps) {
+  const globalDates = useContext(ScaleP19TimelineContext)
   const desktop = useDesktopSettings()
   const { t, locale } = useI18n()
   // On desktop the time axis spans the pane; project labels overlay its left edge.
@@ -115,7 +117,7 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
   }, [groups, desktop, grouping, ROW_HEIGHT])
 
   const range = useMemo(() => {
-    const dates: Date[] = []
+    const dates: Date[] = (globalDates ?? []).flatMap(value => { const date = parseTimelineDay(value); return date ? [date] : [] })
     for (const row of rows.rows) {
       if (row.kind !== 'project') continue
       if (row.span) dates.push(row.span.start, row.span.end)
@@ -123,7 +125,7 @@ export function ProjectTimeline({ groups, grouping, zoom: zoomProp, onZoomChange
     }
     const range = timelineRange(dates, today, zoom)
     return desktop && zoom === 'year' ? { ...range, pxPerDay: 2.5, width: range.days * 2.5 } : range
-  }, [rows, today, zoom, desktop])
+  }, [rows, today, zoom, desktop, globalDates])
   const header = useMemo(() => desktop ? desktopTimelineHeader(range, locale) : timelineHeader(range), [range, desktop, locale])
   const gridLines = useMemo(() => desktop ? header.major : zoom === 'week' ? header.minor.filter(segment => segment.emphasis) : header.minor, [header, zoom, desktop])
   const todayX = timelineX(range, today) + range.pxPerDay / 2

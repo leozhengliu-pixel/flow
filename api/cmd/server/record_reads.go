@@ -14,6 +14,10 @@ func (s *server) syncRecords(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
+	if r.URL.Query().Has("window") {
+		s.scaleP19Window(w, r)
+		return
+	}
 	access, ok := s.syncAccess(w, r)
 	if !ok {
 		return

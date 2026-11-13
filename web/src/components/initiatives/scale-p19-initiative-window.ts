@@ -20,11 +20,11 @@ export function scaleP19InitiativeEntries<T extends Entry>(entries: T[], index: 
   return result
 }
 
-export function useScaleP19InitiativeWindow<T extends Entry>(entries: T[], query: string) {
+export function useScaleP19InitiativeWindow<T extends Entry>(entries: T[], query: string, remote = false) {
   const context = useContext(ApplicationStoreContext)
   const data = context?.data
   const client = syncClientFor(data)
-  const enabled = Boolean(client) && scaleP19InitiativesEnabled(data)
+  const enabled = !remote && Boolean(client) && scaleP19InitiativesEnabled(data)
   const supported = scaleP19InitiativeCatalogSupported(data ?? {}, data?.sync?.collections)
   const [position, setPosition] = useState({ query, index: 0 })
   const index = position.query === query ? position.index : 0

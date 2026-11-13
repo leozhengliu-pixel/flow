@@ -13,6 +13,10 @@ import { releaseScaleP19Bytes, retainedScaleP19Bytes, retainScaleP19Bytes, SCALE
 
 const api = vi.hoisted(() => ({ listProjectRecords: vi.fn(), fetchSyncManifest: vi.fn(), fetchSyncBatch: vi.fn(), listProjectUpdates: vi.fn() }))
 vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), ...api }))
+vi.mock('@/lib/scale-p19-window-api', async original => ({ ...await original<typeof import('@/lib/scale-p19-window-api')>(), readScaleP19Updates: async (workspace: string, id: string, _cursor: string | undefined, signal: AbortSignal) => {
+  const items = await api.listProjectUpdates(id, signal, workspace)
+  return { schema: 1, items, total: items.length, offset: 0, revision: '1', authzEpoch: 'epoch-1', hasMore: false }
+} }))
 afterEach(() => { vi.unstubAllEnvs(); vi.resetAllMocks() })
 
 function scope(principal = 'member', epoch = 'epoch-1', workspace = 'workspace') {

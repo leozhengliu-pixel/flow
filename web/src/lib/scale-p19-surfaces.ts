@@ -1,5 +1,10 @@
 import type { BootstrapData, SyncManifest } from '@/types/flow'
 import { cacheStringBytes } from '@/lib/scale-p08'
+import { SCALE_P19_QUERY_CAPABILITY } from '@/lib/scale-p19-window-api'
+
+export function scaleP19WindowCoreSupported(manifest: SyncManifest) {
+  return manifest.capabilities.includes(SCALE_P19_QUERY_CAPABILITY) && ['user', 'team', 'label', 'savedView', 'favorite'].every(kind => manifest.collections[kind]?.complete === true) && ['users', 'teams', 'labels', 'initiatives', 'projectStatuses', 'projectTemplates', 'projectRelations', 'favorites', 'savedViews', 'customers'].every(field => Array.isArray(manifest.core[field as keyof BootstrapData]))
+}
 
 export function scaleP19ProjectsEnabled(data: BootstrapData | null | undefined) {
   return import.meta.env.VITE_SYNC_V2 === 'true' && import.meta.env.VITE_PROJECT_QUERY_WINDOWS === 'true' && data?.sync?.capabilities.includes('sync-v2') === true

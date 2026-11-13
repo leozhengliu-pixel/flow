@@ -10,6 +10,7 @@ import type { ProjectFilterField, ProjectFilterOption } from './projects-filter-
 import { releaseScaleP19Bytes, retainScaleP19Bytes, retainScaleP19Core } from '@/lib/scale-p19-budget'
 import { cacheStringBytes } from '@/lib/scale-p08'
 import { scaleP19ProjectSummary } from '@/lib/scale-p19-project-summary'
+import { readScaleP19Window, SCALE_P19_QUERY_CAPABILITY, type ScaleP19ServerProjectPage } from '@/lib/scale-p19-window-api'
 
 const recordsForPage = Symbol('scale-p19-records')
 type VersionedPage = ProjectQueryPage & { [recordsForPage]?: SyncRecord[] }
@@ -24,6 +25,20 @@ export function useScaleP19ProjectWindow(workspace: string, query: ScaleP19Proje
   const window = useMemo(() => {
     const retained = new Map<string, { count: number; release: () => void }>()
     return new ScaleP19ProjectWindow(workspace, async (query, signal, workspace) => {
+      if (query.window) {
+        if (!client?.manifest.capabilities.includes(SCALE_P19_QUERY_CAPABILITY)) throw new ApiError('Query windows unavailable', 501)
+        const page = await readScaleP19Window<ScaleP19ServerProjectPage>(workspace, 'projects', query.window, query.cursor, client.requestSignal(signal))
+        if (page.authzEpoch !== client.manifest.authzEpoch) { client.requestReset(); throw new DOMException('Authorization changed', 'AbortError') }
+        const manifest = await fetchSyncManifest(workspace, client.requestSignal(signal))
+        if (!scaleP19ManifestMatches(client.manifest, manifest)) { client.requestReset(); throw new DOMException('Authorization changed', 'AbortError') }
+        const result: VersionedPage = { ...page, items: page.items.map(project => {
+          const current = client.get({ kind: 'project', id: project.id })
+          if (current?.completeness === 'deleted' && compareSyncVersions(current.version, page.versions[project.id]) >= 0) throw new ApiError('Project window changed while loading', 409)
+          return scaleP19ProjectSummary(current?.value && compareSyncVersions(current.version, page.versions[project.id]) > 0 ? current.value as unknown as Project : project)
+        }) }
+        Object.defineProperty(result, recordsForPage, { value: page.items.map(value => ({ key: { kind: 'project', id: value.id }, version: page.versions[value.id], completeness: 'summary', value: scaleP19ProjectSummary(value) })) })
+        return result
+      }
       const page = await listProjectRecords(query, client?.requestSignal(signal) ?? signal, workspace)
       if (!client) return page
       const records: SyncRecord[] = []
@@ -36,7 +51,7 @@ export function useScaleP19ProjectWindow(workspace: string, query: ScaleP19Proje
           records.push({ ...item, completeness: 'summary' })
         }
       }
-      const manifest = await fetchSyncManifest(workspace, client.requestSignal(signal))
+      const manifest = await fetchSyncManifest(workspace, client.requestSignal(signal), undefined, 'projects-page')
       if (!scaleP19ManifestMatches(client.manifest, manifest)) { client.requestReset(); throw new DOMException('Authorization changed', 'AbortError') }
       if (!manifest.capabilities.includes('sync-v2')) { client.requestReset(true); throw new DOMException('Sync unavailable', 'AbortError') }
       const byId = new Map(records.map(record => [record.key.id, record]))
@@ -75,7 +90,7 @@ export function useScaleP19ProjectWindow(workspace: string, query: ScaleP19Proje
   const request = useRef<AbortController | undefined>(undefined)
   const position = useRef(0)
   const initialized = useRef<{ window: ScaleP19ProjectWindow; key: string } | undefined>(undefined)
-  const load = useCallback(async (index: number) => {
+  const load = useCallback(async function readPage(index: number, retried = false): Promise<void> {
     if (client && !retainScaleP19Core(client, client.manifest.core)) { client.requestReset(true); return }
     request.current?.abort()
     window.cancel()
@@ -85,7 +100,6 @@ export function useScaleP19ProjectWindow(workspace: string, query: ScaleP19Proje
       if (client) {
         const manifest = await fetchSyncManifest(workspace, client.requestSignal(operation.signal))
         if (!scaleP19ManifestMatches(client.manifest, manifest)) { client.requestReset(); return }
-        if (!manifest.capabilities.includes('sync-v2')) { client.requestReset(true); return }
       }
       if (operation.signal.aborted || !mounted.current) return
       const page = await window.read(stableQuery, index)
@@ -93,6 +107,7 @@ export function useScaleP19ProjectWindow(workspace: string, query: ScaleP19Proje
     } catch (error) {
       if (operation.signal.aborted || !mounted.current || error instanceof DOMException && error.name === 'AbortError') return
       if (error instanceof SyncResetRequired) { client?.requestReset(true); return }
+      if (error instanceof ApiError && error.status === 409 && !retried) { window.invalidate(); position.current = 0; await readPage(0, true); return }
       if (error instanceof ApiError && [400, 404, 405, 501].includes(error.status)) { client?.requestReset(true); return }
       if (error instanceof ApiError && [401, 403, 409].includes(error.status)) { client?.requestReset(); return }
       setState({ owner: window, key, loading: false, error: error instanceof Error ? error.message : 'Could not load projects' })
@@ -116,23 +131,24 @@ export function useScaleP19ProjectWindow(workspace: string, query: ScaleP19Proje
     return () => releases.forEach(release => release())
   }, [client, enabled, favoriteIds])
   const current = state.owner === window && state.key === key && !client?.disposed
+  const metadata = current ? state.page as (ScaleP19ProjectPage & Partial<ScaleP19ServerProjectPage>) | undefined : undefined
   const page = useMemo(() => current && state.page ? { ...state.page, items: state.page.items.flatMap(project => {
     const record = client?.get({ kind: 'project', id: project.id })
     if (record?.completeness === 'deleted') return []
     const value = entityStore?.getById('project', project.id) as Project | undefined
     return [scaleP19ProjectSummary(value ?? (record?.value as unknown as Project | undefined) ?? project)]
   }) } : undefined, [client, current, entityStore, state.page])
-  const selectedProjects = window.selectedProjects.flatMap(project => {
+  const selectedProjects = client?.disposed ? [] : window.selectedProjects.flatMap(project => {
     const record = client?.get({ kind: 'project', id: project.id })
     if (record?.completeness === 'deleted') return []
     const value = entityStore?.getById('project', project.id) as Project | undefined
     const name = value?.name ?? record?.value?.name
     return [{ id: project.id, name: typeof name === 'string' ? name : project.name }]
   })
-  return { client, enabled, page, selectedProjects, error: current ? state.error : undefined, loading: enabled && (!current || state.loading), window, load, legacy: () => client?.requestReset(true), select: (ids: string[], projects: Project[]) => window.select(ids.filter(id => client?.get({ kind: 'project', id })?.completeness !== 'deleted'), [...selectedProjects, ...projects]) }
+  return { client, enabled, page, metadata, selectedProjects, error: current ? state.error : undefined, loading: enabled && (!current || state.loading), window, load, legacy: () => client?.requestReset(true), select: (ids: string[], projects: Project[]) => window.select(ids.filter(id => client?.get({ kind: 'project', id })?.completeness !== 'deleted'), [...selectedProjects, ...projects]) }
 }
 
-export function useScaleP19FilterCounts(enabled: boolean, workspace: string, query: ScaleP19ProjectQuery, options: Partial<Record<ProjectFilterField, ProjectFilterOption[]>>, active = true) {
+export function useScaleP19FilterCounts(enabled: boolean, workspace: string, query: ScaleP19ProjectQuery, options: Partial<Record<ProjectFilterField, ProjectFilterOption[]>>, active = true, serverCounts?: Record<string, Record<string, number>>) {
   const context = useContext(ApplicationStoreContext)
   const client = syncClientFor(context?.data)
   const definitions = Object.entries(options).flatMap(([field, values]) => field === 'project' ? [] : values!.map(value => ({ field, id: value.id })))
@@ -145,7 +161,7 @@ export function useScaleP19FilterCounts(enabled: boolean, workspace: string, que
     return () => releaseScaleP19Bytes(token)
   }, [client, enabled, state])
   useEffect(() => {
-    if (!enabled || !active || state?.key === key) return
+    if (!enabled || !active || serverCounts || state?.key === key) return
     const [scope, query, definitions] = JSON.parse(key) as [string, ScaleP19ProjectQuery, Array<{ field: string; id: string }>]
     const controller = new AbortController()
     const signal = client?.requestSignal(controller.signal) ?? controller.signal
@@ -162,7 +178,7 @@ export function useScaleP19FilterCounts(enabled: boolean, workspace: string, que
     void Promise.all(Array.from({ length: Math.min(4, definitions.length) }, run)).then(async () => {
       if (signal.aborted) return
       if (client) {
-        const manifest = await fetchSyncManifest(scope, signal)
+        const manifest = await fetchSyncManifest(scope, signal, undefined, 'projects-page')
         if (!scaleP19ManifestMatches(client.manifest, manifest)) { client.requestReset(); return }
         if (!manifest.capabilities.includes('sync-v2')) { client.requestReset(true); return }
       }
@@ -173,7 +189,7 @@ export function useScaleP19FilterCounts(enabled: boolean, workspace: string, que
       else client?.requestReset(true)
     })
     return () => controller.abort()
-  }, [active, client, enabled, key, state?.key])
+  }, [active, client, enabled, key, state?.key, serverCounts])
   if (!enabled) return options
-  return Object.fromEntries(Object.entries(options).map(([field, values]) => [field, values!.map(option => ({ ...option, count: field === 'project' ? 1 : state?.key === key ? state.counts.get(JSON.stringify([field, option.id])) : undefined }))])) as typeof options
+  return Object.fromEntries(Object.entries(options).map(([field, values]) => [field, values!.map(option => ({ ...option, count: field === 'project' ? 1 : serverCounts ? serverCounts[field]?.[option.id] ?? 0 : state?.key === key ? state.counts.get(JSON.stringify([field, option.id])) : undefined }))])) as typeof options
 }

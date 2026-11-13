@@ -1,0 +1,13 @@
+{
+  "source": "store/scale_p19_metadata.go",
+  "unmigrated": 1,
+  "consumers": {
+    "scaleP19MetadataAt": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

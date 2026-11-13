@@ -89,6 +89,7 @@ export type ProjectDataGroup = {
   color?: string
   projects: ProjectPageItem[]
   subgroups?: ProjectDataGroup[]
+  windowTotal?: number
 }
 
 export type ProjectsDataViewProps = {
@@ -759,7 +760,7 @@ function projectGroupStatusType(name: string, propertyOptions?: ProjectPropertyO
 }
 
 function projectCount(group: ProjectDataGroup): number {
-  return group.subgroups?.reduce((total, subgroup) => total + projectCount(subgroup), 0) ?? group.projects.length
+  return group.windowTotal ?? group.subgroups?.reduce((total, subgroup) => total + projectCount(subgroup), 0) ?? group.projects.length
 }
 
 function issueCountLabel(count: number) {

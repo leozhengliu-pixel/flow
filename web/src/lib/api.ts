@@ -408,8 +408,8 @@ export function setTeamMembership(
 }
 export type BootstrapProjection = 'project-list' | 'issue-detail'
 
-export function fetchSyncManifest(workspaceKey: string, signal?: AbortSignal, quiet?: boolean): Promise<import('@/types/flow').SyncManifest> {
-  return request<import('@/types/flow').SyncManifest>('/api/sync/manifest', { headers: { 'X-Workspace-Key': workspaceKey }, signal, quiet }).then(modelManifest)
+export function fetchSyncManifest(workspaceKey: string, signal?: AbortSignal, quiet?: boolean, surface?: 'projects-page' | 'initiatives-page'): Promise<import('@/types/flow').SyncManifest> {
+  return request<import('@/types/flow').SyncManifest>(`/api/sync/manifest${surface ? `?surface=${surface}` : ''}`, { headers: { 'X-Workspace-Key': workspaceKey }, signal, quiet }).then(modelManifest)
 }
 
 export function fetchSyncRecords(workspaceKey: string, query: import('@/types/flow').SyncPageRequest, signal?: AbortSignal): Promise<import('@/types/flow').SyncRecordPage> {

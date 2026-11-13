@@ -35,6 +35,8 @@ import { projectTemplateChoices } from '@/lib/project-template-choice'
 import { useScaleP19FilterCounts, useScaleP19ProjectWindow } from './scale-p19-project-window'
 import { ScaleP19ProjectPager } from './scale-p19-project-pager'
 import { clearScaleP19ProjectHandoff, readScaleP19ProjectHandoff, writeScaleP19ProjectHandoff } from '@/lib/scale-p19-project-handoff'
+import type { ScaleP19ServerQuery } from '@/lib/scale-p19-window-api'
+import { ScaleP19TimelineContext, scaleP19Groups } from './scale-p19-view'
 
 const EMPTY_PROJECTS: Project[] = []
 
@@ -230,7 +232,8 @@ export function ProjectsPage({
   const activeFilters = useMemo(() => bandActive && extraFilters.length ? [...projectFilters, ...extraFilters] : projectFilters, [bandActive, extraFilters, projectFilters])
   const projectFilterQuery = useMemo(() => activeFilters.map(filter => ({ field: filter.field, operator: filter.operator, values: filter.values.map(value => value.id) })), [activeFilters])
   const windowTeamIds = useMemo(() => scopeTeamId ? [...teamHierarchy(teams, teamSettings, teamParents).subtree(scopeTeamId)] : undefined, [scopeTeamId, teamParents, teamSettings, teams])
-  const projectWindow = useScaleP19ProjectWindow(workspaceKey, { teamId: windowTeamIds, archived: 'all', filter: projectFilterQuery })
+  const [windowQuery, setWindowQuery] = useState<ScaleP19ServerQuery>({ schema: 1, display: DEFAULT_PROJECTS_DISPLAY, locale: navigator.language })
+  const projectWindow = useScaleP19ProjectWindow(workspaceKey, { teamId: windowTeamIds, archived: 'all', filter: projectFilterQuery, ...(windowQuery ? { window: { ...windowQuery, teamIds: windowTeamIds, filters: projectFilterQuery } } : {}) })
   const [pagedProjects, setPagedProjects] = useState<Project[]>(projectWindow.enabled ? [] : projects)
   const [directoryLoading, setDirectoryLoading] = useState(projects.length === 0)
   const [directoryLoadingMore, setDirectoryLoadingMore] = useState(false)
@@ -295,6 +298,7 @@ export function ProjectsPage({
   }, [directoryCursor, directoryHasMore, directoryLoadingMore, mergeDirectoryCustomers, projectFilterQuery, projectWindow, scopeTeamId])
   const projectCollection = projectWindow.enabled ? projectWindow.page?.items ?? EMPTY_PROJECTS : pagedProjects.length || projects.length === 0 ? pagedProjects : projects
   const projectDirectoryCustomers = projectWindow.enabled ? { summaries: projectWindow.page?.customerSummaries ?? {}, customers: projectWindow.page?.customers ?? [] } : directoryCustomers
+  const currentProjectRelations = useMemo(() => projectWindow.enabled ? projectWindow.metadata?.projectRelations ?? [] : projectRelations, [projectWindow.enabled, projectWindow.metadata, projectRelations])
   const currentViewerId = viewerId ?? viewer?.id
   const onlineUserIds = useMemo(() => {
     const ids = new Set(presence.map(item => item.user.id))
@@ -317,9 +321,9 @@ export function ProjectsPage({
   }), [initiatives, projectLabelGroups, projectLabels, teams])
   const blockedByIds = useMemo(() => {
     const map = new Map<string, string[]>()
-    for (const edge of projectDependencyEdges(projectCollection, projectRelations)) map.set(edge.blockedId, [...(map.get(edge.blockedId) ?? []), edge.blockerId])
+    for (const edge of projectDependencyEdges(projectCollection, currentProjectRelations)) map.set(edge.blockedId, [...(map.get(edge.blockedId) ?? []), edge.blockerId])
     return map
-  }, [projectCollection, projectRelations])
+  }, [projectCollection, currentProjectRelations])
   const milestoneProgress = useMemo(() => milestoneProgressIndex(issues), [issues])
   // Customers known to the page: the bootstrap's plus those the project directory returned.
   const customerSource = useMemo(() => {
@@ -335,10 +339,11 @@ export function ProjectsPage({
   }, [issues])
   const items = useMemo(() => scopedProjects.map(project => ({
     ...toPageItem(project, projectHref?.(project), itemIndexes, projectUpdates[project.id]?.[0], issues),
+    ...(projectWindow.enabled && projectWindow.metadata?.latestUpdates?.[project.id] ? { updatedAt: projectWindow.metadata.latestUpdates[project.id] } : {}),
     ...(customerSource ? projectCustomerFields(projectDirectoryCustomers.summaries[project.id] ? summaryRowData(projectDirectoryCustomers.summaries[project.id], customerSource) : projectCustomerRowData(project.id, issueIdsByProject.get(project.id) ?? new Set(), customerSource)) : {}),
     milestones: (project.milestones ?? []).map(milestone => ({ id: milestone.id, name: milestone.name, targetDate: milestone.targetDate, progress: milestoneProgress(project.id, milestone.id) })),
     blockedByIds: blockedByIds.get(project.id),
-  })), [blockedByIds, customerSource, projectDirectoryCustomers.summaries, issueIdsByProject, itemIndexes, issues, milestoneProgress, projectHref, projectUpdates, scopedProjects])
+  })), [blockedByIds, customerSource, projectDirectoryCustomers.summaries, issueIdsByProject, itemIndexes, issues, milestoneProgress, projectHref, projectUpdates, scopedProjects, projectWindow.enabled, projectWindow.metadata])
   // With the project-list projection the app store holds no projects, so the directory page
   // (pagedProjects) must absorb timeline edits itself or bars snap back until the next fetch.
   const syncPagedProject = useCallback((project: Project) => setPagedProjects(current => current.map(item => item.id === project.id ? project : item)), [])
@@ -355,8 +360,8 @@ export function ProjectsPage({
   const createProjectDependency = useCallback(async (blockerId: string, blockedId: string) => {
     const blocked = projectCollection.find(project => project.id === blockedId)
     if (!blocked) return
-    await updateTimelineProject(blockedId, { dependencyRelations: dependencyRelationsWithBlocker(blockedId, blockerId, projectRelations, blocked.dependencyIds) })
-  }, [projectCollection, projectRelations, updateTimelineProject])
+    await updateTimelineProject(blockedId, { dependencyRelations: dependencyRelationsWithBlocker(blockedId, blockerId, currentProjectRelations, blocked.dependencyIds) })
+  }, [projectCollection, currentProjectRelations, updateTimelineProject])
   const [sidebarOpen, setSidebarOpen] = useState(handoff?.sidebarOpen ?? false)
   const [windowFilterOpen, setWindowFilterOpen] = useState(false)
   const [insightMode, setInsightMode] = useState<ProjectInsightMode>(handoff?.insightMode ?? 'health')
@@ -386,12 +391,10 @@ export function ProjectsPage({
       else if (client.disposed) clearScaleP19ProjectHandoff(handoffScope)
     })
   }, [extraFilters, handoffScope, insightFilter, insightMode, projectFilters, projectWindow.client, projectWindow.enabled, sidebarOpen, view.state.selectedIds])
-  useEffect(() => {
-    if (!projectWindow.enabled) return
-    const display = view.state.display
-    // These operations need query contracts beyond P10's collection-ordered directory.
-    if (display.layout === 'timeline' || sidebarOpen || insightFilter || display.ordering !== 'Manual' || display.grouping !== 'No grouping' || display.subGrouping !== 'No grouping' || display.showClosed !== 'All' || display.onlyLeadTeamProjects || activeFilters.some(filter => filter.field === 'milestones' || filter.field === 'dates' && filter.values.some(value => value.id === 'overdue'))) projectWindow.legacy()
-  }, [activeFilters, insightFilter, projectWindow, sidebarOpen, view.state.display])
+  const { properties: _properties, timelineZoom: _timelineZoom, ...queryDisplay } = view.state.display
+  const localizedDates = [queryDisplay.ordering, queryDisplay.grouping, queryDisplay.subGrouping].some(value => value === 'Start date' || value === 'Target date')
+  const nextWindowQuery: ScaleP19ServerQuery = { schema: 1, display: queryDisplay, leadTeamId: scopeTeamId, insight: insightFilter, locale: navigator.language, ...(localizedDates ? { dateLocale: document.documentElement.dataset.locale === 'zh-CN' ? 'zh-CN' : 'en' } : {}) }
+  if (projectWindow.enabled && JSON.stringify(windowQuery) !== JSON.stringify(nextWindowQuery)) setWindowQuery(nextWindowQuery)
   useEffect(() => {
     if (projectWindow.enabled) {
       try { projectWindow.select(view.state.selectedIds, projectCollection) }
@@ -421,7 +424,7 @@ export function ProjectsPage({
     targetDate: targetDateOptions(),
   }), [labelGroups, projectLabelGroupNames, projectLabels, statusOptions, users])
   const localFilterOptions = useMemo(() => projectFilterOptions(leadScopedItems, users, availableProjectStatuses, projectLabels, teams, teamSettings, teamParents), [availableProjectStatuses, leadScopedItems, projectLabels, teamParents, teamSettings, teams, users])
-  const filterOptions = useScaleP19FilterCounts(projectWindow.enabled, workspaceKey, { teamId: windowTeamIds, archived: 'all', filter: projectFilterQuery }, localFilterOptions, windowFilterOpen)
+  const filterOptions = useScaleP19FilterCounts(projectWindow.enabled, workspaceKey, { teamId: windowTeamIds, archived: 'all', filter: projectFilterQuery }, localFilterOptions, windowFilterOpen, projectWindow.metadata?.counts)
   // The reference app's Customers filter blocks (Customer name … Customer size), offered while Customer requests is on.
   const customerOptions = useMemo(() => customerSource && featureFlags?.['customer-requests'] !== false ? customerFilterOptions(customerSource) : [], [customerSource, featureFlags])
   const saveTargets = useMemo<SavedViewTarget[]>(() => [
@@ -713,8 +716,9 @@ export function ProjectsPage({
     views={projectViews}
   >
     <div className={`lp-projects__workspace ${sidebarOpen ? 'has-insights' : ''}`}>
-      <div className="lp-projects__data"><ProjectsDataView
+      <div className="lp-projects__data"><ScaleP19TimelineContext.Provider value={projectWindow.enabled ? projectWindow.metadata?.timeline : undefined}><ProjectsDataView
         {...view.dataViewProps}
+        groups={projectWindow.enabled ? scaleP19Groups(view.groups, leadScopedVisibleItems, projectWindow.metadata) : view.dataViewProps.groups}
         loading={loading || (projectWindow.enabled ? projectWindow.loading : directoryLoading) && !items.length}
         error={error ?? (projectWindow.enabled ? projectWindow.error : directoryError)}
         hasMore={!projectWindow.enabled && directoryHasMore}
@@ -749,8 +753,8 @@ export function ProjectsPage({
           onSubscriptionEventsChange: onSetProjectSubscriptionEvents,
           onCreateReminder: onCreateProjectReminder,
         } : undefined}
-      /></div>
-      {sidebarOpen && <ProjectsInsightsSidebar activeFilter={insightFilter} mode={insightMode} onChangeFilter={setInsightFilter} onChangeMode={setInsightMode} projects={leadScopedItems} />}
+      /></ScaleP19TimelineContext.Provider></div>
+      {sidebarOpen && <ProjectsInsightsSidebar activeFilter={insightFilter} mode={insightMode} onChangeFilter={setInsightFilter} onChangeMode={setInsightMode} projects={leadScopedItems} rows={projectWindow.enabled ? projectWindow.metadata?.insights : undefined} />}
     </div>
     {projectWindow.enabled && <ScaleP19ProjectPager page={projectWindow.page} loading={projectWindow.loading} onPage={index => { void projectWindow.load(index) }}/ >}
     {scheduleProjectId && projectById.get(scheduleProjectId) && onUpdateProject && <ProjectUpdateScheduleDialog

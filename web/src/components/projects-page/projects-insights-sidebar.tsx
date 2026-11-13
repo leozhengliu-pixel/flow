@@ -14,14 +14,15 @@ type ProjectInsightRow = {
   value: string
 }
 
-export function ProjectsInsightsSidebar({ activeFilter, mode, onChangeFilter, onChangeMode, projects }: {
+export function ProjectsInsightsSidebar({ activeFilter, mode, onChangeFilter, onChangeMode, projects, rows: serverRows }: {
   activeFilter: ProjectInsightFilter
   mode: ProjectInsightMode
   onChangeFilter: (filter: ProjectInsightFilter) => void
   onChangeMode: (mode: ProjectInsightMode) => void
   projects: ProjectPageItem[]
+  rows?: Record<string, ProjectInsightRow[]>
 }) {
-  const rows: ProjectInsightRow[] = mode === 'health' ? healthRows(projects) : mode === 'leads' ? leadRows(projects) : []
+  const rows: ProjectInsightRow[] = serverRows?.[mode] ?? (mode === 'health' ? healthRows(projects) : mode === 'leads' ? leadRows(projects) : [])
   const filterKind = mode === 'health' ? 'health' : 'lead'
   return <aside aria-label="Project insights" className="lp-project-insights">
     <div aria-label="Project insight grouping" className="lp-project-insights__tabs" role="tablist">

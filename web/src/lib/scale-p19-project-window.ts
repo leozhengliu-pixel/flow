@@ -3,13 +3,14 @@ import { ApiError } from '@/lib/api-client'
 import { cacheStringBytes } from '@/lib/scale-p08'
 import type { Project } from '@/types/flow'
 import { releaseScaleP19Bytes, retainScaleP19Bytes } from '@/lib/scale-p19-budget'
+import type { ScaleP19ServerQuery } from '@/lib/scale-p19-window-api'
 
 export const SCALE_P19_WINDOW_BYTES = 8 * 1024 * 1024
 export const SCALE_P19_PAGE_SIZE = 100
 
-export type ScaleP19ProjectQuery = Omit<ProjectQueryInput, 'cursor' | 'limit' | 'includeTotal'>
+export type ScaleP19ProjectQuery = Omit<ProjectQueryInput, 'cursor' | 'limit' | 'includeTotal'> & { window?: ScaleP19ServerQuery }
 export type ScaleP19ProjectPage = ProjectQueryPage & { index: number; offset: number; completeness: 'partial' | 'complete' }
-type ReadPage = (query: ProjectQueryInput, signal: AbortSignal, workspace: string) => Promise<ProjectQueryPage>
+type ReadPage = (query: ProjectQueryInput & { window?: ScaleP19ServerQuery }, signal: AbortSignal, workspace: string) => Promise<ProjectQueryPage>
 type Lifecycle = { commit: (page: ProjectQueryPage) => void; evict: (page: ProjectQueryPage) => void }
 
 /** Page bodies are evictable; the much smaller cursor trail keeps backward navigation possible. */
@@ -19,6 +20,8 @@ export class ScaleP19ProjectWindow {
   private cursors = new Map<number, string | undefined>([[0, undefined]])
   private offsets = new Map<number, number>([[0, 0]])
   private queryKey = ''
+  private selectionKey = ''
+  private clock?: { now: string; localMonth: string }
   private generation = 0
   private closed = false
   private bytes = 0
@@ -55,8 +58,9 @@ export class ScaleP19ProjectWindow {
   async read(query: ScaleP19ProjectQuery, index = 0): Promise<ScaleP19ProjectPage> {
     if (this.closed) throw new DOMException('Window disposed', 'AbortError')
     const key = JSON.stringify(query)
+    const selectionKey = JSON.stringify([query.q, query.teamId, query.archived, query.filter])
+    if (selectionKey !== this.selectionKey) { this.selected.clear(); this.selectionKey = selectionKey }
     if (key !== this.queryKey) {
-      this.selected.clear()
       this.invalidate()
       this.queryKey = key
     }
@@ -69,7 +73,9 @@ export class ScaleP19ProjectWindow {
     }
     const controller = this.controller = new AbortController()
     const generation = ++this.generation
-    const page = await this.readPage({ ...query, cursor: this.cursors.get(index), limit: SCALE_P19_PAGE_SIZE, includeTotal: true }, controller.signal, this.workspace)
+    if (!this.clock) { const now = new Date(); this.clock = { now: now.toISOString(), localMonth: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` } }
+    const request = { ...query, ...(query.window ? { window: { ...this.clock, ...query.window } } : {}), cursor: this.cursors.get(index), limit: SCALE_P19_PAGE_SIZE, includeTotal: true }
+    const page = await this.readPage(request, controller.signal, this.workspace)
     if (this.closed || controller.signal.aborted || generation !== this.generation) throw new DOMException('Window superseded', 'AbortError')
     if (!Array.isArray(page.items) || page.items.length > SCALE_P19_PAGE_SIZE || !Number.isSafeInteger(page.total) || page.total < 0 || typeof page.hasMore !== 'boolean' || page.hasMore && (!page.nextCursor || page.nextCursor === this.cursors.get(index))) throw new ApiError('Project directory does not support query windows', 501)
     const result: ScaleP19ProjectPage = { ...page, index, offset: this.offsets.get(index)!, completeness: page.hasMore ? 'partial' : 'complete' }
@@ -101,6 +107,7 @@ export class ScaleP19ProjectWindow {
 
   invalidate() {
     this.refresh()
+    this.clock = undefined
     this.cursors = new Map([[0, undefined]])
     this.offsets = new Map([[0, 0]])
     this.retain()

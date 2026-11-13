@@ -41,16 +41,29 @@ async function directory(page: Page, request: APIRequestContext, workspace: stri
     const items = hidden ? [] : Array.from({ length: Math.min(limit, 23210 - offset) }, (_, index) => row(offset + index))
     return route.fulfill({ json: { items, total: hidden ? 0 : 23210, hasMore: !hidden && offset + limit < 23210, nextCursor: !hidden && offset + limit < 23210 ? String(offset + limit) : undefined } })
   })
-  await page.route('**/api/projects/p19-project-*/updates', route => {
+  await page.route('**/api/projects/p19-project-*/updates*', route => {
     expect(route.request().headers()['x-workspace-key']).toBe(workspace)
     const projectId = new URL(route.request().url()).pathname.split('/')[3]
-    return route.fulfill({ json: [{ id: `${projectId}-update`, projectId, user: { ...source.viewer, displayName: '林郑' }, body: 'Window-specific project update', health: 'onTrack', createdAt: '2026-11-12T00:00:00Z', comments: [], reactions: {} }] })
+    const items = [{ id: `${projectId}-update`, projectId, user: { ...source.viewer, displayName: '林郑' }, body: 'Window-specific project update', health: 'onTrack', createdAt: '2026-11-12T00:00:00Z', comments: [], reactions: {} }]
+    return route.fulfill({ json: new URL(route.request().url()).searchParams.has('window') ? { schema: 1, items, total: 1, offset: 0, hasMore: false, revision: head, authzEpoch: epoch } : items })
   })
   let epoch = 'p19-epoch-1'
   let capability = true
   await page.route('**/api/sync/**', route => {
     const url = new URL(route.request().url())
-    if (url.pathname.endsWith('/manifest')) return route.fulfill({ json: { schema: 2, workspaceId: source.workspace.id, viewerId: source.viewer.id, authzEpoch: epoch, head, capabilities: capability ? ['sync-v2'] : [], core: { ...source, projects: [], issues: [], documents: [], projectUpdates: {} }, collections: { ...Object.fromEntries(['users', 'teams', 'labels', 'savedViews', 'favorites'].map(kind => [kind, { revision: '1', complete: true }])), projects: { revision: '1', complete: (route.request().headers()['referer'] ?? '').includes('/initiatives/') }, initiatives: { revision: '1', complete: true } } } })
+    if (url.pathname.endsWith('/manifest')) return route.fulfill({ json: { schema: 2, workspaceId: source.workspace.id, viewerId: source.viewer.id, authzEpoch: epoch, head, capabilities: capability ? ['sync-v2', 'query-windows-v1'] : [], core: { ...source, projects: [], issues: [], documents: [], projectUpdates: {} }, collections: { ...Object.fromEntries(['users', 'teams', 'labels', 'savedViews', 'favorites'].map(kind => [kind, { revision: '1', complete: true }])), projects: { revision: '1', complete: false }, initiatives: { revision: '1', complete: true } } } })
+    if (url.pathname.endsWith('/records') && url.searchParams.has('window')) {
+      const offset = Number(url.searchParams.get('cursor') || 0)
+      const query = JSON.parse(url.searchParams.get('window')!)
+      if (url.searchParams.get('kind') === 'initiatives') {
+        const items = source.initiatives
+        return route.fulfill({ json: { schema: 1, revision: head, versions: Object.fromEntries(items.map((item: { id: string }) => [item.id, '1'])), authzEpoch: epoch, items, entries: items.map((initiative: { id: string }) => ({ key: initiative.id, kind: 'initiative', id: initiative.id, depth: 0, childCount: 0 })), aggregates: Object.fromEntries(items.map((initiative: { id: string }) => [initiative.id, { projects: 0, completed: 0, needingUpdate: 0, hasUpdates: false }])), total: items.length, offset: 0, hasMore: false } })
+      }
+      calls.push(url)
+      const hidden = (query.filters ?? []).some((filter: { field: string; values: string[] }) => filter.field === 'status' && !filter.values.includes(status.name) && !filter.values.includes(status.id))
+      const items = hidden ? [] : Array.from({ length: Math.min(100, 23210 - offset) }, (_, index) => row(offset + index))
+      return route.fulfill({ json: { schema: 1, revision: head, versions: Object.fromEntries(items.map(item => [item.id, '1'])), authzEpoch: epoch, items, total: hidden ? 0 : 23210, offset, hasMore: !hidden && offset + 100 < 23210, nextCursor: !hidden && offset + 100 < 23210 ? String(offset + 100) : undefined, groups: [{ id: 'all-projects', name: 'All projects', total: 23210 }] } })
+    }
     if (url.pathname.endsWith('/changes')) return route.fulfill({ json: { next: head, head, authzEpoch: epoch, transactions: [], hasMore: false, resyncRequired: false } })
     if (url.pathname.endsWith('/batch')) {
       const input = route.request().postDataJSON() as { keys: Array<{ kind: string; id: string }> }
@@ -71,7 +84,7 @@ async function capture(page: Page, name: string, selector?: string) {
   await target.screenshot({ path: `${root}/shots/${name}.png`, animations: 'disabled', scale: 'css' })
 }
 
-for (const enabled of [false, true]) for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) for (const [theme, language] of [['Dark', 'en-US'], ['Light', 'zh-CN']]) {
+for (const enabled of [false, true]) for (const viewport of [{ width: 1440, height: 900 }, { width: 375, height: 812 }, { width: 390, height: 844 }]) for (const [theme, language] of [['Dark', 'en-US'], ['Light', 'zh-CN']]) {
   test.describe(`scale-p19 flags ${enabled} ${viewport.width} ${theme}`, () => {
     test.use({ scaleP19Enabled: enabled, viewport, isMobile: viewport.width < 500, hasTouch: viewport.width < 500 })
 
@@ -85,7 +98,7 @@ for (const enabled of [false, true]) for (const viewport of [{ width: 1440, heig
       await expect(page.getByRole('row', { name: '项目', exact: true })).toBeVisible()
       if (enabled) {
         await expect(page.locator('.scale-p19-project-pager')).toContainText('23210')
-        expect(fixture.calls.some(url => url.searchParams.get('includeTotal') === 'true')).toBe(true)
+        expect(fixture.calls.some(url => url.searchParams.has('window'))).toBe(true)
         const next = page.locator('.scale-p19-project-pager button').last()
         await next.click()
         await expect(page.getByText('Project 00100', { exact: true })).toBeVisible()
@@ -147,6 +160,7 @@ for (const enabled of [false, true]) for (const viewport of [{ width: 1440, heig
       expect((await request.patch('/api/account/settings', { headers, data: { language, interfaceTheme: theme } })).ok()).toBe(true)
       await directory(page, request, workspaceKey)
       await page.goto(`/${workspaceKey}/projects/all`)
+      await expect(page.getByRole('row', { name: '项目', exact: true })).toBeVisible({ timeout: 30_000 })
       const pager = page.locator('.scale-p19-project-pager')
       const next = pager.locator('button').last()
       await expect(pager).toContainText('23210')

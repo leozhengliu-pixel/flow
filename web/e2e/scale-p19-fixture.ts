@@ -2,6 +2,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { createWriteStream, existsSync, mkdirSync, mkdtempSync } from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
+import { randomBytes } from 'node:crypto'
 import { createServer } from 'vite'
 import { test as workspaceTest } from './workspace-fixture'
 
@@ -22,11 +23,12 @@ async function stop(child: ChildProcess) {
   })
 }
 
-export const test = workspaceTest.extend<{ scaleP19Enabled: boolean; scaleP19URL: string }>({
+export const test = workspaceTest.extend<{ scaleP19Enabled: boolean; scaleP19ServerEnabled: boolean; scaleP19URL: string }>({
   scaleP19Enabled: [false, { option: true }],
-  scaleP19URL: [async ({ scaleP19Enabled }, provide) => {
+  scaleP19ServerEnabled: [false, { option: true }],
+  scaleP19URL: [async ({ scaleP19Enabled, scaleP19ServerEnabled }, provide) => {
     const web = path.resolve(import.meta.dirname, '..')
-    const root = '/tmp/codex-scale-p19'
+    const root = process.env.FLOW_SCALE_P19_ARTIFACTS ?? '/tmp/codex-scale-p19'
     mkdirSync(root, { recursive: true })
     const scratch = mkdtempSync(path.join(root, 'browser-'))
     let binary = process.env.FLOW_E2E_API_BIN
@@ -37,7 +39,8 @@ export const test = workspaceTest.extend<{ scaleP19Enabled: boolean; scaleP19URL
     }
     const port = await freePort()
     const log = createWriteStream(path.join(scratch, 'api.log'))
-    const api = spawn(binary, [], { cwd: path.join(web, '../api'), env: { ...process.env, GOMAXPROCS: '2', GOMEMLIMIT: '1536MiB', FLOW_AUTH_DISABLED: 'true', FLOW_DATABASE_PATH: path.join(scratch, 'flow.db'), FLOW_HTTP_ADDR: `127.0.0.1:${port}` }, stdio: ['ignore', 'pipe', 'pipe'] })
+    const sync = scaleP19ServerEnabled ? 'on' : 'off'
+    const api = spawn(binary, [], { cwd: path.join(web, '../api'), env: { ...process.env, GOMAXPROCS: '2', GOMEMLIMIT: '1536MiB', FLOW_AUTH_DISABLED: 'true', FLOW_SYNC_MANIFEST: sync, FLOW_INDEXED_READS: sync, FLOW_RECORD_JOURNAL: sync, FLOW_SYNC_V2: sync, FLOW_CONNECTOR_SECRET_KEY: randomBytes(32).toString('base64'), FLOW_DATABASE_PATH: path.join(scratch, 'flow.db'), FLOW_HTTP_ADDR: `127.0.0.1:${port}` }, stdio: ['ignore', 'pipe', 'pipe'] })
     api.stdout!.pipe(log); api.stderr!.pipe(log)
     const flag = JSON.stringify(String(scaleP19Enabled))
     const vite = await createServer({ root: web, configFile: path.join(web, 'vite.config.ts'), logLevel: 'error', define: { 'import.meta.env.VITE_SYNC_V2': flag, 'import.meta.env.VITE_PROJECT_QUERY_WINDOWS': flag, 'import.meta.env.VITE_INITIATIVE_QUERY_WINDOWS': flag }, server: { host: '127.0.0.1', port: 0, proxy: { '/api': { target: `http://127.0.0.1:${port}`, ws: true } } } })
