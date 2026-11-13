@@ -1,0 +1,117 @@
+{
+  "source": "server/enterprise_identity_integrations.go",
+  "unmigrated": 14,
+  "consumers": {
+    "createIdentityProvider": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ]
+    },
+    "createIntegrationDelivery": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "deleteGitAutomation": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "deleteIdentityProvider": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "deleteTargetBranch": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "discoverWorkspaceSSO": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "enterpriseOIDCClient": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "findAttachmentsByURL": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    },
+    "listIdentityProviders": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    },
+    "processIntegrationDelivery": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ]
+    },
+    "updateIdentityProvider": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "upsertGitAutomation": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "upsertTargetBranch": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "verifyIdentityProvider": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ]
+    }
+  }
+}

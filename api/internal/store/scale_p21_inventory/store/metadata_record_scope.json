@@ -1,0 +1,13 @@
+{
+  "source": "store/metadata_record_scope.go",
+  "unmigrated": 1,
+  "consumers": {
+    "HydrateWorkspaceMetadata": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BeginWorkspaceRead"
+      ]
+    }
+  }
+}

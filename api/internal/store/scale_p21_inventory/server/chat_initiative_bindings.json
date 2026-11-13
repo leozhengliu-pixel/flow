@@ -1,0 +1,36 @@
+{
+  "source": "server/chat_initiative_bindings.go",
+  "unmigrated": 4,
+  "consumers": {
+    "chatInitiativeBindingSession": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "chatInitiativeOwnerRequest": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "chatSendInitiativeBindingUpdate": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "queueChatInitiativeBindingEvent": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

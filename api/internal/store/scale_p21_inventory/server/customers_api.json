@@ -1,0 +1,15 @@
+{
+  "source": "server/customers_api.go",
+  "unmigrated": 1,
+  "consumers": {
+    "upsertCustomer": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "source": "store/scale_p18_project_reads.go",
+  "unmigrated": 3,
+  "consumers": {
+    "InternalProjectFilterMetadata": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    },
+    "InternalProjectIDUnambiguous": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "InternalProjectPage": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

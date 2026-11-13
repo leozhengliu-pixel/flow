@@ -1,0 +1,67 @@
+{
+  "source": "server/loops.go",
+  "unmigrated": 8,
+  "consumers": {
+    "createLoop": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ]
+    },
+    "deleteLoop": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "describeLoopAsync": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "duplicateLoop": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ]
+    },
+    "getLoop": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "listLoops": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "updateLoop": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "withLoopRef": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

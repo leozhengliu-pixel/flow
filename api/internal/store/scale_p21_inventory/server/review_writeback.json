@@ -1,0 +1,15 @@
+{
+  "source": "server/review_writeback.go",
+  "unmigrated": 1,
+  "consumers": {
+    "writeBackReviewChange": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "source": "store/loadtest_seed.go",
+  "unmigrated": 2,
+  "consumers": {
+    "SeedSyntheticMetadata": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "mutateFull"
+      ]
+    },
+    "WorkspaceStateBytes": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

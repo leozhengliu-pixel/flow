@@ -1,0 +1,14 @@
+{
+  "source": "server/agent_settings.go",
+  "unmigrated": 1,
+  "consumers": {
+    "updateWorkspaceAgentGuidance": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

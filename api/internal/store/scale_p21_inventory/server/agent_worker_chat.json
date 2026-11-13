@@ -1,0 +1,37 @@
+{
+  "source": "server/agent_worker_chat.go",
+  "unmigrated": 4,
+  "consumers": {
+    "runAgentSessionOnWorker": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ]
+    },
+    "save": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "sweepWorkerChatReplies": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "workerChatStoredReply": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

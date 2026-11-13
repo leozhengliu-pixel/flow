@@ -1,0 +1,13 @@
+{
+  "source": "store/issue_stats.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateIssueStats": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

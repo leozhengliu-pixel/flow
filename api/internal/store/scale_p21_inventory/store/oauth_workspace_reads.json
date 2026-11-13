@@ -1,0 +1,43 @@
+{
+  "source": "store/oauth_workspace_reads.go",
+  "unmigrated": 3,
+  "consumers": {
+    "AccountCollections": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "DocumentByID": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "ResolveTeamID": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Matches IDs and case-insensitive team keys within the resident team graph; it reads no body collection.",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "TeamSettingsFor": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Looks up one team settings record in the resident policy map, preserving the trusted internal reader contract.",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "TrashSnapshot": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

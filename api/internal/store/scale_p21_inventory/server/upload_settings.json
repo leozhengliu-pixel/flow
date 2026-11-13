@@ -1,0 +1,13 @@
+{
+  "source": "server/upload_settings.go",
+  "unmigrated": 1,
+  "consumers": {
+    "checkUploadPolicy": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

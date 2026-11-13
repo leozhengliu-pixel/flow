@@ -1,0 +1,14 @@
+{
+  "source": "server/label_merge.go",
+  "unmigrated": 1,
+  "consumers": {
+    "mergeLabels": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ]
+    }
+  }
+}

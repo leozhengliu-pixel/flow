@@ -1,0 +1,28 @@
+{
+  "source": "server/chat_dm_agent.go",
+  "unmigrated": 3,
+  "consumers": {
+    "chatDMAuthorize": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "chatAuthorizedMutation"
+      ]
+    },
+    "chatDMMarkSessionRead": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "stopForUnlink": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

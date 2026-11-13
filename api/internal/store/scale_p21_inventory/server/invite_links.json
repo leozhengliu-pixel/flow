@@ -1,0 +1,77 @@
+{
+  "source": "server/invite_links.go",
+  "unmigrated": 9,
+  "consumers": {
+    "createOrRotateWorkspaceInviteLink": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ]
+    },
+    "decideOAuthSyncGroupRequest": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "disableWorkspaceInviteLink": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "getWorkspaceInviteLink": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "inviteLinkPreview": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BootstrapFor"
+      ]
+    },
+    "joinOrganization": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "listOAuthAppFailures": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    },
+    "listOAuthSyncGroupRequests": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    },
+    "rotateSCIMToken": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ]
+    }
+  }
+}

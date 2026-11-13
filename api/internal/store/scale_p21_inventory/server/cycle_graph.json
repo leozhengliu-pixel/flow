@@ -1,0 +1,13 @@
+{
+  "source": "server/cycle_graph.go",
+  "unmigrated": 1,
+  "consumers": {
+    "getCycleGraph": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    }
+  }
+}

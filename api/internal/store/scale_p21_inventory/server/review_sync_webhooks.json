@@ -1,0 +1,22 @@
+{
+  "source": "server/review_sync_webhooks.go",
+  "unmigrated": 2,
+  "consumers": {
+    "afterCodeReviewWebhook": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "applyGitHubReviewActivity": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

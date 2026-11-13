@@ -1,0 +1,22 @@
+{
+  "source": "server/signing_keys.go",
+  "unmigrated": 2,
+  "consumers": {
+    "addCommitSigningKey": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "removeCommitSigningKey": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "source": "store/issue_attributes.go",
+  "unmigrated": 2,
+  "consumers": {
+    "migrateIssueAttributes": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "migrateRecurrenceInstances": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

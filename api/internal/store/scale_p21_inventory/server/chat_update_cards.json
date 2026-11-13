@@ -1,0 +1,13 @@
+{
+  "source": "server/chat_update_cards.go",
+  "unmigrated": 1,
+  "consumers": {
+    "chatSendProjectUpdate": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "source": "store/issue_record_create.go",
+  "unmigrated": 1,
+  "consumers": {
+    "createIssueRecords": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata",
+        "storedWorkspace"
+      ]
+    }
+  }
+}

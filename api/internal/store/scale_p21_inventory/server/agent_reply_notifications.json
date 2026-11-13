@@ -1,0 +1,14 @@
+{
+  "source": "server/agent_reply_notifications.go",
+  "unmigrated": 1,
+  "consumers": {
+    "notifyAgentReply": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

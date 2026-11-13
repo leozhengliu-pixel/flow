@@ -1,0 +1,43 @@
+{
+  "source": "server/loop_output_contract_extraction.go",
+  "unmigrated": 5,
+  "consumers": {
+    "analyzeLoopOutputs": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata",
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "extractLoopContractAsync": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "readLoopContract": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "startLoopContractMigration": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "storeLoopContract": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

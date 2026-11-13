@@ -1,0 +1,62 @@
+{
+  "source": "server/github_app.go",
+  "unmigrated": 8,
+  "consumers": {
+    "checkGitHubAppMember": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "classicGitHubSync": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "getGitHubApp": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    },
+    "linkExistingGitHubAppInstallation": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    },
+    "listAvailableGitHubAppInstallations": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    },
+    "removeGitHubAppInstallation": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    },
+    "startGitHubAppAuthorization": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    },
+    "startGitHubAppInstall": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    }
+  }
+}

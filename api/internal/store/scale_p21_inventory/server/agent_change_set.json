@@ -1,0 +1,22 @@
+{
+  "source": "server/agent_change_set.go",
+  "unmigrated": 2,
+  "consumers": {
+    "agentEntitySnapshot": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "mcpWorkspaceData"
+      ]
+    },
+    "applyAgentMessageChangesLocked": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ]
+    }
+  }
+}

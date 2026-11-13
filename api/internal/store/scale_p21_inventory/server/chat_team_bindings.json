@@ -1,0 +1,51 @@
+{
+  "source": "server/chat_team_bindings.go",
+  "unmigrated": 6,
+  "consumers": {
+    "auditChatIntegrationContext": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "chatBindingAuthorizerValid": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "chatBindingPermitted": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "chatManageableTeamIDs": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "chatPermissions": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "saveChatBinding": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

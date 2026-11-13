@@ -1,0 +1,31 @@
+{
+  "source": "server/migration_import.go",
+  "unmigrated": 3,
+  "consumers": {
+    "fail\u004cinearMigration": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "persist\u004cinearMigration": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "scan\u004cinearMigrationTarget": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ]
+    }
+  }
+}

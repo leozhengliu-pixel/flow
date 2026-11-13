@@ -1,0 +1,21 @@
+{
+  "source": "server/mcp_tools_delete.go",
+  "unmigrated": 2,
+  "consumers": {
+    "deleteMCPResource": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "mcpWorkspaceData"
+      ]
+    },
+    "flowDeletePreview": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "mcpWorkspaceData"
+      ]
+    }
+  }
+}

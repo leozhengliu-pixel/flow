@@ -1,0 +1,13 @@
+{
+  "source": "store/metadata_event.go",
+  "unmigrated": 1,
+  "consumers": {
+    "recordMetadataEvent": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "server/team_default_favorites.go",
+  "unmigrated": 1,
+  "consumers": {
+    "replaceTeamDefaultFavorites": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "store/loop_run_records.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateLoopRunRecords": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

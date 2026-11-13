@@ -1,0 +1,22 @@
+{
+  "source": "server/document_record_scopes.go",
+  "unmigrated": 2,
+  "consumers": {
+    "documentAuthorizationMetadata": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "PagedWorkspaceMetadata"
+      ]
+    },
+    "documentWorkspaceData": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "workspaceData"
+      ]
+    }
+  }
+}

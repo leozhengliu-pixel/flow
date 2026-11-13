@@ -1,0 +1,14 @@
+{
+  "source": "store/peer_freshness.go",
+  "unmigrated": 0,
+  "consumers": {
+    "HasWorkspace": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Checks only whether the workspace core is installed; it does not inspect or certify record completeness.",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

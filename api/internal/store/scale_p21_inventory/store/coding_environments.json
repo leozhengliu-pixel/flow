@@ -1,0 +1,13 @@
+{
+  "source": "store/coding_environments.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateWorkspaceCodingEnvironments": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    }
+  }
+}

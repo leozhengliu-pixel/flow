@@ -1,0 +1,41 @@
+{
+  "source": "store/metadata_copy_revision.go",
+  "unmigrated": 5,
+  "consumers": {
+    "copyRevisionLocked": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "installWrittenWorkspaceLocked": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    },
+    "refreshWorkspaceCopy": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "loadWorkspaceStamped"
+      ]
+    },
+    "refreshWorkspaceCopyLocked": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "loadWorkspaceStamped"
+      ]
+    },
+    "setWorkspaceLocked": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

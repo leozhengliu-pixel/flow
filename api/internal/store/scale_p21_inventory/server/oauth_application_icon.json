@@ -1,0 +1,20 @@
+{
+  "source": "server/oauth_application_icon.go",
+  "unmigrated": 2,
+  "consumers": {
+    "checkOAuthAppLogoInput": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "uploadOAuthApplicationIcon": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "source": "server/document_reminders.go",
+  "unmigrated": 1,
+  "consumers": {
+    "createDocumentReminder": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

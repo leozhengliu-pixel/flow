@@ -1,0 +1,13 @@
+{
+  "source": "store/metadata_delta.go",
+  "unmigrated": 1,
+  "consumers": {
+    "WorkspaceMetadataFields": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "source": "server/internal_record_requirements.go",
+  "unmigrated": 2,
+  "consumers": {
+    "internalRequestConversation": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "mutateInternalConversation": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

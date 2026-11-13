@@ -1,0 +1,13 @@
+{
+  "source": "server/oauth_mcp_auth.go",
+  "unmigrated": 1,
+  "consumers": {
+    "revokeOAuthAuthorization": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

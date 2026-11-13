@@ -1,0 +1,13 @@
+{
+  "source": "server/coding_agent_tool.go",
+  "unmigrated": 1,
+  "consumers": {
+    "startCodingSessionFromTool": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

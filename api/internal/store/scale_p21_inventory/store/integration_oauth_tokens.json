@@ -1,0 +1,15 @@
+{
+  "source": "store/integration_oauth_tokens.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateIntegrationOAuthTokens": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "storedWorkspace"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "server/team_slack_notifications.go",
+  "unmigrated": 1,
+  "consumers": {
+    "dispatchTeamSlackEvent": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

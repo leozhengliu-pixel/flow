@@ -1,0 +1,11 @@
+{
+  "source": "server/scale_p16_record_suggestions.go",
+  "unmigrated": 1,
+  "consumers": {
+    "pruneProjectRecordSuggestions": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": ["WorkspaceMetadataFields"]
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "source": "server/code_host_accounts.go",
+  "unmigrated": 2,
+  "consumers": {
+    "auditCodeHostAccount": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "codeHostWorkspaceURLKey": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

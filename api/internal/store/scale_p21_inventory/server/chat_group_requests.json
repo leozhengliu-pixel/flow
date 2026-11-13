@@ -1,0 +1,14 @@
+{
+  "source": "server/chat_group_requests.go",
+  "unmigrated": 1,
+  "consumers": {
+    "executeChatGroupRequest": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "chatAuthorizedMutation"
+      ]
+    }
+  }
+}

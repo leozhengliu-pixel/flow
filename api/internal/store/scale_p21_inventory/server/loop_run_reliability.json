@@ -1,0 +1,21 @@
+{
+  "source": "server/loop_run_reliability.go",
+  "unmigrated": 2,
+  "consumers": {
+    "listLoopRunEvents": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "loopViewerData": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

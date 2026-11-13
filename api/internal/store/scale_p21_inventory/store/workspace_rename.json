@@ -1,0 +1,20 @@
+{
+  "source": "store/workspace_rename.go",
+  "unmigrated": 2,
+  "consumers": {
+    "WorkspaceCredentialSecretIDs": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "adoptWorkspaceKey": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

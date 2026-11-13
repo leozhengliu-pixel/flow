@@ -1,0 +1,22 @@
+{
+  "source": "store/member_directory.go",
+  "unmigrated": 2,
+  "consumers": {
+    "FormerMembers": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "syncMemberDirectory": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "storedWorkspace"
+      ]
+    }
+  }
+}

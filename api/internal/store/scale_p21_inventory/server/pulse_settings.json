@@ -1,0 +1,15 @@
+{
+  "source": "server/pulse_settings.go",
+  "unmigrated": 1,
+  "consumers": {
+    "preparePulseSummaries": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

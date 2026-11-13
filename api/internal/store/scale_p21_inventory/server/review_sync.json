@@ -1,0 +1,22 @@
+{
+  "source": "server/review_sync.go",
+  "unmigrated": 2,
+  "consumers": {
+    "syncReview": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ]
+    },
+    "syncReviewFromCodeHost": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    }
+  }
+}

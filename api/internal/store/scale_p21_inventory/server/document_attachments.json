@@ -1,0 +1,30 @@
+{
+  "source": "server/document_attachments.go",
+  "unmigrated": 3,
+  "consumers": {
+    "deleteDocumentAttachment": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "recordDocumentAttachment": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "saveDocumentLinkAttachment": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

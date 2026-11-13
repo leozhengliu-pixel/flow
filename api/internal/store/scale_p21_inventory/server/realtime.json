@@ -1,0 +1,20 @@
+{
+  "source": "server/realtime.go",
+  "unmigrated": 2,
+  "consumers": {
+    "listPresence": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    },
+    "updatePresence": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    }
+  }
+}

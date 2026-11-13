@@ -1,0 +1,21 @@
+{
+  "source": "server/agent_runtime_connectors.go",
+  "unmigrated": 2,
+  "consumers": {
+    "auditAgentRunConnectorCall": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "discoverAgentRunConnectors": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

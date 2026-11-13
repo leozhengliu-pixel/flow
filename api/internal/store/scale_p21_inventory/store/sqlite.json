@@ -1,0 +1,198 @@
+{
+  "source": "store/sqlite.go",
+  "unmigrated": 17,
+  "consumers": {
+    "Account": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "Bootstrap": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "BootstrapFor"
+      ]
+    },
+    "BootstrapFor": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "BootstrapForContext"
+      ]
+    },
+    "BootstrapForContext": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    },
+    "CancelWorkspaceDeletion": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "BootstrapFor",
+        "MutateWorkspace"
+      ]
+    },
+    "CycleForCalendar": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "DeleteWorkspace": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BootstrapFor"
+      ]
+    },
+    "Mutate": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "MutateWithAggregate": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ]
+    },
+    "MutateWorkspace": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ]
+    },
+    "ReloadAllWorkspaces": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "Bootstrap",
+        "decodeWorkspaceMetadata"
+      ]
+    },
+    "ReloadWorkspace": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "loadWorkspaceStamped"
+      ]
+    },
+    "ScheduleWorkspaceDeletion": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "WorkspaceAccessStatus": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    },
+    "WorkspaceKeys": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "createWorkspace": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    },
+    "dispatchMutation": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "Bootstrap",
+        "mutateFull",
+        "mutateScoped",
+        "mutateTeamMetadata"
+      ]
+    },
+    "loadOrSeed": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "Bootstrap",
+        "decodeWorkspaceMetadata"
+      ]
+    },
+    "loadWorkspaceStamped": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "Bootstrap",
+        "decodeWorkspaceMetadata"
+      ]
+    },
+    "loadWorkspaceState": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "loadWorkspaceStamped"
+      ]
+    },
+    "mutateFull": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "Bootstrap",
+        "storedWorkspace"
+      ]
+    },
+    "storedWorkspace": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    },
+    "updateWorkspace": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "storedWorkspace"
+      ]
+    },
+    "webhookNeeded": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

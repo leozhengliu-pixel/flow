@@ -1,0 +1,20 @@
+{
+  "source": "store/document_access_migration.go",
+  "unmigrated": 2,
+  "consumers": {
+    "migrateDocumentAccessBatch": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    },
+    "migrateWorkspaceDocumentAccess": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    }
+  }
+}

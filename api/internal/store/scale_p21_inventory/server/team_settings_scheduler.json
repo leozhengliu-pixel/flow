@@ -1,0 +1,15 @@
+{
+  "source": "server/team_settings_scheduler.go",
+  "unmigrated": 1,
+  "consumers": {
+    "maintainTeamSettings": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "server/ai_usage_settings.go",
+  "unmigrated": 1,
+  "consumers": {
+    "listAgentFeedback": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    }
+  }
+}

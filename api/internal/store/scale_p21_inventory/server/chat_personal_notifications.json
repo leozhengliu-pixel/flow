@@ -1,0 +1,13 @@
+{
+  "source": "server/chat_personal_notifications.go",
+  "unmigrated": 1,
+  "consumers": {
+    "chatPersonalNotificationItem": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

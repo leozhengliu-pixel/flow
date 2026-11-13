@@ -1,0 +1,22 @@
+{
+  "source": "server/triage_intelligence_ai.go",
+  "unmigrated": 2,
+  "consumers": {
+    "requestTriageAIPlan": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "mcpWorkspaceData"
+      ]
+    },
+    "runTriageIntelligence": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "source": "server/public_api_records.go",
+  "unmigrated": 8,
+  "consumers": {
+    "getCustomerRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "getCycleRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "getInitiativeRecord": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "getIssueLabelRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "getProjectRecord": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "getTeamRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "getUserRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "getWorkflowStateRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    }
+  }
+}

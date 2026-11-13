@@ -5,25 +5,6 @@ var scaleP21ReviewedMCPTools = map[string]string{
 	"write": `archive_agent_session create_attachment create_attachment_from_upload create_initiative_label create_issue_label create_reminder delete_agent_skill delete_attachment delete_comment delete_customer delete_customer_request delete_diff_comment delete_document delete_initiative delete_issue delete_label delete_loop delete_project delete_view merge_diff prepare_attachment_upload resolve_comment_action resolve_diff_thread restore_document restore_document_version save_agent_skill save_attachment save_comment save_customer save_customer_request save_cycle save_document save_document_permissions save_draft save_initiative save_issue save_label save_loop save_milestone save_project save_reaction save_release save_status_update save_subscription save_team save_template save_view start_coding_session submit_diff_review triage_issue update_notification`,
 }
 
-const scaleP21ReviewedBoundedConsumers = `
-store/scale_p21_record_mutation.go:mutateResidentRecords
-store/resource_access.go:ResolveAccess
-store/sqlite.go:WorkspaceKeys
-store/sqlite.go:dispatchMutation
-store/scale_p11_peer_apply.go:ApplyCommittedPage
-store/scale_p11_peer_apply.go:ShadowCommittedPage
-store/scale_p11_peer_apply.go:preparePeerPage
-store/bounded_recovery.go:installResidentPolicy
-store/read_snapshot.go:BeginWorkspaceRead
-store/read_snapshot.go:workspaceReadSource
-store/sqlite.go:ReloadWorkspace
-store/sqlite.go:ReloadAllWorkspaces
-store/sqlite.go:loadWorkspaceStamped
-store/sqlite.go:loadOrSeed
-store/sqlite.go:mutateFull
-store/bounded_recovery.go:loadResidentWorkspaces
-`
-
 var scaleP21ReviewedRoutes = []string{
 	"GET /api/sync/manifest\ts.syncManifest",
 	"GET /api/sync/records\ts.syncRecords",

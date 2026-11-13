@@ -1,0 +1,21 @@
+{
+  "source": "server/loop_settings.go",
+  "unmigrated": 2,
+  "consumers": {
+    "getLoopConfig": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "updateLoopSettings": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

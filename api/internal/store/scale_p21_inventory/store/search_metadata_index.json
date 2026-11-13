@@ -1,0 +1,13 @@
+{
+  "source": "store/search_metadata_index.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateMetadataSearchIndex": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

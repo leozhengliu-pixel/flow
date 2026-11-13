@@ -1,0 +1,15 @@
+{
+  "source": "server/chat_unfurl.go",
+  "unmigrated": 1,
+  "consumers": {
+    "chatLinkPreviewFor": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields",
+        "chatAuthorizedMutation"
+      ]
+    }
+  }
+}

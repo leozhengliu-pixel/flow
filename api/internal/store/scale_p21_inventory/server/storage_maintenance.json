@@ -1,0 +1,15 @@
+{
+  "source": "server/storage_maintenance.go",
+  "unmigrated": 1,
+  "consumers": {
+    "purgeExpiredTrash": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "store/metadata_record_merge.go",
+  "unmigrated": 1,
+  "consumers": {
+    "refreshMetadataRecords": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    }
+  }
+}

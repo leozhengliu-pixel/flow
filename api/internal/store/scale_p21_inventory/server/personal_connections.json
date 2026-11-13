@@ -1,0 +1,14 @@
+{
+  "source": "server/personal_connections.go",
+  "unmigrated": 1,
+  "consumers": {
+    "auditPersonalConnection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "source": "store/feature_flags_mutation.go",
+  "unmigrated": 1,
+  "consumers": {
+    "WorkspaceSettingsMetadata": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Copies only the workspace identity and workspace settings, both retained and charged to the process policy budget.",
+      "accessors": [
+        "Bootstrap"
+      ]
+    },
+    "mutateFeatureFlags": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

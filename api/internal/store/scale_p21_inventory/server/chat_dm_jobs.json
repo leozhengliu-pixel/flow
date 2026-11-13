@@ -1,0 +1,28 @@
+{
+  "source": "server/chat_dm_jobs.go",
+  "unmigrated": 3,
+  "consumers": {
+    "chatDMInterruptSavedReply": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "chatDMResumeWorkerReply": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "processChatDMReplyJob": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

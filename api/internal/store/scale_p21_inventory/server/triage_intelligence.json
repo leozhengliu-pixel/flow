@@ -1,0 +1,58 @@
+{
+  "source": "server/triage_intelligence.go",
+  "unmigrated": 6,
+  "consumers": {
+    "generateTriageIntelligenceForIssues": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ]
+    },
+    "listIssueSuggestions": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata",
+        "mcpWorkspaceData"
+      ]
+    },
+    "previewIssueSuggestions": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata",
+        "mcpWorkspaceData"
+      ]
+    },
+    "pruneIssueSuggestionTargets": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ]
+    },
+    "refreshIssueSuggestions": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "updateIssueSuggestionState": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata",
+        "mcpWorkspaceData"
+      ]
+    }
+  }
+}

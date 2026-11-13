@@ -1,0 +1,13 @@
+{
+  "source": "server/trash_uploads.go",
+  "unmigrated": 1,
+  "consumers": {
+    "releaseTrashedUploads": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "source": "server/team_member_api.go",
+  "unmigrated": 3,
+  "consumers": {
+    "recordTeamMemberAudit": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "teamForMemberRequest": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "publicMetadata"
+      ]
+    },
+    "teamMemberNames": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

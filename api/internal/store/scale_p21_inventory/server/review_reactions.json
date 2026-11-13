@@ -1,0 +1,14 @@
+{
+  "source": "server/review_reactions.go",
+  "unmigrated": 1,
+  "consumers": {
+    "toggleReviewReaction": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

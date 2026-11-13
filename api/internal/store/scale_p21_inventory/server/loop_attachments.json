@@ -1,0 +1,14 @@
+{
+  "source": "server/loop_attachments.go",
+  "unmigrated": 1,
+  "consumers": {
+    "uploadLoopAttachment": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

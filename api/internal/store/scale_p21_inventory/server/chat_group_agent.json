@@ -1,0 +1,13 @@
+{
+  "source": "server/chat_group_agent.go",
+  "unmigrated": 1,
+  "consumers": {
+    "chatGroupBindings": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

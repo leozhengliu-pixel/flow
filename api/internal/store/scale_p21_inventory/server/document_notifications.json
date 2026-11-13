@@ -1,0 +1,13 @@
+{
+  "source": "server/document_notifications.go",
+  "unmigrated": 1,
+  "consumers": {
+    "workspaceMemberDirectory": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "source": "store/scoped_mutation.go",
+  "unmigrated": 1,
+  "consumers": {
+    "mutateScoped": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "mutateFull",
+        "storedWorkspace"
+      ]
+    }
+  }
+}

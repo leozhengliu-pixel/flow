@@ -1,0 +1,13 @@
+{
+  "source": "server/agent_live_answer.go",
+  "unmigrated": 1,
+  "consumers": {
+    "agentRunOwnedBy": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

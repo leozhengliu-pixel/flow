@@ -1,0 +1,13 @@
+{
+  "source": "store/attachment_index.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateAttachmentIndex": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

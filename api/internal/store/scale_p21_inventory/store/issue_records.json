@@ -1,0 +1,34 @@
+{
+  "source": "store/issue_records.go",
+  "unmigrated": 4,
+  "consumers": {
+    "ImportIssues": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "WorkspaceMetadata": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    },
+    "migrateIssueCollections": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "migrateIssueSequences": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "store/coding_pull_requests.go",
+  "unmigrated": 1,
+  "consumers": {
+    "IntegrationConnections": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

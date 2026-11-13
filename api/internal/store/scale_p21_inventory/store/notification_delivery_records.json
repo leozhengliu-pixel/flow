@@ -1,0 +1,14 @@
+{
+  "source": "store/notification_delivery_records.go",
+  "unmigrated": 1,
+  "consumers": {
+    "notificationDeliverySnapshot": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

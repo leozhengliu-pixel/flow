@@ -1,0 +1,20 @@
+{
+  "source": "store/audit_events.go",
+  "unmigrated": 2,
+  "consumers": {
+    "MigrateLegacyAuditLog": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    },
+    "migrateWorkspaceAuditLog": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    }
+  }
+}

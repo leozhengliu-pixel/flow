@@ -1,0 +1,13 @@
+{
+  "source": "server/team_resource_reads.go",
+  "unmigrated": 1,
+  "consumers": {
+    "listTeamResources": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

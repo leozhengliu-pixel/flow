@@ -1,0 +1,20 @@
+{
+  "source": "server/oauth_authorized_applications.go",
+  "unmigrated": 2,
+  "consumers": {
+    "listAuthorizedApplications": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "revokeMCPAuthorizations": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

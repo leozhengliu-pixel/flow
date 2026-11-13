@@ -1,0 +1,27 @@
+{
+  "source": "store/pulse_feed.go",
+  "unmigrated": 3,
+  "consumers": {
+    "PulseFeed": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "PulseSources": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "prunePulseIndexes": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

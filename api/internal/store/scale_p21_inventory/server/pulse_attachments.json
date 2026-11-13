@@ -1,0 +1,22 @@
+{
+  "source": "server/pulse_attachments.go",
+  "unmigrated": 2,
+  "consumers": {
+    "createPulseUpdateAttachment": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "deletePulseUpdateAttachment": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

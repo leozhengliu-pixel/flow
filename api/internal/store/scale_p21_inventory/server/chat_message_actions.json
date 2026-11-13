@@ -1,0 +1,22 @@
+{
+  "source": "server/chat_message_actions.go",
+  "unmigrated": 2,
+  "consumers": {
+    "chatCreateFromMessage": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "chatAuthorizedMutation"
+      ]
+    },
+    "processChatMessageResult": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields",
+        "chatAuthorizedMutation"
+      ]
+    }
+  }
+}

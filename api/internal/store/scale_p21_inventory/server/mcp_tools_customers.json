@@ -1,0 +1,14 @@
+{
+  "source": "server/mcp_tools_customers.go",
+  "unmigrated": 1,
+  "consumers": {
+    "visibleMCPCustomerRequests": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

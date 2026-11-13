@@ -1,0 +1,13 @@
+{
+  "source": "store/issue_list_projection.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateIssueListProjectionPass": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

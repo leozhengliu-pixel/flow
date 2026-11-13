@@ -1,0 +1,39 @@
+{
+  "source": "server/comment_actions.go",
+  "unmigrated": 4,
+  "consumers": {
+    "generateCommentActions": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "PagedWorkspaceMetadata",
+        "WorkspaceMetadata"
+      ]
+    },
+    "listCommentActions": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata",
+        "workspaceData"
+      ]
+    },
+    "resolveCommentAction": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "startCommentActions": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    }
+  }
+}

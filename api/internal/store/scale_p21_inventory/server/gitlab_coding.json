@@ -1,0 +1,21 @@
+{
+  "source": "server/gitlab_coding.go",
+  "unmigrated": 2,
+  "consumers": {
+    "refreshGitLabOAuthConnection": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "workspaceConnections": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

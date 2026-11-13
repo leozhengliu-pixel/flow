@@ -1,0 +1,13 @@
+{
+  "source": "store/workspace_project_reads.go",
+  "unmigrated": 1,
+  "consumers": {
+    "ProjectByID": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

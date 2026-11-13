@@ -1,0 +1,20 @@
+{
+  "source": "server/agent_runtime_session_tools.go",
+  "unmigrated": 2,
+  "consumers": {
+    "workerChatAsksLoopQuestions": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "workerChatSession": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

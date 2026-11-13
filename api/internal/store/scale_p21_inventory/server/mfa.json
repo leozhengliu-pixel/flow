@@ -1,0 +1,23 @@
+{
+  "source": "server/mfa.go",
+  "unmigrated": 2,
+  "consumers": {
+    "beginMFA": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "finishMFA": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ]
+    }
+  }
+}

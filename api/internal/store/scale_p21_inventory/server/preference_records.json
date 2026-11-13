@@ -1,0 +1,22 @@
+{
+  "source": "server/preference_records.go",
+  "unmigrated": 2,
+  "consumers": {
+    "preferenceMetadata": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "PagedWorkspaceMetadata",
+        "WorkspaceMetadata"
+      ]
+    },
+    "preferenceReviewVisible": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

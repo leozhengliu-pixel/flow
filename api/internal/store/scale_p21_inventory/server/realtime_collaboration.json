@@ -1,0 +1,15 @@
+{
+  "source": "server/realtime_collaboration.go",
+  "unmigrated": 1,
+  "consumers": {
+    "socketWorkspaceMetadata": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "PagedWorkspaceMetadata",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

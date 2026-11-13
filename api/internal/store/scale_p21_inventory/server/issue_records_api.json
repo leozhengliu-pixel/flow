@@ -1,0 +1,38 @@
+{
+  "source": "server/issue_records_api.go",
+  "unmigrated": 4,
+  "consumers": {
+    "createIssueRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "PagedWorkspaceMetadata"
+      ]
+    },
+    "issueRecordsBootstrapData": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "PagedWorkspaceMetadata",
+        "WorkspaceMetadata"
+      ]
+    },
+    "issueRecordsQuery": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata"
+      ]
+    },
+    "updateIssueRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "PagedWorkspaceMetadata"
+      ]
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "source": "server/coding_mcp_gateway.go",
+  "unmigrated": 3,
+  "consumers": {
+    "auditCodingMCPToolCall": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "codingMCPGatewayPolicy": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "codingMCPServers": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

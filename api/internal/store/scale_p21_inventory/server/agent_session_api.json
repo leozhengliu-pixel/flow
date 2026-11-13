@@ -1,0 +1,20 @@
+{
+  "source": "server/agent_session_api.go",
+  "unmigrated": 2,
+  "consumers": {
+    "agentSessionTarget": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "createApplicationAgentTask": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "source": "server/project_comment_threads.go",
+  "unmigrated": 2,
+  "consumers": {
+    "clearProjectThreadSubscription": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "setProjectThreadSubscription": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

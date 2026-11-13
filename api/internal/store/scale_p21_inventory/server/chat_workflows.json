@@ -1,0 +1,22 @@
+{
+  "source": "server/chat_workflows.go",
+  "unmigrated": 2,
+  "consumers": {
+    "chatExecuteAction": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "chatAuthorizedMutation"
+      ]
+    },
+    "processChatInbound": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "chatAuthorizedMutation"
+      ]
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "source": "server/loop_run_steps.go",
+  "unmigrated": 1,
+  "consumers": {
+    "prepareLoopRun": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "PagedWorkspaceMetadata",
+        "WorkspaceMetadata",
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

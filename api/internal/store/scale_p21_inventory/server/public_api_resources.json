@@ -1,0 +1,113 @@
+{
+  "source": "server/public_api_resources.go",
+  "unmigrated": 15,
+  "consumers": {
+    "getOrganization": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listCommentsConnection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listCustomerNeedsConnection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listCustomersConnection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listCyclesConnection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listDocumentsConnection": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listInitiativesConnection": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listIssueLabelsConnection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listProjectMilestonesConnection": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listProjectsConnection": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listReleasesConnection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listTeamsConnection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listUsersConnection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listWorkflowStatesConnection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "publicMetadata": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "PagedWorkspaceMetadata",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

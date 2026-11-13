@@ -1,0 +1,13 @@
+{
+  "source": "store/cycle_capacity_migration.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateWorkspaceCycleCapacity": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    }
+  }
+}

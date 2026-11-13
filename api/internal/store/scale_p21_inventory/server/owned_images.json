@@ -1,0 +1,13 @@
+{
+  "source": "server/owned_images.go",
+  "unmigrated": 1,
+  "consumers": {
+    "resolveWorkspaceLogo": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

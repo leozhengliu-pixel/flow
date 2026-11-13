@@ -1,0 +1,13 @@
+{
+  "source": "server/application_uninstall.go",
+  "unmigrated": 1,
+  "consumers": {
+    "uninstallApplicationInstallation": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    }
+  }
+}

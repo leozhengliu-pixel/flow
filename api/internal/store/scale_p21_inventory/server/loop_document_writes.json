@@ -1,0 +1,13 @@
+{
+  "source": "server/loop_document_writes.go",
+  "unmigrated": 1,
+  "consumers": {
+    "loopFindDocument": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

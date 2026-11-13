@@ -1,0 +1,20 @@
+{
+  "source": "store/document_inherited_scope_migration.go",
+  "unmigrated": 2,
+  "consumers": {
+    "migrateDocumentScopeBatch": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    },
+    "migrateWorkspaceDocumentScope": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    }
+  }
+}

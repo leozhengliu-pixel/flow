@@ -1,0 +1,23 @@
+{
+  "source": "store/read_snapshot.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginWorkspaceRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "decodeWorkspaceMetadata"
+      ]
+    },
+    "workspaceReadSource": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

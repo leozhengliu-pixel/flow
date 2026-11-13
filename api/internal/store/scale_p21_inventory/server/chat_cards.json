@@ -1,0 +1,21 @@
+{
+  "source": "server/chat_cards.go",
+  "unmigrated": 2,
+  "consumers": {
+    "chatIssueCard": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "chatSendUpdateForm": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "chatAuthorizedMutation"
+      ]
+    }
+  }
+}

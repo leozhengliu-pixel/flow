@@ -1,0 +1,13 @@
+{
+  "source": "server/initiative_team_access.go",
+  "unmigrated": 1,
+  "consumers": {
+    "initiativeOutsideTeams": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

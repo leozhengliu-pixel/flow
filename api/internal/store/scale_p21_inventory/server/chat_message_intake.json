@@ -1,0 +1,14 @@
+{
+  "source": "server/chat_message_intake.go",
+  "unmigrated": 1,
+  "consumers": {
+    "chatMessageIntakeExists": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "chatAuthorizedMutation"
+      ]
+    }
+  }
+}

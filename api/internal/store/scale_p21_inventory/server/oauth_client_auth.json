@@ -1,0 +1,13 @@
+{
+  "source": "server/oauth_client_auth.go",
+  "unmigrated": 1,
+  "consumers": {
+    "previousOAuthConsent": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

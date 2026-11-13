@@ -1,0 +1,13 @@
+{
+  "source": "store/agent_web_access_migration.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateWorkspaceAgentWebAccess": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    }
+  }
+}

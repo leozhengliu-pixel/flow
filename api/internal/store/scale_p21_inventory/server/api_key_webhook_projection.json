@@ -1,0 +1,13 @@
+{
+  "source": "server/api_key_webhook_projection.go",
+  "unmigrated": 1,
+  "consumers": {
+    "projectAPIKeyWebhookDelivery": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "BootstrapForUser"
+      ]
+    }
+  }
+}

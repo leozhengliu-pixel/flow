@@ -1,0 +1,41 @@
+{
+  "source": "store/workspace_purge.go",
+  "unmigrated": 5,
+  "consumers": {
+    "BeginWorkspacePurge": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BootstrapFor"
+      ]
+    },
+    "PurgeWorkspaceRows": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BootstrapFor"
+      ]
+    },
+    "RemoveWorkspaceFromCatalog": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BootstrapFor"
+      ]
+    },
+    "WorkspacesDueForDeletion": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "removeWorkspaceFromCatalog": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

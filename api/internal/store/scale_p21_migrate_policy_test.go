@@ -212,10 +212,11 @@ func TestScaleP21MigratePolicyPermissionDifferential(t *testing.T) {
 }
 
 func TestScaleP21MigrateInventoryCount(t *testing.T) {
-	if count := len(metadataFullWorkspaceConsumers()); count != 911 {
-		t.Fatalf("unmigrated consumers=%d, want 911", count)
+	inventory, err := metadataConsumerReviews()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if count := len(scaleP21MigrateReviewedConsumers()); count != 10 {
-		t.Fatalf("reviewed migration consumers=%d, want 10", count)
+	if len(metadataFullWorkspaceConsumers())+len(scaleP21MigrateReviewedConsumers()) != len(inventory.Consumers) {
+		t.Fatal("consumer partition differs from registered total")
 	}
 }

@@ -1,0 +1,13 @@
+{
+  "source": "store/search.go",
+  "unmigrated": 1,
+  "consumers": {
+    "WorkspaceSearchViewer": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

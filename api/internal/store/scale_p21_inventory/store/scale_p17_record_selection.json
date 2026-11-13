@@ -1,0 +1,13 @@
+{
+  "source": "store/scale_p17_record_selection.go",
+  "unmigrated": 1,
+  "consumers": {
+    "SelectedDocumentMetadata": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "source": "store/resource_access.go",
+  "unmigrated": 1,
+  "consumers": {
+    "ResolveAccess": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "accessors": [
+        "Bootstrap"
+      ]
+    },
+    "ResourceReadMetadata": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

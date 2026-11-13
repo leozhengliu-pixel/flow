@@ -1,0 +1,14 @@
+{
+  "source": "server/issue_record_aliases.go",
+  "unmigrated": 1,
+  "consumers": {
+    "buildIssueRecordAuthorizationData": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "PagedWorkspaceMetadata"
+      ]
+    }
+  }
+}

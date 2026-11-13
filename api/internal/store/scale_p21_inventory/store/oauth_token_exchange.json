@@ -1,0 +1,13 @@
+{
+  "source": "store/oauth_token_exchange.go",
+  "unmigrated": 1,
+  "consumers": {
+    "ExchangeOAuthGrant": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "source": "server/builtin_application_access.go",
+  "unmigrated": 1,
+  "consumers": {
+    "builtinApplicationContext": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

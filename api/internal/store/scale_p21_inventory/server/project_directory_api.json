@@ -1,0 +1,14 @@
+{
+  "source": "server/project_directory_api.go",
+  "unmigrated": 1,
+  "consumers": {
+    "listProjectRecords": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "publicMetadata"
+      ]
+    }
+  }
+}

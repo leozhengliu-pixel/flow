@@ -1,0 +1,14 @@
+{
+  "source": "server/auth_settings.go",
+  "unmigrated": 1,
+  "consumers": {
+    "authorizeAuthenticationPolicy": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "source": "server/coding_triggers_api.go",
+  "unmigrated": 2,
+  "consumers": {
+    "codingTriggerRequestContext": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields",
+        "workspaceData"
+      ]
+    },
+    "startReviewCodingSession": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    }
+  }
+}

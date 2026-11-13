@@ -1,0 +1,13 @@
+{
+  "source": "store/scale_p03_resource_records.go",
+  "unmigrated": 1,
+  "consumers": {
+    "resourceReadCompatibility": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

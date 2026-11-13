@@ -1,0 +1,13 @@
+{
+  "source": "store/realtime_records.go",
+  "unmigrated": 1,
+  "consumers": {
+    "MetadataRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

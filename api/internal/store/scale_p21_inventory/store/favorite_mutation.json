@@ -1,0 +1,13 @@
+{
+  "source": "store/favorite_mutation.go",
+  "unmigrated": 1,
+  "consumers": {
+    "mutateStandaloneFavorite": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

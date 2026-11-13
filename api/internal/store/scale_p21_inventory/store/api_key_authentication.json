@@ -1,0 +1,13 @@
+{
+  "source": "store/api_key_authentication.go",
+  "unmigrated": 1,
+  "consumers": {
+    "writeAPIKeyUse": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

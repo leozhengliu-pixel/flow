@@ -1,0 +1,38 @@
+{
+  "source": "server/gitlab_integration.go",
+  "unmigrated": 4,
+  "consumers": {
+    "connectGitLabToken": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "workspaceData"
+      ]
+    },
+    "gitlabConnectionSnapshot": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "workspaceData"
+      ]
+    },
+    "rotateDueGitLabTokens": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "saveGitLabConnection": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

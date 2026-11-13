@@ -1,0 +1,29 @@
+{
+  "source": "server/chat_notifications.go",
+  "unmigrated": 3,
+  "consumers": {
+    "chatSendInitiativeUpdate": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "processChatNotification": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields",
+        "chatAuthorizedMutation"
+      ]
+    },
+    "queueChatDomainEvent": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

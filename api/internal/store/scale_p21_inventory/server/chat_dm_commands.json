@@ -1,0 +1,34 @@
+{
+  "source": "server/chat_dm_commands.go",
+  "unmigrated": 4,
+  "consumers": {
+    "chatDMComment": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "chatAuthorizedMutation"
+      ]
+    },
+    "chatDMCreateIssue": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "chatAuthorizedMutation"
+      ]
+    },
+    "chatDMInbox": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "chatDMLinkPreview": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "chatAuthorizedMutation"
+      ]
+    }
+  }
+}

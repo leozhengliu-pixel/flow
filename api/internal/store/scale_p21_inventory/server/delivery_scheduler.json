@@ -1,0 +1,13 @@
+{
+  "source": "server/delivery_scheduler.go",
+  "unmigrated": 1,
+  "consumers": {
+    "processDueDeliveries": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

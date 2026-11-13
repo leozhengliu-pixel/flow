@@ -1,0 +1,13 @@
+{
+  "source": "server/files_api.go",
+  "unmigrated": 1,
+  "consumers": {
+    "createFileUpload": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

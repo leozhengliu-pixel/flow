@@ -1,0 +1,22 @@
+{
+  "source": "server/attachments_api.go",
+  "unmigrated": 2,
+  "consumers": {
+    "saveLinkAttachment": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "updateLinkAttachment": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

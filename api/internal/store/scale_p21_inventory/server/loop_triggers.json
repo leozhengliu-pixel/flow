@@ -1,0 +1,14 @@
+{
+  "source": "server/loop_triggers.go",
+  "unmigrated": 1,
+  "consumers": {
+    "dispatchLoopTriggers": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata",
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

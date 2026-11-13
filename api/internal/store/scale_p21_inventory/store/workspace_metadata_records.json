@@ -1,0 +1,13 @@
+{
+  "source": "store/workspace_metadata_records.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateWorkspaceMetadataRecords": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

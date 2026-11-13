@@ -1,0 +1,36 @@
+{
+  "source": "server/chat_card_actions.go",
+  "unmigrated": 4,
+  "consumers": {
+    "chatGroupQuickControls": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "chatPersonalIssueCard": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "chatPersonalNotificationCard": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields",
+        "chatAuthorizedMutation"
+      ]
+    },
+    "chatRunQuickAction": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "chatAuthorizedMutation"
+      ]
+    }
+  }
+}

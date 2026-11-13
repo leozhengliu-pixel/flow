@@ -51,6 +51,9 @@ func boundedMetadataRequested() bool {
 }
 
 func validateBoundedMetadataCoverage() error {
+	if _, err := metadataConsumerReviews(); err != nil {
+		return fmt.Errorf("%w: %w", ErrBoundedMetadataCoverage, err)
+	}
 	consumers := metadataFullWorkspaceConsumers()
 	if len(consumers) != 0 {
 		owners := []string{}

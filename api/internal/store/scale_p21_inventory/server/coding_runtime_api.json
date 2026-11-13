@@ -1,0 +1,13 @@
+{
+  "source": "server/coding_runtime_api.go",
+  "unmigrated": 1,
+  "consumers": {
+    "codingRuntimeBootstrap": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

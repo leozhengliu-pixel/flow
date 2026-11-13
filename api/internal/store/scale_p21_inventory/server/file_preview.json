@@ -1,0 +1,13 @@
+{
+  "source": "server/file_preview.go",
+  "unmigrated": 1,
+  "consumers": {
+    "filePreview": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "store/scale_p12_event_access.go",
+  "unmigrated": 1,
+  "consumers": {
+    "ReadEventPolicySource": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

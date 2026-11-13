@@ -1,0 +1,27 @@
+{
+  "source": "store/oauth.go",
+  "unmigrated": 3,
+  "consumers": {
+    "FindAPIKey": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "OAuthApplicationClient": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    },
+    "OAuthApplicationsWithLogo": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

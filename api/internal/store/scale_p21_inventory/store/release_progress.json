@@ -1,0 +1,14 @@
+{
+  "source": "store/release_progress.go",
+  "unmigrated": 1,
+  "consumers": {
+    "PopulateReleaseProgress": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

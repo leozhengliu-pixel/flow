@@ -1,0 +1,22 @@
+{
+  "source": "server/scim_audit.go",
+  "unmigrated": 2,
+  "consumers": {
+    "applySCIMProfileSettings": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "recordSCIMAudit": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

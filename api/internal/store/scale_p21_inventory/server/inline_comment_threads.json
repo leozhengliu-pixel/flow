@@ -1,0 +1,22 @@
+{
+  "source": "server/inline_comment_threads.go",
+  "unmigrated": 2,
+  "consumers": {
+    "clearInitiativeThreadSubscription": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "setInitiativeThreadSubscription": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

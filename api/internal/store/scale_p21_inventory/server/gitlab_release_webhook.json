@@ -1,0 +1,21 @@
+{
+  "source": "server/gitlab_release_webhook.go",
+  "unmigrated": 2,
+  "consumers": {
+    "applyGitLabReleaseHook": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "handleGitLabReleaseHook": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

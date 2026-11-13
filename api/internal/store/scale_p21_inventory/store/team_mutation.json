@@ -1,0 +1,13 @@
+{
+  "source": "store/team_mutation.go",
+  "unmigrated": 1,
+  "consumers": {
+    "mutateTeamMetadata": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

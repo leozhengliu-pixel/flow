@@ -1,0 +1,20 @@
+{
+  "source": "server/pulse_diff.go",
+  "unmigrated": 2,
+  "consumers": {
+    "listInitiativeUpdates": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    },
+    "listProjectUpdates": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    }
+  }
+}

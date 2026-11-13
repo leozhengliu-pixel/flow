@@ -1,0 +1,21 @@
+{
+  "source": "server/chat_issue_threads.go",
+  "unmigrated": 2,
+  "consumers": {
+    "chatSyncIssueComments": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "processChatThreadReply": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "chatAuthorizedMutation"
+      ]
+    }
+  }
+}

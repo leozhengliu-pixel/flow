@@ -1,0 +1,22 @@
+{
+  "source": "server/deploy_previews.go",
+  "unmigrated": 2,
+  "consumers": {
+    "applyDeploymentWebhook": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "putReviewPreview": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

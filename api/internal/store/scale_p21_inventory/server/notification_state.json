@@ -1,0 +1,14 @@
+{
+  "source": "server/notification_state.go",
+  "unmigrated": 1,
+  "consumers": {
+    "scopedNotificationState": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BeginWorkspaceRead",
+        "PagedWorkspaceMetadata"
+      ]
+    }
+  }
+}

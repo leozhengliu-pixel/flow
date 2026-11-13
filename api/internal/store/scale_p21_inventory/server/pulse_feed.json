@@ -1,0 +1,30 @@
+{
+  "source": "server/pulse_feed.go",
+  "unmigrated": 3,
+  "consumers": {
+    "postPulseSeen": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "setInitiativeProjectUpdatesSubscription": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "setPulseSubscription": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

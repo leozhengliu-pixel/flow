@@ -1,0 +1,13 @@
+{
+  "source": "store/content_offload.go",
+  "unmigrated": 1,
+  "consumers": {
+    "SweepOffloadedContent": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    }
+  }
+}

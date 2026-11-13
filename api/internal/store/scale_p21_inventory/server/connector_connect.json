@@ -1,0 +1,14 @@
+{
+  "source": "server/connector_connect.go",
+  "unmigrated": 1,
+  "consumers": {
+    "connectConnector": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

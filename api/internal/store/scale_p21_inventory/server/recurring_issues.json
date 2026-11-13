@@ -1,0 +1,22 @@
+{
+  "source": "server/recurring_issues.go",
+  "unmigrated": 2,
+  "consumers": {
+    "createRecurringOccurrence": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ]
+    },
+    "normalizeLegacyRecurringIssues": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

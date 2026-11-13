@@ -1,0 +1,13 @@
+{
+  "source": "server/coding_artifacts_api.go",
+  "unmigrated": 1,
+  "consumers": {
+    "codingArtifactSession": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

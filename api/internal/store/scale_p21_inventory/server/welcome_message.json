@@ -1,0 +1,23 @@
+{
+  "source": "server/welcome_message.go",
+  "unmigrated": 2,
+  "consumers": {
+    "sendWelcomeMessage": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace",
+        "WorkspaceMetadata"
+      ]
+    },
+    "testWelcomeMessage": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

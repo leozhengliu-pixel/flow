@@ -1,0 +1,14 @@
+{
+  "source": "store/issue_scope_mutation.go",
+  "unmigrated": 1,
+  "consumers": {
+    "mutateIssueScope": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "storedWorkspace"
+      ]
+    }
+  }
+}

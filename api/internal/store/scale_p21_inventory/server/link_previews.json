@@ -1,0 +1,13 @@
+{
+  "source": "server/link_previews.go",
+  "unmigrated": 1,
+  "consumers": {
+    "getLinkPreview": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "publicMetadata"
+      ]
+    }
+  }
+}

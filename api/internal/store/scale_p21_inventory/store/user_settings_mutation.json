@@ -1,0 +1,13 @@
+{
+  "source": "store/user_settings_mutation.go",
+  "unmigrated": 1,
+  "consumers": {
+    "mutateUserSettingsRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

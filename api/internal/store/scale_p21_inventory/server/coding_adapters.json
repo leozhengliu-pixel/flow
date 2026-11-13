@@ -1,0 +1,13 @@
+{
+  "source": "server/coding_adapters.go",
+  "unmigrated": 1,
+  "consumers": {
+    "codingMemberRoleOf": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

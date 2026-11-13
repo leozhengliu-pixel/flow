@@ -1,0 +1,13 @@
+{
+  "source": "server/workspace_deletion.go",
+  "unmigrated": 1,
+  "consumers": {
+    "purgeWorkspace": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "BootstrapFor"
+      ]
+    }
+  }
+}

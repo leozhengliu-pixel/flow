@@ -1,0 +1,22 @@
+{
+  "source": "server/thread_subscriptions.go",
+  "unmigrated": 2,
+  "consumers": {
+    "clearThreadSubscription": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "setThreadSubscription": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "source": "server/coding_environments_api.go",
+  "unmigrated": 3,
+  "consumers": {
+    "auditCodingEnvironment": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    },
+    "codingEnvironmentAccess": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadata"
+      ]
+    },
+    "codingWorkspaceKey": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

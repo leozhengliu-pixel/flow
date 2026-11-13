@@ -1,0 +1,22 @@
+{
+  "source": "server/cycle_capacity.go",
+  "unmigrated": 2,
+  "consumers": {
+    "cycleWithCapacity": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "decorateCycleCapacity": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "store/scale_p17_document_directory.go",
+  "unmigrated": 1,
+  "consumers": {
+    "DocumentDirectoryMetadata": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

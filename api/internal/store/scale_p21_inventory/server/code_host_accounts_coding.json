@@ -1,0 +1,13 @@
+{
+  "source": "server/code_host_accounts_coding.go",
+  "unmigrated": 1,
+  "consumers": {
+    "MemberAccount": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

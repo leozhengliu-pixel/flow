@@ -1,0 +1,14 @@
+{
+  "source": "server/attachment_from_url.go",
+  "unmigrated": 1,
+  "consumers": {
+    "createAttachmentFromURL": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

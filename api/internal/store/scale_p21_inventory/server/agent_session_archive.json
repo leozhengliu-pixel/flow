@@ -1,0 +1,14 @@
+{
+  "source": "server/agent_session_archive.go",
+  "unmigrated": 1,
+  "consumers": {
+    "auditAgentSessionArchive": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "store/application_agents.go",
+  "unmigrated": 1,
+  "consumers": {
+    "resolveApplicationAccess": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

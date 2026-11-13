@@ -1,0 +1,21 @@
+{
+  "source": "server/agent_worker_loop.go",
+  "unmigrated": 2,
+  "consumers": {
+    "finishWorkerLoopRun": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "WorkspaceMetadataFields"
+      ]
+    },
+    "workerLoopContext": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields"
+      ]
+    }
+  }
+}

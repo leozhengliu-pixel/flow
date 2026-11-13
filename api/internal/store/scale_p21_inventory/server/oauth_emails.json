@@ -1,0 +1,14 @@
+{
+  "source": "server/oauth_emails.go",
+  "unmigrated": 1,
+  "consumers": {
+    "notifyApplicationInstalled": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

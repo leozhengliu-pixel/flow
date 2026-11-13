@@ -1,0 +1,21 @@
+{
+  "source": "server/mcp_tools_attachments.go",
+  "unmigrated": 2,
+  "consumers": {
+    "appendMCPDocumentEmbed": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "mcpWorkspaceData"
+      ]
+    },
+    "attachStoredObject": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "store/owned_uploads.go",
+  "unmigrated": 1,
+  "consumers": {
+    "BackfillUploadOwners": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

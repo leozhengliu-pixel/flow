@@ -1,0 +1,30 @@
+{
+  "source": "server/mcp_tools.go",
+  "unmigrated": 3,
+  "consumers": {
+    "mcpWorkspaceData": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "PagedWorkspaceMetadata"
+      ]
+    },
+    "mcpWorkspaceDataForTool": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadataFields",
+        "mcpWorkspaceData"
+      ]
+    },
+    "runFlowTool": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "mcpWorkspaceDataForTool"
+      ]
+    }
+  }
+}

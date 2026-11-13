@@ -1,0 +1,14 @@
+{
+  "source": "server/project_comment_attachments.go",
+  "unmigrated": 1,
+  "consumers": {
+    "storeCommentAttachment": {
+      "owner": "P16",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

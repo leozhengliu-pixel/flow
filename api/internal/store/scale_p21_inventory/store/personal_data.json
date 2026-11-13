@@ -1,0 +1,27 @@
+{
+  "source": "store/personal_data.go",
+  "unmigrated": 3,
+  "consumers": {
+    "ErasePersonFromWorkspace": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    },
+    "PersonalDataLeaks": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    },
+    "ScrubPersonCopies": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    }
+  }
+}

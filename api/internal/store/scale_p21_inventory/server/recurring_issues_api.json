@@ -1,0 +1,15 @@
+{
+  "source": "server/recurring_issues_api.go",
+  "unmigrated": 1,
+  "consumers": {
+    "createTeamRecurringIssue": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate",
+        "PagedWorkspaceMetadata"
+      ]
+    }
+  }
+}

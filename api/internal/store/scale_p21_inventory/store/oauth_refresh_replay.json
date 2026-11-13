@@ -1,0 +1,14 @@
+{
+  "source": "store/oauth_refresh_replay.go",
+  "unmigrated": 0,
+  "consumers": {
+    "OAuthClientSecret": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded mode reads the live confidential secret scalar under admission and retains constant-time comparison; rotation and removal need no resident body cache.",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

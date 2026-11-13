@@ -1,0 +1,13 @@
+{
+  "source": "store/oauth_authorization_records.go",
+  "unmigrated": 1,
+  "consumers": {
+    "oauthMetadataTransaction": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "source": "server/agent_connectors.go",
+  "unmigrated": 1,
+  "consumers": {
+    "executeConnectorTool": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "WorkspaceMetadata"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "store/workflow_state_deletion.go",
+  "unmigrated": 1,
+  "consumers": {
+    "DeleteWorkflowStateRecords": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

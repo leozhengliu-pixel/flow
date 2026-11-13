@@ -1,0 +1,14 @@
+{
+  "source": "store/loop_contract_mutation.go",
+  "unmigrated": 1,
+  "consumers": {
+    "mutateLoopContract": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "storedWorkspace"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "store/application_identity.go",
+  "unmigrated": 1,
+  "consumers": {
+    "SyncAllApplicationIdentities": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

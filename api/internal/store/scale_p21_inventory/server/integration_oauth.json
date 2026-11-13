@@ -1,0 +1,14 @@
+{
+  "source": "server/integration_oauth.go",
+  "unmigrated": 1,
+  "consumers": {
+    "persistOAuthIntegrationError": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

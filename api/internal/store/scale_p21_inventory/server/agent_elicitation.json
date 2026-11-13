@@ -1,0 +1,13 @@
+{
+  "source": "server/agent_elicitation.go",
+  "unmigrated": 1,
+  "consumers": {
+    "resolveAgentElicitation": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    }
+  }
+}

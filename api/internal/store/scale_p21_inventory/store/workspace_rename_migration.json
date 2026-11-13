@@ -1,0 +1,13 @@
+{
+  "source": "store/workspace_rename_migration.go",
+  "unmigrated": 1,
+  "consumers": {
+    "seedWorkspaceKeyRenames": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "store/resource_slug_migration.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateWorkspaceResourceSlugs": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "storedWorkspace"
+      ]
+    }
+  }
+}

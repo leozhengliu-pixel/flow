@@ -1,0 +1,14 @@
+{
+  "source": "store/comment_actions_migration.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateCommentActions": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

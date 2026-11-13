@@ -1,0 +1,21 @@
+{
+  "source": "server/connector_oauth.go",
+  "unmigrated": 2,
+  "consumers": {
+    "connectorForRequest": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "workspaceData"
+      ]
+    },
+    "finishConnectorOAuth": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "PagedWorkspaceMetadata"
+      ]
+    }
+  }
+}

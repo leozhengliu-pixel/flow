@@ -1,0 +1,14 @@
+{
+  "source": "store/issue_record_mutation.go",
+  "unmigrated": 1,
+  "consumers": {
+    "UpdateIssueRecord": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "storedWorkspace"
+      ]
+    }
+  }
+}

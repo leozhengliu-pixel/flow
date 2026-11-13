@@ -1,0 +1,14 @@
+{
+  "source": "store/workspace_color_migration.go",
+  "unmigrated": 1,
+  "consumers": {
+    "migrateWorkspaceInitialsColor": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

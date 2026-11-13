@@ -1,0 +1,29 @@
+{
+  "source": "server/oauth_app_manifest.go",
+  "unmigrated": 3,
+  "consumers": {
+    "createOAuthApplicationFromManifest": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspaceWithAggregate"
+      ]
+    },
+    "exportOAuthApplicationManifest": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "workspaceData"
+      ]
+    },
+    "updateOAuthApplicationFromManifest": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "source": "server/coding_sessions_api.go",
+  "unmigrated": 1,
+  "consumers": {
+    "updateCodingSettings": {
+      "owner": "P18",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap",
+        "MutateWorkspace"
+      ]
+    }
+  }
+}

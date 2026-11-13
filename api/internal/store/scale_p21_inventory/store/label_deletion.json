@@ -1,0 +1,13 @@
+{
+  "source": "store/label_deletion.go",
+  "unmigrated": 1,
+  "consumers": {
+    "MutateLabelDeletion": {
+      "owner": "P21",
+      "status": "unmigrated",
+      "accessors": [
+        "Bootstrap"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "store/scale_p17_trash_headers.go",
+  "unmigrated": 1,
+  "consumers": {
+    "TrashRecordHeader": {
+      "owner": "P17",
+      "status": "unmigrated",
+      "accessors": [
+        "resident-state"
+      ]
+    }
+  }
+}
