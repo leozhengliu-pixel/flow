@@ -5,6 +5,7 @@
     "refreshGitLabOAuthConnection": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "SW20 collision differential proves a target-only integrationConnections scope changes realtime aggregate data when an earlier document ContentData object has the connection ID. Token exchange/CAS ordering is independently retained; the original metadata writer stays pending until bounded legacy aggregate lookup is available.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

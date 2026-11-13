@@ -1,6 +1,6 @@
 {
   "source": "server/team_archive.go",
-  "unmigrated": 4,
+  "unmigrated": 3,
   "consumers": {
     "deleteTeam": {
       "owner": "P21",
@@ -20,13 +20,15 @@
     "purgeExpiredTeams": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "The due-team scan can use bounded resident policy, but positive execution invokes main.go purgeTeam, whose atomic entity cascade and suggestion pruning still use full metadata. Keep this caller pending until its complete positive path can be differentially verified.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
     },
     "restoreDeletedTeam": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes teams/teamID and reads exact users/teamID plus providerJobs/teamID to preserve every persisted Bootstrap predecessor in legacy aggregate lookup; scoped root retains Workspace/Viewer. Callback, audit, missing/malformed ID behavior and exact off accessor remain unchanged. TestScaleP21SW20RestoreTeamDifferential compares full principal/key matrix, canonical target/actor rows, audits and complete sinks, >60 unrelated teams/large unrelated project, nested document collision, immediate native policy installation, cross-workspace and queued/replayed revocation, cancellation and explicit budget rollback/recovery. TestScaleP21SW20ImportedTeamAggregateCollision proves arbitrary imported IDs preserve earlier user/provider-job aggregate precedence, read-only user values and virtual settings defaults.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

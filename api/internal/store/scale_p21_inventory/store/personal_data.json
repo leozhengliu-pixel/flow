@@ -1,17 +1,19 @@
 {
   "source": "store/personal_data.go",
-  "unmigrated": 3,
+  "unmigrated": 1,
   "consumers": {
     "ErasePersonFromWorkspace": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Existing storedWorkspace lookup copies only a struct header and consumes resident core Workspace.ID; it never clones or reads metadata collections. The finite native SQL transaction and trusted caller authorization contract are unchanged. TestScaleP21SW21PersonalErasureUsesResidentIdentity compares legacy and policy-only stores across actor identities, membership/departure/search/recent/chat/notification SQL effects, account invalidation and complete event sinks, unrelated oversized metadata, cross-workspace isolation, missing workspace, cancellation rollback and zero full decodes.",
       "accessors": [
         "storedWorkspace"
       ]
     },
     "PersonalDataLeaks": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Existing storedWorkspace header lookup consumes only resident core Workspace.ID; remaining work consists of SQL scalar COUNT predicates and small leak labels, with no metadata body transfer or accumulation. TestScaleP21SW21PersonalLeakCheckUsesResidentIdentity compares legacy/policy-only results for real identity copies, escaped/no-match/blank/repeated text, missing workspace and cancellation's existing error-as-leak behavior, unchanged canonical bytes, no publication and zero full decodes. This trusted verifier does not authorize requests.",
       "accessors": [
         "storedWorkspace"
       ]
@@ -19,6 +21,7 @@
     "ScrubPersonCopies": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "The wrapper reads only core Workspace.ID, but scrubPersonCopies scans complete body columns, decodes each JSON and retains every rewritten value in one updates slice before an atomic transaction. It needs bounded staging or a streamed typed scrubber with atomic publication; a wrapper identity scope would not bound downstream work.",
       "accessors": [
         "storedWorkspace"
       ]

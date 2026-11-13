@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"flow/api/internal/domain"
@@ -90,7 +91,14 @@ func (s *server) listDeletedTeams(w http.ResponseWriter, r *http.Request) {
 func (s *server) restoreDeletedTeam(w http.ResponseWriter, r *http.Request) {
 	workspaceKey, teamID := r.PathValue("workspaceKey"), r.PathValue("teamId")
 	var restored domain.Team
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.unarchived", teamID, nil, func(data *domain.Bootstrap) error {
+	scope := store.MetadataRecordScope{
+		Read:  []store.RecordKey{{Kind: "providerJobs", ID: teamID}, {Kind: "users", ID: teamID}},
+		Write: []store.RecordKey{{Kind: "teams", ID: teamID}},
+	}
+	if teamID == "" || len(teamID) > 191 || strings.ContainsRune(teamID, '\x00') {
+		scope = store.MetadataRecordScope{}
+	}
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey, "team.unarchived", teamID, nil, scope, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID })
 		if index < 0 || data.Teams[index].ArchivedAt == nil {
 			return errNotFound
