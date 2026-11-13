@@ -1,6 +1,6 @@
 {
   "source": "server/settings_features.go",
-  "unmigrated": 38,
+  "unmigrated": 31,
   "consumers": {
     "connectIntegration": {
       "owner": "P21",
@@ -68,7 +68,8 @@
     },
     "deleteDocumentTemplate": {
       "owner": "P17",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes/deletes only documentTemplates/id; callback uses no other collection and preserves missing-record semantics and the original off-mode context/accessor. TestScaleP21SW5SettingsPointDifferential compares canonical target/other records, response and webhook/realtime effects across the principal/credential matrix and live revocation boundary. TestScaleP21SW5SettingsPointFailures checks cancellation and explicit oversized-target rejection without mutation. requestActor and HTTP authorization remain separate blockers.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -76,7 +77,8 @@
     },
     "deleteOAuthApplication": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes/deletes only oauthApplications/id and retains workspace identity for the revocation notification; client ID capture, installation lookup/uninstall/reconciliation and notification stay outside the callback unchanged. TestScaleP21SW5SettingsPointDifferential compares responses, canonical target/unrelated records and webhook/realtime effects across principal/credential classes, missing IDs and live revocation boundaries. Downstream installation/uninstall helpers, requestActor and HTTP authorization remain independently registered blockers.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -92,7 +94,8 @@
     },
     "deleteWorkspaceIssueTemplate": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes/deletes only issueTemplates/id while retaining the exact workspace-scope OR empty-visibility predicate and missing-record behavior; no issue/content collection is changed. TestScaleP21SW5SettingsPointDifferential covers workspace and team templates with empty visibility, principal/credential classes, canonical unrelated rows and webhook/realtime effects. TestScaleP21SW5SettingsPointFailures preserves private-visibility rejection. requestActor and HTTP authorization remain separate blockers.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -177,7 +180,8 @@
     },
     "refreshIntegrationOAuth": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Projects integrationConnections/id and writes that same canonical record, preserving provider binding and workspace identity. Endpoint validation, provider exchange, encrypted refresh-token CAS and disconnect cleanup remain outside the metadata callback; expiry/status/error fields and existing event envelopes are retained. TestScaleP21SW5IntegrationOAuthDifferential compares principal/credential classes, missing/provider mismatch, encrypted tokens, provider errors, expiry, reconnect CAS/disconnect races, unrelated bytes and queued/replayed revocation under the explicit live boundary. HTTP authorization remains independently blocked.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -211,7 +215,8 @@
     },
     "revokeIntegrationOAuth": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Projects integrationConnections/id and writes that same canonical record, retaining provider binding and workspace identity. External revocation and conditional encrypted-token removal remain outside the callback; status/state/expiry reset and event envelopes are unchanged. TestScaleP21SW5IntegrationOAuthDifferential compares principal/credential classes, missing/provider mismatch, no-token behavior, endpoint/provider failures, reconnect CAS, exact token/record effects, unrelated bytes and queued/replayed revocation under the explicit live boundary. HTTP authorization remains independently blocked.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -254,7 +259,8 @@
     },
     "updateDocumentTemplate": {
       "owner": "P17",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes documentTemplates/id and reads only a supplied nonempty canonical teams/teamId after the existing whitespace normalization; unchanged content and template properties remain on the target. Existing team/name/color validation and no-op behavior are retained. TestScaleP21SW5SettingsPointDifferential compares principal/credential classes, team assignment/clear, invalid/missing/no-op paths, canonical records and event effects; TestScaleP21SW5SettingsPointFailures checks cancellation and explicit oversized-target rollback. HTTP authorization remains independently blocked.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -262,7 +268,8 @@
     },
     "updateIntegration": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes integrationConnections/id only, preserving exact provider binding, config merge with credential-key exclusions, normalized scopes/channels, status validation, redacted response and no-op behavior. TestScaleP21SW5SettingsPointDifferential compares canonical target/unrelated records, response and webhook/realtime effects across principal/credential classes and missing IDs; TestScaleP21SW5SettingsPointFailures covers provider mismatch and client-secret input rejection. HTTP authorization remains independently blocked.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

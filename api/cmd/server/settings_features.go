@@ -1181,7 +1181,7 @@ func (s *server) updateWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Req
 
 func (s *server) deleteWorkspaceIssueTemplate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_template.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "issue_template.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "issueTemplates", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.IssueTemplates)
 		data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool {
 			return template.ID == id && (template.Scope == "workspace" || template.VisibilityTeamID == "")
@@ -1789,7 +1789,7 @@ func (s *server) deleteOAuthApplication(w http.ResponseWriter, r *http.Request) 
 	clientID := ""
 	var deleted domain.OAuthApplication
 	deletedFrom := ""
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_application.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "oauth_application.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "oauthApplications", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -2236,7 +2236,10 @@ func exchangeIntegrationToken(ctx context.Context, tokenURL string, config integ
 
 func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "integrationConnections", ID: id}}})
+	if !ok {
+		return
+	}
 	index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
 	if index < 0 {
 		writeError(w, http.StatusNotFound, "resource not found")
@@ -2305,7 +2308,7 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var result domain.IntegrationConnection
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_refreshed", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "integration.oauth_refreshed", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: id}}}, func(data *domain.Bootstrap) error {
 		currentIndex := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
 			return item.ID == id && item.Provider == provider
 		})
@@ -2335,7 +2338,10 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 
 func (s *server) revokeIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	provider, id := strings.ToLower(r.PathValue("provider")), r.PathValue("id")
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "integrationConnections", ID: id}}})
+	if !ok {
+		return
+	}
 	index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
 	if index < 0 {
 		writeError(w, http.StatusNotFound, "resource not found")
@@ -2386,7 +2392,7 @@ func (s *server) revokeIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 		respondMutation(w, errNotFound, http.StatusBadRequest, nil)
 		return
 	}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.oauth_revoked", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "integration.oauth_revoked", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: id}}}, func(data *domain.Bootstrap) error {
 		currentIndex := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool {
 			return item.ID == id && item.Provider == provider
 		})
@@ -2423,7 +2429,7 @@ func (s *server) updateIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.IntegrationConnection
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "integration.updated", id, input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
 		if index < 0 {
 			return errNotFound
@@ -2602,7 +2608,11 @@ func (s *server) updateDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 	}
 	id := r.PathValue("id")
 	var updated domain.DocumentTemplate
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document_template.updated", id, input, func(data *domain.Bootstrap) error {
+	scope := store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "documentTemplates", ID: id}}}
+	if input.TeamID != nil && strings.TrimSpace(*input.TeamID) != "" {
+		scope.Read = []store.RecordKey{{Kind: "teams", ID: strings.TrimSpace(*input.TeamID)}}
+	}
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "document_template.updated", id, input, scope, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -2623,7 +2633,7 @@ func (s *server) updateDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 
 func (s *server) deleteDocumentTemplate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document_template.deleted", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "document_template.deleted", id, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "documentTemplates", ID: id}}}, func(data *domain.Bootstrap) error {
 		before := len(data.DocumentTemplates)
 		data.DocumentTemplates = slices.DeleteFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == id })
 		if before == len(data.DocumentTemplates) {
