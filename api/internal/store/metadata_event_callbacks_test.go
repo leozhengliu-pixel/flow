@@ -37,7 +37,16 @@ func TestAuditedMetadataCallbackReads(t *testing.T) {
 				return true
 			}
 			selector, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || selector.Sel.Name != "MutateWorkspace" && selector.Sel.Name != "MutateWorkspaceWithAggregate" || len(call.Args) < 4 {
+			if !ok {
+				return true
+			}
+			// The P21 scoped writers take the event and the callback in the same positions as the legacy ones.
+			switch selector.Sel.Name {
+			case "MutateWorkspace", "MutateWorkspaceWithAggregate", "MutateWorkspaceScoped", "MutateWorkspaceScopedWithAggregate":
+			default:
+				ok = false
+			}
+			if !ok || len(call.Args) < 4 {
 				return true
 			}
 			calls++
