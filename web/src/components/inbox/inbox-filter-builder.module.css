@@ -64,6 +64,8 @@
 .valueList:has(>.empty:only-child){padding:0}
 .valueList>.empty:only-child{height:42px}
 .avatar{display:grid;place-items:center;background:var(--avatar,var(--avatar-fallback));color:var(--avatar-initials-fg);font-size:9px;font-weight:450}
+/* An uploaded picture (an app logo) carries no initials colour behind it. */
+img.avatar{background:transparent}
 
 /* Applied inbox filters mirror the shared the reference app chip geometry. */
 .appliedBar{min-height:52px;padding:10px 12px}

@@ -16,6 +16,8 @@
     .oauth-app-list li { position: relative; height: 68px; }
     .oauth-app-list-row { position: absolute; inset: 0; gap: 8px; padding: 0; border-radius: 0 0 10px 10px; color: var(--set-text); font: 400 16px/24px var(--font); }
     .oauth-app-list-row .oauth-app-avatar { margin-left: 10.6667px; background: var(--set-drawer-search-bg); border: 0; }
+    /* An uploaded logo is the whole tile: no fill behind it. */
+    .oauth-app-list-row .oauth-app-avatar.is-image { background: transparent; }
     .oauth-app-list-copy { flex: 1; padding-right: 54.6667px; }
     .oauth-app-list-copy > strong { font: 500 13px/normal var(--font); }
     .oauth-app-list-copy > span { color: var(--set-desc); font: 450 12px/normal var(--font); }

@@ -1,5 +1,8 @@
 /* The built-in agent avatar: a label-coloured disc with the product mark in the page background colour (inverts with the theme). */
 .agent-avatar-mark { display: block; flex: none; width: 100%; height: 100%; border-radius: 50%; }
+/* The mark is drawn straight into an avatar's class (inbox rows, filter options): the ridge must show the page behind it, never
+   that class's per-person avatar colour. Element + class outranks a host's single avatar class. */
+svg.agent-avatar-mark { background: transparent; }
 .agent-avatar-mark__disc { fill: var(--label-base); }
 
 /* An avatar slot (span) holding the mark draws no disc of its own: the mark is the disc. */
