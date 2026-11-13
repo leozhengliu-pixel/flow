@@ -7,6 +7,8 @@ type metadataFullWorkspaceConsumer struct{ owner string }
 
 func metadataFullWorkspaceConsumers() map[string]metadataFullWorkspaceConsumer {
 	return map[string]metadataFullWorkspaceConsumer{
+		"store/scale_p16_record_mutation.go:mutateProjectRecordSelection":           {"P16"},
+		"server/scale_p16_record_suggestions.go:pruneProjectRecordSuggestions":      {"P16"},
 		"server/internal_record_requirements.go:internalRequestConversation":        {"P18"},
 		"server/internal_record_requirements.go:mutateInternalConversation":         {"P18"},
 		"store/scale_p18_project_reads.go:InternalProjectIDUnambiguous":             {"P18"},
