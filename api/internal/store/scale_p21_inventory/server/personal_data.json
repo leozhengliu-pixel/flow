@@ -1,10 +1,11 @@
 {
   "source": "server/personal_data.go",
-  "unmigrated": 5,
+  "unmigrated": 4,
   "consumers": {
     "auditPersonalData": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Needs shared change: deferred personal-data audits must retain attribution after the actor's membership changes. The scoped writer rejects an inactive actor that the legacy audit writer accepts, as proved by TestScaleP21M1DeferredAuditSharedPrerequisite.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -27,7 +28,8 @@
     },
     "refuseSoleAdmin": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The existing field accessor requests only workspace identity, which remains resident under the process policy cap. SoleAdminWorkspaces supplies authoritative ownership; no member/body collection is loaded. TestScaleP21M1CoreReadsDifferential compares the refusal body across principal and credential classes, including users from another workspace.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

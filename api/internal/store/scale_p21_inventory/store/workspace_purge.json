@@ -1,6 +1,6 @@
 {
   "source": "store/workspace_purge.go",
-  "unmigrated": 5,
+  "unmigrated": 4,
   "consumers": {
     "BeginWorkspacePurge": {
       "owner": "P21",
@@ -25,7 +25,8 @@
     },
     "WorkspacesDueForDeletion": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Inspects only resident workspace identities/deletion-request timestamps and returns the original URL-key ordering. The catalog is bounded by the process policy byte cap and contains no record bodies. TestScaleP21M1CoreMetadataDifferential compares before/after cutoffs and complete returned identities with unrelated oversized metadata.",
       "accessors": [
         "resident-state"
       ]

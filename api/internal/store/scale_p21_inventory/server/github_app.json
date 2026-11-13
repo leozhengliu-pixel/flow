@@ -1,10 +1,11 @@
 {
   "source": "server/github_app.go",
-  "unmigrated": 8,
+  "unmigrated": 7,
   "consumers": {
     "checkGitHubAppMember": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode reads resident workspace identity only; canonical key equality, auth-disabled behavior, active SQL membership and optional admin checks are unchanged. Off mode keeps WorkspaceMetadata. TestScaleP21M1CoreReadsDifferential covers principal/credential classes, foreign users and queued/replayed revocation without loading unrelated bodies.",
       "accessors": [
         "WorkspaceMetadata"
       ]

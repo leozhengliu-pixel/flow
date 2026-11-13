@@ -5,6 +5,7 @@
     "ReadEventPolicySource": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Small policy/permission differentials are covered by TestScaleP21M1CoreReadsDifferential, but shared readResidentResourcePolicy still transfers and budgets complete teamSettings rows before stripping unused guidance/body fields. Large unrelated guidance can exhaust the input budget while the serialized policy is small. The shared native policy reader needs header-only SQL projection before this source can be certified.",
       "accessors": [
         "resident-state"
       ]

@@ -1,10 +1,11 @@
 {
   "source": "store/api_key_authentication.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "writeAPIKeyUse": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Existing usage telemetry updates at most one API key and one grant through native SQL JSON expressions, with unchanged minute/revocation predicates and canonical hooks. The bounded resident policy has no credential body collections to copy or hydrate; root installation only retires the complete-copy stamp. TestScaleP21M1APIKeyTelemetryDifferential compares exact canonical key/grant bytes for active and revoked records, selected-empty scope and oversized unrelated settings. Credential lookup consumers remain independently blocked.",
       "accessors": [
         "resident-state"
       ]

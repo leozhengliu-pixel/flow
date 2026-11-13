@@ -1,10 +1,11 @@
 {
   "source": "store/search.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "WorkspaceSearchViewer": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "This existing trusted fallback reads only the resident workspace viewer identity and workspace existence under the policy process cap, without cloning or traversing body collections. TestScaleP21M1CoreMetadataDifferential compares explicit/default/missing workspace identities across full and policy-only representations; authenticated search authorization remains separate.",
       "accessors": [
         "resident-state"
       ]

@@ -1,10 +1,11 @@
 {
   "source": "store/metadata_copy_revision.go",
-  "unmigrated": 5,
+  "unmigrated": 4,
   "consumers": {
     "copyRevisionLocked": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "This existing metadata-cache guard reads only workspace map membership and the fixed-size copyRevision stamp; it never traverses/copies a Bootstrap collection. TestScaleP21M1CoreMetadataDifferential exercises both certified legacy and policy-only bounded paths through BeginWorkspaceRead, including missing selections, ownership, cancellation and admission release.",
       "accessors": [
         "resident-state"
       ]

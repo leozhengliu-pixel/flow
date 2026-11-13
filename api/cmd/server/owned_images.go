@@ -67,7 +67,11 @@ func (s *server) resolveWorkspaceLogo(name string, owner *store.FileUpload) (wor
 	if owner == nil || owner.Purpose != store.FileUploadPurposeWorkspaceLogo || owner.WorkspaceKey == "" {
 		return workspaceLogo{}, false
 	}
-	data, ok := s.store.WorkspaceMetadata(owner.WorkspaceKey)
+	read := s.store.WorkspaceMetadata
+	if s.store.BoundedMetadataEnabled() {
+		read = s.store.WorkspaceSettingsMetadata
+	}
+	data, ok := read(owner.WorkspaceKey)
 	if !ok || data.Workspace.URLKey != owner.WorkspaceKey || data.Workspace.LogoURL != "/uploads/"+name {
 		return workspaceLogo{}, false
 	}
