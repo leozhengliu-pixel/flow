@@ -1,10 +1,11 @@
 {
   "source": "server/coding_runtime_api.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "codingRuntimeBootstrap": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Inventory name collision: coding.service.Bootstrap is the sandbox-token runtime protocol in internal/coding/runtime.go, not a workspace Bootstrap accessor. It uses the coding session repository and narrow workspace/issue adapters. No metadata full scan to migrate. TestScaleP21M2CodingBootstrapIsRuntimeProtocol covers disabled dispatch; existing coding runtime protocol tests cover bound tokens and sessions.",
       "accessors": [
         "Bootstrap"
       ]

@@ -983,7 +983,10 @@ func (s *server) runWebhookDelivery(ctx context.Context, id string, now time.Tim
 func (s *server) attemptWebhookDelivery(ctx context.Context, delivery domain.WebhookDelivery, now time.Time) (domain.WebhookDelivery, error) {
 	var webhook *domain.Webhook
 	if delivery.Kind != domain.WebhookDeliveryKindLifecycle {
-		hooks, _ := s.store.WorkspaceMetadataFields(delivery.WorkspaceKey, "webhooks")
+		hooks, _, err := s.store.WorkspaceMetadataFieldsScoped(ctx, delivery.WorkspaceKey, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "webhooks", ID: delivery.WebhookID}}}, "webhooks")
+		if err != nil {
+			return delivery, err
+		}
 		index := slices.IndexFunc(hooks.Webhooks, func(item domain.Webhook) bool { return item.ID == delivery.WebhookID })
 		if index < 0 || !hooks.Webhooks[index].Enabled && delivery.Kind != domain.WebhookDeliveryKindTest {
 			return s.store.CompleteWebhookDeliveryAttempt(ctx, delivery, store.WebhookDeliveryOutcome{Canceled: true, At: now})
@@ -1156,7 +1159,7 @@ func (s *server) recordWebhookHealth(workspace string, webhook domain.Webhook, d
 
 func (s *server) updateWebhookHealth(workspace, webhookID string, apply func(*domain.Webhook) bool) {
 	ctx := store.WithMetadataFields(context.Background(), "webhooks")
-	err := s.store.MutateWorkspace(ctx, workspace, "webhook.updated", webhookID, map[string]any{"health": true}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(ctx, workspace, "webhook.updated", webhookID, map[string]any{"health": true}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "webhooks", ID: webhookID}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Webhooks, func(item domain.Webhook) bool { return item.ID == webhookID })
 		if index < 0 || !apply(&data.Webhooks[index]) {
 			return store.ErrNoMutation

@@ -1,10 +1,11 @@
 {
   "source": "server/agent_session_api.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "agentSessionTarget": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Genuine trusted configuration scan uses StreamMetadataRecords in canonical order, retaining one typed webhook and at most 256 KiB plus one encoded byte. First matching managed client/enabled/resource subscription wins; no network work occurs in the repeatable-read snapshot. Oversized rows fail explicitly. TestScaleP21M2AgentWebhookScanDifferential covers 122 rows, first/middle/last/missing, cancellation and oversized bodies; caller-owned app URL/secret shortcut is unchanged.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

@@ -47,7 +47,11 @@ func (s *server) allowManualCustomerEdit(w http.ResponseWriter, r *http.Request)
 	if _, apiKey := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); apiKey {
 		return true
 	}
-	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{Fields: []string{"workspaceSettings"}})
+	if err != nil {
+		issueRecordsError(w, err)
+		return false
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return false

@@ -1,10 +1,11 @@
 {
   "source": "server/files_api.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "createFileUpload": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Trusted identity-only scope resolves the workspace key; original actor, filename/type/size validation and durable upload quota writer remain unchanged. TestScaleP21M2CredentialsAndUploadDifferential compares response fields and canonical uploader/workspace/purpose binding with zero full decodes.",
       "accessors": [
         "WorkspaceMetadata"
       ]

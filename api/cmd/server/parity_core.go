@@ -95,7 +95,7 @@ func (s *server) updateProjectRelation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.ProjectRelation
-	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "relation", r.PathValue("id"), input, &updated), workspaceKey(r), "project.relation_updated", r.PathValue("relationId"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(projectRecordScope(r.Context(), "project", "relation", r.PathValue("id"), input, &updated), workspaceKey(r), "project.relation_updated", r.PathValue("relationId"), input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "projectRelations", ID: r.PathValue("relationId")}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ProjectRelations, func(item domain.ProjectRelation) bool {
 			return item.ID == r.PathValue("relationId") && item.ProjectID == r.PathValue("id")
 		})
@@ -114,7 +114,7 @@ func (s *server) updateProjectRelation(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, updated)
 }
 func (s *server) deleteProjectRelation(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(projectRecordScope(r.Context(), "project", "relation", r.PathValue("id"), nil), workspaceKey(r), "project.relation_deleted", r.PathValue("relationId"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(projectRecordScope(r.Context(), "project", "relation", r.PathValue("id"), nil), workspaceKey(r), "project.relation_deleted", r.PathValue("relationId"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "projectRelations", ID: r.PathValue("relationId")}}}, func(data *domain.Bootstrap) error {
 		before := len(data.ProjectRelations)
 		data.ProjectRelations = slices.DeleteFunc(data.ProjectRelations, func(item domain.ProjectRelation) bool {
 			return item.ID == r.PathValue("relationId") && item.ProjectID == r.PathValue("id")
@@ -131,7 +131,10 @@ func (s *server) deleteProjectRelation(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 func (s *server) projectHistory(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	id := r.PathValue("id")
 	writePage(w, r, s.resourceAuditHistory(r, data, "project", id))
 }
@@ -251,7 +254,10 @@ func (s *server) deleteInitiativeRelation(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 func (s *server) initiativeHistory(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	id := r.PathValue("id")
 	writePage(w, r, s.resourceAuditHistory(r, data, "initiative", id))
 }
@@ -463,7 +469,7 @@ func (s *server) documentContentHistory(w http.ResponseWriter, r *http.Request) 
 func (s *server) archiveCustomerNeed(w http.ResponseWriter, r *http.Request) {
 	archived := r.Method == http.MethodPost
 	var result domain.CustomerRequest
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer_need.archive_toggled", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "customer_need.archive_toggled", r.PathValue("id"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "customerRequests", ID: r.PathValue("id")}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.ID == r.PathValue("id") })
 		if index < 0 {
 			return errNotFound
@@ -520,7 +526,7 @@ func (s *server) updateReleaseNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result domain.ReleaseNote
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release.note_updated", r.PathValue("noteId"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "release.note_updated", r.PathValue("noteId"), input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "releaseNotes", ID: r.PathValue("noteId")}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ReleaseNotes, func(item domain.ReleaseNote) bool {
 			return item.ID == r.PathValue("noteId") && item.ReleaseID == r.PathValue("id")
 		})
@@ -561,7 +567,7 @@ func (s *server) updateReleaseNote(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, result)
 }
 func (s *server) deleteReleaseNote(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release.note_deleted", r.PathValue("noteId"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "release.note_deleted", r.PathValue("noteId"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "releaseNotes", ID: r.PathValue("noteId")}}}, func(data *domain.Bootstrap) error {
 		before := len(data.ReleaseNotes)
 		data.ReleaseNotes = slices.DeleteFunc(data.ReleaseNotes, func(item domain.ReleaseNote) bool {
 			return item.ID == r.PathValue("noteId") && item.ReleaseID == r.PathValue("id")
@@ -639,7 +645,7 @@ func (s *server) updateTeamResourceSection(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var item domain.TeamResourceSection
-	err := s.store.MutateWorkspace(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_section_updated", r.PathValue("sectionId"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_section_updated", r.PathValue("sectionId"), input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "teamResourceSections", ID: r.PathValue("sectionId")}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.TeamResourceSections, func(value domain.TeamResourceSection) bool {
 			return value.ID == r.PathValue("sectionId") && value.TeamID == r.PathValue("id")
 		})
@@ -761,7 +767,7 @@ func (s *server) updateTeamResource(w http.ResponseWriter, r *http.Request) {
 		input.URL = &link
 	}
 	var item domain.TeamPinnedResource
-	err := s.store.MutateWorkspace(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_updated", r.PathValue("resourceId"), input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_updated", r.PathValue("resourceId"), input, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "teamPinnedResources", ID: r.PathValue("resourceId")}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.TeamPinnedResources, func(value domain.TeamPinnedResource) bool {
 			return value.ID == r.PathValue("resourceId") && value.TeamID == r.PathValue("id")
 		})
@@ -796,7 +802,7 @@ func (s *server) updateTeamResource(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, item)
 }
 func (s *server) deleteTeamResource(w http.ResponseWriter, r *http.Request) {
-	err := s.store.MutateWorkspace(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_deleted", r.PathValue("resourceId"), nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(teamResourceScope(r.Context(), ""), workspaceKey(r), "team.resource_deleted", r.PathValue("resourceId"), nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "teamPinnedResources", ID: r.PathValue("resourceId")}}}, func(data *domain.Bootstrap) error {
 		before := len(data.TeamPinnedResources)
 		data.TeamPinnedResources = slices.DeleteFunc(data.TeamPinnedResources, func(item domain.TeamPinnedResource) bool {
 			return item.ID == r.PathValue("resourceId") && item.TeamID == r.PathValue("id")

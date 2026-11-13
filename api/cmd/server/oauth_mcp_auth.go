@@ -370,8 +370,12 @@ func (s *server) revokeOAuthAuthorization(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	authorizations, _ := s.store.WorkspaceMetadataFields(workspace.Workspace.URLKey, "oauthAuthorizations")
-	err := s.store.RevokeOAuthAuthorizationRecords(r.Context(), workspace.Workspace.URLKey, id, actor.ID)
+	authorizations, _, err := s.store.WorkspaceMetadataFieldsScoped(r.Context(), workspace.Workspace.URLKey, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "oauthAuthorizations", ID: id}}}, "oauthAuthorizations")
+	if err != nil {
+		respondMutation(w, err, http.StatusNoContent, nil)
+		return
+	}
+	err = s.store.RevokeOAuthAuthorizationRecords(r.Context(), workspace.Workspace.URLKey, id, actor.ID)
 	if errors.Is(err, store.ErrAuthForbidden) || store.IsOAuthNotFound(err) {
 		err = errNotFound
 	}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // maxConnectorToolNames bounds the tool inventory kept on a connector.
@@ -55,7 +56,7 @@ func (s *server) connectConnector(w http.ResponseWriter, r *http.Request) {
 		serverName = strings.TrimSpace(firstNonEmpty(result.ServerInfo.Title, result.ServerInfo.Name))
 	}
 	var updated applicationPolicy
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "application_policy.updated", item.ID, nil, func(workspace *domain.Bootstrap) error {
+	err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "application_policy.updated", item.ID, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "settings", ID: "applicationPolicies"}}}, func(workspace *domain.Bootstrap) error {
 		items := applicationPolicies(workspace)
 		index := slices.IndexFunc(items, func(candidate applicationPolicy) bool { return candidate.ID == item.ID })
 		// The connector was removed or pointed elsewhere while we connected.

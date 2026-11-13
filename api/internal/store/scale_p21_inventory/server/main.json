@@ -1,6 +1,6 @@
 {
   "source": "server/main.go",
-  "unmigrated": 77,
+  "unmigrated": 76,
   "consumers": {
     "attachmentVisible": {
       "owner": "P21",
@@ -540,7 +540,8 @@
     },
     "updateProjectDisplayDefault": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Complete projectDisplayDefault configuration field only; unchanged JSON object validation, response ownership and ErrNoMutation behavior. TestScaleP21M2IntegrationDifferential compares full principal/key matrix, persisted config and webhook/realtime effects without unrelated metadata.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

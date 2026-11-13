@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -451,7 +452,10 @@ func (s *server) executeConnectorTool(r *http.Request, data domain.Bootstrap, ca
 		// Tools are discovered per run: a held call resumed after its connector was removed or revoked is not offered.
 		return nil, fmt.Errorf("MCP tool is no longer available; its connection was removed or access was revoked")
 	}
-	fresh, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	fresh, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{Fields: []string{"workspaceSettings"}, Read: []store.RecordKey{{Kind: "settings", ID: "applicationPolicies"}}})
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, errNotFound
 	}

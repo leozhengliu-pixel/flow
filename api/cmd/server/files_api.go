@@ -117,7 +117,11 @@ func (s *server) createFileUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	workspace := workspaceKey(r)
-	metadata, ok := s.store.WorkspaceMetadata(workspace)
+	metadata, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspace, store.MetadataRecordScope{})
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	if !ok || workspace == "" && !s.authDisabled {
 		writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Select a workspace with the X-Workspace-Key header")
 		return

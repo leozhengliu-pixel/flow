@@ -393,7 +393,10 @@ func (s *server) testIntegrationConnection(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "integrationConnections", ID: id}}})
+	if !ok {
+		return
+	}
 	var connection *domain.IntegrationConnection
 	if id != "" {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
@@ -475,7 +478,7 @@ func persistIntegrationTestError(s *server, r *http.Request, provider, id, messa
 	if id == "" {
 		return
 	}
-	_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.connection_tested", id, map[string]string{"provider": provider, "status": "error"}, func(data *domain.Bootstrap) error {
+	_ = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "integration.connection_tested", id, map[string]string{"provider": provider, "status": "error"}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
 		if index < 0 {
 			return errNotFound
@@ -493,7 +496,7 @@ func persistIntegrationTestSuccess(s *server, r *http.Request, provider, id stri
 	if id == "" {
 		return
 	}
-	_ = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "integration.connection_tested", id, map[string]string{"provider": provider, "status": "ready"}, func(data *domain.Bootstrap) error {
+	_ = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "integration.connection_tested", id, map[string]string{"provider": provider, "status": "ready"}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == provider })
 		if index < 0 {
 			return errNotFound

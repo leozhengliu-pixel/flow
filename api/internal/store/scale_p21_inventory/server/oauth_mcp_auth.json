@@ -1,10 +1,11 @@
 {
   "source": "server/oauth_mcp_auth.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "revokeOAuthAuthorization": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads only oauthAuthorizations/id for audit context with original legacy fields accessor off mode; existing dedicated revocation transaction retains live ownership/admin checks and token revocation. TestScaleP21M2OAuthDifferential compares matrix, missing/forbidden, canonical authorization rows and audit attribution; OAuth session middleware remains independently registered.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

@@ -1,10 +1,11 @@
 {
   "source": "server/agent_connectors.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "executeConnectorTool": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Trusted read declares complete workspaceSettings and settings/applicationPolicies; retains offered-tool check, live policy/URL recheck, argument validation and credential/network calls. TestScaleP21M2ConnectorDifferential exercises scripted MCP calls and policy matrix; oversized settings return explicit scope errors.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata"

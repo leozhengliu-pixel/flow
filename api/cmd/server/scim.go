@@ -19,7 +19,10 @@ func (s *server) listSCIMTokens(w http.ResponseWriter, r *http.Request) {
 	if !s.requireWorkspaceAdmin(w, r) {
 		return
 	}
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	items, err := s.store.ListSCIMTokens(r.Context(), data.Workspace.ID)
 	respondMutation(w, err, http.StatusOK, items)
 }
@@ -38,12 +41,15 @@ func (s *server) createSCIMToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	item, err := s.store.CreateSCIMToken(r.Context(), data.Workspace.ID, input.Name)
 	if err == nil {
 		// Token issuance enables the SCIM surface for this workspace. The
 		// plaintext secret is returned exactly once by CreateSCIMToken.
-		err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "scim.enabled", "workspace", nil, func(next *domain.Bootstrap) error {
+		err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "scim.enabled", "workspace", nil, store.MetadataRecordScope{Fields: []string{"workspaceSettings"}}, func(next *domain.Bootstrap) error {
 			next.WorkspaceSettings.SCIMEnabled = true
 			if next.WorkspaceSettings.SCIMDefaultRole == "" {
 				next.WorkspaceSettings.SCIMDefaultRole = "member"
@@ -59,11 +65,14 @@ func (s *server) revokeSCIMToken(w http.ResponseWriter, r *http.Request) {
 	if !s.requireWorkspaceAdmin(w, r) {
 		return
 	}
-	data := s.workspaceData(r)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return
+	}
 	err := s.store.RevokeSCIMToken(r.Context(), data.Workspace.ID, r.PathValue("id"))
 	if err == nil {
 		auditCtx := store.WithMetadataFields(r.Context(), "auditLog")
-		if auditErr := s.store.MutateWorkspace(auditCtx, workspaceKey(r), "scim.token_revoked", r.PathValue("id"), nil, func(next *domain.Bootstrap) error {
+		if auditErr := s.store.MutateWorkspaceScoped(auditCtx, workspaceKey(r), "scim.token_revoked", r.PathValue("id"), nil, store.MetadataRecordScope{}, func(next *domain.Bootstrap) error {
 			appendAudit(next, "revoked", "scim_token", r.PathValue("id"), nil)
 			return nil
 		}); auditErr != nil {
@@ -77,7 +86,11 @@ func (s *server) requireWorkspaceAdmin(w http.ResponseWriter, r *http.Request) b
 	if s.authDisabled {
 		return true
 	}
-	role, _, err := s.store.WorkspaceRole(r.Context(), s.workspaceData(r).Workspace.ID, authUser(r).ID)
+	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{})
+	if !ok {
+		return false
+	}
+	role, _, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, authUser(r).ID)
 	if err != nil || !workspaceAdminRole(role) {
 		writeError(w, http.StatusForbidden, "workspace administrator access required")
 		return false
@@ -100,7 +113,11 @@ func (s *server) authenticateSCIMRequest(w http.ResponseWriter, r *http.Request)
 		writeSCIMError(w, http.StatusUnauthorized, "", "invalid SCIM bearer token")
 		return "", "", false
 	}
-	data, ok := s.store.WorkspaceMetadata(workspaceKey)
+	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey, store.MetadataRecordScope{Fields: []string{"workspaceSettings"}})
+	if err != nil {
+		writeSCIMRequestError(w, err)
+		return "", "", false
+	}
 	if !ok || data.Workspace.ID != workspaceID {
 		writeSCIMError(w, http.StatusForbidden, "", "SCIM token is not valid for this workspace")
 		return "", "", false
@@ -941,6 +958,10 @@ func (s *server) applySCIMGroupChange(r *http.Request, workspaceKey, workspaceID
 }
 
 func (s *server) scimWorkspaceSettings(workspaceKey string) domain.WorkspaceSettings {
+	if s.store.BoundedMetadataEnabled() {
+		data, _ := s.store.WorkspaceSettingsMetadata(workspaceKey)
+		return data.WorkspaceSettings
+	}
 	data, _ := s.store.WorkspaceMetadata(workspaceKey)
 	return data.WorkspaceSettings
 }
@@ -988,7 +1009,12 @@ func scimGroupRole(settings domain.WorkspaceSettings, displayName string) string
 }
 
 func (s *server) scimRole(workspaceKey, value string) string {
-	data, _ := s.store.WorkspaceMetadata(workspaceKey)
+	var data domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() {
+		data, _ = s.store.WorkspaceSettingsMetadata(workspaceKey)
+	} else {
+		data, _ = s.store.WorkspaceMetadata(workspaceKey)
+	}
 	settings := data.WorkspaceSettings
 	value = strings.TrimSpace(value)
 	if mapped := settings.SCIMRoleMapping[strings.ToLower(value)]; mapped != "" {

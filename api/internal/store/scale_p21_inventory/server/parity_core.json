@@ -1,10 +1,11 @@
 {
   "source": "server/parity_core.go",
-  "unmigrated": 34,
+  "unmigrated": 24,
   "consumers": {
     "archiveCustomerNeed": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes customerRequests/id only; existing archive timestamp and response retained with route authorization independent. TestScaleP21M2RecordWritesDifferential compares canonical collections, responses and event effects across the principal/key matrix including missing IDs.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -100,7 +101,8 @@
     },
     "deleteProjectRelation": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes/deletes only projectRelations/relationId with the existing project ID binding; preserves P16 context and off-mode writer. TestScaleP21M2RecordWritesDifferential compares canonical target/other relations, response and event effects across the principal/key matrix including missing IDs.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -108,7 +110,8 @@
     },
     "deleteReleaseNote": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes/deletes releaseNotes/noteId only, preserving release ID binding and missing-record semantics. TestScaleP21M2RecordWritesDifferential compares last-selected deletion while unrelated rows remain, responses and event effects across the principal/key matrix.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -116,7 +119,8 @@
     },
     "deleteTeamResource": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes/deletes teamPinnedResources/resourceId only; team binding and missing semantics retained. TestScaleP21M2RecordWritesDifferential compares target deletion, unrelated resources, responses and event effects across the principal/key matrix.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -139,7 +143,8 @@
     },
     "initiativeHistory": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only projection supplies workspace ID and live viewer role; resourceAuditHistory retains its admin check and SQL bounded audit query. TestScaleP21M2RecordWritesDifferential compares principal/key matrix and response shape; resource route authorization remains independent.",
       "accessors": [
         "workspaceData"
       ]
@@ -188,7 +193,8 @@
     },
     "projectHistory": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only projection supplies workspace ID and live viewer role; existing admin check and bounded SQL audit query unchanged. TestScaleP21M2RecordWritesDifferential compares principal/key matrix and response shape without loading project bodies.",
       "accessors": [
         "workspaceData"
       ]
@@ -234,7 +240,8 @@
     },
     "updateProjectRelation": {
       "owner": "P16",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes only projectRelations/relationId; type validation, project binding, unchanged-edit and P16 context retained. TestScaleP21M2RecordWritesDifferential compares canonical relations, response and hooks across the principal/key matrix including missing IDs.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -242,7 +249,8 @@
     },
     "updateReleaseNote": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes releaseNotes/noteId only; release binding, former-member mention validator, publication timestamp and unchanged-edit checks retained. TestScaleP21M2RecordWritesDifferential compares canonical notes, response and hooks across the principal/key matrix and missing IDs.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -250,7 +258,8 @@
     },
     "updateTeamResource": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes teamPinnedResources/resourceId only; team binding, URL/type validation and unchanged-edit behavior retained. TestScaleP21M2RecordWritesDifferential compares target/other resources, response and hooks across principal/key matrix and missing IDs.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -258,7 +267,8 @@
     },
     "updateTeamResourceSection": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes teamResourceSections/sectionId only; team binding, name validation, position and unchanged-edit behavior retained. TestScaleP21M2RecordWritesDifferential compares canonical target/other sections, response and hooks across principal/key matrix and missing IDs.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

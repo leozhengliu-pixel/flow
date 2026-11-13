@@ -1,10 +1,11 @@
 {
   "source": "server/connector_connect.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "connectConnector": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes only settings/applicationPolicies with existing ID/URL race check; connector discovery and credential operations remain outside the callback. TestScaleP21M2ConnectorDifferential compares policy ownership/admin matrix and scripted MCP connect/tool inventory and rename results with zero full decodes.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

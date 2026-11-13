@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"slices"
 	"sort"
@@ -244,6 +245,31 @@ func (s *server) agentSessionTarget(ctx context.Context, app domain.ApplicationI
 	if app.WebhookURL != "" {
 		secret, err := s.store.ApplicationWebhookSecret(ctx, app.ID)
 		return agentSessionTarget{url: app.WebhookURL, secret: secret}, err
+	}
+	if s.store.BoundedMetadataEnabled() {
+		var target agentSessionTarget
+		err := s.store.StreamMetadataRecords(ctx, app.WorkspaceKey, "webhooks", func(_ store.RecordKey, reader io.Reader) error {
+			raw, err := io.ReadAll(io.LimitReader(reader, store.MetadataRecordPageMaxBytes+1))
+			if err != nil {
+				return err
+			}
+			if len(raw) > store.MetadataRecordPageMaxBytes {
+				return store.ErrMetadataPageBudget
+			}
+			var hook domain.Webhook
+			if err := json.Unmarshal(raw, &hook); err != nil {
+				return err
+			}
+			if hook.ManagedBy == "application" && hook.ApplicationClientID == app.ClientID && hook.Enabled && slices.Contains(hook.ResourceTypes, "agent_session_events") {
+				target = agentSessionTarget{url: hook.URL, webhook: &hook}
+				return io.EOF
+			}
+			return nil
+		})
+		if errors.Is(err, io.EOF) {
+			err = nil
+		}
+		return target, err
 	}
 	hooks, _ := s.store.WorkspaceMetadataFields(app.WorkspaceKey, "webhooks")
 	for _, hook := range hooks.Webhooks {

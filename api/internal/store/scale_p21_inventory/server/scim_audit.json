@@ -1,10 +1,11 @@
 {
   "source": "server/scim_audit.go",
-  "unmigrated": 2,
+  "unmigrated": 0,
   "consumers": {
     "applySCIMProfileSettings": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes only userSettings/userID and reads users/userID for the existing user aggregate/realtime envelope, preserving job-title ownership rules, timezone validation, map creation and original context. TestScaleP21M2SCIMProfileAndAudit compares canonical settings, webhook previous values and realtime with oversized unrelated records and cancellation.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -12,7 +13,8 @@
     },
     "recordSCIMAudit": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Empty metadata scope; entries and actor are already captured and appendAuditEntries is consumed by the existing transactional audit collector. No audit history is loaded. TestScaleP21M2SCIMProfileAndAudit compares both persisted audit entries including actor and metadata.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

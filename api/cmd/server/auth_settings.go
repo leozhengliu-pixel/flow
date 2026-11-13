@@ -54,7 +54,11 @@ func (s *server) authorizeAuthenticationPolicy(w http.ResponseWriter, r *http.Re
 	}
 	auth, chatAuthenticated := chatIdentityAuthentication(r)
 	if chatAuthenticated {
-		policy, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "identityProviders")
+		policy, ok, err := s.store.WorkspaceMetadataFieldsScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{Fields: []string{"identityProviders"}}, "identityProviders")
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "could not validate authentication policy")
+			return false
+		}
 		if !ok {
 			writeError(w, http.StatusForbidden, "Workspace authentication policy is unavailable")
 			return false
