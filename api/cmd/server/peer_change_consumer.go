@@ -24,9 +24,22 @@ func recordPeerSyncMode() string {
 		return "off"
 	case "on":
 		return "on"
-	default:
+	case "shadow":
 		return "shadow"
+	default:
+		return "off"
 	}
+}
+
+func (s *server) recordPeerSyncMode() string {
+	mode := recordPeerSyncMode()
+	if mode != "off" && !s.store.RecordJournalReady() {
+		s.peerSyncUnavailableOnce.Do(func() {
+			log.Printf("Peer sync disabled: FLOW_RECORD_PEER_SYNC=%s requires an enabled, ready record journal", mode)
+		})
+		return "off"
+	}
+	return mode
 }
 
 // The gate serializes requests and the background worker for one workspace.
@@ -60,6 +73,10 @@ func (q *remoteEventQueue) consumerLocked(workspace string) *peerChangeConsumer 
 }
 
 func (s *server) syncPeerWorkspace(ctx context.Context, workspace string) error {
+	mode := s.recordPeerSyncMode()
+	if mode == "off" {
+		return s.store.ReloadWorkspace(ctx, workspace)
+	}
 	s.remoteEvents.mu.Lock()
 	c := s.remoteEvents.consumerLocked(workspace)
 	c.users++
@@ -119,7 +136,7 @@ func (s *server) syncPeerWorkspace(ctx context.Context, workspace string) error 
 		if err != nil || through < c.cursor {
 			return store.ErrMetadataCursor
 		}
-		if recordPeerSyncMode() == "on" {
+		if mode == "on" {
 			_, err = s.store.ApplyCommittedPage(ctx, c.workspaceID, page)
 		} else {
 			var equivalent bool
@@ -257,9 +274,12 @@ func (s *server) queuePeerSocketAccessCheck(workspace string) {
 }
 
 func (s *server) pollPeerChanges(ctx context.Context) {
+	if s.recordPeerSyncMode() == "off" {
+		return
+	}
 	ticker := time.NewTicker(peerChangePollInterval)
 	defer ticker.Stop()
-	for {
+	for s.recordPeerSyncMode() != "off" {
 		workspaces := s.store.WorkspaceKeys()
 		for _, workspace := range workspaces {
 			s.remoteEvents.wake(workspace, s.applyRemoteEvents)

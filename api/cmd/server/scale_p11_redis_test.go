@@ -14,6 +14,8 @@ import (
 )
 
 func TestScaleP11CompactHeadAndMixedReaderEnvelope(t *testing.T) {
+	t.Setenv("FLOW_RECORD_PEER_SYNC", "shadow")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP11NewFixture(t, 1)
 	event := scaleP11Rename(t, f, "compact hint")
 	event.ClientID = "p11-browser"

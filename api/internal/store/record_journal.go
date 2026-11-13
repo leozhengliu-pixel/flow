@@ -108,6 +108,12 @@ func recordJournalMode() string {
 	}
 }
 
+// RecordJournalReady reports local capture readiness without querying SQL.
+// Consumers still check each workspace's writer coverage before applying changes.
+func (s *SQLiteStore) RecordJournalReady() bool {
+	return s != nil && s.db != nil && recordJournalMode() != "off" && s.db.journalReady.Load()
+}
+
 func journalWriteStatement(query string) bool {
 	rest := strings.TrimSpace(query)
 	word := func() string {

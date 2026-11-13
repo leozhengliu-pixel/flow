@@ -20,6 +20,7 @@ import (
 
 func TestScaleP11CommitBeforePublishKill(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP11NewFixture(t, 1)
 	command := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestScaleP11CommitChild$")
 	databaseURL := f.config.URL
@@ -70,6 +71,7 @@ func TestScaleP11CommitBeforePublishKill(t *testing.T) {
 
 func TestScaleP11AtomicPageAndStaleVersionFallback(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP11NewFixture(t, 2)
 	c := f.service.remoteEvents.consumer(f.workspace)
 	before := scaleP11Name(t, f)
@@ -101,6 +103,7 @@ func TestScaleP11AtomicPageAndStaleVersionFallback(t *testing.T) {
 
 func TestScaleP11ConcurrentFreshnessUsesOneConsumer(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP11NewFixture(t, 1)
 	scaleP11Rename(t, f, "concurrent requests")
 	start := make(chan struct{})
@@ -131,6 +134,7 @@ func TestScaleP11CommitChild(t *testing.T) {
 	if os.Getenv("FLOW_P11_COMMIT_CHILD") != "1" {
 		t.Skip("subprocess commit barrier")
 	}
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	config := store.DatabaseConfig{Driver: os.Getenv("FLOW_TEST_DATABASE_DRIVER"), URL: os.Getenv("FLOW_TEST_DATABASE_URL"), MaxOpenConns: 2}
 	if config.Driver == "sqlite" {
 		config.Path = config.URL
@@ -153,6 +157,7 @@ func TestScaleP11CommitChild(t *testing.T) {
 
 func TestScaleP11FailedApplyKeepsCursorAndPublishesNothing(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "on")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP11NewFixture(t, 1)
 	c := f.service.remoteEvents.consumer(f.workspace)
 	before := c.cursor
@@ -185,6 +190,8 @@ func TestScaleP11FailedApplyKeepsCursorAndPublishesNothing(t *testing.T) {
 }
 
 func TestScaleP11AuthorizationStopsOnFreshnessError(t *testing.T) {
+	t.Setenv("FLOW_RECORD_PEER_SYNC", "shadow")
+	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP11NewFixture(t, 0)
 	if err := f.peer.Close(); err != nil {
 		t.Fatal(err)

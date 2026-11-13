@@ -20,7 +20,8 @@ func (s *server) publishRealtime(workspace string, event domain.RealtimeEvent) {
 		return
 	}
 	s.stampChangeCursor(&event)
-	if recordPeerSyncMode() == "off" {
+	mode := s.recordPeerSyncMode()
+	if mode == "off" {
 		s.realtime.publish(workspace, event)
 		s.queueSocketAccessCheck(workspace, event)
 	} else if s.publishPeerEvent(workspace, event) {
@@ -29,7 +30,7 @@ func (s *server) publishRealtime(workspace string, event domain.RealtimeEvent) {
 	if s.coordinator == nil {
 		return
 	}
-	if recordPeerSyncMode() != "on" && !remoteEventKeepsState(event.Type) && !ephemeralRealtimeEvent(event.Type) {
+	if mode != "on" && !remoteEventKeepsState(event.Type) && !ephemeralRealtimeEvent(event.Type) {
 		// Before the event (and the writer's response): a request on another
 		// server then reloads the workspace instead of using its old copy.
 		// Signals (agent streaming, notifications) change no workspace state.
@@ -37,7 +38,7 @@ func (s *server) publishRealtime(workspace string, event domain.RealtimeEvent) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if recordPeerSyncMode() == "on" && event.Seq > 0 {
+	if mode == "on" && event.Seq > 0 {
 		// Shadow preserves the old envelope for mixed-version readers. Once
 		// all peers consume SQL, Redis carries only the durable head hint.
 		if raw, err := s.store.RecordJournalEventSeq(ctx, event.ID); err == nil {
@@ -61,7 +62,7 @@ func (s *server) startCoordination() {
 	}
 	listenCtx, stop := context.WithCancel(listenCtx)
 	context.AfterFunc(s.store.WorkerContext(), stop)
-	if recordPeerSyncMode() != "off" {
+	if s.recordPeerSyncMode() != "off" {
 		go s.pollPeerChanges(listenCtx)
 	}
 	go func() {
@@ -69,7 +70,7 @@ func (s *server) startCoordination() {
 		subscribedBefore := false
 		for listenCtx.Err() == nil {
 			err := s.coordinator.Listen(listenCtx, s.receiveRemoteEvent, func(resubscribed bool) {
-				if recordPeerSyncMode() != "off" {
+				if s.recordPeerSyncMode() != "off" {
 					for _, workspace := range s.store.WorkspaceKeys() {
 						s.remoteEvents.wake(workspace, s.applyRemoteEvents)
 					}
@@ -124,11 +125,11 @@ func (s *server) receiveRemoteEvent(envelope coordination.EventEnvelope) {
 	if s.receiveCollaborationEvent(envelope.Workspace, envelope.Event) {
 		return
 	}
-	s.remoteEvents.push(envelope.Workspace, envelope.Event, s.applyRemoteEvents)
+	s.remoteEvents.push(envelope.Workspace, envelope.Event, s.recordPeerSyncMode() != "off", s.applyRemoteEvents)
 }
 
-// remoteEventQueue coalesces durable heads and bounds side-channel envelopes.
-// Each workspace has one worker; SQL supplies durable order and payloads.
+// remoteEventQueue batches legacy envelopes while off. Peer sync coalesces
+// durable heads and bounds side-channel envelopes; SQL supplies their payloads.
 type remoteEventQueue struct {
 	mu           sync.Mutex
 	pending      map[string][]domain.RealtimeEvent
@@ -150,16 +151,20 @@ const peerClientHintMaxBytes = 64 << 10
 const peerClientHintMaxEvents = 256
 
 func (q *remoteEventQueue) wake(workspace string, apply func(string)) {
-	q.push(workspace, domain.RealtimeEvent{Type: peerHeadEventType}, apply)
+	q.push(workspace, domain.RealtimeEvent{Type: peerHeadEventType}, true, apply)
 }
 
-func (q *remoteEventQueue) push(workspace string, event domain.RealtimeEvent, apply func(string)) {
+func (q *remoteEventQueue) push(workspace string, event domain.RealtimeEvent, peerSync bool, apply func(string)) {
 	q.mu.Lock()
 	if q.pending == nil {
 		q.pending, q.running = map[string][]domain.RealtimeEvent{}, map[string]bool{}
+	}
+	if peerSync && q.bytes == nil {
 		q.bytes, q.heads, q.waking, q.overflow = map[string]int{}, map[string]int64{}, map[string]bool{}, map[string]bool{}
 	}
-	if event.Type == peerHeadEventType || recordPeerSyncMode() != "off" && event.Seq > 0 {
+	if !peerSync {
+		q.pending[workspace] = append(q.pending[workspace], event)
+	} else if event.Type == peerHeadEventType || event.Seq > 0 {
 		q.noteClientLocked(workspace, event)
 		q.heads[workspace] = max(q.heads[workspace], event.Seq)
 		q.waking[workspace] = true
@@ -256,7 +261,7 @@ func (q *remoteEventQueue) take(workspace string) []domain.RealtimeEvent {
 // applyRemoteEvents installs durable transactions before publishing their SQL
 // events. Non-journal signals retain the compatibility reload path.
 func (s *server) applyRemoteEvents(workspace string) {
-	if recordPeerSyncMode() == "off" {
+	if s.recordPeerSyncMode() == "off" {
 		s.applyLegacyRemoteEvents(workspace)
 		return
 	}

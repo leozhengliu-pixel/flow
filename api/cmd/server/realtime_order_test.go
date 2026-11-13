@@ -207,13 +207,13 @@ func TestRemoteEventQueueBatchesBursts(t *testing.T) {
 	}
 	workers.Add(1)
 	for i := 1; i <= 3; i++ {
-		queue.push("w", domain.RealtimeEvent{ID: fmt.Sprintf("evt_%d", i)}, apply)
+		queue.push("w", domain.RealtimeEvent{ID: fmt.Sprintf("evt_%d", i)}, false, apply)
 	}
 	release <- struct{}{}
 	if got := <-batches; strings.Join(got, ",") != "evt_1,evt_2,evt_3" {
 		t.Fatalf("first batch = %v", got)
 	}
-	queue.push("w", domain.RealtimeEvent{ID: "evt_4"}, apply) // the worker is still running: no second one
+	queue.push("w", domain.RealtimeEvent{ID: "evt_4"}, false, apply) // the worker is still running: no second one
 	release <- struct{}{}
 	if got := <-batches; strings.Join(got, ",") != "evt_4" {
 		t.Fatalf("second batch = %v", got)
@@ -221,7 +221,7 @@ func TestRemoteEventQueueBatchesBursts(t *testing.T) {
 	release <- struct{}{}
 	workers.Wait()
 	workers.Add(1)
-	queue.push("w", domain.RealtimeEvent{ID: "evt_5"}, apply) // a stopped worker is started again
+	queue.push("w", domain.RealtimeEvent{ID: "evt_5"}, false, apply) // a stopped worker is started again
 	release <- struct{}{}
 	if got := <-batches; strings.Join(got, ",") != "evt_5" {
 		t.Fatalf("after restart = %v", got)

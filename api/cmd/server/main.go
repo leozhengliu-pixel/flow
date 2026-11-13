@@ -67,6 +67,7 @@ type server struct {
 	realtime                       *realtimeHub
 	coordinator                    *coordination.Redis
 	coordinationStarted            atomic.Bool
+	peerSyncUnavailableOnce        sync.Once
 	renamedKeysAdopted             atomic.Bool       // the maintenance pass checked every recorded rename once (storage_maintenance.go)
 	healthDegraded                 atomic.Bool       // the last health probe found the coordinator unreachable (health.go)
 	remoteEvents                   remoteEventQueue  // peer events waiting to be applied (redis_coordination.go)

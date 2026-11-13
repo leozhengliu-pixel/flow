@@ -19,6 +19,7 @@ func TestScaleP11PermissionDifferentialAndQueuedRevocation(t *testing.T) {
 	for _, mode := range []string{"shadow", "on", "off"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("FLOW_RECORD_PEER_SYNC", mode)
+			t.Setenv("FLOW_RECORD_JOURNAL", "on")
 			peers, config := scaleP11HTTPPeers(t)
 			for i := range 2 {
 				peers.stopListening(i)

@@ -107,7 +107,7 @@ func (s *server) ensureCurrentWorkspace(ctx context.Context, workspace string) e
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	if recordPeerSyncMode() != "off" {
+	if s.recordPeerSyncMode() != "off" {
 		for {
 			state, err := s.store.WorkspacePeerState(ctx, workspace)
 			if err != nil {
@@ -123,7 +123,8 @@ func (s *server) ensureCurrentWorkspace(ctx context.Context, workspace string) e
 	}
 	shared, err := s.sharedWorkspaceVersion(ctx, workspace)
 	if err != nil {
-		return s.reloadWorkspaceTo(ctx, workspace, 0)
+		// Preserve the legacy Redis outage path: load only missing workspaces.
+		shared = 0
 	}
 	present := s.store.HasWorkspace(workspace)
 	applied := s.workspaceVersions.current(workspace)
