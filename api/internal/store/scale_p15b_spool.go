@@ -74,6 +74,12 @@ func (s *RecordSpool) Seek(offset int64, whence int) (int64, error) {
 }
 func (s *RecordSpool) Stat() (os.FileInfo, error) { return s.file.Stat() }
 
+// CanAppend is an advisory size check before encoding a known large response.
+// Write still reserves bytes atomically against concurrent spool writers.
+func (s *RecordSpool) CanAppend(size int64) bool {
+	return size >= 0 && size <= recordSpoolMaxBytes()-recordSpoolBytes.Load()
+}
+
 func (s *RecordSpool) Close() error {
 	if s == nil {
 		return nil

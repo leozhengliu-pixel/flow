@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strconv"
+	"sync"
+	"time"
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
@@ -25,6 +28,18 @@ func encodeHydratedJSON(ctx context.Context, buffer *bufio.Writer, value reflect
 		return err
 	}
 	t := value.Type()
+	if t == reflect.TypeFor[time.Time]() {
+		var scratch [64]byte
+		raw, err := value.Interface().(time.Time).AppendText(scratch[:1])
+		if err != nil {
+			_, err = json.Marshal(value.Interface())
+			return err
+		}
+		raw[0] = '"'
+		raw = append(raw, '"')
+		_, err = buffer.Write(raw)
+		return err
+	}
 	if t == reflect.TypeFor[domain.AgentToolCall]() {
 		return encodeHydratedAgentToolCall(ctx, buffer, value.Interface().(domain.AgentToolCall), depth)
 	}
@@ -37,8 +52,9 @@ func encodeHydratedJSON(ctx context.Context, buffer *bufio.Writer, value reflect
 	if value.Kind() == reflect.Pointer && !value.IsNil() && t.Elem() == reflect.TypeFor[json.RawMessage]() {
 		return encodeHydratedRawJSON(ctx, buffer, value.Elem().Bytes())
 	}
-	custom := t.Implements(jsonMarshalerType) || t.Implements(textMarshalerType)
-	if value.CanAddr() && (reflect.PointerTo(t).Implements(jsonMarshalerType) || reflect.PointerTo(t).Implements(textMarshalerType)) {
+	marshalers := hydratedMarshalersFor(t)
+	custom := marshalers.value
+	if value.CanAddr() && marshalers.pointer {
 		value = value.Addr()
 		custom = true
 	}
@@ -62,6 +78,17 @@ func encodeHydratedJSON(ctx context.Context, buffer *bufio.Writer, value reflect
 		return encodeHydratedJSON(ctx, buffer, value.Elem(), depth+1)
 	case reflect.String:
 		return encodeHydratedString(ctx, buffer, value.String())
+	case reflect.Bool:
+		_, err := buffer.WriteString(strconv.FormatBool(value.Bool()))
+		return err
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		var scratch [32]byte
+		_, err := buffer.Write(strconv.AppendInt(scratch[:0], value.Int(), 10))
+		return err
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		var scratch [32]byte
+		_, err := buffer.Write(strconv.AppendUint(scratch[:0], value.Uint(), 10))
+		return err
 	case reflect.Struct:
 		if plan := streamPlanFor(t); plan != nil {
 			return encodeHydratedStruct(ctx, buffer, value, plan, depth+1)
@@ -141,6 +168,22 @@ func encodeHydratedJSON(ctx context.Context, buffer *bufio.Writer, value reflect
 	}
 	_, err = buffer.Write(raw)
 	return err
+}
+
+type hydratedMarshalers struct{ value, pointer bool }
+
+var hydratedMarshalerPlans sync.Map
+
+func hydratedMarshalersFor(t reflect.Type) hydratedMarshalers {
+	if cached, ok := hydratedMarshalerPlans.Load(t); ok {
+		return cached.(hydratedMarshalers)
+	}
+	plan := hydratedMarshalers{
+		value:   t.Implements(jsonMarshalerType) || t.Implements(textMarshalerType),
+		pointer: reflect.PointerTo(t).Implements(jsonMarshalerType) || reflect.PointerTo(t).Implements(textMarshalerType),
+	}
+	hydratedMarshalerPlans.Store(t, plan)
+	return plan
 }
 
 // Reproduce AgentToolCall.MarshalJSON's partial-provider-argument handling
@@ -298,6 +341,27 @@ func encodeHydratedString(ctx context.Context, buffer *bufio.Writer, value strin
 }
 
 func encodeHydratedStringContent(ctx context.Context, buffer *bufio.Writer, value string) error {
+	for len(value) > 0 {
+		end := min(len(value), 16<<10)
+		plain := true
+		for i := 0; i < end; i++ {
+			c := value[i]
+			if c >= utf8.RuneSelf || hydratedASCIIQuotes[c] != "" {
+				plain = false
+				break
+			}
+		}
+		if !plain {
+			break
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if _, err := buffer.WriteString(value[:end]); err != nil {
+			return err
+		}
+		value = value[end:]
+	}
 	start := 0
 	for i := 0; i < len(value); {
 		if i-start >= 16<<10 {

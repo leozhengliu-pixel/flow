@@ -110,13 +110,13 @@ func TestScaleP15BMeasureConcurrent10xBootstrap(t *testing.T) {
 		go func() {
 			defer readers.Done()
 			<-start
+			firstWrites.Done()
+			firstWrites.Wait()
 			began := time.Now()
 			first := true
 			w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
 				if first {
 					first = false
-					firstWrites.Done()
-					firstWrites.Wait()
 					sample()
 				}
 				return nil

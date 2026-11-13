@@ -472,7 +472,7 @@ var (
 // signedFileURLs rewrites /uploads/ URLs inside successful JSON responses to
 // signed URLs when the client asks for them with the expire-in header.
 func (s *server) signedFileURLs(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return boundHydratedLegacyDownloads(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if store.RecordHydrationEnabled() && s.realtime != nil {
 			r = r.WithContext(context.WithValue(r.Context(), legacyTransportBudgetKey{}, s.realtime.budget))
 		}
@@ -503,7 +503,7 @@ func (s *server) signedFileURLs(next http.Handler) http.Handler {
 		w.Header().Del("Content-Length")
 		w.WriteHeader(writer.status)
 		_, _ = w.Write(body)
-	})
+	}))
 }
 
 func logSigningFailure(ctx context.Context, err error) {

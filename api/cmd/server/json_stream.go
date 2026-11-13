@@ -37,6 +37,9 @@ func writeStreamedJSON(ctx context.Context, w http.ResponseWriter, status int, v
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
+	if store.RecordHydrationEnabled() {
+		prepareHydratedBootstrapSpool(w, value)
+	}
 	buffer := bufio.NewWriterSize(w, 64<<10)
 	if err := encodeStreamedStruct(ctx, buffer, v, plan); err != nil {
 		log.Printf("encode streamed response: %v", err)

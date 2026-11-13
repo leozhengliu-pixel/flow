@@ -142,13 +142,9 @@ func TestScaleP15BConcurrentLargeResponsesShareStoreBudget(t *testing.T) {
 	for i := range 6 {
 		go func() {
 			defer finished.Done()
-			first := true
+			started.Done()
+			started.Wait()
 			w := &scaleP15CountingWriter{header: make(http.Header), onWrite: func() error {
-				if first {
-					first = false
-					started.Done()
-					started.Wait()
-				}
 				check()
 				return nil
 			}}

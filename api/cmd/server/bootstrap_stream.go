@@ -484,6 +484,8 @@ func writeHydratedBootstrapWithFields(w http.ResponseWriter, data domain.Bootstr
 	}
 	slices.Sort(keys)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	prepareHydratedBootstrapSpool(w, data)
 	buffer := bufio.NewWriterSize(w, 64<<10)
 	encoder := json.NewEncoder(buffer)
 	buffer.WriteByte('{')
