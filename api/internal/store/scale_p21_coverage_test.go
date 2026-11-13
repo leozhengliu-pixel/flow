@@ -159,6 +159,12 @@ func TestScaleP21FullWorkspaceConsumerInventory(t *testing.T) {
 	for _, name := range strings.Fields(scaleP21ReviewedBoundedConsumers) {
 		expected[name] = true
 	}
+	for name, reason := range scaleP21MigrateReviewedConsumers() {
+		if expected[name] || strings.TrimSpace(reason) == "" {
+			t.Errorf("duplicate or unexplained consumer review: %s", name)
+		}
+		expected[name] = true
+	}
 	for name := range actual {
 		if !expected[name] {
 			t.Errorf("unregistered workspace consumer: %s", name)

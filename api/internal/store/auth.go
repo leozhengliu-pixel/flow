@@ -816,7 +816,19 @@ func (s *SQLiteStore) AccountForUser(ctx context.Context, userID string) (domain
 }
 
 func (s *SQLiteStore) SetLastWorkspace(ctx context.Context, userID, workspaceKey string) error {
-	data, ok := s.WorkspaceMetadata(workspaceKey)
+	var data domain.Bootstrap
+	var ok bool
+	if s.metadataResidency != nil {
+		s.mu.RLock()
+		key := workspaceKey
+		if key == "" {
+			key = s.lastWorkspaceKey
+		}
+		data, ok = s.workspaces[key]
+		s.mu.RUnlock()
+	} else {
+		data, ok = s.WorkspaceMetadata(workspaceKey)
+	}
 	if !ok {
 		return ErrAuthForbidden
 	}

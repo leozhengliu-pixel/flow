@@ -204,6 +204,15 @@ func (s *SQLiteStore) ensureSCIMSchema(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) MustWorkspaceID(workspaceKey string) string {
+	if s.metadataResidency != nil {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		workspaceKey = strings.TrimSpace(workspaceKey)
+		if workspaceKey == "" {
+			workspaceKey = s.lastWorkspaceKey
+		}
+		return s.workspaces[workspaceKey].Workspace.ID
+	}
 	if data, ok := s.WorkspaceMetadata(strings.TrimSpace(workspaceKey)); ok {
 		return data.Workspace.ID
 	}

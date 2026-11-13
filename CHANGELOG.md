@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Bounded metadata policy readers now have explicit coverage reviews; SCIM workspace identity reads avoid metadata cloning in bounded mode. `FLOW_BOUNDED_METADATA` remains off and activation still requires complete consumer coverage.
 - Catalog and canonical record reads retain legacy versions until the record journal is ready, including when `FLOW_RECORD_JOURNAL=on` is set before initialization. Journal catalog continuation pages keep using ordered indexes.
 - Bounded metadata remains off by default; gated point edits and native conversation reads now share store work admission, while unported selectors and collection-wide mutations reject activation. Residency inventories allocate only when used.
 - Added staged bounded metadata residency with paged policy recovery, an evictable byte cache and internal work budgets. `FLOW_BOUNDED_METADATA` defaults off and rejects activation until the explicit workspace-consumer inventory and canonical backfill coverage are complete.
