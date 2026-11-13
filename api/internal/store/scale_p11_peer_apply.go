@@ -24,6 +24,9 @@ type peerAppliedWorkspace struct {
 // fetched in one SQL snapshot; a version change, missing coverage, unsupported
 // shape, or intervening local install requires the existing reload path.
 func (s *SQLiteStore) ApplyCommittedPage(ctx context.Context, workspaceID string, page CommittedPage) (applied string, err error) {
+	if s.metadataResidency != nil {
+		return s.applyResidentCommittedPage(ctx, workspaceID, page)
+	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	workspace, next, candidate, stamp, err := s.preparePeerPage(ctx, workspaceID, page)
@@ -58,6 +61,9 @@ func (s *SQLiteStore) ApplyCommittedPage(ctx context.Context, workspaceID string
 // through the compatibility path, and compares the resulting snapshots. The
 // compatibility result remains installed even when the comparison differs.
 func (s *SQLiteStore) ShadowCommittedPage(ctx context.Context, workspaceID string, page CommittedPage) (bool, error) {
+	if s.metadataResidency != nil {
+		return false, ErrBoundedMetadataCoverage
+	}
 	s.writeMu.Lock()
 	workspace, _, candidate, _, err := s.preparePeerPage(ctx, workspaceID, page)
 	s.writeMu.Unlock()
@@ -78,6 +84,9 @@ func (s *SQLiteStore) ShadowCommittedPage(ctx context.Context, workspaceID strin
 func (s *SQLiteStore) preparePeerPage(ctx context.Context, workspaceID string, page CommittedPage) (string, int64, *domain.Bootstrap, copyStamp, error) {
 	fail := func(err error) (string, int64, *domain.Bootstrap, copyStamp, error) {
 		return "", 0, nil, copyStamp{}, err
+	}
+	if s.metadataResidency != nil {
+		return fail(ErrBoundedMetadataCoverage)
 	}
 	next, err := strconv.ParseInt(page.Next, 10, 64)
 	if err != nil || next < 0 || page.Head != page.Next || page.HasMore || page.ResyncRequired || workspaceID == "" {

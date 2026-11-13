@@ -10,6 +10,10 @@ store/scale_p21_record_mutation.go:mutateResidentRecords
 store/resource_access.go:ResolveAccess
 store/sqlite.go:WorkspaceKeys
 store/sqlite.go:dispatchMutation
+store/scale_p11_peer_apply.go:ApplyCommittedPage
+store/scale_p11_peer_apply.go:ShadowCommittedPage
+store/scale_p11_peer_apply.go:preparePeerPage
+store/bounded_recovery.go:installResidentPolicy
 store/read_snapshot.go:BeginWorkspaceRead
 store/read_snapshot.go:workspaceReadSource
 store/sqlite.go:ReloadWorkspace
@@ -18,7 +22,6 @@ store/sqlite.go:loadWorkspaceStamped
 store/sqlite.go:loadOrSeed
 store/sqlite.go:mutateFull
 store/bounded_recovery.go:loadResidentWorkspaces
-store/bounded_recovery.go:reloadResidentWorkspace
 `
 
 var scaleP21ReviewedRoutes = []string{

@@ -354,6 +354,7 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 	}
 	defer tx.Rollback()
 	workspaces, costs := map[string]domain.Bootstrap{}, map[string]int{}
+	stamps, heads := map[string]copyStamp{}, map[string]int64{}
 	s.mu.RLock()
 	lastWorkspace, viewer := s.lastWorkspaceKey, s.viewer
 	initial := len(s.workspaces) == 0
@@ -413,7 +414,7 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 			break
 		}
 		for _, key := range keys {
-			data, _, cost, err := s.readResidentWorkspace(ctx, tx, key)
+			data, stamp, cost, err := s.readResidentWorkspace(ctx, tx, key)
 			if err != nil {
 				return fmt.Errorf("recover resident workspace %q: %w", key, err)
 			}
@@ -422,6 +423,10 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 			}
 			total += cost
 			workspaces[key], costs[key] = data, cost
+			stamps[key] = stamp
+			if heads[key], err = residentJournalHead(ctx, tx, data.Workspace.ID); err != nil {
+				return err
+			}
 		}
 		last, started = keys[len(keys)-1], true
 	}
@@ -443,6 +448,9 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.workspaces, s.copyRevisions = workspaces, nil
+	s.metadataResidency.mu.Lock()
+	s.metadataResidency.stamps, s.metadataResidency.applied = stamps, heads
+	s.metadataResidency.mu.Unlock()
 	// Legacy copy revisions certify complete metadata. Policy-only copies
 	// leave them unknown so native record readers use canonical SQL records.
 	if _, ok := workspaces[lastWorkspace]; !ok {
@@ -469,13 +477,21 @@ func (s *SQLiteStore) reloadResidentWorkspace(ctx context.Context, workspace str
 		return err
 	}
 	defer tx.Rollback()
-	data, _, cost, err := s.readResidentWorkspace(ctx, tx, workspace)
+	data, stamp, cost, err := s.readResidentWorkspace(ctx, tx, workspace)
+	if err != nil {
+		return err
+	}
+	head, err := residentJournalHead(ctx, tx, data.Workspace.ID)
 	if err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	return s.installResidentPolicy(workspace, data, stamp, head, cost)
+}
+
+func (s *SQLiteStore) installResidentPolicy(workspace string, data domain.Bootstrap, stamp copyStamp, head int64, cost int) error {
 	s.metadataResidency.mu.Lock()
 	costs := make(map[string]int, len(s.metadataResidency.policy)+1)
 	for key, value := range s.metadataResidency.policy {
@@ -489,6 +505,15 @@ func (s *SQLiteStore) reloadResidentWorkspace(ctx context.Context, workspace str
 	s.mu.Lock()
 	s.workspaces[workspace] = data
 	s.forgetCopyRevisionLocked(workspace)
+	s.metadataResidency.mu.Lock()
+	s.metadataResidency.stamps[workspace], s.metadataResidency.applied[workspace] = stamp, head
+	s.metadataResidency.mu.Unlock()
 	s.mu.Unlock()
 	return nil
+}
+
+func residentJournalHead(ctx context.Context, tx *sqlTx, workspaceID string) (int64, error) {
+	var head int64
+	err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(head),0) FROM workspace_record_journal_heads WHERE workspace_id=?`, workspaceID).Scan(&head)
+	return head, err
 }

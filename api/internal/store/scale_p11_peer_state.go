@@ -33,5 +33,9 @@ func (s *SQLiteStore) WorkspacePeerState(ctx context.Context, workspace string) 
 	result.AuthzEpoch = strconv.FormatInt(epoch, 10)
 	copy, ok := s.copyRevisionOf(workspace)
 	result.Current = ok && copy.workspaceID == stamp.workspaceID && copy.revision == stamp.revision
+	if s.metadataResidency != nil {
+		policy, _, known := s.residentStamp(workspace)
+		result.Current = known && policy == stamp
+	}
 	return result, nil
 }

@@ -65,6 +65,9 @@ func validateBoundedMetadataCoverage() error {
 	if !RecordHydrationEnabled() || recordJournalMode() != "on" {
 		return fmt.Errorf("%w: record hydration and the record journal must both be on", ErrBoundedMetadataCoverage)
 	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("FLOW_RECORD_PEER_SYNC")), "shadow") {
+		return fmt.Errorf("%w: complete-snapshot peer shadow requires bounded metadata off", ErrBoundedMetadataCoverage)
+	}
 	return nil
 }
 
@@ -76,6 +79,8 @@ type metadataResidency struct {
 	cacheBytes, cacheLimit   int
 	policy                   map[string]int
 	policyBytes, policyLimit int
+	stamps                   map[string]copyStamp
+	applied                  map[string]int64
 	work                     *metadataWorkBudget
 }
 
@@ -92,7 +97,14 @@ type metadataResidentCacheEntry struct {
 }
 
 func newMetadataResidency() *metadataResidency {
-	return &metadataResidency{requireCoverage: true, cache: map[metadataResidentCacheKey]*list.Element{}, cacheLimit: metadataBodyCacheBytes, policy: map[string]int{}, policyLimit: metadataPolicyBytes, work: newMetadataWorkBudget(metadataWorkBytes)}
+	return &metadataResidency{requireCoverage: true, cache: map[metadataResidentCacheKey]*list.Element{}, cacheLimit: metadataBodyCacheBytes, policy: map[string]int{}, policyLimit: metadataPolicyBytes, stamps: map[string]copyStamp{}, applied: map[string]int64{}, work: newMetadataWorkBudget(metadataWorkBytes)}
+}
+
+func (s *SQLiteStore) residentStamp(workspace string) (copyStamp, int64, bool) {
+	s.metadataResidency.mu.Lock()
+	defer s.metadataResidency.mu.Unlock()
+	stamp, ok := s.metadataResidency.stamps[workspace]
+	return stamp, s.metadataResidency.applied[workspace], ok
 }
 
 func (s *SQLiteStore) admitMetadataWork(ctx context.Context, bytes int) (context.Context, func(), error) {
