@@ -1,11 +1,11 @@
 {
   "source": "server/personal_data.go",
-  "unmigrated": 4,
+  "unmigrated": 3,
   "consumers": {
     "auditPersonalData": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Needs shared change: deferred personal-data audits must retain attribution after the actor's membership changes. The scoped writer rejects an inactive actor that the legacy audit writer accepts, as proved by TestScaleP21M1DeferredAuditSharedPrerequisite.",
+      "status": "reviewed",
+      "reason": "Each audit reads only users/subjectID to retain legacy user aggregate enrichment and stages the supplied audit fields in the original audit-only context. Existing AccountForUser workspace selection and caller cancellation remain unchanged. TestScaleP21SW7DeferredAuditsDifferential covers self/other subjects, active/revoked actors, credentials, cancellation/missing paths, canonical Viewer and complete audit/webhook/realtime effects, with persistent SQLite repetition. Account enumeration and archive/erase consumers remain independently blocked.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

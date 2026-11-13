@@ -259,7 +259,7 @@ func writeCodingEnvironmentError(w http.ResponseWriter, err error) {
 
 func (s *server) auditCodingEnvironment(r *http.Request, workspace, action, resourceID string, metadata map[string]any) {
 	ctx := store.WithMetadataFields(context.WithoutCancel(r.Context()), "auditLog")
-	if err := s.store.MutateWorkspace(ctx, workspace, "audit.coding_environment", resourceID, map[string]any{"action": action}, func(data *domain.Bootstrap) error {
+	if err := s.store.MutateWorkspaceScoped(ctx, workspace, "audit.coding_environment", resourceID, map[string]any{"action": action}, store.MetadataRecordScope{}, func(data *domain.Bootstrap) error {
 		appendAudit(data, action, "coding_environment", resourceID, metadata)
 		return nil
 	}); err != nil {

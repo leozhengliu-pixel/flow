@@ -393,7 +393,11 @@ func (s *server) testIntegrationConnection(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	data, ok := s.workspaceDataScoped(w, r, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "integrationConnections", ID: id}}})
+	scope := store.MetadataRecordScope{}
+	if id != "" {
+		scope.Read = []store.RecordKey{{Kind: "integrationConnections", ID: id}}
+	}
+	data, ok := s.workspaceDataScoped(w, r, scope)
 	if !ok {
 		return
 	}

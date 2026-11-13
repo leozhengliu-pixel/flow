@@ -1,11 +1,11 @@
 {
   "source": "server/coding_environments_api.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "auditCodingEnvironment": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "Needs shared change: the environment operation commits before its audit. Scoped actor validation discards an audit if membership is revoked meanwhile; the legacy writer records it. TestScaleP21M1DeferredAuditSharedPrerequisite proves the mismatch.",
+      "status": "reviewed",
+      "reason": "Empty metadata scope retains the original detached audit-only context, actor and credential attribution after native environment commit or membership revocation. Callback only stages the supplied audit metadata. TestScaleP21SW7DeferredAuditsDifferential compares audits, canonical root Viewer, webhook/realtime output, cancellation and missing paths across principal/key classes and repeated persistent SQLite runs; native operation authorization stays independent.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

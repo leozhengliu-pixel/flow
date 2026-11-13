@@ -19,7 +19,7 @@ type inviteLinkPreview struct {
 }
 
 func (s *server) getWorkspaceInviteLink(w http.ResponseWriter, r *http.Request) {
-	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), r.PathValue("workspaceKey"), store.MetadataRecordScope{Fields: []string{"workspaceSettings", "workspaceInviteLink"}})
+	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), r.PathValue("workspaceKey"), store.MetadataRecordScope{Fields: []string{"workspaceInviteLink"}, Read: []store.RecordKey{{Kind: "workspaceSettings", ID: "inviteLinksEnabled"}}})
 	if err != nil {
 		issueRecordsError(w, err)
 		return
@@ -40,7 +40,7 @@ func (s *server) getWorkspaceInviteLink(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) createOrRotateWorkspaceInviteLink(w http.ResponseWriter, r *http.Request) {
-	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), r.PathValue("workspaceKey"), store.MetadataRecordScope{Fields: []string{"workspaceSettings"}})
+	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), r.PathValue("workspaceKey"), store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "workspaceSettings", ID: "inviteLinksEnabled"}}})
 	if err != nil {
 		issueRecordsError(w, err)
 		return
@@ -54,7 +54,7 @@ func (s *server) createOrRotateWorkspaceInviteLink(w http.ResponseWriter, r *htt
 		return
 	}
 	var created domain.WorkspaceInviteLink
-	err = s.store.MutateWorkspaceScoped(r.Context(), r.PathValue("workspaceKey"), "workspace_invite_link.rotated", "", nil, store.MetadataRecordScope{Fields: []string{"workspaceSettings", "workspaceInviteLink"}}, func(workspace *domain.Bootstrap) error {
+	err = s.store.MutateWorkspaceScoped(r.Context(), r.PathValue("workspaceKey"), "workspace_invite_link.rotated", "", nil, store.MetadataRecordScope{Fields: []string{"workspaceInviteLink"}, Read: []store.RecordKey{{Kind: "workspaceSettings", ID: "inviteLinksEnabled"}}}, func(workspace *domain.Bootstrap) error {
 		if !workspace.WorkspaceSettings.InviteLinksEnabled {
 			return errInvalid
 		}
@@ -276,7 +276,7 @@ func (s *server) rotateSCIMToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.store.RevokeSCIMToken(r.Context(), data.Workspace.ID, tokenID)
-	_ = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "scim.token_rotated", tokenID, nil, store.MetadataRecordScope{Fields: []string{"workspaceSettings"}}, func(next *domain.Bootstrap) error {
+	_ = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "scim.token_rotated", tokenID, nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "workspaceSettings", ID: "scimEnabled"}}}, func(next *domain.Bootstrap) error {
 		next.WorkspaceSettings.SCIMEnabled = true
 		appendAudit(next, "rotated", "scim_token", tokenID, map[string]any{"name": name, "replacementId": item.ID})
 		return nil

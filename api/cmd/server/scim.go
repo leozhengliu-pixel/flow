@@ -49,7 +49,7 @@ func (s *server) createSCIMToken(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		// Token issuance enables the SCIM surface for this workspace. The
 		// plaintext secret is returned exactly once by CreateSCIMToken.
-		err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "scim.enabled", "workspace", nil, store.MetadataRecordScope{Fields: []string{"workspaceSettings"}}, func(next *domain.Bootstrap) error {
+		err = s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "scim.enabled", "workspace", nil, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "workspaceSettings", ID: "scimEnabled"}, {Kind: "workspaceSettings", ID: "scimDefaultRole"}}}, func(next *domain.Bootstrap) error {
 			next.WorkspaceSettings.SCIMEnabled = true
 			if next.WorkspaceSettings.SCIMDefaultRole == "" {
 				next.WorkspaceSettings.SCIMDefaultRole = "member"
@@ -113,7 +113,7 @@ func (s *server) authenticateSCIMRequest(w http.ResponseWriter, r *http.Request)
 		writeSCIMError(w, http.StatusUnauthorized, "", "invalid SCIM bearer token")
 		return "", "", false
 	}
-	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey, store.MetadataRecordScope{Fields: []string{"workspaceSettings"}})
+	data, ok, err := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "workspaceSettings", ID: "scimEnabled"}}})
 	if err != nil {
 		writeSCIMRequestError(w, err)
 		return "", "", false

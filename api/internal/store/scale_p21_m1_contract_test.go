@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
@@ -36,19 +35,20 @@ func TestScaleP21M1DeferredAuditSharedPrerequisite(t *testing.T) {
 	}
 	ctx := WithMetadataFields(ContextWithActor(t.Context(), f.data.Viewer), "auditLog")
 	called := false
+	entryID := "m1-deferred-old-" + f.data.Workspace.ID
 	appendEntry := func(data *domain.Bootstrap) error {
 		called = true
-		data.AuditLog = append(data.AuditLog, domain.AuditLogEntry{ID: "m1-deferred-" + f.data.Workspace.ID, Actor: data.Viewer, Action: "m1.deferred", ResourceType: "account", ResourceID: f.data.Viewer.ID})
+		data.AuditLog = append(data.AuditLog, domain.AuditLogEntry{ID: entryID, Actor: data.Viewer, Action: "m1.deferred", ResourceType: "account", ResourceID: f.data.Viewer.ID})
 		return nil
 	}
 	if err := f.MutateWorkspaceScoped(ctx, workspace, "audit.workspace_member", f.data.Viewer.ID, nil, MetadataRecordScope{}, appendEntry); err != nil || !called {
 		t.Fatalf("legacy deferred audit: called=%v err=%v", called, err)
 	}
 	called = false
-	if err := probe.MutateWorkspaceScoped(ctx, workspace, "audit.workspace_member", f.data.Viewer.ID, nil, MetadataRecordScope{}, appendEntry); !errors.Is(err, ErrAuthForbidden) || called {
-		t.Fatalf("shared prerequisite changed: called=%v err=%v", called, err)
+	entryID = "m1-deferred-bounded-" + f.data.Workspace.ID
+	if err := probe.MutateWorkspaceScoped(ctx, workspace, "audit.workspace_member", f.data.Viewer.ID, nil, MetadataRecordScope{}, appendEntry); err != nil || !called {
+		t.Fatalf("bounded deferred audit: called=%v err=%v", called, err)
 	}
-	t.Log("needs shared change: scoped writer rejects a deferred audit actor accepted by the legacy writer; audit consumers must remain activation blockers")
 }
 
 func TestScaleP21M1ActorDirectorySharedPrerequisite(t *testing.T) {
@@ -93,8 +93,7 @@ func TestScaleP21M1ActorDirectorySharedPrerequisite(t *testing.T) {
 	if err := f.db.QueryRowContext(t.Context(), `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='users' AND record_key=?`, workspace, actor.ID).Scan(&bounded); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(original, bounded) || bytes.Equal(legacy, bounded) {
-		t.Fatal("shared actor-directory prerequisite changed")
+	if !bytes.Equal(legacy, bounded) {
+		t.Fatal("bounded actor-directory refresh differs from the legacy writer")
 	}
-	t.Log("needs shared change: legacy metadata mutations refresh the actor's users record; the scoped writer does not preserve this implicit canonical side effect")
 }

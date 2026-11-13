@@ -28,7 +28,7 @@ func allowedWorkspaceFile(settings domain.WorkspaceSettings, filename, detectedT
 }
 
 func (s *server) checkUploadPolicy(workspace, filename string, input io.Reader) (io.Reader, error) {
-	metadata, ok, readErr := s.store.WorkspaceMetadataScoped(context.Background(), workspace, store.MetadataRecordScope{Fields: []string{"workspaceSettings"}})
+	metadata, ok, readErr := s.store.WorkspaceMetadataScoped(context.Background(), workspace, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "workspaceSettings", ID: "restrictFileUploads"}, {Kind: "workspaceSettings", ID: "allowedFileExtensions"}}})
 	if readErr != nil {
 		return nil, readErr
 	}

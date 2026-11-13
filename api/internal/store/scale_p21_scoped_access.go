@@ -9,6 +9,7 @@ import (
 	"io"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,6 +139,25 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	if !RecordHydrationEnabled() {
 		return ErrBoundedMetadataCoverage
 	}
+	actor, hasActor := actorFromContext(ctx)
+	actor = mutationInputActor(actor)
+	refreshActor := hasActor
+	fields, fieldScoped := metadataFieldsFromContext(ctx)
+	if original, selected := metadataRecordScopeFromContext(ctx); selected && !projectRecordSelectionEnabled(ctx) {
+		fields, fieldScoped = metadataRecordFields(original), true
+	}
+	legacyFieldScoped := !projectRecordSelectionEnabled(ctx) && !metadataTeamMutation(event, payload) && metadataOnlyMutation(event, payload) && fieldScoped
+	if legacyFieldScoped && !slices.Contains(fields, "users") {
+		refreshActor = false
+	}
+	if refreshActor && !slices.Contains(scope.Fields, "users") {
+		scope.Read = slices.DeleteFunc(slices.Clone(scope.Read), func(key RecordKey) bool {
+			return key.Kind == "users" && key.ID == actor.ID
+		})
+		if !metadataRecordSelected(scope, "users", actor.ID, true) {
+			scope.Write = append(slices.Clone(scope.Write), RecordKey{Kind: "users", ID: actor.ID})
+		}
+	}
 	if err := validateMetadataRecordScope(scope); err != nil {
 		return err
 	}
@@ -170,20 +190,16 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	apply := func(ctx context.Context) error {
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
-		actor, hasActor := actorFromContext(ctx)
-		actor = mutationInputActor(actor)
+		actor := mutationInputActor(actor)
 		workspaceID, err := s.WorkspaceIDForKey(ctx, workspace)
 		if err != nil {
 			return err
 		}
-		role, teams := "", []string(nil)
+		role, teams, activeActor := "", []string(nil), false
 		if hasActor {
-			var status string
-			role, status, err = s.WorkspaceRole(ctx, workspaceID, actor.ID)
-			if err != nil || status != "active" {
-				return ErrAuthForbidden
+			if currentRole, status, roleErr := s.WorkspaceRole(ctx, workspaceID, actor.ID); roleErr == nil && status == "active" {
+				role, teams, activeActor = currentRole, s.actorTeamIDs(ctx, workspaceID, actor.ID), true
 			}
-			teams = s.actorTeamIDs(ctx, workspaceID, actor.ID)
 		}
 		hooks, err := s.residentWebhookNeeded(ctx, workspace)
 		if err != nil {
@@ -226,7 +242,17 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		originalRole := next.ViewerRole
 		refreshDisplayReferences(&next)
 		if hasActor {
-			next.Viewer, next.ViewerRole, next.ViewerTeamIDs = actor, role, teams
+			next.Viewer = actor
+			if activeActor {
+				next.ViewerRole, next.ViewerTeamIDs = role, teams
+			}
+			if refreshActor {
+				if index := slices.IndexFunc(next.Users, func(user domain.User) bool { return user.ID == actor.ID }); index >= 0 {
+					next.Users[index] = actor
+				} else {
+					next.Users = append(next.Users, actor)
+				}
+			}
 		}
 		next.FormerMembers = s.formerMemberLookup(ctx, tx, &next)
 		next.CollaborationUpdates = collaborationUpdatesLookup(ctx, tx, workspace)
@@ -234,6 +260,9 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		next.ViewerRole, next.ViewerTeamIDs, next.FormerMembers, next.CollaborationUpdates = originalRole, nil, nil, nil
 		if err != nil {
 			return err
+		}
+		if legacyFieldScoped && !slices.Contains(fields, "viewer") {
+			next.Viewer = before.Viewer
 		}
 		if err := validateScopedMetadataChanges(before, next, scope); err != nil {
 			return err
@@ -287,9 +316,15 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		changes = slices.DeleteFunc(changes, func(change metadataRecordChange) bool { return slices.Contains(scope.Fields, change.field) })
 		for _, change := range changes {
 			field, _, typed := metadataRecordType(change.field)
-			isMap := typed && reflect.TypeFor[domain.Bootstrap]().Field(field.index).Type.Kind() == reflect.Map
-			if change.insert && !isMap {
+			isMap := typed && reflect.TypeFor[domain.Bootstrap]().Field(field.index).Type.Kind() == reflect.Map || change.field == "workspaceSettings"
+			actorInsert := refreshActor && change.field == "users" && change.key == actor.ID
+			if change.insert && !isMap && !actorInsert {
 				return fmt.Errorf("%w: point creation requires a complete field or a dedicated creation writer", ErrMetadataRecordQuery)
+			}
+			if change.insert && actorInsert {
+				if err := ensureOAuthMetadataShape(ctx, tx, workspace, "users", "array", lock); err != nil {
+					return err
+				}
 			}
 			if change.insert && isMap {
 				if err := ensureOAuthMetadataShape(ctx, tx, workspace, change.field, "map", lock); err != nil {
@@ -370,6 +405,18 @@ func validateScopedMetadataChanges(before, after domain.Bootstrap, scope Metadat
 			continue
 		}
 		a, b := left.Field(field.index), right.Field(field.index)
+		if field.name == "workspaceSettings" {
+			for i := 0; i < a.NumField(); i++ {
+				if metadataValueEqual(a.Field(i), b.Field(i)) {
+					continue
+				}
+				key := strings.Split(a.Type().Field(i).Tag.Get("json"), ",")[0]
+				if !metadataRecordSelected(scope, field.name, key, true) {
+					return fmt.Errorf("%w: undeclared write %s/%s", ErrMetadataRecordQuery, field.name, key)
+				}
+			}
+			continue
+		}
 		if !rebaseableMetadataField(field, a.Type()) {
 			return fmt.Errorf("%w: undeclared field %s", ErrMetadataRecordQuery, field.name)
 		}

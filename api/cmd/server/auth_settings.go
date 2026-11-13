@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -45,6 +47,22 @@ func allowedAuthenticationMethod(data domain.Bootstrap, role string, auth store.
 	return !enforced
 }
 
+func allowedAuthenticationMethodPolicy(data domain.Bootstrap, role string, auth store.SessionAuthentication, enforced, matched bool) bool {
+	if workspaceAdminRole(role) && !data.WorkspaceSettings.DisableAdminBypass {
+		return true
+	}
+	if auth.Provider == "legacy" && (!data.WorkspaceSettings.EmailAuthEnabled || !data.WorkspaceSettings.GoogleAuthEnabled) {
+		return false
+	}
+	if auth.Provider == "password" && !data.WorkspaceSettings.EmailAuthEnabled {
+		return false
+	}
+	if auth.Provider == "google" && !data.WorkspaceSettings.GoogleAuthEnabled {
+		return false
+	}
+	return !enforced || matched
+}
+
 func (s *server) authorizeAuthenticationPolicy(w http.ResponseWriter, r *http.Request, data domain.Bootstrap, role string) bool {
 	if s.authDisabled {
 		return true
@@ -53,17 +71,28 @@ func (s *server) authorizeAuthenticationPolicy(w http.ResponseWriter, r *http.Re
 		return true
 	}
 	auth, chatAuthenticated := chatIdentityAuthentication(r)
+	enforced, matched := false, false
+	boundedChat := chatAuthenticated && s.store.BoundedMetadataEnabled()
 	if chatAuthenticated {
-		policy, ok, err := s.store.WorkspaceMetadataFieldsScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{Fields: []string{"identityProviders"}}, "identityProviders")
-		if err != nil {
-			writeError(w, http.StatusServiceUnavailable, "could not validate authentication policy")
-			return false
+		if boundedChat {
+			var err error
+			enforced, matched, err = s.store.AuthenticationProviderPolicy(r.Context(), workspaceKey(r), auth)
+			if errors.Is(err, sql.ErrNoRows) {
+				writeError(w, http.StatusForbidden, "Workspace authentication policy is unavailable")
+				return false
+			}
+			if err != nil {
+				writeError(w, http.StatusServiceUnavailable, "could not validate authentication policy")
+				return false
+			}
+		} else {
+			policy, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "identityProviders")
+			if !ok {
+				writeError(w, http.StatusForbidden, "Workspace authentication policy is unavailable")
+				return false
+			}
+			data.IdentityProviders = policy.IdentityProviders
 		}
-		if !ok {
-			writeError(w, http.StatusForbidden, "Workspace authentication policy is unavailable")
-			return false
-		}
-		data.IdentityProviders = policy.IdentityProviders
 		// Second-factor evidence ages out with the session it came from.
 		if auth.MFAVerifiedAt != nil && !time.Now().Before(auth.MFAVerifiedAt.Add(workspaceSessionDuration(data.WorkspaceSettings))) {
 			auth.MFAVerifiedAt = nil
@@ -81,7 +110,13 @@ func (s *server) authorizeAuthenticationPolicy(w http.ResponseWriter, r *http.Re
 			return false
 		}
 	}
-	if !allowedAuthenticationMethod(data, role, auth) {
+	allowed := false
+	if boundedChat {
+		allowed = allowedAuthenticationMethodPolicy(data, role, auth, enforced, matched)
+	} else {
+		allowed = allowedAuthenticationMethod(data, role, auth)
+	}
+	if !allowed {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Sign in using an authentication method allowed by this workspace", "code": "authentication_method_required"})
 		return false
 	}

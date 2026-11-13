@@ -1,11 +1,11 @@
 {
   "source": "server/agent_runtime_connectors.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "auditAgentRunConnectorCall": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "Needs shared change: a connector call may already have changed an external system before its deferred audit; scoped actor validation can discard the audit after membership revocation. TestScaleP21M1DeferredAuditSharedPrerequisite proves the legacy/scoped difference. Preserve the original writer.",
+      "status": "reviewed",
+      "reason": "Empty metadata scope preserves the original background audit-only context and canonical stored Viewer attribution; run/principal/tool/outcome fields come from native inputs. The prior external call is unchanged. TestScaleP21SW7DeferredAuditsDifferential compares success/tool-error/transport-failure audits, canonical Viewer, webhook Snapshot/previous values and realtime across principal/key classes, revocation/cancellation/missing paths and repeated persistent SQLite runs; grant authorization remains separately registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -14,7 +14,7 @@
     "discoverAgentRunConnectors": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Declares workspace settings and only settings/applicationPolicies; disabled tools, empty loop selections and disabled unselected discovery skip unused policy input. Selected connections still load entries to preserve missing-versus-unavailable notices, and the final settings/policy read is one SQL snapshot. Grant authorization and per-call credential checks remain upstream/downstream responsibilities. TestScaleP21M1ConnectorDiscoveryDifferential compares principal/key classes, owned/shared/rejected and selected policies, queued/replayed MCP revocation, unused oversized policy and explicit active-policy budget errors with unrelated oversized metadata. Off mode retains WorkspaceMetadata exactly.",
+      "reason": "Declares workspace settings and only settings/applicationPolicies; disabled tools, empty loop selections and disabled unselected discovery skip unused policy input. Selected connections still load entries to preserve missing-versus-unavailable notices, and the final settings/policy read is one SQL snapshot. Grant authorization and per-call credential checks remain upstream/downstream responsibilities; helper key contexts do not certify those boundaries. TestScaleP21M1ConnectorDiscoveryDifferential compares principal/key-context classes, owned/shared/rejected and selected policies, queued/replayed MCP revocation, unused oversized policy and explicit active-policy budget errors with unrelated oversized metadata. TestScaleP21SW1SelectedConnectorFailuresDifferential covers selected missing/rejected/private/broken connectors, required versus partial policy, disabled MCP, exact persisted skipped notices and deduplicated loop notice events. Off mode retains WorkspaceMetadata exactly.",
       "accessors": [
         "WorkspaceMetadata"
       ]

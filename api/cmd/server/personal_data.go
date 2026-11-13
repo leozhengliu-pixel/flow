@@ -153,7 +153,7 @@ func (s *server) auditPersonalData(ctx context.Context, userID, action string, m
 		return
 	}
 	for _, membership := range account.Workspaces {
-		err := s.store.MutateWorkspace(store.WithMetadataFields(ctx, "auditLog"), membership.Workspace.URLKey, "audit.workspace_member", userID, nil, func(data *domain.Bootstrap) error {
+		err := s.store.MutateWorkspaceScoped(store.WithMetadataFields(ctx, "auditLog"), membership.Workspace.URLKey, "audit.workspace_member", userID, nil, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "users", ID: userID}}}, func(data *domain.Bootstrap) error {
 			appendAudit(data, action, "account", userID, metadata)
 			return nil
 		})

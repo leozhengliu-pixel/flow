@@ -476,7 +476,7 @@ func (s *server) auditAgentRunConnectorCall(grant *agentRunGrant, tool connector
 		"runId": grant.run.ID, "sessionId": grant.run.SessionID, "userId": grant.principal.UserID, "durationMs": elapsed.Milliseconds(),
 	}
 	ctx := store.WithMetadataFields(context.Background(), "auditLog")
-	if err := s.store.MutateWorkspace(ctx, grant.run.WorkspaceKey, "audit.agent_run_mcp", grant.run.ID, map[string]any{"action": "agent_run.mcp_tool_call"}, func(data *domain.Bootstrap) error {
+	if err := s.store.MutateWorkspaceScoped(ctx, grant.run.WorkspaceKey, "audit.agent_run_mcp", grant.run.ID, map[string]any{"action": "agent_run.mcp_tool_call"}, store.MetadataRecordScope{}, func(data *domain.Bootstrap) error {
 		appendAudit(data, "agent_run.mcp_tool_call", "agent_run", grant.run.ID, metadata)
 		return nil
 	}); err != nil {

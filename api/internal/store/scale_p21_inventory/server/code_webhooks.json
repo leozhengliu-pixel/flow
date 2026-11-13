@@ -46,7 +46,7 @@
     "testIntegrationConnection": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Projects only the requested integrationConnections/id and core identity; existing provider/credential probing, encrypted secret access and result writers retained. TestScaleP21M2IntegrationDifferential compares no-token probe failure and all principals/credential forms; existing GitLab connection probe tests cover transport.",
+      "reason": "Projects only the requested integrationConnections/id and core identity; no-ID probes load identity only. Existing provider/credential probing, encrypted secret access and result writers retained. TestScaleP21M2IntegrationDifferential compares no-token probe failure and all principals/credential forms. TestScaleP21SW3IntegrationProbeWithoutConnectionDifferential compares no-ID GitHub errors and GitLab missing/valid/invalid tokens across the same matrix against a local transport.",
       "accessors": [
         "workspaceData"
       ]

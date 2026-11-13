@@ -5,7 +5,7 @@
     "authorizeAuthenticationPolicy": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Trusted bounded identityProviders selection retains the original field-only off accessor; existing session/chat authentication, enforced-provider and MFA checks unchanged. Scope errors are explicit service failures. TestScaleP21M2IdentityDifferential crosses principal/key forms with matching/missing enterprise and password identities.",
+      "reason": "Bounded chat authentication evaluates enabled/enforced provider and exact ID/issuer matches as two scalar SQL aggregates in one snapshot, with constant result size even above 50 providers or with oversized unrelated provider fields. The off branch keeps the original identityProviders-only accessor. Existing admin bypass, authentication-method, MFA, session expiry and API-key boundaries remain. TestScaleP21SW2AuthenticationPolicyDifferential crosses the principal/key matrix, >50 providers, trailing-slash/case issuer matches, disabled/unenforced providers and MFA; store scalar tests cover cancellation and missing workspace.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadataFields"

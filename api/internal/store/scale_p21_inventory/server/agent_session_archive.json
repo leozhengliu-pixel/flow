@@ -1,11 +1,11 @@
 {
   "source": "server/agent_session_archive.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "auditAgentSessionArchive": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "Needs shared change: deferred audits retain an actor after the archived operation commits; the scoped writer rejects a now-inactive actor that the legacy writer records. TestScaleP21M1DeferredAuditSharedPrerequisite proves the mismatch. Keep the original writer until audit attribution and membership validation are equivalent.",
+      "status": "reviewed",
+      "reason": "Empty metadata scope retains the original detached audit-only context and request actor after archive commit or revocation. All task fields come from the native archive outcome; appendAudit remains transaction-staged. TestScaleP21SW7DeferredAuditsDifferential compares canonical root Viewer, Actor/BotActor, audits, complete webhook/realtime envelopes, cancellation and missing workspaces across principal/key classes and persistent SQLite repetition; archive authorization remains independent.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

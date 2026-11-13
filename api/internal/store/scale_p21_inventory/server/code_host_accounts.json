@@ -1,11 +1,11 @@
 {
   "source": "server/code_host_accounts.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "auditCodeHostAccount": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Needs shared change: account linking/unlinking commits before this deferred audit. The scoped writer rejects an inactive actor accepted by the old audit writer; TestScaleP21M1DeferredAuditSharedPrerequisite proves the mismatch. Preserve original actor attribution and the original writer.",
+      "status": "reviewed",
+      "reason": "Empty metadata scope preserves detached audit-only request-versus-explicit-context precedence, actor/BotActor attribution and supplied native account metadata. TestScaleP21SW7DeferredAuditsDifferential compares both context branches, canonical root Viewer, complete audit/webhook/realtime effects, revocation/cancellation/missing paths and repeated persistent SQLite runs across principal/key classes. Account linking authorization remains independent.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

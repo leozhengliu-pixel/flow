@@ -8,7 +8,7 @@
       "accessors": [
         "WorkspaceMetadata"
       ],
-      "reason": "Reads only workspaceSettings through WorkspaceMetadataScoped; the legacy off accessor, extension checks, content sniffing and reader replay are unchanged. Covered by the P21 handler differential."
+      "reason": "Reads only workspaceSettings/restrictFileUploads and allowedFileExtensions through WorkspaceMetadataScoped; the legacy off accessor, extension checks, content sniffing and reader replay are unchanged. Covered by P21 handler differentials and TestScaleP21SW0UploadSettingsBudgetDifferential with over 50 properties and oversized unrelated instructions."
     }
   }
 }

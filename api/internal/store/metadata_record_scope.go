@@ -18,6 +18,7 @@ import (
 // may be created. Removing a loaded Write record deletes it. Omitted fields
 // and records always keep their stored values, including nil versus empty.
 // Kind is the Bootstrap JSON field name; ID is the canonical record key.
+// workspaceSettings uses its property's JSON tag as the record key.
 // Split update collections must currently be declared as complete Fields.
 type MetadataRecordScope struct {
 	Fields []string
@@ -103,6 +104,18 @@ func selectMetadataRecordValue(value reflect.Value, field string, scope Metadata
 		return cloneSnapshotValue(value)
 	}
 	switch value.Kind() {
+	case reflect.Struct:
+		if field != "workspaceSettings" {
+			return reflect.Zero(value.Type())
+		}
+		result := reflect.New(value.Type()).Elem()
+		for i := 0; i < value.NumField(); i++ {
+			key := strings.Split(value.Type().Field(i).Tag.Get("json"), ",")[0]
+			if metadataRecordSelected(scope, field, key, false) {
+				result.Field(i).Set(cloneSnapshotValue(value.Field(i)))
+			}
+		}
+		return result
 	case reflect.Slice:
 		if value.Type().Elem().Kind() != reflect.Struct {
 			return reflect.Zero(value.Type())
@@ -226,6 +239,20 @@ func restoreMetadataRecordFields(ctx context.Context, data *domain.Bootstrap, st
 			continue
 		}
 		switch before.Kind() {
+		case reflect.Struct:
+			if field.name != "workspaceSettings" {
+				after.Set(before)
+				continue
+			}
+			result := reflect.New(before.Type()).Elem()
+			result.Set(before)
+			for i := 0; i < before.NumField(); i++ {
+				key := strings.Split(before.Type().Field(i).Tag.Get("json"), ",")[0]
+				if metadataRecordSelected(scope, field.name, key, true) {
+					result.Field(i).Set(after.Field(i))
+				}
+			}
+			after.Set(result)
 		case reflect.Slice:
 			if before.Type().Elem().Kind() != reflect.Struct {
 				after.Set(before)
@@ -307,6 +334,14 @@ func validateMetadataRecordScope(scope MetadataRecordScope) error {
 				if t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Struct {
 					id, hasID := t.Elem().FieldByName("ID")
 					found = hasID && id.Type.Kind() == reflect.String
+				}
+				if key.Kind == "workspaceSettings" && t.Kind() == reflect.Struct {
+					for i := 0; i < t.NumField(); i++ {
+						if strings.Split(t.Field(i).Tag.Get("json"), ",")[0] == key.ID {
+							found = true
+							break
+						}
+					}
 				}
 			}
 		}
