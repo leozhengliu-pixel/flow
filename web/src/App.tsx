@@ -366,7 +366,7 @@ import { WorkspaceStoreProvider } from '@/store/application-store-context'
 import { migratedSyncSignal, syncBootstrapRequestKey, syncClientFor, syncScopeMatches, syncV2Enabled, SyncResetRequired } from '@/lib/sync-client'
 import { locallyCreatedAgentSession } from '@/lib/scale-activate-a-agent-echo'
 import { realtimeClientId } from '@/lib/api-client'
-import { documentBodyLoaded, fetchResourceSurfaceBootstrap, refreshResourceDocument, resourceSyncSurface, resourceTrashedDocument, resourceWindowEnabled, resourceWindowStale } from '@/lib/resource-window-adapters'
+import { documentBodyLoaded, fetchResourceSurfaceBootstrap, refreshResourceDocument, refreshResourceWindow, resourceSyncSurface, resourceTrashedDocument, resourceWindowEnabled, resourceWindowStale } from '@/lib/resource-window-adapters'
 import { fetchResourceDocument } from '@/lib/scale-p20-transport'
 import { scaleP19Surface } from '@/lib/scale-p19-surfaces'
 import type { RealtimeEvent } from '@/types/flow'
@@ -1632,6 +1632,21 @@ function App() {
       const activeSync = syncClientFor(dataRef.current);
       if (activeSync) {
         if (activeSync.manifest.capabilities.includes('resource-windows')) {
+          if (event.type === 'pulse.summary_scheduled') {
+            try {
+              const current = dataRef.current;
+              if (!current || syncClientFor(current) !== activeSync) return;
+              const next = await refreshResourceWindow(current, pageDocument?.id);
+              setData(value => {
+                if (syncClientFor(value) === activeSync && !activeSync.disposed) return next;
+                syncClientFor(next)?.dispose();
+                return value;
+              });
+            } catch {
+              if (!activeSync.disposed) activeSync.requestReset();
+            }
+            return;
+          }
           activeSync.requestReset();
           return;
         }

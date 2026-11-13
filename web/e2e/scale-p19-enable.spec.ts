@@ -41,13 +41,13 @@ async function capture(page: Page, name: string, selector?: string) {
   await (selector ? page.locator(selector) : page).screenshot({ path: `${root}/shots/${name}.png`, animations: 'disabled', scale: 'css' })
 }
 
-for (const enabled of [false, true]) for (const viewport of [{ width: 1440, height: 900 }, { width: 375, height: 812 }, { width: 390, height: 844 }]) {
-  test.describe(`scale-p19 enable actual server flags=${enabled} width=${viewport.width}`, () => {
+for (const enabled of [false, true]) for (const theme of ['Light', 'Dark']) for (const viewport of [{ width: 1440, height: 900 }, { width: 375, height: 812 }, { width: 390, height: 844 }]) {
+  test.describe(`scale-p19 enable actual server flags=${enabled} width=${viewport.width} theme=${theme}`, () => {
     test.use({ scaleP19Enabled: enabled, scaleP19ServerEnabled: enabled, viewport, isMobile: viewport.width < 500, hasTouch: viewport.width < 500 })
     test('preserves project, timeline, initiative, filter and selection workflows', async ({ page, request, workspaceKey }) => {
       test.setTimeout(180_000)
       const language = viewport.width < 500 ? 'zh-CN' : 'en-US'
-      expect((await request.patch('/api/account/settings', { data: { language, interfaceTheme: viewport.width < 500 ? 'Light' : 'Dark' } })).ok()).toBe(true)
+      expect((await request.patch('/api/account/settings', { data: { language, interfaceTheme: theme } })).ok()).toBe(true)
       const fixture = await seed(request, workspaceKey)
       const requests: string[] = []
       const failures: string[] = []
@@ -67,7 +67,7 @@ for (const enabled of [false, true]) for (const viewport of [{ width: 1440, heig
       }
       await first.press('Space')
       await expect(page.getByRole('toolbar')).toBeVisible()
-      if (enabled) await capture(page, `enable-project-selection-${viewport.width}`)
+      if (enabled) await capture(page, `enable-project-selection-${viewport.width}-${theme}`)
 
       await setDisplay(page, workspaceKey, { ordering: 'Name', grouping: 'Priority' })
       await expect(page.locator('.lp-project-row').first()).toBeVisible()
@@ -84,7 +84,7 @@ for (const enabled of [false, true]) for (const viewport of [{ width: 1440, heig
       await expect(page.locator('.lp-project-timeline__bar').first()).toBeVisible()
       if (enabled) {
         expect(requests.some(url => new URL(url).pathname === '/api/bootstrap')).toBe(false)
-        await capture(page, `enable-timeline-${viewport.width}`)
+        await capture(page, `enable-timeline-${viewport.width}-${theme}`)
       }
 
       await setDisplay(page, workspaceKey, {})
@@ -99,12 +99,12 @@ for (const enabled of [false, true]) for (const viewport of [{ width: 1440, heig
         await page.keyboard.press('Tab')
         await pager.locator('button').last().focus()
         expect(await pager.locator('button').last().evaluate(element => element.matches(':focus-visible'))).toBe(true)
-        await capture(page, `enable-update-pager-focus-${viewport.width}`, '.lp-project-updates-preview .scale-p19-project-pager')
+        await capture(page, `enable-update-pager-focus-${viewport.width}-${theme}`, '.lp-project-updates-preview .scale-p19-project-pager')
         await pager.locator('button').last().click()
         await expect(pager).toContainText('21–25 / 25')
         await expect(updates).toContainText('Window update 00')
         await expect(pager.locator('button').last()).toBeDisabled()
-        await capture(page, `enable-updates-${viewport.width}`)
+        await capture(page, `enable-updates-${viewport.width}-${theme}`)
       }
       await page.keyboard.press('Escape')
       await page.goto(`/${workspaceKey}/initiatives/active`)
@@ -124,7 +124,7 @@ for (const enabled of [false, true]) for (const viewport of [{ width: 1440, heig
           const navigation = (await pager.boundingBox())!
           expect(bulk.y + bulk.height).toBeLessThanOrEqual(navigation.y)
         }
-        await capture(page, `enable-initiative-selection-${viewport.width}`)
+        await capture(page, `enable-initiative-selection-${viewport.width}-${theme}`)
         await pager.locator('button').first().click()
         await expect(page.locator('.li-row').first()).toContainText('Initiative 000')
         expect(requests.some(url => new URL(url).pathname === '/api/bootstrap')).toBe(false)

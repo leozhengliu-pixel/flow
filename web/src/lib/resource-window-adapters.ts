@@ -7,13 +7,26 @@ import type { BootstrapData, Comment, DocumentRevision, FlowDocument, SyncPageRe
 import type { QueryWindow } from '@/lib/query-window-store'
 import { findDocumentBySlugSuffix } from '@/lib/document-slug'
 import { modelRecordKind } from '@/lib/scale-p13-wire'
-import { createResourceClient, fetchResourceDocument, readResourceCollection, readResourceDirectory, resourceEndpointUnavailable } from '@/lib/scale-p20-transport'
+import { createResourceClient, fetchResourceDocument, readResourceCollection, readResourceDirectory, resourceEndpointUnavailable, resourceEndpointUnready } from '@/lib/scale-p20-transport'
 
 export type ResourceSurface = 'documents' | 'trash' | 'people' | 'pickers'
 const documentRefreshes = new WeakMap<SyncClient, Promise<BootstrapData>>()
 
 export function resourceRefreshPending(client?: SyncClient): boolean {
   return Boolean(client && documentRefreshes.has(client))
+}
+
+export async function refreshResourceWindow(data: BootstrapData, documentId?: string): Promise<BootstrapData> {
+  const previous = syncClientFor(data)
+  if (!previous?.surface) throw new SyncResetRequired('Resource surface expired')
+  const signal = previous.requestSignal()
+  if (previous.surface === 'document-detail' && documentId) return refreshResourceDocument(data, documentId, signal)
+  const next = await fetchResourceSurfaceBootstrap(data.workspace.urlKey, previous.surface, () => fetchBootstrap(data.workspace.urlKey, undefined, signal), signal, true)
+  if (next.viewer.id !== data.viewer.id || next.workspace.id !== data.workspace.id) {
+    syncClientFor(next)?.dispose()
+    throw new SyncResetRequired('Resource scope changed during refresh')
+  }
+  return next
 }
 
 export function resourceWindowEnabled(surface: ResourceSurface): boolean {
@@ -101,7 +114,7 @@ export async function fetchResourceSurfaceBootstrap(workspaceKey: string, surfac
         // Compatibility epochs also change on ordinary metadata writes.
         // Restart with fresh authority; a denied read never uses legacy data.
         if (attempt < 2 && (error instanceof SyncResetRequired && !(error instanceof SyncProtocolUnavailable) || error instanceof ApiError && [403, 409].includes(error.status))) continue
-        if (!(error instanceof SyncProtocolUnavailable) && !resourceEndpointUnavailable(error)) throw error
+        if (!(error instanceof SyncProtocolUnavailable) && !resourceEndpointUnavailable(error) && !resourceEndpointUnready(error)) throw error
         return legacy()
       }
     }

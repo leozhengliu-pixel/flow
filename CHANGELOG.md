@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Opt-in resource windows fall back when records are unready, retain history and selection during Pulse bookkeeping, and keep project update pages valid across unrelated events. A journal trigger migration preserves authorization epochs for delivery timestamps; window flags remain off.
 - Activation browser checks can isolate P20 scratch servers, caches and screenshots per run. Scale flag defaults are unchanged.
 - Journal-enabled replicas fall back to the existing authorized resource reads when an older replica disables journal authority, and peer sync retains legacy invalidation counters and business event envelopes during rolling upgrades. Scale activation defaults remain off.
 - Realtime epoch batching retains its legacy fallback when the record journal store is uninitialized.

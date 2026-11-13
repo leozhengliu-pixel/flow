@@ -8,8 +8,14 @@ async function subscribed(page: Page, route: string) {
 }
 
 async function capture(page: Page, name: string) {
+  const floatingChat = page.locator('[data-agent-panel][data-variant="floating"]')
+  if (await floatingChat.isVisible()) {
+    await floatingChat.getByRole('button', { name: 'Close chat', exact: true }).click()
+  }
+  await expect(floatingChat).toBeHidden()
   await page.evaluate(() => document.fonts.ready)
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  await expect(floatingChat).toBeHidden()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   if (process.env.SCALE_ACTIVATE_A_SHOTS) await page.screenshot({ path: `${process.env.SCALE_ACTIVATE_A_SHOTS}/${name}.png`, animations: 'disabled', scale: 'css' })
 }
@@ -92,7 +98,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
         await expect(page.locator('main')).toContainText('Activation document updated')
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
         let oldServerRequests = 0
-        await page.route('**/api/sync/manifest', async route => {
+        await page.route(url => url.pathname === '/api/sync/manifest', async route => {
           oldServerRequests++
           await route.fulfill({ status: 404, json: {} })
         })
