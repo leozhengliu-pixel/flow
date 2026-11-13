@@ -168,6 +168,9 @@ func (s *SQLiteStore) OAuthClient(ctx context.Context, clientID string) (domain.
 }
 
 func (s *SQLiteStore) OAuthApplicationClient(clientID string) (domain.OAuthClient, bool) {
+	if s.BoundedMetadataEnabled() {
+		return s.scaleP21SW17OAuthClient(clientID)
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for workspace, data := range s.workspaces {
@@ -188,6 +191,121 @@ func (s *SQLiteStore) OAuthApplicationClient(clientID string) (domain.OAuthClien
 		}
 	}
 	return domain.OAuthClient{}, false
+}
+
+func (s *SQLiteStore) scaleP21SW17OAuthClient(clientID string) (domain.OAuthClient, bool) {
+	stringColumn := func(field string) string {
+		if s.dialect == "mysql" {
+			column := "JSON_EXTRACT(CONVERT(data USING utf8mb4),'$." + field + "')"
+			return "CASE WHEN JSON_TYPE(" + column + ")='STRING' THEN JSON_UNQUOTE(" + column + ") ELSE '' END"
+		}
+		return "COALESCE(" + s.jsonText("data", field) + ",'')"
+	}
+	boolColumn := func(field string) string {
+		cast := "TEXT"
+		if s.dialect == "mysql" {
+			cast = "CHAR"
+		}
+		return "CASE WHEN CAST(" + s.jsonText("data", field) + " AS " + cast + ") IN ('true','1') THEN 1 ELSE 0 END"
+	}
+	columns := []string{
+		stringColumn("clientId"), stringColumn("name"), stringColumn("developerUrl"), stringColumn("logoUrl"),
+		s.jsonText("data", "scopes"), s.jsonText("data", "redirectUris"), stringColumn("createdAt"),
+	}
+	lengths := []string{"1024"}
+	for _, column := range columns {
+		length := "OCTET_LENGTH(" + column + ")"
+		if s.dialect == "sqlite" {
+			length = "LENGTH(CAST(" + column + " AS BLOB))"
+		}
+		lengths = append(lengths, "COALESCE("+length+",0)")
+	}
+	// Charge string headers and slice growth before transferring dense arrays.
+	lengths = append(lengths, "24*("+s.scaleP21SW17JSONArrayLength("data", "scopes")+"+"+s.scaleP21SW17JSONArrayLength("data", "redirectUris")+")")
+	sizeSQL := "(" + strings.Join(lengths, "+") + ")"
+	query := "SELECT workspace_key,record_key,collection_order," + sizeSQL
+	for _, column := range columns {
+		query += ",CASE WHEN " + sizeSQL + "<=? THEN " + column + " ELSE NULL END"
+	}
+	query += "," + boolColumn("supportsClientCredentials") + "," + boolColumn("publicEnabled") +
+		",CASE WHEN " + stringColumn("clientSecret") + "<>'' THEN 1 ELSE 0 END" +
+		" FROM workspace_metadata_records WHERE field='oauthApplications' AND " + s.metadataRecordKeyEquals("("+stringColumn("clientId")+")", "?")
+	lastWorkspace, lastID, cursor := "", "", false
+	var lastOrder int64
+	for {
+		limit, advanced := MetadataRecordPageMaxBytes, false
+		for attempt := 0; attempt < 3; attempt++ {
+			if limit > (metadataWorkBytes-(1<<20))/3 {
+				return domain.OAuthClient{}, false
+			}
+			ctx, release, err := s.admitMetadataWork(context.Background(), max(2<<20, 3*limit+(1<<20)))
+			if err != nil {
+				return domain.OAuthClient{}, false
+			}
+			values := make([]sql.NullString, len(columns))
+			var workspace, id string
+			var order int64
+			var size, credentials, public, confidential int
+			scan := []any{&workspace, &id, &order, &size}
+			args := []any{}
+			for index := range values {
+				scan = append(scan, &values[index])
+				args = append(args, limit)
+			}
+			scan = append(scan, &credentials, &public, &confidential)
+			args = append(args, clientID)
+			candidateQuery := query
+			if cursor {
+				candidateQuery += ` AND (workspace_key>? OR (workspace_key=? AND (collection_order>? OR (collection_order=? AND record_key>?))))`
+				args = append(args, lastWorkspace, lastWorkspace, lastOrder, lastOrder, lastID)
+			}
+			candidateQuery += " ORDER BY workspace_key,collection_order,record_key LIMIT 1"
+			err = s.db.QueryRowContext(ctx, candidateQuery, args...).Scan(scan...)
+			if err != nil {
+				release()
+				return domain.OAuthClient{}, false
+			}
+			if !s.HasWorkspace(workspace) {
+				release()
+				lastWorkspace, lastID, lastOrder, cursor = workspace, id, order, true
+				advanced = true
+				break
+			}
+			if size > limit {
+				release()
+				limit = size
+				continue
+			}
+			client := domain.OAuthClient{
+				ClientID: values[0].String, ClientName: values[1].String, ClientURI: values[2].String, LogoURI: values[3].String,
+				HomeWorkspaceKey: workspace, PublicEnabled: public == 1, GrantTypes: []string{"authorization_code", "refresh_token"},
+				ResponseTypes: []string{"code"}, TokenEndpointAuthMethod: "none",
+			}
+			if credentials == 1 {
+				client.GrantTypes = append(client.GrantTypes, "client_credentials")
+			}
+			if confidential == 1 {
+				client.TokenEndpointAuthMethod = "client_secret_basic"
+			}
+			if values[4].Valid {
+				err = json.Unmarshal([]byte(values[4].String), &client.AllowedScopes)
+			}
+			if err == nil && values[5].Valid {
+				err = json.Unmarshal([]byte(values[5].String), &client.RedirectURIs)
+			}
+			if err == nil && values[6].String != "" {
+				client.CreatedAt, err = time.Parse(time.RFC3339Nano, values[6].String)
+			}
+			release()
+			if err != nil {
+				return domain.OAuthClient{}, false
+			}
+			return client, true
+		}
+		if !advanced {
+			return domain.OAuthClient{}, false
+		}
+	}
 }
 
 // OAuthApplicationLogoRef is an OAuth application whose logo is a given URL,
@@ -316,6 +434,9 @@ func (s *SQLiteStore) RevokeOAuthRefreshToken(ctx context.Context, token string)
 }
 
 func (s *SQLiteStore) FindAPIKey(secretHash string) (string, domain.APIKey, bool) {
+	if s.BoundedMetadataEnabled() {
+		return s.scaleP21SW17FindAPIKey(secretHash)
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for workspaceKey, data := range s.workspaces {
@@ -326,6 +447,89 @@ func (s *SQLiteStore) FindAPIKey(secretHash string) (string, domain.APIKey, bool
 		}
 	}
 	return "", domain.APIKey{}, false
+}
+
+func (s *SQLiteStore) scaleP21SW17FindAPIKey(secretHash string) (string, domain.APIKey, bool) {
+	from := `api_key_lookup locator JOIN workspace_metadata_records record
+		ON record.workspace_key=locator.workspace_key AND ` + s.metadataRecordKeyEquals("record.record_key", "locator.key_id")
+	predicate := "locator.secret_hash=?"
+	if secretHash == "" {
+		// Empty legacy hashes are intentionally absent from api_key_lookup.
+		from = "workspace_metadata_records record"
+		column := "COALESCE(" + s.jsonText("record.data", "secretHash") + ",'')"
+		if s.dialect == "mysql" {
+			value := "JSON_EXTRACT(CONVERT(record.data USING utf8mb4),'$.secretHash')"
+			column = "CASE WHEN JSON_TYPE(" + value + ")='STRING' THEN JSON_UNQUOTE(" + value + ") ELSE '' END"
+		}
+		predicate = "(" + column + ")=?"
+	}
+	lastWorkspace, lastID, cursor := "", "", false
+	var lastOrder int64
+	workSize := "(LENGTH(record.data)+24*(" + s.scaleP21SW17JSONArrayLength("record.data", "scopes") + "+" + s.scaleP21SW17JSONArrayLength("record.data", "teamIds") + "))"
+	for {
+		limit, advanced := MetadataRecordPageMaxBytes, false
+		for attempt := 0; attempt < 3; attempt++ {
+			if limit > (metadataWorkBytes-(1<<20))/3 {
+				return "", domain.APIKey{}, false
+			}
+			ctx, release, err := s.admitMetadataWork(context.Background(), max(2<<20, 3*limit+(1<<20)))
+			if err != nil {
+				return "", domain.APIKey{}, false
+			}
+			query := `SELECT record.workspace_key,record.record_key,record.collection_order,LENGTH(record.data),` + workSize + `,CASE WHEN ` + workSize + `<=? AND LENGTH(record.data)<=? THEN record.data ELSE NULL END
+				FROM ` + from + ` WHERE record.field='apiKeys' AND ` + predicate
+			args := []any{limit, s.maxStateBytes, secretHash}
+			if cursor {
+				query += ` AND (record.workspace_key>? OR (record.workspace_key=? AND (record.collection_order>? OR (record.collection_order=? AND record.record_key>?))))`
+				args = append(args, lastWorkspace, lastWorkspace, lastOrder, lastOrder, lastID)
+			}
+			query += ` ORDER BY record.workspace_key,record.collection_order,record.record_key LIMIT 1`
+			var workspace, id string
+			var order int64
+			var size, encodedSize int
+			var raw []byte
+			err = s.db.QueryRowContext(ctx, query, args...).Scan(&workspace, &id, &order, &encodedSize, &size, &raw)
+			if err != nil {
+				release()
+				return "", domain.APIKey{}, false
+			}
+			if raw == nil {
+				release()
+				if size <= limit || encodedSize > s.maxStateBytes {
+					return "", domain.APIKey{}, false
+				}
+				limit = size
+				continue
+			}
+			var key domain.APIKey
+			err = json.Unmarshal(raw, &key)
+			release()
+			if err != nil {
+				return "", domain.APIKey{}, false
+			}
+			if s.HasWorkspace(workspace) && key.SecretHash == secretHash && key.RevokedAt == nil && (key.ExpiresAt == nil || time.Now().UTC().Before(*key.ExpiresAt)) {
+				return workspace, key, true
+			}
+			lastWorkspace, lastID, lastOrder, cursor = workspace, id, order, true
+			advanced = true
+			break
+		}
+		if !advanced {
+			return "", domain.APIKey{}, false
+		}
+	}
+}
+
+func (s *SQLiteStore) scaleP21SW17JSONArrayLength(column, field string) string {
+	switch s.dialect {
+	case "mysql":
+		return "COALESCE(JSON_LENGTH(JSON_EXTRACT(CONVERT(" + column + " USING utf8mb4),'$." + field + "')),0)"
+	case "postgres":
+		value := "(convert_from(" + column + ",'UTF8')::jsonb -> '" + field + "')"
+		return "CASE WHEN jsonb_typeof(" + value + ")='array' THEN jsonb_array_length(" + value + ") ELSE 0 END"
+	default:
+		return "COALESCE(json_array_length(" + column + ",'$." + field + "'),0)"
+	}
 }
 
 func (s *SQLiteStore) UserByID(ctx context.Context, id string) (domain.User, error) {

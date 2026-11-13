@@ -1,24 +1,27 @@
 {
   "source": "store/workspace_purge.go",
-  "unmigrated": 4,
+  "unmigrated": 0,
   "consumers": {
     "BeginWorkspacePurge": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded branch selects workspace identity only under the existing deletion/coordinator lock; exact off-mode BootstrapFor dispatch, stored refresh, cutoff, receipt idempotency and SQL side effects remain. TestScaleP21SW17PurgeLifecycleDifferential compares old/new complete lifecycle and deterministic table counts with coordinated/uncoordinated stores, more than 50 unrelated metadata rows, a legal large issue, wrong/live workspace refusal, cancellation/retry and cross-workspace isolation. Measurement confirms the identity check avoids issue hydration; bounded full-decodes stay zero.",
       "accessors": [
         "BootstrapFor"
       ]
     },
     "PurgeWorkspaceRows": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded branch reserves work, reads only workspace identity for live/reused-key refusal, pages code-host secret IDs 200 at a time and selects only workspace identity from the legacy singleton. Existing idempotent 1000-row table deletion and 500-key content-object cleanup preserve ordering and visibility. TestScaleP21SW17PurgeLifecycleDifferential compares canonical row removal, receipts/counts, 405 account secrets, repeated/cancelled purge and unrelated workspace retention with zero full decodes and released work; this trusted maintenance operation has no new viewer authorization boundary.",
       "accessors": [
         "BootstrapFor"
       ]
     },
     "RemoveWorkspaceFromCatalog": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded coordinated branch reads only workspace identity after existing resident reload, preserving the catalog lock and deletion event. Exact off BootstrapFor branch remains. TestScaleP21SW17PurgeLifecycleDifferential covers both coordinator modes, complete receipt and deletion counts, cross-workspace state, cancellation/retry and unchanged unrelated cache/canonical data.",
       "accessors": [
         "BootstrapFor"
       ]
@@ -33,7 +36,8 @@
     },
     "removeWorkspaceFromCatalog": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Uses only identities and shallow references in the process-byte-capped resident catalog; no record bodies are copied. Existing SQL transaction and post-commit catalog publication remain. Bounded post-commit cleanup removes this workspace's policy cost, stamps/applied cursor and cache entries under existing write/mutex order. TestScaleP21SW17PurgeLifecycleDifferential proves owned residency state is released, unrelated cache/policy retained and policy byte totals stay exact alongside old/new SQL side effects.",
       "accessors": [
         "Bootstrap"
       ]

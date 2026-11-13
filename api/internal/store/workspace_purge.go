@@ -411,7 +411,17 @@ func (s *SQLiteStore) BeginWorkspacePurge(ctx context.Context, workspaceKey stri
 				return err
 			}
 		}
-		data, ok := s.BootstrapFor(workspaceKey)
+		var data domain.Bootstrap
+		var ok bool
+		if s.BoundedMetadataEnabled() {
+			var err error
+			data, ok, err = s.WorkspaceMetadataScoped(ctx, workspaceKey, MetadataRecordScope{})
+			if err != nil {
+				return err
+			}
+		} else {
+			data, ok = s.BootstrapFor(workspaceKey)
+		}
 		if !ok {
 			return nil
 		}
@@ -932,7 +942,18 @@ func (s *SQLiteStore) RemoveWorkspaceFromCatalog(ctx context.Context, workspaceK
 		if err := s.ReloadAllWorkspaces(ctx); err != nil {
 			return err
 		}
-		if data, ok := s.BootstrapFor(workspaceKey); ok {
+		var data domain.Bootstrap
+		var ok bool
+		if s.BoundedMetadataEnabled() {
+			var err error
+			data, ok, err = s.WorkspaceMetadataScoped(ctx, workspaceKey, MetadataRecordScope{})
+			if err != nil {
+				return err
+			}
+		} else {
+			data, ok = s.BootstrapFor(workspaceKey)
+		}
+		if ok {
 			workspaceID = data.Workspace.ID
 		}
 		return s.removeWorkspaceFromCatalog(ctx, workspaceKey, counts)
@@ -994,6 +1015,19 @@ func (s *SQLiteStore) removeWorkspaceFromCatalog(ctx context.Context, workspaceK
 	s.forgetChatSnapshotFlag(workspaceKey)
 	s.issueGroupCounts.drop(workspaceKey)
 	s.workspaces = remaining
+	if residency := s.metadataResidency; residency != nil {
+		residency.mu.Lock()
+		residency.policyBytes -= residency.policy[workspaceKey]
+		delete(residency.policy, workspaceKey)
+		delete(residency.stamps, workspaceKey)
+		delete(residency.applied, workspaceKey)
+		for key, element := range residency.cache {
+			if key.workspace == workspaceKey {
+				residency.removeCacheEntry(element)
+			}
+		}
+		residency.mu.Unlock()
+	}
 	for key := range s.copyRevisions {
 		if _, ok := remaining[key]; !ok {
 			s.forgetCopyRevisionLocked(key)
@@ -1014,7 +1048,24 @@ func (s *SQLiteStore) PurgeWorkspaceRows(ctx context.Context, target WorkspacePu
 	if target.Key == "" || target.ID == "" {
 		return fmt.Errorf("purge needs the workspace URL key and ID")
 	}
-	if data, ok := s.BootstrapFor(target.Key); ok {
+	var data domain.Bootstrap
+	var ok bool
+	if s.BoundedMetadataEnabled() {
+		var release func()
+		var err error
+		ctx, release, err = s.admitMetadataWork(ctx, 2<<20)
+		if err != nil {
+			return err
+		}
+		defer release()
+		data, ok, err = s.WorkspaceMetadataScoped(ctx, target.Key, MetadataRecordScope{})
+		if err != nil {
+			return err
+		}
+	} else {
+		data, ok = s.BootstrapFor(target.Key)
+	}
+	if ok {
 		if data.Workspace.ID != target.ID {
 			return ErrWorkspaceKeyReused
 		}
@@ -1041,16 +1092,22 @@ func (s *SQLiteStore) PurgeWorkspaceRows(ctx context.Context, target WorkspacePu
 		}
 	}
 	// Code host account tokens are sealed under the account's ID.
-	accounts, err := s.workspaceStrings(ctx, `SELECT id FROM code_host_accounts WHERE workspace_key=?`, target.Key)
-	if err != nil {
-		return err
-	}
-	for _, id := range accounts {
-		result, err := s.db.ExecContext(ctx, `DELETE FROM connector_secrets WHERE id=?`, CodeHostAccountSecretID(id))
+	if s.BoundedMetadataEnabled() {
+		if err := s.scaleP21SW17PurgeCodeHostSecrets(ctx, target.Key, add); err != nil {
+			return err
+		}
+	} else {
+		accounts, err := s.workspaceStrings(ctx, `SELECT id FROM code_host_accounts WHERE workspace_key=?`, target.Key)
 		if err != nil {
 			return err
 		}
-		add("connector_secrets", rowsAffected(result))
+		for _, id := range accounts {
+			result, err := s.db.ExecContext(ctx, `DELETE FROM connector_secrets WHERE id=?`, CodeHostAccountSecretID(id))
+			if err != nil {
+				return err
+			}
+			add("connector_secrets", rowsAffected(result))
+		}
 	}
 	// Application agent activity logs are keyed by their task.
 	for {
@@ -1085,19 +1142,40 @@ func (s *SQLiteStore) PurgeWorkspaceRows(ctx context.Context, target WorkspacePu
 	// A legacy single-workspace row would bring the workspace back when no
 	// other workspace is left.
 	var legacy []byte
-	if err := s.db.QueryRowContext(ctx, `SELECT data FROM workspace_state WHERE id=1`).Scan(&legacy); err == nil {
+	var legacyErr error
+	if s.BoundedMetadataEnabled() {
+		column := s.jsonText("data", "workspace")
+		length := "OCTET_LENGTH(" + column + ")"
+		if s.dialect == "sqlite" {
+			length = "LENGTH(CAST(" + column + " AS BLOB))"
+		}
+		var size sql.NullInt64
+		legacyErr = s.db.QueryRowContext(ctx, `SELECT `+length+`,CASE WHEN `+length+`<=? THEN `+column+` ELSE NULL END FROM workspace_state WHERE id=1`, MetadataRecordPageMaxBytes).Scan(&size, &legacy)
+		if legacyErr == nil && size.Int64 > MetadataRecordPageMaxBytes {
+			return ErrMetadataPageBudget
+		}
+	} else {
+		legacyErr = s.db.QueryRowContext(ctx, `SELECT data FROM workspace_state WHERE id=1`).Scan(&legacy)
+	}
+	if legacyErr == nil {
 		var stored struct {
 			Workspace domain.Workspace `json:"workspace"`
 		}
-		if json.Unmarshal(legacy, &stored) == nil && (stored.Workspace.ID == target.ID || stored.Workspace.ID == "" && stored.Workspace.URLKey == target.Key) {
+		var decodeErr error
+		if s.BoundedMetadataEnabled() {
+			decodeErr = json.Unmarshal(legacy, &stored.Workspace)
+		} else {
+			decodeErr = json.Unmarshal(legacy, &stored)
+		}
+		if decodeErr == nil && (stored.Workspace.ID == target.ID || stored.Workspace.ID == "" && stored.Workspace.URLKey == target.Key) {
 			result, err := s.db.ExecContext(ctx, `DELETE FROM workspace_state WHERE id=1`)
 			if err != nil {
 				return err
 			}
 			add("workspace_state", rowsAffected(result))
 		}
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return err
+	} else if !errors.Is(legacyErr, sql.ErrNoRows) {
+		return legacyErr
 	}
 	// Offloaded bodies in the content store, then their rows.
 	if deleted, err := s.purgeWorkspaceContentObjects(ctx, target.Key); err != nil {
@@ -1123,6 +1201,27 @@ func (s *SQLiteStore) PurgeWorkspaceRows(ctx context.Context, target WorkspacePu
 	s.forgetChatSnapshotFlag(target.Key)
 	s.issueGroupCounts.drop(target.Key)
 	return nil
+}
+
+func (s *SQLiteStore) scaleP21SW17PurgeCodeHostSecrets(ctx context.Context, workspace string, add func(string, int64)) error {
+	last := ""
+	for {
+		ids, err := s.workspaceStrings(ctx, `SELECT id FROM code_host_accounts WHERE workspace_key=? AND id>? ORDER BY id LIMIT 200`, workspace, last)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			result, err := s.db.ExecContext(ctx, `DELETE FROM connector_secrets WHERE id=?`, CodeHostAccountSecretID(id))
+			if err != nil {
+				return err
+			}
+			add("connector_secrets", rowsAffected(result))
+		}
+		if len(ids) < 200 {
+			return nil
+		}
+		last = ids[len(ids)-1]
+	}
 }
 
 // purgeWorkspaceContentObjects deletes the content-store bodies of the

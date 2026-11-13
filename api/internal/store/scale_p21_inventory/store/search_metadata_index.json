@@ -1,10 +1,11 @@
 {
   "source": "store/search_metadata_index.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "migrateMetadataSearchIndex": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Genuine complete repair uses the resident catalog only for workspace keys, at most 128 canonical key headers per batch and native INSERT SELECT text extraction; bodies are processed in SQL and never decoded or accumulated in Go. Bounded mode reserves 2 MiB of work; off path is unchanged. TestScaleP21SW17NativeSearchRepairDifferential compares fresh/completed/resumed repairs over 270 records including a legal large body and tail token, stale/orphan cleanup, exact SQL-derived content, canonical byte retention, cancellation and zero full decodes/work release. The operation is trusted startup maintenance and creates no viewer-visible projection.",
       "accessors": [
         "resident-state"
       ]

@@ -28,7 +28,7 @@ func requestActor(s *server, r *http.Request) domain.User {
 	if user := authUser(r); user.ID != "" {
 		return user
 	}
-	data, _ := s.store.WorkspaceMetadata(workspaceKey(r))
+	data, _, _ := s.store.WorkspaceMetadataScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{})
 	return data.Viewer
 }
 

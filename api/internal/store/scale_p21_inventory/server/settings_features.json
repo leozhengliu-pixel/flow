@@ -1,6 +1,6 @@
 {
   "source": "server/settings_features.go",
-  "unmigrated": 40,
+  "unmigrated": 39,
   "consumers": {
     "connectIntegration": {
       "owner": "P21",
@@ -198,7 +198,8 @@
     },
     "requestActor": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Explicit authenticated user short-circuit is unchanged. Auth-disabled fallback uses identity-only WorkspaceMetadataScoped with exact off-mode WorkspaceMetadata dispatch and default-workspace semantics. TestScaleP21SW17RequestActorDifferential covers principal/key matrix, missing/empty workspace, stored viewer, explicit actor under cancellation, cancelled bounded fallback, ownership and unrelated large metadata with zero full decodes. Request authorization remains an independent boundary.",
       "accessors": [
         "WorkspaceMetadata"
       ]

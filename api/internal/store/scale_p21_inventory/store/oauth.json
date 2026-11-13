@@ -1,17 +1,19 @@
 {
   "source": "store/oauth.go",
-  "unmigrated": 3,
+  "unmigrated": 1,
   "consumers": {
     "FindAPIKey": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Off mode retains the exact resident lookup. Bounded mode locates canonical matching keys with api_key_lookup and keysets duplicate candidates, preserving exact hash, expiry and revocation predicates without adding membership restrictions. Empty legacy hashes use a scalar predicate. Legal large selected records reserve an adaptive work bound before transfer. TestScaleP21SW17NativeOAuthDifferential covers nil/empty scopes, unrestricted/selected-empty/selected-set credentials, absent subjects, duplicate revoked/live and empty hashes, malformed/case-sensitive references, large team sets, fresh revocation/rotation, owned results, zero full decodes and released admission.",
       "accessors": [
         "resident-state"
       ]
     },
     "OAuthApplicationClient": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Off mode retains the exact resident lookup. Bounded mode projects only OAuthClient fields and secret-presence from the matching canonical application; descriptions and manifest-only values never enter Go. Adaptive charged output allowance retains legal large scalars/arrays. TestScaleP21SW17NativeOAuthDifferential compares every returned field, confidential/public grant behavior, literal null, nil/empty arrays, malformed/missing/case-sensitive IDs, large selected output and unrelated descriptions with zero full decodes and no work leak.",
       "accessors": [
         "resident-state"
       ]
