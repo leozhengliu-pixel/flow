@@ -1,10 +1,11 @@
 {
   "source": "server/customer_settings.go",
-  "unmigrated": 5,
+  "unmigrated": 4,
   "consumers": {
     "allowManualCustomerEdit": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads only complete workspaceSettings; original API-key bypass and manual-edit feature check unchanged. TestScaleP21M2PolicyDifferential compares all principal/key classes and oversized unrelated metadata.",
       "accessors": [
         "WorkspaceMetadata"
       ]

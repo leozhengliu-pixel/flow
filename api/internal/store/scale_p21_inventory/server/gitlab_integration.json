@@ -1,6 +1,6 @@
 {
   "source": "server/gitlab_integration.go",
-  "unmigrated": 4,
+  "unmigrated": 3,
   "consumers": {
     "connectGitLabToken": {
       "owner": "P21",
@@ -28,7 +28,8 @@
     },
     "saveGitLabConnection": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes only integrationConnections/id; provider guard, owned config snapshot, unchanged-edit no-event behavior and timestamp retained. TestScaleP21M2IntegrationDifferential compares state and hooks across the principal/key matrix.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

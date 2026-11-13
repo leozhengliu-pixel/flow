@@ -116,7 +116,10 @@ func (s *server) chatBindingAuthorizerValid(ctx context.Context, workspace strin
 	if !chatPrivateBinding(binding) {
 		return true
 	}
-	data, ok := s.store.WorkspaceMetadataFields(workspace, "workspace")
+	data, ok, err := s.store.WorkspaceMetadataFieldsScoped(ctx, workspace, store.MetadataRecordScope{}, "workspace")
+	if err != nil {
+		return false
+	}
 	if !ok || binding.Authorization.UserID == "" {
 		return false
 	}
@@ -549,7 +552,7 @@ func (s *server) auditChatIntegration(r *http.Request, workspace, action, resour
 
 func (s *server) auditChatIntegrationContext(ctx context.Context, workspace, action, resourceType, resourceID string, metadata map[string]any) {
 	ctx = store.WithMetadataFields(context.WithoutCancel(ctx), "auditLog")
-	if err := s.store.MutateWorkspace(ctx, workspace, "audit.chat_integration", resourceID, map[string]any{"action": action}, func(data *domain.Bootstrap) error {
+	if err := s.store.MutateWorkspaceScoped(ctx, workspace, "audit.chat_integration", resourceID, map[string]any{"action": action}, store.MetadataRecordScope{}, func(data *domain.Bootstrap) error {
 		appendAudit(data, action, resourceType, resourceID, metadata)
 		return nil
 	}); err != nil {

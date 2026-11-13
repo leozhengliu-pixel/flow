@@ -1,10 +1,11 @@
 {
   "source": "server/webhook_delivery.go",
-  "unmigrated": 7,
+  "unmigrated": 5,
   "consumers": {
     "attemptWebhookDelivery": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Trusted read selects only webhooks/delivery.WebhookID using the exact webhooks-only accessor off mode. Missing/disabled cancellation, live retry URL replacement, lifecycle bypass, signing and completion/health order retained; scope errors do not become canceled deliveries. TestScaleP21M2WebhookDeliveryDifferential compares enabled, disabled, missing and lifecycle outcomes against a local receiver with zero full decodes.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
@@ -50,7 +51,8 @@
     },
     "updateWebhookHealth": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes webhooks/webhookID only; health callback, original metadata-fields context and ErrNoMutation retained. No principal or network side effect in this trusted callback. TestScaleP21M2RecordWritesDifferential compares canonical hook state with zero full decodes; delivery business regressions retained.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

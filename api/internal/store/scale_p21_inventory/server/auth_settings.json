@@ -1,10 +1,11 @@
 {
   "source": "server/auth_settings.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "authorizeAuthenticationPolicy": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Trusted bounded identityProviders selection retains the original field-only off accessor; existing session/chat authentication, enforced-provider and MFA checks unchanged. Scope errors are explicit service failures. TestScaleP21M2IdentityDifferential crosses principal/key forms with matching/missing enterprise and password identities.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadataFields"

@@ -2583,7 +2583,7 @@ func (s *server) updateProjectDisplayDefault(w http.ResponseWriter, r *http.Requ
 	}
 
 	var updated json.RawMessage
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project_display_default.updated", "workspace", object, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "project_display_default.updated", "workspace", object, store.MetadataRecordScope{Fields: []string{"projectDisplayDefault"}}, func(data *domain.Bootstrap) error {
 		if len(data.ProjectDisplayDefault) > 0 && sameRawJSON(data.ProjectDisplayDefault, input.Display) {
 			updated = append(json.RawMessage(nil), data.ProjectDisplayDefault...)
 			return store.ErrNoMutation

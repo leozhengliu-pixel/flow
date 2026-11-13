@@ -44,7 +44,7 @@ func (s *server) recordSCIMAudit(r *http.Request, workspaceKey string, entries [
 	}
 	actor := s.scimTeamMemberActor(r, "", "")
 	ctx := store.WithMetadataFields(context.WithoutCancel(r.Context()), "auditLog")
-	err := s.store.MutateWorkspace(ctx, workspaceKey, "scim.audited", entries[0].resourceID, map[string]any{"auditEntries": len(entries)}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(ctx, workspaceKey, "scim.audited", entries[0].resourceID, map[string]any{"auditEntries": len(entries)}, store.MetadataRecordScope{}, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		built := make([]domain.AuditLogEntry, 0, len(entries))
 		for _, entry := range entries {
@@ -275,7 +275,7 @@ func (s *server) applySCIMProfileSettings(ctx context.Context, workspaceKey, use
 		return
 	}
 	ctx = store.WithMetadataFields(context.WithoutCancel(ctx), "userSettings")
-	err := s.store.MutateWorkspace(ctx, workspaceKey, "user_settings.scim_profile", userID, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(ctx, workspaceKey, "user_settings.scim_profile", userID, nil, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "users", ID: userID}}, Write: []store.RecordKey{{Kind: "userSettings", ID: userID}}}, func(data *domain.Bootstrap) error {
 		if data.UserSettings == nil {
 			data.UserSettings = map[string]domain.UserSettings{}
 		}

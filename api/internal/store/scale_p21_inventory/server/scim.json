@@ -1,17 +1,19 @@
 {
   "source": "server/scim.go",
-  "unmigrated": 10,
+  "unmigrated": 3,
   "consumers": {
     "authenticateSCIMRequest": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Trusted scoped workspace identity and complete workspaceSettings; bearer token workspace binding and SCIM-enabled checks retained, read errors propagated. TestScaleP21M2PolicyDifferential covers valid/cross-workspace tokens and zero full decodes.",
       "accessors": [
         "WorkspaceMetadata"
       ]
     },
     "createSCIMToken": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only projected read plus complete workspaceSettings mutation; existing admin boundary, token issuance order and transactional audit staging retained. TestScaleP21M2CredentialsAndUploadDifferential compares issuance/rotation/revocation and TestScaleP21M2PolicyDifferential covers admin permission matrix.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -20,21 +22,24 @@
     },
     "listSCIMTokens": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Only workspace identity is loaded; existing live admin role check and SQL token listing retained. TestScaleP21M2PolicyDifferential crosses five principal classes with session and all three key restrictions, without loading hidden project bodies.",
       "accessors": [
         "workspaceData"
       ]
     },
     "requireWorkspaceAdmin": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only workspace projection followed by unchanged WorkspaceRole/admin check; auth-disabled shortcut retained. TestScaleP21M2PolicyDifferential compares principal/key matrix, queued/replayed access revocation and zero full decodes.",
       "accessors": [
         "workspaceData"
       ]
     },
     "revokeSCIMToken": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only projection and empty metadata audit scope; SQL credential revocation, admin check, audit staging and failure logging retain their order. TestScaleP21M2CredentialsAndUploadDifferential covers create/rotate/revoke and TestScaleP21M2SCIMProfileAndAudit compares staged audits.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -50,7 +55,8 @@
     },
     "scimRole": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Selected representation gates the exact legacy WorkspaceMetadata call; bounded mode uses the resident, process-capped WorkspaceSettingsMetadata policy reader only. Role mapping/default behavior retained. TestScaleP21M2IdentityDifferential compares mappings for all principal/key forms with zero full decodes.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -64,7 +70,8 @@
     },
     "scimWorkspaceSettings": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Selected representation gates the exact legacy accessor; bounded mode clones only resident workspace settings through WorkspaceSettingsMetadata. Existing missing-workspace zero settings behavior retained. TestScaleP21M2IdentityDifferential compares complete settings and role defaults.",
       "accessors": [
         "WorkspaceMetadata"
       ]

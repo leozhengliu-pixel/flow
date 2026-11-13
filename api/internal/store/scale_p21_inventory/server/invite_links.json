@@ -1,10 +1,11 @@
 {
   "source": "server/invite_links.go",
-  "unmigrated": 9,
+  "unmigrated": 4,
   "consumers": {
     "createOrRotateWorkspaceInviteLink": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Trusted workspaceSettings precheck and complete workspaceSettings/workspaceInviteLink transaction scope; retained enabled recheck, actor fallback and random-token creation. TestScaleP21M2PolicyDifferential compares matrix, canonical link and hooks; CredentialsAndUploadDifferential proves oversized policy fails before writing.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",
@@ -13,7 +14,8 @@
     },
     "decideOAuthSyncGroupRequest": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Loads and writes only oauthSyncGroupRequests/requestID, retaining application ID binding, status validation and reviewer attribution. TestScaleP21M2PolicyDifferential compares matrix, unrelated request, canonical state and event hooks.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -21,7 +23,8 @@
     },
     "disableWorkspaceInviteLink": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Complete scalar workspaceInviteLink scope, retaining missing-link semantics and timestamp update. Existing route authorization remains independent. TestScaleP21M2PolicyDifferential compares matrix, canonical link and event hooks.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -29,7 +32,8 @@
     },
     "getWorkspaceInviteLink": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Trusted complete workspaceSettings/workspaceInviteLink selection; unchanged disabled, missing and response shapes with explicit errors. TestScaleP21M2PolicyDifferential compares every principal/key class without loading unrelated bodies.",
       "accessors": [
         "WorkspaceMetadata"
       ]
@@ -66,7 +70,8 @@
     },
     "rotateSCIMToken": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only projection and complete workspaceSettings mutation; live admin check, SQL token rotation sequence and staged audit preserved. TestScaleP21M2CredentialsAndUploadDifferential compares rotation and subsequent revocation; policy test covers admin matrix.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",

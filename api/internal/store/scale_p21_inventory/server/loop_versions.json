@@ -1,6 +1,6 @@
 {
   "source": "server/loop_versions.go",
-  "unmigrated": 4,
+  "unmigrated": 3,
   "consumers": {
     "getLoopVersion": {
       "owner": "P18",
@@ -26,7 +26,8 @@
     },
     "setLoopRunFeedback": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Trusted identity-only selection preserves the original legacy viewer-only field accessor off mode; dedicated loop-run writer still validates loop/run binding and updates only the actor's feedback. TestScaleP21M2LoopFeedbackDifferential compares every principal/key form, feedback and wrong-loop responses.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

@@ -310,7 +310,11 @@ func (s *server) setLoopRunFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, runID := r.PathValue("id"), r.PathValue("runId")
-	data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "viewer")
+	data, ok, err := s.store.WorkspaceMetadataFieldsScoped(r.Context(), workspaceKey(r), store.MetadataRecordScope{}, "viewer")
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return

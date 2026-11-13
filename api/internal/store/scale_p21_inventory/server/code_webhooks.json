@@ -1,6 +1,6 @@
 {
   "source": "server/code_webhooks.go",
-  "unmigrated": 7,
+  "unmigrated": 4,
   "consumers": {
     "applyCodeReviewEvent": {
       "owner": "P21",
@@ -19,7 +19,8 @@
     },
     "persistIntegrationTestError": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes integrationConnections/id only; provider binding, missing-record behavior and error/test timestamps retained. TestScaleP21M2IntegrationDifferential compares five principal classes and four credential forms, canonical rows and webhook/realtime effects.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -27,7 +28,8 @@
     },
     "persistIntegrationTestSuccess": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes integrationConnections/id only; provider binding and supplied test timestamp retained. TestScaleP21M2IntegrationDifferential compares canonical target/other connections and event effects across the permission matrix.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -43,7 +45,8 @@
     },
     "testIntegrationConnection": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Projects only the requested integrationConnections/id and core identity; existing provider/credential probing, encrypted secret access and result writers retained. TestScaleP21M2IntegrationDifferential compares no-token probe failure and all principals/credential forms; existing GitLab connection probe tests cover transport.",
       "accessors": [
         "workspaceData"
       ]

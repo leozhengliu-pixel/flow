@@ -1,10 +1,11 @@
 {
   "source": "server/chat_team_bindings.go",
-  "unmigrated": 6,
+  "unmigrated": 4,
   "consumers": {
     "auditChatIntegrationContext": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Empty metadata scope retains captured audit actor/action/metadata and transaction staging; no audit history input. TestScaleP21M2IdentityDifferential compares persisted chat audits including actor and metadata.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -12,7 +13,8 @@
     },
     "chatBindingAuthorizerValid": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Identity-only scoped read preserves legacy workspace-only accessor; existing live TeamRole owner check unchanged, storage errors refuse authorization. TestScaleP21M2IdentityDifferential compares admin/private outsider/member/guest/inherited principals and credential forms.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

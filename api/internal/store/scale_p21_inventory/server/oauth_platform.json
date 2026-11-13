@@ -1,10 +1,11 @@
 {
   "source": "server/oauth_platform.go",
-  "unmigrated": 5,
+  "unmigrated": 3,
   "consumers": {
     "auditAPIKeyCredential": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Empty metadata audit scope, with original captured credential/application metadata and actor. Session requests remain no-ops. TestScaleP21M2IntegrationDifferential compares credential matrix, event effects and persisted audit metadata.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -26,7 +27,8 @@
     },
     "oauthConsentInstallation": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads only users/installation.InstalledBy with original users-only accessor off mode; existing OAuth workspace admin boundary and SQL active-installation selection unchanged. TestScaleP21M2OAuthDifferential compares installer display name and all principal/key classes at the handler boundary.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

@@ -484,7 +484,7 @@ func (s *server) gitlabConnectionSnapshot(r *http.Request, id string) (domain.Bo
 
 func (s *server) saveGitLabConnection(ctx context.Context, workspaceKey, id, eventType string, mutate func(connection *domain.IntegrationConnection, now time.Time)) (domain.IntegrationConnection, error) {
 	var updated domain.IntegrationConnection
-	err := s.store.MutateWorkspace(ctx, workspaceKey, eventType, id, map[string]string{"provider": "gitlab"}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(ctx, workspaceKey, eventType, id, map[string]string{"provider": "gitlab"}, store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: id}}}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.ID == id && item.Provider == "gitlab" })
 		if index < 0 {
 			return errNotFound
