@@ -45,7 +45,7 @@ func (s *SQLiteStore) readResidentResourcePolicy(ctx context.Context, workspace,
 	budget := newMetadataHydrationBudget()
 	order := map[string]int{}
 	for _, field := range []string{"teams", "teamSettings"} {
-		err := s.scanResidentMetadataField(ctx, s.db, workspace, field, stamp, func(rows []metadataCacheRow) error {
+		err := s.scanResourcePolicyHeaders(ctx, workspace, field, func(rows []metadataCacheRow) error {
 			for _, row := range rows {
 				if err := budget.consume(row.Data); err != nil {
 					return err

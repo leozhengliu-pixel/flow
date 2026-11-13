@@ -8,6 +8,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 - Realtime epoch batching retains its legacy fallback when the record journal store is uninitialized.
 - SQLite journal commits use indexed lookups for a single metadata record and its event, retaining the bounded generic path for other transactions. Scale activation defaults remain unchanged after the 300/800-user load gates failed.
+- Bounded metadata checks now keep legacy aggregate-event compatibility gaps as activation blockers. Additional native scalar readers and startup migrations avoid unrelated bodies, and permission-policy reads project required fields before transfer. Bounded metadata remains off by default.
 - Bounded metadata writers can append declared records in canonical order without loading existing collections. More notification, OAuth, identity-provider and Agent helpers use bounded inputs; session ownership checks read SQL scalars. Bounded metadata remains off by default.
 - Bounded metadata consumer migrations retain deferred audit attribution and actor directory updates. Settings consumers can select individual properties, and authentication-provider policy checks return SQL decisions without loading provider bodies. Bounded metadata remains off by default.
 - Bounded metadata migrations can declare record/field inputs through shared scoped read and mutation adapters, with canonical streaming scans for background work. Consumer reviews are partitioned by source file for independent migrations; bounded metadata remains off by default.
