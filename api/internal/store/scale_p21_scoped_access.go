@@ -164,7 +164,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	if _, content := mutationScopeFromContext(ctx); content || UsesIssueRecordMutations(ctx) {
 		return fmt.Errorf("%w: scoped metadata callback declares issue/content side effects", ErrMetadataRecordQuery)
 	}
-	policyWrite := slices.ContainsFunc(metadataRecordFields(scope), func(field string) bool {
+	policyWrite := slices.ContainsFunc(append(metadataRecordFields(scope), metadataAppendKinds(ctx)...), func(field string) bool {
 		mode := metadataResidencyFields()[field]
 		return mode == "policy" || mode == "core"
 	})
@@ -264,7 +264,11 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if legacyFieldScoped && !slices.Contains(fields, "viewer") {
 			next.Viewer = before.Viewer
 		}
-		if err := validateScopedMetadataChanges(before, next, scope); err != nil {
+		writeScope, appendOrders, err := s.prepareMetadataAppends(ctx, tx, workspace, before, next, scope)
+		if err != nil {
+			return err
+		}
+		if err := validateScopedMetadataChanges(before, next, writeScope); err != nil {
 			return err
 		}
 		encoded, err := json.Marshal(next)
@@ -279,7 +283,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if err != nil {
 			return err
 		}
-		for _, field := range metadataRecordFields(scope) {
+		for _, field := range metadataRecordFields(writeScope) {
 			value := root[field]
 			if shapes[field] == "" && len(value) > 2 && (value[0] == '[' || value[0] == '{') && metadataResidencyFields()[field] != "core" {
 				return fmt.Errorf("%w: unsplittable callback output %s", ErrMetadataRecordQuery, field)
@@ -318,11 +322,12 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			field, _, typed := metadataRecordType(change.field)
 			isMap := typed && reflect.TypeFor[domain.Bootstrap]().Field(field.index).Type.Kind() == reflect.Map || change.field == "workspaceSettings"
 			actorInsert := refreshActor && change.field == "users" && change.key == actor.ID
-			if change.insert && !isMap && !actorInsert {
+			_, appended := appendOrders[metadataRecordKey{field: change.field, key: change.key}]
+			if change.insert && !isMap && !actorInsert && !appended {
 				return fmt.Errorf("%w: point creation requires a complete field or a dedicated creation writer", ErrMetadataRecordQuery)
 			}
-			if change.insert && actorInsert {
-				if err := ensureOAuthMetadataShape(ctx, tx, workspace, "users", "array", lock); err != nil {
+			if change.insert && (actorInsert || appended) {
+				if err := ensureOAuthMetadataShape(ctx, tx, workspace, change.field, "array", lock); err != nil {
 					return err
 				}
 			}
@@ -332,7 +337,11 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				}
 			}
 		}
-		if err := scaleP16WriteChanges(ctx, tx, workspace, newIssueReferences(next), changes); err != nil {
+		writeCtx := ctx
+		if len(appendOrders) > 0 {
+			writeCtx = context.WithValue(ctx, metadataAppendOrdersKey{}, appendOrders)
+		}
+		if err := scaleP16WriteChanges(writeCtx, tx, workspace, newIssueReferences(next), changes); err != nil {
 			return err
 		}
 		var policy domain.Bootstrap

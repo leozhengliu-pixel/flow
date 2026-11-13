@@ -5,6 +5,7 @@
     "resumeAgentApproval": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Scoped decision writer fails event compatibility: a warm legacy cache publishes assembled offloaded session history while canonical scoped hydration retains ContentRefs, and legal histories exceed the scoped realtime 256 KiB cap. Keep original writer until transaction-consistent, budgeted legacy event assembly/publication is supported. The failed SW8 differential is held outside the verified wave.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

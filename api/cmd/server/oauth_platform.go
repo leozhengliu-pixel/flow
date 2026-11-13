@@ -109,7 +109,7 @@ func (s *server) auditAPIKeyCredential(r *http.Request, action string, app domai
 	}
 	workspace := workspaceKey(r)
 	ctx := store.WithMetadataFields(context.WithoutCancel(r.Context()), "auditLog")
-	err := s.store.MutateWorkspaceScoped(ctx, workspace, "audit.oauth_application_credential", app.ID, map[string]any{"action": action}, store.MetadataRecordScope{}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(ctx, workspace, "audit.oauth_application_credential", app.ID, map[string]any{"action": action}, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "oauthApplications", ID: app.ID}}}, func(data *domain.Bootstrap) error {
 		appendAudit(data, action, "oauth_application", app.ID, map[string]any{"application": app.Name, "clientId": app.ClientID, "apiKeyId": key.ID, "apiKeyName": key.Name, "authentication": "apiKey"})
 		return nil
 	})

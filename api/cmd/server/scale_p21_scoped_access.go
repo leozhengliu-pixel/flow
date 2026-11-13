@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 
 	"flow/api/internal/domain"
@@ -31,6 +32,10 @@ func (s *server) workspaceDataScoped(w http.ResponseWriter, r *http.Request, sco
 		data, err = s.store.ProjectScopedMetadata(r.Context(), workspaceKey(r), authUser(r).ID, key, scope)
 	}
 	if err != nil {
+		if errors.Is(err, store.ErrMetadataPageBudget) {
+			writeError(w, http.StatusServiceUnavailable, err.Error())
+			return domain.Bootstrap{}, false
+		}
 		issueRecordsError(w, err)
 		return domain.Bootstrap{}, false
 	}

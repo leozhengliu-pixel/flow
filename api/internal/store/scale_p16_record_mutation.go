@@ -333,6 +333,8 @@ func scaleP16WriteChanges(ctx context.Context, tx *sqlTx, workspace string, refs
 		}
 		if err == nil {
 			change.order = order
+		} else if planned, ok := metadataAppendOrdinal(ctx, key); ok {
+			change.order = planned
 		} else if !updateMetadataField(change.field) {
 			bound, offset := "MAX", 1
 			if change.field == "trash" || change.field == "favorites" {

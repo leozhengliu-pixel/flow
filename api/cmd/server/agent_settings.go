@@ -168,7 +168,13 @@ func (s *server) updateWorkspaceAgentGuidance(w http.ResponseWriter, r *http.Req
 		writeError(w, 400, "workspace guidance must not exceed 8000 characters")
 		return
 	}
-	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "workspace.agent_guidance_updated", "workspace", nil, store.MetadataRecordScope{Fields: []string{"workspaceSettings"}}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspaceScoped(r.Context(), workspaceKey(r), "workspace.agent_guidance_updated", "workspace", nil, store.MetadataRecordScope{
+		Write: []store.RecordKey{
+			{Kind: "workspaceSettings", ID: "agentInstructions"},
+			{Kind: "workspaceSettings", ID: "agentInstructionsEditedById"},
+			{Kind: "workspaceSettings", ID: "agentInstructionsEditedAt"},
+		},
+	}, func(data *domain.Bootstrap) error {
 		next := strings.TrimSpace(input.Instructions)
 		if next == data.WorkspaceSettings.AgentInstructions {
 			return store.ErrNoMutation

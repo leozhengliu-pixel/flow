@@ -5,7 +5,7 @@
     "auditAPIKeyCredential": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Empty metadata audit scope, with original captured credential/application metadata and actor. Session requests remain no-ops. TestScaleP21M2IntegrationDifferential compares credential matrix, event effects and persisted audit metadata.",
+      "reason": "Reads oauthApplications/app.ID for legacy realtime aggregate enrichment while retaining captured credential/application audit metadata and actor. Session requests remain no-ops. TestScaleP21M2IntegrationDifferential and TestScaleP21SW12SecretRotationDifferential compare the credential matrix, canonical state, audit metadata and complete webhook/realtime effects.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

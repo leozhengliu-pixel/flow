@@ -5,7 +5,7 @@
     "updateWorkspaceAgentGuidance": {
       "owner": "P18",
       "status": "reviewed",
-      "reason": "Scoped workspaceSettings input preserves guidance validation, no-op detection and live mutation actor attribution; no entity content or team filtering is used. TestScaleP21M3GuidanceDifferential compares responses, persisted settings, webhook/realtime effects across principals and credential restrictions, forbidden authority, queued/replay revocation, cancellation, ownership and oversized output. Shared HTTP middleware remains independently blocked.",
+      "reason": "Writes only workspaceSettings properties agentInstructions, agentInstructionsEditedById and agentInstructionsEditedAt, preserving validation, no-op detection and live actor attribution. TestScaleP21M3GuidanceDifferential covers responses, persisted settings, sinks, principal/credential restrictions, forbidden authority, revocation, cancellation and ownership. TestScaleP21SW0GuidanceProperties additionally compares large unrelated settings beyond the complete-field budget. Shared HTTP middleware remains independently blocked.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
