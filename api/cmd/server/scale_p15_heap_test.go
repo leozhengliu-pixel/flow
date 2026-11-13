@@ -32,6 +32,10 @@ func TestScaleP15HeapConcurrent10x(t *testing.T) {
 	if os.Getenv("FLOW_P15_HEAP_MEASURE") != "on" {
 		t.Skip("set FLOW_P15_HEAP_MEASURE=on for the 10x retained-heap probe")
 	}
+	signed := os.Getenv("FLOW_P15B_MEASURE_SIGNED") == "on"
+	if signed {
+		t.Setenv("FLOW_FILE_URL_SIGNING_KEY", "p15-heap-measurement-key")
+	}
 	records := 23210
 	if value := os.Getenv("FLOW_P15B_MEASURE_RECORDS"); value != "" {
 		var err error
@@ -54,6 +58,9 @@ func TestScaleP15HeapConcurrent10x(t *testing.T) {
 	}
 	for i := range data.Projects {
 		data.Projects[i] = domain.Project{ID: fmt.Sprint(i), Name: "Project", Description: strings.Repeat("x", bodyBytes)}
+		if signed && i%128 == 0 {
+			data.Projects[i].Description += " /uploads/asset.png"
+		}
 	}
 	runtime.GC()
 	var before runtime.MemStats
@@ -137,6 +144,9 @@ func TestScaleP15HeapConcurrent10x(t *testing.T) {
 			}}
 			ctx := context.WithValue(t.Context(), hydratedLegacyEstimateKey{}, reservation)
 			r := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/issue-records/bootstrap", nil)
+			if signed {
+				r.Header.Set("X-Flow-File-Urls-Expire-In", "3600")
+			}
 			service.signedFileURLs(http.HandlerFunc(func(out http.ResponseWriter, r *http.Request) {
 				owned := data
 				var snapshots [][]domain.Project
@@ -166,7 +176,7 @@ func TestScaleP15HeapConcurrent10x(t *testing.T) {
 		}
 	}
 	for _, digest := range digests {
-		if digest != digests[0] {
+		if !signed && digest != digests[0] {
 			t.Fatalf("response digests differ: %v", digests)
 		}
 	}
@@ -175,7 +185,7 @@ func TestScaleP15HeapConcurrent10x(t *testing.T) {
 		t.Fatalf("spools after completion: %v %v", files, err)
 	}
 	slices.Sort(latencies)
-	t.Logf("P15_HEAP hydration=%s records=%d copies_per_reader=%d readers=4 response_bytes=%d resident_heap_bytes=%d retained_heap_bytes=%d peak_heap_bytes=%d peak_spool_bytes=%d max_latency_ms=%d sha256=%s", os.Getenv("FLOW_RECORD_HYDRATION"), records, copies, outputs[0], before.HeapAlloc, peakRetained.Load(), peakHeap.Load(), peakSpool.Load(), latencies[3].Milliseconds(), digests[0])
+	t.Logf("P15_HEAP hydration=%s signed=%t records=%d copies_per_reader=%d readers=4 response_bytes=%d resident_heap_bytes=%d retained_heap_bytes=%d peak_heap_bytes=%d peak_spool_bytes=%d max_latency_ms=%d sha256=%s", os.Getenv("FLOW_RECORD_HYDRATION"), signed, records, copies, outputs[0], before.HeapAlloc, peakRetained.Load(), peakHeap.Load(), peakSpool.Load(), latencies[3].Milliseconds(), digests[0])
 	if os.Getenv("FLOW_RECORD_HYDRATION") == "on" && peakRetained.Load() > 1<<30 {
 		t.Fatalf("retained heap exceeds the 1 GiB live-heap target: %d", peakRetained.Load())
 	}
