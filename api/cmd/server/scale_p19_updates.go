@@ -151,16 +151,16 @@ func (s *server) scaleP19UpdatePage(w http.ResponseWriter, r *http.Request, kind
 	writeSyncJSON(w, page, store.MetadataRecordPageMaxBytes)
 }
 
-func scaleP19UpdateBinding(kind, id, revision string, records []scaleP19UpdateRecord) (string, error) {
+func scaleP19UpdateBinding(kind, id, _ string, records []scaleP19UpdateRecord) (string, error) {
 	digest := sha256.New()
 	encoder := json.NewEncoder(digest)
-	// The event head can advance between PulseFeed and this handler, or lag an
-	// unsequenced write. Bind the actual projected values as well as the head.
+	// Bind the projected history, rather than unrelated workspace events.
+	// Epoch binding still rejects access changes, including queued old pages.
 	// Encode individual records so hashing does not buffer the entire history.
 	for _, record := range records {
 		if err := encoder.Encode(record.value); err != nil {
 			return "", err
 		}
 	}
-	return fmt.Sprintf("%s:%s:%s:%x", kind, id, revision, digest.Sum(nil)), nil
+	return fmt.Sprintf("%s:%s:%x", kind, id, digest.Sum(nil)), nil
 }
