@@ -89,6 +89,23 @@ func TestScaleP15SnapshotReuseDefaultsOff(t *testing.T) {
 	}
 }
 
+func TestScaleP15SnapshotScopedReadsRemainOwned(t *testing.T) {
+	t.Setenv("FLOW_RECORD_HYDRATION", "on")
+	data := domain.Bootstrap{Projects: make([]domain.Project, 2048)}
+	data.Projects[0].ID = "independently-owned"
+	ctx, release := BeginHydratedSnapshotReuse(t.Context())
+	ctx = WithMetadataRecords(ctx, MetadataRecordScope{Fields: []string{"projects"}})
+	owned := CloneHydratedReadSnapshot(ctx, data)
+	release()
+	if owned.Projects[0].ID != "independently-owned" {
+		t.Fatal("a scoped mutation-adapter input was returned to the compatibility pool")
+	}
+	owned.Projects[0].ID = "changed"
+	if data.Projects[0].ID != "independently-owned" {
+		t.Fatal("a scoped read changed its source")
+	}
+}
+
 func TestScaleP15SnapshotReservationAccountsForContainers(t *testing.T) {
 	data := domain.Bootstrap{Projects: make([]domain.Project, 2048)}
 	before := HydratedSnapshotReservation(data)

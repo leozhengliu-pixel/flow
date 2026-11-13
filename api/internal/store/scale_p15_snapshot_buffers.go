@@ -91,7 +91,8 @@ func BeginHydratedSnapshotReuse(ctx context.Context) (context.Context, func()) {
 // large top-level slice storage is reused, for the explicit request lifetime.
 func CloneHydratedReadSnapshot(ctx context.Context, data domain.Bootstrap) domain.Bootstrap {
 	lease, _ := ctx.Value(hydrationSnapshotReuseKey{}).(*hydrationSnapshotReuse)
-	if !RecordHydrationEnabled() || lease == nil {
+	_, scoped := ctx.Value(metadataRecordScopeKey{}).(MetadataRecordScope)
+	if !RecordHydrationEnabled() || lease == nil || scoped {
 		return cloneBootstrap(data)
 	}
 	lease.mu.Lock()
