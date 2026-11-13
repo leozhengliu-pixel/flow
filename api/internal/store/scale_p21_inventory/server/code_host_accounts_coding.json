@@ -5,6 +5,7 @@
     "MemberAccount": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "SW11 inspection: applyUsernames calls workspaceUsernames over ordered users, members and userSettings; explicit-name claims and numeric suffix collisions depend on the complete workspace directory. A target-only selection changes returned Username. Requires a bounded native username resolver before migration; no scoped replacement certified.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
