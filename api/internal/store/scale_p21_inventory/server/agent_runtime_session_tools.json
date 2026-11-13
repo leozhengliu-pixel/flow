@@ -1,10 +1,11 @@
 {
   "source": "server/agent_runtime_session_tools.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "workerChatAsksLoopQuestions": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode uses trusted AgentSessionHasDraftLoop SQL scalars for exact session owner and draft-loop membership, without hydrating either legal oversized session or loop bodies. Original off branch and internal-conversation flag behavior remain: native reads retain live ResolveAccess/ValidateAccess; metadata mode delegates run authority to its separately registered tool boundary. TestScaleP21SW16AgentSessionDraftLoop and TestScaleP21SW16WorkerDraftLoopDifferential passed twice on one persistent SQLite file, covering principal/key matrix, both internal-record modes, valid/invalid app principals, exact IDs/case/old slugs/malformed references, deleted sessions, missing/foreign owners/workspaces, queued/replayed revocation, unchanged canonical state, cancellation recovery and zero full decodes/work leaks.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]
@@ -12,6 +13,7 @@
     "workerChatSession": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "The legacy metadata branch can return assembled warm-cache Agent messages while canonical point readers retain offloaded references; it also accepts legal session headers beyond the ordinary 256 KiB selected-record limit. A scoped body read or unconditional native authorization would change this helper's existing contracts. Keep pending until bounded full-session output and both internal-record flag branches are covered.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

@@ -329,6 +329,7 @@
     "updateAsk": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Point ask/team/template inputs do not preserve legacy aggregate lookup: TestScaleP21SW16AskAggregateCollisionDifferential reproduced an earlier Document.ContentData object with id equal to the ask ID winning realtime enrichment, while a point scope emitted the Ask. The attempted point migration was reverted; retain the original writer until a bounded aggregate compatibility resolver covers that closure.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

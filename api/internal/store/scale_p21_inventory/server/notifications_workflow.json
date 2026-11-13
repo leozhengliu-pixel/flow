@@ -1,6 +1,6 @@
 {
   "source": "server/notifications_workflow.go",
-  "unmigrated": 19,
+  "unmigrated": 18,
   "consumers": {
     "acknowledgeDesktopNotifications": {
       "owner": "P18",
@@ -21,7 +21,8 @@
     },
     "createTeamLabel": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads only teams/pathTeamID and optional labelGroups/inputGroupID, appending labels with indexed canonical order. Original callback, group scope/resource/archive validation and off-mode accessor remain exact; malformed absent keys preserve callback error precedence. The generated label_ aggregate resolves to the newly created label through the typed lookup. TestScaleP21SW15TeamLabelCreationDifferential and Boundaries compare the full principal/key matrix including private/inherited team rows, canonical actor/new label and existing order/bytes, complete webhook/realtime payloads, missing/foreign/malformed references, queued/replay revocation, cancellation, explicit selected/output budgets and recovery with zero full decodes.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspaceWithAggregate"

@@ -121,6 +121,26 @@ func (s *server) workerChatAsksLoopQuestions(run store.AgentRun) bool {
 	if !chat || !info.LoopQuestions {
 		return false
 	}
+	if s.store.BoundedMetadataEnabled() {
+		principal, err := decodeAgentRunPrincipal(run)
+		if err != nil {
+			return false
+		}
+		ctx := context.Background()
+		var access store.AccessContext
+		checkAccess := internalRecordsEnabled("FLOW_INTERNAL_CONVERSATION_RECORDS")
+		if checkAccess {
+			access, err = s.store.ResolveAccess(ctx, run.WorkspaceKey, principal.UserID, nil)
+			if err != nil {
+				return false
+			}
+		}
+		draft, err := s.store.AgentSessionHasDraftLoop(ctx, run.WorkspaceKey, run.SessionID, principal.UserID)
+		if err != nil || !draft {
+			return false
+		}
+		return !checkAccess || s.store.ValidateAccess(ctx, access) == nil
+	}
 	session, ok := s.workerChatSession(run)
 	if !ok || len(session.LoopIDs) == 0 {
 		return false

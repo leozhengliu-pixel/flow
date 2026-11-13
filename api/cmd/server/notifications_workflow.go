@@ -1177,7 +1177,14 @@ func (s *server) createTeamLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	teamID := r.PathValue("id")
 	var created domain.IssueLabel
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "issue_label.created", input, func(data *domain.Bootstrap) (string, error) {
+	scope := store.MetadataAppendScope{AppendKinds: []string{"labels"}}
+	if len(teamID) <= 191 && !strings.ContainsRune(teamID, '\x00') {
+		scope.Read = append(scope.Read, store.RecordKey{Kind: "teams", ID: teamID})
+	}
+	if input.GroupID != nil && *input.GroupID != "" && len(*input.GroupID) <= 191 && !strings.ContainsRune(*input.GroupID, '\x00') {
+		scope.Read = append(scope.Read, store.RecordKey{Kind: "labelGroups", ID: *input.GroupID})
+	}
+	err := s.store.MutateWorkspaceAppendingWithAggregate(r.Context(), workspaceKey(r), "issue_label.created", input, scope, func(data *domain.Bootstrap) (string, error) {
 		if !teamExists(data, teamID) {
 			return "", errNotFound
 		}
