@@ -599,6 +599,12 @@ func (s *server) startGitLabAccountLink(w http.ResponseWriter, r *http.Request) 
 
 // codeHostWorkspaceURLKey is the workspace's URL key (connector secrets are keyed by it).
 func (s *server) codeHostWorkspaceURLKey(key string) string {
+	if s.store.BoundedMetadataEnabled() {
+		if data, ok := s.store.WorkspaceSettingsMetadata(key); ok && data.Workspace.URLKey != "" {
+			return data.Workspace.URLKey
+		}
+		return key
+	}
 	if data, ok := s.store.WorkspaceMetadataFields(key, "integrationConnections"); ok && data.Workspace.URLKey != "" {
 		return data.Workspace.URLKey
 	}

@@ -1,10 +1,11 @@
 {
   "source": "server/owned_images.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "resolveWorkspaceLogo": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode reads only resident workspace identity/current logo URL and uses the upload owner row's purpose, workspace key and content type. Active-member authorization remains in serveOwnedImage's readable callback. Off mode keeps WorkspaceMetadata. TestScaleP21M1CoreReadsDifferential compares current/obsolete logos with oversized unrelated records.",
       "accessors": [
         "WorkspaceMetadata"
       ]

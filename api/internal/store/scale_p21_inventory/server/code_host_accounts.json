@@ -1,10 +1,11 @@
 {
   "source": "server/code_host_accounts.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "auditCodeHostAccount": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Needs shared change: account linking/unlinking commits before this deferred audit. The scoped writer rejects an inactive actor accepted by the old audit writer; TestScaleP21M1DeferredAuditSharedPrerequisite proves the mismatch. Preserve original actor attribution and the original writer.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -12,7 +13,8 @@
     },
     "codeHostWorkspaceURLKey": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode reads only resident workspace identity to canonicalize the key, never integration bodies; off mode retains the exact field accessor. TestScaleP21M1CoreReadsDifferential covers default, explicit and missing keys alongside the role/credential matrix and oversized unrelated metadata. This trusted key helper does not authorize account access.",
       "accessors": [
         "WorkspaceMetadataFields"
       ]

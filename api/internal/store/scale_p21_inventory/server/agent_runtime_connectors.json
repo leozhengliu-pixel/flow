@@ -5,6 +5,7 @@
     "auditAgentRunConnectorCall": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Needs shared change: a connector call may already have changed an external system before its deferred audit; scoped actor validation can discard the audit after membership revocation. TestScaleP21M1DeferredAuditSharedPrerequisite proves the legacy/scoped difference. Preserve the original writer.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

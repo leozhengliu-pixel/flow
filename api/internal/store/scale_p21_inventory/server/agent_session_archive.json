@@ -5,6 +5,7 @@
     "auditAgentSessionArchive": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Needs shared change: deferred audits retain an actor after the archived operation commits; the scoped writer rejects a now-inactive actor that the legacy writer records. TestScaleP21M1DeferredAuditSharedPrerequisite proves the mismatch. Keep the original writer until audit attribution and membership validation are equivalent.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

@@ -1,10 +1,11 @@
 {
   "source": "store/release_progress.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "PopulateReleaseProgress": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Only the default workspace URL key is read from resident core in bounded mode. Caller-owned releases/issues and the existing indexed issue-state query preserve progress semantics; off mode keeps WorkspaceMetadata. TestScaleP21M1CoreMetadataDifferential compares complete output and confirms no full metadata decode with unrelated oversized bodies.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata"

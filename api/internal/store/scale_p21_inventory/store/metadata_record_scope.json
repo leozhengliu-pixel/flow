@@ -1,10 +1,11 @@
 {
   "source": "store/metadata_record_scope.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "HydrateWorkspaceMetadata": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "This existing trusted reader declares its caller-supplied scope before BeginWorkspaceRead, enforces key/encoded/decoded-object budgets, returns owned data and releases its snapshot/admission. It does not authorize; its existing trash-link projection is unchanged and it is unsuitable for restore writers. TestScaleP21M1CoreMetadataDifferential compares explicit/missing/empty scopes, ownership, cancellation, large-record budget errors and unrelated canonical bytes across legacy and bounded views.",
       "accessors": [
         "BeginWorkspaceRead"
       ]

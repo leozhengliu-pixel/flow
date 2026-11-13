@@ -342,7 +342,11 @@ func (s *server) finishGitHubAppSetup(w http.ResponseWriter, r *http.Request) {
 // checkGitHubAppMember checks the state's user is an active member (admin
 // when required) of the state's workspace.
 func (s *server) checkGitHubAppMember(ctx context.Context, workspace, userID string, admin bool) error {
-	data, ok := s.store.WorkspaceMetadata(workspace)
+	read := s.store.WorkspaceMetadata
+	if s.store.BoundedMetadataEnabled() {
+		read = s.store.WorkspaceSettingsMetadata
+	}
+	data, ok := read(workspace)
 	if !ok || data.Workspace.URLKey != workspace {
 		return errors.New("The workspace no longer exists")
 	}

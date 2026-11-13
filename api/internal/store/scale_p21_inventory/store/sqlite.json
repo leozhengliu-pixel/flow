@@ -5,6 +5,7 @@
     "Account": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "The identity portion is resident core, but issueCollectionCounts still materializes every count row, including orphan/purging workspace keys outside that resident catalog. It needs a bounded count selection tied to the account/catalog snapshot before this complete response can be certified. The small core differential does not certify that aggregate input bound.",
       "accessors": [
         "resident-state"
       ]

@@ -1,10 +1,11 @@
 {
   "source": "server/coding_environments_api.go",
-  "unmigrated": 3,
+  "unmigrated": 1,
   "consumers": {
     "auditCodingEnvironment": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Needs shared change: the environment operation commits before its audit. Scoped actor validation discards an audit if membership is revoked meanwhile; the legacy writer records it. TestScaleP21M1DeferredAuditSharedPrerequisite proves the mismatch.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -12,14 +13,16 @@
     },
     "codingEnvironmentAccess": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded input is resident workspace identity and workspaceSettings; feature and live WorkspaceRole checks and admin/guest semantics remain intact. The exact legacy accessor remains off mode. TestScaleP21M1CoreReadsDifferential compares responses across principal/credential classes, cross-workspace users, default/missing workspaces and oversized unrelated records.",
       "accessors": [
         "WorkspaceMetadata"
       ]
     },
     "codingWorkspaceKey": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Only resident workspace IDs/URL keys are inspected in bounded mode; explicit request keys retain precedence and off mode keeps WorkspaceMetadata. The catalog is bounded by the resident policy process cap. TestScaleP21M1CoreReadsDifferential compares explicit, default, missing and alternate workspace identities. Authorization remains in the caller.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata"

@@ -209,7 +209,14 @@ func (s *server) decorateCycleCapacity(ctx context.Context, data *domain.Bootstr
 	}
 	workspace := data.Workspace.URLKey
 	if workspace == "" {
-		if metadata, ok := s.store.WorkspaceMetadataFields(""); ok {
+		var metadata domain.Bootstrap
+		var ok bool
+		if s.store.BoundedMetadataEnabled() {
+			metadata, ok = s.store.WorkspaceSettingsMetadata("")
+		} else {
+			metadata, ok = s.store.WorkspaceMetadataFields("")
+		}
+		if ok {
 			workspace = metadata.Workspace.URLKey
 		}
 	}

@@ -156,7 +156,11 @@ type codingEnvironmentRequest struct {
 // codingEnvironmentAccess checks the workspace, the coding-sessions feature
 // flag and the caller's role. Guests are refused.
 func (s *server) codingEnvironmentAccess(w http.ResponseWriter, r *http.Request) (codingEnvironmentRequest, bool) {
-	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	read := s.store.WorkspaceMetadata
+	if s.store.BoundedMetadataEnabled() {
+		read = s.store.WorkspaceSettingsMetadata
+	}
+	data, ok := read(workspaceKey(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "Workspace not found")
 		return codingEnvironmentRequest{}, false
@@ -185,7 +189,11 @@ func (s *server) codingWorkspaceKey(r *http.Request, data domain.Bootstrap) stri
 		return key
 	}
 	for _, key := range s.store.WorkspaceKeys() {
-		if candidate, ok := s.store.WorkspaceMetadata(key); ok && candidate.Workspace.ID == data.Workspace.ID {
+		read := s.store.WorkspaceMetadata
+		if s.store.BoundedMetadataEnabled() {
+			read = s.store.WorkspaceSettingsMetadata
+		}
+		if candidate, ok := read(key); ok && candidate.Workspace.ID == data.Workspace.ID {
 			return key
 		}
 	}
