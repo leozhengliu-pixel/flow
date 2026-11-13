@@ -1,6 +1,6 @@
 {
   "source": "server/jira_integration.go",
-  "unmigrated": 6,
+  "unmigrated": 4,
   "consumers": {
     "createJiraLink": {
       "owner": "P21",
@@ -12,7 +12,8 @@
     },
     "deleteJiraLink": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Deletes jiraLinks/trimmed-id only and preserves the original missing-ID result. TestScaleP21M3JiraLinkDifferential compares missing/valid IDs, canonical rows, unrelated links and audit/event effects across principal/credential classes plus cross-workspace and queued/replay revocation. Creation uniqueness/order and credential-projected remote reads remain separate blockers.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -41,7 +42,8 @@
     },
     "updateJiraLink": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Reads and writes jiraLinks/trimmed-id only; sync-direction normalization, replacement-vs-omission for status maps, no-op and timestamp behavior remain unchanged. The callback uses no associated team/state records. TestScaleP21M3JiraLinkDifferential compares canonical state, missing IDs, unrelated links and audit/event effects across principal/credential classes, cross-workspace and queued/replay revocation. Middleware remains independently registered.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

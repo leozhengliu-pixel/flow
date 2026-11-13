@@ -1,10 +1,11 @@
 {
   "source": "server/integration_oauth.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "persistOAuthIntegrationError": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Writes only integrationConnections/id after the original provider and ID check; preserves LastError, timestamps, event payload and the original caller's ignored-error behavior. TestScaleP21M3IntegrationErrorDifferential compares canonical records, unrelated body fingerprints, missing IDs and webhook/realtime/audit effects across principal and credential classes.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
