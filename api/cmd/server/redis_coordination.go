@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,23 +29,18 @@ func (s *server) publishRealtime(workspace string, event domain.RealtimeEvent) {
 	if s.coordinator == nil {
 		return
 	}
-	if mode != "on" && !remoteEventKeepsState(event.Type) && !ephemeralRealtimeEvent(event.Type) {
+	if !remoteEventKeepsState(event.Type) && !ephemeralRealtimeEvent(event.Type) {
 		// Before the event (and the writer's response): a request on another
 		// server then reloads the workspace instead of using its old copy.
+		// On mode does not prove that every peer understands SQL head hints.
 		// Signals (agent streaming, notifications) change no workspace state.
 		s.bumpWorkspaceVersion(workspace)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if mode == "on" && event.Seq > 0 {
-		// Shadow preserves the old envelope for mixed-version readers. Once
-		// all peers consume SQL, Redis carries only the durable head hint.
-		if raw, err := s.store.RecordJournalEventSeq(ctx, event.ID); err == nil {
-			if head, err := strconv.ParseInt(raw, 10, 64); err == nil && head > 0 {
-				event = domain.RealtimeEvent{ID: event.ID, Seq: head, Type: peerHeadEventType, ClientID: event.ClientID, CreatedAt: event.CreatedAt}
-			}
-		}
-	}
+	// Keep the business envelope for old peers until an explicit capability
+	// proof exists. SQL consumers coalesce sequenced envelopes without
+	// retaining their payload and still install changes from the journal.
 	if err := s.coordinator.Publish(ctx, workspace, event); err != nil {
 		log.Printf("Redis publish workspace=%s event=%s: %v", workspace, event.Type, err)
 	}

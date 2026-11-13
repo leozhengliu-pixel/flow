@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -13,7 +11,7 @@ import (
 	"flow/api/internal/idgen"
 )
 
-func TestScaleP11CompactHeadAndMixedReaderEnvelope(t *testing.T) {
+func TestScaleP11MixedReaderEnvelope(t *testing.T) {
 	t.Setenv("FLOW_RECORD_PEER_SYNC", "shadow")
 	t.Setenv("FLOW_RECORD_JOURNAL", "on")
 	f := scaleP11NewFixture(t, 1)
@@ -50,20 +48,8 @@ func TestScaleP11CompactHeadAndMixedReaderEnvelope(t *testing.T) {
 		service.publishRealtime(f.workspace, event)
 		select {
 		case envelope := <-envelopes:
-			if mode == "shadow" {
-				if envelope.Event.Type != event.Type || !bytes.Equal(envelope.Event.Payload, event.Payload) || envelope.Event.Seq != event.Seq {
-					t.Fatal("shadow changed the legacy Redis envelope")
-				}
-			} else {
-				journal, err := f.writer.RecordJournalEventSeq(t.Context(), event.ID)
-				if err != nil {
-					t.Fatal(err)
-				}
-				head, _ := strconv.ParseInt(journal, 10, 64)
-				raw, _ := json.Marshal(envelope.Event)
-				if envelope.Event.Type != peerHeadEventType || envelope.Event.Seq != head || envelope.Event.ClientID != event.ClientID || len(envelope.Event.Payload) != 0 || len(raw) > 512 {
-					t.Fatal("on did not publish a compact journal head")
-				}
+			if envelope.Event.Type != event.Type || !bytes.Equal(envelope.Event.Payload, event.Payload) || envelope.Event.Seq != event.Seq || envelope.Event.ClientID != event.ClientID {
+				t.Fatal("peer mode changed the mixed-reader business envelope")
 			}
 		case <-time.After(3 * time.Second):
 			t.Fatal("Redis did not deliver the peer envelope")

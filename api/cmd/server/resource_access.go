@@ -95,6 +95,11 @@ func (s *server) serveResourceRead(w http.ResponseWriter, r *http.Request, kind 
 	if recordAccessMode() == "shadow" {
 		return false
 	}
+	// An off replica can disable shared journal authority during a rolling
+	// upgrade. The legacy handler still reads and authorizes canonical data.
+	if errors.Is(result.err, store.ErrRecordJournalUnavailable) {
+		return false
+	}
 	if result.err != nil {
 		writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
 		return true

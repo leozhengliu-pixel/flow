@@ -985,6 +985,9 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	if _, _, ok := recordAccessRoute(r); ok && recordAccessMode() != "off" {
 		if recordAccessMode() == "on" {
 			result := s.requestResourceRead(r, workspace, userID)
+			if errors.Is(result.err, store.ErrRecordJournalUnavailable) {
+				return s.resourceAllowedLegacy(r, workspace, userID)
+			}
 			return result.err == nil && result.allowed
 		}
 		allowed := s.resourceAllowedLegacy(r, workspace, userID)
