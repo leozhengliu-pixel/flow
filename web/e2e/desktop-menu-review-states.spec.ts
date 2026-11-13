@@ -3,7 +3,8 @@ import { writeFileSync } from 'node:fs'
 import { test } from './workspace-fixture'
 
 test.use({ deviceScaleFactor: 2, launchOptions: { args: ['--force-device-scale-factor=2'] } })
-test.afterEach(async ({ request, workspaceKey }) => {
+test.afterEach(async ({ page, request, workspaceKey }) => {
+  await page.unrouteAll({ behavior: 'wait' })
   await request.patch('/api/account/settings', { headers: { 'X-Workspace-Key': workspaceKey }, data: { interfaceTheme: 'System preference', language: 'en-US' } })
 })
 
