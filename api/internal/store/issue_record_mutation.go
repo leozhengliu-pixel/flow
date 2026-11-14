@@ -246,6 +246,15 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 		if target == nil {
 			return sql.ErrNoRows
 		}
+		if s.BoundedMetadataEnabled() {
+			states, err := s.loadIssueWorkflowStates(ctx, workspace, &metadata, scope.Payload)
+			if err != nil {
+				return err
+			}
+			defer states.close()
+			metadata.States = states.states
+			storedMetadata.States = slices.Clone(states.states)
+		}
 		metadata.Activities = map[string][]domain.ActivityEvent{}
 		metadata.Comments = map[string][]domain.Comment{}
 		metadata.ActivityHistoryHeads = map[string]domain.ActivityEvent{}

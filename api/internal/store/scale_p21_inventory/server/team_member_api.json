@@ -1,6 +1,6 @@
 {
   "source": "server/team_member_api.go",
-  "unmigrated": 3,
+  "unmigrated": 2,
   "consumers": {
     "recordTeamMemberAudit": {
       "owner": "P21",
@@ -39,7 +39,8 @@
     },
     "teamMemberNames": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode uses the shared independently admitted MemberDirectoryRead over the exact installed logical source: only User ID/Name/DisplayName/Email and Team ID/Name/Key. Staged membership overlays preserve complete ListMembers success/error behavior, including unrelated malformed app installation fallback and global installed OAuth ClientID/name precedence. Literal WorkspaceMetadataFields plus ListMembers dispatch remains exact off mode. Name owners register with the authenticated outer response; bounded direct put/delete/sync establish a nested-safe local response scope. recordTeamMemberAudit continues decorating the original changes slice before its best-effort writer, preserving first-snapshot nonempty UserName through subsequent delete/sync decoration and HTTP encoding. Unscoped current audit callers consume no decorated strings after their audit boundary and close locally. Store/server HotMemberDirectory tests cover the trusted principal/key matrix, display/audit metadata differentials, native scalars, invalid app all-or-none fallback, large ignored bodies, explicit budgets, and request-owned response encoding. This helper review does not certify the separate unchanged audit writer or publicMetadata authorization path.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],

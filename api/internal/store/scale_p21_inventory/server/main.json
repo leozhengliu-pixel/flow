@@ -1,6 +1,6 @@
 {
   "source": "server/main.go",
-  "unmigrated": 77,
+  "unmigrated": 76,
   "consumers": {
     "attachmentVisible": {
       "owner": "P21",
@@ -591,7 +591,8 @@
     },
     "listNotifications": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "The selected-key bounded branch resolves live access and uses NotificationVisibilityRead, holding its dynamic output admission through writeJSON; nonselected credentials retain QueryNotifications and the flag-off selected branch remains literal. Shared TestScaleP21HotNotificationsDifferential covers permission, reference precedence, hidden actors/counts and cursor semantics; TestScaleP21HotNotificationHandler compares actual endpoint JSON for selected-empty/public/private and unrestricted keys and checks zero full decodes, retained response admission and release.",
       "accessors": [
         "publicMetadata"
       ],

@@ -42,14 +42,35 @@ func (s *server) requestResourceRead(r *http.Request, workspace, userID string) 
 	if credential, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
 		key = &credential
 	}
-	if cached, ok := r.Context().Value(resourceReadHandoffKey{}).(*resourceReadHandoff); ok && cached.workspace == workspace && cached.userID == userID && cached.kind == kind && cached.ref == ref && cached.access.MatchesCredential(key) {
+	if cached, ok := r.Context().Value(resourceReadHandoffKey{}).(*resourceReadHandoff); ok && !cached.released && cached.workspace == workspace && cached.userID == userID && cached.kind == kind && cached.ref == ref && cached.access.MatchesCredential(key) {
 		return cached
 	}
-	result := &resourceReadHandoff{workspace: workspace, userID: userID, kind: kind, ref: ref}
+	result := &resourceReadHandoff{workspace: workspace, userID: userID, kind: kind, ref: ref, bounded: s.store.BoundedMetadataEnabled()}
+	if result.bounded {
+		if scope, ok := r.Context().Value(requestResourceReadsKey{}).(*requestResourceReads); ok && !scope.add(result) {
+			result.err = store.ErrMetadataRecordQuery
+			return result
+		}
+	}
 	for attempt := 0; attempt < 3; attempt++ {
+		if result.bounded {
+			result.release()
+		}
 		result.access, result.err = s.store.ResolveAccess(r.Context(), workspace, userID, key)
 		if result.err == nil {
-			result.data, result.allowed, result.err = s.store.ResourceReadMetadata(r.Context(), result.access, kind, ref)
+			if result.bounded {
+				result.owner, result.err = s.store.BeginResourceRead(r.Context(), result.access, kind, ref)
+				if result.err == nil {
+					result.released = false
+					result.data, result.allowed = result.owner.Data, result.owner.Allowed
+					if scope, ok := r.Context().Value(requestResourceReadsKey{}).(*requestResourceReads); ok && !scope.add(result) {
+						result.release()
+						result.err = store.ErrMetadataRecordQuery
+					}
+				}
+			} else {
+				result.data, result.allowed, result.err = s.store.ResourceReadMetadata(r.Context(), result.access, kind, ref)
+			}
 		}
 		if !errors.Is(result.err, store.ErrResourceAccessChanged) || attempt == 2 {
 			break
@@ -76,6 +97,7 @@ func logRecordAccessDifference(r *http.Request, stage string) {
 
 func (s *server) shadowResourceAuthorization(r *http.Request, workspace, userID string, allowed bool) bool {
 	result := s.requestResourceRead(r, workspace, userID)
+	defer result.releaseUnscoped()
 	if result.err != nil || result.allowed != allowed {
 		logRecordAccessDifference(r, "authorization")
 	}
@@ -92,6 +114,7 @@ func (s *server) serveResourceRead(w http.ResponseWriter, r *http.Request, kind 
 		return false
 	}
 	result := s.requestResourceRead(r, workspaceKey(r), authUser(r).ID)
+	defer result.releaseUnscoped()
 	if recordAccessMode() == "shadow" {
 		return false
 	}
@@ -122,6 +145,7 @@ func (s *server) shadowResourceRecord(r *http.Request, kind string, item any) {
 		return
 	}
 	result := s.requestResourceRead(r, workspaceKey(r), authUser(r).ID)
+	defer result.releaseUnscoped()
 	var candidate any
 	if kind == "projects" && len(result.data.Projects) == 1 {
 		candidate = result.data.Projects[0]

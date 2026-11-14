@@ -1,10 +1,11 @@
 {
   "source": "server/team_settings_scheduler.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "maintainTeamSettings": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Trusted minute ticker replaces only its metadata read with BeginTeamMaintenanceRead: installed native team IDs and AutoCloseStale/StaleMonths/AutoArchiveMonths/StaleStatusID remain owned through the unchanged sweep and issue mutations. The literal off WorkspaceMetadataFields call and sweep body remain exact. Projects stays nil like that original fields-only accessor, so the legacy project-wide MutateWorkspace branch remains unreachable. UpdateIssueRecord supplies affected-team workflow states for configured and default canceled status resolution. TestScaleP21HotTeamMaintenanceIdleAndAutomation runs twice on persistent SQLite, comparing literal/bounded behavior separately for warm/reloaded generations: actual public/private stale closure, linked archive/project progress/count, unchanged recent issue, exact workflow/archive timestamps, canonical activity actors/types/automation metadata, zero full metadata decodes, cancellation and identical idle/grouped-query counts. Legacy reload normalization remains unchanged (private stale no-op and three grouped queries versus two warm); bounded SQL is 81/55 versus literal 90/64.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",

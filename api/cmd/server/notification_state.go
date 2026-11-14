@@ -99,6 +99,14 @@ func (s *server) projectNotificationState(ctx context.Context, access store.Acce
 // pushes. A single read snapshot binds the scoped count, IDs and revision;
 // revalidate outside that snapshot before releasing any sensitive result.
 func (s *server) scopedNotificationState(ctx context.Context, access store.AccessContext, source *store.NotificationState) (store.NotificationState, error) {
+	if s.store.BoundedMetadataEnabled() {
+		read, err := s.store.BeginNotificationVisibilityRead(ctx, access)
+		if err != nil {
+			return store.NotificationState{}, err
+		}
+		defer read.Close()
+		return read.State(source)
+	}
 	workspace, key, err := s.store.NotificationStateCredential(access)
 	if err != nil {
 		return store.NotificationState{}, err

@@ -1,10 +1,11 @@
 {
   "source": "server/notification_state.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "scopedNotificationState": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded mode delegates scoped count, revision and changed-ID filtering to the shared NotificationVisibilityRead, preserving the literal original BeginWorkspaceRead/PagedWorkspaceMetadata path off mode. The shared reader selects installed logical M only at its snapshot revision and canonical reference headers otherwise, reuses viewer policy and indexed issue visibility, preserves notification reference precedence and selected-empty unreferenced survivors, changed-ID order/duplicates, missing-record invalidation, and trailing live authority. TestScaleP21HotNotificationsDifferential compares old and bounded state/pages/counts across selected/empty/private/app scopes, admins/private outsiders/members/guests, hidden actors/references, read/lifecycle flags, cursors, and source invalidation. Store paging/source/budget tests cover bounded count scans, canonical fallback, cancellation, held ownership and membership revocation.",
       "accessors": [
         "BeginWorkspaceRead",
         "PagedWorkspaceMetadata"

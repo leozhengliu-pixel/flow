@@ -1,0 +1,19 @@
+{
+  "source": "store/scale_p21_resource_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginResourceRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned project/initiative HTTP detail projection preserves certified logical-source versus canonical fallback, existing slug precedence after visibility/credential filtering, compatibility normalization, live favorites, zero paged issue count and trailing authority. Native identities stream through one parser buffer; policy headers are transient and only winning detail/reference closure remains charged through Close. Canonical target/reference queries preflight byte/structural decode work in one repeatable snapshot; alias headers use a transient maximum-row allowance while genuine matching candidates remain quota charged. Matching caller snapshots are borrowed without closing. TestScaleP21ResourceReadDifferential, LargeOwnershipAndErrors, InheritedSnapshotPoolOne, NativeWireTarget, RevokedAuthority, UnrelatedCountBound and NativeDuplicateReferences cover literal warm/reloaded/canonical M variants, exact old aliases, hidden/duplicate refs, defaults, large detail, timestamp JSON, revocation, mutable ownership, cancellation, budgets and constant held work across 10x unrelated rows.",
+      "accessors": [
+        "resident-state"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Shared GET/HEAD project and initiative detail authorization and output.",
+      "callers": [
+        "server/server.requestResourceRead"
+      ]
+    }
+  }
+}

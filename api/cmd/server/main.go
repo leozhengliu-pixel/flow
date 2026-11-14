@@ -2628,11 +2628,26 @@ func (s *server) listNotifications(w http.ResponseWriter, r *http.Request) {
 	var result store.NotificationPage
 	var err error
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
-		projected, ok := s.publicMetadata(w, r)
-		if !ok {
-			return
+		if s.store.BoundedMetadataEnabled() {
+			access, accessErr := s.store.ResolveAccess(r.Context(), data.Workspace.URLKey, query.UserID, &key)
+			if accessErr != nil {
+				issueRecordsError(w, accessErr)
+				return
+			}
+			reader, readErr := s.store.BeginNotificationVisibilityRead(r.Context(), access)
+			if readErr != nil {
+				issueRecordsError(w, readErr)
+				return
+			}
+			defer reader.Close()
+			result, err = reader.Query(query)
+		} else {
+			projected, ok := s.publicMetadata(w, r)
+			if !ok {
+				return
+			}
+			result, err = s.queryAPIKeyNotifications(r.Context(), key, projected, query)
 		}
-		result, err = s.queryAPIKeyNotifications(r.Context(), key, projected, query)
 	} else {
 		result, err = s.store.QueryNotifications(r.Context(), query)
 	}

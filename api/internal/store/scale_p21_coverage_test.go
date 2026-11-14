@@ -49,7 +49,7 @@ func scaleP21SnapshotConsumer(node ast.Node) bool {
 			found = true
 		}
 		if slices.Contains(scaleP21SnapshotMethods, selector.Sel.Name) ||
-			slices.Contains([]string{"VisitOAuthApplicationLogos", "boundedOAuthAppIconAccess", "ownedImageAccess", "InstalledReviewReferenceVisible"}, selector.Sel.Name) {
+			slices.Contains([]string{"VisitOAuthApplicationLogos", "boundedOAuthAppIconAccess", "ownedImageAccess", "InstalledReviewReferenceVisible", "BeginResourceRead", "BeginTeamMaintenanceRead", "BeginPulseRead", "BeginPulseScheduleRead", "BeginNotificationVisibilityRead", "BeginMemberDirectoryRead"}, selector.Sel.Name) {
 			if qualifier, ok := selector.X.(*ast.Ident); !ok || qualifier.Name != "domain" {
 				found = true
 			}
@@ -293,6 +293,12 @@ func TestScaleP21InventoryRejectsNewHandlerOrMethodValue(t *testing.T) {
 		`package probe; func request() { _ = s.boundedOAuthAppIconAccess(ctx, name, owner, userID, true) }`,
 		`package probe; func request() { _ = s.ownedImageAccess(ctx, name, userID, true) }`,
 		`package probe; func request() { _ = s.InstalledReviewReferenceVisible(ctx, key, ref, query) }`,
+		`package probe; func request() { _ = s.BeginResourceRead(ctx, access, kind, ref) }`,
+		`package probe; func request() { _ = s.BeginTeamMaintenanceRead(ctx, key) }`,
+		`package probe; func request() { _ = s.BeginPulseRead(ctx, key, true) }`,
+		`package probe; func request() { _ = s.BeginPulseScheduleRead(ctx, key) }`,
+		`package probe; func request() { _ = s.BeginNotificationVisibilityRead(ctx, access) }`,
+		`package probe; func request() { _ = s.BeginMemberDirectoryRead(ctx, key, true) }`,
 		`package probe; func job() { _ = s.BeginGitLabConnectionConfigsRead(ctx, key) }`,
 		`package probe; func job() { _ = s.BeginDueNotificationDeliveryRead(ctx, key, statuses, now) }`,
 	} {

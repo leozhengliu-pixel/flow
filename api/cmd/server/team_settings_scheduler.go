@@ -11,7 +11,21 @@ import (
 )
 
 func (s *server) maintainTeamSettings(ctx context.Context, key string, now time.Time) error {
-	metadata, ok := s.store.WorkspaceMetadataFields(key, "teams", "teamSettings")
+	var metadata domain.Bootstrap
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginTeamMaintenanceRead(ctx, key)
+		if err != nil {
+			return err
+		}
+		ok = found
+		if found {
+			defer read.Close()
+			metadata = read.Data
+		}
+	} else {
+		metadata, ok = s.store.WorkspaceMetadataFields(key, "teams", "teamSettings")
+	}
 	if !ok {
 		return nil
 	}

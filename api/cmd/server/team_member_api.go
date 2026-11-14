@@ -135,10 +135,24 @@ func teamMemberOriginList(values []string) ([]string, error) {
 type teamMemberNames struct {
 	users map[string]domain.User
 	teams map[string]domain.Team
+	close func()
+	err   error
 }
 
 func (s *server) teamMemberNames(ctx context.Context, workspace string) teamMemberNames {
 	names := teamMemberNames{users: map[string]domain.User{}, teams: map[string]domain.Team{}}
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginMemberDirectoryRead(ctx, workspace, !s.authDisabled)
+		if err != nil || !found {
+			names.err = err
+			return names
+		}
+		names.users, names.teams = read.Users, read.Teams
+		if !registerRequestReadClose(ctx, read.Close) {
+			names.close = read.Close
+		}
+		return names
+	}
 	data, ok := s.store.WorkspaceMetadataFields(workspace, "users", "teams")
 	if !ok {
 		return names
@@ -157,6 +171,12 @@ func (s *server) teamMemberNames(ctx context.Context, workspace string) teamMemb
 		}
 	}
 	return names
+}
+
+func (names teamMemberNames) closeUnscoped() {
+	if names.close != nil {
+		names.close()
+	}
 }
 
 func (names teamMemberNames) decorate(changes []domain.TeamMemberChange) {
@@ -241,6 +261,11 @@ func (s *server) recordTeamMemberAudit(ctx context.Context, workspace string, ac
 		return
 	}
 	names := s.teamMemberNames(ctx, workspace)
+	defer names.closeUnscoped()
+	if names.err != nil {
+		log.Printf("team member audit names workspace=%s: %v", workspace, names.err)
+		return
+	}
 	names.decorate(changes)
 	ctx = store.WithMetadataFields(context.WithoutCancel(ctx), "auditLog")
 	err := s.store.MutateWorkspace(ctx, workspace, "team_member.updated", changes[0].TeamID, map[string]any{"auditEntries": len(changes)}, func(data *domain.Bootstrap) error {
@@ -402,6 +427,11 @@ func (s *server) listTeamMemberships(w http.ResponseWriter, r *http.Request) {
 // PUT /api/teams/{id}/members/{userId}: add the user to the team or change
 // their role. A given origin is stored (also on an existing membership).
 func (s *server) putTeamMembership(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		r, close = beginRequestResourceReads(r)
+		defer close()
+	}
 	data, team, ok := s.teamForMemberRequest(w, r)
 	if !ok {
 		return
@@ -454,6 +484,11 @@ func (s *server) putTeamMembership(w http.ResponseWriter, r *http.Request) {
 // TEAM_OWNER_PROTECTED). dryRun writes nothing and returns what would be
 // removed, with the reason a member would be kept.
 func (s *server) deleteTeamMembership(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		r, close = beginRequestResourceReads(r)
+		defer close()
+	}
 	data, team, ok := s.teamForMemberRequest(w, r)
 	if !ok {
 		return
@@ -482,6 +517,11 @@ func (s *server) deleteTeamMembership(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	names := s.teamMemberNames(r.Context(), workspaceKey(r))
+	defer names.closeUnscoped()
+	if names.err != nil {
+		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load member names")
+		return
+	}
 	removal := domain.TeamMemberRemoval{DryRun: dryRun, Removed: result.Changes, Kept: []domain.TeamMemberKept{}}
 	if removal.Removed == nil {
 		removal.Removed = []domain.TeamMemberChange{}
@@ -510,6 +550,11 @@ func (names teamMemberNames) userName(userID string) string {
 // always kept, and manual members unless "manual" is listed explicitly.
 // dryRun writes nothing.
 func (s *server) syncTeamMemberships(w http.ResponseWriter, r *http.Request) {
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		r, close = beginRequestResourceReads(r)
+		defer close()
+	}
 	data, team, ok := s.teamForMemberRequest(w, r)
 	if !ok {
 		return
@@ -618,6 +663,12 @@ func (s *server) syncTeamMemberships(w http.ResponseWriter, r *http.Request) {
 		result.Removed = append(result.Removed, changed.Changes...)
 	}
 	names := s.teamMemberNames(r.Context(), workspace)
+	defer names.closeUnscoped()
+	if names.err != nil {
+		audit(append(slices.Clone(result.Added), result.Removed...))
+		writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load member names")
+		return
+	}
 	names.decorate(result.Added)
 	names.decorate(result.Removed)
 	for _, list := range [][]domain.TeamMemberKept{result.Kept, result.Skipped} {

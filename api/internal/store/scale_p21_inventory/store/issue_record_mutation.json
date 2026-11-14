@@ -5,6 +5,7 @@
     "UpdateIssueRecord": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Affected issue/family and typed payload target-team workflow states now load from the exact installed logical source with bounded independent ownership through callback and commit; TestScaleP21IssueWorkflowStates covers the shared fix. Remaining metadata inputs used by general UpdateIssueRecord callbacks (including users, labels, projects and documents) are not certified by this workflow-only migration.",
       "accessors": [
         "Bootstrap",
         "storedWorkspace"

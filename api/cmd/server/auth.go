@@ -86,6 +86,11 @@ type workspaceKeyContextKey struct{}
 
 func (s *server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.store != nil && s.store.BoundedMetadataEnabled() {
+			var release func()
+			r, release = beginRequestResourceReads(r)
+			defer release()
+		}
 		if s.authDisabled {
 			viewer := s.store.Account().Viewer
 			ctx := context.WithValue(s.withAuditRequest(r, viewer, nil), authUserContextKey{}, viewer)
@@ -985,6 +990,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	if _, _, ok := recordAccessRoute(r); ok && recordAccessMode() != "off" {
 		if recordAccessMode() == "on" {
 			result := s.requestResourceRead(r, workspace, userID)
+			defer result.releaseUnscoped()
 			return result.err == nil && result.allowed
 		}
 		allowed := s.resourceAllowedLegacy(r, workspace, userID)

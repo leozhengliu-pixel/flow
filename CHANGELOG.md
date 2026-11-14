@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Bounded notification lists and state share exact credential visibility; member-name responses retain owned scalar directories, and stale-issue maintenance loads only affected workflow states. Supported metadata JSON codecs are guarded against unreviewed additions. Bounded metadata stays off by default.
+- Bounded project and initiative detail reads retain selected values and their memory allowance through response encoding, including cancellation and authorization retries. Timestamp output preserves legacy JSON without retaining unrelated records. Bounded metadata stays off by default.
 - Private cold metadata execution preserves the original preference, favorite, feature flag, team and loop-contract writer dispatch, preparing native publication before commit. Canonical merged timestamps retain audited locations, and failures release prepared state. General cold routing and startup remain guarded; bounded metadata stays off by default.
 - Bounded timestamp output preserves legacy JSON and encoding errors for detached native timezones, while native mutation inputs keep their existing availability checks. Bounded metadata stays off by default.
 - Bounded OAuth icon and review-reference permission checks read only their installed lookup fields. Pulse acknowledgement no-ops retain the viewer's installed timestamp without a write transaction, and webhook checks preserve warm native predicates. Cold metadata snapshots can refresh explicitly; the original full metadata writer prepares bounded publication before commit. Other cold writers and startup remain guarded, and bounded metadata stays off by default.

@@ -66,6 +66,9 @@ func (s *SQLiteStore) resourcePolicyRecords(ctx context.Context, workspace, work
 }
 
 func (s *SQLiteStore) resourceReadRecords(ctx context.Context, p *resourceAccessPolicy, kind, ref string) (domain.Bootstrap, error) {
+	if read, ok := ctx.Value(resourceOwnedReadKey{}).(*ResourceRead); ok && read.store == s {
+		return read.records(ctx, p, kind, ref)
+	}
 	data := domain.Bootstrap{}
 	if kind != "projects" && kind != "initiatives" {
 		return data, sql.ErrNoRows
@@ -157,6 +160,9 @@ func (s *SQLiteStore) resourceReadRecords(ctx context.Context, p *resourceAccess
 }
 
 func (s *SQLiteStore) resourceReadCompatibility(ctx context.Context, p *resourceAccessPolicy, data *domain.Bootstrap) error {
+	if read, ok := ctx.Value(resourceOwnedReadKey{}).(*ResourceRead); ok && read.store == s {
+		return read.compatibility(ctx, p, data)
+	}
 	s.mu.RLock()
 	source := s.workspaces[p.workspace]
 	for _, item := range data.Projects {

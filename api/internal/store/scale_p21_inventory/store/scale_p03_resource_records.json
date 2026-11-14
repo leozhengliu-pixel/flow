@@ -1,15 +1,16 @@
 {
   "source": "store/scale_p03_resource_records.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "resourceReadCompatibility": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Owned BeginResourceRead canonical reads dispatch to a charged compatibility implementation that compares only candidate IDs against the pinned installed generation, retains the original wire-equality bypass and target-only normalization with indexed actor/status records. The original body remains literal for legacy callers. This review certifies the owned detail dispatch; standalone ResourceReadMetadata is not certified bounded. TestScaleP21ResourceReadDifferential covers warm/reloaded/canonical compatibility and the permission matrix; LargeOwnershipAndErrors covers legal large detail and released output admission.",
       "accessors": [
         "Bootstrap"
       ],
       "temperature": "hot",
-      "temperatureReason": "Reachable from owner hot middleware/ticker",
+      "temperatureReason": "Canonical fallback compatibility for project and initiative HTTP detail reads.",
       "callers": [
         "store/SQLiteStore.resourceReadRecords"
       ]

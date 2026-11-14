@@ -18,6 +18,10 @@ type resourceReadHandoff struct {
 	data                         domain.Bootstrap
 	allowed                      bool
 	err                          error
+	owner                        *store.ResourceRead
+	scope                        *requestResourceReads
+	bounded                      bool
+	released                     bool
 }
 
 func handOffResourceRead(r *http.Request, result *resourceReadHandoff) {
@@ -65,7 +69,13 @@ func takeIssueWriteMetadata(r *http.Request, workspace, userID string) (domain.B
 }
 
 func handOffMetadata(r *http.Request, key any, workspace, userID string, data domain.Bootstrap) {
-	*r = *r.WithContext(context.WithValue(r.Context(), key, &pagedMetadataHandoff{workspace: workspace, userID: userID, data: data}))
+	handoff := &pagedMetadataHandoff{workspace: workspace, userID: userID, data: data}
+	registerRequestReadClose(r.Context(), func() {
+		if handoff.taken.CompareAndSwap(false, true) {
+			handoff.data = domain.Bootstrap{}
+		}
+	})
+	*r = *r.WithContext(context.WithValue(r.Context(), key, handoff))
 }
 
 // takeMetadata returns the projection the authorization built for this
