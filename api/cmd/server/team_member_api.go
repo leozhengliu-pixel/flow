@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -373,10 +374,75 @@ var errLastActiveTeam = errors.New("You should be a member of at least one activ
 
 // teamForMemberRequest resolves {id} (team id or key) among the teams the
 // caller can see, applying API key team restrictions.
-func (s *server) teamForMemberRequest(w http.ResponseWriter, r *http.Request) (domain.Bootstrap, domain.Team, bool) {
+func (s *server) teamForMemberRequest(w http.ResponseWriter, r *http.Request) (domain.Bootstrap, domain.Team, func(), bool) {
+	if s.store.BoundedMetadataEnabled() {
+		workspace := workspaceKey(r)
+		if workspace == "" && !s.authDisabled {
+			writeAPIError(w, http.StatusBadRequest, apiErrorInvalidInput, "Select a workspace with the X-Workspace-Key header (API keys and OAuth tokens select it automatically)")
+			return domain.Bootstrap{}, domain.Team{}, nil, false
+		}
+		// An authorization's existing one-shot projection retains precedence.
+		// publicMetadata applies its original key/preference projection to that
+		// exact request-owned copy before the normal reference lookup below.
+		handoff, _ := r.Context().Value(pagedMetadataHandoffKey{}).(*pagedMetadataHandoff)
+		handedOff := !s.authDisabled && handoff != nil && handoff.workspace == workspace && handoff.userID == authUser(r).ID && !handoff.taken.Load()
+		if !handedOff {
+			var access *store.AccessContext
+			var err error
+			if !s.authDisabled {
+				if !acquireProjection(r) {
+					if retryAfter, refused := projectionRefused(r); refused {
+						writeProjectionBusy(w, retryAfter)
+					}
+					return domain.Bootstrap{}, domain.Team{}, nil, false
+				}
+				var credential *domain.APIKey
+				if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+					credential = &key
+				}
+				current, resolveErr := s.store.ResolveAccess(r.Context(), workspace, authUser(r).ID, credential)
+				if errors.Is(resolveErr, sql.ErrNoRows) {
+					resolveErr = store.ErrAuthForbidden
+				}
+				err = resolveErr
+				if err == nil {
+					access = &current
+				}
+			}
+			var read *store.TeamMemberRequestRead
+			found := false
+			if err == nil {
+				read, found, err = s.store.BeginTeamMemberRequestRead(r.Context(), workspace, r.PathValue("id"), access, s.authDisabled && r.Method == http.MethodGet)
+			}
+			if err == nil && !found {
+				if s.authDisabled {
+					writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "workspace not found")
+					return domain.Bootstrap{}, domain.Team{}, nil, false
+				}
+				err = store.ErrAuthForbidden
+			}
+			if errors.Is(err, sql.ErrNoRows) {
+				writePublicRecordNotFound(w, "team")
+				return domain.Bootstrap{}, domain.Team{}, nil, false
+			}
+			if err != nil {
+				if errors.Is(err, store.ErrAuthForbidden) {
+					writeAPIError(w, http.StatusForbidden, apiErrorForbidden, "You don't have access to this workspace")
+				} else {
+					writeAPIError(w, http.StatusInternalServerError, apiErrorInternal, "Could not load workspace data")
+				}
+				return domain.Bootstrap{}, domain.Team{}, nil, false
+			}
+			var close func()
+			if !registerRequestReadClose(r.Context(), read.Close) {
+				close = read.Close
+			}
+			return read.Data, read.Team, close, true
+		}
+	}
 	data, ok := s.publicMetadata(w, r)
 	if !ok {
-		return data, domain.Team{}, false
+		return data, domain.Team{}, nil, false
 	}
 	id := r.PathValue("id")
 	index := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == id })
@@ -385,9 +451,9 @@ func (s *server) teamForMemberRequest(w http.ResponseWriter, r *http.Request) (d
 	}
 	if index < 0 {
 		writePublicRecordNotFound(w, "team")
-		return data, domain.Team{}, false
+		return data, domain.Team{}, nil, false
 	}
-	return data, data.Teams[index], true
+	return data, data.Teams[index], nil, true
 }
 
 func (s *server) registerTeamMemberRoutes(mux *http.ServeMux) {
@@ -399,7 +465,15 @@ func (s *server) registerTeamMemberRoutes(mux *http.ServeMux) {
 
 // GET /api/teams/{id}/members: the team's memberships with role and origin.
 func (s *server) listTeamMemberships(w http.ResponseWriter, r *http.Request) {
-	data, team, ok := s.teamForMemberRequest(w, r)
+	if s.store.BoundedMetadataEnabled() {
+		var close func()
+		r, close = beginRequestResourceReads(r)
+		defer close()
+	}
+	data, team, close, ok := s.teamForMemberRequest(w, r)
+	if close != nil {
+		defer close()
+	}
 	if !ok {
 		return
 	}
@@ -432,7 +506,10 @@ func (s *server) putTeamMembership(w http.ResponseWriter, r *http.Request) {
 		r, close = beginRequestResourceReads(r)
 		defer close()
 	}
-	data, team, ok := s.teamForMemberRequest(w, r)
+	data, team, close, ok := s.teamForMemberRequest(w, r)
+	if close != nil {
+		defer close()
+	}
 	if !ok {
 		return
 	}
@@ -489,7 +566,10 @@ func (s *server) deleteTeamMembership(w http.ResponseWriter, r *http.Request) {
 		r, close = beginRequestResourceReads(r)
 		defer close()
 	}
-	data, team, ok := s.teamForMemberRequest(w, r)
+	data, team, close, ok := s.teamForMemberRequest(w, r)
+	if close != nil {
+		defer close()
+	}
 	if !ok {
 		return
 	}
@@ -555,7 +635,10 @@ func (s *server) syncTeamMemberships(w http.ResponseWriter, r *http.Request) {
 		r, close = beginRequestResourceReads(r)
 		defer close()
 	}
-	data, team, ok := s.teamForMemberRequest(w, r)
+	data, team, close, ok := s.teamForMemberRequest(w, r)
+	if close != nil {
+		defer close()
+	}
 	if !ok {
 		return
 	}

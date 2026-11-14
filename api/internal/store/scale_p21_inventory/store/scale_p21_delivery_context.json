@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_delivery_context.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginNotificationDeliveryContextRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned trusted rendering projection reuses BeginDueNotificationDeliveryRead's original due/status/backoff/order/1000-row selection and allowance, preserves registry-vs-logical URLKey identity, and pins the contextless installed M for HIPAA, recipient ID/email and first review ID/current-slug/title headers. Canonical metadata never replaces that rendering source. Native notification/issue display fields share a SQL snapshot for byte preflight and transfer; unrelated metadata/content bodies are skipped. ResourceRead admission remains live through SMTP/digest assembly and claims/result writes; legacy missing lookup behavior is retained with explicit budget/cancellation failures. Off mode calls original NotificationDeliverySnapshot with its original context. TestScaleP21HotDeliveryEmailDifferential compares actual immediate and digest SMTP messages plus claims/status/attempt/error/backoff for success, HIPAA, transport failure, no mailer, missing sources, review precedence and non-email/future rows at pool size one. TestScaleP21HotDeliveryContextSourceAndCountBound compares consumed inputs with the literal full snapshot, installed-M drift versus canonical writes, cancellation, and exactly 69350304 held bytes at 100 and 1000 unrelated users/reviews/projects with zero full decodes/leaks. New tests and existing SW15/native transaction/scheduler business tests pass persistent SQLite count2. The by-value compatibility API and unowned dispatch dependencies retain independent status.",
+      "accessors": ["BeginDueNotificationDeliveryRead", "BeginInstalledWorkspaceIdentityRead", "BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Immediate and digest email rendering on ordinary notification writes and delivery ticks.",
+      "callers": ["server/server.dispatchNotificationEmails", "server/server.dispatchNotificationDigests"]
+    },
+    "DueIntegrationDeliveryIDs": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Installed-order visitor selects only ID/status/attempts/next-attempt and keeps each transient header plus the immutable source charged through its callback. Payload and previous-value bodies are skipped; missing/default workspace selection stays with BeginInstalledMetadataRead. Off mode retains literal WorkspaceMetadataFields selection and identical due predicate. TestScaleP21HotDeliveryContextSourceAndCountBound compares original field-accessor order with pending/due/future/attempt-limited/no-backoff cases including a legal large payload, 100/1000 unrelated records and zero full decodes/leaks; persistent SQLite count2 passes. Downstream processIntegrationDelivery remains an independent migration boundary.",
+      "accessors": ["WorkspaceMetadataFields", "BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Unconditional delivery scheduler workspace tick.",
+      "callers": ["server/server.processDueDeliveries"]
+    }
+  }
+}

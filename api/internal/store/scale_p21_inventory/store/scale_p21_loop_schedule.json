@@ -1,0 +1,20 @@
+{
+  "source": "store/scale_p21_loop_schedule.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginLoopScheduleRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned trusted scalar projection pins the original installed physical/default workspace generation. It probes live event loops without copying bodies, selects live schedule/event loops in native order and copies only consumed config keys with native types. Event context preserves matching entity/duplicate-request order, team scope/access/retirement and parent settings, workflow defaults and matching ask/member source order while omitting unrelated bodies. Only read-only time.Time/*time.Time fields use WireValue for detached-zone JSON/instant equivalence; mutation preimages remain native. TestScaleP21HotLoopScheduleInstalledProjection and WarmReloadBodyBound pass twice on persistent SQLite for duplicates/NUL/empty/default/missing keys, native ints/int64/string slices/opaque ignored fields, exact timestamp JSON and instants, source/parent closure, cancellation, partial quota cleanup and 10x unrelated bodies at 92752 held bytes/zero SQL/full decodes. This reader does not certify startLoopRun or actual dispatch.",
+      "accessors": [
+        "BeginInstalledMetadataRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Due-loop tick and ordinary domain-event dispatch inspect loop scheduling and trigger inputs.",
+      "callers": [
+        "server/server.runDueLoops",
+        "server/server.dispatchLoopTriggers"
+      ]
+    }
+  }
+}

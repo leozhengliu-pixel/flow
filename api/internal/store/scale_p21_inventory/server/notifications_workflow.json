@@ -1,6 +1,6 @@
 {
   "source": "server/notifications_workflow.go",
-  "unmigrated": 19,
+  "unmigrated": 18,
   "consumers": {
     "acknowledgeDesktopNotifications": {
       "owner": "P18",
@@ -72,8 +72,8 @@
     },
     "dispatchNotificationEmails": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Only the no-mailer full=false branch is migrated: due rows retain an independent read handle through unchanged claims and pending-disabled updates, with exact off method-value dispatch and SW15 repeated canonical state differential. The mailer-enabled full snapshot still needs complete installed recipient/review source and bounded rendering inputs; the legacy by-value API explicitly refuses bounded use. This partial branch does not certify full email rendering.",
+      "status": "reviewed",
+      "reason": "Bounded mailer rendering uses the owned NotificationDeliveryContextRead and retains it through all unchanged claims, SMTP calls and result writes. No-mailer scheduling retains BeginDueNotificationDeliveryRead; off-mode method-value selection/call/context is literal original code. The shared context pins installed M recipients/review headers/HIPAA and native display fields rather than hydrating unrelated metadata. Native MutateNotificationDelivery now separately admits row transfer, structural decode and callback-output encoding inside its original locked transaction. TestScaleP21HotDeliveryEmailDifferential compares actual immediate and digest SMTP messages and canonical claims/status/attempt/error/backoff for success, HIPAA, transport failure, no mailer, source/recipient failures, review precedence and future/non-email rows with pool size one; store source/count-bound/rollback tests and existing SW15/native transaction/scheduler tests pass persistent SQLite count2. This direct consumer is certified; desktop acknowledgement, cycle maintenance, by-value compatibility and other dispatch dependencies retain independent migration status.",
       "accessors": [
         "BeginDueNotificationDeliveryRead"
       ],

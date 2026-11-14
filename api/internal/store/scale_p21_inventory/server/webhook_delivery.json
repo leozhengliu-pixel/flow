@@ -1,6 +1,6 @@
 {
   "source": "server/webhook_delivery.go",
-  "unmigrated": 6,
+  "unmigrated": 4,
   "consumers": {
     "attemptWebhookDelivery": {
       "owner": "P21",
@@ -12,7 +12,8 @@
     },
     "describeWebhookEvent": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded metadata input uses its own exact installed identity/actor generation at the original users accessor point; only consumed actor scalars and the complete first workspace-member subject are copied. Off accessor and subject/URL/issue/comment/attachment/child/offload logic remain unchanged. An owning dispatch lifetime retains actor strings through all base and reordered-milestone envelope queues, and read errors prevent incomplete envelope publication. TestScaleP21HotWebhookDeliveryRoutingAndActors passes twice on persistent SQLite comparing 20 actual queued v1/v2 payloads per warm/reloaded generation: actor names/URLs, missing actor, complete member subject, private selected/selected-empty rules, realtime-only deletion stripping, nested milestone reorder, zero bounded full decodes and zero retained work. This metadata review does not certify enqueueWebhookEvent's unresolved whole-graph team fallback.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
@@ -25,6 +26,7 @@
     "disableFailingWebhook": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Exact atomic writer blocker: the original MutationScope transaction changes webhook enablement, stages its audit, creates the creator inbox notification and notification deliveries together. Generic scoped metadata writers reject notification/delivery content changes; separate webhook and content commits lose the enabled-check exactly-once behavior. Cancellation of queued webhook deliveries and dispatchNotificationEmails remain post-commit. No split transaction or cold fallback is introduced.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -39,6 +41,7 @@
     "dispatchWebhookEvent": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Owned installed routing projection and independent actor/identity accessor generations pass TestScaleP21HotWebhookDeliveryRoutingAndActors twice on persistent SQLite: 20 actual stored envelopes match per warm/reloaded generation, including v1/v2 private/selected-empty routing, actor and full member output, deletion stripping and milestone reorder, with zero bounded full decodes/work retained. This caller still reaches the independently pending enqueueWebhookEvent whole-graph team fallback and remains conservatively unreviewed; routing/identity coverage does not establish bounded activation.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
@@ -51,6 +54,7 @@
     "enqueueWebhookEvent": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Organization identity has an owned installed scalar read, but selected-team events with no direct subject teams retain the original webhookTeamAllowed fallback. That fallback JSON-marshals the whole legacy WorkspaceMetadata graph, fails closed on an unrelated encoding error, then uses map-iteration DFS over arbitrary nested id objects. The typed aggregate resolver has different traversal semantics and is not an exact replacement. Metadata identity alone does not review this consumer; no full-hydration cold fallback is introduced.",
       "accessors": [
         "Bootstrap",
         "WorkspaceMetadata",
@@ -65,6 +69,7 @@
     "recordWebhookFailure": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Exact retention writer blocker: append one audit-stream failure and keep the newest 50 matching WebhookID records in native global order, preserving every unrelated failure record atomically. A complete webhookFailureEvents field exceeds the bounded scope at many hooks; precomputed retention IDs race concurrent appends. No root-locked filtered retention/append resolver is currently available. This is reached by processDueDeliveries -> streamAuditLog -> recordWebhookFailure; no whole-field or split fallback is introduced.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -78,8 +83,8 @@
     },
     "updateWebhookHealth": {
       "owner": "P21",
-      "status": "unmigrated",
-      "reason": "Pending legacy aggregate-reference closure: the scoped image omits legal earlier aggregate matches, changing realtime entity, webhook Snapshot or PreviousValues despite canonical mutation parity. The existing target ID can match an unrelated Document.ContentData object earlier in Bootstrap traversal. Previous review: Writes webhooks/webhookID only; health callback, original metadata-fields context and ErrNoMutation retained. No principal or network side effect in this trusted callback. TestScaleP21M2RecordWritesDifferential compares canonical hook state with zero full decodes; delivery business regressions retained.",
+      "status": "reviewed",
+      "reason": "Existing scoped writer declares only webhooks/webhookID; original off metadata-fields context, health callback and ErrNoMutation behavior remain exact. Shared logical aggregate planning now retains legal earlier nested-document ID matches. TestScaleP21HotWebhookDeliveryHealthAggregateCollision passes twice on persistent SQLite for warm/reloaded actual FailingSince stamps and repeated no-op, canonical target state, webhook payload/PreviousValues/Snapshot and realtime payload, with an earlier Document.ContentData object owning the aggregate ID, byte-identical unrelated large hook/document rows, one event only, zero bounded full decodes and zero retained work. No network or notification side effect is moved into this trusted metadata callback.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"

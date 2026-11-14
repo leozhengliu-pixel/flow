@@ -1,0 +1,21 @@
+{
+  "source": "store/scale_p21_webhook_delivery_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginWebhookDeliveryRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Owned trusted installed projection preserves exact physical/default workspace selection and native hook order/duplicates, copying only ID/URL/resource/team/version/application routing fields for hooks the original predicates can accept. Identity copies only Workspace.ID/URLKey. LoadUsers retains first-match native actor scalars; workspace-member subjects copy complete typed User wire output, using read-only WireValue for detached timestamps. Each original accessor owns a separate generation; routing/actor reads remain admitted through final envelope queue, identity reads close per enqueue. TestScaleP21HotWebhookDeliveryNativeProjection and WarmReloadBodyBound pass twice on persistent SQLite for duplicate/NUL/empty/default/missing keys, ignored large/opaque fields, full-member timestamp JSON/instants, cancellation/closed handles/partial quota cleanup and 10x unrelated hook/profile bodies at constant 187088 held bytes for routing+actor with zero SQL/full decodes. Actual routing/actor server tests compare 20 stored envelopes per mode/generation and prove zero retained work. Team fallback and atomic writers remain independent pending consumers.",
+      "accessors": [
+        "BeginInstalledMetadataRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Ordinary mutation publication routes webhooks and resolves envelope identity and actors.",
+      "callers": [
+        "server/server.dispatchWebhookEvent",
+        "server/server.describeWebhookEvent",
+        "server/server.enqueueWebhookEvent"
+      ]
+    }
+  }
+}

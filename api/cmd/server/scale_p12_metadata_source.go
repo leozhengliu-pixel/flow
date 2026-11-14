@@ -84,11 +84,53 @@ func cloneRealtimeValue[T any](value T) (T, int, error) {
 }
 
 func (s *server) buildPulseEventSource(ctx context.Context, workspace string, source *EventSource) error {
-	snapshot, ok := s.store.PulseSources(workspace)
-	if !ok {
-		return store.ErrAuthForbidden
+	baseBytes := source.bytes
+	chargeOwnedRules := func() error {
+		if !s.store.BoundedMetadataEnabled() {
+			return nil
+		}
+		cost, ok := realtimeValueBytes(reflect.ValueOf(source.rules), eventSourceCacheBytes-baseBytes, 0)
+		if !ok {
+			return store.ErrEventSourceBudget
+		}
+		source.bytes = baseBytes + cost
+		return nil
 	}
-	all := s.realtime.pulseRulesFor(workspace, snapshot)
+	var snapshot *store.PulseFeedSnapshot
+	var all *pulseRules
+	if s.store.BoundedMetadataEnabled() {
+		read, ok, err := s.store.BeginPulseRead(ctx, workspace, false)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return store.ErrAuthForbidden
+		}
+		defer read.Close()
+		kind := "initiative"
+		if strings.HasPrefix(source.event.Type, "project") {
+			kind = "project"
+		}
+		if err := read.LoadSource(ctx, kind, source.event.AggregateID); err != nil {
+			return err
+		}
+		if strings.HasPrefix(source.event.Type, kind+".update_") {
+			if err := read.LoadUpdates(ctx, kind, source.event.AggregateID, nil); err != nil {
+				return err
+			}
+		}
+		snapshot = read.Snapshot
+		// The event source owns its compact clone. A shared rules cache must
+		// not retain pointers into the temporary, admitted read.
+		all = newPulseRules(snapshot)
+	} else {
+		var ok bool
+		snapshot, ok = s.store.PulseSources(workspace)
+		if !ok {
+			return store.ErrAuthForbidden
+		}
+		all = s.realtime.pulseRulesFor(workspace, snapshot)
+	}
 	compact := &store.PulseFeedSnapshot{ProjectUpdates: map[string][]domain.ProjectUpdate{}, InitiativeUpdates: map[string][]domain.InitiativeUpdate{}}
 	ids := []string{}
 	id := source.event.AggregateID
@@ -103,7 +145,7 @@ func (s *server) buildPulseEventSource(ctx context.Context, workspace string, so
 	if _, exists := rootScopes[id]; !exists {
 		source.pulse = compact
 		source.rules = newPulseRules(compact)
-		return nil
+		return chargeOwnedRules()
 	}
 	if strings.HasPrefix(source.event.Type, "project") {
 		if root := all.projects[id]; root != nil {
@@ -219,7 +261,7 @@ func (s *server) buildPulseEventSource(ctx context.Context, workspace string, so
 		}
 		source.rules.initiativeProjects[item.ID] = links
 	}
-	return nil
+	return chargeOwnedRules()
 }
 
 func (source *EventSource) pulseProjection(data domain.Bootstrap, query store.IssueRecordQuery) (domain.RealtimeEvent, bool) {

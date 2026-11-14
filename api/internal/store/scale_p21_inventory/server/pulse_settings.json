@@ -5,6 +5,7 @@
     "preparePulseSummaries": {
       "owner": "P21",
       "status": "unmigrated",
+      "reason": "Read inputs now use owned BeginPulseScheduleRead, LoadSchedule and LoadFeed with native installed scalar/cursor projection and admission retained through processing. The remaining MutateWorkspace callback atomically updates pulseDeliveryCursors, appends notifications and creates delivery rows; it still requires a dedicated bounded summary writer preserving the all-due-member atomic publication and preference/schedule rechecks. Read-side migration alone does not certify this ticker.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace",

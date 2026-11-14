@@ -599,6 +599,72 @@ func (s *server) dispatchLoopTriggers(workspace string, event domain.DomainEvent
 	if !loopEventCandidate(event) {
 		return
 	}
+	if s.store.BoundedMetadataEnabled() {
+		ctx := context.Background()
+		probe, ok, err := s.store.BeginLoopScheduleRead(ctx, workspace, "event-probe")
+		if err != nil {
+			log.Printf("Loop trigger metadata workspace=%s: %v", workspace, err)
+			return
+		}
+		if !ok {
+			return
+		}
+		hasLoops := probe.HasLoops
+		probe.Close()
+		if !hasLoops {
+			return
+		}
+		read, ok, err := s.store.BeginLoopScheduleRead(ctx, workspace, "event")
+		if err != nil {
+			log.Printf("Loop trigger metadata workspace=%s: %v", workspace, err)
+			return
+		}
+		if !ok {
+			return
+		}
+		defer read.Close()
+		if !read.HasLoops {
+			return
+		}
+		if err := read.LoadTriggerEntity(ctx, event); err != nil {
+			log.Printf("Loop trigger entity workspace=%s: %v", workspace, err)
+			return
+		}
+		resolved, ok := s.resolveLoopEvent(workspace, read.Data, event)
+		if !ok {
+			return
+		}
+		if err := read.LoadTriggerContext(ctx, resolved.Issue, resolved.Kind, resolved.Previous); err != nil {
+			log.Printf("Loop trigger context workspace=%s: %v", workspace, err)
+			return
+		}
+		data := read.Data
+		sourceKey, fromLoop := loopEventSource(data, resolved.Issue, resolved.Kind)
+		if fromLoop {
+			return
+		}
+		for _, loop := range data.Loops {
+			if !loopLive(loop) || loop.TriggerType != resolved.EntityType {
+				continue
+			}
+			matched, reason := matchLoopEvent(data, loop, resolved)
+			if !matched {
+				continue
+			}
+			teamIDs := loopEntityTeams(data, resolved.EntityType, resolved.EntityID, resolved.Issue)
+			if !loopScopeMatches(data, loop, teamIDs) {
+				continue
+			}
+			if sourceKey != "" && !loopSourceTrusted(data.WorkspaceSettings, loop, sourceKey) {
+				continue
+			}
+			trigger := loopTrigger{Kind: "event", EventType: event.Type, EntityType: resolved.EntityType, EntityID: resolved.EntityID, SourceKey: sourceKey, Label: reason.label(loopEventEntityName(data, resolved)), Reason: reason}
+			if _, err := s.startLoopRun(workspace, loop.ID, trigger, ""); err != nil && !errors.Is(err, errConflict) && !errors.Is(err, errLoopUnavailable) {
+				log.Printf("Loop trigger workspace=%s loop=%s: %v", workspace, loop.ID, err)
+			}
+		}
+		return
+	}
 	if loops, ok := s.store.WorkspaceMetadataFields(workspace, "loops"); !ok || !slices.ContainsFunc(loops.Loops, func(loop domain.Loop) bool { return loopLive(loop) && loop.TriggerType != "schedule" }) {
 		return
 	}

@@ -1,6 +1,6 @@
 {
   "source": "server/delivery_scheduler.go",
-  "unmigrated": 1,
+  "unmigrated": 0,
   "consumers": {
     "prepareDueNotificationDeliveries": {
       "owner": "P21",
@@ -12,7 +12,8 @@
     },
     "processDueDeliveries": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Its direct bounded integration-delivery selection now visits only installed ID/status/attempts/next-attempt headers in original collection order, keeping payload/previous-value bodies out of the scheduler. Callback processing and existing conflict/cancellation logging stay unchanged; off-mode WorkspaceMetadataFields call and due loop remain literal originals. TestScaleP21HotDeliveryContextSourceAndCountBound compares original selection/order across pending, due/future/no-backoff failures and attempt limits with a legal large payload, 100/1000 unrelated records and zero full decodes/leaks. Existing TestDeliverySchedulerProcessesDueEmailAndHonorsBackoff, TestDueDeliveryIDsRespectsNextAttemptAndLimit and SW15 caller-effect tests pass with new delivery rendering/writer tests on persistent SQLite count2. This reviews only the direct field accessor; downstream sweep, chat, pulse, integration processing and other dispatch functions remain independent boundaries, and no whole-tick activation certification is claimed.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],

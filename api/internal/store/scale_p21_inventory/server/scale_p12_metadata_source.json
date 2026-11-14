@@ -1,0 +1,15 @@
+{
+  "source": "server/scale_p12_metadata_source.go",
+  "unmigrated": 0,
+  "consumers": {
+    "buildPulseEventSource": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded source construction owns installed Pulse headers, loads only the event aggregate and history required by update events, and clones into the compact EventSource before releasing its read. Rules are request-local until compact ownership transfers; the shared workspace rule cache cannot retain the temporary source. The copied rule graph receives complete conservative byte accounting under the existing event-source cache ceiling. Off mode retains PulseSources and its cache. TestScaleP21HotPulseEventsDifferential compares actual shared-source projections and legacy paged projections for warm/reloaded native sources across the principal/key matrix, hidden links/actors, old references, deleted aggregates and complete update histories; cancellation returns errors and work/full-decode counters remain zero. Persistent SQLite count2 passed.",
+      "accessors": ["BeginPulseRead"],
+      "temperature": "hot",
+      "temperatureReason": "Shared realtime source construction for project and initiative events.",
+      "callers": ["server/server.BuildEventSource"]
+    }
+  }
+}

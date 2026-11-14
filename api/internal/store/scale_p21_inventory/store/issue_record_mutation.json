@@ -5,7 +5,7 @@
     "UpdateIssueRecord": {
       "owner": "P21",
       "status": "unmigrated",
-      "reason": "Affected issue/family and typed payload target-team workflow states now load from the exact installed logical source with bounded independent ownership through callback and commit; TestScaleP21IssueWorkflowStates covers the shared fix. Remaining metadata inputs used by general UpdateIssueRecord callbacks (including users, labels, projects and documents) are not certified by this workflow-only migration.",
+      "reason": "Workflow states and the typed non-project/non-team-move/non-opaque-editor callback subset now load exact installed native inputs under independent ownership through commit. TestScaleP21IssueWorkflowStates and HotIssueInputs cover states, user/mention order, point preferences, cycles, labels/groups, SLA inputs, mutable baselines and typed P04 differential. Whole writer remains pending: project/family progress and document scope persistence, actual team moves and live membership audience, opaque editor-state former-member references, the legacy formerMemberLookup full-map allocator, scheduler notification input closure and arbitrary callbacks are not certified by these helpers.",
       "accessors": [
         "Bootstrap",
         "storedWorkspace"

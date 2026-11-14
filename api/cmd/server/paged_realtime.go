@@ -266,8 +266,8 @@ func (s *server) legacyPagedRealtimeEvent(r *http.Request, event domain.Realtime
 		event.Payload, _ = json.Marshal(payload)
 		return event, true, nil
 	}
-	if projected, visible, decided := s.pagedPulseSourceEvent(r, data, event); decided {
-		return projected, visible, nil
+	if projected, visible, decided, err := s.pagedPulseSourceEvent(r, data, event); decided {
+		return projected, visible, err
 	}
 	if strings.HasPrefix(event.Type, "project.") || strings.HasPrefix(event.Type, "project_update.") || strings.HasPrefix(event.Type, "initiative.") || strings.HasPrefix(event.Type, "initiative_update.") {
 		// A relation or update the Pulse sources do not index: as before, the

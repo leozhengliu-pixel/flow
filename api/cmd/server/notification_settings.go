@@ -53,9 +53,20 @@ func (s *server) dispatchNotificationDigests(ctx context.Context, workspace stri
 	if s.mailer == nil {
 		return
 	}
-	data, err := s.store.NotificationDeliverySnapshot(ctx, workspace, []string{"digest"}, now)
-	if err != nil {
-		return
+	var data domain.Bootstrap
+	var err error
+	if s.store.BoundedMetadataEnabled() {
+		read, readErr := s.store.BeginNotificationDeliveryContextRead(ctx, workspace, []string{"digest"}, now)
+		if readErr != nil {
+			return
+		}
+		defer read.Close()
+		data = read.Data
+	} else {
+		data, err = s.store.NotificationDeliverySnapshot(ctx, workspace, []string{"digest"}, now)
+		if err != nil {
+			return
+		}
 	}
 	byUser := map[string][]domain.NotificationDelivery{}
 	for _, delivery := range data.NotificationDeliveries {

@@ -181,6 +181,20 @@ type webhookEvent struct {
 	// noVersion1URL keeps `url` out of version 1 bodies of nested entity
 	// events, which never carried one.
 	noVersion1URL bool
+	metadataErr   error
+}
+
+type webhookDeliveryReadKey struct{}
+
+type webhookDeliveryReadOwner struct {
+	reads []*store.WebhookDeliveryRead
+}
+
+func (owner *webhookDeliveryReadOwner) Close() {
+	for _, read := range owner.reads {
+		read.Close()
+	}
+	owner.reads = nil
 }
 
 // classifyWebhookEvent maps a Flow domain event to the webhook resource type
@@ -423,19 +437,54 @@ func (s *server) dispatchWebhookEvent(workspace string, event domain.DomainEvent
 	}
 	// Runs synchronously after every mutation: check the (small) webhook list
 	// before reading anything else.
-	hooks, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	ctx := context.Background()
+	var hooks domain.Bootstrap
+	var ok bool
+	if s.store.BoundedMetadataEnabled() {
+		owner := &webhookDeliveryReadOwner{}
+		defer owner.Close()
+		ctx = context.WithValue(ctx, webhookDeliveryReadKey{}, owner)
+		read, found, err := s.store.BeginWebhookDeliveryRead(ctx, workspace, true)
+		if err != nil {
+			log.Printf("Flow webhook routing workspace=%s: %v", workspace, err)
+			return
+		}
+		ok = found
+		if found {
+			owner.reads = append(owner.reads, read)
+			hooks = read.Data
+		}
+	} else {
+		hooks, ok = s.store.WorkspaceMetadataFields(workspace, "webhooks")
+	}
 	if !ok || !slices.ContainsFunc(hooks.Webhooks, func(webhook domain.Webhook) bool {
 		return !webhook.AuditLog && webhook.Enabled && webhook.URL != "" && webhookMatches(webhook, webhookEvent{resource: resource, legacy: legacy})
 	}) {
 		return
 	}
-	ctx := context.Background()
 	classified := s.describeWebhookEvent(ctx, workspace, event, resource, action, legacy)
 	s.enqueueWebhookEvent(ctx, workspace, hooks.Webhooks, classified)
 	if event.Type == "project.milestones_reordered" {
 		if parent := snapshotEntity(event); parent != nil {
-			metadata, _ := s.store.WorkspaceMetadataFields(workspace, "users")
+			var metadata domain.Bootstrap
+			var read *store.WebhookDeliveryRead
+			if s.store.BoundedMetadataEnabled() {
+				var err error
+				read, ok, err = s.store.BeginWebhookDeliveryRead(ctx, workspace, false)
+				if err != nil {
+					log.Printf("Flow webhook milestone identity workspace=%s: %v", workspace, err)
+					return
+				}
+				if ok {
+					metadata = read.Data
+				}
+			} else {
+				metadata, _ = s.store.WorkspaceMetadataFields(workspace, "users")
+			}
 			root := s.appBaseURL() + "/" + url.PathEscape(metadata.Workspace.URLKey)
+			if read != nil {
+				read.Close()
+			}
 			if s.appBaseURL() == "" {
 				root = ""
 			}
@@ -449,8 +498,25 @@ func (s *server) dispatchWebhookEvent(workspace string, event domain.DomainEvent
 // enqueueWebhookEvent queues the event for every matching webhook and starts
 // the first attempts.
 func (s *server) enqueueWebhookEvent(ctx context.Context, workspace string, hooks []domain.Webhook, event webhookEvent) {
+	if event.metadataErr != nil {
+		log.Printf("Flow webhook event metadata workspace=%s: %v", workspace, event.metadataErr)
+		return
+	}
 	var full *domain.Bootstrap
-	metadata, _ := s.store.WorkspaceMetadataFields(workspace, "users")
+	var metadata domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() {
+		read, found, err := s.store.BeginWebhookDeliveryRead(ctx, workspace, false)
+		if err != nil {
+			log.Printf("Flow webhook organization identity workspace=%s: %v", workspace, err)
+			return
+		}
+		if found {
+			defer read.Close()
+			metadata = read.Data
+		}
+	} else {
+		metadata, _ = s.store.WorkspaceMetadataFields(workspace, "users")
+	}
 	organizationID := metadata.Workspace.ID
 	for _, webhook := range hooks {
 		if webhook.AuditLog || !webhook.Enabled || webhook.URL == "" || !webhookMatches(webhook, event) {
@@ -578,7 +644,31 @@ func (s *server) describeWebhookEvent(ctx context.Context, workspace string, eve
 	if result.createdAt.IsZero() {
 		result.createdAt = time.Now().UTC()
 	}
-	metadata, _ := s.store.WorkspaceMetadataFields(workspace, "users")
+	var metadata domain.Bootstrap
+	if s.store.BoundedMetadataEnabled() {
+		owner, _ := ctx.Value(webhookDeliveryReadKey{}).(*webhookDeliveryReadOwner)
+		if owner == nil {
+			result.metadataErr = store.ErrBoundedMetadataCoverage
+			return result
+		}
+		read, found, err := s.store.BeginWebhookDeliveryRead(ctx, workspace, false)
+		if err != nil {
+			result.metadataErr = err
+			return result
+		}
+		if found {
+			fullSubject := strings.HasPrefix(event.Type, "workspace_member.") && resource == "users"
+			if err := read.LoadUsers(ctx, event.ActorID, event.AggregateID, fullSubject); err != nil {
+				read.Close()
+				result.metadataErr = err
+				return result
+			}
+			owner.reads = append(owner.reads, read)
+			metadata = read.Data
+		}
+	} else {
+		metadata, _ = s.store.WorkspaceMetadataFields(workspace, "users")
+	}
 	base := s.appBaseURL()
 	root := base + "/" + url.PathEscape(metadata.Workspace.URLKey)
 	result.actor = webhookActorFor(metadata.Users, event.ActorID, root)

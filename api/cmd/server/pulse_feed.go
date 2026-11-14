@@ -70,12 +70,13 @@ type pulseFilterConfig struct {
 var pulseFilterFields = map[string]bool{"author": true, "team": true, "createdDate": true, "updateType": true, "health": true, "initiative": true, "project": true, "projectMember": true, "projectStatus": true, "projectStatusType": true, "projectLabel": true}
 
 type pulseFeedQuery struct {
-	View    string
-	Search  string
-	Filters []pulseFilterConfig
-	Cursor  string
-	Limit   int
-	Now     time.Time
+	View        string
+	Search      string
+	Filters     []pulseFilterConfig
+	Cursor      string
+	Limit       int
+	Now         time.Time
+	SearchMatch func(*store.PulseFeedEntry, string) (bool, error)
 }
 
 type pulseCursor struct {
@@ -299,7 +300,14 @@ func (rules *pulseRules) pulseFeedPage(viewer pulseViewer, query pulseFeedQuery)
 		if query.View == "created" && entry.AuthorID != viewer.ID {
 			continue
 		}
-		if !rules.pulseSearchMatch(entry, search) || slices.ContainsFunc(query.Filters, func(config pulseFilterConfig) bool { return !rules.pulseFiltersMatch(entry, config, query.Now) }) {
+		searchMatch := rules.pulseSearchMatch(entry, search)
+		if !searchMatch && query.SearchMatch != nil {
+			searchMatch, err = query.SearchMatch(entry, search)
+			if err != nil {
+				return nil, nil, nil, "", err
+			}
+		}
+		if !searchMatch || slices.ContainsFunc(query.Filters, func(config pulseFilterConfig) bool { return !rules.pulseFiltersMatch(entry, config, query.Now) }) {
 			continue
 		}
 		why, follows := rules.forMeReasons(viewer, entry)
@@ -467,13 +475,51 @@ func (s *server) pulseRequestContext(w http.ResponseWriter, r *http.Request) (*s
 	return snapshot, newPulseRules(snapshot), viewer, true
 }
 
+func (s *server) pulseOwnedRequestContext(w http.ResponseWriter, r *http.Request) (*store.PulseRead, *pulseRules, pulseViewer, bool) {
+	read, found, err := s.store.BeginPulseRead(r.Context(), workspaceKey(r), true)
+	if err != nil {
+		issueRecordsError(w, err)
+		return nil, nil, pulseViewer{}, false
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return nil, nil, pulseViewer{}, false
+	}
+	if !workspaceFeatureEnabled(read.Snapshot.WorkspaceSettings, "pulse") {
+		read.Close()
+		writeError(w, http.StatusForbidden, "This workspace feature is disabled")
+		return nil, nil, pulseViewer{}, false
+	}
+	viewer, err := s.pulseRequestViewer(r, read.Snapshot)
+	if err == nil {
+		err = read.LoadUserSettings(r.Context(), viewer.ID)
+	}
+	if err != nil {
+		read.Close()
+		if errors.Is(err, store.ErrAuthForbidden) {
+			writeError(w, http.StatusForbidden, "Guests cannot access Pulse")
+		} else {
+			issueRecordsError(w, err)
+		}
+		return nil, nil, pulseViewer{}, false
+	}
+	return read, newPulseRules(read.Snapshot), viewer, true
+}
+
 func (s *server) getPulseFeed(w http.ResponseWriter, r *http.Request) {
-	snapshot, rules, viewer, ok := s.pulseRequestContext(w, r)
+	read, rules, viewer, ok := s.pulseOwnedRequestContext(w, r)
 	if !ok {
 		return
 	}
+	defer read.Close()
+	snapshot := read.Snapshot
 	values := r.URL.Query()
 	query := pulseFeedQuery{View: values.Get("view"), Search: values.Get("q"), Cursor: values.Get("cursor"), Now: time.Now().UTC()}
+	if s.store.BoundedMetadataEnabled() {
+		query.SearchMatch = func(entry *store.PulseFeedEntry, search string) (bool, error) {
+			return read.MatchSearch(r.Context(), entry, search)
+		}
+	}
 	if query.View == "" {
 		query.View = "all"
 	}
@@ -518,10 +564,28 @@ func (s *server) getPulseFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	page, reasons, subscribed, next, err := rules.pulseFeedPage(viewer, query)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid cursor")
+		if errors.Is(err, errInvalid) {
+			writeError(w, http.StatusBadRequest, "invalid cursor")
+		} else {
+			issueRecordsError(w, err)
+		}
 		return
 	}
 	response := pulseFeedResponse{Items: make([]pulseFeedItem, 0, len(page)), NextCursor: next}
+	if s.store.BoundedMetadataEnabled() {
+		ids := map[string][]string{}
+		for _, entry := range page {
+			key := entry.Kind + ":" + entry.SourceID
+			ids[key] = append(ids[key], entry.UpdateID)
+		}
+		for key, selected := range ids {
+			kind, sourceID, _ := strings.Cut(key, ":")
+			if err := read.LoadUpdates(r.Context(), kind, sourceID, selected); err != nil {
+				issueRecordsError(w, err)
+				return
+			}
+		}
+	}
 	for _, entry := range page {
 		if item, ok := rules.pulseItem(entry, reasons[entry], subscribed[entry]); ok {
 			if item.Kind == "initiative" {
@@ -537,10 +601,12 @@ func (s *server) getPulseFeed(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getPulseUnread(w http.ResponseWriter, r *http.Request) {
-	snapshot, rules, viewer, ok := s.pulseRequestContext(w, r)
+	read, rules, viewer, ok := s.pulseOwnedRequestContext(w, r)
 	if !ok {
 		return
 	}
+	defer read.Close()
+	snapshot := read.Snapshot
 	count, latest := rules.pulseUnread(viewer, pulseLastSeen(snapshot, viewer.ID), time.Now().UTC())
 	writeJSON(w, http.StatusOK, map[string]any{"count": count, "latestAt": latest})
 }

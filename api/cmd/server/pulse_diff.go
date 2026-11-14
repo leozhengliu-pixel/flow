@@ -205,48 +205,78 @@ func pulseInitiativeIn(snapshot *store.PulseFeedSnapshot, id string) *domain.Ini
 // projectUpdateDiffPreview returns the diff the next project update would
 // record, for the composer. It reads the shared snapshot without copying it.
 func (s *server) projectUpdateDiffPreview(w http.ResponseWriter, r *http.Request) {
-	snapshot, ok := s.store.PulseFeed(workspaceKey(r))
+	read, ok := s.pulseSourceRead(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	defer read.Close()
+	snapshot := read.Snapshot
 	id := r.PathValue("id")
 	project := pulseProjectIn(snapshot, id)
 	if project == nil {
 		writeError(w, http.StatusNotFound, "resource not found")
 		return
 	}
+	previous, err := read.LoadLatestSnapshot(r.Context(), "project", id)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	next := s.projectPulseSnapshot(r.Context(), snapshot.Workspace.URLKey, *project, time.Now().UTC())
-	writeJSON(w, http.StatusOK, map[string]any{"diff": pulseDiffBetween(latestProjectSnapshot(snapshot.ProjectUpdates[id]), next), "snapshot": next})
+	writeJSON(w, http.StatusOK, map[string]any{"diff": pulseDiffBetween(previous, next), "snapshot": next})
 }
 
 func (s *server) initiativeUpdateDiffPreview(w http.ResponseWriter, r *http.Request) {
-	snapshot, ok := s.store.PulseFeed(workspaceKey(r))
+	read, ok := s.pulseSourceRead(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	defer read.Close()
+	snapshot := read.Snapshot
 	id := r.PathValue("id")
 	initiative := pulseInitiativeIn(snapshot, id)
 	if initiative == nil {
 		writeError(w, http.StatusNotFound, "resource not found")
 		return
 	}
+	previous, err := read.LoadLatestSnapshot(r.Context(), "initiative", id)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	next := initiativePulseSnapshot(&domain.Bootstrap{Projects: snapshot.Projects, Initiatives: snapshot.Initiatives, InitiativeRelations: snapshot.InitiativeRelations}, *initiative, time.Now().UTC())
-	writeJSON(w, http.StatusOK, map[string]any{"diff": pulseDiffBetween(latestInitiativeSnapshot(snapshot.InitiativeUpdates[id]), next), "snapshot": next})
+	writeJSON(w, http.StatusOK, map[string]any{"diff": pulseDiffBetween(previous, next), "snapshot": next})
+}
+
+func (s *server) pulseSourceRead(w http.ResponseWriter, r *http.Request) (*store.PulseRead, bool) {
+	read, found, err := s.store.BeginPulseRead(r.Context(), workspaceKey(r), !s.store.BoundedMetadataEnabled())
+	if err != nil {
+		issueRecordsError(w, err)
+		return nil, false
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return nil, false
+	}
+	return read, true
 }
 
 // listProjectUpdates serves a project's updates (newest first) for paged
 // clients, which no longer receive updates in the workspace bootstrap.
 func (s *server) listProjectUpdates(w http.ResponseWriter, r *http.Request) {
-	snapshot, ok := s.store.PulseFeed(workspaceKey(r))
+	read, ok := s.pulseSourceRead(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	defer read.Close()
+	snapshot := read.Snapshot
 	id := r.PathValue("id")
 	if pulseProjectIn(snapshot, id) == nil {
 		writeError(w, http.StatusNotFound, "resource not found")
+		return
+	}
+	if err := read.LoadUpdates(r.Context(), "project", id, nil); err != nil {
+		issueRecordsError(w, err)
 		return
 	}
 	updates := append([]domain.ProjectUpdate{}, snapshot.ProjectUpdates[id]...)
@@ -272,14 +302,19 @@ func (s *server) listProjectUpdates(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) listInitiativeUpdates(w http.ResponseWriter, r *http.Request) {
-	snapshot, ok := s.store.PulseFeed(workspaceKey(r))
+	read, ok := s.pulseSourceRead(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	defer read.Close()
+	snapshot := read.Snapshot
 	id := r.PathValue("id")
 	if pulseInitiativeIn(snapshot, id) == nil {
 		writeError(w, http.StatusNotFound, "resource not found")
+		return
+	}
+	if err := read.LoadUpdates(r.Context(), "initiative", id, nil); err != nil {
+		issueRecordsError(w, err)
 		return
 	}
 	updates := append([]domain.InitiativeUpdate{}, snapshot.InitiativeUpdates[id]...)

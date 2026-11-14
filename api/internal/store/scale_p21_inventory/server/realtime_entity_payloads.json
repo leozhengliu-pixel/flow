@@ -1,0 +1,15 @@
+{
+  "source": "server/realtime_entity_payloads.go",
+  "unmigrated": 0,
+  "consumers": {
+    "pagedPulseSourceEvent": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Bounded legacy paged projection keeps the installed owned Pulse read through encoding, loads only the aggregate and required update history, and builds local rules instead of retaining closed-read pointers in the shared rules cache. The original PulseSources branch remains off mode. Read/cancellation/budget failures propagate through legacyPagedRealtimeEvent as errors rather than becoming invisible events. TestScaleP21HotPulseEventsDifferential compares full projected event JSON, visibility and decided flags across warm/reloaded principal/key classes, hidden references and counts, old IDs, deletion signals and complete update histories, with cancellation, zero full metadata decodes and released admission; persistent SQLite count2 passed.",
+      "accessors": ["BeginPulseRead"],
+      "temperature": "hot",
+      "temperatureReason": "Legacy paged realtime project and initiative projection.",
+      "callers": ["server/server.legacyPagedRealtimeEvent"]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "source": "server/loop_runtime.go",
-  "unmigrated": 5,
+  "unmigrated": 3,
   "consumers": {
     "check": {
       "owner": "P18",
@@ -32,7 +32,8 @@
     },
     "runDueLoops": {
       "owner": "P18",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Direct ticker selection uses an owned installed logical projection of live schedule loops in native order, retaining ID/status/type/config native values and JSON-equivalent scheduling timestamps through the unchanged occurrence computation and per-loop stamp. Literal off accessor/body remains intact. TestScaleP21HotLoopScheduleInstalledProjection and WarmReloadBodyBound compare physical/default/missing keys, duplicates, native config types, detached-zone exact JSON/instants, cancellation/quota cleanup and 10x unrelated bodies at constant 92752 work bytes/zero SQL. TestScaleP21HotLoopTickScheduleStamps compares actual due/uninitialized/future/draft stamps and zero full decodes twice on persistent SQLite. This certifies the direct reader and scheduling behavior only: runDueLoops calls the independently pending HOT startLoopRun, so actual dispatch and bounded activation remain blocked.",
       "accessors": [
         "WorkspaceMetadataFields"
       ],
@@ -57,8 +58,8 @@
     },
     "setLoopNextRun": {
       "owner": "P18",
-      "status": "unmigrated",
-      "reason": "Point edit needs only loops/loopID, but the legacy loop aggregate has no typed-prefix shortcut: reflective Bootstrap search can match a preceding nested document object. A point-only writer changes webhook/realtime enrichment in that valid state; retain it until the bounded aggregate resolver covers it.",
+      "status": "reviewed",
+      "reason": "Bounded point writer declares only loops/loopID; original off MutateWorkspace context/callback remain literal. The shared logical aggregate planner now preserves reflective precedence across the complete installed before/after images. TestScaleP21HotLoopTickScheduleStamps runs twice on persistent SQLite in warm/reloaded generations and proves actual canonical next-run changes, identical webhook payload/previous values and realtime enrichment when an earlier nested document object collides with the loop ID, byte-identical unrelated large loop/document rows and zero bounded full decodes. Read-only WireValue timestamps never enter this mutation preimage; the scoped writer retains its native validation and explicit budget/coverage guards.",
       "accessors": [
         "Bootstrap",
         "MutateWorkspace"
@@ -77,12 +78,13 @@
         "MutateWorkspace",
         "WorkspaceMetadataFields"
       ],
-      "temperature": "cold",
-      "temperatureReason": "No owner HOT route/ticker reach found in conservative AST graph; admin/startup/rare branch",
+      "temperature": "hot",
+      "temperatureReason": "Actual HOT ticker and ordinary committed domain events invoke this start boundary when a due schedule or matching event loop is selected. Existing full loops/version/entity hydration and run_started mutation remain unmigrated and block activation.",
+      "reason": "Promoted conservatively after TestScaleP21HotLoopTickScheduleStamps proved the actual due-loop call reaches this boundary: the literal store reports agent-disabled while the bounded skeletal store reports loop-not-found. Direct scalar selection/stamps are reviewed separately; startLoopRun must gain an exact owned target/entity read plus transactional latest-version/create-v1 stamp before actual run dispatch can be certified. No cold fallback is installed.",
       "callers": [
         "server/server.runLoopNow",
-        "server/server.runDueLoops",
-        "server/server.dispatchLoopTriggers"
+        "processDueDeliveries -> server/server.runDueLoops -> server/server.startLoopRun",
+        "ordinary issue/project event -> dispatchDomainEvent -> server/server.dispatchLoopTriggers -> server/server.startLoopRun"
       ]
     },
     "teamKeyAllowed": {

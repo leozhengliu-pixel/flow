@@ -1,0 +1,14 @@
+{
+  "source": "store/scale_p21_team_member_request.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginTeamMemberRequestRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["BeginInstalledMetadataRead"],
+      "temperature": "hot",
+      "temperatureReason": "Ordered team identity and development membership inputs for profile-observed teamForMemberRequest.",
+      "reason": "Projects only ordered native Team ID/Key, minimal existing teamVisibleToUser policy fields and workspace ID from the exact source chosen by workspaceReadSource: direct reads retain installed logical values even with unknown revision; explicit parent metadata wins independently of the current registry. Uses shared ResolveAccess/ValidateAccess credential and authority binding plus original SQL identity comparison for native workspace aliases. Complete ListTeamMembers column/SCIM error validation precedes an admitted principal-only team/role projection, retaining all-or-none visibility without a complete membership array. Development GETs read only selected TeamMember wire rows, preserving native strings, timestamp JSON and encoding errors. Detached inputs, policy scratch and encoding remain independently admitted through Close. HotTeamMemberRequest store/server tests pass twice on persistent SQLite across native/default/missing/order/folding, large ignored bodies, unknown revision, explicit snapshot, principal/key/app visibility, forged/foreign access, revocation, output ownership and four direct callers with zero complete metadata decodes. Existing cold source-loader page limits and other publicMetadata consumers remain independently pending."
+    }
+  }
+}

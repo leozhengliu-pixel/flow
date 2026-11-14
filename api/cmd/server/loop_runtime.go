@@ -1517,6 +1517,36 @@ func loopSystemPrompt(data domain.Bootstrap, loop domain.Loop, trigger loopTrigg
 
 // runDueLoops starts scheduled loops whose next run time has passed.
 func (s *server) runDueLoops(workspace string, now time.Time) {
+	if s.store.BoundedMetadataEnabled() {
+		read, ok, err := s.store.BeginLoopScheduleRead(context.Background(), workspace, "schedule")
+		if err != nil {
+			log.Printf("Loop schedule metadata workspace=%s: %v", workspace, err)
+			return
+		}
+		if !ok {
+			return
+		}
+		defer read.Close()
+		for _, loop := range read.Data.Loops {
+			if loop.TriggerType != "schedule" || !loopLive(loop) {
+				continue
+			}
+			next := loop.NextRunAt
+			if next == nil {
+				computed := nextLoopRun(loop.TriggerConfig, loop.CreatedAt, now)
+				s.setLoopNextRun(workspace, loop.ID, computed)
+				next = &computed
+			}
+			if now.Before(*next) {
+				continue
+			}
+			s.setLoopNextRun(workspace, loop.ID, nextLoopRun(loop.TriggerConfig, loop.CreatedAt, now))
+			if _, err := s.startLoopRun(workspace, loop.ID, loopTrigger{Kind: "schedule", ScheduledAt: *next}, ""); err != nil && !errors.Is(err, errConflict) {
+				log.Printf("Scheduled loop workspace=%s loop=%s: %v", workspace, loop.ID, err)
+			}
+		}
+		return
+	}
 	data, ok := s.store.WorkspaceMetadataFields(workspace, "loops")
 	if !ok {
 		return
@@ -1542,6 +1572,23 @@ func (s *server) runDueLoops(workspace string, now time.Time) {
 }
 
 func (s *server) setLoopNextRun(workspace, loopID string, next time.Time) {
+	if s.store.BoundedMetadataEnabled() {
+		ctx := store.WithMetadataFields(context.Background(), "loops")
+		err := s.store.MutateWorkspaceScoped(ctx, workspace, "loop.scheduled", loopID, nil,
+			store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "loops", ID: loopID}}},
+			func(data *domain.Bootstrap) error {
+				loop := loopByID(data, loopID)
+				if loop == nil {
+					return errNotFound
+				}
+				loop.NextRunAt = &next
+				return nil
+			})
+		if err != nil {
+			log.Printf("Loop schedule workspace=%s loop=%s: %v", workspace, loopID, err)
+		}
+		return
+	}
 	// Scheduling only stamps the loop; copy just the loop catalog.
 	ctx := store.WithMetadataFields(context.Background(), "loops")
 	err := s.store.MutateWorkspace(ctx, workspace, "loop.scheduled", loopID, nil, func(data *domain.Bootstrap) error {

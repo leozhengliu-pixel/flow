@@ -2,6 +2,16 @@
   "source": "server/pulse_diff.go",
   "unmigrated": 2,
   "consumers": {
+    "pulseSourceRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "BeginPulseRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Project and initiative update histories and composer previews.",
+      "reason": "Retains the original PulseFeed accessor off mode; bounded mode uses a trusted installed source projection without visiting updates until a target history or latest composer snapshot is requested. Errors remain distinct from missing workspaces, and every caller defers Close through response encoding. TestScaleP21HotPulseGroupHandlerDifferential proves complete legacy project/initiative history values and stored-snapshot stripping; store NativeOwnership and WarmReload prove complete comments/reactions ownership and native latest snapshot reads. Selected-key history redaction still calls publicMetadata and remains registered as unmigrated."
+    },
     "listInitiativeUpdates": {
       "owner": "P16",
       "status": "unmigrated",

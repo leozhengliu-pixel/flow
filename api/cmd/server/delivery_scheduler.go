@@ -115,6 +115,18 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 		s.dispatchNotificationEmails(ctx, key)
 		s.dispatchChatNotifications(ctx, key)
 		s.dispatchNotificationDigests(ctx, key, now)
+		if s.store.BoundedMetadataEnabled() {
+			err := s.store.DueIntegrationDeliveryIDs(ctx, key, now, func(id string) error {
+				if _, err := s.processIntegrationDelivery(ctx, key, id); err != nil && !errors.Is(err, errConflict) && !errors.Is(err, context.Canceled) {
+					log.Printf("Integration delivery workspace=%s id=%s: %v", key, id, err)
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		data, ok := s.store.WorkspaceMetadataFields(key, "integrationDeliveries")
 		if !ok {
 			continue

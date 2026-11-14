@@ -1,6 +1,6 @@
 {
   "source": "server/team_member_api.go",
-  "unmigrated": 2,
+  "unmigrated": 1,
   "consumers": {
     "recordTeamMemberAudit": {
       "owner": "P21",
@@ -23,7 +23,8 @@
     },
     "teamForMemberRequest": {
       "owner": "P21",
-      "status": "unmigrated",
+      "status": "reviewed",
+      "reason": "Bounded reads use the shared ordered TeamMemberRequestRead for only Workspace.ID, Team ID/Key and development GET membership rows, preserving exact-ID-before-first-EqualFold-key precedence and native source strings. Existing teamVisibleToUser policy, active principal/credential binding and trailing authority validation retain admin private settings visibility, guest/direct/inherited boundaries, retired/archive/external exclusions and selected-empty/inferred/application keys. A matching one-shot authorization handoff retains literal publicMetadata key/preference projection and precedence; off mode still invokes publicMetadata unchanged. Owners register with the outer request or return an explicit local closer, and all four direct callers retain them through response encoding. HotTeamMemberRequest differentials pass twice on persistent SQLite across 220 principal/key/reference cases, real app grants, four caller responses, source/default/missing/error boundaries, development wire rows, unknown revision, parent snapshots, handoff one-shot use and zero complete metadata decodes. This reviews only the direct team/member input; the unchanged recordTeamMemberAudit writer, general publicMetadata adapter and cold source loader remain separate blockers.",
       "accessors": [
         "Bootstrap",
         "publicMetadata"

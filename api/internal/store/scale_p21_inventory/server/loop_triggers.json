@@ -5,6 +5,7 @@
     "dispatchLoopTriggers": {
       "owner": "P18",
       "status": "unmigrated",
+      "reason": "Direct HOT event-loop probe and trigger metadata now use owned installed scalar projections; the literal off probe and full accessor/body remain unchanged. TestScaleP21HotLoopTickTriggerSelection passes twice on persistent SQLite comparing native warm/reloaded pre-dispatch loop IDs, trigger reasons/labels/sources, issue/comment/customer-request/project/initiative/release/team/cycle cases, private team scope, source trust and recursive loop-source suppression with zero bounded full decodes. Actual matching dispatch still invokes pending HOT startLoopRun; this consumer remains an activation blocker until an actual run differential verifies that dependency.",
       "accessors": [
         "WorkspaceMetadata",
         "WorkspaceMetadataFields"

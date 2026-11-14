@@ -49,7 +49,7 @@ func scaleP21SnapshotConsumer(node ast.Node) bool {
 			found = true
 		}
 		if slices.Contains(scaleP21SnapshotMethods, selector.Sel.Name) ||
-			slices.Contains([]string{"VisitOAuthApplicationLogos", "boundedOAuthAppIconAccess", "ownedImageAccess", "InstalledReviewReferenceVisible", "BeginResourceRead", "BeginTeamMaintenanceRead", "BeginPulseRead", "BeginPulseScheduleRead", "BeginNotificationVisibilityRead", "BeginMemberDirectoryRead"}, selector.Sel.Name) {
+			slices.Contains([]string{"VisitOAuthApplicationLogos", "boundedOAuthAppIconAccess", "ownedImageAccess", "InstalledReviewReferenceVisible", "BeginResourceRead", "BeginTeamMaintenanceRead", "BeginPulseRead", "BeginPulseScheduleRead", "BeginNotificationVisibilityRead", "BeginMemberDirectoryRead", "BeginNotificationDeliveryContextRead", "DueIntegrationDeliveryIDs", "BeginDocumentRead", "BeginTeamMemberRequestRead", "BeginWebhookDeliveryRead", "BeginLoopScheduleRead"}, selector.Sel.Name) {
 			if qualifier, ok := selector.X.(*ast.Ident); !ok || qualifier.Name != "domain" {
 				found = true
 			}
@@ -299,6 +299,12 @@ func TestScaleP21InventoryRejectsNewHandlerOrMethodValue(t *testing.T) {
 		`package probe; func request() { _ = s.BeginPulseScheduleRead(ctx, key) }`,
 		`package probe; func request() { _ = s.BeginNotificationVisibilityRead(ctx, access) }`,
 		`package probe; func request() { _ = s.BeginMemberDirectoryRead(ctx, key, true) }`,
+		`package probe; func tick() { _ = s.BeginNotificationDeliveryContextRead(ctx, key, statuses, now) }`,
+		`package probe; func tick() { _ = s.DueIntegrationDeliveryIDs(ctx, key, now, visit) }`,
+		`package probe; func request() { _ = s.BeginDocumentRead(ctx, key, user, credential, request) }`,
+		`package probe; func request() { _ = s.BeginTeamMemberRequestRead(ctx, key, user, credential, ref, false) }`,
+		`package probe; func tick() { _ = s.BeginWebhookDeliveryRead(ctx, key, true) }`,
+		`package probe; func tick() { _ = s.BeginLoopScheduleRead(ctx, key) }`,
 		`package probe; func job() { _ = s.BeginGitLabConnectionConfigsRead(ctx, key) }`,
 		`package probe; func job() { _ = s.BeginDueNotificationDeliveryRead(ctx, key, statuses, now) }`,
 	} {

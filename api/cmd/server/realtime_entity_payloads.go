@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Realtime entity payloads let a client apply a document, project or
@@ -126,7 +127,7 @@ func realtimeInitiativeView(rules *pulseRules, viewer pulseViewer, initiative do
 // replaced by the viewer's projection of the aggregate. decided is false for
 // events of other kinds and for aggregates that are not a project or
 // initiative (a relation, an update).
-func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, event domain.RealtimeEvent) (projected domain.RealtimeEvent, visible, decided bool) {
+func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, event domain.RealtimeEvent) (projected domain.RealtimeEvent, visible, decided bool, err error) {
 	kind := ""
 	switch {
 	case strings.HasPrefix(event.Type, "project.") || strings.HasPrefix(event.Type, "project_update."):
@@ -134,17 +135,41 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 	case strings.HasPrefix(event.Type, "initiative.") || strings.HasPrefix(event.Type, "initiative_update."):
 		kind = "initiative"
 	default:
-		return event, false, false
+		return event, false, false, nil
 	}
 	if event.AggregateID == "" {
-		return event, false, false
+		return event, false, false, nil
 	}
-	snapshot, ok := s.store.PulseSources(workspaceKey(r))
-	if !ok {
-		return event, false, true
+	var snapshot *store.PulseFeedSnapshot
+	var rules *pulseRules
+	if s.store.BoundedMetadataEnabled() {
+		read, ok, err := s.store.BeginPulseRead(r.Context(), workspaceKey(r), false)
+		if err != nil {
+			return event, false, true, err
+		}
+		if !ok {
+			return event, false, true, nil
+		}
+		defer read.Close()
+		if err := read.LoadSource(r.Context(), kind, event.AggregateID); err != nil {
+			return event, false, true, err
+		}
+		if strings.HasPrefix(event.Type, kind+".update_") {
+			if err := read.LoadUpdates(r.Context(), kind, event.AggregateID, nil); err != nil {
+				return event, false, true, err
+			}
+		}
+		snapshot = read.Snapshot
+		rules = newPulseRules(snapshot)
+	} else {
+		var ok bool
+		snapshot, ok = s.store.PulseSources(workspaceKey(r))
+		if !ok {
+			return event, false, true, nil
+		}
+		// One index per installed workspace copy, shared by every stream.
+		rules = s.realtime.pulseRulesFor(workspaceKey(r), snapshot)
 	}
-	// One index of the projects and initiatives per installed workspace copy, shared by every stream.
-	rules := s.realtime.pulseRulesFor(workspaceKey(r), snapshot)
 	role := data.ViewerRole
 	if s.authDisabled && role == "" {
 		role = "admin"
@@ -161,17 +186,17 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 			if event.Type == "project.deleted" {
 				// Gone: who could see it is no longer known, so the signal
 				// names neither it nor who deleted it; clients reload.
-				return anonymousRealtimeEvent(event), true, true
+				return anonymousRealtimeEvent(event), true, true, nil
 			}
-			return event, false, false
+			return event, false, false, nil
 		}
 		if !rules.projectVisible(viewer, project) {
 			if scopeChanged {
 				// It may have just left this viewer's reach: they reload,
 				// told neither which project it was nor who moved it.
-				return anonymousRealtimeEvent(event), true, true
+				return anonymousRealtimeEvent(event), true, true, nil
 			}
-			return event, false, true
+			return event, false, true, nil
 		}
 		view := realtimeProjectView(rules, viewer, *project)
 		key := event.ID + "|" + strings.Join(view.TeamIDs, ",") + "|" + strings.Join(view.DependencyIDs, ",")
@@ -186,20 +211,20 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 			}
 			return realtimeEntityPayload(event, view, extra)
 		})
-		return event, true, true
+		return event, true, true, nil
 	}
 	initiative := rules.initiatives[event.AggregateID]
 	if initiative == nil {
 		if event.Type == "initiative.deleted" {
-			return anonymousRealtimeEvent(event), true, true
+			return anonymousRealtimeEvent(event), true, true, nil
 		}
-		return event, false, true
+		return event, false, true, nil
 	}
 	if !rules.initiativeVisible(viewer, initiative) {
 		if scopeChanged {
-			return anonymousRealtimeEvent(event), true, true
+			return anonymousRealtimeEvent(event), true, true, nil
 		}
-		return event, false, true
+		return event, false, true, nil
 	}
 	view := realtimeInitiativeView(rules, viewer, *initiative)
 	key := event.ID + "|" + view.LeadTeamID + "|" + strings.Join(view.ContributingTeamIDs, ",") + "|" + strings.Join(view.ProjectIDs, ",") + "|" + strings.Join(view.ParentInitiativeIDs, ",")
@@ -213,7 +238,7 @@ func (s *server) pagedPulseSourceEvent(r *http.Request, data domain.Bootstrap, e
 		}
 		return realtimeEntityPayload(event, view, extra)
 	})
-	return event, true, true
+	return event, true, true, nil
 }
 
 // pagedDocumentEvent authorizes a document event against the document itself, since the realtime metadata carries no

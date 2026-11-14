@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -106,14 +107,25 @@ func pulseUserZone(zones pulseZones, settings domain.UserSettings, memberships [
 const pulseMaxWindow = 31 * 24 * time.Hour
 
 func (s *server) preparePulseSummaries(ctx context.Context, key string, now time.Time) error {
-	metadata, ok := s.store.WorkspaceMetadataFields(key, "workspaceSettings")
-	if !ok || !workspaceFeatureEnabled(metadata.WorkspaceSettings, "pulse") {
+	read, found, err := s.store.BeginPulseScheduleRead(ctx, key)
+	if err != nil {
+		return err
+	}
+	if !found {
 		return nil
 	}
-	metadata, ok = s.store.WorkspaceMetadataFields(key, "workspaceSettings", "settings", "userSettings", "teamSettings")
-	if !ok {
+	defer read.Close()
+	if !workspaceFeatureEnabled(read.Snapshot.WorkspaceSettings, "pulse") {
 		return nil
 	}
+	if err := read.LoadSchedule(ctx); err != nil {
+		if !s.store.BoundedMetadataEnabled() && errors.Is(err, store.ErrResourceAccessChanged) {
+			return nil
+		}
+		return err
+	}
+	metadata := domain.Bootstrap{Workspace: read.Snapshot.Workspace, WorkspaceSettings: read.Snapshot.WorkspaceSettings,
+		Settings: read.Snapshot.Settings, UserSettings: read.Snapshot.UserSettings, TeamSettings: read.Snapshot.TeamSettings}
 	cursors := pulseCursors(&metadata)
 	workspaceDefault := metadata.WorkspaceSettings.FeatureSettings.PulseWorkspaceSchedule
 	// Every active member is a candidate, including invited members who never
@@ -186,7 +198,14 @@ func (s *server) preparePulseSummaries(ctx context.Context, key string, now time
 	if len(due) == 0 {
 		return nil
 	}
-	if snapshot, ok := s.store.PulseFeed(key); ok {
+	if err := read.LoadFeed(ctx); err != nil {
+		if !s.store.BoundedMetadataEnabled() && errors.Is(err, store.ErrResourceAccessChanged) {
+			return nil
+		}
+		return err
+	}
+	{
+		snapshot := read.Snapshot
 		rules := newPulseRules(snapshot)
 		subscriptions := map[string][]domain.Subscription{}
 		for _, subscription := range snapshot.Subscriptions {

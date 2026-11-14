@@ -2,6 +2,16 @@
   "source": "server/pulse_feed.go",
   "unmigrated": 2,
   "consumers": {
+    "pulseOwnedRequestContext": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": [
+        "BeginPulseRead"
+      ],
+      "temperature": "hot",
+      "temperatureReason": "Pulse feed and sidebar unread request preparation.",
+      "reason": "Uses the owned installed Pulse read with unchanged feature, live membership, guest and selected-key checks, then selects only the requesting user's installed last-seen value. Failures close before returning; feed and unread handlers retain the handle through complete JSON encoding. Feed pages load complete selected updates only after rule/filter/search/cursor selection. Compact bounded entries retain no body Search text; when the source-name predicate does not match, a transient streamed MatchSearch preserves the exact lowercase body/newline/display/name predicate and propagates budget errors independently of cursor validation. TestScaleP21HotPulseGroupHandlerDifferential compares all/following/popular/created/search/filter feeds and unread across the existing principal/key matrix, including cross-field body/author search, complete selected comments/reactions and zero leaked work/full metadata decodes. Store UpdateBodyScaling proves constant retained feed/unread and summary work across 10x Body/BodyData bytes. Existing pulseRequestContext consumers remain separately unported."
+    },
     "postPulseSeen": {
       "owner": "P21",
       "status": "reviewed",

@@ -254,6 +254,14 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			defer states.close()
 			metadata.States = states.states
 			storedMetadata.States = slices.Clone(states.states)
+			if input, ok := scope.Payload.(domain.IssueUpdateInput); ok && issueHotInputsSupported(metadata.Issues, *target, input) {
+				inputs, err := s.loadIssueHotInputs(ctx, workspace, &metadata, *target, input)
+				if err != nil {
+					return err
+				}
+				defer inputs.close()
+				inputs.install(&metadata, &storedMetadata)
+			}
 		}
 		metadata.Activities = map[string][]domain.ActivityEvent{}
 		metadata.Comments = map[string][]domain.Comment{}

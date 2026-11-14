@@ -28,7 +28,8 @@ type PulseFeedEntry struct {
 	Reactions int
 	Score     float64
 	Mentions  []string
-	// Search is the lowercased body and author name.
+	// Search is the lowercased body and author name in the legacy resident
+	// index. Owned reads leave it empty and stream MatchSearch instead.
 	Search string
 }
 

@@ -293,13 +293,22 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 	}
 	var data domain.Bootstrap
 	var snapshotErr error
-	if s.store.BoundedMetadataEnabled() && s.mailer == nil {
-		read, readErr := s.store.BeginDueNotificationDeliveryRead(ctx, key, []string{"pending"}, time.Now().UTC())
-		if readErr != nil {
-			return
+	if s.store.BoundedMetadataEnabled() {
+		if s.mailer == nil {
+			read, readErr := s.store.BeginDueNotificationDeliveryRead(ctx, key, []string{"pending"}, time.Now().UTC())
+			if readErr != nil {
+				return
+			}
+			defer read.Close()
+			data.NotificationDeliveries = read.Deliveries
+		} else {
+			read, readErr := s.store.BeginNotificationDeliveryContextRead(ctx, key, []string{"pending"}, time.Now().UTC())
+			if readErr != nil {
+				return
+			}
+			defer read.Close()
+			data = read.Data
 		}
-		defer read.Close()
-		data.NotificationDeliveries = read.Deliveries
 	} else {
 		data, snapshotErr = snapshot(ctx, key, []string{"pending"}, time.Now().UTC())
 	}
