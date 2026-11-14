@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_cold_write.go",
+  "unmigrated": 0,
+  "consumers": {
+    "withColdFullMutation": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Private original full-metadata-writer integration shares the replica COLD slot and parent write mutex, refreshes the installed base before mutation, binds the original physical default key before coordinator acquisition, prepares exact native source/policy before SQL commit and publishes before synchronous sinks. TestScaleP21ColdFullWrite covers native preimages, canonical rows, rollback after preparation and commit failure, malicious external changes, current-source sinks, HOT changes, peer conflict retries, coordinator/default races and exact/unknown stamps. SQL comparison is 11 legacy versus 12 COLD, a fixed one-query commit-stamp cost. Optimized and issue/content writers are rejected; this adds no general COLD routing or startup exemption.",
+      "accessors": ["mutateFull"],
+      "temperature": "cold",
+      "temperatureReason": "On-demand full hydration is restricted to the private full-metadata COLD writer boundary; optimized/content writers remain independently guarded.",
+      "callers": ["Private COLD full metadata mutation boundary; currently targeted integration tests"]
+    },
+    "installColdFullWriteLocked": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Transfers precommit-prepared native source and policy to the bounded parent under the shared writer lock without postcommit allocation or hydration. Parent retains policy only; original exact/unknown metadata-write proof controls the logical stamp. TestScaleP21ColdFullWrite checks both sink ordering, rollback, policy-only residency, same-version conflict retry and commit-stamp distinctions.",
+      "accessors": ["workspaces"],
+      "temperature": "cold",
+      "temperatureReason": "Only the private COLD full-writer publication hook installs this pre-admitted postimage.",
+      "callers": ["store/metadata_copy_revision.go:installWrittenWorkspaceLocked"]
+    }
+  }
+}

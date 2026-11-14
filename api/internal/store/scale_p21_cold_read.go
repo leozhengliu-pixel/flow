@@ -12,17 +12,18 @@ import (
 type coldMetadataReadKey struct{}
 
 type coldMetadataRead struct {
-	mu     sync.Mutex
-	owner  *metadataResidency
-	facade *SQLiteStore
+	mu      sync.Mutex
+	owner   *metadataResidency
+	facade  *SQLiteStore
+	sources map[string]*metadataLogicalSource
 }
 
 // withColdMetadataRead lends a legacy read facade only for run's lifetime,
-// including projection and encoding. Callbacks must not write, Close the
-// facade, or retain its graph. Cold work deliberately has no HOT page/work
-// ceiling; one replica-wide slot covers the complete graph and its consumers.
-// This pins a callback snapshot; it is not general cold routing that refreshes
-// each access after a write. Existing caller snapshot contexts remain intact.
+// including projection and encoding. Writes require the explicit cold writer;
+// callbacks must not Close the facade or retain its graph. Cold work has no
+// HOT page/work ceiling; one replica-wide slot covers its graph and consumers.
+// Refresh is explicit until cold routing covers each old accessor. Existing
+// caller snapshot contexts remain intact.
 func (s *SQLiteStore) withColdMetadataRead(ctx context.Context, run func(context.Context, *SQLiteStore) error) error {
 	if s.metadataResidency == nil {
 		return run(ctx, s)
@@ -54,7 +55,13 @@ func (s *SQLiteStore) withColdMetadataRead(ctx context.Context, run func(context
 	}
 
 	facade, sources, err := s.pinColdMetadataRead(ctx)
+	read := &coldMetadataRead{owner: r, facade: facade, sources: sources}
 	defer func() {
+		read.mu.Lock()
+		read.facade = nil
+		sources := read.sources
+		read.sources = nil
+		read.mu.Unlock()
 		for _, source := range sources {
 			source.Release()
 		}
@@ -66,8 +73,19 @@ func (s *SQLiteStore) withColdMetadataRead(ctx context.Context, run func(context
 		facade.mu.Lock()
 		facade.workspaces, facade.viewer = nil, domain.User{}
 		facade.lastWorkspaceKey = ""
+		facade.coldParent = nil
 		facade.mu.Unlock()
 	}()
+	if err := facade.decodeColdMetadataRead(ctx, sources); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return run(context.WithValue(ctx, coldMetadataReadKey{}, read), facade)
+}
+
+func (s *SQLiteStore) decodeColdMetadataRead(ctx context.Context, sources map[string]*metadataLogicalSource) error {
 	for workspace, source := range sources {
 		var data domain.Bootstrap
 		value := reflect.ValueOf(&data).Elem()
@@ -87,18 +105,65 @@ func (s *SQLiteStore) withColdMetadataRead(ctx context.Context, run func(context
 			return err
 		}
 		domain.RebuildTeamDirectory(&data)
-		facade.workspaces[workspace] = data
+		s.workspaces[workspace] = data
 	}
+	return ctx.Err()
+}
+
+// refreshColdMetadataRead replaces a facade's graph from the latest installed
+// parent generation while its callback still owns the cold slot. The complete
+// registry/default capture also preserves exact cross-workspace lookup and
+// missing-key behavior. Explicit SQL/read contexts are never cleared.
+func (s *SQLiteStore) refreshColdMetadataRead(ctx context.Context, workspace string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	read := &coldMetadataRead{owner: r, facade: facade}
+	parent := s.coldParent
+	read, ok := ctx.Value(coldMetadataReadKey{}).(*coldMetadataRead)
+	if parent == nil || !ok || read.owner != parent.metadataResidency {
+		return ErrBoundedMetadataCoverage
+	}
+	read.mu.Lock()
+	defer read.mu.Unlock()
+	if read.facade != s {
+		return errMetadataLogicalClosed
+	}
+	next, sources, err := parent.pinColdMetadataRead(ctx)
+	installed := false
 	defer func() {
-		read.mu.Lock()
-		read.facade = nil
-		read.mu.Unlock()
+		if !installed {
+			for _, source := range sources {
+				source.Release()
+			}
+		}
 	}()
-	return run(context.WithValue(ctx, coldMetadataReadKey{}, read), facade)
+	if err != nil {
+		return err
+	}
+	if err := next.decodeColdMetadataRead(ctx, sources); err != nil {
+		return err
+	}
+	// workspace remains an exact registry lookup; neither SQL collation nor
+	// a logical URLKey can turn a missing requested key into an installed one.
+	selected := workspace
+	if selected == "" {
+		selected = next.lastWorkspaceKey
+	}
+	if _, found := next.workspaces[selected]; found {
+		if _, pinned := sources[selected]; !pinned {
+			return ErrBoundedMetadataCoverage
+		}
+	}
+	s.mu.Lock()
+	s.workspaces, s.lastWorkspaceKey, s.viewer = next.workspaces, next.lastWorkspaceKey, next.viewer
+	s.mu.Unlock()
+	previous := read.sources
+	read.sources = sources
+	installed = true
+	for _, source := range previous {
+		source.Release()
+	}
+	return nil
 }
 
 // Both registry identity and every logical generation are captured under the
@@ -112,6 +177,7 @@ func (s *SQLiteStore) pinColdMetadataRead(ctx context.Context) (*SQLiteStore, ma
 	defer r.mu.Unlock()
 	facade := &SQLiteStore{
 		db: s.db, dialect: s.dialect,
+		coldParent:         s,
 		workspaces:         make(map[string]domain.Bootstrap, len(s.workspaces)),
 		lastWorkspaceKey:   s.lastWorkspaceKey,
 		viewer:             s.viewer,

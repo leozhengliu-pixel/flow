@@ -248,6 +248,9 @@ func (s *SQLiteStore) installWrittenWorkspace(workspace string, data domain.Boot
 func (s *SQLiteStore) installWrittenWorkspaceLocked(workspace string, data domain.Bootstrap, write *metadataWrite) {
 	current, ok := s.copyRevisionLocked(workspace)
 	s.workspaces[workspace] = data
+	if s.coldWrite != nil {
+		s.installColdFullWriteLocked(workspace, write, current, ok)
+	}
 	if write == nil || write.workspace != workspace || !ok || current.epoch != write.base.epoch {
 		s.forgetCopyRevisionLocked(workspace)
 		return

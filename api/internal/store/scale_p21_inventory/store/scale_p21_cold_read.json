@@ -2,6 +2,24 @@
   "source": "store/scale_p21_cold_read.go",
   "unmigrated": 0,
   "consumers": {
+    "decodeColdMetadataRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Private COLD executor decodes retained installed field nodes under the sole replica slot, rebuilds legacy directory caches and returns errors before exposing a partial graph. TestScaleP21ColdRead compares warm and reloaded metadata, oversized native fields and cleanup.",
+      "accessors": ["workspaces"],
+      "temperature": "cold",
+      "temperatureReason": "Full native materialization is restricted to the private COLD executor.",
+      "callers": ["store/scale_p21_cold_read.go:withColdMetadataRead", "store/scale_p21_cold_read.go:refreshColdMetadataRead"]
+    },
+    "refreshColdMetadataRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Validates the live COLD lifetime, atomically re-pins registry, defaults, viewer and current logical sources, then replaces the facade graph and releases retired pins. TestScaleP21ColdRead verifies intervening source changes, default and physical-key lookups, missing sources, preserved inherited contexts and earlier owned results.",
+      "accessors": ["workspaces"],
+      "temperature": "cold",
+      "temperatureReason": "Only explicit COLD accessor and writer boundaries refresh their on-demand legacy facade.",
+      "callers": ["store/scale_p21_cold_write.go:refreshColdFullWriteLocked"]
+    },
     "withColdMetadataRead": {
       "owner": "P21",
       "status": "reviewed",
