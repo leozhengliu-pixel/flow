@@ -76,9 +76,10 @@ func TestScaleP21SW22CustomerTaxonomySourceHold(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		canonical, found, err := probe.WorkspaceMetadataScoped(t.Context(), workspace, store.MetadataRecordScope{Fields: []string{"customerStatuses", "customerTiers"}})
-		if err != nil || !found || len(canonical.CustomerStatuses) != 1 || canonical.CustomerStatuses[0].Name != "WarmName" {
-			t.Fatal("canonical source transformation changed", found, err, canonical.CustomerStatuses)
+		hydrated, err := probe.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{Fields: []string{"customerStatuses", "customerTiers"}})
+		canonical := hydrated.Data
+		if err != nil || len(canonical.CustomerStatuses) != 1 || canonical.CustomerStatuses[0].Name != "WarmName" {
+			t.Fatal("canonical source transformation changed", err, canonical.CustomerStatuses)
 		}
 		taxonomy := customerTaxonomy{kind: "status"}
 		if err := taxonomy.validate(canonical.CustomerStatuses, "", "WarmName", "", taxonomy.defaultColor()); !errors.Is(err, errInvalid) {
@@ -88,22 +89,35 @@ func TestScaleP21SW22CustomerTaxonomySourceHold(t *testing.T) {
 		if !ok || taxonomy.validate(installed.CustomerStatuses, "", "WarmName", "", taxonomy.defaultColor()) != nil {
 			t.Fatal("installed logical source no longer allows distinct accepted name")
 		}
-		// Both mutation callbacks use the same validation. Merely switching
-		// the accessor changes a successful no-op into a duplicate error.
+		// Both mutation callbacks must validate the same installed source,
+		// even when canonical SQL would reject a transformed duplicate.
 		validate := func(data *domain.Bootstrap) error {
 			if err := taxonomy.validate(taxonomy.items(data), "", "WarmName", "", taxonomy.defaultColor()); err != nil {
 				return err
 			}
 			return store.ErrNoMutation
 		}
+		before := scaleP21M3Fingerprint(t, repo, workspace, "customerStatuses") + scaleP21M3Fingerprint(t, repo, workspace, "customerTiers")
+		var events, realtime int
+		for _, source := range []*store.SQLiteStore{repo, probe} {
+			source.SetWebhookSink(func(string, domain.DomainEvent) { events++ })
+			source.SetRealtimeSink(func(string, domain.RealtimeEvent) { realtime++ })
+		}
 		if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "customerStatuses"), workspace, "customer_taxonomy.created", "status", nil, validate); err != nil {
 			t.Fatal("legacy accepted validation changed", err)
 		}
 		err = probe.MutateWorkspaceScoped(t.Context(), workspace, "customer_taxonomy.created", "status", nil, store.MetadataRecordScope{Fields: []string{"customerStatuses"}}, validate)
-		if !errors.Is(err, errInvalid) || probe.WorkspaceMetadataDecodes() != 0 {
-			t.Fatal("source hold disappeared; re-review all taxonomy consumers", err)
+		if err != nil || probe.WorkspaceMetadataDecodes() != 0 {
+			t.Fatal("bounded installed validation differs", err)
 		}
-		t.Log("installed list preserves warm typed name for admin/member/guest and all key restrictions; canonical callback changes duplicate validation")
+		for _, source := range []*store.SQLiteStore{repo, probe} {
+			source.SetWebhookSink(nil)
+			source.SetRealtimeSink(nil)
+		}
+		if events != 0 || realtime != 0 || before != scaleP21M3Fingerprint(t, repo, workspace, "customerStatuses")+scaleP21M3Fingerprint(t, repo, workspace, "customerTiers") {
+			t.Fatal("no-op validation published effects or changed canonical rows", events, realtime)
+		}
+		t.Log("installed list and bounded mutation preserve warm typed names; raw canonical SQL still changes duplicate validation")
 	}
 }
 
@@ -196,6 +210,10 @@ func TestScaleP21SW22CustomerTaxonomyAtomicScopeHold(t *testing.T) {
 			}
 			return nil
 		}); err != nil {
+			t.Fatal(err)
+		}
+		probe, err = repo.BoundedMetadataViewForTesting(t.Context())
+		if err != nil {
 			t.Fatal(err)
 		}
 		called = false

@@ -28,6 +28,16 @@ type metadataCollectionSnapshot struct {
 // Fresh authority checks use the original context after the caller closes tx.
 // Readers support io.ReadSeeker and io.ReaderAt, and must stay in callbacks.
 func (s *SQLiteStore) MetadataCollectionsInSnapshot(ctx context.Context, tx *sqlTx, workspace string, kinds ...string) (_ *MetadataCollectionRead, err error) {
+	return s.metadataCollectionsInSnapshot(ctx, tx, workspace, false, kinds...)
+}
+
+// metadataRootCursorInSnapshot defers validation to the root spool owner.
+// It is private because every public collection reader validates before return.
+func (s *SQLiteStore) metadataRootCursorInSnapshot(ctx context.Context, tx *sqlTx, workspace string) (*MetadataCollectionRead, error) {
+	return s.metadataCollectionsInSnapshot(ctx, tx, workspace, true)
+}
+
+func (s *SQLiteStore) metadataCollectionsInSnapshot(ctx context.Context, tx *sqlTx, workspace string, deferRootScan bool, kinds ...string) (_ *MetadataCollectionRead, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -81,6 +91,9 @@ func (s *SQLiteStore) MetadataCollectionsInSnapshot(ctx context.Context, tx *sql
 	snapshot.root = &metadataSnapshotReaderAt{ctx: callbackCtx, snapshot: snapshot, size: r.rootSize}
 	for _, field := range r.collections {
 		field.shape.WorkspaceFound = true
+	}
+	if deferRootScan {
+		return r, nil
 	}
 	if err := r.scanRoot(nil); err != nil {
 		return nil, err

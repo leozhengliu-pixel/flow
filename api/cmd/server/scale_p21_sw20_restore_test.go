@@ -152,6 +152,11 @@ func TestScaleP21SW20RestoreTeamDifferential(t *testing.T) {
 				t.Fatal(err)
 			}
 			f.resources.workspaces = append(f.resources.workspaces, foreign.Workspace.URLKey)
+			// The foreign workspace was created after the bounded view.
+			// Install its literal preimage before comparing tenant binding.
+			if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, foreign.Workspace.URLKey); err != nil {
+				t.Fatal(err)
+			}
 			for _, source := range []*store.SQLiteStore{repo, f.probe} {
 				r, w := f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
 				r.Header.Set("X-Workspace-Key", foreign.Workspace.URLKey)

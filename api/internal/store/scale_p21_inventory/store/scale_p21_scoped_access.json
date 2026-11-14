@@ -2,11 +2,11 @@
   "source": "store/scale_p21_scoped_access.go",
   "unmigrated": 0,
   "consumers": {
-    "readScopedMetadata": {
+    "readScopedMetadataResult": {
       "owner": "P21",
       "status": "reviewed",
-      "accessors": ["BeginWorkspaceRead"],
-      "reason": "Uses an explicit bounded P15 read scope and releases its SQL snapshot; copies the trusted selected data without stripping server-only restore links. Covered by scoped read preservation and budget tests."
+      "accessors": ["resident-state"],
+      "reason": "Trusted installed-source primitive selects declared inputs under the intrinsic 2 MiB decoded and 50-record/256 KiB encoded caps. Bound contexts retain source and response allowance through explicit owner Close; the unbound by-value branch keeps its existing behavior and remains unsuitable for consumer lifetime certification. Exact retained source origin accompanies projection authority checks. SW32 covers retained/default generations, parent release, close, cancellation, foreign tokens and write/reload pin bypass; SW33 covers tenant recreation. No downstream consumer is certified by this primitive review."
     },
     "WorkspaceMetadataScoped": {
       "owner": "P21",
@@ -38,7 +38,7 @@
       "accessors": [
         "MutateWorkspaceWithAggregate"
       ],
-      "reason": "Shared scoped adapter: exact legacy dispatch when residency is off; explicit P15 selection, bounded admission, canonical writes and rejection before commit for undeclared or oversized work in bounded mode. P21 scoped accessor and permission differential tests cover this boundary."
+      "reason": "Off mode forwards the literal original accessor/context. Bounded callbacks use the exact installed logical preimage with declared P15 inputs, live authorization, bounded external hydration/reference refresh, legacy nested aggregate closure and publication work held through sinks. Named CAS conflicts refresh only bounded declared records before retry; point and complete-field merges/deletions install the actual persisted postimage without recomputing pre-persist events. Coordinator reload reserves policy work before writer locking. New unavailable native leaves reject before commit; timestamp receipts retain audited parser provenance. SW27-33 source/aggregate/permission/ownership tests and SW36 persistent point/full-field differentials compare callback attempts, returned/native values, SQL, webhook previous values/snapshots and realtime, including warm NUL, peer merge/delete, coordinator retry, nil append, import inputs and cancellation. Generic 50-record/256 KiB/2 MiB limits remain; domain callbacks and high-cardinality unported consumers are not certified by this adapter review."
     }
   }
 }

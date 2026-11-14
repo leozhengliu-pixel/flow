@@ -2,10 +2,10 @@
   "source": "store/bounded_recovery.go",
   "unmigrated": 0,
   "consumers": {
-    "installResidentPolicy": {
+    "installResidentPolicySource": {
       "owner": "P21",
       "status": "reviewed",
-      "reason": "Original P21 bounded core adapter: explicit record scopes or policy-only residency, process admission, and rejection of unported complete-snapshot operations are covered by the P21 integration tests.",
+      "reason": "Installs a preflighted resident policy and optional immutable logical source together under the store and residency locks after commit; committed writers also publish default workspace selection atomically. SW27/SW30 lifecycle tests cover exact/unknown stamps, late failure, key recreation, cancellation and retained generations.",
       "accessors": [
         "Bootstrap"
       ]

@@ -429,7 +429,7 @@ func residentMetadataRoot(raw []byte) ([]byte, map[string]string, error) {
 			return nil, nil, fmt.Errorf("%w: unknown field %q", ErrBoundedMetadataCoverage, name)
 		}
 		trimmed := strings.TrimSpace(string(value))
-		if shapes[name] == "" && len(trimmed) > 2 && (trimmed[0] == '[' || trimmed[0] == '{') && mode != "core" {
+		if shapes[name] == "" && len(trimmed) > 2 && (trimmed[0] == '[' || trimmed[0] == '{') && mode != "core" && mode != "records" {
 			return nil, nil, fmt.Errorf("%w: unsplit field %q", ErrBoundedMetadataCoverage, name)
 		}
 		if mode != "core" && mode != "policy" {
@@ -610,6 +610,7 @@ func appendResidentMetadataRow(data *domain.Bootstrap, row metadataCacheRow, sha
 }
 
 func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
+	ctx = metadataLogicalUnpinnedContext(ctx)
 	ctx, release, err := s.metadataResidency.work.acquire(ctx, metadataPolicyBytes+2<<20)
 	if err != nil {
 		return err
@@ -622,6 +623,15 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 	defer tx.Rollback()
 	workspaces, costs := map[string]domain.Bootstrap{}, map[string]int{}
 	stamps, heads := map[string]copyStamp{}, map[string]int64{}
+	s.metadataResidency.mu.Lock()
+	buildLogical := s.metadataResidency.requireCoverage || len(s.metadataResidency.logical) != 0
+	s.metadataResidency.mu.Unlock()
+	sources := map[string]*metadataLogicalSource{}
+	defer func() {
+		for _, source := range sources {
+			source.Release()
+		}
+	}()
 	s.mu.RLock()
 	lastWorkspace, viewer := s.lastWorkspaceKey, s.viewer
 	initial := len(s.workspaces) == 0
@@ -685,6 +695,26 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("recover resident workspace %q: %w", key, err)
 			}
+			if buildLogical {
+				var source *metadataLogicalSource
+				current, currentErr := s.retainMetadataLogicalSource(ctx, key)
+				if currentErr == nil && current.Stamp() == stamp {
+					source = current
+					data, cost, err = s.metadataLogicalPolicy(ctx, source)
+				} else {
+					if current != nil {
+						current.Release()
+					}
+					data, stamp, cost, source, err = s.readMetadataLogicalWorkspace(ctx, tx, key)
+				}
+				if err != nil {
+					if source != nil {
+						source.Release()
+					}
+					return fmt.Errorf("recover logical workspace %q: %w", key, err)
+				}
+				sources[key] = source
+			}
 			if cost > s.metadataResidency.policyLimit-total {
 				return ErrMetadataWorkBudget
 			}
@@ -717,7 +747,13 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 	s.workspaces, s.copyRevisions = workspaces, nil
 	s.metadataResidency.mu.Lock()
 	s.metadataResidency.stamps, s.metadataResidency.applied = stamps, heads
+	oldSources := s.metadataResidency.logical
+	s.metadataResidency.logical = sources
+	sources = nil
 	s.metadataResidency.mu.Unlock()
+	for _, source := range oldSources {
+		source.Release()
+	}
 	// Legacy copy revisions certify complete metadata. Policy-only copies
 	// leave them unknown so native record readers use canonical SQL records.
 	if _, ok := workspaces[lastWorkspace]; !ok {
@@ -734,11 +770,60 @@ func (s *SQLiteStore) loadResidentWorkspaces(ctx context.Context) error {
 }
 
 func (s *SQLiteStore) reloadResidentWorkspace(ctx context.Context, workspace string) error {
+	ctx = metadataLogicalUnpinnedContext(ctx)
 	ctx, release, err := s.metadataResidency.work.acquire(ctx, metadataPolicyBytes+2<<20)
 	if err != nil {
 		return err
 	}
 	defer release()
+	s.metadataResidency.mu.Lock()
+	hasLogical := s.metadataResidency.logical[workspace] != nil
+	s.metadataResidency.mu.Unlock()
+	if !s.metadataResidency.requireCoverage && !hasLogical {
+		return s.reloadResidentPolicyWorkspace(ctx, workspace)
+	}
+	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	storedStamp, err := readMetadataStamp(ctx, tx, workspace)
+	if err != nil {
+		return err
+	}
+	if current, err := s.retainMetadataLogicalSource(ctx, workspace); err == nil {
+		exact := current.Stamp() == storedStamp
+		current.Release()
+		if exact {
+			return tx.Commit()
+		}
+	}
+	data, stamp, cost, source, err := s.readMetadataLogicalWorkspace(ctx, tx, workspace)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if source != nil {
+			source.Release()
+		}
+	}()
+	head, err := residentJournalHead(ctx, tx, data.Workspace.ID)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if err := s.installResidentPolicy(workspace, data, stamp, head, cost, source); err != nil {
+		return err
+	}
+	source = nil
+	return nil
+}
+
+// Policy-only probes exercise the storage projection independently of the
+// installed logical lifecycle. They cannot activate production coverage.
+func (s *SQLiteStore) reloadResidentPolicyWorkspace(ctx context.Context, workspace string) error {
 	tx, err := s.db.BeginTx(ctx, metadataReadOptions(s.dialect))
 	if err != nil {
 		return err
@@ -758,7 +843,14 @@ func (s *SQLiteStore) reloadResidentWorkspace(ctx context.Context, workspace str
 	return s.installResidentPolicy(workspace, data, stamp, head, cost)
 }
 
-func (s *SQLiteStore) installResidentPolicy(workspace string, data domain.Bootstrap, stamp copyStamp, head int64, cost int) error {
+func (s *SQLiteStore) installResidentPolicy(workspace string, data domain.Bootstrap, stamp copyStamp, head int64, cost int, sources ...*metadataLogicalSource) error {
+	return s.installResidentPolicySource(workspace, data, stamp, head, cost, false, sources...)
+}
+
+func (s *SQLiteStore) installResidentPolicySource(workspace string, data domain.Bootstrap, stamp copyStamp, head int64, cost int, last bool, sources ...*metadataLogicalSource) error {
+	if len(sources) > 1 {
+		return ErrMetadataRecordQuery
+	}
 	s.metadataResidency.mu.Lock()
 	costs := make(map[string]int, len(s.metadataResidency.policy)+1)
 	for key, value := range s.metadataResidency.policy {
@@ -771,11 +863,25 @@ func (s *SQLiteStore) installResidentPolicy(workspace string, data domain.Bootst
 	}
 	s.mu.Lock()
 	s.workspaces[workspace] = data
+	if last {
+		s.lastWorkspaceKey = workspace
+	}
 	s.forgetCopyRevisionLocked(workspace)
 	s.metadataResidency.mu.Lock()
 	s.metadataResidency.stamps[workspace], s.metadataResidency.applied[workspace] = stamp, head
+	var previous *metadataLogicalSource
+	if len(sources) == 1 {
+		if s.metadataResidency.logical == nil {
+			s.metadataResidency.logical = map[string]*metadataLogicalSource{}
+		}
+		previous = s.metadataResidency.logical[workspace]
+		s.metadataResidency.logical[workspace] = sources[0]
+	}
 	s.metadataResidency.mu.Unlock()
 	s.mu.Unlock()
+	if previous != nil {
+		previous.Release()
+	}
 	return nil
 }
 

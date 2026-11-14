@@ -153,16 +153,19 @@ func TestScaleP21SW5IntegrationOAuthDifferential(t *testing.T) {
 				}
 				if variant == "disconnected" {
 					action = func() error {
-						return repo.MutateWorkspace(t.Context(), workspace, "scale_p21_sw5.concurrent_disconnect", target, nil, func(data *domain.Bootstrap) error {
-							kept := data.IntegrationConnections[:0]
-							for _, item := range data.IntegrationConnections {
-								if item.ID != target {
-									kept = append(kept, item)
+						// Exercise a disconnect on the handler's own instance in
+						// both phases; a separate owner's write models a stale peer.
+						return source.MutateWorkspaceScoped(t.Context(), workspace, "scale_p21_sw5.concurrent_disconnect", target, nil,
+							store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "integrationConnections", ID: target}}}, func(data *domain.Bootstrap) error {
+								kept := data.IntegrationConnections[:0]
+								for _, item := range data.IntegrationConnections {
+									if item.ID != target {
+										kept = append(kept, item)
+									}
 								}
-							}
-							data.IntegrationConnections = kept
-							return nil
-						})
+								data.IntegrationConnections = kept
+								return nil
+							})
 					}
 				}
 				mu.Unlock()

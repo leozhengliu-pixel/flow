@@ -193,6 +193,9 @@ func TestScaleP21M3GuidanceDifferential(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
+			if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+				t.Fatal(err)
+			}
 		}
 		for _, principal := range principals {
 			for _, credential := range scaleP21M3Credentials() {
@@ -211,8 +214,9 @@ func TestScaleP21M3GuidanceDifferential(t *testing.T) {
 							w := httptest.NewRecorder()
 							scaleP21M3Call(service, w, scaleP21M3Request(workspace, principal.user, credential.key, body), (*server).updateWorkspaceAgentGuidance)
 							responses = append(responses, []any{w.Code, scaleP21M3JSON(t, w.Body.Bytes())})
-							data, ok, err := probe.WorkspaceMetadataScoped(t.Context(), workspace, store.MetadataRecordScope{Fields: []string{"workspaceSettings"}})
-							if err != nil || !ok {
+							hydrated, err := probe.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{Fields: []string{"workspaceSettings"}})
+							data := hydrated.Data
+							if err != nil {
 								t.Fatalf("read persisted settings: %v", err)
 							}
 							settings := data.WorkspaceSettings

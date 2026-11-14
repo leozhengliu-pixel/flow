@@ -31,6 +31,7 @@ type scaleP21M2Fixture struct {
 	probe      *store.SQLiteStore
 	principals []scaleP21M2Principal
 	public     string
+	testingT   *testing.T
 }
 
 func scaleP21M2Setup(t *testing.T, repo *store.SQLiteStore) scaleP21M2Fixture {
@@ -84,7 +85,7 @@ func scaleP21M2Setup(t *testing.T, repo *store.SQLiteStore) scaleP21M2Fixture {
 			t.Error("unrelated canonical settings bytes changed")
 		}
 	})
-	return scaleP21M2Fixture{f, probe, principals, public}
+	return scaleP21M2Fixture{scaleP03PlatformFixture: f, probe: probe, principals: principals, public: public, testingT: t}
 }
 
 func scaleP21M2UnrelatedHash(t *testing.T, ctx context.Context, repo *store.SQLiteStore, workspace string) [32]byte {
@@ -105,6 +106,15 @@ func scaleP21M2UnrelatedHash(t *testing.T, ctx context.Context, repo *store.SQLi
 }
 
 func (f scaleP21M2Fixture) request(user domain.User, key *domain.APIKey, body any) *http.Request {
+	// Each pair resets the literal owner between phases. Reset the bounded
+	// view to that same installed preimage, including warm native values.
+	if err := f.probe.RefreshInstalledMetadataViewForTesting(context.Background(), f.repository, f.data.Workspace.URLKey); err != nil {
+		f.testingT.Fatal(err)
+	}
+	return f.literalRequest(user, key, body)
+}
+
+func (f scaleP21M2Fixture) literalRequest(user domain.User, key *domain.APIKey, body any) *http.Request {
 	var raw []byte
 	if body != nil {
 		raw, _ = json.Marshal(body)
@@ -358,6 +368,9 @@ func TestScaleP21M2SCIMProfileAndAudit(t *testing.T) {
 				data.UserSettings[userID] = domain.UserSettings{UserID: userID, JobTitle: "Before"}
 				return nil
 			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
 				t.Fatal(err)
 			}
 			ctx := store.ContextWithActor(t.Context(), f.data.Viewer)

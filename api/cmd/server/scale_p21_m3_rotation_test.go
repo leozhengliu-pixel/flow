@@ -51,6 +51,9 @@ func TestScaleP21M3CredentialRotationDifferential(t *testing.T) {
 							}); err != nil {
 								t.Fatal(err)
 							}
+							if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+								t.Fatal(err)
+							}
 							if _, err := current.AuthenticateAPIKeyRecord(t.Context(), workspace, secretHash(oldSecret), nil); err != nil {
 								t.Fatal("fixture predecessor does not authenticate")
 							}
@@ -75,8 +78,9 @@ func TestScaleP21M3CredentialRotationDifferential(t *testing.T) {
 							if w.Code != want {
 								t.Fatalf("rotation permission status=%d want=%d", w.Code, want)
 							}
-							row, ok, err := probe.WorkspaceMetadataScoped(t.Context(), workspace, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "apiKeys", ID: target.ID}}})
-							if err != nil || !ok || len(row.APIKeys) != 1 {
+							hydrated, err := probe.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "apiKeys", ID: target.ID}}})
+							row := hydrated.Data
+							if err != nil || len(row.APIKeys) != 1 {
 								t.Fatal("rotation lost the target credential")
 							}
 							var response struct {

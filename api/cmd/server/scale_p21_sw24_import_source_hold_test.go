@@ -52,12 +52,12 @@ func TestScaleP21SW24ImportMultipartSourceHold(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		scoped, found, err := probe.WorkspaceMetadataFieldsScoped(t.Context(), f.data.Workspace.URLKey,
-			store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "importJobs", ID: created.ID}}}, "importJobs")
-		if err != nil || !found || len(scoped.ImportJobs) != 1 {
+		hydrated, err := probe.HydrateWorkspaceMetadata(t.Context(), f.data.Workspace.URLKey,
+			store.MetadataRecordScope{Read: []store.RecordKey{{Kind: "importJobs", ID: created.ID}}})
+		if err != nil || len(hydrated.Data.ImportJobs) != 1 {
 			t.Fatal("canonical point control", err)
 		}
-		canonical := scoped.ImportJobs[0]
+		canonical := hydrated.Data.ImportJobs[0]
 		if len(canonical.Headers) != 1 || canonical.Headers[0] != "titlefield" || canonical.Rows != nil {
 			t.Fatalf("canonical control no longer exercises stripped headers and compacted rows: %+v", canonical)
 		}

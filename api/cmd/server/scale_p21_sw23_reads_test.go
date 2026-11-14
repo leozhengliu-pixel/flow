@@ -294,6 +294,9 @@ func TestScaleP21SW23CodingSettingsDifferential(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
+			if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+				t.Fatal(err)
+			}
 		}
 		event := codehost.WebhookEvent{Type: codehost.EventChangeRequestMerged, CodeHost: "github", HostName: "github.com", InstallationID: "sw23-installation", ChangeRequest: &codehost.ChangeRequest{Number: 1}}
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {

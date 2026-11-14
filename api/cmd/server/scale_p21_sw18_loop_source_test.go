@@ -136,10 +136,11 @@ func TestScaleP21SW18LoopVersionsSourceHold(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		canonical, found, err := probe.WorkspaceMetadataScoped(t.Context(), workspace, store.MetadataRecordScope{Fields: []string{"loops", "loopVersions", "users"}})
-		if err != nil || !found {
-			t.Fatal("canonical comparison source", found, err)
+		hydrated, err := probe.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{Fields: []string{"loops", "loopVersions", "users"}})
+		if err != nil {
+			t.Fatal("canonical comparison source", err)
 		}
+		canonical := hydrated.Data
 		service := &server{store: repo, authDisabled: true}
 		request := func() *http.Request {
 			r := httptest.NewRequest(http.MethodGet, "/api/loops/"+id+"/versions", nil)
@@ -172,9 +173,9 @@ func TestScaleP21SW18LoopVersionsSourceHold(t *testing.T) {
 			actual.Name != first.Definition.Name || actual.Instructions != first.Definition.Instructions || actual.Version != 2 {
 			t.Fatal("actual restore did not preserve source version", restored.Code, restored.Body.String())
 		}
-		stored, found, err := probe.WorkspaceMetadataScoped(t.Context(), workspace, store.MetadataRecordScope{Fields: []string{"loops"}})
-		if err != nil || !found || len(stored.Loops) != 1 || stored.Loops[0].Name != "restorename" {
-			t.Fatal("restored canonical witness changed", found, err)
+		stored, err := probe.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{Fields: []string{"loops"}})
+		if err != nil || len(stored.Data.Loops) != 1 || stored.Data.Loops[0].Name != "restorename" {
+			t.Fatal("restored canonical witness changed", err)
 		}
 		t.Log("list/get/restore require exact installed version bodies; canonical history strips accepted NUL")
 	}

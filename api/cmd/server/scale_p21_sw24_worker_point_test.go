@@ -64,6 +64,12 @@ func TestScaleP21SW24WorkerDefinitionDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		canonical, err := probe.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{
+			Read: []store.RecordKey{{Kind: "loops", ID: targetID}},
+		})
+		if err != nil || len(canonical.Data.Loops) != 1 || canonical.Data.Loops[0].TrustedSourceKeys != nil {
+			t.Fatal("canonical nil trusted-source witness changed", err)
+		}
 		before := scaleP21M3Fingerprint(t, repo, workspace, "loops")
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			ctx := f.request(user, key, nil).Context()
@@ -89,17 +95,11 @@ func TestScaleP21SW24WorkerDefinitionDifferential(t *testing.T) {
 					t.Fatalf("owned Loop semantic JSON changed for %q: %s", ref, scaleP21M2Diff(results[0], results[1]))
 				}
 				if results[0] != nil {
-					left, right := reflect.ValueOf(*results[0]), reflect.ValueOf(*results[1])
-					for index := range left.NumField() {
-						if !reflect.DeepEqual(left.Field(index).Interface(), right.Field(index).Interface()) {
-							if left.Type().Field(index).Name != "TrustedSourceKeys" ||
-								len(results[0].TrustedSourceKeys) != 0 || len(results[1].TrustedSourceKeys) != 0 {
-								t.Fatalf("consumed input field %s changed: legacy=%#v bounded=%#v", left.Type().Field(index).Name, left.Field(index).Interface(), right.Field(index).Interface())
-							}
-						}
+					if !reflect.DeepEqual(results[0], results[1]) {
+						t.Fatalf("consumed worker input changed: %s", scaleP21M2Diff(results[0], results[1]))
 					}
-					if ref == targetID && (results[0].TrustedSourceKeys == nil || results[1].TrustedSourceKeys != nil) {
-						t.Fatal("warm empty and canonical nil trusted-source representations were not exercised")
+					if ref == targetID && (results[0].TrustedSourceKeys == nil || results[1].TrustedSourceKeys == nil) {
+						t.Fatal("installed empty trusted-source representations were not preserved")
 					}
 					for _, enabled := range []bool{false, true} {
 						for _, mode := range []string{"", "allowlist", "other"} {
@@ -151,6 +151,10 @@ func TestScaleP21SW24WorkerDefinitionDifferential(t *testing.T) {
 			data.Loops[0].Instructions = strings.Repeat("legal selected loop body ", 18000)
 			return nil
 		}); err != nil {
+			t.Fatal(err)
+		}
+		probe, err = repo.BoundedMetadataViewForTesting(t.Context())
+		if err != nil {
 			t.Fatal(err)
 		}
 		before = scaleP21M3Fingerprint(t, repo, workspace, "loops")

@@ -129,12 +129,14 @@ func TestScaleP21ScopedAccessorWorkedExamples(t *testing.T) {
 						a := request(principal.user, credential.key, operation.method, operation.path, operation.body)
 						a.SetPathValue("id", "p21-missing")
 						before := call(legacy, a, operation.handler)
-						// Reset the comparison's settings through the legacy writer;
-						// the bounded view intentionally retains no settings body.
+						// Reset both representations to the same installed preimage.
 						if err := repo.ReloadWorkspace(t.Context(), workspace); err != nil {
 							t.Fatal(err)
 						}
 						reset()
+						if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+							t.Fatal(err)
+						}
 						b := request(principal.user, credential.key, operation.method, operation.path, operation.body)
 						b.SetPathValue("id", "p21-missing")
 						after := call(bounded, b, operation.handler)
@@ -144,6 +146,9 @@ func TestScaleP21ScopedAccessorWorkedExamples(t *testing.T) {
 					}
 					var auditResults [][]int
 					for _, service := range []*server{legacy, bounded} {
+						if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+							t.Fatal(err)
+						}
 						codes := []int{}
 						created := call(service, request(principal.user, credential.key, http.MethodPost, "/api/workspace/audit-log-stream", map[string]any{"url": "https://example.test/audit", "secret": "p21-matrix-secret-012345"}), (*server).createAuditStream)
 						codes = append(codes, created.Code)
@@ -186,6 +191,9 @@ func TestScaleP21ScopedAccessorWorkedExamples(t *testing.T) {
 		// audit staging, public secret stripping and the background point edit.
 		var createdID string
 		for _, service := range []*server{legacy, bounded} {
+			if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+				t.Fatal(err)
+			}
 			r := request(f.data.Viewer, nil, http.MethodPost, "/api/workspace/audit-log-stream", map[string]any{"url": "https://example.test/audit", "secret": "p21-fixture-secret-012345"})
 			w := call(service, r, (*server).createAuditStream)
 			if w.Code != http.StatusCreated {

@@ -141,6 +141,9 @@ func TestScaleP21M2WebhookDeliveryDifferential(t *testing.T) {
 				}); err != nil {
 					t.Fatal(err)
 				}
+				if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+					t.Fatal(err)
+				}
 				now := time.Now().UTC().Truncate(time.Millisecond)
 				delivery := domain.WebhookDelivery{ID: idgen.New("m2-delivery-"), WorkspaceKey: workspace, WebhookID: "m2-hook", Kind: domain.WebhookDeliveryKindEvent, EventID: "m2-event", EventType: "M2", URL: host.URL, Payload: json.RawMessage(`{"m2":true}`), MaxAttempts: 1, CreatedAt: now, NextAttemptAt: &now}
 				if mode == "missing" {

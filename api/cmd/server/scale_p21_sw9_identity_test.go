@@ -308,6 +308,9 @@ func TestScaleP21SW9EnterpriseOIDCClientDifferential(t *testing.T) {
 		large := original
 		large.Name = strings.Repeat("large selected provider ", 18000)
 		scaleP21SW9Reset(t, repo, workspace, large)
+		if err := f.probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+			t.Fatal(err)
+		}
 		if _, _, err := (&server{store: f.probe}).enterpriseOIDCClient(t.Context(), workspace, original.ID); !errors.Is(err, store.ErrMetadataPageBudget) {
 			t.Fatalf("large selected provider was silently omitted: %v", err)
 		}
@@ -379,10 +382,11 @@ func TestScaleP21SW9ProviderVerificationDifferential(t *testing.T) {
 						if w.Code != spec.status {
 							t.Fatalf("verification status=%d want=%d body=%s", w.Code, spec.status, w.Body.String())
 						}
-						data, ok, err := f.probe.WorkspaceMetadataScoped(t.Context(), workspace, store.MetadataRecordScope{
+						hydrated, err := f.probe.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{
 							Read: []store.RecordKey{{Kind: "identityProviders", ID: target.ID}, {Kind: "users", ID: user.ID}},
 						})
-						if err != nil || !ok || len(data.IdentityProviders) != 1 {
+						data := hydrated.Data
+						if err != nil || len(data.IdentityProviders) != 1 {
 							t.Fatal("verification canonical target missing", err)
 						}
 						if spec.status == http.StatusOK && (data.IdentityProviders[0].LastVerifiedAt == nil || data.IdentityProviders[0].DiscoveryStatus != "verified") {
@@ -467,23 +471,28 @@ func TestScaleP21SW9ProviderVerificationRacesAndBoundaries(t *testing.T) {
 						case "cancelled-outbound":
 							cancel()
 						default:
-							if err := repo.MutateWorkspace(store.WithMetadataFields(t.Context(), "identityProviders"), workspace, "scale_p21_sw9.race", target.ID, nil, func(data *domain.Bootstrap) error {
-								for i := range data.IdentityProviders {
-									if data.IdentityProviders[i].ID != target.ID {
-										continue
+							// Both phases mutate the handler's own installed source.
+							// A write on the separate fixture owner would instead
+							// model a stale peer, which the literal old writer also
+							// keeps until its normal freshness/reload boundary.
+							if err := source.MutateWorkspaceScoped(store.WithMetadataFields(t.Context(), "identityProviders"), workspace, "scale_p21_sw9.race", target.ID, nil,
+								store.MetadataRecordScope{Write: []store.RecordKey{{Kind: "identityProviders", ID: target.ID}}}, func(data *domain.Bootstrap) error {
+									for i := range data.IdentityProviders {
+										if data.IdentityProviders[i].ID != target.ID {
+											continue
+										}
+										switch spec.name {
+										case "updated":
+											data.IdentityProviders[i].UpdatedAt = original.UpdatedAt.Add(time.Hour)
+										case "issuer":
+											data.IdentityProviders[i].Issuer = scaleP21SW9Issuer + "/changed"
+										case "deleted":
+											data.IdentityProviders = append(data.IdentityProviders[:i], data.IdentityProviders[i+1:]...)
+										}
+										return nil
 									}
-									switch spec.name {
-									case "updated":
-										data.IdentityProviders[i].UpdatedAt = original.UpdatedAt.Add(time.Hour)
-									case "issuer":
-										data.IdentityProviders[i].Issuer = scaleP21SW9Issuer + "/changed"
-									case "deleted":
-										data.IdentityProviders = append(data.IdentityProviders[:i], data.IdentityProviders[i+1:]...)
-									}
-									return nil
-								}
-								return errNotFound
-							}); err != nil {
+									return errNotFound
+								}); err != nil {
 								t.Fatal(err)
 							}
 						}

@@ -76,6 +76,8 @@ func TestScaleP21ScopedMetadataWritesMatchCanonicalHooks(t *testing.T) {
 		data.AuditLog = append(data.AuditLog, domain.AuditLogEntry{ID: "p21-audit-" + time.Now().Format("150405.000000000"), Action: "p21.scoped", ResourceType: "settings", ResourceID: "p21-target", Actor: f.data.Viewer, CreatedAt: time.Now().UTC()})
 		return nil
 	}
+	preimage, _ := f.storedWorkspace(workspace)
+	preimage = cloneBootstrap(preimage)
 	if err := f.MutateWorkspaceScoped(t.Context(), workspace, "application_policy.updated", "p21-target", nil, scope, callback); err != nil {
 		t.Fatal(err)
 	}
@@ -83,6 +85,9 @@ func TestScaleP21ScopedMetadataWritesMatchCanonicalHooks(t *testing.T) {
 	if _, err := f.db.ExecContext(t.Context(), `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='settings' AND record_key='p21-target'`, original, workspace); err != nil {
 		t.Fatal(err)
 	}
+	f.mu.Lock()
+	f.setWorkspaceLocked(workspace, preimage)
+	f.mu.Unlock()
 	probe, err := f.BoundedMetadataViewForTesting(t.Context())
 	if err != nil {
 		t.Fatal(err)

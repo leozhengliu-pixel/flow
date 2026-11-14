@@ -1,0 +1,24 @@
+{
+  "source": "store/scale_p21_logical_recovery.go",
+  "unmigrated": 0,
+  "consumers": {
+    "readRawMetadataLogicalSource": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Original raw recovery signature forwards to the shared disk-backed recovery with residency certification disabled, preserving its distinction from production validated recovery. It retains the caller's repeatable SQL snapshot and parser lease. SW27 stored-value differentials and SW33 large-root controls cover the common body.",
+      "accessors": ["readRawMetadataLogicalSourceRoot"]
+    },
+    "readRawMetadataLogicalSourceValidated": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Production cold recovery forwards to the common typed disk construction with streamed manifest and canonical coverage validation enabled. It preserves the exact raw identity before normalization; SW33 compares complete large inline Members and actual peer reload against literal full hydration, including cancellation.",
+      "accessors": ["readRawMetadataLogicalSourceRoot"]
+    },
+    "readRawMetadataLogicalSourceRoot": {
+      "owner": "P21",
+      "status": "reviewed",
+      "reason": "Trusted complete cold scan borrows one repeatable SQL snapshot and a live parser allowance, detaches the root once in fixed 16 KiB chunks into quota-bound disk storage, and validates all root occurrences there. Canonical rows retain physical ordering and typed staging with per-record admission. No complete Bootstrap or unrelated inline field is materialized. SW27 covers repeated inline reuse, maps, histories, physical key ordering, offload errors and cleanup; SW33 covers legal large roots, peer reload, cancellation and exact raw workspace identity. The SQL increase over full hydration is bounded by root chunks plus canonical row headers/body chunks and occurs only at cold construction.",
+      "accessors": ["metadataRootCursorInSnapshot"]
+    }
+  }
+}

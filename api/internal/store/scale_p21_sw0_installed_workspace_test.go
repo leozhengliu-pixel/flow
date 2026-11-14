@@ -248,7 +248,7 @@ func TestScaleP21SW0InstalledWorkspaceProducer(t *testing.T) {
 		t.Fatal(err)
 	}
 	legacy, ok := f.WorkspaceMetadata("")
-	canonical, found, err := probe.WorkspaceMetadataScoped(t.Context(), "", MetadataRecordScope{})
+	canonical, found, err := scaleP21SW30CanonicalMetadataWitness(t.Context(), probe, "", MetadataRecordScope{})
 	if !ok || !found || err != nil || legacy.Workspace.URLKey != physical || canonical.Workspace.URLKey != strings.ReplaceAll(physical, "\x00", "") {
 		t.Fatal("producer did not exercise physical/body distinction", err)
 	}

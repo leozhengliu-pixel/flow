@@ -96,8 +96,8 @@ func TestScaleP21SW20TriageInstalledViewerFullWrite(t *testing.T) {
 		if _, err := repo.UpdateWorkspace(t.Context(), workspace, input); err != nil {
 			t.Fatal(err)
 		}
-		canonical, ok, err := probe.WorkspaceMetadataScoped(t.Context(), workspace, store.MetadataRecordScope{})
-		if err != nil || !ok || reflect.DeepEqual(canonical.Viewer, expected) {
+		canonical, err := probe.HydrateWorkspaceMetadata(t.Context(), workspace, store.MetadataRecordScope{})
+		if err != nil || reflect.DeepEqual(canonical.Data.Viewer, expected) {
 			t.Fatal("fixture did not expose canonical source difference", err)
 		}
 		for _, binding := range []string{workspace, "", workspace + "\x00", workspace + "-missing"} {

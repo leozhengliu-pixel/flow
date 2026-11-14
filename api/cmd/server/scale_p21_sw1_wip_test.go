@@ -67,6 +67,11 @@ func TestScaleP21SW1SelectedConnectorFailuresDifferential(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
+			// Each phase compares the same installed preimage; this view
+			// does not automatically observe a separate owner's full write.
+			if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+				t.Fatal(err)
+			}
 			for _, policy := range []string{"partial", "required"} {
 				t.Setenv("FLOW_LOOP_CONNECTOR_POLICY", policy)
 				type result struct {

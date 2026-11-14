@@ -1,0 +1,12 @@
+{
+  "source": "store/scale_p21_owned_metadata_read.go",
+  "unmigrated": 0,
+  "consumers": {
+    "BeginInstalledMetadataRead": {
+      "owner": "P21",
+      "status": "reviewed",
+      "accessors": ["resident-state"],
+      "reason": "Bounded trusted-source lifetime primitive resolves default key and retains its exact installed logical generation under the same store/residency lock. Independently admitted handle and selected-response allowances remain charged until explicit idempotent Close; selection admission does not reuse a released parent lease. Off mode returns coverage error so callers retain their literal original off accessors. SW32 covers parent release, retained generations, changed defaults, cancellation, foreign bindings, close accounting and fresh write/recovery sources. This primitive review does not certify authorization handoffs or any old consumer."
+    }
+  }
+}

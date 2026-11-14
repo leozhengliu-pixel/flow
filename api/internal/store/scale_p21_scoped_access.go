@@ -33,6 +33,9 @@ func (s *SQLiteStore) BoundedMetadataViewForTesting(ctx context.Context) (*SQLit
 	if err := view.loadResidentWorkspaces(ctx); err != nil {
 		return nil, err
 	}
+	if err := view.captureLogicalTestView(ctx, s, view.WorkspaceKeys()); err != nil {
+		return nil, err
+	}
 	return view, nil
 }
 
@@ -61,8 +64,31 @@ func (s *SQLiteStore) WorkspaceMetadataFieldsScoped(ctx context.Context, workspa
 }
 
 func (s *SQLiteStore) readScopedMetadata(ctx context.Context, workspace string, scope MetadataRecordScope) (domain.Bootstrap, error) {
+	return s.readScopedMetadataResult(ctx, workspace, scope, nil)
+}
+
+func (s *SQLiteStore) readScopedMetadataWithOrigin(ctx context.Context, workspace string, scope MetadataRecordScope) (domain.Bootstrap, metadataLogicalOrigin, error) {
+	var origin metadataLogicalOrigin
+	data, err := s.readScopedMetadataResult(ctx, workspace, scope, &origin)
+	return data, origin, err
+}
+
+func (s *SQLiteStore) readScopedMetadataResult(ctx context.Context, workspace string, scope MetadataRecordScope, origin *metadataLogicalOrigin) (domain.Bootstrap, error) {
 	if !RecordHydrationEnabled() {
 		return domain.Bootstrap{}, ErrBoundedMetadataCoverage
+	}
+	if read, handled, err := installedMetadataReadFromContext(ctx, s, workspace); handled {
+		if err != nil {
+			return domain.Bootstrap{}, err
+		}
+		selection, err := read.Select(ctx, scope)
+		if err != nil {
+			return domain.Bootstrap{}, err
+		}
+		if origin != nil {
+			*origin = selection.origin
+		}
+		return selection.Data, nil
 	}
 	s.mu.RLock()
 	if workspace == "" {
@@ -78,19 +104,45 @@ func (s *SQLiteStore) readScopedMetadata(ctx context.Context, workspace string, 
 		}
 		return domain.Bootstrap{}, sql.ErrNoRows
 	}
-	ctx = WithMetadataRecords(ctx, scope)
-	read, release, err := s.BeginWorkspaceRead(ctx, workspace)
+	if err := validateMetadataRecordScope(scope); err != nil {
+		return domain.Bootstrap{}, err
+	}
+	source, err := s.retainMetadataLogicalSource(ctx, workspace)
+	if err != nil {
+		return domain.Bootstrap{}, err
+	}
+	defer source.Release()
+	if origin != nil {
+		*origin = metadataLogicalOrigin{workspace: workspace, stamp: source.Stamp()}
+	}
+	ctx, release, err := s.admitMetadataWork(ctx, 2<<20)
 	if err != nil {
 		return domain.Bootstrap{}, err
 	}
 	defer release()
-	snapshot, ok := read.Value(workspaceReadKey{}).(workspaceRead)
-	if !ok || snapshot.database != s.db || snapshot.workspace != workspace {
-		return domain.Bootstrap{}, ErrMetadataRecordQuery
+	data, err := source.Select(ctx, scope, 2<<20)
+	if errors.Is(err, ErrMetadataWorkBudget) {
+		return domain.Bootstrap{}, ErrMetadataPageBudget
 	}
-	// This is a trusted read, like WorkspaceMetadata. In particular, preserve
-	// trash restore links; only viewer projections may strip those fields.
-	return cloneBootstrap(snapshot.metadata), nil
+	if err == nil {
+		cost, costErr := metadataAggregateNativeCost(ctx, reflect.ValueOf(data), 0)
+		if costErr != nil {
+			return domain.Bootstrap{}, costErr
+		}
+		encodingWork := cost*8 + 64<<10
+		if encodingWork > metadataWorkBytes {
+			return domain.Bootstrap{}, ErrMetadataPageBudget
+		}
+		if encodingWork > 2<<20 {
+			_, releaseEncoding, admitErr := s.tryAdmitAdditionalMetadataWork(ctx, int(encodingWork)-(2<<20))
+			if admitErr != nil {
+				return domain.Bootstrap{}, admitErr
+			}
+			defer releaseEncoding()
+		}
+		err = validateMetadataLogicalSelection(data, scope)
+	}
+	return data, err
 }
 
 // ProjectScopedMetadata projects declared inputs using live principal policy.
@@ -118,8 +170,11 @@ func (s *SQLiteStore) ProjectScopedMetadata(ctx context.Context, workspace, prin
 			return domain.Bootstrap{}, fmt.Errorf("%w: settings/%s needs its authorized adapter", ErrMetadataRecordQuery, record.ID)
 		}
 	}
-	data, err := s.readScopedMetadata(ctx, workspace, scope)
+	data, origin, err := s.readScopedMetadataWithOrigin(ctx, workspace, scope)
 	if err != nil {
+		return domain.Bootstrap{}, err
+	}
+	if err := s.validateMetadataLogicalOrigin(ctx, origin, access.WorkspaceID); err != nil {
 		return domain.Bootstrap{}, err
 	}
 	data.Viewer, data.ViewerRole = access.policy.metadata.Viewer, access.policy.metadata.ViewerRole
@@ -148,6 +203,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	if !RecordHydrationEnabled() {
 		return ErrBoundedMetadataCoverage
 	}
+	ctx = metadataLogicalUnpinnedContext(ctx)
 	actor, hasActor := actorFromContext(ctx)
 	actor = mutationInputActor(actor)
 	refreshActor := hasActor
@@ -155,7 +211,8 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	if original, selected := metadataRecordScopeFromContext(ctx); selected && !projectRecordSelectionEnabled(ctx) {
 		fields, fieldScoped = metadataRecordFields(original), true
 	}
-	legacyFieldScoped := !projectRecordSelectionEnabled(ctx) && !metadataTeamMutation(event, payload) && metadataOnlyMutation(event, payload) && fieldScoped
+	metadataOnly := metadataOnlyMutation(event, payload)
+	legacyFieldScoped := !projectRecordSelectionEnabled(ctx) && !metadataTeamMutation(event, payload) && metadataOnly && fieldScoped
 	if legacyFieldScoped && !slices.Contains(fields, "users") {
 		refreshActor = false
 	}
@@ -177,6 +234,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		mode := metadataResidencyFields()[field]
 		return mode == "policy" || mode == "core"
 	})
+	policyWrite = policyWrite || hasActor && (!legacyFieldScoped || slices.Contains(fields, "viewer"))
 	reservation := 8 << 20
 	if metadataScopeResolver(ctx) != nil {
 		reservation += 8 << 20
@@ -184,6 +242,20 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	if policyWrite {
 		reservation += metadataPolicyBytes
 	}
+	if !metadataOnly {
+		reservation = max(reservation, metadataLogicalExternalWork)
+	}
+	if s.coordinator != nil {
+		reservation = max(reservation, metadataPolicyBytes+2<<20)
+	}
+	if inputs, _ := ctx.Value(metadataTimestampInputsKey{}).(*MetadataTimestampInputs); inputs != nil {
+		reservation += metadataTimestampInputBytes
+	}
+	ctx, finishTimestampInputs, err := s.startMetadataTimestampInputs(ctx)
+	if err != nil {
+		return err
+	}
+	defer finishTimestampInputs()
 	ctx, release, err := s.admitMetadataWork(ctx, reservation)
 	if err != nil {
 		return err
@@ -199,10 +271,36 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 	ctx, collector, callback := collectMutationAudit(ctx, workspace, mutate)
 	var committed domain.DomainEvent
 	var realtime json.RawMessage
+	var releaseEvent func()
+	defer func() {
+		if releaseEvent != nil {
+			releaseEvent()
+		}
+	}()
 	apply := func(ctx context.Context) error {
+		if releaseEvent != nil {
+			committed, realtime = domain.DomainEvent{}, nil
+			releaseEvent()
+			releaseEvent = nil
+		}
 		scope := scope
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
+		if s.coordinator != nil {
+			if err := s.reloadResidentWorkspace(ctx, workspace); err != nil {
+				return err
+			}
+		}
+		unbindTimestampInputs, err := s.bindMetadataTimestampInputs(ctx)
+		if err != nil {
+			return err
+		}
+		defer unbindTimestampInputs()
+		logicalSource, logicalErr := s.retainMetadataLogicalSource(ctx, workspace)
+		if logicalErr != nil {
+			return logicalErr
+		}
+		defer logicalSource.Release()
 		actor := mutationInputActor(actor)
 		workspaceID, err := s.WorkspaceIDForKey(ctx, workspace)
 		if err != nil {
@@ -214,7 +312,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				role, teams, activeActor = currentRole, s.actorTeamIDs(ctx, workspaceID, actor.ID), true
 			}
 		}
-		hooks, err := s.residentWebhookNeeded(ctx, workspace)
+		hooks, err := s.logicalWebhookNeeded(ctx, logicalSource, workspace)
 		if err != nil {
 			return err
 		}
@@ -244,12 +342,56 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				return err
 			}
 		}
-		before, err := s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
+		baseStamp, err := readMetadataStamp(ctx, tx, workspace)
+		if err != nil {
+			return err
+		}
+		exactSource := baseStamp == logicalSource.Stamp()
+		if s.coordinator != nil && !exactSource {
+			return ErrConcurrentWrite
+		}
+		storageBefore, err := s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
+		if err != nil {
+			return err
+		}
+		before, err := logicalSource.Select(ctx, scope, 2<<20)
 		if err != nil {
 			return err
 		}
 		if before.Workspace.ID != workspaceID {
 			return ErrResourceAccessChanged
+		}
+		eventSource := logicalSource
+		if !metadataOnly {
+			eventSource, err = s.hydrateMetadataLogicalSource(ctx, tx, logicalSource, workspace)
+			if err != nil {
+				return err
+			}
+			defer eventSource.Release()
+		}
+		callbackSource := eventSource
+		refreshComplete := !legacyFieldScoped || slices.Contains(fields, "users")
+		if refreshComplete {
+			callbackSource, err = eventSource.Transform(ctx, func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
+				base := metadataAggregateNode(metadataAggregateStoredNode{node})
+				if legacyFieldScoped && !slices.Contains(fields, name) {
+					return base, false, nil
+				}
+				refreshed := metadataAggregateRefreshField(eventSource, name, base)
+				_, changed := refreshed.(metadataAggregateRefreshCollection)
+				return refreshed, changed, nil
+			})
+			if err != nil {
+				return err
+			}
+			defer callbackSource.Release()
+		}
+		if !metadataOnly {
+			callbackSource, err = refreshMetadataLogicalIssueReferences(ctx, callbackSource)
+			if err != nil {
+				return err
+			}
+			defer callbackSource.Release()
 		}
 		if resolve := metadataScopeResolver(ctx); resolve != nil {
 			keys, err := resolve(cloneBootstrap(before))
@@ -261,7 +403,11 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				return err
 			}
 			ctx = WithMetadataRecords(ctx, scope)
-			before, err = s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
+			storageBefore, err = s.decodeWorkspaceMetadata(ctx, workspace, raw, tx)
+			if err != nil {
+				return err
+			}
+			before, err = logicalSource.Select(ctx, scope, 2<<20)
 			if err != nil {
 				return err
 			}
@@ -269,7 +415,10 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				return ErrResourceAccessChanged
 			}
 		}
-		next := cloneBootstrap(before)
+		next, err := callbackSource.Select(ctx, scope, 2<<20)
+		if err != nil {
+			return err
+		}
 		originalRole := next.ViewerRole
 		refreshDisplayReferences(&next)
 		if hasActor {
@@ -286,7 +435,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			}
 		}
 		validationBefore := before
-		if metadataScopeResolver(ctx) != nil {
+		if metadataScopeResolver(ctx) != nil || refreshComplete {
 			validationBefore = cloneBootstrap(next)
 			validationBefore.ViewerRole, validationBefore.ViewerTeamIDs = originalRole, nil
 		}
@@ -325,28 +474,58 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				return fmt.Errorf("%w: unsplittable callback output %s", ErrMetadataRecordQuery, field)
 			}
 		}
+		payloadWork, releasePayload, err := s.reserveMetadataAggregatePayload(ctx, payload)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if releasePayload != nil {
+				releasePayload()
+			}
+		}()
 		payloadRaw, err := json.Marshal(payload)
 		if err != nil {
 			return err
 		}
 		committed = domain.DomainEvent{ID: idgen.New("evt_"), Type: event, AggregateID: aggregate, Payload: payloadRaw, CreatedAt: time.Now().UTC()}
-		if hooks && s.webhookConfigured() {
-			committed.PreviousValues = aggregatePreviousValues(before, next, aggregate)
+		beforeImage := metadataAggregateImage{Source: eventSource, Selected: &before, Scope: scope}
+		afterImage := metadataAggregateImage{Source: callbackSource, Selected: &next, Scope: writeScope}
+		plan, err := planMetadataAggregatePayload(ctx, beforeImage, afterImage, aggregate, hooks && s.webhookConfigured(), payloadRaw)
+		if err != nil {
+			return err
 		}
-		realtime = enrichRealtimePayload(payloadRaw, aggregateJSONValue(next, aggregate), event)
-		if len(realtime) > MetadataRecordPageMaxBytes {
-			return ErrMetadataPageBudget
+		releaseExtra := func() {}
+		if extra := plan.RequiredBytes - payloadWork; extra > 0 {
+			_, releaseExtra, err = s.tryAdmitAdditionalMetadataWork(ctx, extra)
+			if err != nil {
+				return err
+			}
 		}
+		ownedPayload := releasePayload
+		releaseEvent = func() {
+			releaseExtra()
+			ownedPayload()
+		}
+		releasePayload = nil
+		previous, entity, err := plan.Values(ctx)
+		if err != nil {
+			return err
+		}
+		committed.PreviousValues = previous
+		realtime = enrichRealtimePayload(payloadRaw, entity, event)
 		// Complete fields use the proven delta writer. Point records are
 		// written separately so a deletion never scans the whole collection.
 		complete := cloneBootstrap(next)
-		left, right := reflect.ValueOf(&before).Elem(), reflect.ValueOf(&complete).Elem()
+		persistBefore := storageBefore
+		left, logicalBefore, right := reflect.ValueOf(&persistBefore).Elem(), reflect.ValueOf(&before).Elem(), reflect.ValueOf(&complete).Elem()
 		for _, field := range persistedMetadataFields() {
-			if field.name != "viewer" && !slices.Contains(scope.Fields, field.name) {
+			if field.name == "viewer" || slices.Contains(scope.Fields, field.name) {
+				left.Field(field.index).Set(logicalBefore.Field(field.index))
+			} else {
 				right.Field(field.index).Set(left.Field(field.index))
 			}
 		}
-		if err := s.persistWorkspaceTx(ctx, tx, workspace, &before, &complete, nil, &committed, nil); err != nil {
+		if err := s.persistWorkspaceTx(ctx, tx, workspace, &persistBefore, &complete, nil, &committed, nil); err != nil {
 			return err
 		}
 		changes, _, err := scaleP16RecordChanges(before, next)
@@ -388,15 +567,53 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if err := scaleP16WriteChanges(writeCtx, tx, workspace, newIssueReferences(next), changes); err != nil {
 			return err
 		}
+		candidate, err := callbackSource.Fork(ctx, before, next, writeScope, logicalSource.Stamp(), appendOrders)
+		if err != nil {
+			return err
+		}
+		merged, err := metadataLogicalMergedPostimage(ctx, candidate, changes)
+		candidate.Release()
+		if err != nil {
+			return err
+		}
+		candidate = merged
+		merged, err = metadataLogicalCompletePostimage(ctx, candidate, next, complete, scope)
+		candidate.Release()
+		if err != nil {
+			return err
+		}
+		candidate = merged
+		if !metadataOnly {
+			installed, stripErr := metadataLogicalInstalledCandidate(ctx, candidate)
+			candidate.Release()
+			if stripErr != nil {
+				return stripErr
+			}
+			candidate = installed
+		}
+		defer func() {
+			if candidate != nil {
+				candidate.Release()
+			}
+		}()
+		if callbackSource != eventSource {
+			if err := s.persistMetadataLogicalRefresh(ctx, tx, workspace, eventSource, callbackSource, scope, candidate); err != nil {
+				return err
+			}
+		}
+		capture := tx.captureMetadataCommitStampFrom(workspace, baseStamp)
 		var policy domain.Bootstrap
-		var stamp copyStamp
 		var cost int
 		if policyWrite {
 			// Check the candidate policy before commit, without asking the
 			// transaction's not-yet-flushed journal to certify itself.
 			probe := &SQLiteStore{db: s.db, dialect: s.dialect, metadataResidency: newMetadataResidency()}
 			probe.metadataResidency.requireCoverage = false
-			policy, stamp, cost, err = probe.readResidentWorkspace(ctx, tx, workspace)
+			policy, _, cost, err = probe.readResidentWorkspace(ctx, tx, workspace)
+			if err != nil {
+				return err
+			}
+			policy, cost, err = s.metadataLogicalPolicy(ctx, candidate)
 			if err != nil {
 				return err
 			}
@@ -416,11 +633,28 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if err := tx.Commit(); err != nil {
 			return err
 		}
+		finalStamp, ready := capture.result()
+		if !ready {
+			return ErrBoundedMetadataCoverage
+		}
+		sourceStamp := copyStamp{workspaceID: finalStamp.workspaceID, revision: -1}
+		if exactSource {
+			sourceStamp = finalStamp
+		}
+		if err := candidate.setStamp(sourceStamp); err != nil {
+			return err
+		}
 		if policyWrite {
 			// The writeMu serializes policy cost changes in this store. The
 			// precommit check guarantees installation fits after commit too.
-			return s.installResidentPolicy(workspace, policy, stamp, 0, cost)
+			if err := s.installResidentPolicySource(workspace, policy, finalStamp, 0, cost, true, candidate); err != nil {
+				return err
+			}
+			candidate = nil
+			return nil
 		}
+		s.installMetadataLogicalSource(workspace, candidate, true)
+		candidate = nil
 		s.mu.Lock()
 		s.forgetCopyRevisionLocked(workspace)
 		s.mu.Unlock()
@@ -431,7 +665,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 			return s.coordinator.WithWorkspaceLock(ctx, workspace, func() error { return apply(ctx) })
 		}
 		return apply(ctx)
-	}, nil)
+	}, s.refreshConflictedLogicalMetadata(ctx, workspace))
 	if errors.Is(err, ErrNoMutation) {
 		return nil
 	}
@@ -442,6 +676,9 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		return fmt.Errorf("scoped mutation left uncommitted audit entries")
 	}
 	s.dropMetadataCache(ctx, workspace)
+	// Publication owns a separate reservation and may synchronously start
+	// another mutation after this operation has installed its source.
+	release()
 	s.publishMutation(ctx, workspace, committed, realtime)
 	return nil
 }

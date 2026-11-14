@@ -55,7 +55,7 @@ func TestScaleP21SW18WorkerTrustedSourceHold(t *testing.T) {
 				warm.AgentSessions[0].Messages[0].Status != spec.status || warm.AgentSessions[0].Messages[0].ID != spec.messageID {
 				t.Fatal("trusted writer no longer retains exact installed fields")
 			}
-			canonical, found, err := view.WorkspaceMetadataScoped(t.Context(), workspace, MetadataRecordScope{Fields: []string{"agentSessions"}})
+			canonical, found, err := scaleP21SW30CanonicalMetadataWitness(t.Context(), view, workspace, MetadataRecordScope{Fields: []string{"agentSessions"}})
 			if err != nil || !found {
 				t.Fatal("read canonical witness", found, err)
 			}

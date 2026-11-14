@@ -103,6 +103,9 @@ func scaleP21M3PointDifferential(t *testing.T, operations []scaleP21M3PointOpera
 								}); err != nil {
 									t.Fatal(err)
 								}
+								if err := probe.RefreshInstalledMetadataViewForTesting(t.Context(), repo, workspace); err != nil {
+									t.Fatal(err)
+								}
 								var webhook domain.DomainEvent
 								var realtime domain.RealtimeEvent
 								current.SetWebhookSink(func(_ string, event domain.DomainEvent) { webhook = event })
@@ -150,8 +153,9 @@ func scaleP21M3PointDifferential(t *testing.T, operations []scaleP21M3PointOpera
 								if operation.kind == "workspaceSettings" {
 									scope = store.MetadataRecordScope{Fields: []string{"workspaceSettings"}}
 								}
-								data, ok, err := probe.WorkspaceMetadataScoped(t.Context(), workspace, scope)
-								if err != nil || !ok {
+								hydrated, err := probe.HydrateWorkspaceMetadata(t.Context(), workspace, scope)
+								data := hydrated.Data
+								if err != nil {
 									t.Fatalf("persisted record: %v", err)
 								}
 								if operation.kind == "apiKeys" && w.Code == http.StatusNoContent && !missing {

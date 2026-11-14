@@ -277,7 +277,7 @@ func TestScaleP21SW18TeamResourcesDifferential(t *testing.T) {
 		}
 		t.Run("unavailable-spool-volume", func(t *testing.T) {
 			t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing"))
-			r, w := f.request(f.data.Viewer, nil, nil), httptest.NewRecorder()
+			r, w := f.literalRequest(f.data.Viewer, nil, nil), httptest.NewRecorder()
 			r.SetPathValue("id", teamID)
 			(&server{store: f.probe, authDisabled: true}).listTeamResources(w, r)
 			var got teamResourcesRead
