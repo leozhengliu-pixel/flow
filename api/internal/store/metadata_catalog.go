@@ -46,7 +46,8 @@ func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, w
 	row := metadataCatalogRow{key: key, bodyBytes: size}
 	r := &canonicalMetadataReader{ctx: ctx, tx: tx, workspace: workspace, key: key, size: size}
 	hash := sha256.New()
-	source := io.TeeReader(r, hash)
+	number := metadataCatalogScalarNumber{}
+	source := io.TeeReader(r, io.MultiWriter(hash, &number))
 	iter := jsoniter.Parse(jsoniter.ConfigCompatibleWithStandardLibrary, source, 4096)
 	used := 0
 	var projectObject func(bool) map[string]json.RawMessage
@@ -94,7 +95,8 @@ func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, w
 		iter.Skip()
 		row.omitted = true
 	}
-	if iter.Error != nil {
+	scalarEOF := iter.Error == io.EOF && r.offset == r.size && len(r.buffer) == 0 && number.complete() && ctx.Err() == nil
+	if iter.Error != nil && !scalarEOF {
 		// The iterator decorates reader errors; the exhausted capture budget
 		// distinguishes omission from corrupt canonical JSON or SQL failure.
 		if r.captureExceeded {
@@ -138,6 +140,90 @@ func (s *SQLiteStore) projectCanonicalMetadata(ctx context.Context, tx *sqlTx, w
 		row.archived = 1
 	}
 	return row, nil
+}
+
+// Only an exact EOF after a complete top-level number may end Skip normally.
+// Observe bytes already read for hashing without retaining an arbitrary token.
+type metadataCatalogScalarNumber struct{ state byte }
+
+const (
+	metadataCatalogNumberStart byte = iota
+	metadataCatalogNumberSign
+	metadataCatalogNumberZero
+	metadataCatalogNumberInteger
+	metadataCatalogNumberDot
+	metadataCatalogNumberFraction
+	metadataCatalogNumberExponent
+	metadataCatalogNumberExponentSign
+	metadataCatalogNumberExponentDigits
+	metadataCatalogNumberSpace
+	metadataCatalogNumberInvalid
+)
+
+func (n *metadataCatalogScalarNumber) Write(raw []byte) (int, error) {
+	for _, c := range raw {
+		if n.state == metadataCatalogNumberInvalid {
+			break
+		}
+		digit := c >= '0' && c <= '9'
+		space := c == ' ' || c == '\n' || c == '\r' || c == '\t'
+		switch n.state {
+		case metadataCatalogNumberStart, metadataCatalogNumberSign:
+			switch {
+			case n.state == metadataCatalogNumberStart && space:
+			case n.state == metadataCatalogNumberStart && c == '-':
+				n.state = metadataCatalogNumberSign
+			case c == '0':
+				n.state = metadataCatalogNumberZero
+			case digit:
+				n.state = metadataCatalogNumberInteger
+			default:
+				n.state = metadataCatalogNumberInvalid
+			}
+		case metadataCatalogNumberZero, metadataCatalogNumberInteger, metadataCatalogNumberFraction, metadataCatalogNumberExponentDigits:
+			switch {
+			case digit && n.state != metadataCatalogNumberZero:
+			case c == '.' && (n.state == metadataCatalogNumberZero || n.state == metadataCatalogNumberInteger):
+				n.state = metadataCatalogNumberDot
+			case (c == 'e' || c == 'E') && n.state != metadataCatalogNumberExponentDigits:
+				n.state = metadataCatalogNumberExponent
+			case space:
+				n.state = metadataCatalogNumberSpace
+			default:
+				n.state = metadataCatalogNumberInvalid
+			}
+		case metadataCatalogNumberDot, metadataCatalogNumberExponentSign:
+			if !digit {
+				n.state = metadataCatalogNumberInvalid
+			} else if n.state == metadataCatalogNumberDot {
+				n.state = metadataCatalogNumberFraction
+			} else {
+				n.state = metadataCatalogNumberExponentDigits
+			}
+		case metadataCatalogNumberExponent:
+			if c == '+' || c == '-' {
+				n.state = metadataCatalogNumberExponentSign
+			} else if digit {
+				n.state = metadataCatalogNumberExponentDigits
+			} else {
+				n.state = metadataCatalogNumberInvalid
+			}
+		case metadataCatalogNumberSpace:
+			if !space {
+				n.state = metadataCatalogNumberInvalid
+			}
+		}
+	}
+	return len(raw), nil
+}
+
+func (n *metadataCatalogScalarNumber) complete() bool {
+	switch n.state {
+	case metadataCatalogNumberZero, metadataCatalogNumberInteger, metadataCatalogNumberFraction, metadataCatalogNumberExponentDigits, metadataCatalogNumberSpace:
+		return true
+	default:
+		return false
+	}
 }
 
 func metadataCatalogRelations(raw []byte) map[string][]string {
