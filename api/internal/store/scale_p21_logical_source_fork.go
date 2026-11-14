@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -12,7 +13,7 @@ import (
 
 func (b *metadataLogicalBuilder) copyNode(node metadataLogicalNode) (metadataLogicalNode, error) {
 	start := b.offset
-	count, err := io.CopyBuffer(metadataLogicalWriter{b}, io.NewSectionReader(node.source.file, node.offset, node.size), b.buffer[:])
+	count, err := io.CopyBuffer(metadataLogicalWriter{b}, io.NewSectionReader(metadataLogicalContextReaderAt{b.ctx, node.source.file}, node.offset, node.size), b.buffer[:])
 	if err != nil {
 		return metadataLogicalNode{}, err
 	}
@@ -30,6 +31,9 @@ func (s *metadataLogicalSource) Fork(ctx context.Context, before, next domain.Bo
 		return nil, err
 	}
 	defer s.Release()
+	if s.units != nil {
+		return s.forkUnits(ctx, before, next, scope, stamp, suppliedOrders...)
+	}
 	b, err := newMetadataLogicalBuilder(ctx)
 	if err != nil {
 		return nil, err
@@ -304,6 +308,9 @@ func (b *metadataLogicalBuilder) appendAvailableNative(key, value reflect.Value)
 }
 
 func (n metadataLogicalNode) isNil(ctx context.Context) (bool, error) {
+	if n.collection != nil {
+		return n.collection.nilValue, ctx.Err()
+	}
 	if n.typ.Kind() != reflect.Slice && n.typ.Kind() != reflect.Map && n.typ.Kind() != reflect.Pointer && n.typ.Kind() != reflect.Interface {
 		return false, nil
 	}
@@ -320,12 +327,20 @@ func (s *metadataLogicalSource) setStamp(stamp copyStamp) error {
 		return ErrMetadataRecordQuery
 	}
 	s.stamp = stamp
+	if s.units != nil {
+		s.units.arena.mu.Lock()
+		s.units.stamp = stamp
+		s.units.arena.mu.Unlock()
+	}
 	return nil
 }
 
 // StreamBytes borrows the complete bytes of a typed string or byte slice. The
 // reader remains valid only until visit returns and honors cancellation.
 func (n metadataLogicalNode) StreamBytes(ctx context.Context, visit func(io.Reader) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := n.source.Retain(); err != nil {
 		return err
 	}
@@ -337,29 +352,43 @@ func (n metadataLogicalNode) StreamBytes(ctx context.Context, visit func(io.Read
 			return err
 		}
 		if present == 0 {
-			return visit(io.LimitReader(&metadataLogicalByteReader{ctx, n.source.file, c.offset}, 0))
+			return visit(&metadataLogicalByteReader{ctx: ctx, source: n.source.file, offset: c.offset})
 		}
 	} else if n.typ.Kind() != reflect.String {
 		return ErrMetadataRecordQuery
 	}
 	size, err := c.uint()
-	if err != nil || size > uint64(n.size) {
+	if err != nil {
+		return err
+	}
+	if size > uint64(n.offset+n.size-c.offset) {
 		return io.ErrUnexpectedEOF
 	}
-	return visit(io.LimitReader(&metadataLogicalByteReader{ctx, n.source.file, c.offset}, int64(size)))
+	return visit(&metadataLogicalByteReader{ctx: ctx, source: n.source.file, offset: c.offset, remaining: int64(size)})
 }
 
 type metadataLogicalByteReader struct {
-	ctx    context.Context
-	source io.ReaderAt
-	offset int64
+	ctx       context.Context
+	source    io.ReaderAt
+	offset    int64
+	remaining int64
 }
 
 func (r *metadataLogicalByteReader) Read(p []byte) (int, error) {
 	if err := r.ctx.Err(); err != nil {
 		return 0, err
 	}
-	count, err := r.source.ReadAt(p, r.offset)
+	if r.remaining == 0 {
+		return 0, io.EOF
+	}
+	if int64(len(p)) > r.remaining {
+		p = p[:r.remaining]
+	}
+	count, err := metadataLogicalReadAt(r.ctx, r.source, p, r.offset)
 	r.offset += int64(count)
+	r.remaining -= int64(count)
+	if errors.Is(err, io.EOF) && r.remaining != 0 || err == nil && count != len(p) {
+		err = io.ErrUnexpectedEOF
+	}
 	return count, err
 }

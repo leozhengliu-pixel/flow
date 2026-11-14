@@ -21,6 +21,9 @@ type metadataAggregateImage struct {
 	Selected       *domain.Bootstrap
 	Scope          MetadataRecordScope
 	ExcludedFields []string
+	// Nil overlays every matching point. Occurrence-aware adapters bind this
+	// optional slice filter to the exact source generation before planning.
+	PointOccurrence func(field, id string, ordinal uint64) bool
 }
 
 type metadataAggregateNode interface {
@@ -298,7 +301,7 @@ func (image metadataAggregateImage) visit(ctx context.Context, visit func(string
 				if name == "workspace" || name == "viewer" || name == "viewerRole" || slices.Contains(image.Scope.Fields, name) {
 					node = metadataAggregateNativeNode{selected}
 				} else if slices.Contains(metadataRecordFields(image.Scope), name) {
-					node = metadataAggregateOverlayNode{base: node, selected: selected, field: name, scope: image.Scope}
+					node = metadataAggregateOverlayNode{base: node, selected: selected, field: name, scope: image.Scope, pointOccurrence: image.PointOccurrence}
 				}
 			}
 		}
@@ -330,6 +333,13 @@ func metadataAggregateResolve(ctx context.Context, image metadataAggregateImage,
 	if id == "" {
 		return nil, ctx.Err()
 	}
+	if image.Source != nil && image.Source.units != nil {
+		return metadataAggregateResolveIndexed(ctx, image, id)
+	}
+	return metadataAggregateResolveWalk(ctx, image, id)
+}
+
+func metadataAggregateResolveWalk(ctx context.Context, image metadataAggregateImage, id string) (metadataAggregateNode, error) {
 	field, terminal := metadataAggregatePrefixField(id)
 	var found metadataAggregateNode
 	if field != "" {

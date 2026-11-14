@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -33,24 +34,27 @@ var metadataLogicalProcessLocal = time.Local
 // independent of the current SQL rows: retaining it preserves request handoffs
 // across later writes and reloads.
 type metadataLogicalSource struct {
-	mu     sync.Mutex
-	refs   int
-	stamp  copyStamp
-	fields []metadataLogicalNode
-	stores []*metadataLogicalStorage
+	mu         sync.Mutex
+	refs       int
+	stamp      copyStamp
+	fields     []metadataLogicalNode
+	stores     []*metadataLogicalStorage
+	units      *metadataLogicalUnitsRoot
+	generation [16]byte
 }
 
 // Storage owners contain no parent-generation links, so sharing an unchanged
 // field never retains an unbounded chain of obsolete source descriptors.
 type metadataLogicalStorage struct {
 	mu            sync.Mutex
-	file          *os.File
+	file          metadataLogicalFile
 	refs          int
 	types         []reflect.Type
 	times         []time.Time
 	locations     []*time.Location
 	locationBytes int64
 	bytes         int64
+	unitRoot      *metadataLogicalUnitsRoot
 }
 
 type metadataLogicalNode struct {
@@ -61,6 +65,7 @@ type metadataLogicalNode struct {
 	typ         reflect.Type
 	unavailable bool
 	blocked     bool
+	collection  *metadataLogicalUnitsCollection
 }
 
 type metadataLogicalBuilder struct {
@@ -272,6 +277,9 @@ func (b *metadataLogicalBuilder) Finish(stamp copyStamp) (*metadataLogicalSource
 		return nil, err
 	}
 	b.source.stamp = stamp
+	if _, err := rand.Read(b.source.generation[:]); err != nil {
+		return nil, err
+	}
 	b.finished = true
 	return b.source, nil
 }
@@ -294,6 +302,10 @@ func (s *metadataLogicalSource) Release() {
 	}
 	s.refs--
 	if s.refs == 0 {
+		if s.units != nil {
+			s.units.Release()
+			s.units = nil
+		}
 		for _, storage := range s.stores {
 			storage.Release()
 		}
@@ -302,6 +314,9 @@ func (s *metadataLogicalSource) Release() {
 }
 
 func (s *metadataLogicalStorage) Retain() error {
+	if s.unitRoot != nil {
+		return s.unitRoot.Retain()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.refs == 0 {
@@ -312,6 +327,10 @@ func (s *metadataLogicalStorage) Retain() error {
 }
 
 func (s *metadataLogicalStorage) Release() {
+	if s.unitRoot != nil {
+		s.unitRoot.Release()
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.refs == 0 {

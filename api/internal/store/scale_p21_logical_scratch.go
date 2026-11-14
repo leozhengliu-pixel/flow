@@ -21,6 +21,8 @@ func metadataLogicalSourceScratchContext(ctx context.Context, source *metadataLo
 		source.mu.Lock()
 		if source.refs != 0 && len(source.stores) != 0 {
 			config.directory = filepath.Dir(source.stores[0].file.Name())
+		} else if source.refs != 0 && source.units != nil {
+			config.directory = filepath.Dir(source.units.arena.index.stage.path)
 		}
 		source.mu.Unlock()
 	}

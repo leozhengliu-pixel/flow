@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"reflect"
 	"slices"
@@ -9,10 +10,11 @@ import (
 )
 
 type metadataAggregateOverlayNode struct {
-	base     metadataAggregateNode
-	selected reflect.Value
-	field    string
-	scope    MetadataRecordScope
+	base            metadataAggregateNode
+	selected        reflect.Value
+	field           string
+	scope           MetadataRecordScope
+	pointOccurrence func(field, id string, ordinal uint64) bool
 }
 
 func (n metadataAggregateOverlayNode) nodeType() reflect.Type { return n.base.nodeType() }
@@ -101,7 +103,7 @@ func (n metadataAggregateOverlayNode) nodeChildren(ctx context.Context, visit fu
 	}
 	seen := map[string]bool{}
 	nextOrdinal := 0
-	err := n.base.nodeChildren(ctx, func(key reflect.Value, child metadataAggregateNode) error {
+	err := n.baseChildren(ctx, func(key reflect.Value, child metadataAggregateNode, ordinal uint64) error {
 		var id string
 		matched := false
 		if n.selected.Kind() == reflect.Map {
@@ -138,6 +140,9 @@ func (n metadataAggregateOverlayNode) nodeChildren(ctx context.Context, visit fu
 			return visit(key, child)
 		}
 		seen[id] = true
+		if n.selected.Kind() == reflect.Slice && n.pointOccurrence != nil && !n.pointOccurrence(n.field, id, ordinal) {
+			return visit(key, child)
+		}
 		value, exists := n.selectedRecord(id)
 		if !exists {
 			// An absent selected write is a tombstone, including deletion of
@@ -177,6 +182,35 @@ func (n metadataAggregateOverlayNode) nodeChildren(ctx context.Context, visit fu
 		}
 	}
 	return nil
+}
+
+func (n metadataAggregateOverlayNode) baseChildren(ctx context.Context, visit func(reflect.Value, metadataAggregateNode, uint64) error) error {
+	stored, ok := n.base.(metadataAggregateStoredNode)
+	if n.pointOccurrence == nil || n.selected.Kind() != reflect.Slice || !ok || stored.value.collection == nil {
+		return n.base.nodeChildren(ctx, func(key reflect.Value, child metadataAggregateNode) error {
+			var ordinal uint64
+			if key.IsValid() && key.Kind() == reflect.Int {
+				ordinal = uint64(key.Int())
+			}
+			return visit(key, child, ordinal)
+		})
+	}
+	collection := stored.value.collection
+	prefix := metadataLogicalUnitsOrderKey(collection.field, 0)[:2]
+	index := 0
+	return collection.root.Range(ctx, 0, prefix, sw29LogicalPrefixEnd(prefix), func(key, raw []byte) error {
+		leaf, err := metadataLogicalUnitsDecodeLeaf(raw)
+		if err != nil {
+			return err
+		}
+		child, err := collection.root.node(ctx, leaf, collection.typ.Elem(), false)
+		if err != nil {
+			return err
+		}
+		dense := index
+		index++
+		return visit(reflect.ValueOf(dense), metadataAggregateStoredNode{child}, binary.BigEndian.Uint64(key[2:]))
+	})
 }
 
 func (n metadataAggregateOverlayNode) nodeValue(ctx context.Context, limit int) (reflect.Value, error) {

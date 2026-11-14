@@ -23,6 +23,9 @@ func (s *metadataLogicalSource) Transform(ctx context.Context, transform func(st
 		return nil, err
 	}
 	defer s.Release()
+	if s.units != nil {
+		return s.transformUnits(ctx, transform)
+	}
 	result, err := newMetadataLogicalBuilder(ctx)
 	if err != nil {
 		return nil, err

@@ -1,11 +1,11 @@
 {
   "source": "store/application_identity.go",
-  "unmigrated": 0,
+  "unmigrated": 1,
   "consumers": {
     "SyncAllApplicationIdentities": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Direct startup enumeration now owns only installed OAuthApplications.ClientID strings under an independent bounded allowance retained through the entire sync/error-join batch; the literal legacy source, sort, compact and calls remain off mode. TestScaleP21SW24ApplicationIdentityIDsSource compares exact same-installed global enumeration including duplicates, empty/NUL/invalid-UTF8/case/long IDs, stable sorted dispatch, original downstream context and ordered errors.Join. Ownership and Bounds prove detached backing after source replacement, independent parent lifetime, explicit 64MiB/process limits, no waiting and recovery. Producer exercises real InstallApplication and SyncAll name/logo/user updates plus cancellation on the same actual installed source in both representations. Enumeration still ignores cancellation while downstream receives the original context. Persistent SQLite repetition passed. OAuthApplicationByClientID, oauthMetadataTransaction and the resident loader retain independent activation blockers; installation reads, syncInstallationIdentity and complete startup readiness are not certified by this direct-input review.",
+      "status": "unmigrated",
+      "reason": "SW52 actual owner-produced bounded test view and real reload prove the current beginApplicationIdentityIDsRead dispatch enumerates no OAuthApplications from the policy-only registry. Earlier producer proof attached metadataResidency to the full owner and missed this representation mismatch. Keep the guard until the source-backed atomic registry helper and whole real synchronization path are integrated and verified; the unrelated downstream application readers and writer remain independently guarded.",
       "accessors": [
         "resident-state"
       ]

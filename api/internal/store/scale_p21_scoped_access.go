@@ -371,16 +371,9 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		}
 		callbackSource := eventSource
 		refreshComplete := !legacyFieldScoped || slices.Contains(fields, "users")
-		if refreshComplete {
-			callbackSource, err = eventSource.Transform(ctx, func(name string, node metadataLogicalNode) (metadataAggregateNode, bool, error) {
-				base := metadataAggregateNode(metadataAggregateStoredNode{node})
-				if legacyFieldScoped && !slices.Contains(fields, name) {
-					return base, false, nil
-				}
-				refreshed := metadataAggregateRefreshField(eventSource, name, base)
-				_, changed := refreshed.(metadataAggregateRefreshCollection)
-				return refreshed, changed, nil
-			})
+		deferredRefresh := refreshComplete && metadataOnly && eventSource.units != nil
+		if refreshComplete && !deferredRefresh {
+			callbackSource, err = metadataAggregateDisplaySource(ctx, eventSource, fields, legacyFieldScoped)
 			if err != nil {
 				return err
 			}
@@ -419,6 +412,26 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if err != nil {
 			return err
 		}
+		if deferredRefresh {
+			err = refreshSelectedMetadataLogicalReferences(ctx, eventSource, &next, scope, fields, legacyFieldScoped, 2<<20)
+			if err != nil {
+				if cancelErr := ctx.Err(); cancelErr != nil {
+					return cancelErr
+				}
+				// Unsupported selected layouts keep the original streamed
+				// transform and selection path, with its original errors.
+				callbackSource, err = metadataAggregateDisplaySource(ctx, eventSource, fields, legacyFieldScoped)
+				if err != nil {
+					return err
+				}
+				defer callbackSource.Release()
+				deferredRefresh = false
+				next, err = callbackSource.Select(ctx, scope, 2<<20)
+				if err != nil {
+					return err
+				}
+			}
+		}
 		originalRole := next.ViewerRole
 		refreshDisplayReferences(&next)
 		if hasActor {
@@ -445,6 +458,13 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		next.ViewerRole, next.ViewerTeamIDs, next.FormerMembers, next.CollaborationUpdates = originalRole, nil, nil, nil
 		if err != nil {
 			return err
+		}
+		if deferredRefresh {
+			callbackSource, err = metadataAggregateDisplaySource(ctx, eventSource, fields, legacyFieldScoped)
+			if err != nil {
+				return err
+			}
+			defer callbackSource.Release()
 		}
 		if legacyFieldScoped && !slices.Contains(fields, "viewer") {
 			next.Viewer = before.Viewer
@@ -494,6 +514,7 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 		if err != nil {
 			return err
 		}
+		defer plan.Close()
 		releaseExtra := func() {}
 		if extra := plan.RequiredBytes - payloadWork; extra > 0 {
 			_, releaseExtra, err = s.tryAdmitAdditionalMetadataWork(ctx, extra)

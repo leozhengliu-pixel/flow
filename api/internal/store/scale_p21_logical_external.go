@@ -140,6 +140,26 @@ func (s *SQLiteStore) hydrateMetadataLogicalSource(ctx context.Context, tx *sqlT
 		if !ok || name == "-" || builder.source.fields[index].typ != nil {
 			return nil
 		}
+		if node.source.unitRoot != nil {
+			// External hydration still produces a typed source. Copy one
+			// framed field at a time rather than retaining virtual nodes
+			// under the contiguous-source ownership rules.
+			if err := startField(); err != nil {
+				return err
+			}
+			var written metadataLogicalNode
+			var err error
+			if node.collection != nil {
+				written, err = builder.writeAggregateNode(metadataLogicalStreamedCollection{metadataAggregateStoredNode{node}}, 0)
+			} else {
+				written, err = builder.importNode(node, 0)
+			}
+			if err != nil {
+				return err
+			}
+			builder.source.fields[index] = written
+			return nil
+		}
 		if !slices.Contains(builder.source.stores, node.source) {
 			if err := node.source.Retain(); err != nil {
 				return err
@@ -403,6 +423,9 @@ func (e *metadataLogicalExternal) importJobs(name string, original metadataLogic
 		return err
 	}
 	returnErr := original.Children(e.ctx, func(_ reflect.Value, node metadataLogicalNode) error {
+		if err := e.builder.inheritLocations(node.source); err != nil {
+			return err
+		}
 		value, err := node.Value(e.ctx, metadataLogicalExternalWork-metadataLogicalExternalRecord-64<<10)
 		if err != nil {
 			return err

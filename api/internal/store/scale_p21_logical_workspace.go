@@ -49,6 +49,12 @@ func (s *SQLiteStore) readMetadataLogicalWorkspace(ctx context.Context, tx *sqlT
 	if err != nil {
 		return domain.Bootstrap{}, copyStamp{}, 0, nil, err
 	}
+	packed, err := metadataLogicalUnitsForInstalled(ctx, normalized)
+	if err != nil {
+		normalized.Release()
+		return domain.Bootstrap{}, copyStamp{}, 0, nil, err
+	}
+	normalized = packed
 	data, cost, err := s.metadataLogicalPolicy(ctx, normalized)
 	if err != nil {
 		normalized.Release()

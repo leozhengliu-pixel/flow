@@ -1,6 +1,6 @@
 {
   "source": "server/application_policies.go",
-  "unmigrated": 2,
+  "unmigrated": 3,
   "consumers": {
     "deleteApplicationPolicy": {
       "owner": "P21",
@@ -14,11 +14,11 @@
     },
     "listApplicationPolicies": {
       "owner": "P21",
-      "status": "reviewed",
+      "status": "unmigrated",
       "accessors": [
         "workspaceData"
       ],
-      "reason": "Uses one declared settings/applicationPolicies map record for reads and writes, retaining the existing owner/admin and API-key checks. The off branch calls the original accessors. Covered by the P21 handler principal/scope differential."
+      "reason": "Actual-owner SW48 differential proves a legal 12000-entry applicationPolicies setting returns literal HTTP 200 with 4488002 response bytes versus bounded HTTP 503. Existing save validation imposes no matching collection count/byte cap. Requires a streamed exact policy filter/list and owned response encoding rather than complete-setting Select under 2 MiB. Small whole-M/source/lifetime proofs do not certify legal complete-collection output."
     },
     "saveApplicationPolicy": {
       "owner": "P21",

@@ -22,6 +22,7 @@ type InstalledMetadataRead struct {
 	source     *metadataLogicalSource
 	release    func()
 	selections map[*OwnedMetadataSelection]struct{}
+	reductions map[*OwnedMetadataReduction]struct{}
 	closed     bool
 }
 
@@ -103,6 +104,7 @@ func (s *SQLiteStore) BeginInstalledMetadataRead(ctx context.Context, workspace 
 		return &InstalledMetadataRead{
 			store: s, workspace: selected, source: source,
 			release: release, selections: map[*OwnedMetadataSelection]struct{}{},
+			reductions: map[*OwnedMetadataReduction]struct{}{},
 		}, true, nil
 	}
 }
@@ -200,11 +202,15 @@ func (r *InstalledMetadataRead) Close() {
 		return
 	}
 	r.closed = true
-	source, release, selections := r.source, r.release, r.selections
+	source, release, selections, reductions := r.source, r.release, r.selections, r.reductions
 	r.source, r.release, r.selections = nil, nil, nil
+	r.reductions = nil
 	r.mu.Unlock()
 	for selection := range selections {
 		selection.Close()
+	}
+	for reduction := range reductions {
+		reduction.Close()
 	}
 	if source != nil {
 		source.Release()

@@ -1,11 +1,11 @@
 {
   "source": "store/scale_p21_sw16_project_templates.go",
-  "unmigrated": 0,
+  "unmigrated": 1,
   "consumers": {
     "BeginProjectTemplatesRead": {
       "owner": "P21",
-      "status": "reviewed",
-      "reason": "Resident access reads only exact/default workspace membership, the complete selected ProjectTemplates field, logical URLKey and five nil hydration flags under RLock. It preflights native string/container/encoding work, independently admits before cloning and rechecks source growth. The retained handle owns detached native text/slices/pointers and wire-equivalent fixed-offset timestamps through response encoding. It validates original BootstrapFor issue/import/content typed sources one body at a time under per-collection repeatable snapshots with 64-row keyset/header preflights and independent header/raw/typed leases. Original source missing and SQL/decode failure semantics are retained; oversized work fails explicitly, with no full-metadata fallback or decoded-row accumulation. Targeted native/source/lifecycle/error/default/logical empty/content/admission tests and server signing/principal/key differentials pass twice on persistent SQLite. This direct accessor review does not certify the independently pending bounded source loader.",
+      "status": "unmigrated",
+      "reason": "Actual bounded-view differential now proves this helper reads an absent nonresident ProjectTemplates field from the policy-only workspace map: literal HTTP 200 contains the template while bounded HTTP 200 returns null, both warm and reloaded. Prior full-source projection tests do not certify the installed logical source. Requires an owned source-backed template projection with legacy unrelated hydration failures, signing, native wire values and response lifetime preserved. Regression evidence: SW45 template residency probe, twice-persistent coverage pending repair.",
       "accessors": [
         "resident-state"
       ]

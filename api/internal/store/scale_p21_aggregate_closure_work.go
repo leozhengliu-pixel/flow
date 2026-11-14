@@ -16,6 +16,7 @@ type metadataAggregatePlan struct {
 	RequiredBytes, WinnerBytes int
 	before, after              metadataAggregateNode
 	previous                   bool
+	sources                    []*metadataLogicalSource
 }
 
 func planMetadataAggregate(ctx context.Context, before, after metadataAggregateImage, id string, previous bool, payloadBytes int) (*metadataAggregatePlan, error) {
@@ -71,10 +72,38 @@ func planMetadataAggregateWork(ctx context.Context, before, after metadataAggreg
 	// This is a materialization limit backed by the larger reservation,
 	// rather than the former fixed encoded page limit.
 	plan.WinnerBytes = int(max(oldCost, nextCost)) * 8
+	for _, image := range []struct {
+		node   metadataAggregateNode
+		source *metadataLogicalSource
+	}{{plan.before, before.Source}, {plan.after, after.Source}} {
+		if image.node == nil || image.source == nil {
+			continue
+		}
+		duplicate := false
+		for _, source := range plan.sources {
+			duplicate = duplicate || source == image.source
+		}
+		if duplicate {
+			continue
+		}
+		if err := image.source.Retain(); err != nil {
+			plan.Close()
+			return nil, err
+		}
+		plan.sources = append(plan.sources, image.source)
+	}
 	return plan, nil
 }
 
+func (p *metadataAggregatePlan) Close() {
+	for _, source := range p.sources {
+		source.Release()
+	}
+	p.sources = nil
+}
+
 func (p *metadataAggregatePlan) Values(ctx context.Context) (json.RawMessage, any, error) {
+	defer p.Close()
 	var oldValue any
 	var err error
 	if p.previous {
