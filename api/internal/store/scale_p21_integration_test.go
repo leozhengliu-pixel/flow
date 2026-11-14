@@ -61,6 +61,10 @@ func TestScaleP21ResidentPointWriterMatchesLegacyRowsAndHooks(t *testing.T) {
 	if err := probe.loadResidentWorkspaces(t.Context()); err != nil {
 		t.Fatal(err)
 	}
+	if err := probe.captureLogicalTestView(t.Context(), f.SQLiteStore, []string{workspace}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(probe.releaseMetadataLogicalSources)
 	probe.SetWebhookSink(func(_ string, event domain.DomainEvent) { residentHook = event })
 	probe.SetRealtimeSink(func(_ string, event domain.RealtimeEvent) { residentRealtime = event })
 	if err := probe.MutateWorkspace(ctx, workspace, "project.updated", "p21-edit", map[string]string{"name": "After"}, mutate); err != nil {

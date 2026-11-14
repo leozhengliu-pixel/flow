@@ -566,7 +566,29 @@ func (s *server) postPulseSeen(w http.ResponseWriter, r *http.Request) {
 			at = now
 		}
 	}
-	current := pulseLastSeen(snapshot, viewer.ID)
+	var current *time.Time
+	if !s.store.BoundedMetadataEnabled() {
+		current = pulseLastSeen(snapshot, viewer.ID)
+	} else {
+		read, found, err := s.store.BeginInstalledMetadataRead(r.Context(), workspaceKey(r))
+		if err != nil {
+			respondMutation(w, err, http.StatusOK, nil)
+			return
+		}
+		if !found {
+			writeError(w, http.StatusNotFound, "workspace not found")
+			return
+		}
+		defer read.Close()
+		selection, err := read.Select(r.Context(), store.MetadataRecordScope{
+			Read: []store.RecordKey{{Kind: "userSettings", ID: viewer.ID}},
+		})
+		if err != nil {
+			respondMutation(w, err, http.StatusOK, nil)
+			return
+		}
+		current = pulseLastSeen(&store.PulseFeedSnapshot{UserSettings: selection.Data.UserSettings}, viewer.ID)
+	}
 	if current != nil && !at.After(*current) {
 		writeJSON(w, http.StatusOK, map[string]any{"lastSeenAt": current})
 		return

@@ -88,7 +88,7 @@ func TestScaleP21HotPulseSeenDifferential(t *testing.T) {
 			t.Log("Bounded successful acknowledgement performs the scoped writer's locking root and selected-record reads plus bounded normalization/journal publication; the off-mode writer uses its installed complete image. Counts describe this one-record fixture.")
 		}
 		if sqlCounts[1][1] > sqlCounts[0][1] {
-			t.Log("Bounded no-op acknowledgement enters the scoped transaction to recheck canonical FeedLastSeenTime because PulseFeed's policy-only resident snapshot omits userSettings; the off-mode snapshot can return before mutation. PulseFeed remains an independent migration blocker.")
+			t.Fatalf("owned installed last-seen precheck added SQL to the no-op: legacy=%d bounded=%d", sqlCounts[0][1], sqlCounts[1][1])
 		}
 		f.matrix(t, func(t *testing.T, user domain.User, key *domain.APIKey) {
 			for _, exists := range []bool{false, true} {
