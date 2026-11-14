@@ -525,7 +525,8 @@ func (s *SQLiteStore) MutateWorkspaceScopedWithAggregate(ctx context.Context, wo
 				right.Field(field.index).Set(left.Field(field.index))
 			}
 		}
-		if err := s.persistWorkspaceTx(ctx, tx, workspace, &persistBefore, &complete, nil, &committed, nil); err != nil {
+		inputCtx := context.WithValue(ctx, scopedMetadataImportInputsKey{}, scopedMetadataImportInputs{data: &next, scope: writeScope})
+		if err := s.persistWorkspaceTx(inputCtx, tx, workspace, &persistBefore, &complete, nil, &committed, nil); err != nil {
 			return err
 		}
 		changes, _, err := scaleP16RecordChanges(before, next)
